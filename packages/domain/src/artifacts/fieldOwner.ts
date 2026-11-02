@@ -2,6 +2,9 @@
  * Field owner (spec 18): what holds a value on screen, which decides what an edit to it changes.
  * The owner rule is decided at run time by comparing the live element with its source, so no
  * script is read. Spec 19 adds `token` before the style comparison.
+ *
+ * A longhand the source sets only through a shorthand (`background: #fff` sets background-color)
+ * counts as the source's own value: the browser expands the shorthand, through `expand`.
  */
 
 /** The field an owner question is about: a style property, the text, or an image's `src`. */
@@ -40,7 +43,45 @@ export interface FieldOwnerInput {
   readonly locked: boolean;
   /** Reads a value into the form the browser compares by, for example colours to `rgb()`. */
   readonly normalise: (value: string) => string;
+  /** The value the browser gives `longhand` when `shorthand: value` is the only declaration (spec 18). */
+  readonly expand: (shorthand: string, value: string, longhand: string) => string;
 }
+
+/** The shorthands in the Design fields that set a longhand, so a literal shorthand in the source sets the longhand too. */
+const SHORTHANDS: Readonly<Record<string, readonly string[]>> = {
+  "background-color": ["background"],
+  "border-width": ["border"],
+  "border-style": ["border"],
+  "border-color": ["border"],
+  "padding-top": ["padding"],
+  "padding-right": ["padding"],
+  "padding-bottom": ["padding"],
+  "padding-left": ["padding"],
+  "margin-top": ["margin"],
+  "margin-right": ["margin"],
+  "margin-bottom": ["margin"],
+  "margin-left": ["margin"],
+  "font-family": ["font"],
+  "font-size": ["font"],
+  "font-weight": ["font"],
+  "line-height": ["font"],
+  "flex-direction": ["flex-flow"],
+  "flex-wrap": ["flex-flow"],
+};
+
+/**
+ * The value the source gives a property: its own declaration, else the value a shorthand in the
+ * source gives it. A longhand declared after its shorthand is the longhand's own (the cascade).
+ */
+const sourceValueOf = (inline: Readonly<Record<string, string>>, property: string, expand: FieldOwnerInput["expand"]): string | null => {
+  const declared = inline[property] ?? null;
+  if (declared !== null) return declared;
+  for (const shorthand of SHORTHANDS[property] ?? []) {
+    const value = inline[shorthand] ?? null;
+    if (value !== null) return expand(shorthand, value, property);
+  }
+  return null;
+};
 
 const collapse = (text: string): string => text.replace(/\s+/g, " ").trim();
 
@@ -68,7 +109,7 @@ export function fieldOwner(input: FieldOwnerInput): FieldOwner {
   if (field.kind === "style") {
     if (live.animated.includes(field.property)) return { owner: "animated" };
     const liveValue = live.inline[field.property] ?? null;
-    const sourceValue = source.inline[field.property] ?? null;
+    const sourceValue = sourceValueOf(source.inline, field.property, input.expand);
     if (liveValue === sourceValue || (liveValue !== null && sourceValue !== null && normalise(liveValue) === normalise(sourceValue))) {
       return { owner: "source" };
     }

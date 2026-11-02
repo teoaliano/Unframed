@@ -199,6 +199,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   // The values the frame is running: the saved ones over the artifact's declared defaults, which is what a field's owner is matched against.
   const normalised = announcement === undefined ? undefined : normaliseDials(announcement.config);
   const current = normalised?.ok ? mergeDialValues(normalised.schema, dials ?? null) : dials;
+  session.showDials(current ?? {});
   const names: Record<string, string> = {};
   for (const element of session.tree?.elements ?? []) names[element.id] = element.name;
 

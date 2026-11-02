@@ -20,6 +20,7 @@ import { previewUrl } from "../../canvas/assetStore.ts";
 import { chainOf } from "./EditPanels.tsx";
 import { ImagePicker } from "./ImagePicker.tsx";
 import type { EditReport, EditSession } from "./editSession.ts";
+import { expandShorthand } from "./expandShorthand.ts";
 import { fieldNameOf } from "./tellAgent.ts";
 
 const WEIGHTS = ["100", "200", "300", "400", "500", "600", "700", "800", "900"];
@@ -350,7 +351,7 @@ const SidesRow = ({
 }) => {
   const [linked, setLinked] = useState(false);
   return (
-    <Row label={label}>
+    <Row label={label} mark={SIDES.map((side) => dialPathOf(views[side])).find((path) => path !== undefined)}>
       <div className="flex min-w-0 items-center gap-1.5">
         <div role="group" aria-label={label} className="grid min-w-0 flex-1 grid-cols-4 gap-1">
           {SIDES.map((side) => {
@@ -460,6 +461,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, onTell, onAsk
       dials: dials ?? {},
       locked: subject.locked,
       normalise: normaliserFor(property),
+      expand: expandShorthand,
     });
   };
 
@@ -611,6 +613,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, onTell, onAsk
           dials: dials ?? {},
           locked: first!.locked,
           normalise: (value) => value,
+          expand: expandShorthand,
         })
     : ownerOf(first!, "background-image");
   const pictureLine = picture === null ? null : ownerLine(pictureOwner, true, () => onAsk("Picture", [chipDataOf(first!)]));
@@ -667,7 +670,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, onTell, onAsk
       </Section>
 
       <Section name="Shape" note={shapeNote}>
-        <Row label="Border">
+        <Row label="Border" mark={dialPathOf(borderWidthView) ?? dialPathOf(borderStyleView) ?? dialPathOf(borderColourView)}>
           <div role="group" aria-label="Border" className="flex min-w-0 flex-wrap items-center gap-1.5">
             <div className="w-20">
               <NumberControl
@@ -689,7 +692,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, onTell, onAsk
           format: (value) => (value === "" ? "" : String(Math.round(Number(value) * 100))),
           write: (typed) => String(Math.min(100, Math.max(0, typed)) / 100),
         })}
-        <Row label="Shadow">
+        <Row label="Shadow" mark={Object.values(shadowFields).map(dialPathOf).find((path) => path !== undefined)}>
           <div role="group" aria-label="Shadow" className="grid grid-cols-2 gap-1.5">
             {shadowNumber("x", "Shadow x")}
             {shadowNumber("y", "Shadow y")}

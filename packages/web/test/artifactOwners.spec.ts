@@ -13,11 +13,28 @@ import type { TestEngine } from "../../engine/test/engineProcess.ts";
  */
 
 /** Accent colours the title; the summary's size is an arithmetic value on the dial, so it is the agent's code. */
-const OWNERS = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}#pinned{background:#ffffff !important}</style>${BRIDGE_TAG}</head><body><main><h1 id="title" style="font-size: 32px">Welcome</h1><p id="sum" style="font-size: 16px">Lead text</p><p id="pinned" style="background-color: #eeeeee">Pinned</p></main>
+const OWNERS = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}#pinned{background:#ffffff !important}</style>${BRIDGE_TAG}</head><body><main><h1 id="title" style="font-size: 32px">Welcome</h1><p id="sum" style="font-size: 16px">Lead text</p><p id="pinned" style="background: #eeeeee">Pinned</p></main>
 <script>
 unframed.dials("Look", { accent: "#a78bfa", size: [12, 8, 40] }, function (v) {
   document.getElementById("title").style.color = v.accent;
   document.getElementById("sum").style.fontSize = v.size * 2 + "px";
+});
+</script></body></html>`;
+
+/** A heading whose text a dial sets: edited in place, the text writes the dial (spec 18, task 34). */
+const TEXT_OWNERS = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}</style>${BRIDGE_TAG}</head><body><main><h1 id="headline" style="font-size: 32px">Placeholder</h1></main>
+<script>
+unframed.dials("Copy", { headline: "Welcome" }, function (v) {
+  document.getElementById("headline").textContent = v.headline;
+});
+</script></body></html>`;
+
+/** A card whose border colour and top padding a dial sets: the Border and Spacing fields carry the parameter mark. */
+const FRAME_OWNERS = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}</style>${BRIDGE_TAG}</head><body><main><p id="card" style="padding: 4px; border: 1px solid #000">Card</p></main>
+<script>
+unframed.dials("Frame", { pad: 12, edge: "#123456" }, function (v) {
+  document.getElementById("card").style.paddingTop = v.pad + "px";
+  document.getElementById("card").style.borderColor = v.edge;
 });
 </script></body></html>`;
 
@@ -45,10 +62,10 @@ const preparedFile = async (engine: TestEngine): Promise<string> => {
   return found;
 };
 
-const onBoard = async (page: Page, engine: TestEngine) => {
+const onBoard = async (page: Page, engine: TestEngine, html: string = OWNERS) => {
   await openCanvas(page, engine);
   await writeBridge(engine);
-  await filledArtifact(engine, { id: "shape:owners", kind: "page", ref: "160", at: { x: -520, y: -40 }, size: { w: 400, h: 260 }, title: "Owners", html: OWNERS });
+  await filledArtifact(engine, { id: "shape:owners", kind: "page", ref: "160", at: { x: -520, y: -40 }, size: { w: 400, h: 260 }, title: "Owners", html });
   await expect(shapeOnScreen(page, "shape:owners")).toBeVisible();
 };
 
@@ -161,4 +178,32 @@ test("a dial edit and a style edit in one burst land in one version and one undo
   await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(() => fileOf(agent), { timeout: 8000 }).toBe(before);
   await expect.poll(() => dialsOf(agent), { timeout: 8000 }).toBeUndefined();
+});
+
+test("a dial-owned text edited in place writes the dial through the burst, with no new version", async ({ page, agent }) => {
+  await onBoard(page, agent, TEXT_OWNERS);
+  await openEditor(page);
+  await select(page, "headline");
+  await preparedFile(agent);
+  const countBefore = await htmlCount(agent);
+
+  // A double-click edits the text in place: the frame takes the typed words and the dial follows.
+  await frameOf(page).locator("#headline").dblclick();
+  await page.keyboard.type("Hello there");
+  await page.keyboard.press("Enter");
+  await expect(frameOf(page).locator("#headline")).toHaveText("Hello there");
+
+  await expect.poll(() => dialsOf(agent), { timeout: 8000 }).toEqual({ headline: "Hello there" });
+  expect(await htmlCount(agent)).toBe(countBefore);
+});
+
+test("a dial behind a border or a padding field shows the parameter mark on that field", async ({ page, agent }) => {
+  await onBoard(page, agent, FRAME_OWNERS);
+  await openEditor(page);
+  await select(page, "card");
+  await preparedFile(agent);
+
+  await expect(parameters(page).getByRole("img", { name: "Parameter edge" })).toBeVisible();
+  await expect(parameters(page).getByRole("img", { name: "Parameter pad" })).toBeVisible();
+  await expect(parameters(page).getByRole("group", { name: "Padding" }).getByRole("spinbutton", { name: "Padding top" })).toBeEnabled();
 });

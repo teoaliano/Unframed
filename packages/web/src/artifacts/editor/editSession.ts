@@ -16,11 +16,13 @@ import {
   type ArtifactKind,
   type Burst,
   type EditBox,
+  type FieldOwner,
 } from "@unframed/domain";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Editor, TLShapeId } from "tldraw";
 import type { EngineConnection } from "../../rpc/engine.ts";
 import { messageOf } from "../../agent/store.ts";
+import { expandShorthand } from "./expandShorthand.ts";
 import { showError, showNotice } from "../../toasts.tsx";
 import type { EditMessage } from "../ArtifactFrame.tsx";
 
@@ -80,6 +82,8 @@ export interface EditSessionInput {
 export interface EditSession {
   readonly mode: EditMode;
   readonly setMode: (mode: EditMode) => void;
+  /** The dial values the frame runs: the saved ones over the declared defaults, with the burst's held values. A dial-owned text is matched against them. */
+  readonly showDials: (values: Readonly<Record<string, unknown>>) => void;
   readonly selection: readonly string[];
   readonly setSelection: (ids: readonly string[]) => void;
   readonly hovered: EditReport | null;
@@ -176,6 +180,13 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   /** The held dial values: those a commit is writing, then those the burst still holds. */
   const heldNow = (): Readonly<Record<string, unknown>> => ({ ...inFlight.current, ...Object.fromEntries(burstRef.current.dials) });
   /** The shape's saved dial values, as the room has them. */
+  /** The frame's dial values, set by the editor each render (see `showDials`). */
+  const shownDials = useRef<Readonly<Record<string, unknown>>>({});
+  /** The dial each element's in-place text writes, so a second text message still writes that dial. */
+  const dialTextOf = useRef<Record<string, string>>({});
+  const showDials = useCallback((values: Readonly<Record<string, unknown>>) => {
+    shownDials.current = values;
+  }, []);
   const shapeDials = (): Readonly<Record<string, unknown>> | undefined => (editor.getShape(shapeId as TLShapeId)?.props as { dials?: Record<string, unknown> } | undefined)?.dials;
   /** Once a burst holds nothing, it has no base file either, so the next edit starts a new one. */
   const settle = () => {
@@ -342,25 +353,32 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     return false;
   };
 
+  /** The owner of an element's text as the frame's dials and the source say it: null for a runtime element. */
+  const textOwnerOf = (id: string): FieldOwner | null => {
+    const element = treeRef.current?.elements.find((candidate) => candidate.id === id);
+    const report = reportsRef.current[id];
+    if (element === undefined || report === undefined) return null;
+    return fieldOwner({
+      field: { kind: "text" },
+      source: { inline: element.style, text: element.text, src: element.src ?? null },
+      live: { inline: report.inline, text: report.text, src: report.src, animated: report.animated },
+      dials: shownDials.current,
+      locked: false,
+      normalise: (value) => value,
+      expand: expandShorthand,
+    });
+  };
+
   /**
-   * Whether a double-click may edit an element's text in place: the owner rule says the source holds it.
-   * A text a script sets, or a text a dial sets, is read-only here (a dial's text waits for the dial write).
+   * Whether a double-click may edit an element's text in place: the source holds it, or a dial does, whose
+   * text the edit writes through the burst (spec 18). A text a script sets is read-only here.
    */
   const textEditable = (id: string): boolean => {
     if (lockedInside(id)) return false;
     if (burstEdits(burstRef.current).some((edit) => edit.type === "text" && edit.elementId === id)) return true;
-    const element = treeRef.current?.elements.find((candidate) => candidate.id === id);
-    const report = reportsRef.current[id];
-    if (element === undefined || report === undefined) return false;
-    const owner = fieldOwner({
-      field: { kind: "text" },
-      source: { inline: element.style, text: element.text, src: element.src ?? null },
-      live: { inline: report.inline, text: report.text, src: report.src, animated: report.animated },
-      dials: {},
-      locked: false,
-      normalise: (value) => value,
-    });
-    return owner.owner === "source";
+    if (dialTextOf.current[id] !== undefined) return true;
+    const owner = textOwnerOf(id);
+    return owner !== null && (owner.owner === "source" || owner.owner === "dial");
   };
 
   const setMode = useCallback(
@@ -512,6 +530,15 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
         if (id === null || text === null) return;
         const burstText = burstEdits(burstRef.current).find((edit) => edit.type === "text" && edit.elementId === id);
         const shown = burstText?.type === "text" ? burstText.text : (reportsRef.current[id]?.text ?? null);
+        // A text a dial holds writes the dial, as a Design edit does; the source's own text stays as it is.
+        // The dial is remembered: once its text is held, the frame's text no longer matches the dial's value.
+        const owner = burstText === undefined ? textOwnerOf(id) : null;
+        const path = owner?.owner === "dial" ? owner.path : burstText === undefined ? dialTextOf.current[id] : undefined;
+        if (path !== undefined) {
+          dialTextOf.current[id] = path;
+          if (text !== shown) patchDial(path, text);
+          return;
+        }
         // Leaving a text unchanged is not an edit, so it writes no version.
         if (text !== shown) collect({ type: "text", elementId: id, text }, false);
         return;
@@ -573,6 +600,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   return {
     mode,
     setMode,
+    showDials,
     selection,
     setSelection,
     hovered,

@@ -11,6 +11,7 @@ const base = (over: Partial<FieldOwnerInput> = {}): FieldOwnerInput => ({
   dials: {},
   locked: false,
   normalise,
+  expand: (_shorthand, value) => value,
   ...over,
 });
 
@@ -39,6 +40,26 @@ describe("fieldOwner", () => {
 
     const sized = base({ field: { kind: "style", property: "font-size" }, source: { inline: { "font-size": "10px" }, text: null, src: null }, live: { inline: { "font-size": "24px" }, text: null, src: null, animated: [] } });
     expect(fieldOwner({ ...sized, dials: { size: 24 } })).toEqual({ owner: "dial", path: "size" });
+  });
+
+  it("answers source for a longhand the source sets only through a shorthand, when the live value is the shorthand's", () => {
+    const shorthand = { inline: { background: "#fff" }, text: null, src: null };
+    expect(fieldOwner(base({ field: { kind: "style", property: "background-color" }, source: shorthand, live: { inline: { "background-color": "#FFF" }, text: null, src: null, animated: [] } }))).toEqual({ owner: "source" });
+  });
+
+  it("expands a shorthand through the browser's expand, so a part of a shorthand is the longhand's value", () => {
+    const expand = (shorthand: string, value: string, longhand: string) => (shorthand === "padding" && longhand === "padding-top" ? value.split(" ")[0]! : value);
+    const padded = base({ field: { kind: "style", property: "padding-top" }, source: { inline: { padding: "4px 8px" }, text: null, src: null }, expand });
+    expect(fieldOwner({ ...padded, live: { inline: { "padding-top": "4px" }, text: null, src: null, animated: [] } })).toEqual({ owner: "source" });
+    expect(fieldOwner({ ...padded, live: { inline: { "padding-top": "8px" }, text: null, src: null, animated: [] } })).toEqual({ owner: "script" });
+  });
+
+  it("answers script when the live value is not the shorthand's, and the longhand declared after the shorthand decides", () => {
+    const field = { kind: "style", property: "background-color" } as const;
+    expect(fieldOwner(base({ field, source: { inline: { background: "#fff" }, text: null, src: null }, live: { inline: { "background-color": "#123456" }, text: null, src: null, animated: [] } }))).toEqual({ owner: "script" });
+    const both = { inline: { background: "#fff", "background-color": "#000" }, text: null, src: null };
+    expect(fieldOwner(base({ field, source: both, live: { inline: { "background-color": "#000" }, text: null, src: null, animated: [] } }))).toEqual({ owner: "source" });
+    expect(fieldOwner(base({ field, source: both, live: { inline: { "background-color": "#fff" }, text: null, src: null, animated: [] } }))).toEqual({ owner: "script" });
   });
 
   it("answers script when two dials hold the same value, and when no dial does", () => {
