@@ -18,6 +18,7 @@ import { Tip } from "../../chrome/ui.tsx";
 import { useCanvasProject, useEngine } from "../../context.ts";
 import { ArtifactFrame, outsideUrlOf, type EditMessage } from "../ArtifactFrame.tsx";
 import { kitOf } from "../kit.ts";
+import { kitUi } from "../../kits/state.ts";
 import { KitModePicker } from "../KitMode.tsx";
 import { previewPort } from "../state.ts";
 import { RenderButton } from "../render.tsx";
@@ -94,6 +95,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
     kind: facts?.kind ?? "page",
     file: facts?.file ?? "",
     locked: facts?.locked ?? [],
+    kit,
   });
   const sessionRef = useRef(session);
   sessionRef.current = session;
@@ -337,6 +339,9 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             project={project}
             dials={current ?? {}}
             locked={facts.locked}
+            kit={kit}
+            mode={facts.mode}
+            onOpenKit={() => kitUi(editor).update((state) => ({ ...state, open: true }))}
             onTell={(elements) => tellAgent(chatClient, shapeId, elements)}
             onAsk={(field, elements) => tellAgent(chatClient, shapeId, elements, makeEditableInstruction(field))}
           />

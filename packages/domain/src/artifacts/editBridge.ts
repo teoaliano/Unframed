@@ -517,8 +517,41 @@ export function installEditBridge(win: EditWindow): void {
     return el !== null && validId(el) === id ? el : null;
   };
 
-  // Whether a style value, as the browser would show it inline, is what the computed style became.
+  // Whether a stylesheet `!important` rule that matches the element sets the property (spec 18). Undefined where the document
+  // keeps no style sheets, as a test stub does.
+  const importantRuleWins = (el: EditElement, property: string): boolean | undefined => {
+    const sheets = (doc as { styleSheets?: ArrayLike<{ cssRules: ArrayLike<unknown> }> }).styleSheets;
+    if (sheets === undefined) return undefined;
+    const matches = (selector: string): boolean => {
+      try {
+        return (el as unknown as { matches(selector: string): boolean }).matches(selector);
+      } catch {
+        return false;
+      }
+    };
+    const walk = (rules: ArrayLike<unknown>): boolean =>
+      Array.from(rules).some((rule) => {
+        const styled = rule as { selectorText?: unknown; style?: { getPropertyPriority(name: string): string }; cssRules?: ArrayLike<unknown> };
+        if (typeof styled.selectorText === "string" && styled.style !== undefined) {
+          return styled.style.getPropertyPriority(property) === "important" && matches(styled.selectorText);
+        }
+        return styled.cssRules !== undefined && walk(styled.cssRules);
+      });
+    return Array.from(sheets).some((sheet) => {
+      try {
+        return walk(sheet.cssRules);
+      } catch {
+        // A sheet from another origin keeps its rules to itself.
+        return false;
+      }
+    });
+  };
+
+  // Whether a style value, as the browser would show it inline, is what the computed style became. In a browser the
+  // `!important` rules decide; a value that changes nothing on screen is not overridden by itself.
   const overriddenBy = (el: EditElement, property: string, value: string, before: string): boolean => {
+    const important = importantRuleWins(el, property);
+    if (important !== undefined) return important;
     const after = win.getComputedStyle(el).getPropertyValue(property);
     const probe = doc.createElement("i");
     probe.style.setProperty(property, value);

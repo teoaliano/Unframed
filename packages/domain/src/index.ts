@@ -77,6 +77,7 @@ export * from "./artifacts/viewer.ts";
 export * from "./artifacts/editBridge.ts";
 export * from "./artifacts/fieldOwner.ts";
 export * from "./artifacts/burst.ts";
+export * from "./artifacts/framePatches.ts";
 export * from "./artifacts/live.ts";
 export * from "./artifacts/preview.ts";
 export type { LegacyEdge, LegacyGraph, LegacyNode } from "./legacy/graph.ts";

@@ -4,8 +4,9 @@
  * edit in the burst, and a read-only value says why. With several elements selected a value they
  * share shows, a value they differ on shows Mixed, and an edit reaches each of them.
  */
-import { dialAt, DESIGN_FIELDS, fieldOwner, styleValueRefusal, type ChipElement, type FieldOwner } from "@unframed/domain";
-import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Link, MessageSquarePlus, SlidersHorizontal, Unlink } from "lucide-react";
+import type { SourceEdit } from "@unframed/contracts";
+import { cssName, dialAt, DESIGN_FIELDS, fieldOwner, kitCssNames, resolve, styleValueRefusal, TEXT_STYLE_SUFFIX, tokensForField, type ChipElement, type FieldOwner, type Kit, type TextStyleField, type Token } from "@unframed/domain";
+import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Diamond, Link, MessageSquarePlus, SlidersHorizontal, Unlink } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Autocomplete, AutocompleteInput, AutocompleteItem, AutocompleteList, AutocompletePopup } from "~/components/ui/autocomplete";
 import { Button } from "~/components/ui/button";
@@ -320,23 +321,199 @@ const ColourControl = ({ label, hex, mixed, disabled, onCommit }: { readonly lab
   );
 };
 
-const Row = ({ label, mark, children }: { readonly label: string; readonly mark?: string | undefined; readonly children: ReactNode }) => (
+const Row = ({ label, mark, token, children }: { readonly label: string; readonly mark?: string | undefined; readonly token?: ReactNode; readonly children: ReactNode }) => (
   <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-2">
     <span className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
       <span className="truncate">{label}</span>
       {mark !== undefined && <ParameterMark path={mark} />}
     </span>
-    <div className="min-w-0">{children}</div>
+    <div className="flex min-w-0 items-center gap-1">
+      <div className="min-w-0 flex-1">{children}</div>
+      {token}
+    </div>
   </div>
 );
 
-const Section = ({ name, note, children }: { readonly name: string; readonly note: ReactNode; readonly children: ReactNode }) => (
+const Section = ({ name, note, action, children }: { readonly name: string; readonly note: ReactNode; readonly action?: ReactNode; readonly children: ReactNode }) => (
   <fieldset aria-label={name} className="m-0 flex flex-col gap-2 border-0 p-0">
-    <legend className="mb-1 text-xs font-medium text-muted-foreground">{name}</legend>
+    <legend className="mb-1 flex min-w-0 items-center gap-1 text-xs font-medium text-muted-foreground">
+      {name}
+      {action}
+    </legend>
     {children}
     {note}
   </fieldset>
 );
+
+/** The fields that offer a token: the Design tab's slot (spec 19, the token button). Opacity, keywords and visibility offer none. */
+const TOKEN_FIELDS = new Set(["font-family", "font-size", "font-weight", "line-height", "letter-spacing", "color", "background-color", "border-width", "border-color", "border-radius", "box-shadow", "padding", "margin", "gap", "text-style"]);
+
+/** The text a token shows for the artifact's mode: its colour as a swatch, a text style as its family and size, or one field of it (`suffix`, a CSS property name). */
+const tokenValueOf = (token: Token, kit: Kit, mode: string, suffix?: string): { readonly text: string; readonly colour?: string } => {
+  const value = resolve(kit, token.path, mode);
+  if (value === undefined) return { text: "" };
+  if (typeof value === "object") {
+    const field = (Object.keys(TEXT_STYLE_SUFFIX) as TextStyleField[]).find((candidate) => TEXT_STYLE_SUFFIX[candidate] === suffix);
+    return { text: field === undefined ? `${value.fontFamily} · ${value.fontSize}` : String(value[field]) };
+  }
+  return token.type === "color" ? { text: String(value), colour: String(value) } : { text: String(value) };
+};
+
+/** The literal values a token's properties take when detached: one for a plain token, one per longhand for a text style. */
+const literalsOf = (token: Token, kit: Kit, mode: string, properties: readonly string[]): Array<{ readonly property: string; readonly value: string }> => {
+  const value = resolve(kit, token.path, mode);
+  if (value === undefined) return [];
+  if (typeof value !== "object") return properties.map((property) => ({ property, value: String(value) }));
+  return (Object.keys(TEXT_STYLE_SUFFIX) as TextStyleField[])
+    .filter((field) => properties.includes(TEXT_STYLE_SUFFIX[field]))
+    .map((field) => ({ property: TEXT_STYLE_SUFFIX[field], value: String(value[field]) }));
+};
+
+/** The last two segments of a token's path: what a chip shows (the whole path is its tooltip). */
+const shortPathOf = (path: string): string => path.split("/").slice(-2).join("/");
+
+/** The token a kit custom property belongs to, and the text style field it names when the token is a text style. */
+const tokenNamed = (kit: Kit | null, name: string): { readonly token: Token; readonly suffix?: string } | undefined => {
+  for (const token of kit?.tokens ?? []) {
+    for (const base of [cssName(token.path), ...(token.formerNames ?? [])]) {
+      if (base === name) return { token };
+      if (token.type === "textStyle") {
+        const suffix = Object.values(TEXT_STYLE_SUFFIX).find((candidate) => `${base}-${candidate}` === name);
+        if (suffix !== undefined) return { token, suffix };
+      }
+    }
+  }
+  return undefined;
+};
+
+/** A token's value as a chip shows it: the short path, a swatch for a colour, and the mode's value in muted text. */
+const ChipFace = ({ token, suffix, kit, mode }: { readonly token: Token; readonly suffix?: string | undefined; readonly kit: Kit; readonly mode: string }) => {
+  const { text, colour } = tokenValueOf(token, kit, mode, suffix);
+  return (
+    <>
+      {colour !== undefined && <span aria-hidden className="size-3.5 shrink-0 rounded-sm border" style={{ background: colour }} />}
+      <span className="truncate font-mono text-xs">{shortPathOf(token.path)}</span>
+      <span className="ml-auto truncate text-xs text-muted-foreground">{text}</span>
+    </>
+  );
+};
+
+/**
+ * The token button of a field (spec 19, The token button): a popover with a search field, the tokens the field offers with their
+ * value in the artifact's mode, and Edit kit at the foot. Hovering a token previews it in the frame; choosing one writes its source edits.
+ */
+const TokenPicker = ({
+  field,
+  kit,
+  mode,
+  editable,
+  edits,
+  session,
+  onOpenKit,
+  chip,
+  detach,
+  onOpenChange,
+}: {
+  readonly field: string;
+  readonly kit: Kit | null;
+  readonly mode: string;
+  readonly editable: boolean;
+  /** The source edits that set the field to a token, one list per token. */
+  readonly edits: (token: Token) => SourceEdit[];
+  readonly session: EditSession;
+  readonly onOpenKit: () => void;
+  /** A field that holds a token shows it as a chip, which opens this popover (spec 19, The token chip). */
+  readonly chip?: { readonly token: Token; readonly suffix?: string } | undefined;
+  /** Writes the token's resolved value as literals, for Detach. */
+  readonly detach?: (() => void) | undefined;
+  /** Tells the Design tab the popover is open, so a chip stays while a preview changes the field's owner. */
+  readonly onOpenChange?: ((open: boolean) => void) | undefined;
+}) => {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const close = (next: boolean) => {
+    setOpen(next);
+    onOpenChange?.(next);
+    if (!next) {
+      session.previewEdits(null);
+      setQuery("");
+    }
+  };
+  const search = query.trim().toLowerCase();
+  const offered = kit === null ? [] : tokensForField(field, kit).filter((token) => search === "" || token.path.includes(search) || cssName(token.path).includes(search));
+  return (
+    <Popover open={open} onOpenChange={close}>
+      {chip === undefined || kit === null ? (
+        <PopoverTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Use a token" disabled={!editable} />}>
+          <Diamond aria-hidden />
+        </PopoverTrigger>
+      ) : (
+        <PopoverTrigger render={<Button variant="outline" size="sm" className="min-w-0 justify-start" title={chip.token.path} />}>
+          <ChipFace token={chip.token} suffix={chip.suffix} kit={kit} mode={mode} />
+        </PopoverTrigger>
+      )}
+      <PopoverPopup side="left" align="start" padding="compact" className="w-72" aria-label="Use a token" initialFocus={false}>
+        {detach !== undefined && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="justify-start"
+            onClick={() => {
+              close(false);
+              detach();
+            }}
+          >
+            Detach
+          </Button>
+        )}
+        {kit === null ? (
+          <p className="m-0 text-sm text-muted-foreground">No kit yet.</p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <Input aria-label="Search tokens" placeholder="Search tokens…" value={query} onChange={(event) => setQuery(event.currentTarget.value)} />
+            <div className="flex max-h-64 flex-col gap-0.5 overflow-auto">
+              {offered.map((token) => {
+                const { text, colour } = tokenValueOf(token, kit, mode);
+                return (
+                  <Button
+                    key={token.path}
+                    variant="ghost"
+                    size="sm"
+                    className="min-w-0 justify-start"
+                    onMouseEnter={() => session.previewEdits(edits(token))}
+                    onMouseLeave={() => session.previewEdits(null)}
+                    onFocus={() => session.previewEdits(edits(token))}
+                    onBlur={() => session.previewEdits(null)}
+                    onClick={() => {
+                      // The frame goes back to its own values first: a patch of a value the hover already showed reads as overridden.
+                      close(false);
+                      for (const edit of edits(token)) session.patch(edit);
+                    }}
+                  >
+                    {colour !== undefined && <span aria-hidden className="size-3.5 shrink-0 rounded-sm border" style={{ background: colour }} />}
+                    <span className="truncate font-mono text-xs">{token.path}</span>
+                    <span className="ml-auto truncate text-xs text-muted-foreground">{text}</span>
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="justify-start"
+          onClick={() => {
+            close(false);
+            onOpenKit();
+          }}
+        >
+          Edit kit
+        </Button>
+      </PopoverPopup>
+    </Popover>
+  );
+};
 
 /** Four sides of one spacing property (padding or margin), with a link toggle that sets all four at once. */
 const SidesRow = ({
@@ -344,15 +521,17 @@ const SidesRow = ({
   prefix,
   views,
   onWrite,
+  token,
 }: {
   readonly label: string;
   readonly prefix: "padding" | "margin";
   readonly views: Record<(typeof SIDES)[number], View>;
   readonly onWrite: (property: string, typed: number) => void;
+  readonly token?: ReactNode;
 }) => {
   const [linked, setLinked] = useState(false);
   return (
-    <Row label={label} mark={SIDES.map((side) => dialPathOf(views[side])).find((path) => path !== undefined)}>
+    <Row label={label} mark={SIDES.map((side) => dialPathOf(views[side])).find((path) => path !== undefined)} token={token}>
       <div className="flex min-w-0 items-center gap-1.5">
         <div role="group" aria-label={label} className="grid min-w-0 flex-1 grid-cols-4 gap-1">
           {SIDES.map((side) => {
@@ -403,6 +582,12 @@ export interface DesignTabProps {
   readonly project: string;
   readonly dials: Readonly<Record<string, unknown>> | undefined;
   readonly locked: readonly string[];
+  /** The project kit (spec 19), or null when the project has none. */
+  readonly kit: Kit | null;
+  /** The artifact's kit mode, as stored on the shape. */
+  readonly mode: string | undefined;
+  /** Opens the Kit dialog. */
+  readonly onOpenKit: () => void;
   /** Tell the agent: the selected elements' chips go into the artifact's chat (spec 18, Point and tell). */
   readonly onTell: (elements: ChipElement[]) => void;
   /** Ask the agent to make a read-only field editable, with the read-only elements' chips. */
@@ -423,7 +608,9 @@ const normaliserFor = (property: string) => (value: string) => {
   return probe.style.getPropertyValue(property);
 };
 
-export const DesignTab = ({ session, kind, project, dials, locked, onTell, onAsk }: DesignTabProps) => {
+export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, onOpenKit, onTell, onAsk }: DesignTabProps) => {
+  // The token chip whose popover is open. A preview of a token changes the frame, so the field's owner can change while the popover is up.
+  const [openChip, setOpenChip] = useState<{ readonly field: string; readonly named: { readonly token: Token; readonly suffix?: string } } | null>(null);
   const { selection, reports, tree, preparing, prepareError, pending, families, overridden } = session;
   if (preparing) return <p className="m-0 p-2.5 text-sm text-muted-foreground">{`Getting this ${kind} ready for editing…`}</p>;
   if (prepareError !== undefined) return <p className="m-0 p-2.5 text-sm text-destructive-foreground">{prepareError}</p>;
@@ -454,7 +641,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, onTell, onAsk
 
   /** Who holds a style value of one element. An edit still in the burst is the person's own, so the owner stays the source until it is written. */
   const ownerOf = (subject: Subject, property: string): FieldOwner => {
-    if (pending.some((edit) => edit.type === "style" && edit.elementId === subject.id && edit.property === property)) return { owner: "source" };
+    if (pending.some((edit) => (edit.type === "style" || edit.type === "token") && edit.elementId === subject.id && edit.property === property)) return { owner: "source" };
     return fieldOwner({
       field: { kind: "style", property },
       source: subject.element === undefined ? null : { inline: subject.element.style, text: subject.element.text, src: subject.element.src ?? null },
@@ -463,6 +650,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, onTell, onAsk
       locked: subject.locked,
       normalise: normaliserFor(property),
       expand: expandShorthand,
+      kitNames: kit === null ? [] : kitCssNames(kit),
     });
   };
 
@@ -500,17 +688,55 @@ export const DesignTab = ({ session, kind, project, dials, locked, onTell, onAsk
     }
   };
 
+  // The token slot of a field: the tokens it offers, written to every selected element. The padding and margin rows pass their four sides.
+  const currentMode = kit === null ? "" : mode !== undefined && kit.modes.includes(mode) ? mode : (kit.modes[0] ?? "");
+  const tokenEdits =
+    (properties: readonly string[]) =>
+    (token: Token): SourceEdit[] =>
+      subjects.flatMap((subject) => properties.map((property): SourceEdit => ({ type: "token", elementId: subject.id, property, token: token.path })));
+  const tokenSlot = (field: string, editable: boolean, properties: readonly string[] = [field]) =>
+    TOKEN_FIELDS.has(field) ? (
+      <TokenPicker field={field} kit={kit} mode={currentMode} editable={editable} edits={tokenEdits(properties)} session={session} onOpenKit={onOpenKit} />
+    ) : undefined;
+  /** Writes a token's resolved values to the properties as literals, to every selected element (Detach). */
+  const detachWith = (token: Token, properties: readonly string[]) => {
+    if (kit === null) return;
+    for (const subject of subjects) {
+      for (const literal of literalsOf(token, kit, currentMode, properties)) session.patch({ type: "style", elementId: subject.id, property: literal.property, value: literal.value });
+    }
+  };
+  /** The chip of a field that holds a token (spec 19, The token chip), or null when the field holds none the kit has. */
+  const chipFor = (field: string, view: View, properties: readonly string[] = [field]): ReactNode => {
+    const named = view.owner.owner === "token" ? tokenNamed(kit, view.owner.name) : openChip?.field === field ? openChip.named : undefined;
+    if (named === undefined || kit === null) return null;
+    return (
+      <TokenPicker
+        field={field}
+        kit={kit}
+        mode={currentMode}
+        editable
+        edits={tokenEdits(properties)}
+        session={session}
+        onOpenKit={onOpenKit}
+        chip={named}
+        detach={() => detachWith(named.token, properties)}
+        onOpenChange={(next) => setOpenChip(next ? { field, named } : null)}
+      />
+    );
+  };
+
   const numberField = (label: string, property: string, options: { readonly format?: (value: string) => string; readonly write?: (typed: number, subject: Subject) => string } = {}) => {
     const view = viewOf(property);
+    const chip = chipFor(property, view);
     return (
-      <Row label={label} mark={dialPathOf(view)}>
-        <NumberControl
+      <Row label={label} mark={dialPathOf(view)} token={chip === null ? tokenSlot(property, view.editable) : undefined}>
+        {chip ?? <NumberControl
           label={label}
           value={view.mixed ? "" : (options.format ?? numberOf)(view.value)}
           placeholder={view.mixed ? MIXED : undefined}
           disabled={!view.editable}
           onCommit={(typed) => write(property, (subject) => (options.write ?? ((value, s) => numberValue(property, value, s.report.inline[property])))(typed, subject))}
-        />
+        />}
       </Row>
     );
   };
@@ -526,9 +752,10 @@ export const DesignTab = ({ session, kind, project, dials, locked, onTell, onAsk
 
   const colourField = (label: string, property: string) => {
     const view = viewOf(property, (subject) => hexOf(subject.report.computed[property]));
+    const chip = chipFor(property, view);
     return (
-      <Row label={label} mark={dialPathOf(view)}>
-        <ColourControl label={label} hex={view.value} mixed={view.mixed} disabled={!view.editable} onCommit={(next) => write(property, () => next)} />
+      <Row label={label} mark={dialPathOf(view)} token={chip === null ? tokenSlot(property, view.editable) : undefined}>
+        {chip ?? <ColourControl label={label} hex={view.value} mixed={view.mixed} disabled={!view.editable} onCommit={(next) => write(property, () => next)} />}
       </Row>
     );
   };
@@ -543,12 +770,27 @@ export const DesignTab = ({ session, kind, project, dials, locked, onTell, onAsk
 
   // Text
   const fontView = viewOf("font-family", (subject) => firstFamily(subject.report.computed["font-family"] ?? ""));
+  const fontChip = chipFor("font-family", fontView);
   const weightView = viewOf("font-weight");
+  const weightChip = chipFor("font-weight", weightView);
+  // A text style: the five text fields all hold sub-names of one text style token, which the Text header shows as a chip.
+  const TEXT_PROPERTIES = ["font-family", "font-size", "font-weight", "line-height", "letter-spacing"];
+  const textStyleOwned = (() => {
+    if (openChip?.field === "text-style") return openChip.named.token;
+    const named = TEXT_PROPERTIES.map((property) => {
+      const view = viewOf(property);
+      return view.owner.owner === "token" ? tokenNamed(kit, view.owner.name) : undefined;
+    });
+    const [first] = named;
+    if (first === undefined || first.token.type !== "textStyle") return undefined;
+    return named.every((candidate) => candidate !== undefined && candidate.token.path === first.token.path) ? first.token : undefined;
+  })();
   const alignView = viewOf("text-align");
   const textNote = noteOf(fontView, viewOf("font-size"), weightView, viewOf("line-height"), viewOf("letter-spacing"), alignView, viewOf("color"));
 
   // Shape
   const borderWidthView = viewOf("border-width");
+  const borderWidthChip = chipFor("border-width", borderWidthView);
   const borderStyleView = viewOf("border-style");
   const borderColourView = viewOf("border-color", (subject) => hexOf(subject.report.computed["border-color"]));
   const radiusView = viewOf("border-radius");
@@ -580,6 +822,11 @@ export const DesignTab = ({ session, kind, project, dials, locked, onTell, onAsk
   const flex = subjects.every((subject) => FLEX_DISPLAYS.includes(displayOf(subject)));
   const gapped = subjects.every((subject) => GAP_DISPLAYS.includes(displayOf(subject)));
   const sidesWrite = (property: string, typed: number) => write(property, (subject) => numberValue(property, typed, subject.report.inline[property]));
+  const sidesToken = (prefix: "padding" | "margin") => {
+    const views = sideViews(prefix);
+    const editable = SIDES.every((side) => views[side].editable);
+    return tokenSlot(prefix, editable, SIDES.map((side) => `${prefix}-${side}`));
+  };
 
   // Visibility: a hide edit, for elements the source holds with an id and nothing locks them.
   const visible = subjects.every((subject) => subject.element === undefined || !subject.element.hidden);
@@ -614,21 +861,52 @@ export const DesignTab = ({ session, kind, project, dials, locked, onTell, onAsk
           Tell the agent
         </Button>
       </div>
+      {kit !== null && (
+        <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+          <Button variant="ghost" size="xs" className="min-w-0" onClick={onOpenKit}>{`Kit: ${kit.name}`}</Button>
+          <span className="truncate">{currentMode}</span>
+        </div>
+      )}
       {anyLocked && noteText(LOCKED)}
       {subjects.some((subject) => overridden[subject.id] === true) && noteText(OVERRIDDEN)}
 
-      <Section name="Text" note={textNote}>
-        <Row label="Font">
-          <FontControl
-            value={fontView.mixed ? "" : fontView.value}
-            disabled={!fontView.editable}
-            families={families}
-            onCommit={(typed) => write("font-family", () => (typed.includes(" ") ? `"${typed.replace(/"/g, "")}"` : typed))}
-          />
+      <Section
+        name="Text"
+        note={textNote}
+        action={
+          textStyleOwned === undefined ? (
+            tokenSlot("text-style", fontView.editable, ["font-size"])
+          ) : (
+            <TokenPicker
+              field="text-style"
+              kit={kit}
+              mode={currentMode}
+              editable
+              edits={tokenEdits(["font-size"])}
+              session={session}
+              onOpenKit={onOpenKit}
+              chip={{ token: textStyleOwned }}
+              detach={() => detachWith(textStyleOwned, TEXT_PROPERTIES)}
+              onOpenChange={(next) => setOpenChip(next ? { field: "text-style", named: { token: textStyleOwned } } : null)}
+            />
+          )
+        }
+      >
+        <Row label="Font" token={fontChip === null ? tokenSlot("font-family", fontView.editable) : undefined}>
+          {fontChip ?? (
+            <FontControl
+              value={fontView.mixed ? "" : fontView.value}
+              disabled={!fontView.editable}
+              families={families}
+              onCommit={(typed) => write("font-family", () => (typed.includes(" ") ? `"${typed.replace(/"/g, "")}"` : typed))}
+            />
+          )}
         </Row>
         {numberField("Size", "font-size")}
-        <Row label="Weight" mark={dialPathOf(weightView)}>
-          <KeywordControl label="Weight" value={weightView.value} mixed={weightView.mixed} options={WEIGHTS} disabled={!weightView.editable} onPick={(next) => write("font-weight", () => next)} />
+        <Row label="Weight" mark={dialPathOf(weightView)} token={weightChip === null ? tokenSlot("font-weight", weightView.editable) : undefined}>
+          {weightChip ?? (
+            <KeywordControl label="Weight" value={weightView.value} mixed={weightView.mixed} options={WEIGHTS} disabled={!weightView.editable} onPick={(next) => write("font-weight", () => next)} />
+          )}
         </Row>
         {numberField("Line height", "line-height")}
         {numberField("Letter spacing", "letter-spacing")}
@@ -656,8 +934,9 @@ export const DesignTab = ({ session, kind, project, dials, locked, onTell, onAsk
       </Section>
 
       <Section name="Shape" note={shapeNote}>
-        <Row label="Border" mark={dialPathOf(borderWidthView) ?? dialPathOf(borderStyleView) ?? dialPathOf(borderColourView)}>
+        <Row label="Border" mark={dialPathOf(borderWidthView) ?? dialPathOf(borderStyleView) ?? dialPathOf(borderColourView)} token={borderWidthChip === null ? tokenSlot("border-width", borderWidthView.editable) : undefined}>
           <div role="group" aria-label="Border" className="flex min-w-0 flex-wrap items-center gap-1.5">
+            {borderWidthChip ?? (
             <div className="w-20">
               <NumberControl
                 label="Border width"
@@ -667,10 +946,12 @@ export const DesignTab = ({ session, kind, project, dials, locked, onTell, onAsk
                 onCommit={(typed) => write("border-width", () => `${typed}px`)}
               />
             </div>
+            )}
             <div className="min-w-24 flex-1">
               <KeywordControl label="Border style" value={borderStyleView.value} mixed={borderStyleView.mixed} options={BORDER_STYLES} disabled={!borderStyleView.editable} onPick={(next) => write("border-style", () => next)} />
             </div>
             <ColourControl label="Border colour" hex={borderColourView.value} mixed={borderColourView.mixed} disabled={!borderColourView.editable} onCommit={(next) => write("border-color", () => next)} />
+            {tokenSlot("border-color", borderColourView.editable)}
           </div>
         </Row>
         {numberField("Corner radius", "border-radius", { write: (typed) => `${typed}px` })}
@@ -678,7 +959,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, onTell, onAsk
           format: (value) => (value === "" ? "" : String(Math.round(Number(value) * 100))),
           write: (typed) => String(Math.min(100, Math.max(0, typed)) / 100),
         })}
-        <Row label="Shadow" mark={Object.values(shadowFields).map(dialPathOf).find((path) => path !== undefined)}>
+        <Row label="Shadow" mark={Object.values(shadowFields).map(dialPathOf).find((path) => path !== undefined)} token={tokenSlot("box-shadow", shadowEditable)}>
           <div role="group" aria-label="Shadow" className="grid grid-cols-2 gap-1.5">
             {shadowNumber("x", "Shadow x")}
             {shadowNumber("y", "Shadow y")}
@@ -698,8 +979,8 @@ export const DesignTab = ({ session, kind, project, dials, locked, onTell, onAsk
       </Section>
 
       <Section name="Spacing" note={noteOf(...SIDES.map((side) => sideViews("padding")[side]), ...SIDES.map((side) => sideViews("margin")[side]))}>
-        <SidesRow label="Padding" prefix="padding" views={sideViews("padding")} onWrite={sidesWrite} />
-        <SidesRow label="Margin" prefix="margin" views={sideViews("margin")} onWrite={sidesWrite} />
+        <SidesRow label="Padding" prefix="padding" views={sideViews("padding")} onWrite={sidesWrite} token={sidesToken("padding")} />
+        <SidesRow label="Margin" prefix="margin" views={sideViews("margin")} onWrite={sidesWrite} token={sidesToken("margin")} />
         {gapped && numberField("Gap", "gap")}
       </Section>
 

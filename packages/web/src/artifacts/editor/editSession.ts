@@ -11,12 +11,14 @@ import {
   dialsWith,
   emptyBurst,
   fieldOwner,
+  framePatchesOf,
   releaseDials as releaseHeldDials,
   withoutEdit,
   type ArtifactKind,
   type Burst,
   type EditBox,
   type FieldOwner,
+  type Kit,
 } from "@unframed/domain";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Editor, TLShapeId } from "tldraw";
@@ -77,6 +79,8 @@ export interface EditSessionInput {
   readonly kind: ArtifactKind;
   readonly file: string;
   readonly locked: readonly string[];
+  /** The project kit, which a token edit's preview reads (spec 19). */
+  readonly kit: Kit | null;
 }
 
 export interface EditSession {
@@ -115,6 +119,11 @@ export interface EditSession {
   /** Elements a stylesheet `!important` rule wins over, as the bridge last reported them. */
   readonly overridden: Readonly<Record<string, boolean>>;
   readonly patch: (edit: SourceEdit) => void;
+  /**
+   * Shows edits in the frame without adding them to the burst (a token's hover preview). The burst's
+   * own edits are shown again over the reset frame; null shows only the burst.
+   */
+  readonly previewEdits: (edits: readonly SourceEdit[] | null) => void;
   readonly commit: () => Promise<void>;
   /** Drops the burst and puts the frame back, or with `quiet`, drops it without touching the frame (its artifact is gone). */
   readonly discard: (quiet?: boolean) => void;
@@ -131,7 +140,7 @@ const sameIds = (a: readonly string[], b: readonly string[]): boolean => a.lengt
 const conflictSentence = (kind: ArtifactKind, reason: unknown): string =>
   reason === "agent" ? "The agent rewrote this. Your last change wasn't saved." : `This ${kind} changed somewhere else. Your last change wasn't saved.`;
 
-export const useEditSession = ({ editor, engine, project, shapeId, kind, file, locked }: EditSessionInput): EditSession => {
+export const useEditSession = ({ editor, engine, project, shapeId, kind, file, locked, kit }: EditSessionInput): EditSession => {
   const [mode, setModeState] = useState<EditMode>("edit");
   const [selection, setSelectionState] = useState<readonly string[]>([]);
   const [hovered, setHovered] = useState<EditReport | null>(null);
@@ -157,6 +166,8 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   lockedRef.current = locked;
   const fileRef = useRef(file);
   fileRef.current = file;
+  const kitRef = useRef(kit);
+  kitRef.current = kit;
   const treeRef = useRef<SourceTree | undefined>(undefined);
   treeRef.current = tree;
   // The reports as the frame last sent them, read at once by a text edit that starts in the same click.
@@ -311,7 +322,8 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       if (edit.elementId !== undefined) lastEdit.current[edit.elementId] = edit;
       if (baseRef.current === undefined) baseRef.current = fileRef.current;
       setPending(burstEdits(burstRef.current));
-      if (showInFrame) post({ type: "unframed:edit:patch", patches: [edit] });
+      const patches = framePatchesOf(edit, kitRef.current);
+      if (showInFrame && patches.length > 0) post({ type: "unframed:edit:patch", patches });
       window.clearTimeout(timerRef.current);
       timerRef.current = window.setTimeout(() => void commit(), COMMIT_DELAY_MS);
     },
@@ -343,6 +355,15 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   );
 
   const patch = useCallback((edit: SourceEdit) => collect(edit, true), [collect]);
+
+  const previewEdits = useCallback(
+    (edits: readonly SourceEdit[] | null) => {
+      post({ type: "unframed:edit:reset" });
+      const patches = [...burstEdits(burstRef.current), ...(edits ?? [])].flatMap((edit) => framePatchesOf(edit, kitRef.current));
+      if (patches.length > 0) post({ type: "unframed:edit:patch", patches });
+    },
+    [post],
+  );
 
   /** Whether an element is locked or sits inside a locked one, by the source tree's parents. */
   const lockedInside = (id: string): boolean => {
@@ -621,6 +642,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     releaseDials,
     overridden,
     patch,
+    previewEdits,
     commit,
     discard,
     handleKey,
