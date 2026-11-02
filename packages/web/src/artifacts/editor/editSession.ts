@@ -3,7 +3,7 @@
  * reports, the burst of source edits and its commit, undo within the session, and the prepare
  * that makes an older file editable. The frame is reached only through the edit protocol.
  */
-import type { SourceEdit, SourceTreeElement } from "@unframed/contracts";
+import type { OffTokenFound, SourceEdit, SourceTreeElement } from "@unframed/contracts";
 import {
   addToBurst,
   burstDials,
@@ -48,6 +48,8 @@ export interface EditReport {
 export interface SourceTree {
   readonly ready: boolean;
   readonly elements: readonly SourceTreeElement[];
+  /** The literals of the file that sit close to a kit token (spec 19); empty with no kit. */
+  readonly offTokens: readonly OffTokenFound[];
 }
 
 /** An element of the frame's live tree (spec 18, `unframed:edit:tree`): `id` is null for a runtime element. */
@@ -90,6 +92,8 @@ export interface EditSession {
   readonly showDials: (values: Readonly<Record<string, unknown>>) => void;
   readonly selection: readonly string[];
   readonly setSelection: (ids: readonly string[]) => void;
+  /** Selects the elements a style rule's selector matches in the frame (spec 19, Off-token values). */
+  readonly selectMatching: (selector: string) => void;
   readonly hovered: EditReport | null;
   readonly reports: Readonly<Record<string, EditReport>>;
   /** The font families the document's elements use, first family of each, as the bridge reports them. */
@@ -414,6 +418,8 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     [commit, post],
   );
 
+  const selectMatching = useCallback((selector: string) => post({ type: "unframed:edit:selectMatching", selector }), [post]);
+
   const setSelection = useCallback(
     (ids: readonly string[]) => {
       if (sameIds(selectionRef.current, ids)) return;
@@ -485,6 +491,11 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
         post({ type: "unframed:edit:mode", mode: modeRef.current, locked: lockedRef.current });
         if (selectionRef.current.length > 0) post({ type: "unframed:edit:select", ids: selectionRef.current });
         post({ type: "unframed:edit:tree" });
+        return;
+      }
+      case "unframed:edit:matched": {
+        const ids = Array.isArray(message.ids) ? message.ids.filter((id): id is string => typeof id === "string") : [];
+        setSelection(ids);
         return;
       }
       case "unframed:edit:tree": {
@@ -589,7 +600,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       .call("artifact.sourceTree", { project, file })
       .then(async (answer) => {
         if (!live) return;
-        setTree({ ready: answer.ready, elements: answer.elements });
+        setTree({ ready: answer.ready, elements: answer.elements, offTokens: answer.offTokens });
         if (answer.ready || preparedFor.current === file) return;
         preparedFor.current = file;
         setPreparing(true);
@@ -624,6 +635,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     showDials,
     selection,
     setSelection,
+    selectMatching,
     hovered,
     reports,
     families,

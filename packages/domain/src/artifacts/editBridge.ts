@@ -50,6 +50,7 @@ export interface EditDocument {
   addEventListener(type: string, listener: (event: EditEvent) => void, capture: boolean): void;
   removeEventListener(type: string, listener: (event: EditEvent) => void, capture: boolean): void;
   querySelector(selector: string): EditElement | null;
+  querySelectorAll?(selector: string): ArrayLike<EditElement>;
   elementFromPoint(x: number, y: number): EditElement | null;
   createElement(tag: string): EditElement;
   createRange?(): { selectNodeContents(node: EditElement): void; collapse?(toEnd: boolean): void };
@@ -301,6 +302,19 @@ export function installEditBridge(win: EditWindow): void {
     };
     walk(doc.body);
     return found;
+  };
+
+  const idsMatching = (selector: string): string[] => {
+    if (typeof doc.querySelectorAll !== "function") return [];
+    try {
+      return Array.from(doc.querySelectorAll(selector)).flatMap((el) => {
+        const id = validId(el);
+        return id === null ? [] : [id];
+      });
+    } catch {
+      // A selector the document cannot match (an invalid one) selects nothing.
+      return [];
+    }
   };
 
   const reportSelection = () => {
@@ -655,6 +669,9 @@ export function installEditBridge(win: EditWindow): void {
     } else if (type === "unframed:edit:select") {
       selection = Array.isArray(data.ids) ? data.ids.filter((id): id is string => typeof id === "string") : [];
       reportSelection();
+    } else if (type === "unframed:edit:selectMatching" && typeof data.selector === "string") {
+      // The elements a style rule's selector matches, with an id each, answered for the editor to select (spec 19, Off-token values).
+      post({ type: "unframed:edit:matched", ids: idsMatching(data.selector) });
     } else if (type === "unframed:edit:hover") {
       external = typeof data.id === "string" ? resolveKey(data.id) : null;
       schedule();

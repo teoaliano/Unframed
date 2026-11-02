@@ -6,8 +6,8 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { extname, join } from "node:path";
 import type { TLRecord } from "@tldraw/tlschema";
-import { isBareFileName, unframedError, type ArtifactImage, type SourceEdit, type SourceTreeElement } from "@unframed/contracts";
-import { ARTIFACT_SIZE_LIMIT, artifactTitle, projectSlug, shapeKind, sidecarFileName, type ArtifactKind } from "@unframed/domain";
+import { isBareFileName, unframedError, type ArtifactImage, type OffTokenFound, type SourceEdit, type SourceTreeElement } from "@unframed/contracts";
+import { ARTIFACT_SIZE_LIMIT, artifactTitle, offTokenValues, projectSlug, shapeKind, sidecarFileName, type ArtifactKind } from "@unframed/domain";
 import { applySourceEdits, sourceTreeOf, stampElementIds } from "@unframed/domain/html";
 import type { CommittedChange } from "../canvas/rooms.ts";
 import { byteSize, prepareArtifactHtml, tooLargeMessage } from "./artifactHtml.ts";
@@ -68,7 +68,7 @@ export const artifactEditService = (deps: EditServiceDeps) => {
   },
 
   /** The elements of a file that carry an id, and whether the file is ready for editing as it stands. */
-  sourceTree: async (project: string, file: string): Promise<{ ready: boolean; elements: SourceTreeElement[] }> => {
+  sourceTree: async (project: string, file: string): Promise<{ ready: boolean; elements: SourceTreeElement[]; offTokens: OffTokenFound[] }> => {
     const dir = await folderOf(deps, project);
     if (!isBareFileName(file)) throw unframedError("bad_request", "That is not a file in this project.");
     let html: string;
@@ -77,7 +77,8 @@ export const artifactEditService = (deps: EditServiceDeps) => {
     } catch {
       throw unframedError("not_found", `No file ${file} in this project.`);
     }
-    return { ready: isReady(html), elements: sourceTreeOf(html) };
+    const kit = kitOf(await deps.read(project));
+    return { ready: isReady(html), elements: sourceTreeOf(html), offTokens: kit === null ? [] : offTokenValues(html, kit) };
   },
 
   /** A page or motion's file, stamped and bridged in a new version when it is not ready; the current file when it is. */

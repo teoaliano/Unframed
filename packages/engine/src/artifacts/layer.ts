@@ -3,7 +3,7 @@
  * and the snapshot stream, over the artifact store, the renderer and the snapshot service.
  */
 import { join } from "node:path";
-import type { ArtifactImage, ArtifactSnapshot, RenderStatus, SourceEdit, SourceTreeElement } from "@unframed/contracts";
+import type { ArtifactImage, ArtifactSnapshot, OffTokenFound, RenderStatus, SourceEdit, SourceTreeElement } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
 import { projectSlug } from "@unframed/domain";
 import { byteSize, prepareArtifactHtml } from "./artifactHtml.ts";
@@ -50,7 +50,7 @@ export class Artifacts extends Context.Service<
     /** "Open in a new tab": the shape's live viewer pointer, kept current from then on. */
     readonly openLive: (project: string, shapeId: string) => Effect.Effect<{}, UnframedError>;
     /** The element editor's file operations (spec 18). */
-    readonly sourceTree: (project: string, file: string) => Effect.Effect<{ ready: boolean; elements: SourceTreeElement[] }, UnframedError>;
+    readonly sourceTree: (project: string, file: string) => Effect.Effect<{ ready: boolean; elements: SourceTreeElement[]; offTokens: OffTokenFound[] }, UnframedError>;
     readonly prepareEdit: (project: string, shapeId: string) => Effect.Effect<{ file: string }, UnframedError>;
     readonly edit: (project: string, shapeId: string, baseFile: string, edits: SourceEdit[]) => Effect.Effect<{ file: string; summary: string[] }, UnframedError>;
     readonly images: (project: string) => Effect.Effect<{ images: ArtifactImage[] }, UnframedError>;

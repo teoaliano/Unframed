@@ -4,7 +4,7 @@
  * edit in the burst, and a read-only value says why. With several elements selected a value they
  * share shows, a value they differ on shows Mixed, and an edit reaches each of them.
  */
-import type { SourceEdit } from "@unframed/contracts";
+import type { OffTokenFound, SourceEdit } from "@unframed/contracts";
 import { cssName, dialAt, DESIGN_FIELDS, fieldOwner, kitCssNames, resolve, styleValueRefusal, TEXT_STYLE_SUFFIX, tokensForField, type ChipElement, type FieldOwner, type Kit, type TextStyleField, type Token } from "@unframed/domain";
 import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Diamond, Link, MessageSquarePlus, SlidersHorizontal, Unlink } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
@@ -576,6 +576,49 @@ const fileNameOf = (url: string): string => {
   }
 };
 
+/**
+ * The Off-token values section (spec 19, Off-token values): the literals in the file that sit close to a kit token, one row per place.
+ * Closed by default. A row selects its element (a rule selects the elements its selector matches); Use token writes a token edit for it.
+ */
+const OffTokens = ({
+  values,
+  labelOf,
+  onSelect,
+  onUse,
+}: {
+  readonly values: readonly OffTokenFound[];
+  readonly labelOf: (value: OffTokenFound) => string;
+  readonly onSelect: (value: OffTokenFound) => void;
+  readonly onUse: (value: OffTokenFound) => void;
+}) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <fieldset aria-label="Off-token values" className="m-0 flex flex-col gap-2 border-0 p-0">
+      <legend className="mb-1 text-xs font-medium text-muted-foreground">
+        <Button variant="ghost" size="xs" aria-expanded={open} onClick={() => setOpen(!open)}>{`Off-token values (${values.length})`}</Button>
+      </legend>
+      {open &&
+        (values.length === 0 ? (
+          <p className="m-0 text-sm text-muted-foreground">Every value here is on the kit.</p>
+        ) : (
+          values.map((value, index) => (
+            <div key={`${index}-${value.property}-${value.value}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+              <Button variant="ghost" size="sm" className="min-w-0 justify-start" onClick={() => onSelect(value)}>
+                <span className="flex min-w-0 flex-col items-start">
+                  <span className="max-w-full truncate text-sm">{labelOf(value)}</span>
+                  <span className="max-w-full truncate font-mono text-xs text-muted-foreground">{`${value.property}: ${value.value} ${value.exact ? "=" : "≈"} ${value.css}`}</span>
+                </span>
+              </Button>
+              <Button variant="outline" size="xs" onClick={() => onUse(value)}>
+                Use token
+              </Button>
+            </div>
+          ))
+        ))}
+    </fieldset>
+  );
+};
+
 export interface DesignTabProps {
   readonly session: EditSession;
   readonly kind: "page" | "motion";
@@ -828,6 +871,23 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     return tokenSlot(prefix, editable, SIDES.map((side) => `${prefix}-${side}`));
   };
 
+  // Off-token values: a row names its element (the Layers tab's name) or its rule; a row selects the place, and Use token writes a token edit for it.
+  const labelOfOff = (value: OffTokenFound): string => {
+    const place = value.place;
+    if ("elementId" in place) return elements.find((candidate) => candidate.id === place.elementId)?.name ?? place.elementId;
+    return `In styles: ${place.rule.selector}`;
+  };
+  const selectOff = (value: OffTokenFound) => {
+    const place = value.place;
+    if ("elementId" in place) session.setSelection([place.elementId]);
+    else session.selectMatching(place.rule.selector);
+  };
+  const useOff = (value: OffTokenFound) => {
+    const place = value.place;
+    const edit: SourceEdit = "elementId" in place ? { type: "token", elementId: place.elementId, property: value.property, token: value.path } : { type: "token", rule: place.rule, property: value.property, token: value.path };
+    session.patch(edit);
+  };
+
   // Visibility: a hide edit, for elements the source holds with an id and nothing locks them.
   const visible = subjects.every((subject) => subject.element === undefined || !subject.element.hidden);
   const visibleEditable = subjects.every((subject) => subject.element !== undefined && !subject.locked);
@@ -998,6 +1058,8 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
           <Switch aria-label="Visible" checked={visible} disabled={!visibleEditable} onCheckedChange={(next) => subjects.forEach((subject) => session.patch({ type: "hide", elementId: subject.id, hidden: !next }))} />
         </Row>
       </Section>
+
+      {kit !== null && <OffTokens values={tree?.offTokens ?? []} labelOf={labelOfOff} onSelect={selectOff} onUse={useOff} />}
 
       {picture !== null && (
         <fieldset aria-label="Image" className="m-0 flex flex-col gap-2 border-0 p-0">

@@ -69,10 +69,26 @@ export type ArtifactEditSidecar = typeof ArtifactEditSidecar.Type;
 export const ArtifactImage = Schema.Struct({ file: Schema.String, fileName: Schema.String, at: Schema.Number });
 export type ArtifactImage = typeof ArtifactImage.Type;
 
-/** Reads an artifact file's source tree and whether every element has its id and the bridge is in. */
+/** Where an off-token value sits: an element's inline style (by its id), or a style rule (spec 19). */
+export const OffTokenPlace = Schema.Union([Schema.Struct({ elementId: Schema.String }), Schema.Struct({ rule: StyleRuleRef })]);
+export type OffTokenPlace = typeof OffTokenPlace.Type;
+
+/** A literal in an artifact's source that sits close to a kit token (spec 19, Off-token rules). */
+export const OffTokenFound = Schema.Struct({
+  place: OffTokenPlace,
+  property: Schema.String,
+  value: Schema.String,
+  path: Schema.String,
+  css: Schema.String,
+  tokenValue: Schema.String,
+  exact: Schema.Boolean,
+});
+export type OffTokenFound = typeof OffTokenFound.Type;
+
+/** Reads an artifact file's source tree, whether every element has its id and the bridge is in, and its off-token values (spec 19). */
 export const ArtifactSourceTree = Rpc.make("artifact.sourceTree", {
   payload: Schema.Struct({ project: Schema.String, file: Schema.String }),
-  success: Schema.Struct({ ready: Schema.Boolean, elements: Schema.Array(SourceTreeElement) }),
+  success: Schema.Struct({ ready: Schema.Boolean, elements: Schema.Array(SourceTreeElement), offTokens: Schema.Array(OffTokenFound) }),
   error: UnframedError,
 });
 
