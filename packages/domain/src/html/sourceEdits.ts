@@ -5,7 +5,7 @@
 import type { SourceEdit } from "@unframed/contracts";
 import type { ArtifactKind } from "../artifacts/artifactRules.ts";
 import { DESIGN_FIELDS, styleValueRefusal } from "../designFields.ts";
-import { parseStylesheet } from "../kits/css.ts";
+import { parseStylesheet, type CssRule } from "../kits/css.ts";
 import { kitCssNames } from "../kits/rules.ts";
 import { cssName } from "../kits/runtime.ts";
 import { TEXT_STYLE_SUFFIX, type Kit } from "../kits/types.ts";
@@ -67,6 +67,7 @@ export const summaryLines = (lines: readonly string[]): string[] => {
 
 const applyEdit = (html: string, edit: SourceEdit, kind: ArtifactKind, kit: Kit | null): Step => {
   if (edit.type === "token") return applyToken(html, edit, kind, kit);
+  if (edit.type === "componentRule") return applyComponentRule(html, edit, kit);
   const before = sourceTreeOf(html).find((entry) => entry.id === edit.elementId);
   const target = findById(parseSource(html), edit.elementId);
   if (before === undefined || target === undefined) return { refusal: `There is no element ${edit.elementId} in this ${kind} any more.` };
@@ -151,6 +152,23 @@ const applyToken = (html: string, edit: Extract<SourceEdit, { type: "token" }>, 
   return { html: next, line: `Token · In styles: ${ref.selector}` };
 };
 
+/**
+ * A componentRule edit (spec 20): sets one declaration of the rule its StyleRuleRef names, adding it
+ * when the rule lacks it. The rest of the source stays byte for byte.
+ */
+const applyComponentRule = (html: string, edit: Extract<SourceEdit, { type: "componentRule" }>, kit: Kit | null): Step => {
+  const field = DESIGN_FIELDS.find((candidate) => candidate.property === edit.property);
+  if (field === undefined) return { refusal: `${edit.property} cannot be edited here.` };
+  const value = edit.value.trim();
+  const refusal = styleValueRefusal(edit.property, value, kit === null ? [] : kitCssNames(kit));
+  if (refusal !== null) return { refusal };
+  const found = findRule(html, edit.rule);
+  if (found === null) return { refusal: "That style rule is no longer in this component." };
+  const declaration = found.rule.declarations.filter((candidate) => candidate.property === edit.property).at(-1);
+  const next = declaration === undefined ? addDeclaration(html, found.block.start, found.rule, edit.property, value) : html.slice(0, found.block.start + declaration.start) + value + html.slice(found.block.start + declaration.end);
+  return { html: next, line: `${field.label} · ${edit.rule.selector}` };
+};
+
 /** The `<style>` elements of a source in document order, each with the offsets of its text. A block without a location is left out. */
 const styleBlocks = (doc: Document): Array<{ start: number; end: number }> => {
   const found: Array<{ start: number; end: number }> = [];
@@ -168,11 +186,18 @@ const styleBlocks = (doc: Document): Array<{ start: number; end: number }> => {
   return found;
 };
 
-/**
- * Replaces the value of the last `property` declaration of the rule `ref` names, keeping every
- * other byte. Null when the rule, or its declaration of that property, is gone.
- */
-const replaceRuleValue = (html: string, ref: { block: number; selector: string; occurrence: number }, property: string, value: string): string | null => {
+/** Adds a declaration at the end of a rule's block, before the closing brace and any space before it. */
+const addDeclaration = (html: string, blockStart: number, rule: CssRule, property: string, value: string): string => {
+  const open = blockStart + rule.body.open;
+  let at = blockStart + rule.body.close;
+  while (at > open && /\s/.test(html.charAt(at - 1))) at -= 1;
+  const before = html.slice(open, at).trimEnd();
+  const lead = before === "" || before.endsWith(";") ? " " : "; ";
+  return html.slice(0, at) + `${lead}${property}: ${value};` + html.slice(at);
+};
+
+/** The rule `ref` names, with the start offset of its style block in the source. Null when the rule is gone. */
+const findRule = (html: string, ref: { block: number; selector: string; occurrence: number }): { rule: CssRule; block: { start: number; end: number } } | null => {
   const block = styleBlocks(parseSource(html))[ref.block];
   if (block === undefined) return null;
   const text = html.slice(block.start, block.end);
@@ -181,12 +206,20 @@ const replaceRuleValue = (html: string, ref: { block: number; selector: string; 
     if (rule.selector !== ref.selector) continue;
     const occurrence = seen;
     seen += 1;
-    if (occurrence !== ref.occurrence) continue;
-    const declaration = rule.declarations.filter((candidate) => candidate.property === property).at(-1);
-    if (declaration === undefined) return null;
-    return html.slice(0, block.start + declaration.start) + value + html.slice(block.start + declaration.end);
+    if (occurrence === ref.occurrence) return { rule, block };
   }
   return null;
+};
+
+/**
+ * Replaces the value of the last `property` declaration of the rule `ref` names, keeping every
+ * other byte. Null when the rule, or its declaration of that property, is gone.
+ */
+const replaceRuleValue = (html: string, ref: { block: number; selector: string; occurrence: number }, property: string, value: string): string | null => {
+  const found = findRule(html, ref);
+  const declaration = found?.rule.declarations.filter((candidate) => candidate.property === property).at(-1);
+  if (found === null || declaration === undefined) return null;
+  return html.slice(0, found.block.start + declaration.start) + value + html.slice(found.block.start + declaration.end);
 };
 
 const isImageFile = (file: string): boolean =>

@@ -14,6 +14,8 @@ export const SourceEdit = Schema.Union([
   Schema.Struct({ type: Schema.Literal("attribute"), elementId: Schema.String, name: Schema.String, value: Schema.NullOr(Schema.String) }),
   Schema.Struct({ type: Schema.Literal("hide"), elementId: Schema.String, hidden: Schema.Boolean }),
   Schema.Struct({ type: Schema.Literal("image"), elementId: Schema.String, target: Schema.Literals(["src", "background"]), file: Schema.String }),
+  // A declaration in one rule of a component sheet's style (spec 20). The rule's selector is checked against locks by the engine.
+  Schema.Struct({ type: Schema.Literal("componentRule"), rule: StyleRuleRef, property: Schema.String, value: Schema.String }),
   // Exactly one of elementId and rule is set; the source edit refuses a token edit with both or neither (spec 19).
   Schema.Struct({
     type: Schema.Literal("token"),

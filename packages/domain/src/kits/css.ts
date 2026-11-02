@@ -22,6 +22,8 @@ export interface CssRule {
   /** The block at-rules the rule sits in, outermost first, as written (`@media (…)`). */
   readonly atRules: string[];
   readonly declarations: CssDeclaration[];
+  /** Offsets of the block's text: the index after its opening brace, and the index of its closing brace (or the end of the range). */
+  readonly body: { readonly open: number; readonly close: number };
 }
 
 /** The at-rules whose bodies hold style rules. Others (`@keyframes`, `@font-face`) are skipped. */
@@ -134,7 +136,7 @@ export const parseStylesheet = (text: string): CssRule[] => {
         if (prelude.startsWith("@")) {
           if (RULE_AT_RULES.test(prelude)) walk(i + 1, bodyEnd, [...atRules, prelude]);
         } else if (prelude !== "") {
-          rules.push({ selector: prelude, atRules, declarations: declarationsIn(text, i + 1, bodyEnd) });
+          rules.push({ selector: prelude, atRules, declarations: declarationsIn(text, i + 1, bodyEnd), body: { open: i + 1, close: bodyEnd } });
         }
         i = bodyEnd + 1;
         preludeStart = i;

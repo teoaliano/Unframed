@@ -131,7 +131,7 @@ export const artifactEditService = (deps: EditServiceDeps) => {
     if (locked.size > 0) {
       for (const edit of edits) {
         // Rename and hide still work on a locked element, so a person can tidy what they protected. A style rule is no element, so no lock holds it.
-        if (edit.type === "attribute" || edit.type === "hide" || edit.elementId === undefined) continue;
+        if (edit.type === "attribute" || edit.type === "hide" || edit.type === "componentRule" || edit.elementId === undefined) continue;
         const holder = lockedBy(edit.elementId, locked, byId);
         if (holder !== undefined) throw unframedError("bad_request", `${byId.get(holder)?.name ?? holder} is locked. Unlock it in Layers to edit it.`);
       }
