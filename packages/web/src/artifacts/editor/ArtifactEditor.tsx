@@ -320,7 +320,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             </TabsList>
           </Tabs>
         </ColumnHeader>
-        {panel === "design" && <DesignTab session={session} kind={facts.kind} dials={current ?? {}} locked={facts.locked} />}
+        {panel === "design" && <DesignTab session={session} kind={facts.kind} project={project} dials={current ?? {}} locked={facts.locked} />}
         {panel === "layers" && <LayersTab session={session} kind={facts.kind} shapeId={shapeId} locked={facts.locked} onLock={setLocked} />}
         {panel === "parameters" && (
           <ParametersBody

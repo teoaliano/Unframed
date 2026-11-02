@@ -16,7 +16,9 @@ import { Switch } from "~/components/ui/switch";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { Tip } from "../../chrome/ui.tsx";
 import { showError } from "../../toasts.tsx";
+import { previewUrl } from "../../canvas/assetStore.ts";
 import { chainOf } from "./EditPanels.tsx";
+import { ImagePicker } from "./ImagePicker.tsx";
 import type { EditReport, EditSession } from "./editSession.ts";
 
 const WEIGHTS = ["100", "200", "300", "400", "500", "600", "700", "800", "900"];
@@ -374,9 +376,27 @@ const SidesRow = ({
   );
 };
 
+/** The picture an element shows: an img's file, or the one url() of its background image; null when it shows none. */
+const pictureOf = (report: EditReport): { readonly target: "src" | "background"; readonly file: string } | null => {
+  if (report.tag === "img") return { target: "src", file: report.src ?? "" };
+  const match = /^url\(\s*["']?([^"')]*)["']?\s*\)$/.exec(report.computed["background-image"] ?? "");
+  return match === null ? null : { target: "background", file: match[1] ?? "" };
+};
+
+/** The bare project file name a picture's URL ends in: a computed background is an absolute URL. */
+const fileNameOf = (url: string): string => {
+  const last = url.split("/").pop() ?? "";
+  try {
+    return decodeURIComponent(last.split("?")[0] ?? "");
+  } catch {
+    return last;
+  }
+};
+
 export interface DesignTabProps {
   readonly session: EditSession;
   readonly kind: "page" | "motion";
+  readonly project: string;
   readonly dials: Readonly<Record<string, unknown>> | undefined;
   readonly locked: readonly string[];
 }
@@ -395,7 +415,7 @@ const normaliserFor = (property: string) => (value: string) => {
   return probe.style.getPropertyValue(property);
 };
 
-export const DesignTab = ({ session, kind, dials, locked }: DesignTabProps) => {
+export const DesignTab = ({ session, kind, project, dials, locked }: DesignTabProps) => {
   const { selection, reports, tree, preparing, prepareError, pending, families, overridden } = session;
   if (preparing) return <p className="m-0 p-2.5 text-sm text-muted-foreground">{`Getting this ${kind} ready for editing…`}</p>;
   if (prepareError !== undefined) return <p className="m-0 p-2.5 text-sm text-destructive-foreground">{prepareError}</p>;
@@ -549,6 +569,24 @@ export const DesignTab = ({ session, kind, dials, locked }: DesignTabProps) => {
   const visible = subjects.every((subject) => subject.element === undefined || !subject.element.hidden);
   const visibleEditable = subjects.every((subject) => subject.element !== undefined && !subject.locked);
 
+  // Image: one element at a time. An image edit still in the burst is the person's own, so its owner stays the source until it is written.
+  const picture = single ? pictureOf(first!.report) : null;
+  const pictureOwner: FieldOwner =
+    picture === null ? { owner: "source" }
+    : pending.some((edit) => edit.type === "image" && edit.elementId === first!.id && edit.target === picture.target) ? { owner: "source" }
+    : picture.target === "src" ?
+      first!.element === undefined ? { owner: "script" }
+      : fieldOwner({
+          field: { kind: "src" },
+          source: { inline: first!.element.style, text: first!.element.text, src: first!.element.src ?? null },
+          live: { inline: first!.report.inline, text: first!.report.text, src: first!.report.src, animated: first!.report.animated },
+          dials: dials ?? {},
+          locked: first!.locked,
+          normalise: (value) => value,
+        })
+    : ownerOf(first!, "background-image");
+  const pictureLine = picture === null ? null : ownerLine(pictureOwner, true);
+
   return (
     <div className="flex min-h-0 flex-col gap-3 overflow-auto p-2.5" data-testid="design-tab">
       <div className="flex min-w-0 items-baseline gap-2">
@@ -658,6 +696,19 @@ export const DesignTab = ({ session, kind, dials, locked }: DesignTabProps) => {
           <Switch aria-label="Visible" checked={visible} disabled={!visibleEditable} onCheckedChange={(next) => subjects.forEach((subject) => session.patch({ type: "hide", elementId: subject.id, hidden: !next }))} />
         </Row>
       </Section>
+
+      {picture !== null && (
+        <fieldset aria-label="Image" className="m-0 flex flex-col gap-2 border-0 p-0">
+          <legend className="mb-1 text-xs font-medium text-muted-foreground">Image</legend>
+          <div className="flex items-center gap-2">
+            {fileNameOf(picture.file) !== "" && <img alt="" src={previewUrl(project, fileNameOf(picture.file), 512)} className="size-10 shrink-0 rounded-sm object-cover" />}
+            {pictureOwner.owner === "source" && (
+              <ImagePicker project={project} onChoose={(file) => session.patch({ type: "image", elementId: first!.id, target: picture.target, file })} />
+            )}
+          </div>
+          {pictureLine}
+        </fieldset>
+      )}
     </div>
   );
 };
