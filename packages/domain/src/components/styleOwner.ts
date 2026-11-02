@@ -1,17 +1,8 @@
 /**
  * Style owners inside a component sheet (spec 20): which declaration sets a property on a
  * picked copy, by the cascade, and the owner order a sheet's Design field follows.
- *
- * `StyleRuleRef` has spec 19's shape (spec 19 owns the name; it is defined here so this module
- * builds on its own, and the two must stay identical).
  */
-
-/** The address of one rule in an artifact's `<style>` elements (spec 19). */
-export type StyleRuleRef = {
-  readonly block: number
-  readonly selector: string
-  readonly occurrence: number
-};
+import type { StyleRuleRef } from "../kits/offTokens.ts";
 
 export type StyleDeclaration = {
   readonly property: string;
