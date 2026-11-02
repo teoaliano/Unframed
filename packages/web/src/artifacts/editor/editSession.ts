@@ -138,6 +138,8 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
         showNotice(conflictSentence(kind, "elsewhere"), "warning");
         return;
       }
+      // A burst begun while this commit was in flight was made on the file before it: it now rests on the new one.
+      if (baseRef.current === base) baseRef.current = answer.file;
       // Each commit is its own undo step, so Cmd-Z takes back one save at a time.
       editor.markHistoryStoppingPoint("element edit");
       editor.updateShape({ id: shapeId as TLShapeId, type: kind, props: { file: answer.file } } as never);
@@ -156,6 +158,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   /**
    * Sends a burst to the engine. A `conflict` on the file this session set last is the room lagging the
    * editor, not another writer, so it is sent again for a few moments before it counts as a conflict.
+   * The editor's own shape must still show that file: once it shows another, the change was a real one.
    */
   const send = async (base: string, edits: SourceEdit[]): Promise<{ file: string }> => {
     for (let attempt = 0; ; attempt++) {
@@ -164,7 +167,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       } catch (error) {
         const code = (error as { code?: unknown }).code;
         const reason = (error as { details?: { reason?: unknown } }).details?.reason;
-        const lagging = code === "conflict" && reason !== "agent" && base === lastSet.current && attempt < LAG_RETRIES;
+        const lagging = code === "conflict" && reason !== "agent" && base === lastSet.current && shownFile() === base && attempt < LAG_RETRIES;
         if (!lagging) throw error;
         await new Promise((resolve) => setTimeout(resolve, LAG_RETRY_MS));
       }
@@ -324,6 +327,14 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
         return;
     }
   };
+
+  // The shape's file changed under a pending burst: the agent or another writer rewrote it. The burst is dropped
+  // at once. Committing it now lets the engine answer the conflict and say who changed the file, and it writes nothing.
+  useEffect(() => {
+    const base = baseRef.current;
+    if (base === undefined || file === base || file === "") return;
+    void commit();
+  }, [file]);
 
   // The source tree of the file, and the prepare that makes an older file editable (spec 18, The editor).
   useEffect(() => {
