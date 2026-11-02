@@ -210,6 +210,7 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
         entry.file = typeof props.file === "string" ? props.file : "";
         entry.title = typeof props.title === "string" ? props.title : "";
         if (props.dials !== undefined && Object.keys(obj(props.dials)).length > 0) entry.dials = props.dials;
+        if (Array.isArray(props.lockedElements) && props.lockedElements.length > 0) entry.lockedElements = props.lockedElements;
         break;
       case "mark": {
         entry.type = record.type;
@@ -467,6 +468,7 @@ const precheck = (ops: ReadonlyArray<unknown>, ctx: BatchContext): void => {
       if (!numeric(record.x) || !numeric(record.y)) refuse("create: x and y must be numbers");
     }
     const props = obj(record.props);
+    if (type === "update" && "lockedElements" in props) refuse("update: lockedElements is set by the person in the editor's Layers tab");
     if (hasDataUrl(props)) refuse(`${String(type)}: bytes cannot travel in shape props; name a file in the project folder instead`);
     if (type === "create" || type === "update") fileOf(String(type), ctx, props);
   }

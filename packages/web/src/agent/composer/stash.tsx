@@ -1,4 +1,4 @@
-import type { ChatAttachment } from "@unframed/contracts";
+import type { ChatAttachment, ElementChip } from "@unframed/contracts";
 import { stashSnippet } from "@unframed/domain";
 import { Bookmark, ChevronDown, File, FileText, Image, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -18,6 +18,7 @@ export interface StashEntry {
   readonly text: string;
   readonly selection: ReadonlyArray<string>;
   readonly attachments: ReadonlyArray<ChatAttachment>;
+  readonly elements?: ReadonlyArray<ElementChip>;
   readonly at: string;
 }
 
@@ -208,7 +209,9 @@ export const StashDrawer = ({
           <li className="px-2 py-1 text-xs text-muted-foreground">{`Nothing stashed yet. Press ${mac ? "⌘S" : "Ctrl+S"} with a prompt in the composer to stash it.`}</li>
         ) : (
           entries.map((entry) => {
-            const snippet = stashSnippet(entry.text, entry.attachments);
+            const pointed = entry.elements?.length ?? 0;
+            // An entry that holds only pointed-at elements (spec 18) says so, as one holding only files does.
+            const snippet = entry.text.trim() === "" && entry.attachments.length === 0 && pointed > 0 ? `(${pointed} element${pointed === 1 ? "" : "s"})` : stashSnippet(entry.text, entry.attachments);
             const images = entry.attachments.filter((item) => item.kind === "image").length;
             const files = entry.attachments.length - images;
             const lit = current?.id === entry.id;

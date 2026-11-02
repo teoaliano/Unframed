@@ -207,7 +207,7 @@ export const decide = (command: ChatCommand, model: ProjectChats, now: string): 
           turnId,
           streaming: false,
           attachments: attachments.map(({ id: attachmentId, name, type, kind, size }) => ({ id: attachmentId, name, type, kind, size })),
-          ...(message.context ? { context: { selection: [...message.context.selection] } } : {}),
+          ...(message.context ? { context: { selection: [...message.context.selection], ...(message.context.elements ? { elements: [...message.context.elements] } : {}) } } : {}),
           createdAt: command.createdAt,
         }),
         event("thread.turn-start-requested", id, {

@@ -4,6 +4,7 @@
  * says, how a restored draft joins the current one, what ArrowUp recalls, whether a
  * follow-up queues or steers, and when the typing guard holds a request back.
  */
+import type { ElementChip } from "@unframed/contracts";
 import { ATTACHMENT_LIMITS } from "./attachments.ts";
 import type { Chat } from "./chatModel.ts";
 import { IMPLEMENT_PLAN_PROMPT } from "./prompts.ts";
@@ -296,7 +297,23 @@ export interface StoredDraft {
   readonly text: string;
   readonly mentions: ReadonlyArray<string>;
   readonly attachments: ReadonlyArray<DraftAttachment>;
+  /** The element chips the person pointed at (spec 18), kept only when there are some. */
+  readonly elements?: ReadonlyArray<ElementChip>;
 }
+
+const isElementChip = (value: unknown): value is ElementChip => {
+  const item = value as Partial<ElementChip> | null;
+  return (
+    typeof item === "object" &&
+    item !== null &&
+    typeof item.shapeId === "string" &&
+    (item.elementId === null || typeof item.elementId === "string") &&
+    typeof item.selector === "string" &&
+    typeof item.tag === "string" &&
+    typeof item.label === "string" &&
+    typeof item.excerpt === "string"
+  );
+};
 
 const isDraftAttachment = (value: unknown): value is DraftAttachment => {
   const item = value as Partial<DraftAttachment> | null;
@@ -319,7 +336,8 @@ export const readStoredDrafts = (value: unknown): Array<[string, StoredDraft]> =
     if (typeof item !== "object" || item === null || typeof item.text !== "string") return [];
     const mentions = Array.isArray(item.mentions) ? item.mentions.filter((id): id is string => typeof id === "string") : [];
     const attachments = Array.isArray(item.attachments) ? item.attachments.filter(isDraftAttachment) : [];
-    return [[key, { text: item.text, mentions, attachments }]];
+    const elements = Array.isArray(item.elements) ? item.elements.filter(isElementChip) : [];
+    return [[key, { text: item.text, mentions, attachments, ...(elements.length > 0 ? { elements } : {}) }]];
   });
 };
 
@@ -327,8 +345,9 @@ export const readStoredDrafts = (value: unknown): Array<[string, StoredDraft]> =
 export const storedDraftsValue = (drafts: Iterable<readonly [string, StoredDraft]>, keep: (key: string) => boolean): Record<string, StoredDraft> | null => {
   const value: Record<string, StoredDraft> = {};
   for (const [key, draft] of drafts) {
-    if (!keep(key) || (draft.text === "" && draft.mentions.length === 0 && draft.attachments.length === 0)) continue;
-    value[key] = { text: draft.text, mentions: [...draft.mentions], attachments: [...draft.attachments] };
+    const elements = draft.elements ?? [];
+    if (!keep(key) || (draft.text === "" && draft.mentions.length === 0 && draft.attachments.length === 0 && elements.length === 0)) continue;
+    value[key] = { text: draft.text, mentions: [...draft.mentions], attachments: [...draft.attachments], ...(elements.length > 0 ? { elements: [...elements] } : {}) };
   }
   return Object.keys(value).length === 0 ? null : value;
 };

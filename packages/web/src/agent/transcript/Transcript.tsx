@@ -32,7 +32,7 @@ const UserMessage = ({ message, running, onEdit }: { readonly message: ChatMessa
   const [confirming, setConfirming] = useState(false);
   const long = message.text.length > COLLAPSE_CHARACTERS || message.text.split("\n").length > COLLAPSE_LINES;
   const [open, setOpen] = useState(false);
-  const selected = message.context?.selection.length ?? 0;
+  const selected = (message.context?.selection.length ?? 0) + (message.context?.elements?.length ?? 0);
   return (
     <article className="group flex flex-col items-end gap-1" data-role="user" data-message-id={message.id}>
       <div className="relative max-w-[80%] min-w-0 rounded-2xl bg-message p-3 text-message-foreground" data-testid="message-bubble">

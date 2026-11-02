@@ -46,6 +46,7 @@ Scripted-agent scripts in spec 07's format. Specs 07 and 08 use them all; `fixtu
 - `fixtures/question.json`: the agent asks the person two questions (single and multi-select) and waits. Specs 07 and 08.
 - `fixtures/rate-limit.json`: a usage-limit warning, then a rejected turn, then `allowed` clearing the notice. Specs 07 and 08.
 - `fixtures/resume.json`: a turn that asks a question (so it can be stopped while it waits), then a second turn that answers Resume thread. Spec 08.
+- `fixtures/race.json`: a `page_write` on the landing page, sent while the editor holds a pending burst. Spec 18.
 - `fixtures/revise.json`: `motion_read` then `motion_write` on an existing motion. Specs 07 and 09.
 - `fixtures/stitch.json`: two motions read and stitched into one new motion. Specs 07 and 09.
 - `fixtures/subagents.json`: three sub-agent tasks, one of them failed. Spec 08.

@@ -15,7 +15,7 @@ const LogoMark = () => (
   <span
     role="img"
     aria-label="Unframed"
-    className="block size-6 shrink-0 bg-foreground"
+    className="block size-4.5 shrink-0 bg-foreground"
     style={{ mask: `url("${logoUrl}") center / contain no-repeat`, WebkitMask: `url("${logoUrl}") center / contain no-repeat` }}
   />
 );
@@ -58,10 +58,13 @@ export const TopCorners = () => {
       <TabStrip
         platform={settingsOnLeft ? "windows" : "macos"}
         controls="space"
+        squareStart={docked}
         logo={<LogoMark />}
         settings={SettingsButton && <SettingsButton />}
         regions={{
-          frame: { className: "absolute inset-x-0 top-0" },
+          // The bar's fill and outline sit with the strip above the docked rail (600). Under it, the rail hid the bar's left
+          // flare and bottom border, and the rail's right border showed through the bar.
+          frame: { className: "absolute inset-x-0 top-0 *:data-[slot=top-bar-body]:z-[650]" },
           start: {
             ref: left,
             className: "unframed-chrome-left data-docked:z-[700] data-docked:border-transparent data-docked:bg-transparent",

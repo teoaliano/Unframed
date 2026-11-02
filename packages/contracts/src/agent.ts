@@ -5,6 +5,7 @@
  */
 import * as Schema from "effect/Schema";
 import { ConnectionClient } from "./agentConnections.ts";
+import { ElementChip } from "./elementEdits.ts";
 
 export const AgentProvider = Schema.Literals(["claude", "codex"]);
 export type AgentProvider = typeof AgentProvider.Type;
@@ -129,7 +130,11 @@ const Base = {
   threadId: Schema.String,
 };
 
-export const MessageContext = Schema.Struct({ selection: Schema.Array(Schema.String) });
+export const MessageContext = Schema.Struct({
+  selection: Schema.Array(Schema.String),
+  /** The elements the person pointed at (spec 18). Absent when none. */
+  elements: Schema.optionalKey(Schema.Array(ElementChip)),
+});
 
 export const ApprovalDecision = Schema.Literals(["accept", "acceptForSession", "decline", "cancel"]);
 export type ApprovalDecision = typeof ApprovalDecision.Type;

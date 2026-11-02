@@ -490,6 +490,15 @@ describe("drafts kept across reloads", () => {
     expect(storedDraftsValue([], () => true)).toBeNull();
   });
 
+  it("keeps a draft's pointed-at element chips (spec 18), and a draft that holds only those", () => {
+    const chip = { shapeId: "shape:page", elementId: "e1", selector: "#hero", tag: "h1", label: "Hero", excerpt: "Welcome" };
+    const value = storedDraftsValue([["chat-a", { text: "", mentions: [], attachments: [], elements: [chip] }]], () => true);
+    expect(value).toEqual({ "chat-a": { text: "", mentions: [], attachments: [], elements: [chip] } });
+    expect(readStoredDrafts({ "chat-a": { text: "", mentions: [], attachments: [], elements: [chip, { shapeId: 3 }] } })).toEqual([
+      ["chat-a", { text: "", mentions: [], attachments: [], elements: [chip] }],
+    ]);
+  });
+
   it("reads them back, skipping anything malformed", () => {
     const stored = {
       "chat-a": { text: "hello", mentions: ["shape:x", 4], attachments: [attachment, { id: 1 }] },

@@ -3,12 +3,13 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { BRIDGE_TAG, RUNTIME_TAG } from "@unframed/domain";
 import { describe, expect, it } from "vitest";
+import { renderConfigFor } from "../src/artifacts/renderer.ts";
 import { motionShape } from "./agentCanvas.ts";
 import { makeTempDir, startEngine, type TestEngine } from "./harness.ts";
 import type { TestRpcClient } from "./rpcClient.ts";
 
 const COMPOSITION = '<html><body><div id="root" data-composition-id="main" data-start="0" data-duration="2" data-width="640" data-height="360"></div></body></html>';
-const LIBRARY = ["gsap.js", "hyperframes-player.js", "hyperframes-runtime.js", "hyperframes-viewer.html", "unframed-dials.js"];
+const LIBRARY = ["gsap.js", "hyperframes-player.js", "hyperframes-runtime.js", "hyperframes-viewer.html", "unframed-dials.js", "unframed-edit.js"];
 
 interface Rendering {
   readonly engine: TestEngine;
@@ -52,7 +53,7 @@ describe("motion.upload", () => {
     const saved = await rpc.call("motion.upload", { project: "board", fileName: "../elsewhere/My Intro.html", html: "<head></head><div id=root></div>" });
     expect(saved).toEqual({ file: expect.stringMatching(/^\d+-my-intro\.html$/), fileName: "My Intro.html", bytes: expect.any(Number), mime: "text/html" });
     const html = await readFile(join(folder, saved.file), "utf8");
-    expect(html).toBe(`<head>${RUNTIME_TAG}\n${BRIDGE_TAG}\n</head><div id=root></div>`);
+    expect(html).toBe(`<head>${RUNTIME_TAG}\n${BRIDGE_TAG}\n</head><div data-hf-id="hf-aph5" id=root></div>`);
     expect(saved.bytes).toBe(Buffer.byteLength(html));
     expect(JSON.parse(await readFile(join(folder, saved.file.replace(/\.html$/, ".json")), "utf8"))).toEqual({
       source: "upload",
@@ -189,5 +190,12 @@ describe("lifecycle changes while a motion renders", () => {
     expect(await rpc.call("projects.rename", { name: "board", to: "renamed" })).toEqual({ name: "renamed", movedRenders: 0 });
     // Closing the project stopped tracking its renders.
     await expect(rpc.call("motion.renderStatus", { project: "board", id: started.id })).rejects.toMatchObject({ message: "No such render." });
+  });
+});
+
+describe("the producer config for a render", () => {
+  it("turns static-frame dedup off, whatever the environment says, so one capture glitch is not copied through the static tail", async () => {
+    const config = await renderConfigFor("/usr/bin/chrome");
+    expect(config.staticFrameDedup).toBe(false);
   });
 });

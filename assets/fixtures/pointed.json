@@ -1,0 +1,10 @@
+{
+  "when": "^pointed",
+  "turns": [
+    {
+      "title": "Read the pointed element",
+      "text": "I can see the heading you pointed at.",
+      "expectPreamble": "^Selected: page pg1 \\(\"Pointed\"\\)\\.\\n\\nThese are the elements the person pointed at in this message\\..*\\n\\nPage \"Pointed\" \\(shape pg1\\):\\n- \\[data-hf-id=\"hf-aaaa\"\\]: <h1 data-hf-id=\"hf-aaaa\">Hi</h1>$"
+    }
+  ]
+}

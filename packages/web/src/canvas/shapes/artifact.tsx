@@ -3,10 +3,11 @@ import { artifactTitle, readRef, type ArtifactKind, type DialsAnnouncement } fro
 import { AppWindow, Clapperboard } from "lucide-react";
 import { useCallback, useEffect } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
-import { ArtifactFrame, type ArtifactFrameProps } from "../../artifacts/ArtifactFrame.tsx";
+import { ArtifactFrame, type ArtifactFrameProps, type EditMessage } from "../../artifacts/ArtifactFrame.tsx";
+import { DropOutline, onFrameEdit } from "../../artifacts/imageDrop.tsx";
 import { ProblemLine, RenderRow } from "../../artifacts/RenderRow.tsx";
 import { snapshotsOf, snapshotUrl, stillOf } from "../../artifacts/snapshots.ts";
-import { forgetFrame, hearFrame, isInteractive, isLive, previewPort, reachFrame } from "../../artifacts/state.ts";
+import { forgetEdit, forgetFrame, hearFrame, isInteractive, isLive, previewPort, reachEdit, reachFrame } from "../../artifacts/state.ts";
 import { currentSlots } from "../../chrome/slots.ts";
 import { useCanvasProject } from "../../context.ts";
 import { artifactCardClass } from "./looks.ts";
@@ -76,7 +77,11 @@ const CanvasFrame = ({ shapeId, ...props }: Omit<ArtifactFrameProps, "onAnnounce
   useEffect(() => () => forgetFrame(editor, shapeId), [editor, shapeId]);
   const onAnnounce = useCallback((announcement: DialsAnnouncement) => hearFrame(editor, shapeId, announcement), [editor, shapeId]);
   const onReady = useCallback((post: (values: unknown) => void) => reachFrame(editor, shapeId, post), [editor, shapeId]);
-  return <ArtifactFrame {...props} onAnnounce={onAnnounce} onReady={onReady} />;
+  // The edit bridge is loaded into a canvas frame only for an image drop (spec 18); its answers come back here.
+  useEffect(() => () => forgetEdit(editor, shapeId), [editor, shapeId]);
+  const onEdit = useCallback((message: EditMessage) => onFrameEdit(editor, shapeId, message), [editor, shapeId]);
+  const onEditReady = useCallback((post: (message: unknown) => void) => reachEdit(editor, shapeId, post), [editor, shapeId]);
+  return <ArtifactFrame {...props} onAnnounce={onAnnounce} onReady={onReady} onEdit={onEdit} onEditReady={onEditReady} />;
 };
 
 /** A filled artifact: no card, the title above its corner, and its frame while live, else its still. */
@@ -99,6 +104,7 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
         ) : (
           <Still shape={shape} title={title} />
         )}
+        {live && <DropOutline shapeId={shape.id} />}
       </HTMLContainer>
       {kind === "motion" && <RenderRow shape={shape} />}
       <ProblemLine shapeId={shape.id} offset={props.h + (kind === "motion" ? RENDER_ROW_HEIGHT : 0)} width={props.w} />
