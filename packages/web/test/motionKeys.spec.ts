@@ -98,7 +98,8 @@ test("Esc closes the values panel first, then clears the tween selection, then t
   await openMotion(page, agent);
   await expect(timeline(page).getByTestId("timeline-row").first()).toBeVisible({ timeout: 40_000 });
   const bar = timeline(page).locator('[data-testid="timeline-bar"][data-tween="0"]').first();
-  const panel = timeline(page).getByRole("region", { name: /^Values for/ });
+  // The values panel is a popover, so it sits in the page, not in the strip.
+  const panel = page.getByRole("region", { name: /^Values for/ });
   const tweenSelected = () => timeline(page).locator('[data-testid="timeline-bar"][data-selected="true"]');
 
   // A double-click on a bar selects its tween and opens the values panel.
