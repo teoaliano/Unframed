@@ -15,6 +15,11 @@ const SHUTTLE_LIMIT = 4;
 /** Playback the person starts is trusted over the player's paused reports for this long, while the player starts. */
 const START_GRACE_MS = 400;
 
+/** A commit seek is confirmed by a report within half a frame of its time. Until then, older reports do not move the playhead. */
+const SEEK_TOLERANCE = 0.5 / FRAME_RATE;
+/** Reports older than a seek are ignored for at most this long, so a seek the player never confirms cannot hold the playhead. */
+const SEEK_SETTLE_MS = 500;
+
 /** Where a key came from: the frame (forwarded in Edit mode), the strip's time area, or the page body. */
 export type TransportZone = "frame" | "strip" | "body";
 
@@ -43,6 +48,8 @@ export class MotionTransport {
   // The last time the viewer reported, and when; while playing the clock moves on from it.
   private base = 0;
   private baseAt = 0;
+  /** A commit seek the player has not confirmed yet: its time, and when it was sent. */
+  private seeking: { time: number; at: number } | undefined;
   private expectPlay = 0;
   private frameRequest: number | undefined;
   // The settings go to the player once per connection and document: the runtime posts its timeline again whenever its manifest moves (a seek does that),
@@ -114,6 +121,11 @@ export class MotionTransport {
     // Until the carried time has landed, the new document's own report (time zero) is not the playhead.
     if (this.carried !== undefined) return;
     const now = performance.now();
+    // A report that predates a seek would send the playhead back, and the next step would start from there.
+    if (this.seeking !== undefined) {
+      if (Math.abs(data.time - this.seeking.time) <= SEEK_TOLERANCE || now - this.seeking.at > SEEK_SETTLE_MS) this.seeking = undefined;
+      else return;
+    }
     this.base = data.time;
     this.baseAt = now;
     if (data.ended === true) this.wantsPlay = false;
@@ -162,6 +174,7 @@ export class MotionTransport {
     this.baseAt = performance.now();
     this.send({ type: "unframed:player:control", action: "seek", seconds: time, mode });
     if (mode === "commit") {
+      this.seeking = { time, at: this.baseAt };
       this.wantsPlay = false;
       this.update({ playing: false, shuttle: undefined });
     }
@@ -170,8 +183,10 @@ export class MotionTransport {
 
   /** One frame (or ten) from the frame the playhead is in: the transport pauses first. */
   step = (frames: number): void => {
+    // A step taken before the last one has landed starts from where that step is going, so quick presses all count.
+    const from = this.seeking?.time ?? this.current();
     this.pause();
-    const frame = Math.max(0, frameOf(this.current()) + frames);
+    const frame = Math.max(0, frameOf(from) + frames);
     this.seek(frame / FRAME_RATE);
   };
 
