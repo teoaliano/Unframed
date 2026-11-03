@@ -26,6 +26,13 @@ Open the `.dc.html` files in a browser. The index (00) describes the folder as t
 - `design/OptionB.dc.html`: the recipe option where a group holds standing settings. Index; recipe groups are spec 06.
 - `design/OptionC.dc.html`: the recipe option where a result stays wired to its sources. Index.
 
+## design-md/
+
+The library's system kits (spec 19): ten DESIGN.md files from VoltAgent/awesome-design-md (MIT) at commit `3b605329240ce735b510037cca322f1831fdd7f8`, verbatim except `stripe/DESIGN.md`, where the upstream file's three misspellings of the brand as "Stripi" are corrected to "Stripe". `packages/domain/src/kits/systemKits.ts` lists them with their one-line summaries, and the Kit dialog's DESIGN.md importer turns each into a kit preset when the Library opens.
+
+- `design-md/LICENSE`: the repository's MIT licence.
+- `design-md/<name>/DESIGN.md`: one brand each, for `apple`, `claude`, `vercel`, `notion`, `airbnb`, `linear.app`, `stripe`, `figma`, `bmw-m` and `coinbase`.
+
 ## fixtures/
 
 Scripted-agent scripts in spec 07's format. Specs 07 and 08 use them all; `fixtures/README.md` holds the conventions.
@@ -72,6 +79,7 @@ Model-facing text. Each file says where it is used and what its placeholders are
 - `prompts/declined.md`: what the agent is told when the person declines a request. Spec 07.
 - `prompts/dials-contract.md`: the parameters paragraph appended to both artifact write descriptions. Specs 07 and 09.
 - `prompts/dials-timeline.md`: the timeline paragraph appended to the `motion_write` description. Specs 07 and 09.
+- `prompts/kit-tools.md`: the `kit_read` and `kit_write` descriptions and the `ops` argument, with the guidance framed as data. Spec 19.
 - `prompts/failures.md`: the failure sentences by subtype, the two fallbacks and the quit-mid-turn sentence. Spec 07.
 - `prompts/free-repair.md`: the Free mode repair call's system prompt parts and user turn prefix. Spec 05.
 - `prompts/implement-plan.md`: the prefix sent before a plan when the person implements it (from t3code, MIT). Spec 08.

@@ -71,3 +71,16 @@ DialKit (dialkit) is used under the MIT License. It is bundled with the web clie
 is never copied into a project folder.
 
 The full licence texts of these packages are listed with the rest of the bundle's packages.
+
+--------------------------------------------------------------------------------
+awesome-design-md (the library's system kits, spec 19)
+--------------------------------------------------------------------------------
+
+The ten DESIGN.md files in assets/design-md (apple, claude, vercel, notion, airbnb,
+linear.app, stripe, figma, bmw-m, coinbase) come from VoltAgent/awesome-design-md
+(https://github.com/VoltAgent/awesome-design-md, commit
+3b605329240ce735b510037cca322f1831fdd7f8), except one correction: stripe/DESIGN.md spells
+the brand "Stripi" three times upstream, and the copy here says "Stripe". The app turns each
+into a kit preset. They describe the visual language of those brands and are not affiliated
+with or endorsed by them. awesome-design-md is used under the MIT License; its text is in
+assets/design-md/LICENSE.
