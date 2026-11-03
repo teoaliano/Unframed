@@ -1,7 +1,3 @@
-/**
- * The library on the canvas (spec 06): the Library button in its chrome slot, the "Add to
- * library" handler the context menu calls, and the two dialogs they open.
- */
 import { UnframedError } from "@unframed/contracts";
 import type { KitPreset, LibraryEntry } from "@unframed/domain";
 import { useEffect, useState } from "react";
@@ -19,7 +15,6 @@ const messageOf = (error: unknown) => (error instanceof UnframedError || error i
 
 export const LIBRARY_TOOLTIP = "Ready-made flows and styles";
 
-/** The Library in the bottom bar: a tldraw toolbar button beside the tools. */
 const LibraryButton = () => {
   const editor = useEditor();
   return (
@@ -35,7 +30,6 @@ export const LibraryHost = () => {
   const project = useCanvasProject();
   const settings = useSettings();
   const ui = useValue("library", () => libraryUi(editor).get(), [editor]);
-  // A kit that would replace the project's own kit waits here for its confirmation.
   const [replacing, setReplacing] = useState<KitPreset>();
 
   useEffect(() => {

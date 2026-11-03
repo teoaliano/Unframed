@@ -1,7 +1,3 @@
-/**
- * The Kit table (spec 19): the groups on the left, the search, the tokens as rows with one column
- * per mode, the row menu, the mode menus, and Add token and Add mode.
- */
 import { applyKitOps, cssName, TOKEN_TYPES, type Kit, type KitOp, type Token, type TokenType, type TokenValue } from "@unframed/domain";
 import { useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
@@ -11,7 +7,6 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/c
 import { Tip } from "../chrome/ui.tsx";
 import { keepEscapeInField, ValueCell } from "./KitCells.tsx";
 
-/** The value a new token of each type starts with, so it is valid before the person edits it. */
 export const STARTING_VALUE: Record<TokenType, TokenValue> = {
   color: "#000000",
   dimension: "0px",
@@ -23,18 +18,15 @@ export const STARTING_VALUE: Record<TokenType, TokenValue> = {
   easing: "power2.out",
 };
 
-/** The value a token shows in one mode: its own, else the default mode's. */
 export const valueIn = (token: Token, mode: string, kit: Kit): TokenValue | undefined => token.value ?? token.values?.[mode] ?? token.values?.[kit.modes[0]!];
 
 const groupOf = (path: string): string => path.split("/")[0]!;
 
-/** Past this many rows the table renders only the rows in view (spec 19). */
 export const VIRTUAL_ROWS = 200;
 const ROW_HEIGHT = 56;
 const VIEWPORT_HEIGHT = 480;
 const OVERSCAN = 8;
 
-/** The rows to draw: all of them, or past VIRTUAL_ROWS the rows in view, with spacers standing in for the rest. */
 function windowRows<T>(rows: ReadonlyArray<T>, scrollTop: number, windowing: boolean): { rows: ReadonlyArray<T>; before: number; after: number } {
   if (!windowing) return { rows, before: 0, after: 0 };
   const first = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN);
@@ -42,7 +34,6 @@ function windowRows<T>(rows: ReadonlyArray<T>, scrollTop: number, windowing: boo
   return { rows: rows.slice(first, last), before: first * ROW_HEIGHT, after: (rows.length - last) * ROW_HEIGHT };
 }
 
-/** A token written whole, with its value or values, and the description it keeps (none when undefined). */
 const tokenOp = (token: Token, body: { readonly value: TokenValue } | { readonly values: Record<string, TokenValue> }, description: string | undefined): KitOp => ({
   op: "setToken",
   path: token.path,
@@ -51,14 +42,12 @@ const tokenOp = (token: Token, body: { readonly value: TokenValue } | { readonly
   ...(description !== undefined ? { description } : {}),
 });
 
-/** The artifacts that use a token or mode, named in a tooltip: at most ten titles, then the rest. */
 export const usedByLabel = (ids: ReadonlyArray<string>, titleOf: (id: string) => string): string => {
   const titles = ids.slice(0, 10).map(titleOf);
   const rest = ids.length - titles.length;
   return rest > 0 ? [...titles, `and ${rest} more`].join("\n") : titles.join("\n");
 };
 
-/** Which artifact shapes use each token path and each mode (kit.usage). */
 export interface KitUsageCounts {
   readonly tokens: Readonly<Record<string, readonly string[]>>;
   readonly modes: Readonly<Record<string, readonly string[]>>;
@@ -96,7 +85,6 @@ export const KitTable = (props: KitTableProps) => {
   );
   const windowed = windowRows(shown, scrollTop, shown.length > VIRTUAL_ROWS);
 
-  /** A refusal stays under its field; a commit that worked closes the field. */
   const finish = (refusal: string | undefined, close: () => void): string | undefined => {
     if (refusal === undefined) close();
     return refusal;
@@ -120,7 +108,6 @@ export const KitTable = (props: KitTableProps) => {
     else commit([tokenOp(token, { value: base }, token.description)]);
   };
 
-  /** The description is written with the token's own values; an empty text removes it. */
   const setDescription = (token: Token, text: string): string | undefined => {
     const trimmed = text.trim();
     const description = trimmed === "" ? undefined : trimmed;
@@ -133,7 +120,6 @@ export const KitTable = (props: KitTableProps) => {
     if (refusal === undefined) setAdding(false);
   };
 
-  /** Starting an edit clears the last refusal, so it never sits under a row it was not about. */
   const startEdit = (start: () => void) => {
     setProblem(undefined);
     start();
@@ -298,7 +284,6 @@ const GroupButton = ({ name, count, active, onClick }: { readonly name: string; 
   </Button>
 );
 
-/** A name typed in place: Enter commits, Escape or leaving the field cancels; a refusal shows under it. */
 const NameField = ({ label, initial, onCommit, onCancel }: { readonly label: string; readonly initial: string; readonly onCommit: (name: string) => string | undefined; readonly onCancel: () => void }) => {
   const [text, setText] = useState(initial);
   const [problem, setProblem] = useState<string>();

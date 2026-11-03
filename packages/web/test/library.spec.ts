@@ -23,7 +23,6 @@ test("the Library dialog: both rows of controls, the system presets, and the emp
   await expect(dialog.getByRole("group", { name: "Type" }).getByRole("button")).toHaveText(["All", "Recipes", "Groups", "Kits"]);
   await expect(dialog.getByRole("group", { name: "Source" }).getByRole("button")).toHaveText(["Any", "Custom", "System"]);
   expect(await shownNames(page)).toEqual(["Layerize", "Prose to JSON"]);
-  // Ten presets or fewer need no pages.
   await expect(dialog.getByRole("navigation", { name: "Pages" })).toHaveCount(0);
 
   await search.fill("nothing like this");
@@ -52,7 +51,6 @@ test("user presets come first by the sort, are filtered and searched, and page b
   await expect(pages.getByTestId("library-range")).toHaveText("11–16 of 16");
   expect(await shownNames(page)).toEqual(["Preset 02", "Preset 01", "Preset 00", "A recipe", "Layerize", "Prose to JSON"]);
 
-  // A new sort goes back to page 1.
   await dialog.getByRole("combobox", { name: "Sort" }).click();
   await page.getByRole("option", { name: "A–Z" }).click();
   await expect(pages.getByTestId("library-range")).toHaveText("1–10 of 16");
@@ -186,7 +184,6 @@ test("delete asks first, removes the preset, and says so when it fails", async (
   await expect.poll(() => shownNames(page)).toEqual(["Keep me", "Layerize", "Prose to JSON"]);
   expect(JSON.parse(await readFile(presetsFile(engine), "utf8")).map((entry: any) => entry.id)).toEqual(["user-a"]);
 
-  // The file goes bad behind the dialog's back: the engine refuses, and the dialog says so.
   await writePresets(engine, "[ not json");
   await presetItem(page, "Keep me").getByRole("button", { name: "Delete Keep me" }).click();
   await alert.getByRole("button", { name: "Delete preset" }).click();
@@ -200,7 +197,6 @@ test("the dialog reads the file every time it opens, and says so, keeping the sy
   await page.keyboard.press("Escape");
   await expect(libraryDialog(page)).toHaveCount(0);
 
-  // Saved in another tab, or written by another engine.
   await writePresets(engine, [userPreset("user-a", "From elsewhere")]);
   await openLibrary(page);
   expect(await shownNames(page)).toEqual(["From elsewhere", "Layerize", "Prose to JSON"]);

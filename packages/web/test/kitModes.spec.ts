@@ -6,8 +6,6 @@ import { clickShape } from "./generation.ts";
 import { filledArtifact } from "./artifacts.ts";
 import { putRecords } from "./media.ts";
 
-/** Spec 19, task 23: the Kit mode picker in the editor header and the selection toolbar. */
-
 const kit: Kit = {
   format: 1,
   name: "Brand",
@@ -26,7 +24,6 @@ const modeOf = async (engine: Parameters<typeof roomRecords>[0], id: string) =>
 
 const swatchIn = (frame: FrameLocator) => frame.locator("#swatch").evaluate((element) => getComputedStyle(element).backgroundColor);
 
-/** Opens the Kit mode picker in `scope` and chooses one of its options by name. */
 const pickMode = async (page: Page, scope: Locator, option: string) => {
   await scope.getByRole("combobox", { name: "Kit mode" }).click();
   await page.getByRole("option", { name: option, exact: true }).click();
@@ -38,7 +35,6 @@ test("the Kit mode picker sets a shape's mode from the toolbar and the editor he
   await filledArtifact(agent, { id: "shape:brand", kind: "page", ref: "170", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Brand", html: swatchPage() });
   await expect(shapeOnScreen(page, "shape:brand")).toBeVisible();
 
-  // The selection toolbar: after Parameters, it names the mode in use.
   await clickShape(page, "shape:brand");
   const toolbar = page.getByTestId("selection-toolbar");
   await expect(toolbar.getByRole("combobox", { name: "Kit mode" })).toHaveText("light");
@@ -46,11 +42,9 @@ test("the Kit mode picker sets a shape's mode from the toolbar and the editor he
   await expect.poll(() => modeOf(agent, "shape:brand")).toBe("dark");
   await expect(toolbar.getByRole("combobox", { name: "Kit mode" })).toHaveText("dark");
 
-  // Cmd-Z on the canvas takes the choice back.
   await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(() => modeOf(agent, "shape:brand")).toBeUndefined();
 
-  // The editor header: choosing dark restyles the editor's frame at once.
   const at = await centre(shapeOnScreen(page, "shape:brand"));
   await page.mouse.dblclick(at.x, at.y);
   const editor = page.getByTestId("artifact-editor");
@@ -60,7 +54,6 @@ test("the Kit mode picker sets a shape's mode from the toolbar and the editor he
   await expect.poll(() => modeOf(agent, "shape:brand")).toBe("dark");
   await expect.poll(() => swatchIn(frame)).toBe("rgb(138, 180, 248)");
 
-  // The default mode writes no prop at all.
   await pickMode(page, editor, "light (default)");
   await expect.poll(() => modeOf(agent, "shape:brand")).toBeUndefined();
   await expect.poll(() => swatchIn(frame)).toBe("rgb(26, 115, 232)");
