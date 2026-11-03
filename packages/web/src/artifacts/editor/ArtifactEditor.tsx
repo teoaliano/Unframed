@@ -132,6 +132,8 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   });
   const sessionRef = useRef(session);
   sessionRef.current = session;
+  // The motion strip's values panel, which an Esc closes first (spec 21): the strip sets the closer when it mounts.
+  const closePanel = useRef<(() => boolean) | undefined>(undefined);
   // A motion's transport (spec 21): the strip's buttons and keys drive the player through its viewer.
   const [transport] = useState(() => new MotionTransport());
   useEffect(() => () => transport.dispose(), [transport]);
@@ -239,6 +241,11 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      // Esc ends the innermost open thing first: a motion's values panel (spec 21), then the session's own selections (spec 18).
+      if (event.key === "Escape" && !event.defaultPrevented && closePanel.current?.()) {
+        event.preventDefault();
+        return;
+      }
       if (event.defaultPrevented || editor.wasEventAlreadyHandled(event) || typingIn(event.target) || typingIn(document.activeElement)) return;
       if (isUndo(event)) return;
       // The transport takes its keys only where the focus is the frame, the strip or the page body (spec 21, the shortcuts).
@@ -572,6 +579,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
         <MotionTimeline
           key={shapeId}
           title={title}
+          closePanel={closePanel}
           engine={engine}
           project={project}
           file={facts.file}

@@ -89,6 +89,8 @@ const tickLabel = (seconds: number): string => `${Number(seconds.toFixed(2))} s`
 export interface MotionTimelineProps {
   /** The motion's title, which names the region. */
   readonly title: string;
+  /** The editor's Esc asks the strip to close its values panel first: the strip sets this to a closer that answers whether it closed one (spec 21, Esc). */
+  readonly closePanel: { current: (() => boolean) | undefined };
   readonly engine: EngineConnection;
   readonly project: string;
   /** The motion's file: its reading is asked for by name, and asked again when the file changes. */
@@ -337,7 +339,7 @@ const RowLine = ({
   );
 };
 
-export const MotionTimeline = ({ title, engine, project, file, session, dials, schema, locked, column, transport, onAsk, kit, mode, reveal, className }: MotionTimelineProps) => {
+export const MotionTimeline = ({ title, closePanel, engine, project, file, session, dials, schema, locked, column, transport, onAsk, kit, mode, reveal, className }: MotionTimelineProps) => {
   const [prefs, save] = useTimelinePrefs(engine);
   const { open } = prefs;
   const transportState = useSyncExternalStore(transport.subscribe, transport.getSnapshot);
@@ -366,6 +368,19 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
   const setSelectedTween = session.setTween;
   // The timing panel: the bar it opened from, by its tween and target (spec 21, The values panel).
   const [timing, setTiming] = useState<{ readonly tween: number; readonly target: string; readonly at: number | null } | null>(null);
+  const timingOpen = useRef(false);
+  timingOpen.current = timing !== null;
+  useEffect(() => {
+    closePanel.current = () => {
+      if (!timingOpen.current) return false;
+      timingOpen.current = false;
+      setTiming(null);
+      return true;
+    };
+    return () => {
+      closePanel.current = undefined;
+    };
+  }, [closePanel]);
   const tweens = useMemo(() => new Map<number, Tween>((current?.value?.tweens ?? []).map((tween) => [tween.ref.index, tween])), [current?.value]);
   const hidden = useMemo(() => new Set((session.tree?.elements ?? []).filter((element) => element.hidden).map((element) => element.id)), [session.tree]);
   const names = useMemo(() => Object.fromEntries((session.tree?.elements ?? []).map((element) => [element.id, element.name])), [session.tree]);

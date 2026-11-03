@@ -554,6 +554,11 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       if (parent) setSelection([parent]);
       return true;
     }
+    // A motion's tween selection goes first, then the element selection (spec 21, Esc).
+    if (key === "Escape" && tweenRef.current !== null) {
+      setTween(null);
+      return true;
+    }
     if (key === "Escape" && selectionRef.current.length > 0) {
       setSelection([]);
       return true;

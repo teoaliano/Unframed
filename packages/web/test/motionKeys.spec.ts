@@ -7,7 +7,9 @@ import type { TestEngine } from "../../engine/test/engineProcess.ts";
 /** A four-second motion whose dot moves across the composition, so there is a selectable element and a clock. */
 const MOVER = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}#dot{position:absolute;left:20px;top:120px;width:80px;height:80px;background:#f00}</style></head><body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360"><div id="dot" class="clip" data-start="0" data-duration="4"></div></div>
-<script src="gsap.js"></script><script>window.__timelines = { main: gsap.timeline({ paused: true }).to("#dot", { x: 400, duration: 4 }, 0) };</script></body></html>`;
+<script src="gsap.js"></script><script>const tl = gsap.timeline({ paused: true });
+tl.to("#dot", { x: 400, duration: 4 }, 0);
+window.__timelines = { main: tl };</script></body></html>`;
 
 const SHAPE = "shape:intro";
 const editor = (page: Page) => page.getByTestId("artifact-editor");
@@ -88,6 +90,42 @@ test("Esc in the strip clears the element selection first, and a second Esc clos
   await expect(outline(page, "selected")).toHaveCount(0);
   await expect(region(page)).toBeVisible();
 
+  await page.keyboard.press("Escape");
+  await expect(region(page)).toHaveCount(0);
+});
+
+test("Esc closes the values panel first, then clears the tween selection, then the element selection, and a last Esc closes the editor", async ({ page, agent }) => {
+  await openMotion(page, agent);
+  await expect(timeline(page).getByTestId("timeline-row").first()).toBeVisible({ timeout: 40_000 });
+  const bar = timeline(page).locator('[data-testid="timeline-bar"][data-tween="0"]').first();
+  const panel = timeline(page).getByRole("region", { name: /^Values for/ });
+  const tweenSelected = () => timeline(page).locator('[data-testid="timeline-bar"][data-selected="true"]');
+
+  // A double-click on a bar selects its tween and opens the values panel.
+  await bar.dblclick();
+  await expect(panel).toBeVisible();
+  await expect.poll(() => tweenSelected().count()).toBeGreaterThan(0);
+
+  // Esc closes the panel and keeps the tween selected.
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
+  await expect.poll(() => tweenSelected().count()).toBeGreaterThan(0);
+  await expect(region(page)).toBeVisible();
+
+  // The next Esc clears the tween selection, and the element is not touched.
+  await page.keyboard.press("Escape");
+  await expect.poll(() => tweenSelected().count()).toBe(0);
+  await expect(region(page)).toBeVisible();
+
+  // With an element selected in the frame and no tween, Esc clears the element; a further Esc closes the editor.
+  await expect(async () => {
+    await insideComposition(region(page).frameLocator("iframe[data-artifact-frame]")).locator("#dot").click();
+    await expect(outline(page, "selected")).toHaveCount(1, { timeout: 1000 });
+  }).toPass({ timeout: 40_000 });
+  await timeline(page).getByTestId("timeline-rows").click();
+  await page.keyboard.press("Escape");
+  await expect(outline(page, "selected")).toHaveCount(0);
+  await expect(region(page)).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(region(page)).toHaveCount(0);
 });
