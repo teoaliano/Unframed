@@ -275,3 +275,25 @@ test("at fit the last keyframe sits inside the strip and opens its panel, and at
   await clickDiamond(page, 4, 1);
   await expect(panel(page).getByText("Ends at the element's own style.")).toBeVisible();
 });
+
+const SET = VALUES.replace('tl.to("#dot", { backgroundColor: "rebeccapurple", duration: 0.5 }, 2);', 'tl.set("#dot", { backgroundColor: "rebeccapurple" }, 2);');
+
+test("a number cleared in the values panel reverts to the last committed value, as a colour does", async ({ page, agent }) => {
+  await openMotion(page, agent, VALUES);
+  await clickDiamond(page, 0, 1);
+  const x = panel(page).getByRole("textbox", { name: "X", exact: true });
+  await x.fill("");
+  await x.press("Enter");
+  await expect(x).toHaveValue("120");
+});
+
+test("a number the engine refuses reverts the field to the last committed value, as a colour does", async ({ page, agent }) => {
+  await openMotion(page, agent, SET);
+  await clickDiamond(page, 1, 0);
+  const duration = panel(page).getByRole("textbox", { name: "Duration", exact: true });
+  const committed = await duration.inputValue();
+  await duration.fill("2");
+  await duration.press("Enter");
+  await expect(page.getByRole("alert").getByText("A set has no duration to change.")).toBeVisible({ timeout: 15_000 });
+  await expect(duration).toHaveValue(committed);
+});

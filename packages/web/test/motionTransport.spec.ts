@@ -36,9 +36,9 @@ const timeInComposition = async (page: Page): Promise<number> => {
 test.setTimeout(150_000);
 
 /** Opens the motion in the editor, in Edit mode, with the strip's time area focused: keys act there. */
-const openStrip = async (page: Page, engine: TestEngine) => {
+const openStrip = async (page: Page, engine: TestEngine, size = { w: 480, h: 270 }) => {
   await openCanvas(page, engine);
-  await filledArtifact(engine, { id: SHAPE, kind: "motion", ref: "150", at: { x: -520, y: -40 }, size: { w: 480, h: 270 }, title: "Intro", html: MOVER });
+  await filledArtifact(engine, { id: SHAPE, kind: "motion", ref: "150", at: { x: -520, y: -40 }, size, title: "Intro", html: MOVER });
   await expect(shapeOnScreen(page, SHAPE)).toBeVisible();
   await page.mouse.click(640, 600);
   const at = await centre(shapeOnScreen(page, SHAPE));
@@ -139,4 +139,13 @@ test("playing from the transport in Edit mode moves the motion, and the outline 
   await expect.poll(() => timeInComposition(page), { timeout: 10_000 }).toBeGreaterThan(0.5);
   await page.keyboard.press("Space");
   await expect.poll(async () => (await outline(page, "selected").boundingBox())!.x, { timeout: 5000 }).toBeGreaterThan(before.x + 30);
+});
+
+test("a click on the frame's margin in Edit mode does not start playback", async ({ page, agent }) => {
+  // A 16:9 motion in a 3:2 frame leaves a band above and below the composition, which only the player takes the click on.
+  await openStrip(page, agent, { w: 480, h: 320 });
+  await region(page).frameLocator("iframe[data-artifact-frame]").locator("hyperframes-player").click({ position: { x: 100, y: 4 } });
+  await page.waitForTimeout(1000);
+  await expect(timeline(page).getByRole("button", { name: "Play (Space)" })).toBeVisible();
+  expect(await timeInComposition(page)).toBe(0);
 });

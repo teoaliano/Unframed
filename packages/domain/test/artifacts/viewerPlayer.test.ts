@@ -170,5 +170,6 @@ describe("the viewer page", () => {
     expect(page).toContain("editor");
     expect(page).toContain("setAttribute(\"controls\"");
     expect(page).toContain("setAttribute(\"autoplay\"");
+    expect(page).toContain("disable-click-to-play");
   });
 });
