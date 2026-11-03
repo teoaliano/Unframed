@@ -87,6 +87,31 @@ test("dragging the left edge stretches from the start, so the end stays where it
   await expect.poll(() => editSummaries(agent).then((all) => all.at(-1)), { timeout: 15_000 }).toEqual(["Moved Dot position to 1 s", "Set Dot position to 3 s long"]);
 });
 
+test("pressing a bar's end diamond with no movement opens the values panel and writes nothing", async ({ page, agent }) => {
+  await openMotion(page, agent);
+  const before = (await editSummaries(agent)).length;
+  await row(page, "Dot").locator('[data-testid="timeline-diamond"][data-fraction="1"]').click();
+  await expect(timeline(page).getByRole("region", { name: /^Values for Dot/ })).toBeVisible();
+  await page.waitForTimeout(1_500);
+  expect((await editSummaries(agent)).length).toBe(before);
+});
+
+test("pressing a bar's end diamond and dragging it stretches the bar with its start fixed, and opens no panel", async ({ page, agent }) => {
+  await openMotion(page, agent);
+  const ruler = await rulerOf(page);
+  const diamondAtEnd = row(page, "Dot").locator('[data-testid="timeline-diamond"][data-fraction="1"]');
+  const box = await diamondAtEnd.boundingBox();
+  if (!box) throw new Error("no diamond");
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width / 2, y);
+  await page.mouse.down();
+  await page.mouse.move(ruler.x(3), y, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => Number(await bar(page).getAttribute("data-duration"))).toBeCloseTo(3, 1);
+  expect(Number(await bar(page).getAttribute("data-start"))).toBeCloseTo(0, 3);
+  await expect(timeline(page).getByRole("region", { name: /^Values for/ })).toHaveCount(0);
+});
+
 test("a stretched edge snaps to another bar's edge within 8 px, and a guide shows the snap", async ({ page, agent }) => {
   await openMotion(page, agent);
   const ruler = await rulerOf(page);

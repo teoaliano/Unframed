@@ -6,7 +6,7 @@
  * after that column, so the ruler and the playhead share one coordinate system with the bars.
  */
 import { ChevronDown, ChevronLeft, ChevronRight, Lock, Maximize2, PanelBottom, Pause, Play, Repeat, Volume2, VolumeX, ZoomIn, ZoomOut } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { clampDialValue, dialAt, fitZoom, rulerStep, snapMove, snapTime, zoomAt, zoomButton, type DialSchema, type Kit, type Owner, type SnapTarget, type Tween, type TweenRef } from "@unframed/domain";
 import type { SourceEdit } from "@unframed/contracts";
 import type { ChipElement } from "@unframed/domain";
@@ -36,6 +36,9 @@ const LABEL_WIDTH = 160;
 /** A bar's edge within this many pixels is its stretch handle (spec 21, Editing on the strip). */
 const EDGE_PIXELS = 6;
 
+/** A press that moves less than this many pixels is a click, not a drag (spec 21, Rows, lanes and diamonds). */
+const DRAG_PIXELS = 3;
+
 /** A colour as a CSS colour text, the forms the values panel draws a swatch for. */
 const COLOUR = /^(#[0-9a-f]{3,8}|rgba?\(|hsla?\(|oklch\(|[a-z]+$)/i;
 
@@ -58,6 +61,9 @@ interface Gesture {
   readonly ref: TweenRef;
   readonly channels: string[];
   readonly startX: number;
+  readonly startY: number;
+  /** Whether the press has moved far enough to be a drag. A bar's press is one from the start; a diamond's is once it moves. */
+  moved: boolean;
   /** The bar's own start and end, stagger offset included. */
   readonly origin: number;
   readonly end: number;
@@ -189,6 +195,8 @@ const RowLine = ({
   onBarDown,
   onBarMove,
   onBarUp,
+  onDiamondDown,
+  onDiamondClick,
   onOpenValues,
   clipNote,
   onClipDown,
@@ -204,8 +212,11 @@ const RowLine = ({
   readonly onSelectElement: (id: string) => void;
   readonly cursorOf: (bar: BarView) => string;
   readonly onBarDown: (bar: BarView, event: ReactPointerEvent<HTMLDivElement>) => void;
-  readonly onBarMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  readonly onBarUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  readonly onBarMove: (event: ReactPointerEvent<HTMLElement>) => void;
+  readonly onBarUp: (event: ReactPointerEvent<HTMLElement>) => void;
+  /** A press on a keyframe: the bar's gesture at the point pressed, or none, and a click, which opens the values panel. */
+  readonly onDiamondDown: (bar: BarView, event: ReactPointerEvent<HTMLElement>) => void;
+  readonly onDiamondClick: (bar: BarView, fraction: number, event: ReactMouseEvent<HTMLElement>) => void;
   readonly onOpenValues: (bar: BarView, fraction: number | null) => void;
   /** A clip row's note: the sentence its bar shows, or null when it may move. Undefined for every other row. */
   readonly clipNote?: string | null | undefined;
@@ -261,39 +272,6 @@ const RowLine = ({
             style={{ left: row.span.start * pxPerSecond, width: Math.max(row.span.duration * pxPerSecond, 2) }}
           />
         )}
-        {/* The keyframes sit under the bars, so a bar's stretch edge takes the pointer where a diamond sits on it. */}
-        {row.bars.flatMap((bar, index) =>
-          bar.copy
-            ? []
-            : bar.diamonds.map((at, step) => {
-                // A diamond's place in its bar, 0 at its start and 1 at its end: the values it opens with (spec 21, Rows).
-                const fraction = bar.duration > 0 ? Math.round(((at - bar.start) / bar.duration) * 1000) / 1000 : 0;
-                return (
-                  // A keyframe is a small target of its own, not a kit button: a button's touch area would cover the bar it sits on.
-                  <span
-                    key={`${index}:${step}`}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Keyframe of ${row.name}`}
-                    data-testid="timeline-diamond"
-                    data-tween={bar.tween}
-                    data-fraction={fraction}
-                    className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rotate-45 bg-foreground"
-                    style={{ left: at * pxPerSecond }}
-                    onPointerDown={(event) => event.stopPropagation()}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onOpenValues(bar, fraction);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter" && event.key !== " ") return;
-                      event.preventDefault();
-                      onOpenValues(bar, fraction);
-                    }}
-                  />
-                );
-              }),
-        )}
         {row.bars.map((bar, index) => {
           const thin = row.kind === "element" && !row.expanded;
           const chosen = bar.tween >= 0 && bar.tween === selectedTween;
@@ -330,6 +308,43 @@ const RowLine = ({
             />
           );
         })}
+        {/* The keyframes are drawn above the bars, so every diamond takes the pointer, the middle ones included (spec 21, Rows, lanes and diamonds). */}
+        {row.bars.flatMap((bar, index) =>
+          bar.copy
+            ? []
+            : bar.diamonds.map((at, step) => {
+                // A diamond's place in its bar, 0 at its start and 1 at its end: the values it opens with (spec 21, Rows).
+                const fraction = bar.duration > 0 ? Math.round(((at - bar.start) / bar.duration) * 1000) / 1000 : 0;
+                return (
+                  // A keyframe is a small target of its own, not a kit button: a button's touch area would cover the bar it sits on.
+                  <span
+                    key={`${index}:${step}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Keyframe of ${row.name}`}
+                    data-testid="timeline-diamond"
+                    data-tween={bar.tween}
+                    data-target={bar.target}
+                    data-fraction={fraction}
+                    className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rotate-45 bg-foreground"
+                    style={{ left: at * pxPerSecond }}
+                    onPointerDown={(event) => {
+                      event.stopPropagation();
+                      onDiamondDown(bar, event);
+                    }}
+                    onPointerMove={onBarMove}
+                    onPointerUp={onBarUp}
+                    onPointerCancel={onBarUp}
+                    onClick={(event) => onDiamondClick(bar, fraction, event)}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      onOpenValues(bar, fraction);
+                    }}
+                  />
+                );
+              }),
+        )}
       </div>
     </div>
   );
@@ -569,6 +584,8 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
   // and from the left edge both (the end stays put). Each change is one tween edit in the burst and a tween patch in the frame,
   // and the burst's pause writes the version after the release.
   const gesture = useRef<Gesture | null>(null);
+  /** Whether the keyframe press that is under way has moved, so the click that ends it does not open the values panel. */
+  const diamondMoved = useRef(false);
   const [guide, setGuide] = useState<number | null>(null);
   const [barDragging, setBarDragging] = useState(false);
   const pendingTiming = (index: number): { start?: number; duration?: number | { token: string } } | undefined =>
@@ -587,27 +604,55 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
     const rights = allowed(bar, row);
     return rights.move || rights.start || rights.end ? "cursor-grab" : "cursor-not-allowed";
   };
-  const onBarDown = (bar: BarView, row: RowView, event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
+  /**
+   * Starts a gesture on a bar or a keyframe. `local` and `width` are the press's place and the bar's width in pixels, so a keyframe
+   * takes the bar's gesture at the point it sits on: within 6 px of an edge is a stretch, else a move (spec 21, Rows, lanes and diamonds).
+   */
+  const beginGesture = (bar: BarView, row: RowView, event: ReactPointerEvent<HTMLElement>, local: number, width: number, fromDiamond: boolean): void => {
     setSelectedTween(bar.tween);
     if (row.element !== null && !session.selection.includes(row.element)) session.setSelection([row.element]);
     const rights = allowed(bar, row);
-    const rect = event.currentTarget.getBoundingClientRect();
-    const local = event.clientX - rect.left;
     // The edge within 6 px is the stretch; a narrow bar's nearer edge wins.
     const nearStart = local <= EDGE_PIXELS && rights.start;
-    const nearEnd = rect.width - local <= EDGE_PIXELS && rights.end;
-    const mode: GestureMode | null = nearStart && nearEnd ? (local <= rect.width / 2 ? "start" : "end") : nearStart ? "start" : nearEnd ? "end" : rights.move ? "move" : null;
+    const nearEnd = width - local <= EDGE_PIXELS && rights.end;
+    const mode: GestureMode | null = nearStart && nearEnd ? (local <= width / 2 ? "start" : "end") : nearStart ? "start" : nearEnd ? "end" : rights.move ? "move" : null;
     if (mode === null) return;
     const tween = tweens.get(bar.tween)!;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
-    gesture.current = { mode, bar, target: bar.target, ref: tween.ref, channels: channelsOf(tween), startX: event.clientX, origin: bar.start, end: bar.start + bar.duration, offset: bar.stagger ?? 0, last: "" };
-    setBarDragging(true);
+    gesture.current = { mode, bar, target: bar.target, ref: tween.ref, channels: channelsOf(tween), startX: event.clientX, startY: event.clientY, moved: !fromDiamond, origin: bar.start, end: bar.start + bar.duration, offset: bar.stagger ?? 0, last: "" };
+    // A keyframe shows the drag once it has moved; a bar shows it from the press.
+    if (!fromDiamond) setBarDragging(true);
   };
-  const onBarMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+  const onBarDown = (bar: BarView, row: RowView, event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    beginGesture(bar, row, event, event.clientX - rect.left, rect.width, false);
+  };
+  const onDiamondDown = (bar: BarView, row: RowView, event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return;
+    diamondMoved.current = false;
+    // The keyframe sits in the time area, whose left edge is the bar's origin at zero seconds.
+    const area = event.currentTarget.parentElement?.getBoundingClientRect();
+    if (area === undefined) return;
+    const left = area.left + bar.start * pxRef.current;
+    beginGesture(bar, row, event, event.clientX - left, Math.max(bar.duration * pxRef.current, 2), true);
+  };
+  /** A click on a keyframe opens its values panel, unless the press before it moved (then it was a drag). */
+  const onDiamondClick = (bar: BarView, fraction: number, event: ReactMouseEvent<HTMLElement>) => {
+    event.stopPropagation();
+    if (diamondMoved.current) return;
+    openValues(bar, fraction);
+  };
+  const onBarMove = (event: ReactPointerEvent<HTMLElement>) => {
     const current = gesture.current;
     if (current === null) return;
+    if (!current.moved) {
+      if (Math.hypot(event.clientX - current.startX, event.clientY - current.startY) < DRAG_PIXELS) return;
+      current.moved = true;
+      diamondMoved.current = true;
+      setBarDragging(true);
+    }
     const targets = snapTargets(rows, current.ref.index, transport.current(), range, length);
     const pxPerSecond = pxRef.current;
     const dt = (event.clientX - current.startX) / pxPerSecond;
@@ -958,7 +1003,7 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
     setSelectedTween(bar.tween);
     setTiming({ tween: bar.tween, target: bar.target, at: fraction });
   };
-  const onBarUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+  const onBarUp = (event: ReactPointerEvent<HTMLElement>) => {
     if (gesture.current === null) return;
     gesture.current = null;
     setGuide(null);
@@ -1165,6 +1210,8 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
                     onBarDown={(bar, event) => onBarDown(bar, row, event)}
                     onBarMove={onBarMove}
                     onBarUp={onBarUp}
+                    onDiamondDown={(bar, event) => onDiamondDown(bar, row, event)}
+                    onDiamondClick={onDiamondClick}
                     onOpenValues={openValues}
                     clipNote={clipNoteFor(row)}
                     onClipDown={(event) => onClipDown(row, event)}
