@@ -11,12 +11,13 @@ import { useSlots } from "./slots.ts";
  */
 export const ToolbarEnd = () => {
   const editor = useEditor();
-  const { agentButton: Agent, libraryButton: Library } = useSlots();
+  const { agentButton: Agent, kitButton: Kit, libraryButton: Library } = useSlots();
   const [open, setOpen] = useState(false);
   const add = useRef<HTMLButtonElement>(null);
   return (
     <TldrawUiToolbar orientation="horizontal" label="Unframed" data-unframed-toolbar-group="">
       {Agent && <Agent />}
+      {Kit && <Kit />}
       {Library && <Library />}
       <TldrawUiToolbarButton ref={add} type="tool" title="Add" isActive={open} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((was) => !was)}>
         <TldrawUiButtonIcon icon="plus" />

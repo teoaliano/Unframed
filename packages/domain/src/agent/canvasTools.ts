@@ -210,6 +210,7 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
         entry.file = typeof props.file === "string" ? props.file : "";
         entry.title = typeof props.title === "string" ? props.title : "";
         if (props.dials !== undefined && Object.keys(obj(props.dials)).length > 0) entry.dials = props.dials;
+        if (typeof props.mode === "string") entry.mode = props.mode;
         if (Array.isArray(props.lockedElements) && props.lockedElements.length > 0) entry.lockedElements = props.lockedElements;
         break;
       case "mark": {
@@ -263,6 +264,8 @@ export interface BatchContext {
   readonly indexAbove: (below: string | undefined) => string;
   readonly pageId: string;
   readonly boxes: ReadonlyMap<string, ShapeBoxes>;
+  /** The kit's mode names; a page or motion may only name one of them (spec 19). */
+  readonly modes?: ReadonlyArray<string>;
 }
 
 export type PreparedBatch =
@@ -646,6 +649,9 @@ const update = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
     const { text, ...rest } = patch;
     props.richText = richTextOf(typeof text === "string" ? text : "");
     return applyPatch(batch, shape, props, rest);
+  }
+  if ((kind === "page" || kind === "motion") && typeof patch.mode === "string" && !(ctx.modes ?? []).includes(patch.mode)) {
+    refuse(`there is no mode ${patch.mode} in the kit`);
   }
   applyPatch(batch, shape, props, patch);
 };
