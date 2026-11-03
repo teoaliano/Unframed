@@ -134,7 +134,7 @@ const barsOf = (tween: Tween, target: string, offset: number, timing: { start: n
 }
 
 /** A property's group, as HyperFrames classes it (spec 21, Groups). */
-const groupOfKey = (key: string): PropertyGroup => {
+export const groupOfKey = (key: string): PropertyGroup => {
   if (["x", "y", "xPercent", "yPercent"].includes(key)) return "position";
   if (["scale", "scaleX", "scaleY"].includes(key)) return "scale";
   if (["width", "height"].includes(key)) return "size";

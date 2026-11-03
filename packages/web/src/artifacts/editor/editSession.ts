@@ -50,7 +50,14 @@ export interface EditReport {
 export interface TweenPatch {
   readonly selector: string;
   readonly channels: readonly string[];
-  readonly change: { readonly start?: number; readonly duration?: number; readonly ease?: string; readonly stagger?: number };
+  readonly change: {
+    readonly start?: number;
+    readonly duration?: number;
+    readonly ease?: string;
+    readonly stagger?: number;
+    /** The values at one keyframe (`at` 0, 1 or a step), by property, as the frame shows them (static text or a number). */
+    readonly values?: { readonly at: number; readonly props: Readonly<Record<string, string | number>> };
+  };
 }
 
 export interface SourceTree {

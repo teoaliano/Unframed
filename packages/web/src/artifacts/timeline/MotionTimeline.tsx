@@ -19,9 +19,10 @@ import type { EngineConnection } from "../../rpc/engine.ts";
 import { messageOf } from "../../agent/store.ts";
 import type { EditSession } from "../editor/editSession.ts";
 import { TIMELINE_MIN_HEIGHT, clampTimelineHeight, useTimelinePrefs } from "./timelinePrefs.ts";
-import { buildRows, channelsOf, dialLimitOf, selectOptionsOf, staggerEachOf, type BarView, type RowView } from "./rows.ts";
+import { buildRows, channelsOf, dialLimitOf, groupOfKey, selectOptionsOf, staggerEachOf, type BarView, type RowView } from "./rows.ts";
 import { DEFAULT_EASE, easeChoices, kitEasings, type EaseValue } from "./ease.ts";
-import { TimingPanel } from "./TimingPanel.tsx";
+import { resolve, scriptValue } from "@unframed/domain";
+import { ValuesPanel, type PanelField, type ValuesPanelProps } from "./ValuesPanel.tsx";
 import { MotionTransport, SPEEDS, readoutParts } from "./transport.ts";
 
 /** The transport row alone, which is what Hide leaves showing. */
@@ -32,6 +33,12 @@ const LABEL_WIDTH = 160;
 
 /** A bar's edge within this many pixels is its stretch handle (spec 21, Editing on the strip). */
 const EDGE_PIXELS = 6;
+
+/** A colour as a CSS colour text, the forms the values panel draws a swatch for. */
+const COLOUR = /^(#[0-9a-f]{3,8}|rgba?\(|hsla?\(|oklch\(|[a-z]+$)/i;
+
+/** The props the values panel takes, without its close handler. */
+type PanelProps = Omit<ValuesPanelProps, "onClose" | "className">;
 
 /** A tween's duration is at least one frame at 30 fps (spec 21, Motion edits). */
 const MIN_DURATION = 0.033;
@@ -163,7 +170,7 @@ const RowLine = ({
   onBarDown,
   onBarMove,
   onBarUp,
-  onOpenTiming,
+  onOpenValues,
 }: {
   readonly row: RowView;
   readonly pxPerSecond: number;
@@ -176,7 +183,7 @@ const RowLine = ({
   readonly onBarDown: (bar: BarView, event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onBarMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onBarUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  readonly onOpenTiming: (bar: BarView) => void;
+  readonly onOpenValues: (bar: BarView, fraction: number | null) => void;
 }) => {
   const runtime = row.kind === "runtime";
   const name = row.name;
@@ -238,7 +245,7 @@ const RowLine = ({
               onPointerMove={onBarMove}
               onPointerUp={onBarUp}
               onPointerCancel={onBarUp}
-              onDoubleClick={() => onOpenTiming(bar)}
+              onDoubleClick={() => onOpenValues(bar, null)}
               className={cn(
                 "absolute top-1/2 -translate-y-1/2 rounded-sm",
                 cursorOf(bar),
@@ -253,15 +260,34 @@ const RowLine = ({
         {row.bars.flatMap((bar, index) =>
           bar.copy
             ? []
-            : bar.diamonds.map((at, step) => (
-                <span
-                  key={`${index}:${step}`}
-                  data-testid="timeline-diamond"
-                  aria-hidden
-                  className="pointer-events-none absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rotate-45 bg-foreground"
-                  style={{ left: at * pxPerSecond }}
-                />
-              )),
+            : bar.diamonds.map((at, step) => {
+                // A diamond's place in its bar, 0 at its start and 1 at its end: the values it opens with (spec 21, Rows).
+                const fraction = bar.duration > 0 ? Math.round(((at - bar.start) / bar.duration) * 1000) / 1000 : 0;
+                return (
+                  // A keyframe is a small target of its own, not a kit button: a button's touch area would cover the bar it sits on.
+                  <span
+                    key={`${index}:${step}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Keyframe of ${row.name}`}
+                    data-testid="timeline-diamond"
+                    data-tween={bar.tween}
+                    data-fraction={fraction}
+                    className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rotate-45 bg-foreground"
+                    style={{ left: at * pxPerSecond }}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenValues(bar, fraction);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      onOpenValues(bar, fraction);
+                    }}
+                  />
+                );
+              }),
         )}
       </div>
     </div>
@@ -292,7 +318,7 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [selectedTween, setSelectedTween] = useState<number | null>(null);
   // The timing panel: the bar it opened from, by its tween and target (spec 21, The values panel).
-  const [timing, setTiming] = useState<{ readonly tween: number; readonly target: string } | null>(null);
+  const [timing, setTiming] = useState<{ readonly tween: number; readonly target: string; readonly at: number | null } | null>(null);
   const tweens = useMemo(() => new Map<number, Tween>((current?.value?.tweens ?? []).map((tween) => [tween.ref.index, tween])), [current?.value]);
   const hidden = useMemo(() => new Set((session.tree?.elements ?? []).filter((element) => element.hidden).map((element) => element.id)), [session.tree]);
   const names = useMemo(() => Object.fromEntries((session.tree?.elements ?? []).map((element) => [element.id, element.name])), [session.tree]);
@@ -541,7 +567,8 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
       const value = changed[field];
       const owner = tween?.[field];
       if (value === undefined || owner === undefined) continue;
-      if (owner.kind === "source") literal[field] = value;
+      // A token-owned field takes a number when it is detached; the token is replaced by the number the person typed or dragged.
+      if (owner.kind === "source" || owner.kind === "token") literal[field] = value;
       else if (owner.kind === "dial") {
         const limit = dialLimitOf(schema, owner.path);
         if (limit !== null) session.patchDial(owner.path.join("."), clampDialValue(limit, value));
@@ -600,15 +627,136 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
     session.patchTween({ type: "tween-stagger", tween: ref, each }, { selector: target, channels, change: { stagger: each } });
   };
 
+
   /** The timing panel's bar: its tween's own start (the first target's, stagger offset taken off), its duration and its stagger. */
   const timingBar = timing === null ? undefined : rows.flatMap((row) => row.bars).find((bar) => bar.tween === timing.tween && bar.target === timing.target);
   const timingTween = timing === null ? undefined : tweens.get(timing.tween);
   const timingEach = timingTween === undefined ? null : staggerEachOf(timingTween, session.pending);
   const easeField = timingTween === undefined || timing === null ? null : easeFieldOf(timingTween, timing.target);
 
-  const openTiming = (bar: BarView) => {
+  /** The text a token shows in the artifact's mode, and the tokens of the given types (spec 19). */
+  const tokenText = (path: string): string => {
+    const value = kit === null ? undefined : resolve(kit, path, mode);
+    return value === undefined ? "" : String(value);
+  };
+  const tokensOf = (types: readonly string[]) => (kit?.tokens ?? []).filter((token) => types.includes(token.type)).map((token) => ({ path: token.path, value: tokenText(token.path) }));
+
+  /** The values panel of the tween it opened from: its timing, its stagger, and the values at the keyframe it opened at (spec 21, The values panel). */
+  const panelOf = (): PanelProps | null => {
+    if (timing === null || timingTween === undefined || timingBar === undefined) return null;
+    const tween = timingTween;
+    const target = timing.target;
+    const ref = tween.ref;
+    const channelsNow = channelsOf(tween);
+    const write = (property: string, at: number, value: number | string | { token: string }, frame?: string) =>
+      session.patchTween(
+        { type: "tween-value", tween: ref, at, property, value },
+        { selector: target, channels: channelsNow, change: frame === undefined ? {} : { values: { at, props: { [property]: frame } } } },
+      );
+    const timeField = (key: string, label: string, owner: Owner, value: number, commit: (seconds: number) => void): PanelField => {
+      const tokenDetach = () => {
+        const seconds = kit === null || owner.kind !== "token" ? undefined : scriptValue(kit, owner.name, mode);
+        if (typeof seconds === "number") commit(seconds);
+      };
+      if (owner.kind === "source") return { key, label, control: { kind: "number", value, unit: "s", editable: true, onCommit: commit } };
+      if (owner.kind === "dial") return { key, label, parameter: owner.path.join(" › "), control: { kind: "number", value, unit: "s", editable: dialLimitOf(schema, owner.path) !== null, onCommit: commit } };
+      if (owner.kind === "token" && key === "duration") {
+        return {
+          key,
+          label,
+          control: { kind: "number", value, unit: "s", editable: false, onCommit: commit },
+          token: {
+            name: owner.name,
+            value: tokenText(owner.name),
+            options: tokensOf(["duration"]),
+            onChoose: (path) => session.patchTween({ type: "tween-time", tween: ref, duration: { token: path } }, { selector: target, channels: channelsNow, change: {} }),
+            onDetach: tokenDetach,
+          },
+        };
+      }
+      return { key, label, control: { kind: "text", value: owner.kind === "script" ? owner.text : "" }, note: "Set by the agent's code." };
+    };
+    const fields: PanelField[] = [
+      timeField("start", "Start", tween.start, timingBar.start - (timingBar.stagger ?? 0), (seconds) => applyTiming(ref, target, channelsNow, { start: seconds })),
+      timeField("duration", "Duration", tween.duration, timingBar.duration, (seconds) => applyTiming(ref, target, channelsNow, { duration: seconds })),
+    ];
+    if (timingEach !== null) {
+      fields.push({ key: "stagger", label: "Stagger", control: { kind: "number", value: timingEach, unit: "s", editable: tween.stagger?.kind === "source", onCommit: (each) => applyStagger(ref, target, channelsNow, each) } });
+    }
+    if (timing.at !== null) {
+      const step = tween.keyframes.find((candidate) => Math.abs(candidate.at - timing.at!) < 1e-6);
+      for (const property of Object.keys(step?.values ?? {}).sort()) {
+        const owner = step!.values[property]!;
+        const at = timing.at;
+        if (owner.kind === "source") {
+          const value = owner.value;
+          if (typeof value === "number") fields.push({ key: property, label: property, control: { kind: "number", value, unit: "", editable: true, onCommit: (next) => write(property, at, next, String(next)) } });
+          else {
+            const match = /^(-?\d+(?:\.\d+)?)([a-z%]*)$/i.exec(value.trim());
+            if (match) {
+              const unit = match[2]!;
+              fields.push({ key: property, label: property, control: { kind: "number", value: Number(match[1]), unit, editable: true, onCommit: (next) => write(property, at, next, `${next}${unit}`) } });
+            } else if (COLOUR.test(value.trim())) {
+              fields.push({ key: property, label: property, control: { kind: "colour", value, editable: true, onCommit: (next) => write(property, at, next, next) } });
+            } else fields.push({ key: property, label: property, control: { kind: "text", value } });
+          }
+        } else if (owner.kind === "dial") {
+          const current = dialAt(dials, owner.path.join("."));
+          const path = owner.path.join(".");
+          const parameter = owner.path.join(" › ");
+          const editable = dialLimitOf(schema, owner.path) !== null || schema === undefined;
+          if (typeof current === "number") fields.push({ key: property, label: property, parameter, control: { kind: "number", value: current, unit: "", editable, onCommit: (next) => session.patchDial(path, next) } });
+          else fields.push({ key: property, label: property, parameter, control: { kind: "text", value: String(current ?? "") } });
+        } else if (owner.kind === "token") {
+          const text = tokenText(owner.name);
+          const types = COLOUR.test(text) ? ["color"] : ["dimension"];
+          fields.push({
+            key: property,
+            label: property,
+            control: { kind: "text", value: text },
+            token: {
+              name: owner.name,
+              value: text,
+              options: tokensOf(types),
+              onChoose: (path) => write(property, at, { token: path }),
+              onDetach: () => write(property, at, text),
+            },
+          });
+        } else {
+          fields.push({ key: property, label: property, control: { kind: "text", value: owner.text }, note: "Set by the agent's code." });
+        }
+      }
+    }
+    const count = tween.repeat?.count;
+    const repeat = tween.repeat === null ? null : `${count === undefined || count === null ? "Repeats forever" : count < 0 ? "Repeats forever" : `Repeats ${count} times`}${tween.repeat.yoyo ? ", back and forth" : ""}`;
+    const sentence =
+      timing.at === null ? null : timing.at === 0 && tween.method === "to" ? "Starts from the element's current look." : timing.at === 1 && tween.method === "from" ? "Ends at the element's own style." : null;
+    // A bar in a collapsed row names no group: the group is the one the tween holds, or the one of the value the diamond opened on.
+    const first = timing.at === null ? undefined : Object.keys(tween.keyframes.find((candidate) => Math.abs(candidate.at - timing.at!) < 1e-6)?.values ?? {})[0];
+    const groupName = timingBar.group ?? (first !== undefined ? groupOfKey(first) : tween.groups.length === 1 ? tween.groups[0]! : null);
+    const group = groupName === null ? null : groupName.charAt(0).toUpperCase() + groupName.slice(1);
+    const anchor = LABEL_WIDTH + timingBar.start * pxPerSecond - (scroller.current?.scrollLeft ?? 0);
+    const left = Math.max(8, Math.min(anchor, Math.max(8, width - 288)));
+    return {
+      title: names[target] ?? target,
+      group,
+      method: tween.method,
+      fields,
+      ease: easeField === null ? null : { label: easeField.label, choices: easeField.choices, disabled: easeField.disabled },
+      onEase: (value) => easeField?.value(value),
+      repeat,
+      sentence,
+      readOnly: tween.readOnly,
+      left,
+    };
+  };
+  const panel = panelOf();
+
+  /** Opens the values panel from a bar (its timing) or from a diamond (the values at that keyframe too). */
+  const openValues = (bar: BarView, fraction: number | null) => {
     if (bar.tween < 0) return;
-    setTiming({ tween: bar.tween, target: bar.target });
+    setSelectedTween(bar.tween);
+    setTiming({ tween: bar.tween, target: bar.target, at: fraction });
   };
   const onBarUp = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (gesture.current === null) return;
@@ -737,7 +885,7 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
             const bar = rows.flatMap((row) => row.bars).find((candidate) => candidate.tween === selectedTween);
             if (bar === undefined) return;
             event.preventDefault();
-            openTiming(bar);
+            openValues(bar, null);
           }}
         >
           {/* The scroller scrolls the time (Shift and the wheel) and the rows (the wheel); the ruler stays on top. */}
@@ -804,7 +952,7 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
                     onBarDown={(bar, event) => onBarDown(bar, row, event)}
                     onBarMove={onBarMove}
                     onBarUp={onBarUp}
-                    onOpenTiming={openTiming}
+                    onOpenValues={openValues}
                   />
                 ))}
               </div>
@@ -817,24 +965,7 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
               <div ref={playhead} data-testid="timeline-playhead" aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-px bg-primary" />
             </div>
           </div>
-          {timing !== null && timingTween !== undefined && timingBar !== undefined && (
-            <TimingPanel
-              title={names[timing.target] ?? timing.target}
-              method={timingTween.method}
-              start={timingBar.start - (timingBar.stagger ?? 0)}
-              duration={timingBar.duration}
-              stagger={timingEach}
-              startEditable={timingTween.start.kind === "source" || (timingTween.start.kind === "dial" && dialLimitOf(schema, timingTween.start.path) !== null)}
-              durationEditable={timingTween.duration.kind === "source" || (timingTween.duration.kind === "dial" && dialLimitOf(schema, timingTween.duration.path) !== null)}
-              staggerEditable={timingTween.stagger?.kind === "source"}
-              onStart={(seconds) => applyTiming(timingTween.ref, timing.target, channelsOf(timingTween), { start: seconds })}
-              onDuration={(seconds) => applyTiming(timingTween.ref, timing.target, channelsOf(timingTween), { duration: seconds })}
-              onStagger={(each) => applyStagger(timingTween.ref, timing.target, channelsOf(timingTween), each)}
-              ease={easeField === null ? null : { label: easeField.label, choices: easeField.choices, disabled: easeField.disabled }}
-              onEase={(value) => easeField?.value(value)}
-              onClose={() => setTiming(null)}
-            />
-          )}
+          {panel !== null && <ValuesPanel {...panel} onClose={() => setTiming(null)} />}
           {barDragging && (
             <p data-testid="timeline-free-hint" className="pointer-events-none absolute bottom-1 right-3 text-xs text-muted-foreground">
               {freeHint()}

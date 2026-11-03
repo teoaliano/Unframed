@@ -274,8 +274,9 @@ const valueFor = (edit: Extract<MotionEdit, { type: "tween-value" }>, current: n
   const { value, property } = edit;
   if (typeof value === "object") {
     const kind = tokenKind?.(value.token);
-    const numeric = typeof current === "number" || (typeof current === "string" && isNumberText(current));
-    if (kind === "colour" && typeof current === "string" && isColourText(current)) return { text: value };
+    // A token-owned value has no literal to check against, so the token's type alone decides.
+    const numeric = current === undefined || typeof current === "number" || (typeof current === "string" && isNumberText(current));
+    if (kind === "colour" && (current === undefined || (typeof current === "string" && isColourText(current)))) return { text: value };
     if ((kind === "number" || kind === "duration") && numeric) return { text: value };
     return { refusal: `${value.token} is not a token of a matching type.` };
   }
