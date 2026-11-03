@@ -513,11 +513,20 @@ export function installEditBridge(win: EditWindow): void {
     if (typeof steps === "object" && steps !== null) return Object.keys(steps).map((key) => parseFloat(key)).filter((value) => Number.isFinite(value));
     return [];
   };
+  // A report asked for before the composition's script has made its timelines is asked again, for a few seconds.
+  let tweenWaits = 0;
   const reportTweens = () => {
     tweenFrame = null;
     const found: unknown[] = [];
     const timelines = win.__timelines;
-    if (typeof timelines !== "object" || timelines === null) return;
+    if (typeof timelines !== "object" || timelines === null) {
+      if (tweenWaits < 50) {
+        tweenWaits += 1;
+        win.setTimeout(reportTweens, 100);
+      }
+      return;
+    }
+    tweenWaits = 0;
     for (const timeline of Object.values(timelines)) {
       const tl = timeline as { getChildren?: (nested: boolean, tweens: boolean, timelines: boolean) => unknown[] };
       if (typeof tl?.getChildren !== "function") continue;
@@ -935,6 +944,10 @@ export function installEditBridge(win: EditWindow): void {
         restoreScroll(at.x, at.y);
       }
       post({ type: "unframed:edit:ready" });
+    } else if (type === "unframed:edit:tweens") {
+      // The editor asks again once a document is shown: a report queued while it was hidden may never have run (spec 21).
+      tweenWaits = 0;
+      win.setTimeout(reportTweens, 0);
     } else if (type === "unframed:edit:mode") {
       locked = Array.isArray(data.locked) ? data.locked.filter((id): id is string => typeof id === "string") : [];
       listen(data.mode === "edit");

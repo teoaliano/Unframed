@@ -16,12 +16,13 @@ const ROWS = `<!doctype html><html><head><style>#root{position:relative;width:64
 <div class="dot" id="d3" data-hf-id="hf-d3" data-uf-name="Dot 3" style="left:140px"></div>
 </div>
 <script src="gsap.js"></script><script>
-window.__timelines = { main: gsap.timeline({ paused: true })
-  .to("#title", { opacity: 1, duration: 1 }, 0)
-  .to(".dot", { y: -40, duration: 1, stagger: 0.2 }, 1)
-  .fromTo("#logo", { x: 0 }, { x: 100, duration: 1, repeat: 2 }, 0) };
-var ghost = document.createElement("div"); ghost.id = "ghost"; document.body.appendChild(ghost);
-window.__timelines.main.to(ghost, { x: 10, duration: 1 }, 2);
+const tl = gsap.timeline({ paused: true });
+tl.to("#title", { opacity: 1, duration: 1 }, 0);
+tl.to(".dot", { y: -40, duration: 1, stagger: 0.2 }, 1);
+tl.fromTo("#logo", { x: 0 }, { x: 100, duration: 1, repeat: 2 }, 0);
+window.__timelines = { main: tl };
+const ghost = document.createElement("div"); ghost.id = "ghost"; document.body.appendChild(ghost);
+tl.to(ghost, { x: 10, duration: 1 }, 2);
 </script></body></html>`;
 
 const SHAPE = "shape:intro";
@@ -54,11 +55,12 @@ const openRows = async (page: Page, engine: TestEngine, props: Record<string, un
 test("clips come in track order, element rows sit under their clip or under Composition, and a run-time tween gets a greyed row", async ({ page, agent }) => {
   await openRows(page, agent);
   await expect(rows(page).first()).toBeVisible();
-  const order = await rows(page).evaluateAll((elements) => elements.map((element) => `${(element as HTMLElement).dataset.rowKind}:${(element as HTMLElement).dataset.rowName}`));
-  expect(order).toEqual(["clip:Logo", "element:Logo", "element:Dot 1", "element:Dot 2", "clip:Title", "element:Title", "composition:Composition", "element:Dot 3", "runtime:#ghost"]);
+  // The run-time row comes from the frame's live report, which lands a moment after the reading's rows.
+  const order = () => rows(page).evaluateAll((elements) => elements.map((element) => `${(element as HTMLElement).dataset.rowKind}:${(element as HTMLElement).dataset.rowName}`));
+  await expect.poll(order, { timeout: 20_000 }).toEqual(["clip:Logo", "element:Logo", "element:Dot 1", "element:Dot 2", "clip:Title", "element:Title", "composition:Composition", "element:Dot 3", "runtime:body > div:nth-of-type(2)"]);
 
-  // The run-time row is greyed and says where it comes from.
-  await expect(row(page, "#ghost", "runtime")).toHaveAttribute("title", "Made by the agent's code while the motion runs.");
+  // The run-time row is named by its selector, greyed, and says where it comes from.
+  await expect(row(page, "body > div:nth-of-type(2)", "runtime")).toHaveAttribute("title", "Made by the agent's code while the motion runs.");
 });
 
 test("a staggered tween draws a bar on each target, offset by the stagger, and a repeating tween draws its repeats and its diamonds", async ({ page, agent }) => {
@@ -71,7 +73,7 @@ test("a staggered tween draws a bar on each target, offset by the stagger, and a
 
   // The logo's fromTo repeats twice: two lighter copies after its bar, and a diamond at each end of the bar.
   const logo = row(page, "Logo");
-  await expect(logo.getByTestId("timeline-bar").locator('[data-copy="true"]')).toHaveCount(2);
+  await expect(logo.locator('[data-testid="timeline-bar"][data-copy="true"]')).toHaveCount(2);
   await expect(logo.getByTestId("timeline-diamond")).toHaveCount(2);
 });
 

@@ -27,6 +27,7 @@ import { messageOf } from "../../agent/store.ts";
 import { expandShorthand } from "./expandShorthand.ts";
 import { showError, showNotice } from "../../toasts.tsx";
 import type { EditMessage } from "../ArtifactFrame.tsx";
+import type { LiveTween } from "../timeline/rows.ts";
 
 export type EditMode = "edit" | "interact";
 
@@ -102,6 +103,8 @@ export interface EditSession {
   readonly tree: SourceTree | undefined;
   /** The frame's live elements, for the Layers tab's runtime rows. Asked for when the frame is ready and on request. */
   readonly live: readonly LiveNode[];
+  /** A motion's live tweens, as the bridge reports them after load and after each dials apply (spec 21). */
+  readonly liveTweens: readonly LiveTween[];
   /** Hovers an element from Layers: the frame outlines it. Null clears it. */
   readonly hoverLayer: (id: string | null) => void;
   /** The element a Layers row hovers, outlined in the frame. */
@@ -153,6 +156,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   const [boxes, setBoxes] = useState<Readonly<Record<string, EditBox>>>({});
   const [tree, setTree] = useState<SourceTree | undefined>(undefined);
   const [live, setLive] = useState<readonly LiveNode[]>([]);
+  const [liveTweens, setLiveTweens] = useState<readonly LiveTween[]>([]);
   const [layerHover, setLayerHover] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [prepareError, setPrepareError] = useState<string | undefined>(undefined);
@@ -492,6 +496,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
         post({ type: "unframed:edit:mode", mode: modeRef.current, locked: lockedRef.current });
         if (selectionRef.current.length > 0) post({ type: "unframed:edit:select", ids: selectionRef.current });
         post({ type: "unframed:edit:tree" });
+        post({ type: "unframed:edit:tweens" });
         return;
       }
       case "unframed:edit:matched": {
@@ -501,6 +506,10 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       }
       case "unframed:edit:tree": {
         setLive(Array.isArray(message.nodes) ? (message.nodes as LiveNode[]) : []);
+        return;
+      }
+      case "unframed:edit:tweens": {
+        setLiveTweens(Array.isArray(message.tweens) ? (message.tweens as LiveTween[]) : []);
         return;
       }
       case "unframed:edit:report": {
@@ -643,6 +652,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     boxes,
     tree,
     live,
+    liveTweens,
     hoverLayer,
     layerHover,
     requestLive,

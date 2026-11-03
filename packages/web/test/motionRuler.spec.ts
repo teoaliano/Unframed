@@ -112,9 +112,10 @@ test("Ctrl+wheel zooms around the cursor, so the time under the cursor stays und
   const area = await boxOf(scroll);
   const cursor = { x: area.x + area.width * 0.4, y: area.y + area.height / 2 };
 
+  // The time starts after the 160 px label column, at the track's left edge.
   const timeUnder = async () => {
     const box = await boxOf(track(page));
-    return (cursor.x - box.x) / (await zoomOf(page));
+    return (cursor.x - box.x - 160) / (await zoomOf(page));
   };
   const before = await timeUnder();
   const zoomBefore = await zoomOf(page);

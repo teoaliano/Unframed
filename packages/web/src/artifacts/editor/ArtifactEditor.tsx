@@ -426,7 +426,20 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
           />
         )}
       </section>
-      {timeline && <MotionTimeline title={title} engine={engine} column={columnHeight} transport={transport} className="col-start-2 row-start-2 max-[1279px]:col-span-2" />}
+      {timeline && (
+        <MotionTimeline
+          title={title}
+          engine={engine}
+          project={project}
+          file={facts.file}
+          session={session}
+          dials={current ?? {}}
+          locked={facts.locked}
+          column={columnHeight}
+          transport={transport}
+          className="col-start-2 row-start-2 max-[1279px]:col-span-2"
+        />
+      )}
     </div>
   );
 };
