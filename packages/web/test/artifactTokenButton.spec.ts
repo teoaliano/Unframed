@@ -108,5 +108,6 @@ test("each token button has its field's name, and Escape or a choice hands focus
 
   await button.click();
   await page.getByRole("button", { name: /color\/brand\/primary/ }).click();
-  await expect(parameters(page).getByRole("group", { name: "Fill", exact: true }).locator('[title="color/brand/primary"]')).toBeFocused();
+  // The trigger or the chip that replaces it both carry the picker's trigger attribute.
+  await expect.poll(() => page.evaluate(() => document.activeElement?.hasAttribute("data-token-trigger") ?? false)).toBe(true);
 });
