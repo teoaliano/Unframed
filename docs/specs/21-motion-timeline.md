@@ -132,6 +132,8 @@ So Unframed adds one small pass over the write parse's located calls. It reads e
 
 `motionTimeline(html)` finds the timeline script (HyperFrames' rule: the first inline script that declares `gsap.timeline`, else the first with tween calls). It parses it once and resolves every tween's targets against the source document. The engine caches the answer per file name, which is safe because an artifact file never changes.
 
+The reading finds tweens only when they are called on a named timeline (`window.__timelines.main.to(...)`). A tween chained onto `gsap.timeline()` (`gsap.timeline().to(...)`) is not read: the strip shows no rows for it, and the motion plays as written. The agent is told to call each tween on the named timeline (Assets).
+
 ```ts
 type Owner =                                  // spec 18's owner names, for one tween value
   | { kind: "source"; value: number | string } // a literal in the source
@@ -374,7 +376,7 @@ No new project records. A committed burst is a spec 18 edit version: a new file 
 7. **Spec 18, Mode shortcuts** ("V and I switch from anywhere in the editor except a text field or an in-place text edit, and from inside the frame through the bridge"): with the focus in the strip (its time area or one of its rows), I sets the loop's In point instead of switching to Interact. Why: I and O are the editing convention for a range, and the strip is where a range is set; focus keeps the two apart. Spec 18's edit bridge, "It forwards V, I, Esc, Shift+Enter and the editor's undo keys to the editor as `unframed:edit:key`", also forwards Space, J, K, L, M, the arrows, Shift+L and O in a motion, under spec 18's exception for an in-place text edit. Spec 18's Esc chain gains two steps before it (The transport).
 8. **Spec 18, The edit bridge**: its message table gains `unframed:edit:tweens`, and its `unframed:edit:patch` gains the `tween` kind.
 9. **Spec 18, Point and tell, the chip**: "Excerpt: the element's start tag as in the source (…), its own text cut to 80 characters, `…` for any children, and its end tag, cut to 240 characters." For a chip made by `Ask the agent to make this editable` on a tween, the excerpt is the tween's `source` (the call as written) instead, cut to 240 characters, and the selector and label are still the element's. Why: the agent must see the code that sets the value, not the element's markup.
-10. **`assets/prompts/dials-timeline.md`** gains one sentence (Assets).
+10. **`assets/prompts/dials-timeline.md`** gains two sentences (Assets): the value rule, and the rule for calling each tween on the named timeline.
 11. **CLAUDE.md, Commands**: "`pnpm test:perf` runs the frame-budget specs (specs 02, 09, 12 and 17)" gains spec 21.
 12. **00-index, Vocabulary**: "Editor: … dials (DialKit parameters) on the right." gains "and, for a motion, the timeline under it". The index gains this spec's terms.
 
@@ -470,6 +472,7 @@ None open. Settled with the person:
 
 ### Assets this spec needs
 
+- `assets/prompts/motion-write-tool.md` and `assets/prompts/dials-timeline.md` gain the same sentence on calling each tween on `window.__timelines.main`, never chained onto `gsap.timeline()`, because the editor's timeline reads only those tweens (a chained tween shows no row and plays as written). The motion write description carries it too.
 - `assets/prompts/dials-timeline.md` gains one sentence after its example, written at build time. Proposed: "Put a parameter's value straight into the tween (`duration: v.speed`, `x: v.toX`, a position of `v.delay`), never inside an expression such as `v.speed * 2`: the person can drag a value taken straight from a parameter on the editor's timeline, and anything computed is read-only there." The file's header changes from "Verbatim" to say that this sentence is Unframed's own.
 - `assets/fixtures/motion-samples/`: six or more motions written to follow `dials-timeline.md`, made at build time for the probe and the browser tests. Together they cover literal and dial timing, a token ease, a stagger, a loop, a helper, keyframes and two clips.
 - No new instruction asset. "Ask the agent to make this editable" uses spec 18's point and tell, with the tween's source as the chip's excerpt (Rules this spec bends, 9).
