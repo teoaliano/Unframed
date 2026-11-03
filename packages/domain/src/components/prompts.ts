@@ -16,3 +16,6 @@ export const COMPONENT_READ_SHAPE_ID = "The component shape.";
 
 /** `make-component-instruction.md`, with its `<kind>` and `<title>` placeholders. */
 export const MAKE_COMPONENT_TEMPLATE = "Make a component from the element attached to this message, in the <kind> \"<title>\". Write it with component_write: its markup as the template, its styles in the project's tokens when it has a kit, a variant for each visible difference among the similar elements in this <kind>, and a text property for each piece of text that differs between them. Then replace that element, and each of its look-alikes in this <kind>, with an instance of the new component, keeping the element's data-hf-id on the instance that replaces it. Change nothing else in the <kind>.";
+
+/** Make component (spec 20): the fixed instruction with the artifact's kind and title filled in. The title is a plain string, never a replacement pattern. */
+export const makeComponentInstruction = (kind: string, title: string): string => MAKE_COMPONENT_TEMPLATE.split("<kind>").join(kind).replace("<title>", () => title);

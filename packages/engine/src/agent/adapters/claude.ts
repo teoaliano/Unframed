@@ -192,6 +192,10 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
           interactionMode: session?.interactionMode ?? "default",
           ...(options.toolUseID ? { toolUseId: options.toolUseID } : {}),
           ...(options.suggestions ? { suggestions: options.suggestions as unknown as ReadonlyArray<{ type: string; destination: string }> } : {}),
+          signals: {
+            ...(options.decisionReason === undefined ? {} : { decisionReason: options.decisionReason }),
+            ...(options.suppressAlwaysAllowRule === true ? { suppressAlwaysAllowRule: true } : {}),
+          },
           signal: options.signal,
         });
         if (answer.behavior === "allow") {

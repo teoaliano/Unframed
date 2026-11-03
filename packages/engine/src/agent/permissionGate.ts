@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
 import {
   answerPermission,
+  approvalPresentation,
   CANCELLED_MESSAGE,
   decidePermission,
   requestTarget,
   type ApprovalDecision,
+  type ApprovalOption,
+  type ApprovalSignals,
   type InteractionMode,
   type PermissionUpdate,
   type RequestType,
@@ -27,6 +30,8 @@ export interface GateCall {
   /** What the request says, when the call names it (spec 14's generate); else the tool's target. */
   readonly detail?: string;
   readonly suggestions?: ReadonlyArray<PermissionUpdate>;
+  /** What the provider says about this ask: its reason and the answers it offers. */
+  readonly signals?: ApprovalSignals;
   readonly signal?: AbortSignal;
 }
 
@@ -91,10 +96,12 @@ export class PermissionGate {
         return { behavior: "allow", updatedInput: { ...call.input, answers } };
       }
       case "ask": {
+        const detail = call.detail ?? requestTarget(call.toolName, call.input);
         const decision = await this.request(
           {
             requestType: answer.requestType,
-            detail: call.detail ?? requestTarget(call.toolName, call.input),
+            detail,
+            ...approvalPresentation(call.signals ?? {}, detail),
             args: { toolName: call.toolName, input: call.input, ...(call.toolUseId ? { toolUseId: call.toolUseId } : {}) },
           },
           call.turnId,
@@ -107,7 +114,13 @@ export class PermissionGate {
 
   /** Opens a request and waits for the person's decision; an abort answers it as cancelled. */
   request(
-    request: { readonly requestType: RequestType; readonly detail: string; readonly args: Readonly<Record<string, unknown>> },
+    request: {
+      readonly requestType: RequestType;
+      readonly detail: string;
+      readonly reason?: string;
+      readonly options?: ReadonlyArray<ApprovalOption>;
+      readonly args: Readonly<Record<string, unknown>>;
+    },
     turnId: string | undefined,
     signal?: AbortSignal,
   ): Promise<ApprovalDecision> {

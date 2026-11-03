@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Locator } from "@playwright/test";
 import { openCanvas } from "./canvas.ts";
-import { createChat, engineChat, expect, FIXTURES, openRail, say, test } from "./agent.ts";
+import { createChat, engineChat, expect, FIXTURES, openRail, pendingRequest, promptBox, say, scriptFolder, sendThrough, startAgentEngine, test } from "./agent.ts";
 import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
 
 const reply = (panel: Locator) => panel.locator("[data-role='assistant']");
@@ -43,6 +43,33 @@ test("Always allow this session answers this ask and skips the next one", async 
   await say(panel, "and dist too");
   await expect(reply(panel).last()).toContainText("Removed dist too.");
   await expect(approval).toHaveCount(0);
+});
+
+test("an approval offers the provider's answers: its reason under the target, no standing grant when it says so, and a warning on an answer", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await createChat(agent, { runtimeMode: "approval-required", title: "Guarded" });
+  const panel = await openRail(page);
+  await say(panel, "a guarded delete please");
+
+  const approval = panel.getByTestId("approval-panel");
+  await expect(approval.getByTestId("approval-target")).toHaveText("rm -rf ../shared/cache");
+  await expect(approval.getByTestId("approval-reason")).toHaveText("This deletes files outside the project folder.");
+  await expect(approval.getByRole("button")).toHaveText(["Decline", "Approve"]);
+  await expect(approval.getByRole("button", { name: "More approval options" })).toHaveCount(0);
+  await approval.getByRole("button", { name: "Approve" }).click();
+  await expect(reply(panel).last()).toContainText("Cleared the shared cache.");
+
+  await say(panel, "now install it");
+  const runAnyway = approval.getByRole("button", { name: "Run anyway" });
+  await expect(runAnyway).toHaveAttribute("aria-description", "This runs a script from the internet.");
+  await expect(approval.getByTestId("approval-reason")).toHaveCount(0);
+  await runAnyway.hover();
+  await expect(page.locator("[data-slot='tooltip-popup']")).toHaveText("This runs a script from the internet.");
+  await approval.getByRole("button", { name: "More approval options" }).click();
+  await expect(page.getByRole("menuitem")).toHaveText(["Stop the turn"]);
+  await page.keyboard.press("Escape");
+  await approval.getByRole("button", { name: "Decline" }).click();
+  await expect(reply(panel).last()).toContainText("I did not install it.");
 });
 
 test("a padded command shows its first 300 characters with the padding kept, and says how many it held back", async ({ page, agent }) => {
@@ -156,4 +183,143 @@ test("the question panel is t3code's: kit Buttons in its header and for its opti
   await expectSlot(hero, "button");
   await expectToken(hero, "background-color", "--accent");
   await expectSlot(panel.getByRole("button", { name: "Submit answers" }), "message-action");
+});
+
+test("a question that arrives over a draft sets the draft aside: the box takes the answer, and the draft comes back once it is answered", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  const chatId = await createChat(agent, { title: "Asking" });
+  const panel = await openRail(page);
+  const box = promptBox(panel);
+  await box.click();
+  await box.pressSequentially("my own draft");
+  await box.blur();
+  await sendThrough(agent, chatId, "ask me first about the page");
+
+  const question = panel.getByTestId("question-panel");
+  await expect(question.getByTestId("panel-count")).toHaveText("1/2");
+  await expect(box).toHaveText("");
+  await expect(panel.locator("[data-placeholder]")).toHaveAttribute("data-placeholder", "Type your own answer, or leave this blank to use the selected option");
+  await box.click();
+  await box.pressSequentially("Sepia");
+  await panel.getByRole("button", { name: "Next question" }).click();
+  await question.getByRole("checkbox", { name: /Hero/ }).click();
+  await panel.getByRole("button", { name: "Submit answers" }).click();
+  await expect(question).toHaveCount(0);
+  await expect(box).toHaveText("my own draft");
+  const resolved = (await engineChat(agent, chatId)).activities.find((activity) => activity.kind === "user-input.resolved");
+  expect((resolved?.payload as { answers?: unknown }).answers).toEqual({ "Which look should the page have?": "Sepia", "Which sections should it have?": ["Hero"] });
+});
+
+test("files attached while a question waits go with its answer, each question keeps its own, and the draft's files come back after", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  const chatId = await createChat(agent, { title: "Asking" });
+  const panel = await openRail(page);
+  const shelf = panel.getByTestId("attachments");
+  const attach = async (name: string, body: string) => {
+    const chooser = page.waitForEvent("filechooser");
+    await panel.getByRole("button", { name: "Attach files" }).click();
+    await (await chooser).setFiles([{ name, mimeType: "text/plain", buffer: Buffer.from(body) }]);
+    await expect(shelf.locator("[data-chip='file'][data-status='ready']")).toHaveCount(1);
+  };
+  await attach("draft.txt", "kept for later");
+  await sendThrough(agent, chatId, "ask me first about the page");
+
+  const question = panel.getByTestId("question-panel");
+  await expect(question.getByTestId("panel-count")).toHaveText("1/2");
+  await expect(shelf).toHaveCount(0);
+  // A file alone answers a question that takes an answer of one's own.
+  await expect(panel.getByRole("button", { name: "Next question" })).toBeDisabled();
+  await attach("mood.txt", "cream");
+  await expect(shelf.locator("[data-chip='file']")).toHaveText(["mood.txt5 B"]);
+  await panel.getByRole("button", { name: "Next question" }).click();
+  await expect(question.getByTestId("panel-count")).toHaveText("2/2");
+  await expect(shelf).toHaveCount(0);
+  // A question that takes only its options takes no file.
+  await expect(panel.getByRole("button", { name: "Attach files" })).toBeDisabled();
+  await question.getByRole("checkbox", { name: /Hero/ }).click();
+  await panel.getByRole("button", { name: "Previous" }).click();
+  await expect(shelf.locator("[data-chip='file']")).toHaveText(["mood.txt5 B"]);
+  await panel.getByRole("button", { name: "Next question" }).click();
+  await panel.getByRole("button", { name: "Submit answers" }).click();
+  await expect(question).toHaveCount(0);
+  await expect(reply(panel).last()).toContainText("Thanks. I will build the page with the look and sections you picked.");
+  await expect(shelf.locator("[data-chip='file']")).toHaveText(["draft.txt14 B"]);
+
+  const resolved = (await engineChat(agent, chatId)).activities.find((activity) => activity.kind === "user-input.resolved");
+  const answers = (resolved?.payload as { answers: Record<string, unknown> }).answers;
+  expect(answers["Which sections should it have?"]).toEqual(["Hero"]);
+  expect(answers["Which look should the page have?"]).toMatch(/^Attached file "mood\.txt": \/.+$/);
+});
+
+test("a question's text is markdown: a link opens in a new tab and markup shows as text", async ({ page }) => {
+  const asking = {
+    when: "^ask",
+    turns: [
+      {
+        question: {
+          questions: [
+            {
+              id: "look",
+              header: "Look",
+              question: "Which look? See [the brief](https://example.com/brief) and <b>this</b>.",
+              options: [{ label: "Warm", description: "" }, { label: "Cool", description: "" }],
+              multiSelect: false,
+            },
+          ],
+        },
+        text: "Thanks.",
+      },
+    ],
+  };
+  const agent = await startAgentEngine({ script: await scriptFolder({ asking }) });
+  try {
+    await openCanvas(page, agent);
+    const panel = await openRail(page);
+    await say(panel, "ask about the look");
+    const text = panel.getByTestId("question-panel").getByTestId("panel-question");
+    const link = text.getByRole("link", { name: "the brief" });
+    await expect(link).toHaveAttribute("href", "https://example.com/brief");
+    await expect(link).toHaveAttribute("target", "_blank");
+    await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    await expect(text).toHaveText("Which look? See the brief and <b>this</b>.");
+    await expect(text.locator("b")).toHaveCount(0);
+  } finally {
+    await agent.dispose();
+  }
+});
+
+test("an approval that arrives while the person types waits until they pause for 1.5 s", async ({ page, agent }) => {
+  await page.clock.install();
+  await openCanvas(page, agent);
+  const chatId = await createChat(agent, { runtimeMode: "approval-required", title: "Cleanup" });
+  const panel = await openRail(page);
+  const box = promptBox(panel);
+  const approval = panel.getByTestId("approval-panel");
+  await box.click();
+  await box.pressSequentially("a thought in progress");
+  await sendThrough(agent, chatId, "clean the build please");
+
+  // A key every 100 ms until the engine holds the approval, then for a while after it reached the page.
+  let parked = false;
+  const waiting = expect
+    .poll(() => pendingRequest(agent, chatId), { timeout: 15_000 })
+    .toBeDefined()
+    .then(() => {
+      parked = true;
+    });
+  while (!parked) {
+    await box.press(".");
+    await page.waitForTimeout(100);
+  }
+  await waiting;
+  await expect(panel.locator("[data-role='user']")).toContainText("clean the build please");
+  for (let n = 0; n < 8; n++) {
+    await box.press(".");
+    await page.waitForTimeout(100);
+  }
+  await expect(approval).toHaveCount(0);
+
+  await page.clock.fastForward(1600);
+  await expect(approval.getByTestId("approval-target")).toHaveText("rm -rf build");
+  await expect(box).toHaveText(/^a thought in progress\.+$/);
 });

@@ -116,6 +116,24 @@ describe("DTCG import", () => {
   });
 });
 
+describe("a file's values meet the same rules as a typed one", () => {
+  it("skips a DTCG font family that would write CSS, and keeps the others", () => {
+    const fragment = tokensOf(
+      fromDtcg([file("t.json", { font: { $type: "fontFamily", body: { $value: "Inter; } body { display:none } .x {" }, ok: { $value: "Inter, sans-serif" } } })]),
+    );
+    expect(fragment.tokens.map((token) => token.path)).toEqual(["font/ok"]);
+    expect(fragment.skipped).toBe(1);
+  });
+
+  it("writes a description into no CSS, so one that closes a comment cannot break the export", () => {
+    const base: Kit = { format: 1, name: "Brand", modes: ["light"], tokens: [{ path: "color/a", type: "color", value: "#fff" }] };
+    const described: Kit = { ...base, tokens: [{ ...base.tokens[0]!, description: "x */ body { display:none } /*" }] };
+    expect(toCss(described)).toBe(toCss(base));
+    expect(toTailwind(described)).not.toContain("display:none");
+    expect(toTailwind(described).match(/\*\//g)).toHaveLength(1);
+  });
+});
+
 describe("CSS import", () => {
   it("reads :root as the default mode, and the custom properties' types from their values", () => {
     const fragment = tokensOf(

@@ -53,3 +53,12 @@ describe("compileComponent", () => {
     expect(() => compileComponent("<html></html>", "x.html")).toThrow(/needs one <script/);
   });
 });
+
+describe("compileComponent header (spec 20)", () => {
+  it("keeps line and paragraph separators out of the header comment", () => {
+    const compiled = compileComponent(SHEET, "1761400000000\u2028chip\u2029.html");
+    const header = compiled.split("\n")[0]!;
+    expect(header).not.toMatch(/[\u2028\u2029]/);
+    expect(header).toContain("1761400000000_chip_.html");
+  });
+});

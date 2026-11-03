@@ -1,16 +1,14 @@
 import { activityLabel, agentShapeId, resetMoment, buildTimeline, type TimelineBlock, formatWorkDuration, revertSkipLine, type Chat, type ChatMessage, type ChatTurn } from "@unframed/domain";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Brain, ChevronDown, ChevronRight, Clock, Undo2, X } from "lucide-react";
+import { Brain, ChevronDown, ChevronRight, Undo2 } from "lucide-react";
 import { useMaybeEditor } from "tldraw";
 import { Badge } from "~/components/ui/badge";
 import { Button, InlineButton } from "~/components/ui/button";
-import { Tip } from "../../chrome/ui.tsx";
 import { describeShape } from "../composer/chips.tsx";
 import { ConfirmDialog } from "../ConfirmDialog.tsx";
 import { providerName } from "../providers.ts";
 import { BODY_CLASS, Chevron, Disclosure, IconSlot, ROW_CLASS, WorkEntries } from "./WorkLog.tsx";
-import { returnQueued, sendQueued } from "../queue.tsx";
-import { useQueue, useWatchedThread, type ChatClient } from "../store.ts";
+import { useWatchedThread, type ChatClient } from "../store.ts";
 import { ChatMarkdown } from "./ChatMarkdown.tsx";
 import { PlanCard } from "./PlanCard.tsx";
 import { RecapCard } from "./RecapCard.tsx";
@@ -79,43 +77,6 @@ const UserMessage = ({ message, running, onEdit }: { readonly message: ChatMessa
       />
     </article>
   );
-};
-
-/**
- * Messages waiting for the running turn (t3code's queued row): a dashed, dimmed bubble with
- * Send now and a way back to the composer. A press on either keeps the focus in the composer.
- */
-const QueuedMessages = ({ client, chatId }: { readonly client: ChatClient; readonly chatId: string }) => {
-  const queue = useQueue(client, chatId);
-  return queue.map((item, index) => (
-    <div key={item.id} className="max-w-[80%] self-end rounded-2xl border border-dashed p-3 text-message-foreground/80" data-testid="queued-message" data-state={item.state}>
-      <div className="text-sm leading-relaxed whitespace-pre-wrap break-words">{item.message.text}</div>
-      <div className="mt-2 flex items-center gap-4 text-xs text-secondary-label">
-        <Tip label={index === 0 ? "Sends after the next tool call or when the turn ends" : "Sends after the messages above it"} side="bottom">
-          <span className="inline-flex h-6 items-center gap-1">
-            <Clock aria-hidden className="size-3.5" />
-            Queued
-          </span>
-        </Tip>
-        <div className="ml-auto flex items-center gap-0.5">
-          <Button variant="ghost-muted" size="xs" disabled={item.state === "sending"} onPointerDown={(event) => event.preventDefault()} onClick={() => void sendQueued(client, chatId, item.id)}>
-            Send now
-          </Button>
-          <Tip label="Cancel and return to the composer" side="bottom">
-            <Button
-              variant="ghost-muted"
-              size="icon-xs"
-              aria-label="Cancel and return to the composer"
-              onPointerDown={(event) => event.preventDefault()}
-              onClick={() => returnQueued(client, chatId, item.id)}
-            >
-              <X aria-hidden />
-            </Button>
-          </Tip>
-        </div>
-      </div>
-    </div>
-  ));
 };
 
 export interface TranscriptProps {
@@ -261,7 +222,6 @@ export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }:
           );
         })}
         <LimitLine chat={chat} />
-        <QueuedMessages client={client} chatId={chatId} />
         {running && !streaming && latest && (
           <ActivityLine label={chat.outside === undefined ? activityLabel(chat.activities, latest.turnId) : "Working from outside Unframed…"} since={latest.startedAt ?? latest.requestedAt} />
         )}

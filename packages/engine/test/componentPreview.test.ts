@@ -15,7 +15,7 @@ const SHEET = `<!doctype html><html><head>
 </head><body><div data-uf-template hidden><button data-uf-prop="label">Buy</button></div></body></html>`;
 
 const CSP =
-  "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-ancestors http://localhost:* http://127.0.0.1:* http://[::1]:*";
+  "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-ancestors http://localhost:* http://127.0.0.1:*";
 
 /** An engine with a project `board`, whose folder the test fills. */
 const withBoard = async (): Promise<{ engine: TestEngine; folder: string }> => {

@@ -15,7 +15,7 @@ import { guardUpgrade, refuseUpgrade } from "./guard.ts";
  */
 
 const PREVIEW_CSP =
-  "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-ancestors http://localhost:* http://127.0.0.1:* http://[::1]:*";
+  "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-ancestors http://localhost:* http://127.0.0.1:*";
 
 /** The allow-list. Everything else is 404, which keeps sidecars, the database and temp files unservable. */
 const CONTENT_TYPES: Readonly<Record<string, string>> = {
@@ -80,9 +80,12 @@ const resolvePreview = (request: {
   return { kind: "file", project: slug, file, contentType };
 };
 
-const refuse = (res: http.ServerResponse, status: number, body: string, head: boolean) => {
+/** A missing page or sheet (spec 20): one readable line, so a frame open on a deleted file says what happened. */
+const MISSING_PAGE = `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:24px;font:13px system-ui, sans-serif;color:#6b6b6b;background:#ffffff">This file is no longer in the project.</body></html>`;
+
+const refuse = (res: http.ServerResponse, status: number, body: string, head: boolean, type = "text/plain; charset=utf-8") => {
   res.writeHead(status, {
-    "content-type": "text/plain; charset=utf-8",
+    "content-type": type,
     "content-length": Buffer.byteLength(body),
     "cache-control": "no-store",
     "x-content-type-options": "nosniff",
@@ -120,7 +123,10 @@ const handler =
       await ensureCompiledComponent(dirname(path), name).catch(() => false);
     }
     const info = await stat(path).catch(() => undefined);
-    if (!info?.isFile()) return refuse(res, 404, "not found", head);
+    if (!info?.isFile()) {
+      if (info === undefined && folderExists && name.endsWith(".html")) return refuse(res, 404, MISSING_PAGE, head, "text/html; charset=utf-8");
+      return refuse(res, 404, "not found", head);
+    }
     const etag = etagOf(info.size, info.mtimeMs);
     const headers: http.OutgoingHttpHeaders = {
       "content-security-policy": PREVIEW_CSP,

@@ -41,6 +41,41 @@ describe("text edits", () => {
   });
 });
 
+describe("style edits keep the bytes they do not change", () => {
+  it("appends a new declaration with the separator the attribute already uses", () => {
+    const html = '<body><p data-hf-id="hf-aaaa" style="color:red;background:blue">x</p></body>';
+    expect(okHtml([{ type: "style", elementId: "hf-aaaa", property: "opacity", value: "0.5" }], html)).toBe(
+      '<body><p data-hf-id="hf-aaaa" style="color:red;background:blue;opacity: 0.5">x</p></body>',
+    );
+  });
+
+  it("rewrites only the declaration it changes, keeping the spacing of the others", () => {
+    const html = '<body><p data-hf-id="hf-aaaa" style="color:red;  background:url(a;b.png)">x</p></body>';
+    expect(okHtml([{ type: "style", elementId: "hf-aaaa", property: "color", value: "blue" }], html)).toBe(
+      '<body><p data-hf-id="hf-aaaa" style="color: blue;  background:url(a;b.png)">x</p></body>',
+    );
+  });
+
+  it("removes one declaration and its separator, leaving the others byte for byte", () => {
+    const html = '<body><p data-hf-id="hf-aaaa" style="color:red;background-color:blue;opacity:0.5">x</p></body>';
+    expect(okHtml([{ type: "style", elementId: "hf-aaaa", property: "background-color", value: null }], html)).toContain('style="color:red;opacity:0.5"');
+    expect(okHtml([{ type: "style", elementId: "hf-aaaa", property: "color", value: null }], html)).toContain('style="background-color:blue;opacity:0.5"');
+  });
+
+  it("keeps the hide declaration last and leaves the other bytes alone when a style is added", () => {
+    const html = '<body><p data-hf-id="hf-aaaa" data-uf-hidden style="color:red;display: none !important">x</p></body>';
+    expect(okHtml([{ type: "style", elementId: "hf-aaaa", property: "opacity", value: "0.5" }], html)).toContain(
+      'style="color:red;opacity: 0.5;display: none !important"',
+    );
+  });
+
+  it("writes a quote inside a value so the attribute still reads back as one value", () => {
+    const html = '<body><p data-hf-id="hf-aaaa" style="color:red">x</p></body>';
+    const next = okHtml([{ type: "style", elementId: "hf-aaaa", property: "font-family", value: "'Inter Tight', serif" }], html);
+    expect(next).toBe('<body><p data-hf-id="hf-aaaa" style="color:red; font-family: \'Inter Tight\', serif">x</p></body>');
+  });
+});
+
 describe("style edits", () => {
   it("sets a declaration on an element with no style attribute, creating the attribute before the closing bracket", () => {
     const next = okHtml([{ type: "style", elementId: "hf-bbbb", property: "font-size", value: "48px" }]);
@@ -132,6 +167,17 @@ describe("image edits", () => {
   it("writes a background image as a background-image declaration", () => {
     const next = okHtml([{ type: "image", elementId: "hf-cccc", target: "background", file: "c.png" }]);
     expect(next).toContain('<p data-hf-id="hf-cccc" style="background-image: url(&quot;c.png&quot;)">Plain');
+  });
+
+  it("refuses a file name that would break out of the url() or the style value", () => {
+    const hostile = 'a");position:fixed;inset:0;x:("b.png';
+    expect(refusalOf([{ type: "image", elementId: "hf-cccc", target: "background", file: hostile }])).toBe(`${hostile} is not an image this page can show.`);
+    expect(refusalOf([{ type: "image", elementId: "hf-dddd", target: "src", file: 'x"y.png' }])).toBe('x"y.png is not an image this page can show.');
+    expect(refusalOf([{ type: "image", elementId: "hf-cccc", target: "background", file: "my pic.png" }])).toBe("my pic.png is not an image this page can show.");
+  });
+
+  it("accepts a plain image file name with dots, dashes and underscores", () => {
+    expect(okHtml([{ type: "image", elementId: "hf-dddd", target: "src", file: "hero-image_2.v1.webp" }])).toContain('src="hero-image_2.v1.webp"');
   });
 
   it("refuses a file that is not an image or not a bare name", () => {

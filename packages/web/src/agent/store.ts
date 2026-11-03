@@ -1,7 +1,7 @@
 import type { ElementChip } from "@unframed/contracts";
 import { rememberDrafts, takeDrafts } from "../project/tabMemory.ts";
 import { UnframedError, type ChatAttachment, type ChatSummary, type ClientChatCommand, type ProviderStatuses, type ShellStreamItem, type ThreadStreamItem } from "@unframed/contracts";
-import { projectChat, type Chat, type ChatEvent, type ChatMessage } from "@unframed/domain";
+import { projectChat, readStoredDrafts, sendShortcutOf, storedDraftsValue, type Chat, type ChatEvent, type ChatMessage, type SendShortcut } from "@unframed/domain";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import type { EngineConnection } from "../rpc/engine.ts";
 
@@ -48,24 +48,36 @@ export interface QueuedMessage {
   /** The latest completed tool call when it was queued: the next one is its boundary. */
   readonly after: string | null;
   readonly state: "waiting" | "sending";
+  /** The context chips the composer showed, before groups were expanded into `selection`: an edit shows these. */
+  readonly chips?: ReadonlyArray<string>;
 }
 
-/** A draft put back into a chat's composer. */
-/** A chat's unsent text, and the shapes its @ mentions put among the context chips. */
+/** A chat's unsent text, the shapes its @ mentions put among the context chips, and its uploaded attachments. */
 export interface ChatDraft {
   readonly text: string;
   readonly mentions: ReadonlyArray<string>;
+  readonly attachments: ReadonlyArray<ChatAttachment>;
   /** The element chips the person pointed at (spec 18, Point and tell). */
   readonly elements?: ReadonlyArray<ElementChip>;
 }
 
-export const EMPTY_DRAFT: ChatDraft = { text: "", mentions: [] };
+export const EMPTY_DRAFT: ChatDraft = { text: "", mentions: [], attachments: [] };
+
+const sameIds = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) => a.length === b.length && a.every((id, index) => b[index] === id);
 
 export const sameDraft = (a: ChatDraft, b: ChatDraft): boolean =>
   a.text === b.text &&
-  a.mentions.length === b.mentions.length &&
-  a.mentions.every((id, index) => b.mentions[index] === id) &&
+  sameIds(a.mentions, b.mentions) &&
+  sameIds(
+    a.attachments.map((item) => item.id),
+    b.attachments.map((item) => item.id),
+  ) &&
   JSON.stringify(a.elements ?? []) === JSON.stringify(b.elements ?? []);
+
+/** The toolbar's Agent tray keeps its own draft, under this key. */
+export const TOOLBAR_DRAFT = "toolbar";
+
+const DRAFT_WRITE_MS = 400;
 
 export interface Handoff {
   readonly text: string;
@@ -104,16 +116,31 @@ export class ChatClient {
   private readonly queues = new Map<string, ReadonlyArray<QueuedMessage>>();
   private readonly handoffs = new Map<string, Handoff[]>();
   private readonly drafts_ = new Map<string, ChatDraft>();
+  private readonly draftsKey: string;
+  private readonly stopDrafts: () => void;
+  private draftsTimer: ReturnType<typeof setTimeout> | undefined;
+  private draftWrites = 0;
+  private readonly writtenDrafts: string[] = [];
+  private draftsRead = false;
+  /** Every attachment a draft of this project held, by id, so a chip copied from one draft brings its file into another. */
+  private readonly knownAttachments = new Map<string, ChatAttachment>();
   private followUpValue: "queue" | "steer" = "queue";
   private followUpWatch: (() => void) | undefined;
   private planModeValue = false;
   private planModeWatch: (() => void) | undefined;
+  private sendShortcutValue: SendShortcut = "enter";
+  private sendShortcutWatch: (() => void) | undefined;
   private readonly stopShell: () => void;
 
   constructor(engine: EngineConnection, project: string) {
     this.engine = engine;
     this.project = project;
     this.stopShell = engine.subscribe("orchestration.subscribeShell", { projectId: project }, (item) => this.onShell(item));
+    this.draftsKey = `agent.drafts.${project}`;
+    this.stopDrafts = engine.subscribe("preferences.subscribe", { keys: [this.draftsKey] }, (change) => {
+      if (change.key === this.draftsKey) this.onStoredDrafts(change.value);
+    });
+    if (typeof window !== "undefined") window.addEventListener("pagehide", this.flushDrafts);
   }
 
   /** The unsent drafts, for a project tab that goes to the background (spec 17). */
@@ -122,13 +149,20 @@ export class ChatClient {
   }
 
   restoreDrafts(entries: ReadonlyArray<readonly [string, ChatDraft]>): void {
-    for (const [key, draft] of entries) this.drafts_.set(key, draft);
+    for (const [key, draft] of entries) {
+      this.drafts_.set(key, draft);
+      this.rememberAttachments(draft.attachments);
+    }
   }
 
   dispose(): void {
+    this.flushDrafts();
+    if (typeof window !== "undefined") window.removeEventListener("pagehide", this.flushDrafts);
+    this.stopDrafts();
     this.stopShell();
     this.followUpWatch?.();
     this.planModeWatch?.();
+    this.sendShortcutWatch?.();
     for (const entry of this.threads.values()) entry.stop();
     this.threads.clear();
   }
@@ -357,8 +391,8 @@ export class ChatClient {
     return [...this.queues.keys()];
   }
 
-  enqueue(threadId: string, message: QueuedMessage["message"], after: string | null): void {
-    this.queues.set(threadId, [...this.queue(threadId), { id: newId("queued"), message, after, state: "waiting" }]);
+  enqueue(threadId: string, message: QueuedMessage["message"], after: string | null, chips?: ReadonlyArray<string>): void {
+    this.queues.set(threadId, [...this.queue(threadId), { id: newId("queued"), message, after, state: "waiting", ...(chips !== undefined ? { chips } : {}) }]);
     this.changed(`queue:${threadId}`);
     this.changed("queues");
   }
@@ -394,8 +428,10 @@ export class ChatClient {
   }
 
   // -------------------------------------------------------------------------------------
-  // Each chat's unsent text (or `NEW_CHAT`'s), so the canvas rail and the editor's rail show
-  // the same draft and closing the editor loses nothing. In memory only: a reload drops it.
+  // Each chat's unsent draft (or `NEW_CHAT`'s, or the toolbar tray's), so the canvas rail and
+  // the editor's rail show the same draft and closing the editor loses nothing. Kept in the
+  // `agent.drafts.<project>` preference, so a reload or a restart keeps it too: the packaged
+  // app's origin changes every launch, so local storage would not.
 
   draft(key: string): ChatDraft {
     return this.drafts_.get(key) ?? EMPTY_DRAFT;
@@ -403,9 +439,55 @@ export class ChatClient {
 
   setDraft(key: string, draft: ChatDraft): void {
     if (sameDraft(this.draft(key), draft)) return;
-    if (draft.text === "" && draft.mentions.length === 0 && (draft.elements ?? []).length === 0) this.drafts_.delete(key);
+    if (draft.text === "" && draft.mentions.length === 0 && draft.attachments.length === 0 && (draft.elements ?? []).length === 0) this.drafts_.delete(key);
     else this.drafts_.set(key, draft);
+    this.rememberAttachments(draft.attachments);
     this.changed(`draft:${key}`);
+    clearTimeout(this.draftsTimer);
+    this.draftsTimer = setTimeout(this.flushDrafts, DRAFT_WRITE_MS);
+  }
+
+  rememberAttachments(attachments: ReadonlyArray<ChatAttachment>): void {
+    for (const attachment of attachments) this.knownAttachments.set(attachment.id, attachment);
+  }
+
+  /** An attachment some draft of this project held, by its id. */
+  knownAttachment(id: string): ChatAttachment | undefined {
+    return this.knownAttachments.get(id);
+  }
+
+  private readonly flushDrafts = (): void => {
+    if (this.draftsTimer === undefined) return;
+    clearTimeout(this.draftsTimer);
+    this.draftsTimer = undefined;
+    // A deleted chat's draft goes with it; one being created, the new chat's and the toolbar's stay.
+    const keep = (key: string) => !this.synced || key === NEW_CHAT || key === TOOLBAR_DRAFT || this.summaries.has(key) || this.pendingChats.has(key);
+    const value = storedDraftsValue(this.drafts_, keep);
+    const json = JSON.stringify(value);
+    this.writtenDrafts.push(json);
+    if (this.writtenDrafts.length > 50) this.writtenDrafts.shift();
+    this.draftWrites++;
+    void this.engine
+      .call("preferences.set", { key: this.draftsKey, value })
+      .catch(() => undefined)
+      .finally(() => this.draftWrites--);
+  };
+
+  /**
+   * The stored drafts: the first read fills in what this tab has not typed meanwhile; later,
+   * another window's writes replace ours. Our own writes come back as changes, not always in
+   * order, so an echo of one, or any change while one is in flight, is ignored.
+   */
+  private onStoredDrafts(value: unknown): void {
+    if (this.draftWrites > 0 || this.draftsTimer !== undefined || this.writtenDrafts.includes(JSON.stringify(value ?? null))) return;
+    const first = !this.draftsRead;
+    this.draftsRead = true;
+    for (const [key, draft] of readStoredDrafts(value)) {
+      if (sameDraft(this.draft(key), draft) || (first && this.drafts_.has(key))) continue;
+      this.drafts_.set(key, draft);
+      this.rememberAttachments(draft.attachments);
+      this.changed(`draft:${key}`);
+    }
   }
 
   // -------------------------------------------------------------------------------------
@@ -420,6 +502,18 @@ export class ChatClient {
       });
     }
     return this.followUpValue;
+  }
+
+  /** The Send shortcut preference (spec 10 shows its control): Enter unless set. */
+  get sendShortcut(): SendShortcut {
+    if (!this.sendShortcutWatch) {
+      this.sendShortcutWatch = this.engine.subscribe("preferences.subscribe", { keys: ["agent.sendShortcut"] }, (change) => {
+        if (change.key !== "agent.sendShortcut") return;
+        this.sendShortcutValue = sendShortcutOf(change.value);
+        this.changed("ui");
+      });
+    }
+    return this.sendShortcutValue;
   }
 
   /** The Plan mode preference (spec 10 shows its control): off unless set, as in t3code. */
@@ -551,6 +645,12 @@ export const useHandoffVersion = (client: ChatClient): number => useKey(client, 
 export const usePlanMode = (client: ChatClient): boolean => {
   useKey(client, "ui");
   return client.planMode;
+};
+
+/** The Send shortcut preference, live. */
+export const useSendShortcut = (client: ChatClient): SendShortcut => {
+  useKey(client, "ui");
+  return client.sendShortcut;
 };
 
 /** The Follow-up behavior preference, live. */

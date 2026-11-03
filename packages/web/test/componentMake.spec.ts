@@ -33,6 +33,9 @@ test("Make component sends the element's chip and the fixed instruction to a new
   const user = sent.messages.find((message) => message.role === "user");
   expect(user?.text).toBe(MAKE_COMPONENT_TEMPLATE.split("<kind>").join("page").replace("<title>", "Landing"));
   expect(user?.context?.elements).toEqual([expect.objectContaining({ shapeId: SHAPE, tag: "p", label: "Lead text" })]);
+  // One element is one selected thing: the artifact is not counted again beside its element chip.
+  expect(user?.context?.selection).toEqual([]);
+  await expect(page.locator('[data-role="user"] header').first()).toHaveText("You · 1 selected");
   await expect(editor(page).locator('[data-editor-column="rail"]').getByText("Make a component from the element attached to this message", { exact: false }).first()).toBeVisible();
 });
 

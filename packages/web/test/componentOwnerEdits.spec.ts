@@ -65,6 +65,37 @@ test("a background set by a variant rule changes only that variant's cells, and 
   await expect(cellButton(page, 1)).toHaveCSS("padding-top", "20px");
 });
 
+test("a background set by the base rule says it covers all variants except the one its override takes over, and changes only the cells it reaches", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await writeSheet(agent, PRICE_CARD);
+  await putRecords(agent, [componentShape({ id: "shape:card", ref: "151", at: { x: 420, y: 60 }, tag: "uf-price-card", title: "Price card" })]);
+  await expect(shapeOnScreen(page, "shape:card")).toBeVisible();
+  await openComponentEditor(page);
+
+  // The primary cell's background is the base rule's, and the secondary rule takes over the secondary cell.
+  await expect(async () => {
+    await cellButton(page, 0).click();
+    await expect(outline(page, "selected")).toHaveCount(1, { timeout: 1000 });
+  }).toPass({ timeout: 20_000 });
+  await expect(design(page).getByTestId("variant-line")).toHaveText("Editing Price card · primary");
+  await expect(design(page).getByRole("group", { name: "Fill", exact: true }).getByText("All variants, except kind: secondary", { exact: true })).toBeVisible({ timeout: 20_000 });
+  // The scope chip never covers the field's control: their boxes do not overlap.
+  const fill = design(page).getByRole("group", { name: "Fill", exact: true });
+  const chipBox = await fill.getByText("All variants, except kind: secondary", { exact: true }).boundingBox();
+  const fieldBox = await fill.getByRole("button", { name: "Background", exact: true }).boundingBox();
+  expect(chipBox && fieldBox).toBeTruthy();
+  const overlap = chipBox!.x < fieldBox!.x + fieldBox!.width && fieldBox!.x < chipBox!.x + chipBox!.width && chipBox!.y < fieldBox!.y + fieldBox!.height && fieldBox!.y < chipBox!.y + chipBox!.height;
+  expect(overlap).toBe(false);
+
+  await design(page).getByRole("button", { name: "Background", exact: true }).click();
+  await page.getByRole("textbox", { name: "Hex", exact: true }).fill("#ff0000");
+  await page.getByRole("textbox", { name: "Hex", exact: true }).press("Enter");
+  await page.keyboard.press("Escape");
+
+  await expect(cellButton(page, 0)).toHaveCSS("background-color", "rgb(255, 0, 0)", { timeout: 15_000 });
+  await expect(cellButton(page, 1)).toHaveCSS("background-color", "rgb(238, 238, 238)");
+});
+
 // A button whose background colour is a kit token declared in its base rule, in a sheet with the tokens tag.
 const TOKEN_SHEET = stampElementIds(`<!doctype html><html><head><meta charset="utf-8">${TOKENS_TAG}${BRIDGE_TAG}${COMPONENT_HELPER_TAG}</head><body style="margin:0">
 <script type="application/json" data-uf-component>{"tag":"uf-price-card","variants":{"kind":["primary","secondary"]},"props":{"label":"text"},"slots":[]}</script>

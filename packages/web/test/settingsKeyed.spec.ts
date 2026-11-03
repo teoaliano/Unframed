@@ -6,6 +6,7 @@ import { liveKey } from "../../engine/test/oauthStub.ts";
 import { gate } from "../../engine/test/openRouterStub.ts";
 import { expect, test } from "./fixtures.ts";
 import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
+import { platformOf } from "./platform.ts";
 import { IMAGE_MODELS, KEY, openApp, openSettings, settingsDialog, startSettingsEngine, TEXT_MODELS, VIDEO_MODELS } from "./settings.ts";
 
 test("with a key: the title, the OpenRouter heading, the spend, cap and remaining line and a 30-hour expiry note", async ({ page }) => {
@@ -241,6 +242,30 @@ test("Follow-up behavior shows Queue by default, saves Steer at once without Sav
     await expect(dialog.getByRole("combobox", { name: "Follow-up behavior" })).toHaveText("Steer");
   } finally {
     await second.engine.dispose();
+  }
+});
+
+test("Send shortcut sits next to Follow-up behavior: Enter by default, t3code's three options, saved at once without Save", async ({ page }) => {
+  const { engine } = await startSettingsEngine();
+  try {
+    await openApp(page, engine);
+    const dialog = await openSettings(page);
+    const { mac } = await platformOf(page);
+    const chord = mac ? "⌘Enter" : "Ctrl+Enter";
+    const agents = dialog.getByRole("region", { name: "Local agents" });
+    // Send shortcut, then Follow-up behavior, as t3code orders them.
+    await expect(agents.getByRole("combobox")).toHaveText(["Enter", "Queue"]);
+    const select = dialog.getByRole("combobox", { name: "Send shortcut" });
+    await expect(select).toHaveText("Enter");
+    await select.click();
+    await expect(page.getByRole("option")).toHaveText(["Enter", `${chord} for multiline prompts`, `${chord} always`]);
+    await page.getByRole("option", { name: `${chord} always` }).click();
+    await expect(select).toHaveText(`${chord} always`);
+    await expect
+      .poll(async () => (await (await engine.rpc()).call("preferences.get", { keys: ["agent.sendShortcut"] })).values["agent.sendShortcut"])
+      .toBe("mod-enter");
+  } finally {
+    await engine.dispose();
   }
 });
 

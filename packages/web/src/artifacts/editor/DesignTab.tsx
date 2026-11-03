@@ -346,8 +346,8 @@ const Row = ({ label, mark, token, children }: { readonly label: string; readonl
       <span className="truncate">{label}</span>
       {mark !== undefined && <ParameterMark path={mark} />}
     </span>
-    <div className="flex min-w-0 items-center gap-1">
-      <div className="min-w-0 flex-1">{children}</div>
+    <div className="flex min-w-0 flex-wrap items-center gap-1">
+      <div className="min-w-[7rem] flex-1">{children}</div>
       {token}
     </div>
   </div>
@@ -423,6 +423,7 @@ const ChipFace = ({ token, suffix, kit, mode }: { readonly token: Token; readonl
  */
 const TokenPicker = ({
   field,
+  label,
   kit,
   mode,
   editable,
@@ -434,6 +435,8 @@ const TokenPicker = ({
   onOpenChange,
 }: {
   readonly field: string;
+  /** The field's name as the Design tab shows it, for the trigger's accessible name. */
+  readonly label: string;
   readonly kit: Kit | null;
   readonly mode: string;
   readonly editable: boolean;
@@ -463,15 +466,24 @@ const TokenPicker = ({
   return (
     <Popover open={open} onOpenChange={close}>
       {chip === undefined || kit === null ? (
-        <PopoverTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Use a token" disabled={!editable} />}>
+        <PopoverTrigger render={<Button variant="ghost" size="icon-xs" aria-label={`Use a token for ${label}`} data-token-trigger={field} disabled={!editable} />}>
           <Diamond aria-hidden />
         </PopoverTrigger>
       ) : (
-        <PopoverTrigger render={<Button variant="outline" size="sm" className="min-w-0 justify-start" title={chip.token.path} />}>
+        <PopoverTrigger render={<Button variant="outline" size="sm" className="min-w-0 justify-start" title={chip.token.path} data-token-trigger={field} />}>
           <ChipFace token={chip.token} suffix={chip.suffix} kit={kit} mode={mode} />
         </PopoverTrigger>
       )}
-      <PopoverPopup side="left" align="start" padding="compact" className="w-72" aria-label="Use a token" initialFocus={false}>
+      {/* Escape or a choice hands focus back to the field's trigger, or to the chip that replaces it. */}
+      <PopoverPopup
+        side="left"
+        align="start"
+        padding="compact"
+        className="w-72"
+        aria-label="Use a token"
+        initialFocus={false}
+        finalFocus={() => document.querySelector<HTMLElement>(`[data-token-trigger="${CSS.escape(field)}"]`)}
+      >
         {detach !== undefined && (
           <Button
             variant="ghost"
@@ -734,7 +746,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   /** Who holds a style value of one element. An edit still in the burst is the person's own, so the owner stays the source until it is written. */
   /** A board copy's field in its component sheet (spec 20): the variants it covers, and the rule that sets it. Null for a page's element. */
   const sheetOf = (subject: Subject, property: string): SheetField | null =>
-    sheetFieldOf(subject.report.sheetRules, subject.report.inline, property, expandShorthand, kit === null ? [] : kitCssNames(kit));
+    sheetFieldOf(subject.report.sheetRules, subject.report.inline, property, expandShorthand, kit === null ? [] : kitCssNames(kit), subject.report.sheetOverrides);
 
   const ownerOf = (subject: Subject, property: string): FieldOwner => {
     if (pending.some((edit) => (edit.type === "style" || edit.type === "token") && edit.elementId === subject.id && edit.property === property)) return { owner: "source" };
@@ -813,9 +825,9 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
             : { type: "token", elementId: subject.id, property, token: token.path };
         }),
       );
-  const tokenSlot = (field: string, editable: boolean, properties: readonly string[] = [field]) =>
+  const tokenSlot = (field: string, editable: boolean, properties: readonly string[] = [field], label: string = field) =>
     TOKEN_FIELDS.has(field) ? (
-      <TokenPicker field={field} kit={kit} mode={currentMode} editable={editable} edits={tokenEdits(properties)} session={session} onOpenKit={onOpenKit} />
+      <TokenPicker field={field} label={label} kit={kit} mode={currentMode} editable={editable} edits={tokenEdits(properties)} session={session} onOpenKit={onOpenKit} />
     ) : undefined;
   /** Writes a token's resolved values to the properties as literals, to every selected element (Detach). */
   const detachWith = (token: Token, properties: readonly string[]) => {
@@ -829,12 +841,13 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     }
   };
   /** The chip of a field that holds a token (spec 19, The token chip), or null when the field holds none the kit has. */
-  const chipFor = (field: string, view: View, properties: readonly string[] = [field]): ReactNode => {
+  const chipFor = (field: string, view: View, properties: readonly string[] = [field], label: string = field): ReactNode => {
     const named = view.owner.owner === "token" ? tokenNamed(kit, view.owner.name) : openChip?.field === field ? openChip.named : undefined;
     if (named === undefined || kit === null) return null;
     return (
       <TokenPicker
         field={field}
+        label={label}
         kit={kit}
         mode={currentMode}
         editable
@@ -851,15 +864,22 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   /** A board copy's chip (spec 20) beside the token slot: a rule-set field shows its chip alone, since its edit is the rule's. */
   const withSheet = (view: View, slot: ReactNode): ReactNode => {
     if (view.sheet?.kind !== "variants") return slot;
-    const chip = <Badge variant="outline" size="sm">{view.sheet.chip}</Badge>;
+    // A long scope truncates, with the whole text in the kit Tip, so it never runs under the field's control (spec 20).
+    const chip = (
+      <Tip label={view.sheet.chip}>
+        <Badge variant="outline" size="sm" className="min-w-0 max-w-full">
+          <span className="block min-w-0 truncate">{view.sheet.chip}</span>
+        </Badge>
+      </Tip>
+    );
     return view.sheet.rule === undefined ? (<>{chip}{slot}</>) : chip;
   };
 
   const numberField = (label: string, property: string, options: { readonly format?: (value: string) => string; readonly write?: (typed: number, subject: Subject) => string } = {}) => {
     const view = viewOf(property);
-    const chip = chipFor(property, view);
+    const chip = chipFor(property, view, [property], label);
     return (
-      <Row label={label} mark={dialPathOf(view)} token={chip === null ? withSheet(view, tokenSlot(property, view.editable)) : undefined}>
+      <Row label={label} mark={dialPathOf(view)} token={chip === null ? withSheet(view, tokenSlot(property, view.editable, [property], label)) : undefined}>
         {chip ?? <NumberControl
           label={label}
           value={view.mixed ? "" : (options.format ?? numberOf)(view.value)}
@@ -882,9 +902,9 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
 
   const colourField = (label: string, property: string) => {
     const view = viewOf(property, (subject) => hexOf(subject.report.computed[property]));
-    const chip = chipFor(property, view);
+    const chip = chipFor(property, view, [property], label);
     return (
-      <Row label={label} mark={dialPathOf(view)} token={chip === null ? withSheet(view, tokenSlot(property, view.editable)) : undefined}>
+      <Row label={label} mark={dialPathOf(view)} token={chip === null ? withSheet(view, tokenSlot(property, view.editable, [property], label)) : undefined}>
         {chip ?? <ColourControl label={label} hex={view.value} mixed={view.mixed} disabled={!view.editable} onCommit={(next) => write(property, () => next)} />}
       </Row>
     );
@@ -900,9 +920,9 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
 
   // Text
   const fontView = viewOf("font-family", (subject) => firstFamily(subject.report.computed["font-family"] ?? ""));
-  const fontChip = chipFor("font-family", fontView);
+  const fontChip = chipFor("font-family", fontView, undefined, "Font");
   const weightView = viewOf("font-weight");
-  const weightChip = chipFor("font-weight", weightView);
+  const weightChip = chipFor("font-weight", weightView, undefined, "Weight");
   // A text style: the five text fields all hold sub-names of one text style token, which the Text header shows as a chip.
   const TEXT_PROPERTIES = ["font-family", "font-size", "font-weight", "line-height", "letter-spacing"];
   const textStyleOwned = (() => {
@@ -920,7 +940,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
 
   // Shape
   const borderWidthView = viewOf("border-width");
-  const borderWidthChip = chipFor("border-width", borderWidthView);
+  const borderWidthChip = chipFor("border-width", borderWidthView, undefined, "Border");
   const borderStyleView = viewOf("border-style");
   const borderColourView = viewOf("border-color", (subject) => hexOf(subject.report.computed["border-color"]));
   const radiusView = viewOf("border-radius");
@@ -959,7 +979,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   const sidesToken = (prefix: "padding" | "margin") => {
     const views = sideViews(prefix);
     const editable = SIDES.every((side) => views[side].editable);
-    return withSheet(views.top, tokenSlot(prefix, editable, SIDES.map((side) => `${prefix}-${side}`)));
+    return withSheet(views.top, tokenSlot(prefix, editable, SIDES.map((side) => `${prefix}-${side}`), prefix === "padding" ? "Padding" : "Margin"));
   };
 
   // Off-token values: a row names its element (the Layers tab's name) or its rule; a row selects the place, and Use token writes a token edit for it.
@@ -1064,10 +1084,11 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
         note={textNote}
         action={
           textStyleOwned === undefined ? (
-            tokenSlot("text-style", fontView.editable, ["font-size"])
+            tokenSlot("text-style", fontView.editable, ["font-size"], "Text style")
           ) : (
             <TokenPicker
               field="text-style"
+              label="Text style"
               kit={kit}
               mode={currentMode}
               editable
@@ -1081,7 +1102,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
           )
         }
       >
-        <Row label="Font" token={fontChip === null ? tokenSlot("font-family", fontView.editable) : undefined}>
+        <Row label="Font" token={fontChip === null ? tokenSlot("font-family", fontView.editable, undefined, "Font") : undefined}>
           {fontChip ?? (
             <FontControl
               value={fontView.mixed ? "" : fontView.value}
@@ -1092,7 +1113,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
           )}
         </Row>
         {numberField("Size", "font-size")}
-        <Row label="Weight" mark={dialPathOf(weightView)} token={weightChip === null ? tokenSlot("font-weight", weightView.editable) : undefined}>
+        <Row label="Weight" mark={dialPathOf(weightView)} token={weightChip === null ? tokenSlot("font-weight", weightView.editable, undefined, "Weight") : undefined}>
           {weightChip ?? (
             <KeywordControl label="Weight" value={weightView.value} mixed={weightView.mixed} options={WEIGHTS} disabled={!weightView.editable} onPick={(next) => write("font-weight", () => next)} />
           )}
@@ -1123,7 +1144,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
       </Section>
 
       <Section name="Shape" note={shapeNote}>
-        <Row label="Border" mark={dialPathOf(borderWidthView) ?? dialPathOf(borderStyleView) ?? dialPathOf(borderColourView)} token={borderWidthChip === null ? tokenSlot("border-width", borderWidthView.editable) : undefined}>
+        <Row label="Border" mark={dialPathOf(borderWidthView) ?? dialPathOf(borderStyleView) ?? dialPathOf(borderColourView)} token={borderWidthChip === null ? tokenSlot("border-width", borderWidthView.editable, undefined, "Border") : undefined}>
           <div role="group" aria-label="Border" className="flex min-w-0 flex-wrap items-center gap-1.5">
             {borderWidthChip ?? (
             <div className="w-20">
@@ -1140,12 +1161,12 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
               <KeywordControl label="Border style" value={borderStyleView.value} mixed={borderStyleView.mixed} options={BORDER_STYLES} disabled={!borderStyleView.editable} onPick={(next) => write("border-style", () => next)} />
             </div>
             <ColourControl label="Border colour" hex={borderColourView.value} mixed={borderColourView.mixed} disabled={!borderColourView.editable} onCommit={(next) => write("border-color", () => next)} />
-            {tokenSlot("border-color", borderColourView.editable)}
+            {tokenSlot("border-color", borderColourView.editable, undefined, "Border colour")}
           </div>
         </Row>
         {numberField("Corner radius", "border-radius", { write: (typed) => `${typed}px` })}
         {opacityField}
-        <Row label="Shadow" mark={Object.values(shadowFields).map(dialPathOf).find((path) => path !== undefined)} token={tokenSlot("box-shadow", shadowEditable)}>
+        <Row label="Shadow" mark={Object.values(shadowFields).map(dialPathOf).find((path) => path !== undefined)} token={tokenSlot("box-shadow", shadowEditable, undefined, "Shadow")}>
           <div role="group" aria-label="Shadow" className="grid grid-cols-2 gap-1.5">
             {shadowNumber("x", "Shadow x")}
             {shadowNumber("y", "Shadow y")}

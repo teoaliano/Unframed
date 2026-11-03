@@ -139,6 +139,7 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
             turnId,
             runtimeMode: context.runtimeMode(chatId),
             interactionMode: input.interactionMode,
+            ...(call.permission === undefined ? {} : { signals: call.permission }),
             signal: abort.signal,
           });
       if (allowed.behavior === "allow") {

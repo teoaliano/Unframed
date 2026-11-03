@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { makeTempDir, startEngine, type TestEngine } from "./harness.ts";
 
 const CSP =
-  "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-ancestors http://localhost:* http://127.0.0.1:* http://[::1]:*";
+  "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-ancestors http://localhost:* http://127.0.0.1:*";
 
 /** An engine with a project `board` holding `files`. */
 const withProject = async (files: Record<string, string | Buffer>): Promise<{ engine: TestEngine; folder: string }> => {
@@ -47,7 +47,11 @@ describe("the preview origin", () => {
       await expectNotFound(engine, path);
     }
     for (const method of ["POST", "PUT", "DELETE", "OPTIONS"]) await expectNotFound(engine, "/p/board/landing.html", method);
-    await expectNotFound(engine, "/p/board/missing.html");
+    const missing = await preview(engine, "/p/board/missing.html");
+    expect(missing.status).toBe(404);
+    expect(missing.headers["content-type"]).toBe("text/html; charset=utf-8");
+    expect(missing.text).toContain("This file is no longer in the project.");
+    expect(missing.text).not.toContain("<script");
     await expectNotFound(engine, "/p/nothere/landing.html");
   });
 
@@ -101,6 +105,14 @@ describe("the preview origin", () => {
       expect(response.text, name).toBe(`bytes of ${name}`);
     }
     for (const name of refused) await expectNotFound(engine, `/p/board/${name}`);
+  });
+
+  it("names only frame-ancestors sources Chrome accepts: no IPv6 host, which Chrome logs as an error on every frame", async () => {
+    const { engine } = await withProject({ "landing.html": "<h1>Hello</h1>" });
+    const response = await preview(engine, "/p/board/landing.html");
+    const ancestors = String(response.headers["content-security-policy"]).split(";").map((d) => d.trim()).find((d) => d.startsWith("frame-ancestors"));
+    expect(ancestors).toBe("frame-ancestors http://localhost:* http://127.0.0.1:*");
+    expect(ancestors).not.toContain("[");
   });
 
   it("puts the content policy and its companion headers on every served response", async () => {
@@ -174,6 +186,8 @@ describe("the preview origin", () => {
     const fresh = await preview(engine, "/p/board/fresh.html");
     expect(fresh.status).toBe(200);
     expect(fresh.text).toBe("<h1>new</h1>");
-    await expectNotFound(engine, "/p/board/landing.html");
+    const gone = await preview(engine, "/p/board/landing.html");
+    expect(gone.status).toBe(404);
+    expect(gone.text).toContain("This file is no longer in the project.");
   });
 });

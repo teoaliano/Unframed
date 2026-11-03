@@ -189,3 +189,60 @@ describe("questions", () => {
     });
   });
 });
+
+describe("files on an answer", () => {
+  it("reach the provider as the stored files' paths after the answer, and the response keeps them", async () => {
+    const agent = await startAgentEngine();
+    const chatId = await agent.createChat();
+    await agent.send(chatId, "ask me first about the page");
+    const parked = await (await agent.watch(chatId)).until((chat) => openRequests(chat, "user-input").length === 1, "the question");
+    const requestId = ((openRequests(parked, "user-input")[0]!.payload) as { requestId: string }).requestId;
+    const { relativeUrl } = await agent.rpc.call("attachments.createUploadUrl", { name: "mood.txt", mimeType: "text/plain", sizeBytes: 5 });
+    const uploaded = (await agent.engine.request(relativeUrl, { method: "POST", body: Buffer.from("cream"), headers: { "content-type": "application/octet-stream" } })).json().attachment;
+    await agent.dispatch({
+      type: "thread.user-input.respond",
+      threadId: chatId,
+      requestId,
+      answers: { "Which sections should it have?": ["Hero"] },
+      attachmentsByQuestionId: { "Which look should the page have?": [{ id: uploaded.id, name: "mood.txt" }] },
+    });
+    const chat = await agent.settled(chatId, 1);
+    const resolved = chat.activities.find((activity) => activity.kind === "user-input.resolved")?.payload as { answers: Record<string, unknown> };
+    expect(resolved.answers["Which sections should it have?"]).toEqual(["Hero"]);
+    expect(resolved.answers["Which look should the page have?"]).toMatch(/^Attached file "mood\.txt": \/.+\.txt$/);
+    expect(lastReply(chat)).toBe("Thanks. I will build the page with the look and sections you picked.");
+  });
+});
+
+describe("the answers an approval offers", () => {
+  it("carry the provider's reason and options on the request, and an answer it does not offer is refused", async () => {
+    const agent = await startAgentEngine();
+    const chatId = await agent.createChat({ runtimeMode: "approval-required" });
+    await agent.send(chatId, "a guarded delete please");
+    const { chat, requestId } = await parkedOn(agent, chatId);
+    expect(chat.activities.find((activity) => activity.kind === "approval.requested")?.payload).toMatchObject({
+      detail: "rm -rf ../shared/cache",
+      reason: "This deletes files outside the project folder.",
+      options: [
+        { decision: "decline", label: "Decline" },
+        { decision: "accept", label: "Approve" },
+      ],
+    });
+    await expect(agent.dispatch({ type: "thread.approval.respond", threadId: chatId, requestId, decision: "acceptForSession" })).rejects.toMatchObject({
+      code: "bad_request",
+      message: "That answer is not offered for this request.",
+    });
+    await agent.dispatch({ type: "thread.approval.respond", threadId: chatId, requestId, decision: "accept" });
+    expect(lastReply(await agent.settled(chatId, 1))).toBe("Cleared the shared cache.");
+  });
+
+  it("name nothing when the provider says nothing, so the fixed four apply", async () => {
+    const agent = await startAgentEngine();
+    const chatId = await agent.createChat({ runtimeMode: "approval-required" });
+    await agent.send(chatId, "clean the build folder");
+    const { chat } = await parkedOn(agent, chatId);
+    const payload = chat.activities.find((activity) => activity.kind === "approval.requested")?.payload as Record<string, unknown>;
+    expect(payload).not.toHaveProperty("options");
+    expect(payload).not.toHaveProperty("reason");
+  });
+});

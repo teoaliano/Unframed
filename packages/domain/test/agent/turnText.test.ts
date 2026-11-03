@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  answersWithFiles,
   buildPreamble,
   changeNote,
   checkCanvasTools,
@@ -118,5 +119,22 @@ describe("the preamble", () => {
     expect(selectionLabel({ title: "", fileName: "hero.png" })).toBe("hero.png");
     expect(selectionLabel({ text: "a".repeat(50) })).toBe("a".repeat(40));
     expect(selectionLabel({})).toBeUndefined();
+  });
+});
+
+describe("an answer's files", () => {
+  it("are added to the answer as the paths a provider can open, after any text (t3code's fallback: no provider takes files in an answer)", () => {
+    const files = {
+      look: [{ kind: "image", name: "ref.png", path: "/data/attachments/a1.png" }],
+      sections: [{ kind: "file", name: "brief.pdf", path: "/data/attachments/a2.pdf" }],
+      tone: [{ kind: "file", name: "notes.txt", path: "/data/attachments/a3.txt" }],
+    } as const;
+    expect(answersWithFiles({ look: "Warm", sections: ["Hero"], other: "kept" }, files)).toEqual({
+      look: 'Warm\n\nAttached image "ref.png": /data/attachments/a1.png',
+      sections: ["Hero", 'Attached file "brief.pdf": /data/attachments/a2.pdf'],
+      tone: 'Attached file "notes.txt": /data/attachments/a3.txt',
+      other: "kept",
+    });
+    expect(answersWithFiles({ look: "Warm" }, {})).toEqual({ look: "Warm" });
   });
 });

@@ -85,7 +85,7 @@ export const compileComponent = (sheetHtml: string, sheetFile: string): string =
   const read = readComponentSheet(sheetHtml);
   if (!read.ok) throw new Error(read.refusal);
   const { declaration, style, template } = read.sheet;
-  const header = `// Compiled by Unframed from ${sheetFile.replace(/[\r\n*/]/g, "_")}. Built from that sheet; do not edit.`;
+  const header = `// Compiled by Unframed from ${sheetFile.replace(/[\r\n\u2028\u2029*/]/g, "_")}. Built from that sheet; do not edit.`;
   return [
     header,
     "(function () {",

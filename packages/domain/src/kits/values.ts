@@ -204,9 +204,12 @@ export const normaliseShadow = (text: string): string =>
     .replace(/(^|[^\d.])0(px|rem|em|%)?(?![\d.])/g, (_match, before: string) => `${before}0`);
 
 /** Whether a shadow reads as CSS box-shadow: balanced brackets, no statement characters, and two lengths for its offsets. */
+/** Whether the quotes in a CSS value pair up: an open quote would swallow the rest of its declaration. */
+const quotesBalance = (text: string): boolean => (text.match(/"/g)?.length ?? 0) % 2 === 0 && (text.match(/'/g)?.length ?? 0) % 2 === 0;
+
 export const isShadow = (text: string): boolean => {
   const value = text.trim();
-  if (value === "" || /[;{}<>\\]/.test(value)) return false;
+  if (value === "" || /[;{}<>\\]|\/\*|\*\//.test(value) || !quotesBalance(value)) return false;
   let depth = 0;
   for (const ch of value) {
     if (ch === "(") depth++;
@@ -214,6 +217,12 @@ export const isShadow = (text: string): boolean => {
     if (depth < 0) return false;
   }
   return depth === 0 && /(^|\s)-?(\d+\.?\d*|\.\d+)(px|rem|em)?\s+-?(\d+\.?\d*|\.\d+)(px|rem|em)?/.test(value);
+};
+
+/** A font family list, as CSS text it cannot leave its own declaration: no block, comment, at-rule, url() or line break. */
+export const isFontFamily = (text: string): boolean => {
+  const value = text.trim();
+  return value !== "" && !/[;{}<>\\@\r\n]|\/\*|\*\/|url\(/i.test(value) && quotesBalance(value);
 };
 
 /** The first family of a font-family list, unquoted and lower-cased. */

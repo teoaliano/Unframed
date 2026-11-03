@@ -94,6 +94,13 @@ const bareFileOrEmpty = T.string.check((file) => {
   if (file !== "" && !isBareFileName(file)) throw new T.ValidationError(`Expected a file name, got ${JSON.stringify(file)}`);
 });
 
+/** A component sheet's file name: the bare project file name rule the preview route serves, ending in `.html` (spec 20). Pins write it into an attribute. */
+export const isSheetFileName = (name: string): boolean => /^[A-Za-z0-9][A-Za-z0-9._-]{0,200}\.html$/.test(name);
+
+const sheetFileOrEmpty = T.string.check((file) => {
+  if (file !== "" && !isSheetFileName(file)) throw new T.ValidationError(`Expected a component sheet file name, got ${JSON.stringify(file)}`);
+});
+
 /** A page or motion: its file in the project folder (`''` when empty), title and original file name. */
 export interface ArtifactShapeProps {
   w: number;
@@ -226,7 +233,7 @@ const buildSchema = (refusalOf?: (kit: Kit) => string | null): TLSchema => {
       page: { props: artifactProps, meta: refMeta, migrations: artifactMigrations("page") },
       motion: { props: artifactProps, meta: refMeta, migrations: artifactMigrations("motion") },
       component: {
-        props: { ...artifactProps, tag: componentTag },
+        props: { ...artifactProps, file: sheetFileOrEmpty, tag: componentTag },
         meta: refMeta,
         migrations: createShapePropsMigrationSequence({ sequence: [] }),
       },

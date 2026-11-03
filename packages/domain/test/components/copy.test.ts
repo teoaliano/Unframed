@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { copiedTag, updateImpact, type ComponentPropType } from "../../src/index.ts";
+import { copiedTag, readComponentSheet, retagSheet, updateImpact, type ComponentPropType } from "../../src/index.ts";
 
 describe("copiedTag", () => {
   it("names the first copy -copy", () => {
@@ -88,5 +88,24 @@ describe("updateImpact", () => {
     expect(sentences[0]).toMatch(/kind "secondary"/);
     expect(sentences.at(-2)).toMatch(/the property icon/);
     expect(sentences.at(-1)).toMatch(/the slot end/);
+  });
+});
+
+describe("retagSheet (spec 20's copy)", () => {
+  const DECL = '{"tag":"uf-button","variants":{"kind":["primary"]},"props":{},"slots":[]}';
+  const sheet = (open: string) => `<!doctype html><html><head>
+${open}${DECL}</script>
+<style type="text/x-uf-component" data-uf-component-style>:host { color: red; }</style>
+</head><body><div data-uf-template hidden><span>Buy</span></div></body></html>`;
+
+  it.each([
+    ["the attribute last", '<script type="application/json" data-uf-component>'],
+    ["the attribute first", '<script data-uf-component type="application/json">'],
+    ["the attribute in the middle", '<script type="application/json" data-uf-component id="decl">'],
+  ])("retags a declaration with %s", (_name, open) => {
+    const copy = retagSheet(sheet(open), "uf-button-copy");
+    const read = readComponentSheet(copy);
+    expect(read.ok && read.sheet.declaration.tag).toBe("uf-button-copy");
+    expect(copy).not.toContain('"tag":"uf-button"');
   });
 });

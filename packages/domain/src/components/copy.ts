@@ -10,8 +10,15 @@ export const copiedTag = (tag: string, taken: ReadonlySet<string>): string => {
   }
 };
 
-const DECLARATION = /(<script\b[^>]*data-uf-component>)([\s\S]*?)(<\/script>)/i;
+/** The declaration element, whatever order its attributes come in, as the reader finds it (comments blanked, so offsets match). */
+const DECLARATION = /(<script\b(?=[^>]*\btype\s*=\s*"application\/json")(?=[^>]*\sdata-uf-component(?=[\s=>]))[^>]*>)([\s\S]*?)(<\/script>)/i;
 
 /** The sheet with its declaration's tag replaced (spec 20's copy): every other byte of the sheet is kept. The sheet must be valid. */
-export const retagSheet = (html: string, tag: string): string =>
-  html.replace(DECLARATION, (_all, open: string, body: string, close: string) => `${open}${JSON.stringify({ ...JSON.parse(body), tag })}${close}`);
+export const retagSheet = (html: string, tag: string): string => {
+  const blanked = html.replace(/<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\n]/g, " "));
+  const match = DECLARATION.exec(blanked);
+  if (!match) return html;
+  const [whole, open, body, close] = match;
+  const start = match.index;
+  return `${html.slice(0, start)}${open}${JSON.stringify({ ...JSON.parse(html.slice(start + open!.length, start + open!.length + body!.length)), tag })}${close}${html.slice(start + whole.length)}`;
+};

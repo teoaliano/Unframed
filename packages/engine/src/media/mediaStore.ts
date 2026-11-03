@@ -283,6 +283,8 @@ export const mediaStoreLayer = Layer.effect(
           const temp = join(targetDir, `.copy-${randomUUID()}.tmp`);
           if (isHtmlFileName(file)) {
             // A pasted page or motion is a new file of its kind: tags and ids, as every artifact write gets (spec 18).
+            // Its pinned sheets come first, so the pins it carries are valid when the pins are injected (spec 20).
+            if (sourceDir !== targetDir) await copyPinnedComponents(sourceDir, targetDir, file);
             const text = await readFile(source, "utf8");
             const kind = kindOfArtifactHtml(text);
             const prepared = (await pinComponents(targetDir, await runPromise(rooms.read(project)), prepareArtifactHtml(text, kind))).html;
@@ -299,7 +301,6 @@ export const mediaStoreLayer = Layer.effect(
               join(targetDir, sidecarFileName(target)),
               sidecarText({ source: "copy", fileName, mime, bytes, at: new Date().toISOString(), of: file, ...(ofProject === undefined ? {} : { ofProject }) }),
             );
-            if (sourceDir !== targetDir) await copyPinnedComponents(sourceDir, targetDir, file);
             return target;
           } catch (error) {
             await rm(temp, { force: true });

@@ -1,5 +1,6 @@
-/** The settings dialog's Local agents section (spec 10): provider statuses, command paths and the follow-up choice. */
+/** The settings dialog's Local agents section (spec 10): provider statuses, command paths, the send shortcut and the follow-up choice. */
 import type { ProviderStatus, ProviderStatuses } from "@unframed/contracts";
+import type { SendShortcut } from "@unframed/domain";
 import { useId } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -7,9 +8,11 @@ import { Label } from "~/components/ui/label";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Spinner } from "~/components/ui/spinner";
 import { Switch } from "~/components/ui/switch";
+import { platform } from "../canvas/platform.ts";
 import { linkClass, SectionHeading } from "./fields.tsx";
 
 export const FOLLOW_UP_KEY = "agent.followUp";
+export const SEND_SHORTCUT_KEY = "agent.sendShortcut";
 /** Off unless set, as t3code ships it: plan mode, its toggle, `/plan`, `/default` and Shift+Tab (spec 08). */
 export const PLAN_MODE_KEY = "agent.planMode";
 export type FollowUp = "queue" | "steer";
@@ -18,6 +21,15 @@ const FOLLOW_UPS: ReadonlyArray<{ readonly value: FollowUp; readonly label: stri
   { value: "queue", label: "Queue", hint: "Wait for the running turn, then send" },
   { value: "steer", label: "Steer", hint: "Send into the running turn" },
 ];
+
+const sendShortcuts = (): ReadonlyArray<{ readonly value: SendShortcut; readonly label: string }> => {
+  const chord = platform() === "darwin" ? "⌘Enter" : "Ctrl+Enter";
+  return [
+    { value: "enter", label: "Enter" },
+    { value: "mod-enter-multiline", label: `${chord} for multiline prompts` },
+    { value: "mod-enter", label: `${chord} always` },
+  ];
+};
 
 /** What a status line says: `ready` with what is known about the sign-in, else the provider's own message. */
 export const statusText = (status: ProviderStatus): string => {
@@ -70,6 +82,8 @@ export interface LocalAgentsProps {
   readonly codexPath: string;
   readonly claudeConfigDir: string;
   readonly onChange: (field: "claudePath" | "codexPath" | "claudeConfigDir", value: string) => void;
+  readonly sendShortcut: SendShortcut;
+  readonly onSendShortcut: (value: SendShortcut) => void;
   readonly followUp: FollowUp;
   readonly onFollowUp: (value: FollowUp) => void;
   readonly planMode: boolean;
@@ -78,6 +92,7 @@ export interface LocalAgentsProps {
 
 export const LocalAgents = (props: LocalAgentsProps) => {
   const configId = useId();
+  const sendShortcutId = useId();
   const followUpId = useId();
   const planModeId = useId();
   return (
@@ -122,6 +137,23 @@ export const LocalAgents = (props: LocalAgentsProps) => {
           value={props.claudeConfigDir}
           onChange={(event) => props.onChange("claudeConfigDir", event.target.value)}
         />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label id={sendShortcutId} render={<span />}>
+          Send shortcut
+        </Label>
+        <Select value={props.sendShortcut} onValueChange={(value) => value && props.onSendShortcut(value as SendShortcut)}>
+          <SelectTrigger aria-labelledby={sendShortcutId}>
+            <SelectValue>{sendShortcuts().find((option) => option.value === props.sendShortcut)?.label}</SelectValue>
+          </SelectTrigger>
+          <SelectPopup alignItemWithTrigger={false}>
+            {sendShortcuts().map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
       </div>
       <div className="flex flex-col gap-1.5">
         <Label id={followUpId} render={<span />}>

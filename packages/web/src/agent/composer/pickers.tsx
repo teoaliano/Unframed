@@ -1,15 +1,17 @@
 import type { AgentProvider, ModelSelection, ProviderModel, ProviderStatuses } from "@unframed/contracts";
 import { contextMeter, type Chat, type ContextUsage, type InteractionMode, type RuntimeMode, type Traits } from "@unframed/domain";
 import { Check, ChevronDown, Ellipsis, Lock, LockOpen, Minimize2, PencilLine, Sparkles, Zap, type LucideIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { Kbd } from "~/components/ui/kbd";
 import { Menu, MenuGroup, MenuGroupLabel, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import claudeLogo from "../../../../../assets/brand/provider-logos/claude.svg?url";
 import codexLogo from "../../../../../assets/brand/provider-logos/codex.svg?url";
 import { Tip } from "../../chrome/ui.tsx";
+import { platform } from "../../canvas/platform.ts";
 import { Chevron, Disclosure } from "../transcript/WorkLog.tsx";
 import { effectiveModel, modelsOf, PROVIDERS, providerName } from "../providers.ts";
 import { record } from "../record.ts";
@@ -46,10 +48,17 @@ export interface ModelPickerProps {
   readonly onPick: (provider: AgentProvider, model: ProviderModel) => void;
 }
 
+/** Cmd on a Mac, Ctrl elsewhere, and neither of the other: t3code's `mod`. */
+const modHeld = (event: { readonly metaKey: boolean; readonly ctrlKey: boolean }): boolean =>
+  platform() === "darwin" ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+
 /**
  * The model picker (t3code's): Claude and Codex tabs with their logos, a search, the
  * current models and a collapsible Legacy section. A tab whose provider is not ready
- * shows its status instead.
+ * shows its status instead. t3code's keys: Cmd+1 to Cmd+9 pick the rows shown,
+ * Cmd+Shift+ArrowUp and ArrowDown step through the providers that can be picked, ArrowLeft
+ * in an empty search (or Shift+Tab) goes to the tabs and ArrowRight comes back, and
+ * Cmd+Shift+M closes it as it opened it.
  */
 export const ModelPicker = ({ statuses, selection, providerLocked, disabled, open, onOpenChange, onPick }: ModelPickerProps) => {
   const current = effectiveModel(statuses, selection.provider, selection.model);
@@ -75,6 +84,31 @@ export const ModelPicker = ({ statuses, selection, providerLocked, disabled, ope
     onPick(tab, model);
     onOpenChange(false);
   };
+  const tabList = useRef<HTMLDivElement>(null);
+  const search = useRef<HTMLInputElement>(null);
+  const mac = platform() === "darwin";
+  const switchTab = (provider: AgentProvider) => {
+    setTab(provider);
+    setQuery("");
+    setHighlight(0);
+  };
+  const onPopupKey = (event: ReactKeyboardEvent) => {
+    if (event.defaultPrevented || event.repeat || event.altKey || !modHeld(event)) return;
+    if (event.shiftKey && event.key.toLowerCase() === "m") {
+      onOpenChange(false);
+    } else if (event.shiftKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+      const choices = PROVIDERS.filter((provider) => !(providerLocked && provider !== selection.provider) && statuses?.[provider]?.status === "ready");
+      const at = choices.indexOf(tab);
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      const next = choices[at < 0 ? (step === 1 ? 0 : choices.length - 1) : (at + step + choices.length) % choices.length];
+      if (next !== undefined) switchTab(next);
+    } else if (!event.shiftKey && /^[1-9]$/.test(event.key)) {
+      const model = visible[Number(event.key) - 1];
+      if (model) pick(model);
+    } else return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
 
   const row = (model: ProviderModel) => {
     const index = visible.indexOf(model);
@@ -98,6 +132,7 @@ export const ModelPicker = ({ statuses, selection, providerLocked, disabled, ope
           {model.description !== "" && <span className="mt-0.5 block truncate text-xs leading-snug text-muted-foreground">{model.description}</span>}
         </span>
         {chosen && <Check aria-label="Current model" className="size-3.5 shrink-0" />}
+        {index < 9 && <Kbd>{mac ? `⌘${index + 1}` : `Ctrl+${index + 1}`}</Kbd>}
       </div>
     );
   };
@@ -109,8 +144,18 @@ export const ModelPicker = ({ statuses, selection, providerLocked, disabled, ope
         <span className="min-w-0 truncate">{current?.name ?? (selection.model === "" ? providerName(selection.provider) : selection.model)}</span>
         <ChevronDown aria-hidden className="size-3 opacity-60" />
       </PopoverTrigger>
-      <PopoverPopup side="top" align="start" sideOffset={6} padding="compact" className="w-[300px]" aria-label="Models">
-        <div role="tablist" aria-label="Providers" className="mb-2 flex gap-1">
+      <PopoverPopup side="top" align="start" sideOffset={6} padding="compact" className="w-[300px]" aria-label="Models" onKeyDown={onPopupKey}>
+        <div
+          ref={tabList}
+          role="tablist"
+          aria-label="Providers"
+          className="mb-2 flex gap-1"
+          onKeyDown={(event) => {
+            if (event.key !== "ArrowRight" || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || !search.current) return;
+            event.preventDefault();
+            search.current.focus();
+          }}
+        >
           {PROVIDERS.map((provider) => {
             const locked = providerLocked && provider !== selection.provider;
             const button = (
@@ -123,9 +168,7 @@ export const ModelPicker = ({ statuses, selection, providerLocked, disabled, ope
                 aria-disabled={locked || undefined}
                 data-pressed={tab === provider ? "" : undefined}
                 onClick={() => {
-                  if (locked) return;
-                  setTab(provider);
-                  setHighlight(0);
+                  if (!locked) switchTab(provider);
                 }}
               >
                 <ProviderLogo provider={provider} />
@@ -146,6 +189,7 @@ export const ModelPicker = ({ statuses, selection, providerLocked, disabled, ope
         ) : (
           <>
             <Input
+              ref={search}
               size="compact"
               className="mb-1"
               placeholder="Search models..."
@@ -157,6 +201,18 @@ export const ModelPicker = ({ statuses, selection, providerLocked, disabled, ope
                 setHighlight(0);
               }}
               onKeyDown={(event) => {
+                const plain = !event.altKey && !event.ctrlKey && !event.metaKey;
+                if (plain && ((event.key === "ArrowLeft" && !event.shiftKey && query === "") || (event.key === "Tab" && event.shiftKey))) {
+                  const tabs = [...(tabList.current?.querySelectorAll<HTMLElement>("[role='tab']:not([aria-disabled='true'])") ?? [])];
+                  const target = tabs.find((element) => element.getAttribute("aria-selected") === "true") ?? tabs[0];
+                  if (target) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    target.focus();
+                    return;
+                  }
+                }
+                if (!plain) return;
                 if (event.key === "ArrowDown" && visible.length > 0) {
                   event.preventDefault();
                   setHighlight((highlight + 1) % visible.length);
@@ -228,12 +284,28 @@ const GROUP_LABEL = "px-2 pt-1.5 pb-1 text-xs font-medium text-muted-foreground"
  * The traits picker: radio groups for the traits the chosen model declares (its effort
  * levels, thinking, fast mode), the model's default marked. Hidden when it declares none.
  */
-export const TraitsPicker = ({ provider, model, traits, disabled, onChange }: { readonly provider: AgentProvider; readonly model: ProviderModel | undefined; readonly traits: Traits; readonly disabled: boolean; readonly onChange: (traits: Traits) => void }) => {
+export const TraitsPicker = ({
+  provider,
+  model,
+  traits,
+  disabled,
+  open,
+  onOpenChange,
+  onChange,
+}: {
+  readonly provider: AgentProvider;
+  readonly model: ProviderModel | undefined;
+  readonly traits: Traits;
+  readonly disabled: boolean;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly onChange: (traits: Traits) => void;
+}) => {
   if (!model || (model.efforts.length === 0 && model.thinking !== true && model.fastMode !== true)) return null;
   const effort = traits.effort ?? model.defaultEffort;
   const labels = [effort !== undefined ? effortLabel(effort) : undefined, traits.thinking === true ? "Thinking" : undefined].filter((label): label is string => label !== undefined);
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger render={<Button variant="ghost-muted" size="xs" className="min-w-0 shrink-[2]" />} aria-label="Traits" data-testid="traits-picker" disabled={disabled}>
         <span className="min-w-0 truncate">{labels.length > 0 ? labels.join(" · ") : "Default"}</span>
         {traits.fastMode === true && <Zap aria-label="Fast mode" />}
@@ -356,7 +428,7 @@ export const CompactControlsMenu = ({
 // The context window meter.
 
 /** The chat's latest token usage, from spec 07's context window activities. */
-export const latestUsage = (chat: Chat | undefined): ContextUsage | undefined => {
+export const latestUsage = (chat: Chat | undefined): (ContextUsage & { readonly updatedAt: string }) | undefined => {
   for (const activity of [...(chat?.activities ?? [])].reverse()) {
     if (activity.kind !== "context-window.updated") continue;
     const payload = record(activity.payload);
@@ -366,6 +438,7 @@ export const latestUsage = (chat: Chat | undefined): ContextUsage | undefined =>
       usedTokens: usage.usedTokens,
       ...(typeof usage.maxTokens === "number" ? { maxTokens: usage.maxTokens } : {}),
       ...(typeof usage.totalProcessedTokens === "number" ? { totalProcessedTokens: usage.totalProcessedTokens } : {}),
+      updatedAt: activity.createdAt,
     };
   }
   return undefined;

@@ -69,6 +69,23 @@ describe("Claude event mapping", () => {
     ]);
   });
 
+  it("does not repeat streamed text when the CLI sends each block of the message as its own assistant message", () => {
+    const { events } = replay([
+      { type: "stream_event", session_id: SESSION, parent_tool_use_id: null, event: { type: "message_start", message: { id: "msg_1" } } },
+      { type: "stream_event", session_id: SESSION, parent_tool_use_id: null, event: { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "Hmm." } } },
+      { type: "assistant", session_id: SESSION, uuid: "u1", parent_tool_use_id: null, message: { id: "msg_1", content: [{ type: "thinking", thinking: "Hmm." }] } },
+      { type: "stream_event", session_id: SESSION, parent_tool_use_id: null, event: { type: "content_block_delta", index: 1, delta: { type: "text_delta", text: "Reading the canvas." } } },
+      { type: "assistant", session_id: SESSION, uuid: "u2", parent_tool_use_id: null, message: { id: "msg_1", content: [{ type: "text", text: "Reading the canvas." }] } },
+      { type: "assistant", session_id: SESSION, uuid: "u3", parent_tool_use_id: null, message: { id: "msg_1", content: [{ type: "tool_use", id: "toolu_1", name: "Read", input: {} }] } },
+    ]);
+    expect(events.slice(1).filter((event) => event.type !== "item.started")).toEqual([
+      { type: "content.delta", turnId: "turn:1", itemId: "msg_1:0", payload: { streamKind: "reasoning_summary_text", delta: "Hmm." } },
+      { type: "item.completed", turnId: "turn:1", itemId: "msg_1:0", payload: { itemType: "reasoning", status: "completed" } },
+      { type: "content.delta", turnId: "turn:1", itemId: "msg_1:1", payload: { streamKind: "assistant_text", delta: "Reading the canvas." } },
+      { type: "item.completed", turnId: "turn:1", itemId: "msg_1:1", payload: { itemType: "assistant_message", status: "completed" } },
+    ]);
+  });
+
   it("uses the assistant message's own text when there were no partial messages", () => {
     const { events, state } = replay([{ type: "assistant", uuid: "u9", parent_tool_use_id: null, message: { id: "msg_2", content: [{ type: "text", text: "Whole." }] } }]);
     expect(events[0]).toEqual({ type: "content.delta", turnId: "turn:1", itemId: "msg_2:0", payload: { streamKind: "assistant_text", delta: "Whole." } });
