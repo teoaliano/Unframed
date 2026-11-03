@@ -74,6 +74,32 @@ const initialSnapshot = (): RoomSnapshot => ({
   ],
 });
 
+/** The tag of a component shape, or undefined for any other record. */
+const componentTagOf = (record: TLRecord): { id: string; tag: string } | undefined => {
+  if (record.typeName !== "shape" || record.type !== "component") return undefined;
+  const tag = (record as unknown as { props: { tag?: unknown } }).props.tag;
+  return typeof tag === "string" ? { id: record.id, tag } : undefined;
+};
+
+/**
+ * Refuses a change that gives a component shape a tag another component shape of the canvas holds
+ * (spec 20, one shape per tag). `held` is the canvas as it is before the change.
+ */
+const refuseDuplicateTags = (put: ReadonlyArray<TLRecord>, removed: ReadonlySet<string>, held: Iterable<TLRecord>): void => {
+  const incoming = put.map(componentTagOf).filter((component) => component !== undefined);
+  if (incoming.length === 0) return;
+  const holders = new Map<string, string>();
+  for (const record of held) {
+    const component = componentTagOf(record);
+    if (component && !removed.has(component.id)) holders.set(component.tag, component.id);
+  }
+  for (const component of incoming) {
+    const holder = holders.get(component.tag);
+    if (holder !== undefined && holder !== component.id) throw new InvalidChange(`${component.tag} is already the component ${holder}; write to that shape, or choose another tag`);
+    holders.set(component.tag, component.id);
+  }
+};
+
 /** Refuses records that fail the canvas schema, naming the first one. */
 const validateRecords = (records: ReadonlyArray<TLRecord>): void => {
   const schema = roomSchemaOf();
@@ -242,6 +268,9 @@ export class CanvasRoom {
    */
   apply(change: CanvasChange, origin: ChangeOrigin): Applied {
     validateRecords(change.put);
+    if (change.put.some((record) => componentTagOf(record) !== undefined)) {
+      refuseDuplicateTags(change.put, new Set(change.remove), this.storage.transaction((txn) => Array.from(txn.values())).result);
+    }
     const inverse: { put: TLRecord[]; remove: string[] } = { put: [], remove: [] };
     const result = this.withOrigin(origin, () =>
       this.storage.transaction((txn) => {

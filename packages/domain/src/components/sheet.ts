@@ -51,6 +51,7 @@ const MESSAGES = {
   style: 'a component sheet needs one <style type="text/x-uf-component" data-uf-component-style>',
   template: "a component sheet needs one <div data-uf-template hidden> holding its markup",
   script: "a component's template cannot hold a script; put behaviour in the page that uses it",
+  markup: "a component's template cannot hold an on attribute, a javascript: link, or an iframe, object or embed; put behaviour in the page that uses it",
   examples: "a component sheet holds at most one <div data-uf-example hidden>",
   tooMany: "a component has at most 4 variants, 16 properties and 8 slots",
   slotName: 'slots: a slot is "" for the default slot, or a name of lowercase letters, digits and hyphens',
@@ -190,6 +191,8 @@ export const readComponentSheet = (html: string): ComponentSheetRead => {
     if (!found) return refuse(slot === "" ? "slots: the template has no <slot>" : `slots: the template has no <slot name="${slot}">`);
   }
   if (/<script\b/i.test(templateText)) return refuse(MESSAGES.script);
+  const active = inside.some((tag) => tag.name === "iframe" || tag.name === "object" || tag.name === "embed" || Object.entries(tag.attrs).some(([name, value]) => name.startsWith("on") || /^\s*javascript:/i.test(value)));
+  if (active) return refuse(MESSAGES.markup);
   const nested = inside.find((tag) => tag.name.startsWith("uf-"));
   if (nested) {
     return refuse(

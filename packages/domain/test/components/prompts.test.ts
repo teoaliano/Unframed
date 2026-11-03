@@ -7,6 +7,7 @@ import {
   COMPONENT_WRITE_ARGUMENTS,
   COMPONENT_WRITE_TEXT,
   MAKE_COMPONENT_TEMPLATE,
+  makeComponentInstruction,
 } from "../../src/index.ts";
 
 /** Spec 20: the component tools' model-facing text is the assets' text. */
@@ -36,5 +37,17 @@ describe("the component tools' model-facing text is the assets' text", () => {
   it("names the four sheet parts and the limits in the write description", () => {
     for (const part of ["data-uf-component>", "data-uf-component-style>", "data-uf-template hidden>", "data-uf-example hidden>"]) expect(COMPONENT_WRITE_TEXT).toContain(part);
     expect(COMPONENT_WRITE_TEXT).toContain("at most 4 variants");
+  });
+});
+
+describe("makeComponentInstruction (spec 20, Make component)", () => {
+  it("fills the kind and the title into the asset's placeholders", () => {
+    expect(makeComponentInstruction("page", "Landing")).toBe(
+      'Make a component from the element attached to this message, in the page "Landing". Write it with component_write: its markup as the template, its styles in the project\'s tokens when it has a kit, a variant for each visible difference among the similar elements in this page, and a text property for each piece of text that differs between them. Then replace that element, and each of its look-alikes in this page, with an instance of the new component, keeping the element\'s data-hf-id on the instance that replaces it. Change nothing else in the page.',
+    );
+  });
+
+  it("writes a title with $ patterns as typed", () => {
+    expect(makeComponentInstruction("page", "Price $& $1 $$")).toContain('in the page "Price $& $1 $$"');
   });
 });

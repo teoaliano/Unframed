@@ -346,8 +346,8 @@ const Row = ({ label, mark, token, children }: { readonly label: string; readonl
       <span className="truncate">{label}</span>
       {mark !== undefined && <ParameterMark path={mark} />}
     </span>
-    <div className="flex min-w-0 items-center gap-1">
-      <div className="min-w-0 flex-1">{children}</div>
+    <div className="flex min-w-0 flex-wrap items-center gap-1">
+      <div className="min-w-[7rem] flex-1">{children}</div>
       {token}
     </div>
   </div>
@@ -746,7 +746,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   /** Who holds a style value of one element. An edit still in the burst is the person's own, so the owner stays the source until it is written. */
   /** A board copy's field in its component sheet (spec 20): the variants it covers, and the rule that sets it. Null for a page's element. */
   const sheetOf = (subject: Subject, property: string): SheetField | null =>
-    sheetFieldOf(subject.report.sheetRules, subject.report.inline, property, expandShorthand, kit === null ? [] : kitCssNames(kit));
+    sheetFieldOf(subject.report.sheetRules, subject.report.inline, property, expandShorthand, kit === null ? [] : kitCssNames(kit), subject.report.sheetOverrides);
 
   const ownerOf = (subject: Subject, property: string): FieldOwner => {
     if (pending.some((edit) => (edit.type === "style" || edit.type === "token") && edit.elementId === subject.id && edit.property === property)) return { owner: "source" };
@@ -864,7 +864,14 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   /** A board copy's chip (spec 20) beside the token slot: a rule-set field shows its chip alone, since its edit is the rule's. */
   const withSheet = (view: View, slot: ReactNode): ReactNode => {
     if (view.sheet?.kind !== "variants") return slot;
-    const chip = <Badge variant="outline" size="sm">{view.sheet.chip}</Badge>;
+    // A long scope truncates, with the whole text in the kit Tip, so it never runs under the field's control (spec 20).
+    const chip = (
+      <Tip label={view.sheet.chip}>
+        <Badge variant="outline" size="sm" className="min-w-0 max-w-full">
+          <span className="block min-w-0 truncate">{view.sheet.chip}</span>
+        </Badge>
+      </Tip>
+    );
     return view.sheet.rule === undefined ? (<>{chip}{slot}</>) : chip;
   };
 
