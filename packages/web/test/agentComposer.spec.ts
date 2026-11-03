@@ -207,6 +207,10 @@ test("a large paste becomes pasted-text.txt with a toast; Cmd+Shift+V keeps it i
   await expect(files).toHaveText(["pasted-text.txt"]);
   const notice = toast(page, "Large paste attached as pasted-text.txt");
   await expect(notice).toBeVisible();
+  // With the docked rail open, the toast starts right of it, clear of the composer.
+  const noticeBox = (await notice.boundingBox())!;
+  const railBox = (await panel.boundingBox())!;
+  expect(noticeBox.x).toBeGreaterThanOrEqual(railBox.x + railBox.width);
   const { mac } = await platformOf(page);
   const hint = mac ? "⌘⇧V" : "Ctrl+Shift+V";
   await expect(toastDescription(page, `35.2 KB · Use ${hint} to keep a large paste inline.`)).toBeVisible();
