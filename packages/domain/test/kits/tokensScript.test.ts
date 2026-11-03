@@ -5,7 +5,6 @@ import type { Kit } from "../../src/kits/types.ts";
 
 type Listener = (event: { source: unknown; origin: string; data: unknown }) => void;
 
-/** A document with a head (optional), an element that can take children, and getElementById. */
 const fakeDocument = (withHead: boolean) => {
   const make = (tag: string) => {
     const children: any[] = [];

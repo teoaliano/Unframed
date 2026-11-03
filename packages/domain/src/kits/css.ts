@@ -1,35 +1,21 @@
-/**
- * A small stylesheet scanner for the kit's rules: the rules of one `<style>` text with their
- * selectors, their at-rule context and their declarations, each value with its offsets so a
- * change keeps every other byte. It reads what the kit needs (comments, strings, brackets and
- * the block at-rules that hold rules), and nothing more.
- */
 
 export interface CssDeclaration {
-  /** As written, custom properties case kept, other properties lower-cased. */
   readonly property: string;
-  /** The value without `!important`, trimmed. */
   readonly value: string;
   readonly important: boolean;
-  /** Offsets of the value in the text: `text.slice(start, end)` is `value`. */
   readonly start: number;
   readonly end: number;
 }
 
 export interface CssRule {
-  /** The selector text as written, trimmed. */
   readonly selector: string;
-  /** The block at-rules the rule sits in, outermost first, as written (`@media (…)`). */
   readonly atRules: string[];
   readonly declarations: CssDeclaration[];
-  /** Offsets of the block's text: the index after its opening brace, and the index of its closing brace (or the end of the range). */
   readonly body: { readonly open: number; readonly close: number };
 }
 
-/** The at-rules whose bodies hold style rules. Others (`@keyframes`, `@font-face`) are skipped. */
 const RULE_AT_RULES = /^@(media|supports|layer|container|document)\b/i;
 
-/** The index of the bracket that closes the one at `open`, skipping strings and comments; -1 when none. */
 const closing = (text: string, open: number): number => {
   let depth = 0;
   for (let i = open; i < text.length; i++) {
@@ -65,7 +51,6 @@ const skipComment = (text: string, from: number): number => {
   return end === -1 ? text.length - 1 : end + 1;
 };
 
-/** Reads the declarations between `start` and `end` (exclusive) of the text. */
 const declarationsIn = (text: string, start: number, end: number): CssDeclaration[] => {
   const out: CssDeclaration[] = [];
   let depth = 0;
@@ -107,7 +92,6 @@ const declarationsIn = (text: string, start: number, end: number): CssDeclaratio
   return out;
 };
 
-/** The rules of a stylesheet text, in document order. Rules inside block at-rules are included, each with its at-rules. */
 export const parseStylesheet = (text: string): CssRule[] => {
   const rules: CssRule[] = [];
   const walk = (from: number, to: number, atRules: string[]) => {
@@ -154,5 +138,4 @@ export const parseStylesheet = (text: string): CssRule[] => {
   return rules;
 };
 
-/** The text with its comments taken out, so a prelude reads as its selector. */
 const stripComments = (text: string): string => text.replace(/\/\*[\s\S]*?\*\//g, " ");

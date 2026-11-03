@@ -1,13 +1,6 @@
 import type { Kit, Token, TokenValue } from "./types.ts";
 
-/**
- * The kit's runtime rules: CSS names, alias resolution, the CSS the tokens script writes and
- * the values `unframed.token()` returns. One function, so the browser's copy in the tokens
- * script and the engine's copy (for the CSS export and the stamp) cannot drift.
- *
- * Self-contained on purpose, like `dialRules`: the tokens script embeds this function's
- * source text, so nothing inside it may refer to anything outside it. Types are erased.
- */
+// Shipped as source text by tokensScript: refer to nothing outside the body.
 export function kitCore(easeCss: Readonly<Record<string, string>>) {
   const SUFFIX = ["font-family", "font-size", "font-weight", "line-height", "letter-spacing"];
   const FIELDS = ["fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing"];
@@ -24,7 +17,6 @@ export function kitCore(easeCss: Readonly<Record<string, string>>) {
 
   const modeOf = (kit: Kit, mode: string | undefined): string => (mode !== undefined && kit.modes.includes(mode) ? mode : kit.modes[0]!);
 
-  /** The stored value for a mode, falling back to the default mode's. */
   const rawValue = (kit: Kit, token: Token, mode: string): TokenValue | undefined => {
     if (token.value !== undefined) return token.value;
     const values = token.values ?? {};
@@ -59,7 +51,6 @@ export function kitCore(easeCss: Readonly<Record<string, string>>) {
     return resolveScalar(kit, raw, mode, depth);
   };
 
-  /** The value at a path with aliases followed, in the mode asked for (the default mode when it is not one of the kit's). */
   const resolve = (kit: Kit, path: string, mode?: string): TokenValue | undefined => {
     const token = find(kit, path);
     if (token === undefined) return undefined;
@@ -78,7 +69,6 @@ export function kitCore(easeCss: Readonly<Record<string, string>>) {
     return String(raw);
   };
 
-  /** The custom properties one token writes in one mode, as [name, value] pairs. */
   const declarations = (kit: Kit, token: Token, mode: string): Array<[string, string]> => {
     const base = cssName(token.path);
     const raw = rawValue(kit, token, mode);
@@ -94,7 +84,6 @@ export function kitCore(easeCss: Readonly<Record<string, string>>) {
     return [[base, cssText(kit, raw, token.type)]];
   };
 
-  /** A former name: the custom property a renamed token used to have, written as var() of its new one. */
   const formerDeclarations = (token: Token): Array<[string, string]> => {
     const base = cssName(token.path);
     return (token.formerNames ?? []).flatMap((former) =>
@@ -107,7 +96,6 @@ export function kitCore(easeCss: Readonly<Record<string, string>>) {
   const block = (selector: string, pairs: Array<[string, string]>): string =>
     selector + " {\n" + pairs.map(([name, value]) => "  " + name + ": " + value + ";\n").join("") + "}\n";
 
-  /** The stylesheet text: the default mode on :root, the rest as [data-theme] blocks holding only what differs. */
   const kitCss = (kit: Kit): string => {
     const defaultMode = kit.modes[0]!;
     const rootPairs: Array<[string, string]> = [];
@@ -160,7 +148,6 @@ export function kitCore(easeCss: Readonly<Record<string, string>>) {
     };
   };
 
-  /** The value `unframed.token(path)` returns: CSS text, a number for a duration in seconds, an object for a text style, a GSAP name or a function for an easing. Undefined for no such token. */
   const scriptValue = (kit: Kit, pathOrName: string, mode?: string): unknown => {
     const token = find(kit, pathOrName) ?? kit.tokens.find((candidate) => cssName(candidate.path) === pathOrName);
     if (token === undefined) return undefined;

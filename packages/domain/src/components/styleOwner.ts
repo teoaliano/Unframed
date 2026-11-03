@@ -1,7 +1,3 @@
-/**
- * Style owners inside a component sheet (spec 20): which declaration sets a property on a
- * picked copy, by the cascade, and the owner order a sheet's Design field follows.
- */
 import type { StyleRuleRef } from "../kits/offTokens.ts";
 
 export type StyleDeclaration = {
@@ -10,16 +6,13 @@ export type StyleDeclaration = {
   readonly important: boolean;
 };
 
-/** A rule of the component style, in document order. `ref.selector` is its selector text. */
 export type StyleRule = {
   readonly ref: StyleRuleRef;
   readonly declarations: readonly StyleDeclaration[];
 };
 
-/** `true` or `false` when the bridge can test the selector on the picked copy, `"unknown"` when it cannot. */
 export type StyleMatch = boolean | "unknown";
 
-/** A `:host([name])` or `:host([name="value"])` condition: a variant (or a property) the rule covers. */
 export type VariantCondition = { readonly name: string; readonly value: string | null };
 
 export type StyleOwner =
@@ -59,11 +52,6 @@ const compareCandidates = (a: Candidate, b: Candidate): number => {
   return 0;
 };
 
-/**
- * Specificity of a selector as a triple (ids, classes and attributes and pseudo-classes, types).
- * `:where()` counts nothing; `:is()`, `:not()` and `:has()` count their argument only. Pseudo-elements
- * count as types. Close enough for the sheets an agent writes; `:host(x)` counts `:host` plus `x`.
- */
 export const specificity = (selector: string): readonly [number, number, number] => {
   let text = selector.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""').replace(/:where\([^()]*\)/g, " ");
   const ids = (text.match(/#[A-Za-z_-][\w-]*/g) ?? []).length;
@@ -80,7 +68,6 @@ export const specificity = (selector: string): readonly [number, number, number]
   return [ids, attributes + pseudoClasses, types + pseudoElements];
 };
 
-/** The `:host(...)` attribute conditions of a selector, in order. */
 export const variantConditions = (selector: string): VariantCondition[] => {
   const conditions: VariantCondition[] = [];
   for (const host of selector.matchAll(/:host\(((?:[^()]|\([^()]*\))*)\)/g)) {
@@ -92,12 +79,6 @@ export const variantConditions = (selector: string): VariantCondition[] => {
   return conditions;
 };
 
-/**
- * Which declaration sets `property` on a picked copy: the inline style, one rule of the
- * component style, or none. Winner by the cascade: `!important` first, then the inline
- * style, then specificity, then the later declaration. A rule the bridge cannot test
- * (`:has()`, or `matches` says so) that could beat the winner makes the owner `script`.
- */
 export const styleOwner = (
   rules: readonly StyleRule[],
   inline: readonly StyleDeclaration[],
@@ -149,9 +130,7 @@ export const styleOwner = (
 
 export type SheetOwnerInput = {
   readonly locked: boolean;
-  /** The picked element is runtime-made (a board label, for example). */
   readonly runtime: boolean;
-  /** The winning declaration is a `var()` of a kit token, else null. */
   readonly token: string | null;
   readonly style: StyleOwner;
 };
@@ -162,7 +141,6 @@ export type SheetOwner =
   | { readonly owner: "token"; readonly token: string }
   | { readonly owner: "style"; readonly style: StyleOwner };
 
-/** Spec 20's owner order inside a sheet: locked, then script, then token, then the style owner. */
 export const sheetOwner = (input: SheetOwnerInput): SheetOwner => {
   if (input.locked) return { owner: "locked" };
   if (input.runtime) return { owner: "script" };

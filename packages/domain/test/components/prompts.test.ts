@@ -10,15 +10,11 @@ import {
   makeComponentInstruction,
 } from "../../src/index.ts";
 
-/** Spec 20: the component tools' model-facing text is the assets' text. */
-
 const prompts = join(import.meta.dirname, "../../../../assets/prompts");
 const read = (file: string) => readFileSync(join(prompts, file), "utf8");
 
-/** The first fenced `text` block of a prompt asset. */
 const block = (file: string): string => /^(`{3,})text\n([\s\S]*?)\n\1$/m.exec(read(file))![2]!;
 
-/** A file's `## Arguments` bullets. */
 const args = (file: string): Record<string, string> =>
   Object.fromEntries([...read(file).split("## Arguments")[1]!.matchAll(/^- `([^`]+)`: (.*)$/gm)].map((match) => [match[1]!, match[2]!]));
 

@@ -1,9 +1,3 @@
-/**
- * Value owners (spec 21, task 5): who owns one value of a motion's timeline script. Spec 18's
- * owner names, for a tween value: `source` (a literal in the file), `dial` (a parameter read
- * straight from the `unframed.dials` callback), `token` (`unframed.token("name")`), or `script`
- * (anything else, read-only). `ownerOf` is the one place that decides it.
- */
 
 export type Owner =
   | { readonly kind: "source"; readonly value: number | string }
@@ -11,22 +5,17 @@ export type Owner =
   | { readonly kind: "token"; readonly name: string }
   | { readonly kind: "script"; readonly text: string };
 
-/** The `unframed.dials` apply function's first parameter, as far as an owner rule can tell. */
 export interface DialScope {
-  /** The parameter's name, or null when the callback has none or destructures it. */
   readonly param: string | null;
   readonly reassigned: boolean;
   readonly destructured: boolean;
 }
 
 export interface OwnerContext {
-  /** The script as written. Owners quote expressions from it, cut to 120 characters. */
   readonly source: string;
-  /** Null outside any dials callback. */
   readonly dial: DialScope | null;
 }
 
-/** One AST node of the script, as acorn gives it. */
 export type ScriptNode = { readonly type: string; readonly start: number; readonly end: number; readonly [key: string]: any };
 
 const SCRIPT_CUT = 120;
@@ -35,7 +24,6 @@ const RANDOM = /random\(/;
 
 const cut = (text: string, length: number) => (text.length > length ? `${text.slice(0, length - 1)}…` : text);
 
-/** A number, a negative number, or arithmetic on numbers alone; null otherwise. */
 export const constantNumber = (node: ScriptNode | null | undefined): number | null => {
   if (!node) return null;
   if (node.type === "Literal" && typeof node.value === "number") return node.value;
@@ -59,7 +47,6 @@ export const constantNumber = (node: ScriptNode | null | undefined): number | nu
   return null;
 };
 
-/** `v.speed`, `v.scene.speed`, `v["speed"]`: the path under the parameter, or null. */
 const dialPath = (node: ScriptNode, scope: DialScope | null): string[] | null => {
   if (!scope || !scope.param || scope.reassigned || scope.destructured) return null;
   const steps: string[] = [];
@@ -79,7 +66,6 @@ const dialPath = (node: ScriptNode, scope: DialScope | null): string[] | null =>
   return steps;
 };
 
-/** `unframed.token("name")` with one string literal. */
 const tokenName = (node: ScriptNode): string | null => {
   if (node.type !== "CallExpression" || node.arguments.length !== 1) return null;
   const callee: ScriptNode = node.callee;
@@ -106,7 +92,6 @@ export function ownerOf(node: ScriptNode | null | undefined, context: OwnerConte
   return { kind: "script", text: text() };
 }
 
-/** The apply function of the last `unframed.dials` call in a script, and its parameter. */
 export interface DialsCallback {
   readonly call: ScriptNode;
   readonly fn: ScriptNode;
@@ -122,7 +107,6 @@ const isDialsCall = (node: ScriptNode): boolean =>
 
 const FUNCTIONS = new Set(["FunctionExpression", "ArrowFunctionExpression", "FunctionDeclaration"]);
 
-/** Every node under `node`, depth first, in source order. */
 const each = (node: unknown, visit: (node: ScriptNode) => void): void => {
   if (!node || typeof node !== "object") return;
   if (Array.isArray(node)) {
@@ -174,7 +158,6 @@ export function dialsCallback(ast: ScriptNode): DialsCallback | null {
   };
 }
 
-/** The owner context for one script: its source and the dials scope the callback gives. */
 export function ownerContextFor(ast: ScriptNode, source: string): OwnerContext {
   const callback = dialsCallback(ast);
   return { source, dial: callback?.scope ?? null };

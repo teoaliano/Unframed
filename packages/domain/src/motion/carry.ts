@@ -1,16 +1,9 @@
-/**
- * Carry rules (spec 21, task 8): which tweens and dials a clip takes with it when it moves or
- * stretches, and the one sentence that refuses the move when it cannot take them. HyperFrames'
- * own matcher (`clipTweenMatcher`) works on selectors; this works on the reading's data-hf-id
- * targets and nearest-clip map, so both answer the same question for the same file.
- */
 import type { Clip, ElementInfo, Tween, TweenRef } from "./types.ts";
 import type { Owner } from "./owners.ts";
 
 export type Carry = { readonly tweens: TweenRef[]; readonly dials: string[][] } | { readonly refused: string };
 
 export interface CarryOptions {
-  /** A stretch also needs the carried durations to be editable, not only the starts. */
   readonly stretch?: boolean;
 }
 
@@ -24,7 +17,6 @@ const dialPath = (owner: Owner | null): string[] | null => (owner?.kind === "dia
 
 const nameOf = (model: CarryModel, hfId: string): string => model.elements[hfId]?.name ?? hfId;
 
-/** A tween is carried when it has targets and every one of them sits in the clip, with no nearer clip. */
 const carries = (model: CarryModel, clipHfId: string, tween: Tween): boolean =>
   tween.targets.length > 0 && tween.targets.every((target) => model.elements[target]?.clip === clipHfId);
 

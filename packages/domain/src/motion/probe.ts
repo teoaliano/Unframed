@@ -1,9 +1,3 @@
-/**
- * The motion editability probe (spec 21, task 3). It counts a motion's tweens by the owner of
- * each value and by the reason a tween is read-only, so the build can see how much of what the
- * agent writes the timeline may edit. It reads the file with HyperFrames' write parser and uses
- * a first version of the owner rules; `ownerOf` (task 5) takes this over.
- */
 import { isTweenConfigKey } from "@hyperframes/parsers/gsap-constants";
 import { findTimelineScript, parseGsapScriptAcornForWrite, type TweenCallInfo } from "@hyperframes/parsers/gsap-parser-acorn";
 import { dialsCallback, ownerContextFor, ownerOf, type OwnerContext, type ScriptNode } from "./owners.ts";
@@ -14,12 +8,9 @@ export type OwnerCounts = Record<OwnerKind, number>;
 export interface ProbeCounts {
   readonly tweens: number;
   readonly start: OwnerCounts;
-  /** Tweens with a duration. A `set` has none and is not counted. */
   readonly duration: OwnerCounts;
-  /** Every value at a diamond: from-values, to-values and each keyframe step. */
   readonly values: OwnerCounts;
   readonly stagger: OwnerCounts;
-  /** Reason counts, keyed by the reason's first word. */
   readonly readOnly: Record<string, number>;
 }
 
@@ -31,7 +22,6 @@ const FUNCTION_NODES = new Set(["FunctionDeclaration", "FunctionExpression", "Ar
 
 const count = (): OwnerCounts => ({ source: 0, dial: 0, token: 0, script: 0 });
 
-/** Inline scripts only, as the timeline finder reads them. */
 const inlineScripts = (html: string): { textContent: string }[] =>
   [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)]
     .filter((match) => !/\bsrc\s*=/i.test(match[1]!))
@@ -50,7 +40,6 @@ const keyName = (property: AstNode): string | null => {
   return null;
 };
 
-/** A reason the tween is read-only in the first version: loops, helpers, and computed keyframes. */
 const readOnlyReason = (call: TweenCallInfo, keyframesComputed: boolean, dialsFn: AstNode | null): string | null => {
   const ancestors = call.ancestors as AstNode[];
   if (ancestors.some((node) => LOOP_NODES.has(node.type))) return "loop";

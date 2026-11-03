@@ -7,7 +7,6 @@ window.__timelines.main.fromTo('#ta', { opacity: 0 }, { opacity: 1, duration: 1 
 window.__timelines.main.to('#tb', { x: 40, duration: 1 }, 2.5);
 window.__timelines.main.to('#tc', { x: 10, duration: 0.5 }, 4);`;
 
-// The root holds three clips. `extra` goes inside the root, `script` replaces the timeline script.
 const html = (extra = "", script = SCRIPT, duration = "6") => `<html><body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="${duration}" data-width="640" data-height="360">
   <div id="a" class="clip" data-start="0" data-duration="2"><div id="ta"></div></div>

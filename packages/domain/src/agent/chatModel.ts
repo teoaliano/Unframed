@@ -1,8 +1,3 @@
-/**
- * The chat store's model (spec 07), rebuilt on t3code's orchestration: the read model of a
- * chat, the commands that change it and the events they become. The decider and the
- * projector in this folder are the only code that interprets them.
- */
 import type { ElementChip } from "@unframed/contracts";
 import type { AgentProvider, Effort } from "./providerStatus.ts";
 
@@ -17,17 +12,14 @@ export interface Traits {
   readonly fastMode?: boolean;
 }
 
-/** An outside chat's provider is `outside`: no Unframed adapter runs it (spec 14). */
 export type ChatProvider = AgentProvider | "outside";
 
-/** An in-app agent's selection, which is what a command may carry. */
 export interface AgentSelection {
   readonly provider: AgentProvider;
   readonly model: string;
   readonly traits: Traits;
 }
 
-/** The in-app selection of a chat's stored selection: `undefined` for an outside chat, which has none. */
 export const agentSelectionOf = (selection: ModelSelection): AgentSelection | undefined =>
   selection.provider === "outside" ? undefined : { provider: selection.provider, model: selection.model, traits: selection.traits };
 
@@ -39,7 +31,6 @@ export interface ModelSelection {
 
 export type AttachmentKind = "image" | "file";
 
-/** What a stored message keeps per attachment: never bytes. */
 export interface MessageAttachment {
   readonly id: string;
   readonly name: string;
@@ -50,7 +41,6 @@ export interface MessageAttachment {
 
 export interface MessageContext {
   readonly selection: ReadonlyArray<string>;
-  /** The elements the person pointed at (spec 18). */
   readonly elements?: ReadonlyArray<ElementChip>;
 }
 
@@ -93,14 +83,11 @@ export interface ProposedPlan {
 
 export type TurnState = "running" | "interrupted" | "completed" | "error";
 
-/** One shape a turn touched, as the recap lists it. */
 export interface TurnFile {
   readonly shapeId: string;
   readonly kind: string;
   readonly change: "created" | "updated" | "deleted";
-  /** A page or motion's file after the turn. */
   readonly file?: string;
-  /** A page or motion's file before the turn, when it changed. */
   readonly previousFile?: string;
 }
 
@@ -112,7 +99,6 @@ export interface TurnRevert {
   readonly at: string;
 }
 
-/** Which outside client a chat belongs to, and the session that made it (spec 14). */
 export interface OutsideChatRef {
   readonly connectionId: string;
   readonly sessionId: string;
@@ -131,7 +117,6 @@ export interface ChatTurn {
   readonly usage?: unknown;
   readonly files?: ReadonlyArray<TurnFile>;
   readonly reverted?: TurnRevert;
-  /** Set when a revert of the turn was asked for, so a second one is refused before the first lands. */
   readonly revertRequestedAt?: string;
 }
 
@@ -161,17 +146,13 @@ export interface Chat {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly deletedAt: string | null;
-  /** Set on an outside chat: the connection and session it shows calls from (spec 14). */
   readonly outside?: OutsideChatRef;
-  /** "" until someone names it; at most 60 characters. */
   readonly title: string;
   readonly titledBy: TitledBy | null;
-  /** The artifacts it touched, in first-touch order. */
   readonly tags: ReadonlyArray<string>;
   readonly modelSelection: ModelSelection;
   readonly runtimeMode: RuntimeMode;
   readonly interactionMode: InteractionMode;
-  /** The room clock when its last turn settled. */
   readonly lastClock: number | null;
   readonly latestTurn: LatestTurn | null;
   readonly session: ChatSession | null;
@@ -181,11 +162,9 @@ export interface Chat {
   readonly turns: ReadonlyArray<ChatTurn>;
 }
 
-/** One project's chats: the read model every command is decided against. */
 export interface ProjectChats {
   readonly projectId: string;
   readonly chats: Readonly<Record<string, Chat>>;
-  /** The sequence of the last event folded in. */
   readonly sequence: number;
 }
 
@@ -207,27 +186,19 @@ interface CommandBase {
   readonly threadId: string;
 }
 
-/**
- * A command about every chat of a project at once. Its events still belong to each chat it
- * touches, and its receipt names the project.
- */
 export interface ProjectCommand {
   readonly commandId: string;
   readonly projectId: string;
-  /** Deletes every chat that is not running when the command runs; running chats finish and stay. */
   readonly type: "project.chats.clear";
 }
 
-/** Commands the web dispatches. */
 export type ClientCommand = ThreadClientCommand | ProjectCommand;
 
-/** The web's commands about one chat. */
 export type ThreadClientCommand = CommandBase &
   (
     | {
         readonly type: "thread.create";
         readonly modelSelection: ModelSelection;
-        /** Full access when absent. */
         readonly runtimeMode?: RuntimeMode;
         readonly interactionMode?: InteractionMode;
         readonly tags?: ReadonlyArray<string>;
@@ -242,7 +213,6 @@ export type ThreadClientCommand = CommandBase &
         readonly message: {
           readonly messageId: string;
           readonly text: string;
-          /** Resolved by the engine from the stored files before the decider sees them. */
           readonly attachments: ReadonlyArray<AttachmentRef | MessageAttachment>;
           readonly context?: MessageContext;
         };
@@ -257,16 +227,13 @@ export type ThreadClientCommand = CommandBase &
         readonly type: "thread.user-input.respond";
         readonly requestId: string;
         readonly answers: Readonly<Record<string, unknown>>;
-        /** Files attached to each answer, by question id; resolved by the engine like a message's. */
         readonly attachmentsByQuestionId?: Readonly<Record<string, ReadonlyArray<AttachmentRef | MessageAttachment>>>;
       }
     | { readonly type: "thread.user-input.dismiss"; readonly requestId: string }
     | { readonly type: "thread.turn.revert"; readonly turnCount: number }
     | { readonly type: "thread.checkpoint.revert"; readonly turnCount: number; readonly restoreCanvas: boolean }
     | { readonly type: "thread.session.stop" }
-    /** Detach: the person unlinks artifacts from the chat. A later write to one tags it again. */
     | { readonly type: "thread.tags.remove"; readonly ids: ReadonlyArray<string> }
-    /** Undo of a Detach. The engine keeps only ids that are artifacts on the canvas, as for `thread.create`'s tags. */
     | { readonly type: "thread.tags.add"; readonly ids: ReadonlyArray<string> }
   );
 
@@ -280,18 +247,15 @@ export interface ActivityInput {
   readonly createdAt: string;
 }
 
-/** Commands only the engine's reactors dispatch. */
 export type InternalCommand = CommandBase &
   (
     | { readonly type: "thread.session.set"; readonly session: ChatSession }
-    /** An outside session's first call into a project: makes its chat (spec 14). The engine mints `threadId`. */
     | {
         readonly type: "thread.outside.create";
         readonly title: string;
         readonly outside: OutsideChatRef;
         readonly createdAt: string;
       }
-    /** Opens the running turn an outside chat's calls belong to. It has no message. */
     | { readonly type: "thread.outside.turn.begin"; readonly turnId: string; readonly createdAt: string }
     | { readonly type: "thread.message.assistant.delta"; readonly messageId: string; readonly turnId: string | null; readonly delta: string }
     | { readonly type: "thread.message.assistant.complete"; readonly messageId: string; readonly turnId: string | null; readonly text?: string }
@@ -313,7 +277,6 @@ export type InternalCommand = CommandBase &
 
 export type ChatCommand = ClientCommand | InternalCommand;
 
-/** An event as the decider emits it, before the engine stamps its base fields. */
 export interface PendingEvent {
   readonly type: ChatEventType;
   readonly aggregateId: string;
@@ -346,7 +309,6 @@ export type ChatEventType =
   | "thread.turn-settled"
   | "thread.outside-turn-began";
 
-/** A committed event, with t3code's base fields. */
 export interface ChatEvent extends PendingEvent {
   readonly sequence: number;
   readonly eventId: string;

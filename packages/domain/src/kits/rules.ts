@@ -1,8 +1,3 @@
-/**
- * The kit rules (spec 19): token names, CSS names and collisions, every value form per type,
- * aliases and cycles, modes and the limits. `kitRefusal` answers the first sentence a kit
- * breaks, in the words the dialog and the agent show; null means the kit is valid.
- */
 import { isEaseName } from "./easings.ts";
 import { kitRuntime } from "./runtime.ts";
 import { isFontFamily, isShadow, parseBezier, parseColour, parseLength, parseTime, parseWeight } from "./values.ts";
@@ -18,7 +13,6 @@ export const NAME_SENTENCE = "A token name is words joined by slashes, like colo
 const FORMER_NAME = /^--[a-z0-9-]+$/;
 const FORMER_NAME_SENTENCE = "A former name is a CSS name in lower case, like --color-brand-primary.";
 
-/** The refusal for a token path, naming the rule it breaks, or null when it is a path. */
 export const pathRefusal = (path: string): string | null => {
   if (path.length > KIT_LIMITS.path) return `A token name is at most ${KIT_LIMITS.path} characters.`;
   const segments = path.split("/");
@@ -27,7 +21,6 @@ export const pathRefusal = (path: string): string | null => {
   return segments.every((segment) => SEGMENT.test(segment)) ? null : NAME_SENTENCE;
 };
 
-/** `none` names "no mode" in a snapshot's file name (spec 19), so no kit mode may take it. */
 export const modeRefusal = (name: string): string | null => {
   if (!MODE.test(name)) return "A mode name is a short word, like light or dark.";
   return name === "none" ? "none is reserved; give the mode another name." : null;
@@ -36,7 +29,6 @@ export const modeRefusal = (name: string): string | null => {
 const DIMENSION_SENTENCE = (value: unknown) => `${String(value)} is not a size. Use a number with px, rem, em or %.`;
 const WEIGHT_SENTENCE = "A font weight is a number from 1 to 1000, or normal, bold, lighter or bolder.";
 
-/** The refusal for one literal value of a type (aliases are checked by `aliasRefusal`). */
 const literalRefusal = (type: TokenType, value: unknown): string | null => {
   switch (type) {
     case "color":
@@ -64,7 +56,6 @@ const literalRefusal = (type: TokenType, value: unknown): string | null => {
 const isAlias = (value: unknown): value is string => typeof value === "string" && ALIAS.test(value);
 const targetOf = (value: string): string => ALIAS.exec(value)![1]!;
 
-/** The refusal for an alias: an unknown target, or a target of another type. Null when it is not an alias or is fine. */
 const aliasRefusal = (kit: Kit, path: string, expected: TokenType, value: string): string | null => {
   const target = kit.tokens.find((token) => token.path === targetOf(value));
   if (target === undefined) return `${path} refers to ${targetOf(value)}, which is not in the kit.`;
@@ -72,7 +63,6 @@ const aliasRefusal = (kit: Kit, path: string, expected: TokenType, value: string
   return null;
 };
 
-/** The refusal for one stored value of a token (a value in one mode, or the one value). */
 export const valueRefusal = (token: Pick<Token, "path" | "type">, value: unknown, kit: Kit): string | null => {
   if (token.type === "textStyle") {
     if (isAlias(value)) return aliasRefusal(kit, token.path, "textStyle", value);
@@ -100,7 +90,6 @@ export const valueRefusal = (token: Pick<Token, "path" | "type">, value: unknown
   return literalRefusal(token.type, value);
 };
 
-/** Every CSS name a token makes: its own, or its five text style names, and its former names. */
 const namesOf = (token: Token, base: string): string[] =>
   token.type === "textStyle" ? Object.values(TEXT_STYLE_SUFFIX).map((sub) => `${base}-${sub}`) : [base];
 
@@ -119,7 +108,6 @@ const aliasTargets = (token: Token): string[] => {
   return targets;
 };
 
-/** The first sentence a kit breaks, or null. */
 export const kitRefusal = (kit: Kit): string | null => {
   if (kit.name.trim().length < 1 || kit.name.trim().length > 80) return "A kit needs a name of 1 to 80 characters.";
   if (kit.modes.length === 0) return "A kit keeps at least one mode.";
@@ -155,7 +143,6 @@ export const kitRefusal = (kit: Kit): string | null => {
     }
   }
 
-  // Aliases refer to tokens that exist; a cycle is refused, naming the first two of it.
   const targets = new Map(kit.tokens.map((token) => [token.path, aliasTargets(token)]));
   const state = new Map<string, "open" | "done">();
   const visit = (path: string, stack: string[]): string | null => {
@@ -177,7 +164,6 @@ export const kitRefusal = (kit: Kit): string | null => {
     if (refusal) return refusal;
   }
 
-  // CSS names must not collide: a token's own, its text style names, and its former names.
   const owners = new Map<string, string>();
   for (const token of kit.tokens) {
     const base = kitRuntime.cssName(token.path);
@@ -191,7 +177,6 @@ export const kitRefusal = (kit: Kit): string | null => {
   return null;
 };
 
-/** Whether a name is a CSS name, a former name included, that the kit's tokens make. */
 export const kitCssNames = (kit: Kit): string[] =>
   kit.tokens.flatMap((token) => {
     const base = kitRuntime.cssName(token.path);

@@ -1,9 +1,3 @@
-/**
- * Motion edits (spec 21): the changes a person makes on the timeline, applied to a motion file
- * with HyperFrames' own writer. Each edit names its tween by `TweenRef` (source order), is
- * checked against the file's own reading (owner, lock, id), and writes only the bytes it changes.
- * Spec 18's `applySourceEdits` gathers these with its other edit types.
- */
 import { findTimelineScript, parseGsapScriptAcornForWrite, type TweenCallInfo } from "@hyperframes/parsers/gsap-parser-acorn";
 import { retimeClipTweensInScript, type ClipTweenRetime } from "@hyperframes/parsers/gsap-writer-acorn";
 import { stampElementIds } from "../html/elementIds.ts";
@@ -24,16 +18,12 @@ export type MotionEdit =
   | { readonly type: "composition-duration"; readonly seconds: number };
 
 export interface MotionEditOptions {
-  /** `data-hf-id`s of the elements the person locked in Layers. Descendants of one are locked too. */
   readonly lockedElements?: ReadonlySet<string>;
-  /** The kind of a token in the project's kit (`easing`, `colour`, `number`, `duration`), or undefined. */
   readonly tokenKind?: (name: string) => string | undefined;
 }
 
-/** The type names of the six motion edits: what `isMotionEdit` tells apart from spec 18's element edits. */
 export const MOTION_EDIT_TYPES: ReadonlySet<string> = new Set(["tween-time", "tween-ease", "tween-stagger", "tween-value", "clip-time", "composition-duration"]);
 
-/** True for the six motion edits. Anything else is one of spec 18's element edits. */
 export const isMotionEdit = (edit: { readonly type: string }): edit is MotionEdit => MOTION_EDIT_TYPES.has(edit.type);
 
 export type MotionEditResult = { readonly ok: true; readonly html: string; readonly summary: string[] } | { readonly ok: false; readonly refusal: string };
@@ -41,10 +31,8 @@ export type MotionEditResult = { readonly ok: true; readonly html: string; reado
 const MIN_DURATION = 0.033;
 const SCRIPT = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;
 
-/** Milliseconds, as the writer keeps them. */
 const millis = (seconds: number): number => Math.round(seconds * 1000) / 1000;
 
-/** The timeline script's text and where it sits in the file, found the way the reading finds it. */
 interface ScriptSpan { readonly textContent: string; readonly start: number; readonly end: number }
 
 const timelineSpan = (html: string): ScriptSpan | null => {
@@ -59,10 +47,8 @@ const timelineSpan = (html: string): ScriptSpan | null => {
 
 const splice = (html: string, span: ScriptSpan, text: string): string => html.slice(0, span.start) + text + html.slice(span.end);
 
-/** Names an element for a sentence: its layer name, as the reading gives it. */
 const nameOf = (reading: MotionTimeline, hfId: string | undefined): string => (hfId ? reading.elements[hfId]?.name ?? hfId : "the tween");
 
-/** The first locked element among a tween's targets, or one of their ancestors. */
 const lockedAmong = (reading: MotionTimeline, targets: readonly string[], locked: ReadonlySet<string> | undefined): string | null => {
   if (!locked || locked.size === 0) return null;
   for (const target of targets) {
@@ -81,7 +67,6 @@ const sentenceCase = (text: string) => text.charAt(0).toUpperCase() + text.slice
 
 interface Session {
   html: string;
-  /** The HyperFrames id of each tween as the file has it now, by index. Moves change them. */
   ids: string[];
   summary: string[];
 }
@@ -142,7 +127,6 @@ const applyTweenTime = (session: Session, edit: Extract<MotionEdit, { type: "twe
 
 const refuse = (refusal: string): MotionEditResult => ({ ok: false, refusal });
 
-/** Sets an attribute on the start tag of the element with this data-hf-id, outside the script. */
 const setAttribute = (html: string, hfId: string, name: string, value: string): string => {
   const tag = new RegExp(`<[a-zA-Z][^>]*?\\sdata-hf-id="${hfId}"[^>]*>`);
   const match = tag.exec(html);
@@ -155,7 +139,6 @@ const setAttribute = (html: string, hfId: string, name: string, value: string): 
   return html.slice(0, match.index) + updated + html.slice(match.index + current.length);
 };
 
-/** Milliseconds are kept, and a clip or the length is never shorter than one frame. */
 const atLeastFrame = (seconds: number): number => millis(Math.max(MIN_DURATION, seconds));
 
 const applyTweenValue = (session: Session, edit: Extract<MotionEdit, { type: "tween-value" }>, base: MotionTimeline, options: MotionEditOptions): MotionEditResult | null => {
@@ -178,7 +161,6 @@ const applyTweenValue = (session: Session, edit: Extract<MotionEdit, { type: "tw
   const node = diamondNode(call.call, call.animation, edit.at);
   const property = propertiesOf(node).find((candidate) => keyOfNode(candidate) === edit.property);
   if (!property) return refuse(`${name} has no ${edit.property} at this diamond.`);
-  // Only the value's own bytes are replaced, so the other properties keep their text, quotes and order.
   const code = typeof resolved.text === "object" ? `unframed.token(${JSON.stringify(resolved.text.token)})` : typeof resolved.text === "number" ? String(resolved.text) : JSON.stringify(resolved.text);
   const next = text.slice(0, property.value.start) + code + text.slice(property.value.end);
   if (next === text) return refuse(`The edit to ${name} could not be applied.`);
@@ -247,19 +229,16 @@ const NUMBER_TEXT = /^-?\d+(?:\.\d+)?(?:px|%|em|rem|vw|vh|deg|s|ms)?$/i;
 const isColourText = (text: string): boolean => COLOUR_FORMS.some((form) => form.test(text.trim())) || NAMED_COLOURS.has(text.trim().toLowerCase());
 const isNumberText = (text: string): boolean => NUMBER_TEXT.test(text.trim());
 
-/** A number takes the unit of the literal it replaces: `"120px"` stays in px. Null when the literal has no number. */
 const unitOf = (current: number | string): string | null => {
   if (typeof current === "number") return "";
   const match = /^-?\d+(?:\.\d+)?([a-z%]*)$/i.exec(current.trim());
   return match ? match[1]! : null;
 };
 
-/** The value a tween-value writes, or the refusal sentence when the value does not fit the literal. */
 const valueFor = (edit: Extract<MotionEdit, { type: "tween-value" }>, current: number | string | undefined, name: string, tokenKind: MotionEditOptions["tokenKind"]): { text: number | string | { token: string } } | { refusal: string } => {
   const { value, property } = edit;
   if (typeof value === "object") {
     const kind = tokenKind?.(value.token);
-    // A token-owned value has no literal to check against, so the token's type alone decides.
     const numeric = current === undefined || typeof current === "number" || (typeof current === "string" && isNumberText(current));
     if (kind === "colour" && (current === undefined || (typeof current === "string" && isColourText(current)))) return { text: value };
     if ((kind === "number" || kind === "duration") && numeric) return { text: value };
@@ -282,7 +261,6 @@ const keyOfNode = (property: ScriptNode): string | null => {
   return null;
 };
 
-/** The object literal that holds a diamond's values in the call, as the writer's parse has it. */
 const diamondNode = (call: TweenCallInfo, animation: { keyframes?: unknown }, at: number): ScriptNode | undefined => {
   if (animation.keyframes) {
     const keyframes = propertiesOf(call.varsArg as ScriptNode).find((p) => keyOfNode(p) === "keyframes")?.value as ScriptNode | undefined;
@@ -298,10 +276,8 @@ const diamondNode = (call: TweenCallInfo, animation: { keyframes?: unknown }, at
 
 const propertiesOf = (node: ScriptNode | undefined): ScriptNode[] => (node?.type === "ObjectExpression" ? node.properties.filter((p: ScriptNode) => p.type === "Property") : []);
 
-/** Stands in for a token expression while the writer runs; the writer quotes it like any string. */
 const tokenPlaceholder = (index: number) => `__unframed_token_${index}__`;
 
-/** Checks that an edit's tween is the one the base reading read, and returns the live location of it. */
 const locate = (session: Session, edit: { readonly tween: TweenRef }, base: MotionTimeline) => {
   const tween = base.tweens[edit.tween.index];
   const name = nameOf(base, tween?.targets[0]);
@@ -371,7 +347,6 @@ const applyTweenStagger = (session: Session, edit: Extract<MotionEdit, { type: "
   return null;
 };
 
-/** Applies edits in order to one motion file. Nothing is written unless every edit applies. */
 export function applyMotionEdits(html: string, edits: readonly MotionEdit[], options: MotionEditOptions = {}): MotionEditResult {
   const stamped = stampElementIds(html);
   const base = motionTimeline(stamped);

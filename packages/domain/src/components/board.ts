@@ -1,8 +1,3 @@
-/**
- * The variant board rule (spec 20): which combinations a sheet shows on its own, and their
- * labels. Up to 48 combinations, a grid with the first variant slowest. Above that, one row
- * per variant, each varying that variant with the others at their defaults.
- */
 import type { ComponentDeclaration } from "./sheet.ts";
 
 export const BOARD_CAP = 48;
@@ -11,10 +6,6 @@ export type BoardCell = { readonly values: Readonly<Record<string, string>>; rea
 
 export type BoardCells = { readonly cells: readonly BoardCell[]; readonly line?: string };
 
-/**
- * The rule itself, with no reference to this module, so the sheet helper can carry its text
- * (`boardCellsRule.toString()`), as the dials bridge carries its rules.
- */
 export const boardCellsRule = (declaration: Pick<ComponentDeclaration, "variants">, cap: number): BoardCells => {
   const labelOf = (values: Readonly<Record<string, string>>, names: readonly string[]): string =>
     names.length === 0 ? "Default" : names.map((name) => values[name]).join(" · ");

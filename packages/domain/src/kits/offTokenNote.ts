@@ -1,24 +1,15 @@
-/**
- * The off-token note (spec 19): what a page or motion write answers when its file has literal
- * values close to a kit token. It never refuses a write. The notes are capped and repeats are
- * counted, so a long page answers a short list.
- */
 import type { OffTokenValue } from "./offTokens.ts";
 
-/** The most notes one write answers before the rest are counted in the last note. */
 export const OFF_TOKEN_NOTE_LIMIT = 10;
 
-/** The sentence after the notes: a literal can be intended, so the agent decides. */
 export const OFF_TOKEN_ADVICE = "These values sit close to kit tokens. Use the token unless the difference is intended.";
 
 export interface OffTokenNote {
-  /** Every off-token value in the file, repeats included. */
   readonly count: number;
   readonly notes: string[];
   readonly advice: string;
 }
 
-/** The write result's `offToken`, or `undefined` when the file has no off-token value. */
 export const offTokenNote = (values: ReadonlyArray<OffTokenValue>): OffTokenNote | undefined => {
   if (values.length === 0) return undefined;
   const groups = new Map<string, { value: OffTokenValue; repeats: number }>();

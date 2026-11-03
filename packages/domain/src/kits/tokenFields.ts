@@ -1,9 +1,3 @@
-/**
- * Which tokens a Design tab field offers (spec 19). A field is named by the CSS property it
- * writes, as spec 18's DESIGN_FIELDS lists them; the token types follow the field's value kind.
- * Opacity, keyword fields (layout, align, border style) offer nothing. The shorthands `padding`
- * and `margin` stand for their four sides, and `text-style` is the Text section header's picker.
- */
 import { DESIGN_FIELDS, type DesignValueKind } from "../designFields.ts";
 import type { Kit, Token, TokenType } from "./types.ts";
 
@@ -27,7 +21,6 @@ const SPACING = ["space", "spacing", "gap"];
 const RADIUS = ["radius", "radii", "rounded"];
 const TEXT = ["font", "text", "size"];
 
-/** The path keywords that move a token to the front for a field. Other fields keep the kit's order. */
 const PREFERRED: Readonly<Record<string, readonly string[]>> = {
   padding: SPACING,
   margin: SPACING,
@@ -46,7 +39,6 @@ const PREFERRED: Readonly<Record<string, readonly string[]>> = {
   "letter-spacing": TEXT,
 };
 
-/** The tokens a field offers: of its types, the ones whose path has a preferred keyword first, each group in kit order. */
 export const tokensForField = (field: string, kit: Kit): Token[] => {
   const types = typesOf(field);
   if (types.length === 0) return [];

@@ -1,9 +1,3 @@
-/**
- * The timeline reading (spec 21): what the editor may change in one motion file, read once from
- * its timeline script with HyperFrames' write parser. Each value is read from its own node and
- * given an owner by `ownerOf`; anything the timeline cannot edit carries a sentence saying why.
- * This module answers questions only. Edits are `applyMotionEdits` (task 10 onward).
- */
 import { isTweenConfigKey } from "@hyperframes/parsers/gsap-constants";
 import { ensureHfIds } from "@hyperframes/parsers/hf-ids";
 import { findTimelineScript, parseGsapScriptAcornForWrite, type TweenCallInfo } from "@hyperframes/parsers/gsap-parser-acorn";
@@ -21,7 +15,6 @@ const LOOP_NODES = new Set(["ForStatement", "ForInStatement", "ForOfStatement", 
 const FUNCTION_NODES = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
 const NOT_VALUES = new Set(["keyframes", "motionPath", "ease", "duration", "delay"]);
 
-/** Inline scripts only, in document order, as the timeline finder reads them. */
 const inlineScripts = (html: string): { textContent: string }[] =>
   [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)]
     .filter((match) => !/\bsrc\s*=/i.test(match[1]!))
@@ -39,7 +32,6 @@ const keyOf = (property: ScriptNode): string | null => {
 const propertiesOf = (node: ScriptNode | undefined | null): ScriptNode[] =>
   node?.type === "ObjectExpression" ? node.properties.filter((p: ScriptNode) => p.type === "Property") : [];
 
-/** The value owners of an object's own properties, configuration keys left out. */
 const valuesOf = (node: ScriptNode | undefined | null, context: OwnerContext): Record<string, Owner> => {
   const values: Record<string, Owner> = {};
   for (const property of propertiesOf(node)) {
@@ -54,7 +46,6 @@ const percentage = (key: string): number | null => {
   return match ? Number(match[1]) / 100 : null;
 };
 
-/** A keyframes object or array, as one entry per step. Null when it is not a literal shape. */
 const keyframeSteps = (node: ScriptNode, context: OwnerContext): KeyframeValues[] | null => {
   if (node.type === "ObjectExpression") {
     const steps: KeyframeValues[] = [];
@@ -123,7 +114,6 @@ const repeatOf = (vars: ScriptNode | undefined): Repeat => {
   return { count, yoyo: yoyo?.type === "Literal" && yoyo.value === true };
 };
 
-/** The stagger of a tween: its owner, and which form it was written in. */
 const staggerOf = (vars: ScriptNode | undefined, context: OwnerContext): { owner: Owner | null; form: StaggerForm | null } => {
   const node = propertiesOf(vars).find((p) => keyOf(p) === "stagger")?.value as ScriptNode | undefined;
   if (!node) return { owner: null, form: null };
@@ -139,7 +129,6 @@ const staggerOf = (vars: ScriptNode | undefined, context: OwnerContext): { owner
   return owner.kind === "source" ? { owner, form } : { owner, form: "other" };
 };
 
-/** Per-target offsets in seconds for a stagger with a static value; zeros when there is none. */
 export function staggerOffsets(tween: Tween, targetCount = tween.targets.length): number[] {
   const offsets = Array.from({ length: targetCount }, () => 0);
   const owner = tween.stagger;
@@ -214,14 +203,12 @@ const tweenOf = (
   };
 };
 
-/** A start is a number. A label or a string is not a value the timeline can move, so it is script. */
 const startOf = (node: ScriptNode, context: OwnerContext): Owner => {
   const owner = ownerOf(node, context);
   if (owner.kind === "source" && typeof owner.value !== "number") return { kind: "script", text: context.source.slice(node.start, node.end) };
   return owner;
 };
 
-/** The `data-hf-id`s a selector matches, in document order; none when it does not resolve. */
 const targetsOf = (document: Doc, selector: string, partial: boolean): string[] => {
   if (partial || !selector || selector.startsWith("__")) return [];
   try {
@@ -233,13 +220,11 @@ const targetsOf = (document: Doc, selector: string, partial: boolean): string[] 
 
 const NUMBER_TEXT = /^-?\d+(\.\d+)?$/;
 
-/** An attribute's value as an owner: a plain number is source, anything else (a clip name, a blank) is script. */
 const attributeOwner = (text: string | null): Owner => {
   const value = text ?? "";
   return NUMBER_TEXT.test(value.trim()) ? { kind: "source", value: Number(value) } : { kind: "script", text: value };
 };
 
-/** The parts of a DOM element and document the reading uses (linkedom provides them, the domain has no DOM lib). */
 interface El {
   readonly id: string;
   getAttribute(name: string): string | null;
@@ -261,7 +246,6 @@ const ancestorsOf = (element: El): El[] => {
   return chain;
 };
 
-/** The elements, the clips and the length of the composition, read from the stamped document. */
 const compositionOf = (document: Doc, options: MotionTimelineOptions) => {
   const root = document.querySelector("[data-composition-id]");
   const elements: Record<string, ElementInfo> = {};
@@ -275,7 +259,6 @@ const compositionOf = (document: Doc, options: MotionTimelineOptions) => {
     const parent = chain.find((ancestor) => ancestor.hasAttribute("data-hf-id"));
     const clip = [element as El, ...chain].find((candidate) => isClip.has(candidate));
     elements[idOf(element as El)] = {
-      // The layer name (spec 18): `data-uf-name` when the person set one, else the element's id.
       name: ((element as El).getAttribute("data-uf-name") ?? "").trim() || (element as El).id || idOf(element as El),
       parent: parent ? idOf(parent) : null,
       clip: clip ? idOf(clip) : null,

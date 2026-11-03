@@ -1,14 +1,9 @@
-/**
- * Pins (spec 20): the `<script src>` tag an artifact uses for one component tag. `readPins` reads
- * them from a document's source; `injectPins` and `setPin` write them. Pins are never stored on shapes.
- */
 import { isSheetFileName } from "@unframed/contracts";
 import { TOKENS_TAG } from "../artifacts/artifactRules.ts";
 import { compiledFileName } from "./compile.ts";
 
 export type Pin = { readonly tag: string; readonly sheet: string };
 
-/** The project's components: the current sheet of each tag on the canvas, and every sheet with its tag. */
 export type ComponentRegistry = {
   readonly current: ReadonlyMap<string, string>;
   readonly sheets: ReadonlyMap<string, string>;
@@ -16,11 +11,8 @@ export type ComponentRegistry = {
 
 export type PinInjection = {
   readonly html: string;
-  /** Used tags that have a pin naming the current version, after the injection. */
   readonly pinned: string[];
-  /** The pinned tags whose pin names an older sheet. */
   readonly olderVersions: string[];
-  /** Used `uf-` tags that no component on the canvas has. */
   readonly unknownTags: string[];
 };
 
@@ -31,7 +23,6 @@ const COMPILED_SRC = /^[A-Za-z0-9][A-Za-z0-9._-]*\.component\.js$/;
 
 const USED_TAG = /<(uf-[a-z][a-z0-9-]*)[\s/>]/gi;
 
-/** Every pin in a document, in source order: the tag it serves and the sheet file of its compiled src. */
 export const readPins = (html: string): Pin[] => {
   const pins: Pin[] = [];
   for (const match of html.matchAll(PIN_TAG)) {
@@ -43,7 +34,6 @@ export const readPins = (html: string): Pin[] => {
   return pins;
 };
 
-/** The compiled file a pin of this sheet names. */
 export const pinnedCompiledFile = (pin: Pin): string => compiledFileName(pin.sheet);
 
 const pinTag = (tag: string, sheet: string): string => {
@@ -51,10 +41,8 @@ const pinTag = (tag: string, sheet: string): string => {
   return `<script src="${compiledFileName(sheet)}" data-uf-component="${tag}"></script>`;
 };
 
-/** The `uf-` tags a document uses, once each, in order of first use. */
 const usedTags = (html: string): string[] => [...new Set([...html.matchAll(USED_TAG)].map((match) => match[1]!.toLowerCase()))];
 
-/** The place new pins go: right after the tokens tag, else after the head's open tag, else at the top. */
 const insertAt = (html: string, block: string): string => {
   if (html.includes(TOKENS_TAG)) {
     const end = html.indexOf(TOKENS_TAG) + TOKENS_TAG.length;
@@ -68,17 +56,11 @@ const insertAt = (html: string, block: string): string => {
   return `${block}\n${html}`;
 };
 
-/** The tag and src attributes of a pin element. */
 const pinSheet = (element: string): { tag: string | undefined; src: string | undefined } => ({
   tag: ATTRIBUTE_VALUE("data-uf-component").exec(element)?.[1],
   src: ATTRIBUTE_VALUE("src").exec(element)?.[1],
 });
 
-/**
- * Adds, repairs and reports the pins of a page or motion (spec 20). A used tag that is a component
- * on the canvas gets a pin when it has none, and a pin that names no sheet of its tag in the project
- * is replaced with the current version's. A valid pin is kept, whatever version it names.
- */
 export const injectPins = (html: string, registry: ComponentRegistry): PinInjection => {
   const current = new Map([...registry.current].filter(([, sheet]) => isSheetFileName(sheet)));
   const used = usedTags(html);
@@ -117,7 +99,6 @@ export const injectPins = (html: string, registry: ComponentRegistry): PinInject
   return { html: out, pinned, olderVersions, unknownTags };
 };
 
-/** Points a tag's pin at a sheet's compiled file: the first pin of the tag is replaced, others are removed, or a new pin is added. */
 export const setPin = (html: string, tag: string, sheet: string): string => {
   const elements = [...html.matchAll(PIN_ELEMENT)].filter((match) => pinSheet(match[0]).tag === tag);
   if (elements.length === 0) return insertAt(html, pinTag(tag, sheet));
