@@ -589,6 +589,36 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
     session.patchTween(edit, { selector: target, channels, change });
   };
 
+  // The end marker (spec 21, Total length): a drag sets `data-duration` through a composition-duration edit, and the runtime's own
+  // root duration so playback follows it. It snaps to the playhead and to the last clip's end, else to whole frames.
+  const endDrag = useRef<{ startX: number; origin: number; pxPerSecond: number } | null>(null);
+  const endEditable = current?.value?.length.kind === "source";
+  const onEndDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || length <= 0 || !endEditable) return;
+    // The handle is not a scrub: the ruler under it does not start one.
+    event.stopPropagation();
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    endDrag.current = { startX: event.clientX, origin: length, pxPerSecond: pxRef.current };
+  };
+  const onEndMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = endDrag.current;
+    if (drag === null) return;
+    const clipEnds = rows.flatMap((row) => (row.kind === "clip" && row.span !== null ? [row.span.start + row.span.duration] : []));
+    const targets: SnapTarget[] = [{ priority: 0, time: transport.current() }, ...clipEnds.map((time) => ({ priority: 1, time }))];
+    const snapped = snapTime(drag.origin + (event.clientX - drag.startX) / drag.pxPerSecond, { targets, pxPerSecond: drag.pxPerSecond, free: event.altKey });
+    const seconds = Math.max(MIN_DURATION, snapped.time);
+    setGuide(snapped.guide ? snapped.time : null);
+    transport.setRootDuration(seconds);
+    session.patch({ type: "composition-duration", seconds });
+  };
+  const onEndUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (endDrag.current === null) return;
+    endDrag.current = null;
+    setGuide(null);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
   // A clip drag (spec 21, Clips): its bar's body moves the clip, an edge stretches it. Each change is one `clip-time` edit in the burst,
   // and the dials its carried tweens take are held with it, so one undo takes back the whole step.
   const clipGesture = useRef<ClipGesture | null>(null);
@@ -854,6 +884,19 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
                     <span data-testid="timeline-end" className="pointer-events-none absolute inset-y-0 border-l-2 border-foreground pl-1 text-[10px] leading-6 font-medium" style={{ left: length * pxPerSecond }}>
                       {tickLabel(length)}
                     </span>
+                  )}
+                  {length > 0 && (
+                    <div
+                      data-testid="timeline-end-handle"
+                      role="presentation"
+                      title={endEditable ? undefined : "The length is set by the agent's code."}
+                      className={cn("absolute inset-y-0 z-[5] w-3 -translate-x-1/2 touch-none", endEditable ? "cursor-ew-resize" : "cursor-not-allowed")}
+                      style={{ left: length * pxPerSecond }}
+                      onPointerDown={onEndDown}
+                      onPointerMove={onEndMove}
+                      onPointerUp={onEndUp}
+                      onPointerCancel={onEndUp}
+                    />
                   )}
                 </div>
               </div>

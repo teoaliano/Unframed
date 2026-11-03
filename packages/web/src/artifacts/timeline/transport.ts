@@ -200,6 +200,11 @@ export class MotionTransport {
     this.update({ muted });
   };
 
+  /** The composition's own length, set while the end marker is dragged, so playback and the frame follow it (spec 21, Total length). */
+  setRootDuration = (seconds: number): void => {
+    this.send({ type: "unframed:player:control", action: "root-duration", seconds });
+  };
+
   setLoop = (loop: boolean): void => {
     this.update({ loop });
     this.sendRange();
