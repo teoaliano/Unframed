@@ -119,12 +119,25 @@ const timingOf = (tween: Tween, input: RowsInput, live: LiveTween | undefined): 
   return start === undefined || duration === undefined ? null : { start, duration };
 };
 
+/**
+ * A bar's diamonds, in seconds (spec 21, Diamonds): its start and its end, and each keyframe step the bar's group has. A `set` has only
+ * its one diamond at the start. A step at the start or the end is not drawn twice.
+ */
+const diamondsOf = (tween: Tween, start: number, duration: number, group: PropertyGroup | null): number[] => {
+  if (tween.method === "set") return [start];
+  const fractions = [0, 1];
+  for (const step of tween.keyframes) {
+    if (group !== null && !Object.keys(step.values).some((key) => groupOfKey(key) === group)) continue;
+    if (!fractions.some((fraction) => Math.abs(fraction - step.at) < 1e-6)) fractions.push(step.at);
+  }
+  return fractions.sort((a, b) => a - b).map((at) => start + at * duration);
+};
+
 /** The bars one tween draws on one target, with its repeats, for a group lane or for the element as a whole. */
 const barsOf = (tween: Tween, target: string, offset: number, timing: { start: number; duration: number }, group: PropertyGroup | null, stagger: number | null): BarView[] => {
   const start = timing.start + offset;
   const duration = timing.duration;
-  const steps = tween.method === "set" ? [start] : tween.keyframes.filter((step) => group === null || Object.keys(step.values).some((key) => groupOfKey(key) === group)).map((step) => start + step.at * duration);
-  const main: BarView = { tween: tween.ref.index, target, group, start, duration, copy: false, stagger, readOnly: tween.readOnly, diamonds: steps };
+  const main: BarView = { tween: tween.ref.index, target, group, start, duration, copy: false, stagger, readOnly: tween.readOnly, diamonds: diamondsOf(tween, start, duration, group) };
   const copies: BarView[] = [];
   const count = tween.repeat?.count;
   if (tween.repeat !== null && typeof count === "number" && count > 0) {

@@ -48,7 +48,8 @@ const fileOf = async (engine: TestEngine) => (await roomShapes(engine, "default"
 /** Opens the values panel from the bar, then its Ease field. */
 const openEase = async (page: Page) => {
   await bar(page).dblclick();
-  await timeline(page).getByRole("button", { name: "Ease", exact: true }).click();
+  // The values panel is a popover in the page, so its Ease field is found there.
+  await page.getByRole("button", { name: "Ease", exact: true }).click();
 };
 
 test("the ease picker lists the 31 catalogue eases with curves, and the current one is checked", async ({ page, agent }) => {
@@ -109,7 +110,9 @@ test("an ease a parameter sets offers only the parameter's options, and choosing
   await expect(choice(page, "Power2 · Out")).toBeEnabled();
   await expect(choice(page, "Back · Out")).toBeEnabled();
   await expect(choice(page, "Sine · In")).toBeDisabled();
-  await expect(choice(page, "Sine · In")).toHaveAttribute("title", "This ease comes from the parameter ease, which offers only its own options.");
+  // The disabled row says why in a tooltip, which shows when the pointer rests on it.
+  await choice(page, "Sine · In").hover({ force: true });
+  await expect(page.getByText("This ease comes from the parameter ease, which offers only its own options.")).toBeVisible();
   await choice(page, "Back · Out").click();
 
   await expect.poll(async () => (await fileOf(agent))?.dials?.ease, { timeout: 10_000 }).toBe("back.out");

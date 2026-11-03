@@ -10,6 +10,7 @@ import type { TestEngine } from "../../engine/test/engineProcess.ts";
 /**
  * One dot. Tween 0 moves it and animates its colour: a from-value at the start and a to-value at the end, the end's colour an
  * oklch(). Tween 1 sets a named colour at its end. Tween 2 repeats twice, back and forth. Tween 3 has a token duration.
+ * Tween 4 is a `from`, whose end diamond has no values of its own. Tween 5 has a keyframe in its middle, at 50 %.
  */
 const VALUES = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}#dot{position:absolute;left:20px;top:120px;width:60px;height:60px;background:#f00}</style></head><body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="8" data-width="640" data-height="360"><div id="dot" data-uf-name="Dot" class="clip" data-start="0" data-duration="8"></div></div>
@@ -20,6 +21,8 @@ tl.fromTo("#dot", { x: 0, color: "#ffffff" }, { x: 120, color: "oklch(70% 0.2 15
 tl.to("#dot", { backgroundColor: "rebeccapurple", duration: 0.5 }, 2);
 tl.to("#dot", { opacity: 0.5, duration: 0.5, repeat: 2, yoyo: true }, 3);
 tl.to("#dot", { scale: 2, duration: unframed.token("duration/fast") }, 5);
+tl.from("#dot", { opacity: 0.2, duration: 0.5 }, 6);
+tl.to("#dot", { x: 60, keyframes: { "50%": { x: 200 }, "100%": { x: 60 } }, duration: 1 }, 7);
 </script></body></html>`;
 
 /** A colour token on the background, and a parameter that sets the dot's x at its end. */
@@ -44,7 +47,8 @@ const diamond = (page: Page, tween: number, fraction: number) => timeline(page).
 const clickDiamond = async (page: Page, tween: number, fraction: number) => {
   await diamond(page, tween, fraction).click({ position: { x: fraction === 1 ? 8 : 2, y: 5 } });
 };
-const panel = (page: Page) => timeline(page).getByRole("region", { name: /^Values for/ });
+// The values panel is a popover, so it sits in the page, not in the strip.
+const panel = (page: Page) => page.getByRole("region", { name: /^Values for/ });
 const region = (page: Page) => page.getByRole("region", { name: "Editing Intro" });
 
 test.setTimeout(180_000);
@@ -82,6 +86,70 @@ test("a diamond opens the values panel with the numbers and colours at that keyf
   await panel(page).getByRole("textbox", { name: "x" }).fill("150");
   await panel(page).getByRole("textbox", { name: "x" }).press("Enter");
   await expect.poll(() => editSummaries(agent).then((all) => all.at(-1)?.[0]), { timeout: 15_000 }).toBe("Set Dot x to 150");
+});
+
+test("a to tween's start diamond and a from tween's end diamond open the values panel with their sentences", async ({ page, agent }) => {
+  await openMotion(page, agent, VALUES);
+  await clickDiamond(page, 1, 0);
+  await expect(panel(page).getByText("Starts from the element's current look.")).toBeVisible();
+  await expect(panel(page).getByRole("textbox", { name: "backgroundColor" })).toHaveCount(0);
+  await panel(page).getByRole("button", { name: "Close values" }).click();
+
+  await clickDiamond(page, 4, 1);
+  await expect(panel(page).getByText("Ends at the element's own style.")).toBeVisible();
+  await expect(panel(page).getByText("Starts from the element's current look.")).toHaveCount(0);
+});
+
+test("the values panel is a popover beside the keyframe it opened from, not a box at the strip's start", async ({ page, agent }) => {
+  await openMotion(page, agent, VALUES);
+  await clickDiamond(page, 1, 0);
+  await expect(panel(page)).toBeVisible();
+  const keyframe = await diamond(page, 1, 0).boundingBox();
+  const box = await panel(page).boundingBox();
+  if (!keyframe || !box) throw new Error("no keyframe or panel");
+  // Above or below the keyframe, a few pixels off, whichever side the popover finds room on.
+  const gap = Math.min(Math.abs(box.y - (keyframe.y + keyframe.height)), Math.abs(box.y + box.height - keyframe.y));
+  expect(gap).toBeLessThan(16);
+});
+
+test("a press on a middle keyframe with no movement opens the values panel at that keyframe", async ({ page, agent }) => {
+  await openMotion(page, agent, VALUES);
+  await zoomIn(page, 2);
+  await diamond(page, 5, 0.5).click();
+  await expect(panel(page).getByRole("textbox", { name: "x" })).toHaveValue("200");
+});
+
+test("a press on a middle keyframe that moves 3 px or more moves the tween and opens no panel", async ({ page, agent }) => {
+  await openMotion(page, agent, VALUES);
+  await zoomIn(page, 2);
+  await diamond(page, 5, 0.5).scrollIntoViewIfNeeded();
+  const box = await diamond(page, 5, 0.5).boundingBox();
+  if (!box) throw new Error("no diamond");
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 30, y, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(() => editSummaries(agent).then((all) => all.at(-1)?.[0]), { timeout: 15_000 }).toMatch(/^Moved Dot /);
+  await expect(panel(page)).toHaveCount(0);
+});
+
+test("a press on a keyframe that moves under 3 px still opens the values panel", async ({ page, agent }) => {
+  await openMotion(page, agent, VALUES);
+  await zoomIn(page, 2);
+  await diamond(page, 5, 0.5).scrollIntoViewIfNeeded();
+  const box = await diamond(page, 5, 0.5).boundingBox();
+  if (!box) throw new Error("no diamond");
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  const before = (await editSummaries(agent)).length;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 2, y, { steps: 2 });
+  await page.mouse.up();
+  await expect(panel(page)).toBeVisible();
+  expect((await editSummaries(agent)).length).toBe(before);
 });
 
 test("a named colour at a diamond shows its name and takes a hex value", async ({ page, agent }) => {
