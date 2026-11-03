@@ -93,6 +93,17 @@ export const ComponentPinsSubscribe = Rpc.make("component.pins", {
   stream: true,
 });
 
+/** One component an artifact pins an older version of: the sheet it pins, the one it would move to, and what changes (spec 20). */
+export const ComponentUpdate = Schema.Struct({ tag: Schema.String, title: Schema.String, from: Schema.String, to: Schema.String, warnings: Schema.Array(Schema.String) });
+export type ComponentUpdate = typeof ComponentUpdate.Type;
+
+/** The updates available to one page or motion, one row per component (spec 20). */
+export const ComponentUpdates = Rpc.make("component.updates", {
+  payload: Schema.Struct({ project: Schema.String, shapeId: Schema.String }),
+  success: Schema.Array(ComponentUpdate),
+  error: UnframedError,
+});
+
 /**
  * Copies a component sheet (spec 20): a fresh tag within the project, and across projects the same
  * tag when the destination's canvas does not hold it. Answers the copy's file and tag.

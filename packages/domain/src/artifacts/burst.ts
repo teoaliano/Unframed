@@ -21,6 +21,8 @@ const burstKey = (edit: SourceEdit): string => {
   if (edit.type === "token" && edit.rule !== undefined) {
     return JSON.stringify(["rule", edit.rule.block, edit.rule.selector, edit.rule.occurrence, `style:${edit.property}`]);
   }
+  if (edit.type === "componentRule") return JSON.stringify(["rule", edit.rule.block, edit.rule.selector, edit.rule.occurrence, `style:${edit.property}`]);
+  if (edit.type === "componentUpdate") return JSON.stringify(["component", edit.tag]);
   const field =
     edit.type === "text" ? "text"
     : edit.type === "style" || edit.type === "token" ? `style:${edit.property}`
