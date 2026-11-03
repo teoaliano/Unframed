@@ -89,7 +89,8 @@ test("cards and rows show the name, summary, needs and chips, Add, and delete on
   await expect(libraryDialog(page)).toHaveAttribute("data-view", "list");
   const row = presetItem(page, "Portrait retouch");
   await expect(row.getByTestId("preset-chips").locator("[data-chip]")).toHaveText(["Recipe", "Image", "Custom"]);
-  await expect(row.getByText("Soft light for faces")).toHaveAttribute("title", "Soft light for faces");
+  await row.getByText("Soft light for faces").hover();
+  await expect(page.locator("[data-slot='tooltip-popup']")).toHaveText("Soft light for faces");
   await expect(row.getByRole("button", { name: "Add" })).toBeVisible();
   await expect(row.getByRole("button", { name: "Delete Portrait retouch" })).toBeVisible();
   await expect(presetItem(page, "Prose to JSON").getByRole("button", { name: /^Delete/ })).toHaveCount(0);

@@ -472,7 +472,7 @@ test("past 200 rows the table draws only the rows in view, and scrolling reaches
   expect(await dialog.locator("[data-token]").count()).toBeLessThan(60);
   await expect(row(dialog, "dimension/space/t259")).toHaveCount(0);
 
-  await dialog.locator(".max-h-\\[480px\\]").evaluate((element) => {
+  await dialog.locator('[data-slot="table-container"]').evaluate((element) => {
     element.scrollTop = element.scrollHeight;
   });
   await expect(row(dialog, "dimension/space/t259")).toBeVisible();
