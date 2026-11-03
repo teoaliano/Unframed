@@ -15,6 +15,7 @@ const readout = (page: Page) => timeline(page).getByTestId("timeline-readout");
 const ruler = (page: Page) => timeline(page).getByTestId("timeline-ruler");
 const track = (page: Page) => timeline(page).getByTestId("timeline-track");
 const zoomOf = async (page: Page): Promise<number> => Number(await track(page).getAttribute("data-px-per-second"));
+const range = (page: Page) => timeline(page).getByTestId("timeline-range");
 
 /** The clock's seconds, read from the readout's `m:ss.cc`. */
 const secondsOf = async (page: Page): Promise<number> => {
@@ -127,4 +128,48 @@ test("Ctrl+wheel zooms around the cursor, so the time under the cursor stays und
 
   await expect.poll(() => zoomOf(page)).toBeGreaterThan(zoomBefore);
   expect(await timeUnder()).toBeCloseTo(before, 1);
+});
+
+test("the loop range's In and Out handles drag along the ruler, and an In dragged past the Out is refused", async ({ page, agent }) => {
+  await openStrip(page, agent);
+  // The focus is on the strip's time area, where I and O act: In at one second, Out at three.
+  await timeline(page).getByTestId("timeline-rows").click();
+  for (let step = 0; step < 3; step++) await page.keyboard.press("Shift+ArrowRight");
+  await page.keyboard.press("i");
+  for (let step = 0; step < 6; step++) await page.keyboard.press("Shift+ArrowRight");
+  await page.keyboard.press("o");
+  await expect(range(page)).toHaveAttribute("data-out", /^3/);
+
+  const px = await zoomOf(page);
+  const ruler0 = await boxOf(ruler(page));
+  const at = (seconds: number) => ruler0.x + seconds * px;
+  const centreOf = async (locator: Locator) => {
+    const box = await boxOf(locator);
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  };
+
+  // Dragging In from one second to two moves the range's start there, and the handle goes with it.
+  const inHandle = await centreOf(timeline(page).getByTestId("timeline-loop-in"));
+  await page.mouse.move(inHandle.x, inHandle.y);
+  await page.mouse.down();
+  await page.mouse.move(at(2), inHandle.y, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => Number(await range(page).getAttribute("data-in"))).toBeCloseTo(2, 1);
+
+  // Dragging Out from three seconds to two and a half.
+  const outHandle = await centreOf(timeline(page).getByTestId("timeline-loop-out"));
+  await page.mouse.move(outHandle.x, outHandle.y);
+  await page.mouse.down();
+  await page.mouse.move(at(2.5), outHandle.y, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => Number(await range(page).getAttribute("data-out"))).toBeCloseTo(2.5, 1);
+
+  // An In dragged past the Out is refused: the In stays where it was.
+  const inAgain = await centreOf(timeline(page).getByTestId("timeline-loop-in"));
+  await page.mouse.move(inAgain.x, inAgain.y);
+  await page.mouse.down();
+  await page.mouse.move(at(3.5), inAgain.y, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  await expect.poll(async () => Number(await range(page).getAttribute("data-in"))).toBeCloseTo(2, 1);
 });
