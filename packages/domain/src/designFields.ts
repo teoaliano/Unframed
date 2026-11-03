@@ -69,8 +69,12 @@ const PATTERNS: Partial<Record<DesignValueKind, RegExp>> = {
   shadow: /^(?:none|[-+.\dA-Za-z#%(),'"/\s]*\d[-+.\dA-Za-z#%(),'"/\s]*)$/,
 };
 
+/** The fields whose value may be negative: margins and letter spacing. Every other length or number is refused below zero. */
+const SIGNED_PROPERTIES: ReadonlySet<string> = new Set(["margin-top", "margin-right", "margin-bottom", "margin-left", "letter-spacing"]);
+
 const valueFits = (field: DesignField, value: string): boolean => {
   if (value === "" || FORBIDDEN.some((re) => re.test(value))) return false;
+  if (value.startsWith("-") && !SIGNED_PROPERTIES.has(field.property) && (field.kind === "length" || field.kind === "number")) return false;
   if (field.kind === "keyword") return field.keywords.includes(value);
   if (field.kind === "weight") {
     const pattern = PATTERNS.weight;

@@ -6,11 +6,38 @@
  * by byte offset, so nothing else in the file moves.
  */
 import { mintHfId, stampHfIdsInPlace } from "@hyperframes/parsers";
+import { parse } from "parse5";
 import { attr, flatten, isElement, isText, parseSource, scopeRoots, type ChildNode, type Document, type Element } from "./source.ts";
 
 const ID = "data-hf-id";
 
 type Splice = { readonly from: number; readonly to: number; readonly text: string };
+
+/**
+ * Parsed with scripting off, as the stamper parses: a noscript's children are elements here, so the
+ * comparison below sees them and can take back the ids the stamper gave them.
+ */
+const parseMarkup = (html: string): Document => parse(html, { sourceCodeLocationInfo: true, scriptingEnabled: false });
+
+const insideNoscript = (el: Element): boolean => {
+  for (let parent = el.parentNode as Element | null; parent !== null; parent = parent.parentNode as Element | null) {
+    if (parent.nodeName === "noscript") return true;
+  }
+  return false;
+};
+
+/** Takes the id out of every element inside a noscript: an unrendered subtree gets none (spec 18). */
+const stripNoscriptIds = (stamped: string): string => {
+  const splices: Splice[] = [];
+  for (const el of elementsOf(parseMarkup(stamped))) {
+    const span = idSpan(el);
+    if (span === undefined || !insideNoscript(el)) continue;
+    let from = span.from;
+    while (from > 0 && /\s/.test(stamped[from - 1]!)) from -= 1;
+    splices.push({ from, to: span.to, text: "" });
+  }
+  return applySplices(stamped, splices);
+};
 
 /** Every element of the document in document order, template contents included. */
 const elementsOf = (doc: Document): Element[] => {
@@ -58,10 +85,10 @@ const isSettled = (html: string): boolean => {
  */
 const restoreOutOfScope = (source: string, stamped: string): string => {
   if (stamped === source) return stamped;
-  const before = elementsOf(parseSource(source));
-  const doc = parseSource(stamped);
+  const before = elementsOf(parseMarkup(source));
+  const doc = parseMarkup(stamped);
   const after = elementsOf(doc);
-  if (before.length !== after.length || before.some((el, n) => el.nodeName !== after[n]!.nodeName)) return stamped;
+  if (before.length !== after.length || before.some((el, n) => el.nodeName !== after[n]!.nodeName)) return stripNoscriptIds(stamped);
   const scope = inScope(doc);
   const splices: Splice[] = [];
   after.forEach((el, n) => {
@@ -86,7 +113,7 @@ const restoreOutOfScope = (source: string, stamped: string): string => {
  * The fresh id is minted from the copy's own content, so it follows the package's scheme.
  */
 const freshenDuplicates = (html: string): string => {
-  const doc = parseSource(html);
+  const doc = parseMarkup(html);
   const scope = [...inScope(doc)];
   const assigned = new Set(elementsOf(doc).map((el) => attr(el, ID)).filter((id): id is string => !!id));
   const seen = new Set<string>();
