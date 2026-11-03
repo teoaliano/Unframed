@@ -42,6 +42,8 @@ test("Show on timeline opens the strip, expands the element's row and selects th
   // The row is expanded: its collapse control is there, and the lanes are drawn.
   await expect(timeline(page).getByRole("button", { name: "Collapse Dot" })).toBeVisible();
   // The opacity tween (the second one) is the selected bar.
-  await expect(timeline(page).locator('[data-testid="timeline-bar"][data-selected="true"]')).toHaveCount(1);
-  await expect(timeline(page).locator('[data-testid="timeline-bar"][data-selected="true"]')).toHaveAttribute("data-tween", "1");
+  // The tween's bars are selected (the element's bar and its lane), and no other tween's.
+  const selected = timeline(page).locator('[data-testid="timeline-bar"][data-selected="true"]');
+  await expect.poll(() => selected.count()).toBeGreaterThan(0);
+  for (const bar of await selected.all()) await expect(bar).toHaveAttribute("data-tween", "1");
 });

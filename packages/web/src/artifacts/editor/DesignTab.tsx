@@ -125,6 +125,8 @@ interface View {
   readonly editable: boolean;
   /** Asks the agent to make the field editable, with the read-only elements' chips. */
   readonly ask: () => void;
+  /** Opens the motion's timeline at the tween that animates the field (spec 21, The Design tab link), when an element is animated. */
+  readonly reveal?: (() => void) | undefined;
 }
 
 /** The parameter a view's field is driven by, when it is editable as a dial. */
@@ -144,7 +146,7 @@ const noteText = (text: string) => <p className="m-0 text-xs text-muted-foregrou
  * The line a read-only owner shows under its section, or null when the value is the source's own or locked (the tab says that once).
  * A dial's value is editable with one element selected, so it shows no line then; with several it names its parameter.
  */
-const ownerLine = (owner: FieldOwner, single: boolean, ask: () => void): ReactNode => {
+const ownerLine = (owner: FieldOwner, single: boolean, ask: () => void, reveal?: () => void): ReactNode => {
   if (owner.owner === "source" || owner.owner === "locked") return null;
   if (owner.owner === "script") {
     return (
@@ -156,7 +158,18 @@ const ownerLine = (owner: FieldOwner, single: boolean, ask: () => void): ReactNo
       </>
     );
   }
-  if (owner.owner === "animated") return noteText("Animated by the agent's code.");
+  if (owner.owner === "animated") {
+    return (
+      <>
+        {noteText("Animated by the agent's code.")}
+        {reveal !== undefined && (
+          <Button variant="ghost" size="xs" className="justify-self-start" onClick={reveal}>
+            Show on timeline
+          </Button>
+        )}
+      </>
+    );
+  }
   if (owner.owner !== "dial" || single) return null;
   return noteText(`Set by parameter ${owner.path}.`);
 };
@@ -635,6 +648,8 @@ export interface DesignTabProps {
   readonly onTell: (elements: ChipElement[]) => void;
   /** Ask the agent to make a read-only field editable, with the read-only elements' chips. */
   readonly onAsk: (field: string, elements: ChipElement[]) => void;
+  /** Opens a motion's timeline at the tween that animates a property of an element (spec 21). */
+  readonly onShowOnTimeline?: (element: string, property: string) => void;
 }
 
 /** The value a dial takes for a CSS value written to its field: a number dial takes the number, anything else the text. */
@@ -651,7 +666,7 @@ const normaliserFor = (property: string) => (value: string) => {
   return probe.style.getPropertyValue(property);
 };
 
-export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, onOpenKit, onTell, onAsk }: DesignTabProps) => {
+export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, onOpenKit, onTell, onAsk, onShowOnTimeline }: DesignTabProps) => {
   // The token chip whose popover is open. A preview of a token changes the frame, so the field's owner can change while the popover is up.
   const [openChip, setOpenChip] = useState<{ readonly field: string; readonly named: { readonly token: Token; readonly suffix?: string } } | null>(null);
   const { selection, reports, tree, preparing, prepareError, pending, families, overridden } = session;
@@ -711,7 +726,9 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     const owner = owners.find((candidate) => candidate.owner !== "source") ?? { owner: "source" as const };
     // A dial's value moves its parameter, so it is editable with one element only.
     const ask = () => onAsk(fieldNameOf(property), subjects.filter((_, index) => owners[index]!.owner !== "source").map(chipDataOf));
-    return { value: mixed ? "" : (values[0] ?? ""), mixed, owner, editable: owner.owner === "source" || (owner.owner === "dial" && single), ask };
+    const animated = owners.findIndex((candidate) => candidate.owner === "animated");
+    const reveal = animated === -1 || onShowOnTimeline === undefined ? undefined : () => onShowOnTimeline(subjects[animated]!.id, property);
+    return { value: mixed ? "" : (values[0] ?? ""), mixed, owner, editable: owner.owner === "source" || (owner.owner === "dial" && single), ask, reveal };
   };
 
   /** Writes a value to a property of every selected element, refusing the whole write when one value cannot be written. A dial-owned value moves its dial. */
@@ -805,7 +822,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
 
   const noteOf = (...views: View[]): ReactNode => {
     for (const view of views) {
-      const line = ownerLine(view.owner, single, view.ask);
+      const line = ownerLine(view.owner, single, view.ask, view.reveal);
       if (line !== null) return line;
     }
     return null;

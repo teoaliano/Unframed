@@ -95,6 +95,8 @@ export interface MotionTimelineProps {
   readonly column: number;
   /** The transport the editor made for this motion's player. */
   readonly transport: MotionTransport;
+  /** The Design tab's Show on timeline request: the element and the property it shows, with a count that makes each request new (spec 21). */
+  readonly reveal?: { readonly element: string; readonly property: string; readonly nonce: number } | undefined;
   readonly className?: string;
 }
 
@@ -296,7 +298,7 @@ const RowLine = ({
   );
 };
 
-export const MotionTimeline = ({ title, engine, project, file, session, dials, schema, locked, column, transport, className }: MotionTimelineProps) => {
+export const MotionTimeline = ({ title, engine, project, file, session, dials, schema, locked, column, transport, reveal, className }: MotionTimelineProps) => {
   const [prefs, save] = useTimelinePrefs(engine);
   const { open } = prefs;
   const transportState = useSyncExternalStore(transport.subscribe, transport.getSnapshot);
@@ -344,6 +346,33 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
     const element = scroller.current?.querySelector<HTMLElement>(`[data-testid="timeline-row"][data-row-key="${CSS.escape(firstSelected)}"]`);
     element?.scrollIntoView({ block: "nearest" });
   }, [firstSelected]);
+
+  // Show on timeline (spec 21, The Design tab link): opens the strip, expands the element's row and selects the tween that animates the
+  // property, the earliest after the playhead when there are several, else the last. Each request is handled once, so a new version
+  // does not select again.
+  const handledReveal = useRef(-1);
+  const scrollToTween = useRef<number | null>(null);
+  useEffect(() => {
+    if (reveal === undefined || reveal.nonce === handledReveal.current || current?.value === undefined) return;
+    handledReveal.current = reveal.nonce;
+    const onElement = Array.from(tweens.values()).filter((tween) => tween.targets.includes(reveal.element));
+    const byChannel = onElement.filter((tween) => channelsOf(tween).includes(reveal.property));
+    const candidates = byChannel.length > 0 ? byChannel : onElement;
+    const chosen = candidates.filter((tween) => (numberOf(tween.start, dials) ?? 0) >= transport.current()).sort((a, b) => (numberOf(a.start, dials) ?? 0) - (numberOf(b.start, dials) ?? 0))[0] ?? candidates.at(-1);
+    if (chosen === undefined) return;
+    if (!open) save({ height: prefs.height, open: true });
+    setExpanded((previous) => (previous.has(reveal.element) ? previous : new Set(previous).add(reveal.element)));
+    setSelectedTween(chosen.ref.index);
+    scrollToTween.current = chosen.ref.index;
+  }, [reveal, current?.value, tweens, dials, transport, open, save, prefs.height]);
+  useEffect(() => {
+    const index = scrollToTween.current;
+    if (index === null) return;
+    const bar = scroller.current?.querySelector<HTMLElement>(`[data-testid="timeline-bar"][data-tween="${index}"]`);
+    if (bar === null || bar === undefined) return;
+    scrollToTween.current = null;
+    bar.scrollIntoView({ block: "nearest", inline: "nearest" });
+  });
 
   // A resize drag: the start, and the height it has reached. Saved once, on release.
   const drag = useRef<{ startY: number; startHeight: number; latest: number } | null>(null);
