@@ -6,7 +6,7 @@
  */
 import type { OffTokenFound, SourceEdit } from "@unframed/contracts";
 import { cssName, dialAt, DESIGN_FIELDS, fieldOwner, kitCssNames, resolve, styleValueRefusal, TEXT_STYLE_SUFFIX, tokensForField, type ArtifactKind, type ChipElement, type ComponentDeclaration, type FieldOwner, type Kit, type TextStyleField, type Token } from "@unframed/domain";
-import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Diamond, Link, MessageSquarePlus, SlidersHorizontal, Unlink } from "lucide-react";
+import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Component, Diamond, Link, MessageSquarePlus, SlidersHorizontal, Unlink } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Autocomplete, AutocompleteInput, AutocompleteItem, AutocompleteList, AutocompletePopup } from "~/components/ui/autocomplete";
 import { Button } from "~/components/ui/button";
@@ -647,6 +647,8 @@ export interface DesignTabProps {
   readonly componentOf?: ((tag: string) => { readonly shapeId: string; readonly title: string } | undefined) | undefined;
   /** Opens the editor on a component shape, after the pending burst is written (spec 20, Go to main component). */
   readonly onGoToMain?: ((shapeId: string) => void) | undefined;
+  /** Make component: sends the selected element to the artifact's chat with the fixed instruction (spec 20). */
+  readonly onMake?: ((element: ChipElement) => void) | undefined;
 }
 
 /** The value a dial takes for a CSS value written to its field: a number dial takes the number, anything else the text. */
@@ -663,7 +665,7 @@ const normaliserFor = (property: string) => (value: string) => {
   return probe.style.getPropertyValue(property);
 };
 
-export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, onOpenKit, onTell, onAsk, component, onAskComponent, componentTitle, componentOf, onGoToMain }: DesignTabProps) => {
+export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, onOpenKit, onTell, onAsk, component, onAskComponent, componentTitle, componentOf, onGoToMain, onMake }: DesignTabProps) => {
   // The token chip whose popover is open. A preview of a token changes the frame, so the field's owner can change while the popover is up.
   const [openChip, setOpenChip] = useState<{ readonly field: string; readonly named: { readonly token: Token; readonly suffix?: string } } | null>(null);
   const { selection, reports, tree, preparing, prepareError, pending, families, overridden } = session;
@@ -941,6 +943,8 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     : ownerOf(first!, "background-image");
   const pictureLine = picture === null ? null : ownerLine(pictureOwner, true, () => onAsk("Picture", [chipDataOf(first!)]));
 
+  // Make component (spec 20): one plain element with an id, in a page or motion (never in a sheet, never an instance).
+  const makeShown = single && instance === null && kind !== "component" && first!.report.id !== null && onMake !== undefined;
   // A picked board copy names the variant it shows: `Editing Button · secondary · md`.
   const variant = single && first!.report.variant ? Object.values(first!.report.variant) : null;
   return (
@@ -955,6 +959,17 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
           <MessageSquarePlus aria-hidden />
           Tell the agent
         </Button>
+        {makeShown &&
+          // aria-disabled, not disabled: a disabled button would not show its tooltip.
+          (() => {
+            const button = (
+              <Button variant="outline" size="sm" className="shrink-0" aria-disabled={first!.locked} onClick={() => !first!.locked && onMake?.(chipDataOf(first!))}>
+                <Component aria-hidden />
+                Make component
+              </Button>
+            );
+            return first!.locked ? <Tip label="Unlock it first. The agent replaces it with the component.">{button}</Tip> : button;
+          })()}
       </div>
       {kit !== null && (
         <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">

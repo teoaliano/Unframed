@@ -13,7 +13,7 @@ import { Tabs, TabsList, TabsTab } from "~/components/ui/tabs";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { cn } from "~/lib/utils";
 import { AgentRail } from "../../agent/rail/AgentRail.tsx";
-import { useChatClient } from "../../agent/store.ts";
+import { useChatClient, useProviders } from "../../agent/store.ts";
 import { Tip } from "../../chrome/ui.tsx";
 import { useCanvasProject, useEngine } from "../../context.ts";
 import { ArtifactFrame, outsideUrlOf, type EditMessage } from "../ArtifactFrame.tsx";
@@ -21,6 +21,7 @@ import { kitOf } from "../kit.ts";
 import { kitUi } from "../../kits/state.ts";
 import { KitModePicker } from "../KitMode.tsx";
 import { countUsing } from "../componentPins.ts";
+import { makeComponent } from "./makeComponent.ts";
 import { previewPort } from "../state.ts";
 import { RenderButton } from "../render.tsx";
 import { ComponentSection } from "./ComponentSection.tsx";
@@ -76,6 +77,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   const engine = useEngine();
   const kit = useValue("project kit", () => kitOf(editor), [editor]);
   const chatClient = useChatClient(engine, project);
+  const { statuses } = useProviders(chatClient);
   const facts = useValue(
     "edited artifact",
     () => {
@@ -388,6 +390,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             onAskComponent={askAboutComponent}
             componentOf={componentOf}
             onGoToMain={goToMain}
+            onMake={(element) => void makeComponent({ client: chatClient, statuses, shapeId: String(shapeId), kind: facts.kind, title: displayTitle, element })}
           />
         )}
         {shownPanel === "layers" && (
