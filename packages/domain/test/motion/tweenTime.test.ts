@@ -151,7 +151,7 @@ for (var i = 0; i < 2; i++) { window.__timelines.main.to('#dot', { x: i }, 0); }
       { type: "tween-time", tween: title.ref, duration: 1.25 },
     ]);
     if (!result.ok) throw new Error(result.refusal);
-    expect(result.summary).toEqual(["Moved title visual to 1.5 s", "Set title visual to 1.25 s long"]);
+    expect(result.summary).toEqual(["Moved title visual to 1.5 s", "Set title duration to 1.25 s"]);
   });
 });
 
@@ -184,5 +184,14 @@ describe("tween-time: duration tokens (spec 21, The values panel, a token-owned 
     const detached = apply([{ type: "tween-time", tween: tweenOn(read(tokened.html), "title").ref, duration: 0.6 }], tokened.html, withTokens);
     if (!detached.ok) throw new Error(detached.refusal);
     expect(tweenOn(read(detached.html), "title").duration).toEqual({ kind: "source", value: 0.6 });
+  });
+});
+
+describe("tween-time: the summary names the duration", () => {
+  it("says Set <element> duration to <n> s", () => {
+    const dot = `window.__timelines.main.to('#box', { x: 10, duration: 1 }, 1);`;
+    const source = `<html><body><div id="root" data-composition-id="main" data-start="0" data-duration="6" data-width="640" data-height="360"><div id="c" class="clip" data-start="0" data-duration="6"><div id="box" data-uf-name="Dot 1"></div></div></div>\n<script>\nwindow.__timelines = {};\nwindow.__timelines.main = gsap.timeline({ paused: true });\n${dot}\n</script></body></html>`;
+    const result = applyMotionEdits(source, [{ type: "tween-time", tween: motionTimeline(source).tweens[0]!.ref, duration: 2 }]);
+    expect(result.ok && result.summary).toEqual(["Set Dot 1 duration to 2 s"]);
   });
 });
