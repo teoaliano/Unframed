@@ -864,7 +864,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     const view = viewOf(property);
     const chip = chipFor(property, view);
     return (
-      <Row label={label} mark={dialPathOf(view)} token={chip === null ? withSheet(view, tokenSlot(property, view.editable)) : undefined}>
+      <Row label={label} mark={dialPathOf(view)} token={chip === null ? (withSheet(view, tokenSlot(property, view.editable)) ?? <span aria-hidden className="size-6 shrink-0" />) : undefined}>
         {chip ?? <NumberControl
           label={label}
           value={view.mixed ? "" : (options.format ?? numberOf)(view.value)}
@@ -889,7 +889,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     const view = viewOf(property, (subject) => hexOf(subject.report.computed[property]));
     const chip = chipFor(property, view);
     return (
-      <Row label={label} mark={dialPathOf(view)} token={chip === null ? withSheet(view, tokenSlot(property, view.editable)) : undefined}>
+      <Row label={label} mark={dialPathOf(view)} token={chip === null ? (withSheet(view, tokenSlot(property, view.editable)) ?? <span aria-hidden className="size-6 shrink-0" />) : undefined}>
         {chip ?? <ColourControl label={label} hex={view.value} mixed={view.mixed} disabled={!view.editable} onCommit={(next) => write(property, () => next)} />}
       </Row>
     );
