@@ -230,7 +230,7 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
   });
 }
 
-/** The viewer page's HTML, as the engine writes it into the motion library. The player is made from script: with `ui=editor` it has no controls and no autoplay, so the editor's transport starts it. */
+/** The viewer page's HTML, as the engine writes it into the motion library. The player is made from script: with `ui=editor` it has no controls, autoplay or click-to-play, so the editor's transport starts it. */
 export const viewerPageSource = (): string =>
   [
     "<!doctype html>",
@@ -248,7 +248,8 @@ export const viewerPageSource = (): string =>
     '  var player = document.createElement("hyperframes-player");',
     '  player.setAttribute("runtime-src", "hyperframes-runtime.js");',
     '  player.setAttribute("muted", "");',
-    '  if (!editor) { player.setAttribute("controls", ""); player.setAttribute("autoplay", ""); }',
+    '  if (editor) player.setAttribute("disable-click-to-play", "");',
+    '  else { player.setAttribute("controls", ""); player.setAttribute("autoplay", ""); }',
     "  document.body.appendChild(player);",
     `  (${viewerRelay.toString()})(win, player);`,
     "})(window);",

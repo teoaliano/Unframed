@@ -121,10 +121,14 @@ const Control = ({ label, control }: { readonly label: string; readonly control:
 };
 
 /** A number field that applies on Enter or when it loses focus, and shows its unit after the number. */
-const NumberControl = ({ label, value, unit, editable, onCommit }: { readonly label: string; readonly value: number; readonly unit: string; readonly editable: boolean; readonly onCommit: (value: number) => void }) => (
+const NumberControl = ({ label, value, unit, editable, onCommit }: { readonly label: string; readonly value: number; readonly unit: string; readonly editable: boolean; readonly onCommit: (value: number) => void }) => {
+  // Every commit remounts the field on the value the file holds, so a cleared or refused number shows that value again.
+  const [attempts, setAttempts] = useState(0);
+  return (
   <span className="flex items-center gap-1">
-    <NumberField key={`${label}:${value}`} size="sm" className="w-24" defaultValue={value} format={FORMAT} disabled={!editable} onValueCommitted={(typed) => {
+    <NumberField key={`${label}:${value}:${attempts}`} size="sm" className="w-24" defaultValue={value} format={FORMAT} disabled={!editable} onValueCommitted={(typed) => {
       if (typed !== null && Number.isFinite(typed) && typed !== value) onCommit(typed);
+      setAttempts((count) => count + 1);
     }}>
       <NumberFieldGroup>
         <NumberFieldInput
@@ -138,7 +142,8 @@ const NumberControl = ({ label, value, unit, editable, onCommit }: { readonly la
     </NumberField>
     {unit !== "" && <span className="text-xs text-muted-foreground">{unit}</span>}
   </span>
-);
+  );
+};
 
 /** A colour as a swatch and a text field; Enter or leaving the field applies the typed colour. */
 const ColourField = ({ label, value, editable, onCommit }: { readonly label: string; readonly value: string; readonly editable: boolean; readonly onCommit: (value: string) => void }) => {
