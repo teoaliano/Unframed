@@ -36,6 +36,9 @@ const LABEL_WIDTH = 160;
 /** A bar's edge within this many pixels is its stretch handle (spec 21, Editing on the strip). */
 const EDGE_PIXELS = 6;
 
+/** Rows this far above and below the view stay mounted, so a short scroll shows no gap (spec 21, Layout). */
+const VIEW_OVERSCAN = 240;
+
 /** A press that moves less than this many pixels is a click, not a drag (spec 21, Rows, lanes and diamonds). */
 const DRAG_PIXELS = 3;
 
@@ -412,13 +415,51 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
     [current?.value, names, dials, shownPending, session.liveTweens, expanded, locked, hidden],
   );
   const selected = new Set(session.selection);
+  // The rows are mounted only where they are in view (spec 21, Layout): the scroller's offset and height decide which, and the
+  // rows above and below are spacers of their heights. A row out of view is revealed by moving the scroller to it.
+  const rowsRef = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState({ top: 0, height: 0 });
+  const measureView = () => {
+    const element = scroller.current;
+    if (element === null) return;
+    const next = { top: element.scrollTop - (rowsRef.current?.offsetTop ?? 0), height: element.clientHeight };
+    setView((previous) => (previous.top === next.top && previous.height === next.height ? previous : next));
+  };
+  const rowTops = useMemo(() => {
+    const tops: number[] = [];
+    let total = 0;
+    for (const row of rows) {
+      tops.push(total);
+      total += row.height;
+    }
+    return { tops, total };
+  }, [rows]);
+  const revealRow = (index: number) => {
+    const element = scroller.current;
+    if (element === null || index < 0 || index >= rows.length) return;
+    const top = (rowsRef.current?.offsetTop ?? 0) + rowTops.tops[index]!;
+    const bottom = top + rows[index]!.height;
+    // The ruler stays on top of the time area, so a row under it is out of view.
+    const ruler = 24;
+    if (top < element.scrollTop + ruler) element.scrollTop = top - ruler;
+    else if (bottom > element.scrollTop + element.clientHeight) element.scrollTop = bottom - element.clientHeight;
+  };
+  const rowOfTween = (tween: number) => rows.findIndex((row) => row.bars.some((bar) => bar.tween === tween));
+
   // A selection made in the frame or in Layers scrolls its row into view.
   const [firstSelected] = session.selection;
+  const revealedSelection = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (firstSelected === undefined) return;
-    const element = scroller.current?.querySelector<HTMLElement>(`[data-testid="timeline-row"][data-row-key="${CSS.escape(firstSelected)}"]`);
-    element?.scrollIntoView({ block: "nearest" });
-  }, [firstSelected]);
+    if (firstSelected === undefined) {
+      revealedSelection.current = undefined;
+      return;
+    }
+    if (revealedSelection.current === firstSelected) return;
+    const index = rows.findIndex((row) => (row.element ?? row.key) === firstSelected);
+    if (index < 0) return;
+    revealedSelection.current = firstSelected;
+    revealRow(index);
+  }, [firstSelected, rows]);
 
   // Show on timeline (spec 21, The Design tab link): opens the strip, expands the element's row and selects the tween that animates the
   // property, the earliest after the playhead when there are several, else the last. Each request is handled once, so a new version
@@ -442,7 +483,11 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
     const index = scrollToTween.current;
     if (index === null) return;
     const bar = scroller.current?.querySelector<HTMLElement>(`[data-testid="timeline-bar"][data-tween="${index}"]`);
-    if (bar === null || bar === undefined) return;
+    if (bar === null || bar === undefined) {
+      // Its row is not mounted yet: move the scroller to it, and the bar is found on the render that follows.
+      revealRow(rowOfTween(index));
+      return;
+    }
     scrollToTween.current = null;
     bar.scrollIntoView({ block: "nearest", inline: "nearest" });
   });
@@ -451,6 +496,19 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
   const drag = useRef<{ startY: number; startHeight: number; latest: number } | null>(null);
   const [dragging, setDragging] = useState<number | undefined>(undefined);
   const height = open ? clampTimelineHeight(dragging ?? prefs.height, column) : TRANSPORT_HEIGHT;
+  // Before the first paint the view is measured, so the rows in view are mounted on the frame they first show.
+  useLayoutEffect(() => measureView(), [open, height, rows]);
+  // The rows that are in view, with the overscan above and below: [first, last) of `rows`.
+  const visible = useMemo(() => {
+    const top = view.top - VIEW_OVERSCAN;
+    const bottom = view.top + view.height + VIEW_OVERSCAN;
+    let first = 0;
+    while (first < rows.length && rowTops.tops[first]! + rows[first]!.height <= top) first++;
+    let last = first;
+    while (last < rows.length && rowTops.tops[last]! < bottom) last++;
+    return { first, last };
+  }, [view, rows, rowTops]);
+  const bottomSpace = rowTops.total - (visible.last > visible.first ? rowTops.tops[visible.last - 1]! + rows[visible.last - 1]!.height : rowTops.tops[visible.first] ?? 0);
 
   // The zoom: null is fit (the whole length in the strip's width, which opens the strip), else pixels a second.
   const scroller = useRef<HTMLDivElement>(null);
@@ -1173,7 +1231,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
           }}
         >
           {/* The scroller scrolls the time (Shift and the wheel) and the rows (the wheel); the ruler stays on top. */}
-          <div ref={scroller} data-testid="timeline-scroll" className="relative min-h-0 flex-1 overflow-auto">
+          <div ref={scroller} data-testid="timeline-scroll" className="relative min-h-0 flex-1 overflow-auto" onScroll={measureView}>
             <div data-testid="timeline-track" data-px-per-second={pxPerSecond} className="relative flex min-h-full flex-col" style={{ width: trackTotal }}>
               <div className="sticky top-0 z-10 flex h-6 flex-none">
                 <div className="sticky left-0 z-20 w-40 flex-none border-b border-r bg-card" />
@@ -1228,11 +1286,12 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
                   )}
                 </div>
               </div>
-              <div data-testid="timeline-rows" className="relative flex min-h-0 flex-1 flex-col" onClick={() => setSelectedTween(null)}>
+              <div ref={rowsRef} data-testid="timeline-rows" className="relative flex min-h-0 flex-1 flex-col" onClick={() => setSelectedTween(null)}>
                 {current?.value?.script === "none" && <p className="sticky left-0 p-2 text-xs text-muted-foreground">This motion has no GSAP timeline the editor can read.</p>}
                 {current?.value?.script === "unreadable" && <p className="sticky left-0 p-2 text-xs text-muted-foreground">The timeline script could not be read.</p>}
                 {current?.error !== undefined && <p className="sticky left-0 p-2 text-xs text-muted-foreground">{current.error}</p>}
-                {rows.map((row) => (
+                <div aria-hidden style={{ height: rowTops.tops[visible.first] ?? 0 }} />
+                {rows.slice(visible.first, visible.last).map((row) => (
                   <RowLine
                     key={row.key}
                     row={row}
@@ -1258,6 +1317,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
                     onClipUp={onClipUp}
                   />
                 ))}
+                <div aria-hidden style={{ height: bottomSpace }} />
               </div>
               {length > 0 && length * pxPerSecond < trackWidth && (
                 <div data-testid="timeline-past-end" aria-hidden className="pointer-events-none absolute inset-y-0 bg-background/60" style={{ left: LABEL_WIDTH + length * pxPerSecond, right: 0 }} />
