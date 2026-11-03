@@ -287,7 +287,7 @@ const RowLine = ({
       style={{ height: row.height }}
     >
       {compact ? (
-        <div className="sticky left-0 z-10 flex flex-none items-center justify-center border-b border-r bg-card text-xs" style={{ width: COMPACT_LABEL }}>
+        <div className="sticky left-0 z-10 flex flex-none items-center justify-center overflow-hidden border-b border-r bg-card text-xs" style={{ width: COMPACT_LABEL }}>
           {row.locked && <Lock aria-hidden data-testid="timeline-lock" aria-label="Locked. Unlock it in Layers to edit it." className="absolute bottom-0 right-0 size-2.5 text-muted-foreground" />}
           {/* An element row has two 12 px controls side by side: its disclosure chevron, when it has lanes, and its select. */}
           <div className="flex items-center">
@@ -314,7 +314,7 @@ const RowLine = ({
           </div>
         </div>
       ) : (
-      <div className="sticky left-0 z-10 flex w-40 flex-none items-center gap-1 border-b border-r bg-card pr-1 text-xs" style={{ paddingLeft: 4 + row.depth * 12 }}>
+      <div className="sticky left-0 z-10 flex w-40 flex-none items-center gap-1 overflow-hidden border-b border-r bg-card pr-1 text-xs" style={{ paddingLeft: 4 + row.depth * 12 }}>
         {row.expandable ? (
           <Button variant="ghost" size="icon-tiny" className={HIT_AREA + " size-6"} aria-label={`${row.expanded ? "Collapse" : "Expand"} ${name}`} onClick={onToggle}>
             {row.expanded ? <ChevronDown aria-hidden /> : <ChevronRight aria-hidden />}
