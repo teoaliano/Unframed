@@ -1,8 +1,15 @@
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { injectPins, readComponentSheet, readPins, shapeKind, type ComponentDeclaration, type ComponentRegistry, type PinInjection } from "@unframed/domain";
 import type { InstanceDeclarations } from "@unframed/domain/html";
 import type { TLRecord } from "@tldraw/tlschema";
+
+export const sheetDeclaration = async (folder: string, sheet: string): Promise<ComponentDeclaration | undefined> => {
+  const text = await readFile(join(folder, basename(sheet)), "utf8").catch(() => undefined);
+  if (text === undefined) return undefined;
+  const read = readComponentSheet(text);
+  return read.ok ? read.sheet.declaration : undefined;
+};
 
 export const componentRegistry = async (folder: string, records: ReadonlyArray<TLRecord>, html: string): Promise<ComponentRegistry> => {
   const current = new Map<string, string>();
@@ -14,10 +21,8 @@ export const componentRegistry = async (folder: string, records: ReadonlyArray<T
   const sheets = new Map<string, string>([...current].map(([tag, file]) => [file, tag] as const));
   for (const pin of readPins(html)) {
     if (sheets.has(pin.sheet)) continue;
-    const text = await readFile(join(folder, pin.sheet), "utf8").catch(() => undefined);
-    if (text === undefined) continue;
-    const read = readComponentSheet(text);
-    if (read.ok) sheets.set(pin.sheet, read.sheet.declaration.tag);
+    const declaration = await sheetDeclaration(folder, pin.sheet);
+    if (declaration !== undefined) sheets.set(pin.sheet, declaration.tag);
   }
   return { current, sheets };
 };
@@ -29,16 +34,14 @@ export const instanceDeclarations = async (folder: string, records: ReadonlyArra
   const found = new Map<string, { title: string; declaration: ComponentDeclaration }>();
   for (const pin of readPins(html)) {
     if (found.has(pin.tag)) continue;
-    const text = await readFile(join(folder, pin.sheet), "utf8").catch(() => undefined);
-    if (text === undefined) continue;
-    const read = readComponentSheet(text);
-    if (!read.ok) continue;
+    const declaration = await sheetDeclaration(folder, pin.sheet);
+    if (declaration === undefined) continue;
     const shape = records.find((record) => {
       const props = (record as unknown as { props?: Record<string, unknown> }).props;
       return record.typeName === "shape" && shapeKind((record as { type: string }).type) === "component" && props?.tag === pin.tag;
     });
     const title = (shape as unknown as { props: { title?: unknown } } | undefined)?.props.title;
-    found.set(pin.tag, { title: typeof title === "string" && title !== "" ? title : pin.tag, declaration: read.sheet.declaration });
+    found.set(pin.tag, { title: typeof title === "string" && title !== "" ? title : pin.tag, declaration });
   }
   return found;
 };
