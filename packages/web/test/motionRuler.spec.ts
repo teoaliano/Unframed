@@ -175,3 +175,15 @@ test("the loop range's In and Out handles drag along the ruler, and an In dragge
   expect(reached).toBeGreaterThan(2);
   expect(reached).toBeLessThan(2.5);
 });
+
+test("one Ctrl+wheel notch zooms 1.2x around the cursor", async ({ page, agent }) => {
+  await openStrip(page, agent);
+  const before = await zoomOf(page);
+  const area = await timeline(page).getByTestId("timeline-scroll").boundingBox();
+  if (!area) throw new Error("no time area");
+  await page.mouse.move(area.x + area.width / 2, area.y + area.height / 2);
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, -100);
+  await page.keyboard.up("Control");
+  await expect.poll(async () => (await zoomOf(page)) / before).toBeCloseTo(1.2, 2);
+});

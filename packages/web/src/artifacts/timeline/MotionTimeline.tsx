@@ -1216,7 +1216,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
           onPointerCancel={onResizeUp}
         />
       )}
-      <header data-testid="timeline-transport" className="flex h-10 flex-none items-center gap-1 border-b px-2">
+      <header data-testid="timeline-transport" className="flex min-h-10 flex-none flex-wrap items-center gap-x-1 gap-y-1 border-b px-2 py-1">
         <Tip label={playing ? "Pause (Space)" : "Play (Space)"}>
           <Button variant="ghost" size="icon-sm" aria-label={playing ? "Pause (Space)" : "Play (Space)"} onClick={() => transport.togglePlay()}>
             {playing ? <Pause aria-hidden /> : <Play aria-hidden />}

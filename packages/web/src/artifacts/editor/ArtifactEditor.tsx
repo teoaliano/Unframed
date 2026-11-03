@@ -5,11 +5,12 @@
  */
 import type { ArtifactShapeProps, ComponentUpdate } from "@unframed/contracts";
 import { artifactTitle, dialsWith, editorPreviewViewport, isArtifactKind, mergeDialValues, normaliseDials, previewScale, type ArtifactKind, type ChipElement, type DialsAnnouncement } from "@unframed/domain";
-import { AppWindow, ArrowLeft, Clapperboard, Component, ExternalLink, Hand, MousePointer2, SlidersHorizontal } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { AppWindow, ArrowLeft, Clapperboard, Component, ExternalLink, Hand, MousePointer2, PanelLeft, SlidersHorizontal } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useEditor, useValue, type TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
+import { Sheet, SheetPopup } from "~/components/ui/sheet";
 import { Tabs, TabsList, TabsTab } from "~/components/ui/tabs";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { cn } from "~/lib/utils";
@@ -36,6 +37,20 @@ import { useEditSession, type EditMode } from "./editSession.ts";
 import { makeEditableInstruction, tellAgent } from "./tellAgent.ts";
 import { MotionTimeline } from "../timeline/MotionTimeline.tsx";
 import { MotionTransport, type TransportZone } from "../timeline/transport.ts";
+
+/** Below these window widths the agent rail, then the parameters column, fold into a kit Sheet (spec 09, the editor). */
+const RAIL_FOLDS = "(max-width: 999px)";
+const PARAMETERS_FOLD = "(max-width: 719px)";
+
+const useWindowQuery = (query: string): boolean =>
+  useSyncExternalStore(
+    (changed) => {
+      const list = window.matchMedia(query);
+      list.addEventListener("change", changed);
+      return () => list.removeEventListener("change", changed);
+    },
+    () => window.matchMedia(query).matches,
+  );
 
 export interface ArtifactEditorProps {
   readonly shapeId: TLShapeId;
@@ -247,6 +262,8 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      // A folded rail or parameters sheet takes its own Esc.
+      if (event.key === "Escape" && sheetOpenRef.current) return;
       // Esc ends the innermost open thing first: a motion's values panel (spec 21), then the session's own selections (spec 18).
       if (event.key === "Escape" && !event.defaultPrevented && closePanel.current?.()) {
         event.preventDefault();
@@ -292,6 +309,14 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
     [transport],
   );
   const onEditReady = useCallback((send: (message: unknown) => void) => sessionRef.current.onFrameReady(send), []);
+
+  const railFolded = useWindowQuery(RAIL_FOLDS);
+  const parametersFolded = useWindowQuery(PARAMETERS_FOLD);
+  const [sheetChoice, setSheet] = useState<"agent" | "parameters">();
+  // A folded column's sheet is open only while its column is folded: a wider window closes it.
+  const sheet = (sheetChoice === "agent" && railFolded) || (sheetChoice === "parameters" && parametersFolded) ? sheetChoice : undefined;
+  const sheetOpenRef = useRef(false);
+  sheetOpenRef.current = sheet !== undefined;
 
   const [panel, setPanelState] = useState<Panel>(() => (panelRemembered.get(shapeId) ?? "design") as Panel);
   const setPanel = (next: Panel) => {
@@ -365,21 +390,87 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   // A motion with a file has its timeline in a second row under the centre column (spec 21). Below a 1280 px window
   // the timeline spans the centre and right columns, and the right column stops above it.
   const timeline = facts.kind === "motion" && facts.file !== "";
+  const columns = railFolded ? (parametersFolded ? "grid-cols-[minmax(0,1fr)]" : "grid-cols-[minmax(0,1fr)_320px]") : "grid-cols-[360px_minmax(0,1fr)_320px]";
+  // The parameters column's content: the column itself, or the sheet a narrow window folds it into.
+  const parametersBody = (
+    <>
+      <ColumnHeader>
+        <Tabs value={shownPanel} onValueChange={(next) => setPanel(String(next) as Panel)} className="h-12 min-w-0">
+          <TabsList variant="underline" aria-label="Editor panels">
+            <TabsTab value="design">Design</TabsTab>
+            <TabsTab value="layers">Layers</TabsTab>
+            {!component && (
+              <TabsTab value="parameters">
+                <SlidersHorizontal aria-hidden />
+                Parameters
+              </TabsTab>
+            )}
+          </TabsList>
+        </Tabs>
+      </ColumnHeader>
+      {shownPanel === "design" && (
+        <DesignTab
+          session={session}
+          kind={facts.kind}
+          project={project}
+          dials={current ?? {}}
+          locked={facts.locked}
+          kit={kit}
+          mode={facts.mode}
+          onOpenKit={() => kitUi(editor).update((state) => ({ ...state, open: true }))}
+          onTell={(elements) => tellAgent(chatClient, shapeId, elements)}
+          onAsk={(field, elements) => tellAgent(chatClient, shapeId, elements, makeEditableInstruction(field))}
+          onShowOnTimeline={(element, property) => setReveal({ element, property, nonce: (reveal?.nonce ?? 0) + 1 })}
+          component={component ? session.declaration : null}
+          componentTitle={component ? displayTitle || facts.tag : undefined}
+          onAskComponent={askAboutComponent}
+          componentOf={componentOf}
+          onUpdateComponent={(tag) => acceptUpdates([tag])}
+          onGoToMain={goToMain}
+          onMake={(element) => void makeComponent({ client: chatClient, statuses, shapeId: String(shapeId), kind: facts.kind, title: displayTitle, element })}
+        />
+      )}
+      {shownPanel === "layers" && (
+        <LayersTab
+          session={session}
+          kind={facts.kind}
+          shapeId={shapeId}
+          locked={facts.locked}
+          onLock={setLocked}
+          onTell={(elements) => tellAgent(chatClient, shapeId, elements)}
+        />
+      )}
+      {shownPanel === "parameters" && (
+        <ParametersBody
+          shapeId={shapeId}
+          kind={facts.kind}
+          title={title}
+          announcement={announcement}
+          saved={dials}
+          onWrite={(values) => session.releaseDials(values as Record<string, unknown>)}
+          post={(values) => post.current?.(values)}
+        />
+      )}
+    </>
+  );
   return (
     // Full height. tldraw's watermark stays over its bottom-right corner: tldraw.css lifts the tldraw container above this layer.
     <div
       ref={grid}
       data-testid="artifact-editor"
       className={cn(
-        "pointer-events-auto absolute inset-0 z-[700] box-border grid grid-cols-[360px_minmax(0,1fr)_320px] gap-3 bg-background p-3 font-sans text-foreground",
+        "pointer-events-auto absolute inset-0 z-[700] box-border grid gap-3 bg-background p-3 font-sans text-foreground",
         timeline ? "grid-rows-[minmax(0,1fr)_auto]" : "grid-rows-[minmax(0,1fr)]",
+        columns,
       )}
       {...KEEP_FROM_CANVAS}
     >
-      <section data-editor-column="rail" className={cn(COLUMN, "col-start-1 row-span-full")}>
-        <AgentRail project={project} embedded filterTo={[shapeId]} onOpenEditor={onOpen} onClose={close} />
-      </section>
-      <section data-editor-column="centre" className={cn(COLUMN, "col-start-2 row-start-1")} aria-label={`Editing ${title}`}>
+      {!railFolded && (
+        <section data-editor-column="rail" className={cn(COLUMN, "col-start-1 row-span-full")}>
+          <AgentRail project={project} embedded filterTo={[shapeId]} onOpenEditor={onOpen} onClose={close} />
+        </section>
+      )}
+      <section data-editor-column="centre" className={cn(COLUMN, railFolded ? "col-start-1" : "col-start-2", "row-start-1")} aria-label={`Editing ${title}`}>
         {/* A container, so a narrow column folds its labels into icons rather than overflow. */}
         <ColumnHeader className="@container/editor-header gap-1">
           <Tip label="Back to canvas (Esc)">
@@ -387,13 +478,23 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
               <ArrowLeft aria-hidden />
             </Button>
           </Tip>
+          {railFolded && (
+            <Tip label="Show agent">
+              <Button variant="outline" size="sm" className="shrink-0" aria-label="Show agent" onClick={() => setSheet("agent")}>
+                <PanelLeft aria-hidden />
+                <span className="@max-[520px]/editor-header:sr-only">Show agent</span>
+              </Button>
+            </Tip>
+          )}
           <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
           {/* The title and the use count keep their width and the kind word truncates first, so neither is squeezed away (spec 09, the header). */}
           <span className="flex min-w-0 flex-1 items-baseline gap-2">
-            <span data-testid="artifact-editor-title" className="shrink-0 truncate text-sm font-semibold">
-              {title}
-            </span>
-            <span data-testid="artifact-editor-kind" className="min-w-0 truncate text-sm text-muted-foreground @max-[760px]/editor-header:hidden">
+            <Tip label={title}>
+              <span data-testid="artifact-editor-title" className="min-w-0 truncate text-sm font-semibold">
+                {title}
+              </span>
+            </Tip>
+            <span data-testid="artifact-editor-kind" className="min-w-0 shrink truncate text-sm text-muted-foreground @max-[760px]/editor-header:hidden">
               {facts.kind}
             </span>
             {component && uses > 0 && (
@@ -414,14 +515,18 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
                 if (picked === "edit" || picked === "interact") session.setMode(picked);
               }}
             >
-              <Toggle value="edit" aria-label="Edit" title="Edit (V)">
-                <MousePointer2 aria-hidden />
-                <span className="@max-[520px]/editor-header:sr-only">Edit</span>
-              </Toggle>
-              <Toggle value="interact" aria-label="Interact" title="Interact (I)">
-                <Hand aria-hidden />
-                <span className="@max-[520px]/editor-header:sr-only">Interact</span>
-              </Toggle>
+              <Tip label="Edit (V)">
+                <Toggle value="edit" aria-label="Edit">
+                  <MousePointer2 aria-hidden />
+                  <span className="@max-[520px]/editor-header:sr-only">Edit</span>
+                </Toggle>
+              </Tip>
+              <Tip label="Interact (I)">
+                <Toggle value="interact" aria-label="Interact">
+                  <Hand aria-hidden />
+                  <span className="@max-[520px]/editor-header:sr-only">Interact</span>
+                </Toggle>
+              </Tip>
             </ToggleGroup>
           )}
           {facts.file !== "" && kit && <KitModePicker shapeId={shapeId} variant="header" />}
@@ -481,6 +586,14 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
               </Button>
             </Tip>
           )}
+          {parametersFolded && (
+            <Tip label="Show parameters">
+              <Button variant="outline" size="sm" className="shrink-0" aria-label="Show parameters" onClick={() => setSheet("parameters")}>
+                <SlidersHorizontal aria-hidden />
+                <span className="@max-[520px]/editor-header:sr-only">Show parameters</span>
+              </Button>
+            </Tip>
+          )}
         </ColumnHeader>
         <div ref={body} className={cn("relative flex min-h-0 flex-1", viewport !== undefined && "items-center justify-center overflow-hidden")}>
           {facts.file === "" ? (
@@ -524,65 +637,11 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
         </div>
       </section>
       {/* The bottom 40 px hold tldraw's watermark, which sits over this corner, so the controls end above it. */}
-      <section data-editor-column="parameters" className={cn(COLUMN, "col-start-3 row-span-full pb-10 max-[1279px]:row-span-1 max-[1279px]:row-start-1")}>
-        <ColumnHeader>
-          <Tabs value={shownPanel} onValueChange={(next) => setPanel(String(next) as Panel)} className="h-12 min-w-0">
-            <TabsList variant="underline" aria-label="Editor panels">
-              <TabsTab value="design">Design</TabsTab>
-              <TabsTab value="layers">Layers</TabsTab>
-              {!component && (
-                <TabsTab value="parameters">
-                  <SlidersHorizontal aria-hidden />
-                  Parameters
-                </TabsTab>
-              )}
-            </TabsList>
-          </Tabs>
-        </ColumnHeader>
-        {shownPanel === "design" && (
-          <DesignTab
-            session={session}
-            kind={facts.kind}
-            project={project}
-            dials={current ?? {}}
-            locked={facts.locked}
-            kit={kit}
-            mode={facts.mode}
-            onOpenKit={() => kitUi(editor).update((state) => ({ ...state, open: true }))}
-            onTell={(elements) => tellAgent(chatClient, shapeId, elements)}
-            onAsk={(field, elements) => tellAgent(chatClient, shapeId, elements, makeEditableInstruction(field))}
-            onShowOnTimeline={(element, property) => setReveal({ element, property, nonce: (reveal?.nonce ?? 0) + 1 })}
-            component={component ? session.declaration : null}
-            componentTitle={component ? displayTitle || facts.tag : undefined}
-            onAskComponent={askAboutComponent}
-            componentOf={componentOf}
-            onUpdateComponent={(tag) => acceptUpdates([tag])}
-            onGoToMain={goToMain}
-            onMake={(element) => void makeComponent({ client: chatClient, statuses, shapeId: String(shapeId), kind: facts.kind, title: displayTitle, element })}
-          />
-        )}
-        {shownPanel === "layers" && (
-          <LayersTab
-            session={session}
-            kind={facts.kind}
-            shapeId={shapeId}
-            locked={facts.locked}
-            onLock={setLocked}
-            onTell={(elements) => tellAgent(chatClient, shapeId, elements)}
-          />
-        )}
-        {shownPanel === "parameters" && (
-          <ParametersBody
-            shapeId={shapeId}
-            kind={facts.kind}
-            title={title}
-            announcement={announcement}
-            saved={dials}
-            onWrite={(values) => session.releaseDials(values as Record<string, unknown>)}
-            post={(values) => post.current?.(values)}
-          />
-        )}
-      </section>
+      {!parametersFolded && (
+        <section data-editor-column="parameters" className={cn(COLUMN, railFolded ? "col-start-2" : "col-start-3", "row-span-full pb-10 max-[1279px]:row-span-1 max-[1279px]:row-start-1")}>
+          {parametersBody}
+        </section>
+      )}
       {timeline && (
         <MotionTimeline
           key={shapeId}
@@ -601,9 +660,19 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
           kit={kit}
           mode={facts.mode}
           reveal={reveal}
-          className="col-start-2 row-start-2 max-[1279px]:col-span-2"
+          className={railFolded ? (parametersFolded ? "col-start-1 row-start-2" : "col-start-1 col-span-2 row-start-2") : "col-start-2 row-start-2 max-[1279px]:col-span-2"}
         />
       )}
+      <Sheet open={sheet === "agent"} onOpenChange={(open) => setSheet(open ? "agent" : undefined)}>
+        <SheetPopup side="left" aria-label="Agent" showCloseButton={false} className="w-[min(88vw,24rem)]">
+          <AgentRail project={project} inSheet filterTo={[shapeId]} onOpenEditor={onOpen} onClose={() => setSheet(undefined)} />
+        </SheetPopup>
+      </Sheet>
+      <Sheet open={sheet === "parameters"} onOpenChange={(open) => setSheet(open ? "parameters" : undefined)}>
+        <SheetPopup side="right" aria-label="Parameters" showCloseButton={false} className="w-[min(88vw,24rem)]">
+          <div className="flex min-h-0 flex-1 flex-col">{parametersBody}</div>
+        </SheetPopup>
+      </Sheet>
     </div>
   );
 };
