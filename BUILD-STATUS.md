@@ -116,6 +116,9 @@ Open for the person:
 - Spec 19: a text style's off-token Use token writes all five longhands.
 - Spec 19: the Used by count path has no browser test.
 - CI: the `test` job runs the engine, domain and whole browser suite on one runner; with specs 18 and 19 it passed 30 minutes, so its limit is 45. Sharding the browser suite across runners would bring it back down.
+- Undo and selection: tldraw records selection changes as undo steps, so after opening an editor (which selects the shape) and closing it, the first Cmd-Z restores the earlier selection and the next one undoes the edit before it. This is canvas-wide tldraw behaviour, not specific to spec 20; changing it would change undo everywhere.
+- Spec 20: a token written inside a shorthand in a component rule (`background: var(...)`) is not offered as a token rule edit; only a rule's own longhand declaration is.
+- Spec 20: `component.updates` can answer empty right after an undo, because the engine reads the room before the undo syncs; the editor retries up to 8 times at 250 ms instead of the engine waiting.
 - Spec 01: the Electron 44 boot and the `dist` branch publish run only in the tag workflow. `scripts/electronSmoke.ts` ran with plain Node as the binary; `scripts/publishDist.sh` never ran.
 - Spec 04, task 21: the test moves the image through the room, not with a mouse drag, because dragging a selected shape moves the whole selection.
 - Spec 05: logic duplicated between `textRuns.ts` and spec 03's `runs.ts` (run-id minting, the `of` lookup, top-index lookup), and between the image and text catalogue functions.
