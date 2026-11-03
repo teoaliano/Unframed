@@ -5,7 +5,7 @@
  * The rows' label column sits beside the time area; the time area's origin is the track's left edge
  * after that column, so the ruler and the playhead share one coordinate system with the bars.
  */
-import { ChevronDown, ChevronLeft, ChevronRight, Lock, Maximize2, PanelBottom, Pause, Play, Repeat, Volume2, VolumeX, ZoomIn, ZoomOut } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Code, Film, Layers, Lock, Maximize2, Minus, PanelBottom, Pause, Play, Repeat, Square, Volume2, VolumeX, ZoomIn, ZoomOut } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { clampDialValue, dialAt, fitZoom, rulerStep, snapMove, snapTime, zoomAt, zoomButton, type DialSchema, type Kit, type Owner, type SnapTarget, type Tween, type TweenRef } from "@unframed/domain";
 import type { SourceEdit } from "@unframed/contracts";
@@ -32,6 +32,10 @@ const TRANSPORT_HEIGHT = 40;
 
 /** The label column beside the time area: 160 px (spec 21, Layout). */
 const LABEL_WIDTH = 160;
+
+/** Under this strip width the label column is 24 px of icons, each name in a tooltip (spec 21, Layout). */
+const COMPACT_WIDTH = 900;
+const COMPACT_LABEL = 24;
 
 /** A bar's edge within this many pixels is its stretch handle (spec 21, Editing on the strip). */
 const EDGE_PIXELS = 6;
@@ -192,6 +196,7 @@ const LoopHandle = ({
 /** One row: its label beside the time area, its bars, and its diamonds. A lane is a thinner row under its element. */
 const RowLine = ({
   row,
+  compact,
   pxPerSecond,
   timeWidth,
   selected,
@@ -211,6 +216,8 @@ const RowLine = ({
   onClipUp,
 }: {
   readonly row: RowView;
+  /** The label column is icons only, each name in a tooltip (spec 21, Layout). */
+  readonly compact: boolean;
   readonly pxPerSecond: number;
   readonly timeWidth: number;
   readonly selected: boolean;
@@ -245,6 +252,34 @@ const RowLine = ({
       className={cn("flex flex-none", selected && "bg-accent/40", runtime && "text-muted-foreground", row.hidden && "opacity-50")}
       style={{ height: row.height }}
     >
+      {compact ? (
+        <div className="sticky left-0 z-10 flex flex-none items-center justify-center border-b border-r bg-card text-xs" style={{ width: COMPACT_LABEL }}>
+          {row.locked && <Lock aria-hidden data-testid="timeline-lock" aria-label="Locked. Unlock it in Layers to edit it." className="absolute bottom-0 right-0 size-2.5 text-muted-foreground" />}
+          {/* An element row has two 12 px controls side by side: its disclosure chevron, when it has lanes, and its select. */}
+          <div className="flex items-center">
+            {row.expandable && (
+              <Tip label={name}>
+                <Button variant="ghost" size="icon-micro" className="size-3" aria-label={`${row.expanded ? "Collapse" : "Expand"} ${name}`} onClick={onToggle}>
+                  {row.expanded ? <ChevronDown aria-hidden className="size-2.5" /> : <ChevronRight aria-hidden className="size-2.5" />}
+                </Button>
+              </Tip>
+            )}
+            {row.kind === "element" && row.element !== null ? (
+              <Tip label={name}>
+                <Button variant="ghost" size="icon-micro" className="size-3" aria-label={`Select ${name}`} onClick={() => onSelectElement(row.element!)}>
+                  <Square aria-hidden className="size-2.5" />
+                </Button>
+              </Tip>
+            ) : !row.expandable ? (
+              <Tip label={name}>
+                <span role="img" aria-label={name} className="inline-flex size-3 items-center justify-center text-muted-foreground">
+                  {row.kind === "clip" ? <Film aria-hidden className="size-2.5" /> : row.kind === "composition" ? <Layers aria-hidden className="size-2.5" /> : row.kind === "runtime" ? <Code aria-hidden className="size-2.5" /> : <Minus aria-hidden className="size-2.5" />}
+                </span>
+              </Tip>
+            ) : null}
+          </div>
+        </div>
+      ) : (
       <div className="sticky left-0 z-10 flex w-40 flex-none items-center gap-1 border-b border-r bg-card pr-1 text-xs" style={{ paddingLeft: 4 + row.depth * 12 }}>
         {row.expandable ? (
           <Button variant="ghost" size="icon-tiny" aria-label={`${row.expanded ? "Collapse" : "Expand"} ${name}`} onClick={onToggle}>
@@ -262,6 +297,7 @@ const RowLine = ({
         )}
         {row.locked && <Lock aria-hidden data-testid="timeline-lock" aria-label="Locked. Unlock it in Layers to edit it." className="ml-auto size-3 flex-none text-muted-foreground" />}
       </div>
+      )}
       <div className="relative flex-none border-b" style={{ width: timeWidth, height: row.height }}>
         {row.span !== null && (
           <div
@@ -515,9 +551,14 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
   const scroller = useRef<HTMLDivElement>(null);
   const rulerTime = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
+  const labelWidth = width > 0 && width < COMPACT_WIDTH ? COMPACT_LABEL : LABEL_WIDTH;
+  const compact = labelWidth === COMPACT_LABEL;
+  // The clock and the zoom handlers, which run outside React's renders, read the label width from here.
+  const labelRef = useRef(labelWidth);
+  labelRef.current = labelWidth;
   const [zoom, setZoom] = useState<number | null>(null);
   // Fit shows the whole length in the time area, which is the strip's width less the label column.
-  const fit = width > LABEL_WIDTH && length > 0 ? fitZoom(width - LABEL_WIDTH, length) : 0;
+  const fit = width > labelWidth && length > 0 ? fitZoom(width - labelWidth, length) : 0;
   const pxPerSecond = zoom ?? fit;
   // The clock reads the zoom from here, outside React, and the zoom handlers read the fit the same way.
   const pxRef = useRef(pxPerSecond);
@@ -541,7 +582,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
       const parts = readoutParts(time, total);
       if (clock.current) clock.current.textContent = parts.clock;
       if (frame.current) frame.current.textContent = parts.frame;
-      if (playhead.current) playhead.current.style.transform = `translateX(${LABEL_WIDTH + time * pxRef.current}px)`;
+      if (playhead.current) playhead.current.style.transform = `translateX(${labelRef.current + time * pxRef.current}px)`;
     });
     return () => transport.setPainter(undefined);
   }, [transport]);
@@ -567,9 +608,9 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
       event.preventDefault();
       const rect = element.getBoundingClientRect();
       // The time starts after the label column, so the anchor is measured from there.
-      const next = zoomAt({ pxPerSecond: pxRef.current, scrollLeft: element.scrollLeft - LABEL_WIDTH }, { deltaY: event.deltaY, cursorX: event.clientX - rect.left, fit: fitRef.current });
+      const next = zoomAt({ pxPerSecond: pxRef.current, scrollLeft: element.scrollLeft - labelRef.current }, { deltaY: event.deltaY, cursorX: event.clientX - rect.left, fit: fitRef.current });
       setZoom(next.pxPerSecond);
-      pendingScroll.current = next.scrollLeft + LABEL_WIDTH;
+      pendingScroll.current = next.scrollLeft + labelRef.current;
     };
     element.addEventListener("wheel", onWheel, { passive: false });
     return () => element.removeEventListener("wheel", onWheel);
@@ -578,9 +619,9 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
   const zoomBy = (direction: "in" | "out") => {
     const element = scroller.current;
     if (!element || fitRef.current <= 0) return;
-    const next = zoomButton({ pxPerSecond: pxRef.current, scrollLeft: element.scrollLeft - LABEL_WIDTH, viewport: element.clientWidth, playhead: transport.current(), fit: fitRef.current }, direction);
+    const next = zoomButton({ pxPerSecond: pxRef.current, scrollLeft: element.scrollLeft - labelRef.current, viewport: element.clientWidth, playhead: transport.current(), fit: fitRef.current }, direction);
     setZoom(next.pxPerSecond);
-    pendingScroll.current = next.scrollLeft + LABEL_WIDTH;
+    pendingScroll.current = next.scrollLeft + labelRef.current;
   };
   const fitToLength = () => {
     setZoom(null);
@@ -1119,8 +1160,8 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
   const step = pxPerSecond > 0 ? rulerStep(pxPerSecond) : 1;
   const ticks: number[] = [];
   for (let at = 0; length > 0 && at <= length + 1e-9; at += step) ticks.push(Math.round(at * 1000) / 1000);
-  const trackWidth = Math.max(length * pxPerSecond, width - LABEL_WIDTH);
-  const trackTotal = trackWidth + LABEL_WIDTH;
+  const trackWidth = Math.max(length * pxPerSecond, width - labelWidth);
+  const trackTotal = trackWidth + labelWidth;
 
   return (
     <section
@@ -1237,7 +1278,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
           <div ref={scroller} data-testid="timeline-scroll" className="relative min-h-0 flex-1 overflow-auto" onScroll={measureView}>
             <div data-testid="timeline-track" data-px-per-second={pxPerSecond} className="relative flex min-h-full flex-col" style={{ width: trackTotal }}>
               <div className="sticky top-0 z-10 flex h-6 flex-none">
-                <div className="sticky left-0 z-20 w-40 flex-none border-b border-r bg-card" />
+                <div className="sticky left-0 z-20 flex-none border-b border-r bg-card" style={{ width: labelWidth }} />
                 <div
                   ref={rulerTime}
                   data-testid="timeline-ruler"
@@ -1298,6 +1339,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
                   <RowLine
                     key={row.key}
                     row={row}
+                    compact={compact}
                     pxPerSecond={pxPerSecond}
                     timeWidth={trackWidth}
                     selected={row.element !== null && selected.has(row.element)}
@@ -1323,10 +1365,10 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
                 <div aria-hidden style={{ height: bottomSpace }} />
               </div>
               {length > 0 && length * pxPerSecond < trackWidth && (
-                <div data-testid="timeline-past-end" aria-hidden className="pointer-events-none absolute inset-y-0 bg-background/60" style={{ left: LABEL_WIDTH + length * pxPerSecond, right: 0 }} />
+                <div data-testid="timeline-past-end" aria-hidden className="pointer-events-none absolute inset-y-0 bg-background/60" style={{ left: labelWidth + length * pxPerSecond, right: 0 }} />
               )}
               {guide !== null && (
-                <div data-testid="timeline-snap-guide" aria-hidden className="pointer-events-none absolute inset-y-0 w-px bg-foreground/70" style={{ left: LABEL_WIDTH + guide * pxPerSecond }} />
+                <div data-testid="timeline-snap-guide" aria-hidden className="pointer-events-none absolute inset-y-0 w-px bg-foreground/70" style={{ left: labelWidth + guide * pxPerSecond }} />
               )}
               <div ref={playhead} data-testid="timeline-playhead" aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-px bg-primary" />
             </div>

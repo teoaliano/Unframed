@@ -110,10 +110,43 @@ test("a hidden element's row is greyed, and its bars still take a drag", async (
   await expect(row(page, "Dot 1")).not.toHaveClass(/opacity-50/);
 });
 
+test("in a strip narrower than 900 px the label column collapses to 24 px of icons, and each name is in a tooltip", async ({ page, agent }) => {
+  // A window of 1100 px gives the strip under 900 px: the centre and right columns share it.
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await openRows(page, agent);
+  const strip = await timeline(page).boundingBox();
+  if (!strip) throw new Error("no strip");
+  expect(strip.width).toBeLessThan(900);
+  const label = await row(page, "Dot 1").locator("xpath=./div[1]").boundingBox();
+  if (!label) throw new Error("no label column");
+  expect(label.width).toBeLessThanOrEqual(24);
+  // The row's select control is still there, named, and its name shows in a tooltip.
+  const select = row(page, "Dot 1").getByRole("button", { name: "Select Dot 1" });
+  await expect(select).toBeVisible();
+  // The name is not written in the row, so its text appears only in the tooltip.
+  await expect(timeline(page).getByText("Dot 1", { exact: true })).toHaveCount(0);
+  await select.hover();
+  await expect(page.getByText("Dot 1", { exact: true })).toBeVisible();
+});
+
+test("in a strip of 900 px or more the label column is 160 px and shows each name", async ({ page, agent }) => {
+  await page.setViewportSize({ width: 2200, height: 900 });
+  await openRows(page, agent);
+  const strip = await timeline(page).boundingBox();
+  if (!strip) throw new Error("no strip");
+  expect(strip.width).toBeGreaterThanOrEqual(900);
+  const label = await row(page, "Dot 1").locator("xpath=./div[1]").boundingBox();
+  if (!label) throw new Error("no label column");
+  expect(label.width).toBeCloseTo(160, 0);
+  await expect(row(page, "Dot 1").getByText("Dot 1", { exact: true })).toBeVisible();
+});
+
 test("a row selects its element in the frame, and an element picked in the frame selects its row", async ({ page, agent }) => {
   await openRows(page, agent);
   await expect(region(page).getByRole("group", { name: "Mode" }).getByRole("button", { name: "Edit", exact: true })).toHaveAttribute("aria-pressed", "true");
 
+  // Dot 3 is the last element row, below the strip's height: rows out of view are not mounted, so the strip is scrolled to it.
+  await timeline(page).getByTestId("timeline-scroll").evaluate((element) => (element.scrollTop = element.scrollHeight));
   await row(page, "Dot 3").getByRole("button", { name: "Select Dot 3" }).click();
   await expect(outline(page, "selected")).toHaveCount(1, { timeout: 10_000 });
   await expect(row(page, "Dot 3")).toHaveAttribute("data-selected", "true");
