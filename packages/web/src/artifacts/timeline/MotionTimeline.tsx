@@ -188,16 +188,16 @@ const RowLine = ({
     >
       <div className="sticky left-0 z-10 flex w-40 flex-none items-center gap-1 border-b border-r bg-card pr-1 text-xs" style={{ paddingLeft: 4 + row.depth * 12 }}>
         {row.expandable ? (
-          <button type="button" aria-label={`${row.expanded ? "Collapse" : "Expand"} ${name}`} className="grid size-4 flex-none place-items-center" onClick={onToggle}>
-            {row.expanded ? <ChevronDown aria-hidden className="size-3" /> : <ChevronRight aria-hidden className="size-3" />}
-          </button>
+          <Button variant="ghost" size="icon-tiny" aria-label={`${row.expanded ? "Collapse" : "Expand"} ${name}`} onClick={onToggle}>
+            {row.expanded ? <ChevronDown aria-hidden /> : <ChevronRight aria-hidden />}
+          </Button>
         ) : (
           <span className="size-4 flex-none" />
         )}
         {row.kind === "element" && row.element !== null ? (
-          <button type="button" aria-label={`Select ${name}`} className="truncate text-left" onClick={() => onSelectElement(row.element!)}>
-            {name}
-          </button>
+          <Button variant="ghost" size="xs" aria-label={`Select ${name}`} onClick={() => onSelectElement(row.element!)}>
+            <span className="truncate">{name}</span>
+          </Button>
         ) : (
           <span className={cn("truncate", row.kind === "composition" && "font-medium", row.kind === "clip" && "font-medium")}>{name}</span>
         )}
