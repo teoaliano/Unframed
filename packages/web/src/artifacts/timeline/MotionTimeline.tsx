@@ -6,7 +6,7 @@
  * after that column, so the ruler and the playhead share one coordinate system with the bars.
  */
 import { ChevronDown, ChevronLeft, ChevronRight, Code, Film, Layers, Lock, Maximize2, Minus, PanelBottom, Pause, Play, Repeat, Square, Volume2, VolumeX, ZoomIn, ZoomOut } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent, type KeyboardEvent as ReactKeyboardEvent, type CSSProperties } from "react";
 import { clampDialValue, dialAt, fitZoom, rulerStep, snapMove, snapTime, zoomAt, zoomButton, type DialSchema, type Kit, type Owner, type SnapTarget, type Tween, type TweenRef } from "@unframed/domain";
 import type { SourceEdit } from "@unframed/contracts";
 import type { ChipElement } from "@unframed/domain";
@@ -33,6 +33,9 @@ const TRANSPORT_HEIGHT = 40;
 
 /** The label column beside the time area: 160 px (spec 21, Layout). */
 const LABEL_WIDTH = 160;
+
+/** Room the fit leaves after the motion's end, so the last keyframe's hit area stays inside the strip. */
+const END_INSET = 24;
 
 /** Under this strip width the label column is 24 px of icons, each name in a tooltip (spec 21, Layout). */
 const COMPACT_WIDTH = 480;
@@ -272,6 +275,21 @@ const RowLine = ({
   const runtime = row.kind === "runtime";
   const name = row.name;
   const lanes = laneOf(row.bars);
+  // A keyframe's hit area is 24 px, but no wider than the room to its nearest neighbour in the row: two keyframes closer than that split
+  // the presses between them, so the press goes to the one nearer it (spec 21, Rows, lanes and diamonds). Each side adds half of what is left.
+  const keyframes = row.bars.flatMap((bar) => (bar.copy ? [] : bar.diamonds));
+  const hitSide = (at: number): number => {
+    let gap = Infinity;
+    let skipped = false;
+    for (const other of keyframes) {
+      if (other === at && !skipped) {
+        skipped = true;
+        continue;
+      }
+      gap = Math.min(gap, Math.abs(other - at) * pxPerSecond);
+    }
+    return Math.max(0, (Math.min(24, gap) - 10) / 2);
+  };
   return (
     <div
       data-testid="timeline-row"
@@ -413,8 +431,8 @@ const RowLine = ({
                     data-tween={bar.tween}
                     data-target={bar.target}
                     data-fraction={fraction}
-                    className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rotate-45 bg-foreground before:absolute before:-inset-[7px] before:-rotate-45 before:content-[''] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    style={{ left: at * pxPerSecond }}
+                    className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rotate-45 bg-foreground before:absolute before:-inset-y-[7px] before:-inset-x-[var(--hit-side)] before:-rotate-45 before:content-[''] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    style={{ left: at * pxPerSecond, "--hit-side": `${hitSide(at)}px` } as CSSProperties}
                     onPointerDown={(event) => {
                       event.stopPropagation();
                       onDiamondDown(bar, event);
@@ -601,7 +619,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
   labelRef.current = labelWidth;
   const [zoom, setZoom] = useState<number | null>(null);
   // Fit shows the whole length in the time area, which is the strip's width less the label column.
-  const fit = width > labelWidth && length > 0 ? fitZoom(width - labelWidth, length) : 0;
+  const fit = width > labelWidth && length > 0 ? fitZoom(width - labelWidth - END_INSET, length) : 0;
   const pxPerSecond = zoom === null ? fit : zoom * fit;
   // The clock reads the zoom from here, outside React, and the zoom handlers read the fit the same way.
   const pxRef = useRef(pxPerSecond);
@@ -1240,6 +1258,8 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
   const ticks: number[] = [];
   for (let at = 0; length > 0 && at <= length + 1e-9; at += step) ticks.push(Math.round(at * 1000) / 1000);
   const trackWidth = Math.max(length * pxPerSecond, width - labelWidth);
+  // The end label's room: about 40 px for its text to the right of the end line.
+  const endFlip = length * pxPerSecond + 40 > trackWidth;
   const trackTotal = trackWidth + labelWidth;
 
   return (
@@ -1391,7 +1411,12 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
                     </span>
                   ))}
                   {length > 0 && (
-                    <span data-testid="timeline-end" className="pointer-events-none absolute inset-y-0 border-l-2 border-foreground pl-1 text-[10px] leading-6 font-medium" style={{ left: length * pxPerSecond }}>
+                    // Its label sits left of the end line where the strip has no room for it to the right, so it never runs past the strip's edge.
+                    <span
+                      data-testid="timeline-end"
+                      className={cn("pointer-events-none absolute inset-y-0 border-foreground text-[10px] leading-6 font-medium", endFlip ? "border-r-2 pr-1 text-right" : "border-l-2 pl-1")}
+                      style={{ left: length * pxPerSecond, transform: endFlip ? "translateX(-100%)" : undefined }}
+                    >
                       {tickLabel(length)}
                     </span>
                   )}
