@@ -3,7 +3,7 @@
  * import, the merge and `kit_write` share one set of rules. All or nothing: the first op
  * that breaks a rule stops the list and nothing is written.
  */
-import { kitRefusal, modeRefusal } from "./rules.ts";
+import { GUIDANCE_SENTENCE, kitRefusal, modeRefusal } from "./rules.ts";
 import { cssName } from "./runtime.ts";
 import type { Kit, Token, TokenType, TokenValue } from "./types.ts";
 
@@ -19,7 +19,8 @@ export type KitOp =
   | { op: "renameMode"; name: string; to: string }
   | { op: "deleteMode"; name: string }
   | { op: "setDefaultMode"; name: string }
-  | { op: "reorder"; paths: string[] };
+  | { op: "reorder"; paths: string[] }
+  | { op: "setGuidance"; guidance: string };
 
 /** The result: the kit (null after `remove`), or the first refusal with its op, counted from 1. */
 export type KitOpsResult = { ok: true; kit: Kit | null } | { ok: false; op: number; refusal: string };
@@ -130,6 +131,12 @@ const applyOne = (current: Kit | null, op: KitOp): Kit | null => {
     case "setDefaultMode":
       modeNamed(kit, op.name);
       return { ...kit, modes: [op.name, ...kit.modes.filter((mode) => mode !== op.name)] };
+
+    case "setGuidance": {
+      if (typeof op.guidance !== "string") refuse(GUIDANCE_SENTENCE);
+      const { guidance: _old, ...rest } = kit;
+      return op.guidance.trim() === "" ? rest : { ...rest, guidance: op.guidance };
+    }
 
     case "reorder": {
       const listed = new Set<string>();

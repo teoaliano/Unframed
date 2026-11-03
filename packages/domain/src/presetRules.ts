@@ -75,7 +75,7 @@ export interface KitPreset {
   readonly name: string;
   readonly summary: string;
   readonly kind: "kit";
-  readonly kit: { readonly name: string; readonly modes: ReadonlyArray<string>; readonly tokens: ReadonlyArray<Token> };
+  readonly kit: { readonly name: string; readonly modes: ReadonlyArray<string>; readonly tokens: ReadonlyArray<Token>; readonly guidance?: string | undefined };
   readonly revision: number;
   readonly needs?: undefined;
   readonly medium?: undefined;

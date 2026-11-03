@@ -25,6 +25,7 @@ export const KitDefinition = Schema.Struct({
   name: Schema.String,
   modes: Schema.Array(Schema.String),
   tokens: Schema.Array(KitDefinitionToken),
+  guidance: Schema.optionalKey(Schema.String),
 });
 export type KitDefinition = typeof KitDefinition.Type;
 
@@ -77,7 +78,7 @@ export interface Token {
 export interface KitLink {
   presetId: string;
   revision: number;
-  base: { modes: string[]; tokens: Token[] };
+  base: { modes: string[]; tokens: Token[]; guidance?: string };
 }
 
 export interface Kit {
@@ -87,5 +88,7 @@ export interface Kit {
   modes: string[];
   /** In the order the dialog shows them. */
   tokens: Token[];
+  /** Markdown from the person on how to use the brand: voice, layout, do's and don'ts. */
+  guidance?: string;
   from?: KitLink;
 }

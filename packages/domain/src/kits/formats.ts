@@ -21,6 +21,12 @@ export interface ImportFragment {
   readonly tokens: Token[];
   /** Tokens and declarations the import could not read. */
   readonly skipped: number;
+  /** What was skipped, by name, when the format can name it (a DESIGN.md's front matter entries). */
+  readonly skippedNames?: ReadonlyArray<string>;
+  /** True when the values belong to no mode: they go to the kit's default mode, and add none. */
+  readonly modeless?: boolean;
+  /** Markdown the kit takes as its guidance. */
+  readonly guidance?: string;
 }
 
 export type ImportResult = { ok: true; fragment: ImportFragment } | { ok: false; refusal: string };
@@ -184,6 +190,7 @@ export const fromDtcg = (files: ReadonlyArray<ImportFile>): ImportResult => {
   const modes: string[] = [];
   let skipped = 0;
   let name: string | undefined;
+  let guidance: string | undefined;
 
   for (const file of files) {
     let root: unknown;
@@ -196,6 +203,7 @@ export const fromDtcg = (files: ReadonlyArray<ImportFile>): ImportResult => {
     const extension = isRecord(root["$extensions"]) && isRecord(root["$extensions"][UNFRAMED]) ? (root["$extensions"][UNFRAMED] as Record<string, unknown>) : undefined;
     const fileModes = Array.isArray(extension?.["modes"]) ? (extension["modes"] as unknown[]).filter((mode): mode is string => typeof mode === "string") : undefined;
     if (name === undefined && typeof extension?.["name"] === "string") name = extension["name"] as string;
+    if (guidance === undefined && typeof extension?.["guidance"] === "string" && extension["guidance"].trim() !== "") guidance = extension["guidance"] as string;
     const mode = modeOfFile(file.name);
     const defaultMode = fileModes?.[0] ?? mode;
     for (const listed of fileModes ?? [mode]) if (!modes.includes(listed)) modes.push(listed);
@@ -241,7 +249,8 @@ export const fromDtcg = (files: ReadonlyArray<ImportFile>): ImportResult => {
     visit(root, [], undefined);
   }
 
-  return { ok: true, fragment: assemble(collected, modes.length > 0 ? modes : [DEFAULT_MODE], skipped, name) };
+  const fragment = assemble(collected, modes.length > 0 ? modes : [DEFAULT_MODE], skipped, name);
+  return { ok: true, fragment: guidance === undefined ? fragment : { ...fragment, guidance } };
 };
 
 /** The kit path of a CSS custom property name: `--color-brand-primary` is `color/brand/primary`. */
@@ -375,9 +384,9 @@ const DTCG_TYPE: Readonly<Record<TokenType, string>> = {
   easing: "cubicBezier",
 };
 
-/** The DTCG JSON of a kit: a group per path segment, the default mode's value, and every mode's value in the unframed extension. */
+/** The DTCG JSON of a kit: a group per path segment, the default mode's value, and every mode's value and the guidance in the unframed extension. */
 export const toDtcg = (kit: Kit): string => {
-  const root: Record<string, unknown> = { $extensions: { [UNFRAMED]: { name: kit.name, modes: kit.modes } } };
+  const root: Record<string, unknown> = { $extensions: { [UNFRAMED]: { name: kit.name, modes: kit.modes, ...(kit.guidance === undefined ? {} : { guidance: kit.guidance }) } } };
   const defaultMode = kit.modes[0]!;
   for (const token of kit.tokens) {
     const segments = token.path.split("/");

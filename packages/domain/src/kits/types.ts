@@ -19,6 +19,8 @@ export const KIT_LIMITS = {
   description: 200,
   path: 120,
   segments: 6,
+  /** Characters of guidance markdown. A long DESIGN.md body is about 40,000. */
+  guidance: 100_000,
 } as const;
 
 /** The CSS property a text style field becomes, after the text style's name. */

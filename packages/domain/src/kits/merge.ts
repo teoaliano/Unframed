@@ -8,6 +8,7 @@ import { type Kit, type Token, type TokenValue } from "./types.ts";
 export interface KitSide {
   readonly modes: string[];
   readonly tokens: Token[];
+  readonly guidance?: string | undefined;
 }
 
 export interface MergeCounts {
@@ -25,13 +26,24 @@ export interface MergeConflict {
   readonly kit: string;
 }
 
-/** The person's choice per conflict, keyed `path|mode`. Keeping the project's value is the default. */
+/**
+ * The person's choice per conflict, keyed `path|mode`, and the guidance's under `GUIDANCE_CHOICE`,
+ * which holds no `|` and so never meets a token's key. Keeping the project's value is the default.
+ */
 export type MergeChoices = Readonly<Record<string, "mine" | "kit">>;
+
+export const GUIDANCE_CHOICE = "guidance";
+
+/** What the merge did with the guidance: took the library's, kept the project's change, or found both changed. Absent when nothing changed. */
+export type GuidanceMerge = "updated" | "kept" | "conflict";
 
 export interface MergeResult {
   readonly kit: Kit;
   readonly counts: MergeCounts;
   readonly conflicts: MergeConflict[];
+  readonly guidance?: GuidanceMerge;
+  /** Both sides' guidance when both changed it differently; an empty text is no guidance. */
+  readonly guidanceConflict?: { readonly here: string; readonly kit: string };
 }
 
 /** A stable text of a value, with object keys sorted, so two equal values compare equal. */
@@ -154,12 +166,33 @@ export const mergeKit = (input: { project: Kit; base: KitSide; library: KitSide 
     tokens.push(row);
   }
 
-  return { kit: { ...project, modes, tokens }, counts, conflicts };
+  const { guidance: _guidance, ...rest } = project;
+  const merged = mergeGuidance(project.guidance, base.guidance, library.guidance, choices[GUIDANCE_CHOICE]);
+  return {
+    kit: { ...rest, modes, tokens, ...(merged.text === undefined ? {} : { guidance: merged.text }) },
+    counts,
+    conflicts,
+    ...(merged.outcome === undefined ? {} : { guidance: merged.outcome }),
+    ...(merged.conflict === undefined ? {} : { guidanceConflict: merged.conflict }),
+  };
 };
 
-/** Applies a different library kit: the project's modes with the library's added, the library's name, its tokens set and the project's others kept. The caller links it to the preset. */
+/** The guidance merges as one more value: the side that changed it wins, and both changing it differently is a conflict. */
+const mergeGuidance = (project: string | undefined, base: string | undefined, library: string | undefined, choice: "mine" | "kit" | undefined) => {
+  const p = project ?? "";
+  const b = base ?? "";
+  const l = library ?? "";
+  const text = (value: string) => (value === "" ? undefined : value);
+  if (p === l) return { text: text(p), outcome: undefined, conflict: undefined };
+  if (l === b) return { text: text(p), outcome: "kept" as const, conflict: undefined };
+  if (p === b) return { text: text(l), outcome: "updated" as const, conflict: undefined };
+  return { text: text(choice === "kit" ? l : p), outcome: "conflict" as const, conflict: { here: p, kit: l } };
+};
+
+/** Applies a different library kit: the project's modes with the library's added, the library's name, its tokens set and the project's others kept, and its guidance when it has one. The caller links it to the preset. */
 export const replaceKit = (project: Kit, library: Kit): Kit => {
-  const { from: _link, ...rest } = project;
+  const { from: _link, guidance: _guidance, ...rest } = project;
+  const guidance = library.guidance ?? project.guidance;
   const modes = [...project.modes, ...library.modes.filter((mode) => !project.modes.includes(mode))];
   const tokens = [...project.tokens];
   for (const incoming of library.tokens) {
@@ -167,5 +200,5 @@ export const replaceKit = (project: Kit, library: Kit): Kit => {
     if (at === -1) tokens.push(structuredClone(incoming));
     else tokens[at] = structuredClone(incoming);
   }
-  return { ...rest, name: library.name, modes, tokens };
+  return { ...rest, name: library.name, modes, tokens, ...(guidance === undefined ? {} : { guidance }) };
 };
