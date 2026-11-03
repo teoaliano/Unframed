@@ -57,15 +57,12 @@ import { generateArguments, generateTool } from "./generateTool.ts";
 import type { ConnectionBook } from "../agentConnections/book.ts";
 import type { ImagePricingAnswer, ImageRunRequest, ModelEntry, RunEvent, TextRunRequest, VideoStartRequest } from "@unframed/contracts";
 
-/** What an agent's generation reaches: the run services, pricing, the default model, run events and the ledger. */
 export interface GenerationRuns {
   readonly runImage: (request: ImageRunRequest) => Promise<{ runId: string; batchId: string; placeholders: string[] }>;
   readonly runText: (request: TextRunRequest) => Promise<{ runId: string; batchId: string; placeholders: string[] }>;
   readonly pricing: (model: string) => Promise<ImagePricingAnswer>;
-  /** The models of a kind, and the default one: the settings' image or video model. */
   readonly models: (kind: "image" | "video") => Promise<ReadonlyArray<ModelEntry>>;
   readonly defaultModel: (kind: "image" | "video") => Promise<string>;
-  /** A render job (spec 04) and how it ends (spec 14: an agent's video). */
   readonly startVideo: (request: VideoStartRequest) => Promise<{ jobId: string; status: string; shapeId: string }>;
   readonly onVideoFinished: (jobId: string, handler: (outcome: { ok: boolean; cost: number | null }) => void) => () => void;
   readonly track: (project: string, handler: (event: RunEvent) => void) => () => void;
@@ -86,17 +83,13 @@ import { artifactDiff } from "./turnDiff.ts";
 
 export interface AgentRuntimeDeps {
   readonly dataDir: string;
-  /** The windows' live selection, read and set by outside calls (spec 14). */
   readonly selection: LiveSelection;
-  /** The run services and the connection store, for an agent's `generate` (spec 14). */
   readonly generationRuns: GenerationRuns;
-  /** The outside turn's idle time; two minutes unless a test shortens it (spec 14). */
   readonly outsideTurnIdleMs?: number;
   readonly testAgentScript: string | undefined;
   readonly idleMs: number | undefined;
   readonly uploadUrlTtlMs: number | undefined;
   readonly agentDebug: boolean;
-  /** The project's folder, or `undefined` when there is no such project. */
   readonly projectFolder: (project: string) => Promise<string | undefined>;
   readonly openDatabase: (slug: string) => Promise<DatabaseSync>;
   readonly registerCloser: (slug: string, name: string, close: () => Promise<void>) => Promise<() => void>;
@@ -107,18 +100,12 @@ export interface AgentRuntimeDeps {
     readonly changeLog: (project: string, clock: number) => Promise<ReadonlyArray<ChangeLogRow>>;
   };
   readonly runEnvironment: (provider: AgentProvider) => Promise<RunEnvironment>;
-  /** The model an empty model setting means: the provider's first non-legacy row. */
   readonly defaultModel: (provider: AgentProvider) => Promise<string | undefined>;
-  /** Builds the real provider adapters; the scripted one replaces both under the test variable. */
   readonly realAdapter: (provider: AgentProvider, context: AdapterContext) => ProviderAdapter;
-  /** The tools other specs add to the Unframed MCP server (spec 09: the artifact and preview tools). */
   readonly extraTools?: (context: AgentToolContext) => ReadonlyArray<McpTool>;
-  /** Told when a chat's provider session closes, for whatever it held open (spec 09's preview tabs). */
   readonly onSessionClosed?: (project: string, chatId: string) => void;
 }
 
-/** A dispatch refusal the RPC layer answers as spec 01's error. */
-/** A turn's paid runs are counted by chat and turn, so a revert can wait for the ones still landing (spec 14). */
 const runKey = (chatId: string, turn: number): string => `${chatId}:${turn}`;
 
 export class DispatchError extends Error {
@@ -134,11 +121,9 @@ interface ActiveTurn {
   readonly turnCount: number;
   readonly interactionMode: InteractionMode;
   readonly startedAt: number;
-  /** The model the turn runs on, an empty setting resolved. */
   readonly model: string;
 }
 
-/** One project's chats: its store, its turn changes, and the queue its runtime events are taken in. */
 class ProjectAgent {
   readonly slug: string;
   readonly folder: string;
@@ -158,17 +143,10 @@ class ProjectAgent {
 
 const serverCommandId = () => `server:${randomUUID()}`;
 
-/** A command without the fields the runtime fills in. */
 type Bare<C> = C extends unknown ? Omit<C, "commandId" | "projectId" | "threadId"> : never;
 
 const record = (value: unknown): Record<string, any> => (typeof value === "object" && value !== null ? (value as Record<string, any>) : {});
 
-/**
- * The agent runtime (spec 07): the chat store of every open project, the reactors that run
- * its side effects, the provider service, the MCP server's tools and the attachment store.
- * Reactors run after an intent is committed and report back through more commands.
- */
-/** The document record with its kit replaced (or removed, for null), the one record a kit change writes. */
 const withKit = (records: ReadonlyArray<TLRecord>, kit: Kit | null): TLRecord => {
   const document = records.find((record) => record.typeName === "document") ?? { id: "document:document", typeName: "document", gridSize: 10, name: "", meta: {} };
   const meta = { ...(document as { meta: Record<string, unknown> }).meta };
@@ -181,9 +159,7 @@ const withKit = (records: ReadonlyArray<TLRecord>, kit: Kit | null): TLRecord =>
 export class AgentRuntime {
   readonly tokens = new McpTokens();
   readonly registry = new McpToolRegistry();
-  /** The outside calls: an outside session's chat and turn in each project (spec 14). */
   readonly outside: OutsideChats;
-  /** The tools only an outside connection has, after the registry's (spec 14). */
   readonly outsideTools: McpTool[];
   private readonly generation: AgentGeneration;
   readonly attachments: AttachmentStore;
@@ -191,10 +167,8 @@ export class AgentRuntime {
   private readonly projects = new Map<string, Promise<ProjectAgent>>();
   private readonly chatProjects = new Map<string, string>();
   private readonly activeTurns = new Map<string, ActiveTurn>();
-  /** The paid runs each in-app or outside turn still has landing, by chat and turn (spec 14). */
   private readonly paidRuns = new Map<string, number>();
   private readonly adapters = new Map<AgentProvider, ProviderAdapter>();
-  /** The project agents that finished opening. */
   private readonly settledAgents = new Map<string, ProjectAgent>();
   private apiPort = 0;
   private readonly deps: AgentRuntimeDeps;
@@ -219,7 +193,6 @@ export class AgentRuntime {
     };
     for (const tool of new CanvasTools(context).tools()) this.registry.register(tool);
     for (const tool of new KitTools(context).tools()) this.registry.register(tool);
-    // Outside calls only: `canvas_select` never reaches an in-app agent (spec 07, spec 14).
     this.generation = new AgentGeneration({
       records: (project) => deps.rooms.read(project),
       recordsOf: async (project, ids) => {
@@ -276,7 +249,6 @@ export class AgentRuntime {
       deps.outsideTurnIdleMs ?? OUTSIDE_TURN_IDLE_MS,
     );
     for (const tool of deps.extraTools?.(context) ?? []) this.registry.register(tool);
-    // In-app and outside agents both have `generate`; an outside call's own check (its connection's limit) is the only difference (spec 14).
     this.registry.register(generateTool((binding, args) => this.generateFor(binding, args)));
     this.providers = new ProviderService({
       adapterFor: (provider) => this.adapterFor(provider),
@@ -307,7 +279,6 @@ export class AgentRuntime {
     };
   }
 
-  /** The provider a runtime event names. An outside chat has no adapter, so its events name Claude as they always did. */
   private eventProvider(provider: ChatProvider | undefined): ProviderAdapter["provider"] {
     return this.adapterFor(provider === undefined || provider === "outside" ? "claude" : provider).provider;
   }
@@ -331,11 +302,6 @@ export class AgentRuntime {
     return agent?.engine.chat(chatId)?.runtimeMode ?? DEFAULT_RUNTIME_MODE;
   }
 
-
-  /**
-   * What a project's chats are doing now (spec 17): chats with a turn running, and chats waiting on
-   * the person. Reads only a chat store that is already open, so a closed project costs nothing.
-   */
   liveActivity(name: string): { readonly running: number; readonly needsYou: number } {
     const agent = this.settledAgents.get(projectSlug(name));
     if (agent === undefined) return { running: 0, needsYou: 0 };
@@ -350,7 +316,6 @@ export class AgentRuntime {
     return { running, needsYou };
   }
 
-  /** Opens a project's chat store on first use, reconciling chats a quit left running. */
   project(name: string): Promise<ProjectAgent> {
     const slug = projectSlug(name);
     const known = this.projects.get(slug);
@@ -376,7 +341,6 @@ export class AgentRuntime {
   }
 
   private async closeProject(agent: ProjectAgent): Promise<void> {
-    // Rename, delete, a folder move and shutdown all close the project: its open outside turns settle first (spec 14).
     await this.outside.settleOpen(agent).catch((error: unknown) => logError(`outside turns of ${agent.slug}: ${errorText(error)}`));
     agent.closed = true;
     if (this.settledAgents.get(agent.slug) === agent) {
@@ -389,14 +353,12 @@ export class AgentRuntime {
     agent.engine.close();
   }
 
-  /** At open, a chat whose turn was running when the engine stopped reads as failed with the quit-mid-turn sentence. */
   private async reconcile(agent: ProjectAgent): Promise<void> {
     for (const chat of Object.values(agent.engine.model.chats)) {
       if (chat.deletedAt !== null) continue;
       const running = chat.latestTurn?.state === "running" || chat.session?.status === "starting" || chat.session?.status === "running";
       if (!running || this.providers.has(chat.id)) continue;
       if (chat.outside !== undefined) {
-        // An outside turn was not cut off by Unframed: the agent just stopped being heard, so it settles as completed (spec 14).
         await this.outside.settle(agent, chat.id);
         if (agent.engine.chat(chat.id)?.session?.status === "running") {
           await this.internal(agent, chat.id, { type: "thread.session.set", session: { status: "ready", activeTurnId: null, lastError: null } });
@@ -438,25 +400,19 @@ export class AgentRuntime {
     }
   }
 
-
-  /** A session of an outside client ended: its open turns settle, and its chats say so (spec 14). */
   endOutsideSession(sessionId: string): Promise<void> {
     return this.outside.endSession(sessionId, [...this.settledAgents.values()]);
   }
 
-  /** A connection was revoked: its chats' open turns settle, and each says it is disconnected (spec 14). */
   disconnectOutside(connectionId: string): Promise<void> {
     return this.outside.disconnect(connectionId, [...this.settledAgents.values()]);
   }
 
-  /** Dispatches a command the web sent: attachments and tags are resolved against the files and the canvas first. */
   async dispatch(command: ClientCommand): Promise<{ sequence: number }> {
     const agent = await this.project(command.projectId);
-    // An in-app turn cannot be reverted while one of its paid generations is still landing (spec 14).
     if (command.type === "thread.turn.revert" && agent.engine.chat(command.threadId)?.outside === undefined && (this.paidRuns.get(runKey(command.threadId, command.turnCount)) ?? 0) > 0) {
       throw new DispatchError("conflict", "Wait for the generation to land before reverting.");
     }
-    // Reverting an open outside turn settles it first, then reverts it (spec 14). The web cannot stop an outside agent.
     if (command.type === "thread.turn.revert" && agent.engine.chat(command.threadId)?.outside !== undefined) {
       await this.outside.settle(agent, command.threadId);
     }
@@ -492,7 +448,6 @@ export class AgentRuntime {
     }
   }
 
-  /** An internal command; a refusal is logged, never thrown. */
   private async internal(agent: ProjectAgent, chatId: string, command: Bare<ChatCommand>): Promise<boolean> {
     if (agent.closed) return false;
     try {
@@ -514,7 +469,6 @@ export class AgentRuntime {
     return ids.filter((id) => artifacts.has(id));
   }
 
-  /** The tag reactor: adds the ids the chat does not have yet. Adding one it has is a no-op. */
   private async tag(project: string, chatId: string, ids: ReadonlyArray<string>): Promise<void> {
     const agent = await this.project(project);
     const chat = agent.engine.chat(chatId);
@@ -522,7 +476,6 @@ export class AgentRuntime {
     if (fresh.length > 0) await this.internal(agent, chatId, { type: "thread.tags.add", ids: fresh });
   }
 
-  /** An outside call of `generate`: its open turn, and the checked arguments (spec 14). */
   private async generateFor(binding: McpBinding, args: Record<string, unknown>): Promise<ToolAnswer> {
     const checked = generateArguments(args);
     if (!checked.ok) return { value: { error: checked.message }, isError: true };
@@ -532,7 +485,6 @@ export class AgentRuntime {
     return this.generation.generate({ project: binding.project, chatId: binding.chatId, turn, turnId, connectionId: binding.connectionId, ...checked });
   }
 
-  /** What an in-app `generate`'s approval says: the medium, the shapes and the estimate, from a dry run (spec 14). */
   private async generationDetail(chatId: string, input: Readonly<Record<string, unknown>>): Promise<string | undefined> {
     const project = this.chatProjects.get(chatId);
     const checked = generateArguments(input);
@@ -556,7 +508,6 @@ export class AgentRuntime {
       selection: latestUser?.context?.selection ?? [],
     };
   }
-
 
   private react(agent: ProjectAgent, events: ReadonlyArray<ChatEvent>): void {
     for (const event of events) {
@@ -609,7 +560,6 @@ export class AgentRuntime {
     }
   }
 
-  /** The provider command reactor: builds the preamble, starts or reuses the session, sends the turn. */
   private async startTurn(agent: ProjectAgent, chatId: string, requested: Record<string, any>): Promise<void> {
     const chat = agent.engine.chat(chatId);
     if (!chat) return;
@@ -664,14 +614,12 @@ export class AgentRuntime {
     }
   }
 
-  /** A selection with an empty model resolved to the provider's first non-legacy one. */
   private async resolveModel(selection: ModelSelection): Promise<ModelSelection> {
     if (selection.model !== "" || selection.provider === "outside") return selection;
     const model = await this.deps.defaultModel(selection.provider).catch(() => undefined);
     return model === undefined ? selection : { ...selection, model };
   }
 
-  /** What the model is told before the person's message. */
   private async preamble(
     agent: ProjectAgent,
     chat: Chat,
@@ -701,7 +649,6 @@ export class AgentRuntime {
     if (chat.lastClock !== null) {
       note = changeNote(await this.deps.rooms.changeLog(agent.slug, chat.lastClock), chat.id);
     }
-    // The artifacts the chips point into, listed once each in the order the chips name them (spec 18).
     const listed = new Map<string, { shapeId: string; kind: "page" | "motion"; label: string }>();
     const chips = elements.map((chip) => ({ ...chip, shapeId: agentShapeId(chip.shapeId) }));
     for (const chip of chips) {
@@ -724,7 +671,6 @@ export class AgentRuntime {
     });
   }
 
-  /** The files attached to answers, by question, as paths the provider can open; one no longer stored is left out. */
   private answerFiles(byQuestion: Record<string, unknown>): Record<string, PreambleAttachment[]> {
     const files: Record<string, PreambleAttachment[]> = {};
     for (const [question, attached] of Object.entries(byQuestion)) {
@@ -752,7 +698,6 @@ export class AgentRuntime {
     await this.internal(agent, chatId, { type: "thread.session.set", session: { status: "stopped", activeTurnId: null, lastError: null } });
   }
 
-
   private onRuntimeEvent(chatId: string, draft: RuntimeEventDraft): void {
     const project = this.chatProjects.get(chatId);
     const agent = project === undefined ? undefined : this.settledAgents.get(project);
@@ -767,7 +712,6 @@ export class AgentRuntime {
     agent.ingestion = agent.ingestion.then(() => this.ingest(agent, event)).catch((error: unknown) => logError(`chat ${chatId}: ${errorText(error)}`));
   }
 
-  /** Turns one canonical runtime event into internal commands. */
   private async ingest(agent: ProjectAgent, event: RuntimeEvent): Promise<void> {
     const chatId = event.threadId;
     const chat = agent.engine.chat(chatId);
@@ -893,11 +837,6 @@ export class AgentRuntime {
     }
   }
 
-  /**
-   * The turn settle reactor: a failure sentence below what the agent said, `lastClock`, the
-   * turn's files, the sidecar, then the session leaving `running`, which settles the turn.
-   * The chat's first completed turn then asks for a title.
-   */
   private async settle(
     agent: ProjectAgent,
     chatId: string,
@@ -944,7 +883,6 @@ export class AgentRuntime {
       session: { status: failed ? "error" : interrupted ? "interrupted" : "ready", activeTurnId: null, lastError: sentence ?? null },
     });
     if (active?.turnId === turn.turnId) this.activeTurns.delete(chatId);
-    // An interrupt is a hard stop, and a session that ended on its own must not keep its token.
     if (interrupted || !this.providers.has(chatId)) {
       void this.providers.serial(chatId, () => this.providers.stop(chatId, interrupted ? "interrupted" : "closed"));
     } else {
@@ -954,9 +892,7 @@ export class AgentRuntime {
     if (turn.turnCount === 1 && outcome.state === "completed" && settled && settled.titledBy !== "user") void this.title(agent, settled);
   }
 
-  /** Titling: one small request on the chat's own provider; any failure is silent. */
   private async title(agent: ProjectAgent, chat: Chat): Promise<void> {
-    // An outside chat has no provider of Unframed's to title it, so it keeps the name it has.
     if (chat.modelSelection.provider === "outside") return;
     try {
       const first = chat.messages.find((message) => message.role === "user")?.text ?? "";
@@ -977,7 +913,6 @@ export class AgentRuntime {
       logInfo(`chat ${chat.id}: no title: ${errorText(error)}`);
     }
   }
-
 
   private async revertOne(agent: ProjectAgent, chatId: string, turn: number): Promise<{ restored: string[]; skipped: Array<{ id: string; by: SkippedBy }> }> {
     const rows = agent.turnChanges.rows(chatId, turn);
@@ -1015,11 +950,6 @@ export class AgentRuntime {
     }
   }
 
-  /**
-   * Edit from here, after the decider dropped the later turns: reverts their canvas changes
-   * newest first with the skip rule, rolls the provider conversation back, and forgets their
-   * turn changes. It runs before any later turn of the chat is sent.
-   */
   private async revertToCheckpoint(
     agent: ProjectAgent,
     chatId: string,
@@ -1036,7 +966,6 @@ export class AgentRuntime {
           restored.push(...outcome.restored);
           skipped.push(...outcome.skipped);
         }
-        // Chat-wide, so it outlives the dropped turns: the rail says which shapes were left alone (spec 08).
         await this.activity(agent, chatId, {
           id: `checkpoint-reverted:${randomUUID()}`,
           tone: "info",
@@ -1051,7 +980,6 @@ export class AgentRuntime {
       logError(`chat ${chatId}: could not restore the canvas: ${errorText(error)}`);
     }
     if (rewind.dropped > 0) {
-      // The provider conversation is rolled back on a live session: a closed one is resumed first.
       await this.providers
         .ensure(agent.slug, chat, agent.folder, agent.engine)
         .then(() => this.providers.rollback(chatId, rewind.dropped))
@@ -1060,14 +988,11 @@ export class AgentRuntime {
     agent.turnChanges.dropAfter(chatId, rewind.keep);
   }
 
-
-  /** Thread search (spec 08): this project's chats whose messages or final replies match. */
   async searchThreads(project: string, query: string, limit: number | undefined): Promise<ThreadSearchMatch[]> {
     const agent = await this.project(project);
     return searchChats(Object.values(agent.engine.model.chats), query, limit ?? SEARCH_LIMIT_MAX);
   }
 
-  /** The pages and motions a chat's turns `from + 1` to `to` wrote, as diffs (spec 08). */
   async turnDiff(project: string, chatId: string, from: number, to: number, ignoreWhitespace: boolean): Promise<{ files: ArtifactDiffFile[] }> {
     const agent = await this.project(project);
     const chat = agent.engine.chat(chatId);
@@ -1090,4 +1015,3 @@ export class AgentRuntime {
     for (const adapter of this.adapters.values()) await adapter.stopAll().catch(() => undefined);
   }
 }
-

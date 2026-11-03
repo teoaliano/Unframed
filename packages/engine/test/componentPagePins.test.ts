@@ -6,8 +6,6 @@ import { scriptFolder, startAgentEngine, type AgentEngine } from "./agent.ts";
 import { roomShape, seed, toolResults } from "./agentCanvas.ts";
 import { componentShape, pageShape } from "./canvasRecords.ts";
 
-/** Spec 20, task 15: `page_write` and `motion_write` inject pins for the canvas's components and return `components`. */
-
 const BUTTON = `<!doctype html><html><head>
 <script type="application/json" data-uf-component>{"tag":"uf-button","variants":{"kind":["primary","secondary"]},"props":{"label":"text"},"slots":[]}</script>
 <style type="text/x-uf-component" data-uf-component-style>:host { display: inline-block; }</style>
@@ -16,7 +14,6 @@ const BUTTON = `<!doctype html><html><head>
 const script = (tools: Array<{ name: string; input: Record<string, unknown> }>) =>
   scriptFolder({ pins: { when: "^go", turns: [{ text: "Done.", tools }] } });
 
-/** The sheets of a project: a current button and an older one, each with its compiled file. */
 const writeSheets = async (agent: AgentEngine) => {
   for (const sheet of ["1-button.html", "2-button.html"]) {
     await writeFile(join(agent.folder, sheet), BUTTON);

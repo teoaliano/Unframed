@@ -33,7 +33,6 @@ const startRendering = async (renderer: "ok" | "fail" | "no-chrome" = "ok"): Pro
 
 const room = async (rpc: TestRpcClient): Promise<any[]> => (await rpc.call("testCanvas.read", { project: "board" })).records as any[];
 
-/** Polls a render until it settles, answering every status it passed through. */
 const follow = async (rpc: TestRpcClient, id: string) => {
   const seen: any[] = [];
   for (let i = 0; i < 400; i++) {
@@ -211,7 +210,6 @@ describe("lifecycle changes while a motion renders", () => {
     expect(existsSync(join(engine.dataDir, "output", "board"))).toBe(true);
     await follow(rpc, started.id);
     expect(await rpc.call("projects.rename", { name: "board", to: "renamed" })).toEqual({ name: "renamed", movedRenders: 0 });
-    // Closing the project stopped tracking its renders.
     await expect(rpc.call("motion.renderStatus", { project: "board", id: started.id })).rejects.toMatchObject({ message: "No such render." });
   });
 });

@@ -1,8 +1,3 @@
-/**
- * The kit tools (spec 19): `kit_read` and `kit_write` on the Unframed MCP server. The kit is
- * the document record's `meta.unframed.kit`, so a write is one room change with the chat's
- * origin: every op is applied by the domain's `applyKitOps` first, and a refusal writes nothing.
- */
 import { randomUUID } from "node:crypto";
 import { PLAN_NO_WRITES_MESSAGE, applyKitOps, cssName, resolve, type ActivityInput, type InteractionMode, type Kit, type KitOp } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
@@ -12,7 +7,6 @@ import { kitOf } from "./tokensFile.ts";
 import { changedKitParts } from "./kitTurn.ts";
 import type { TurnChanges } from "../agent/turnChanges.ts";
 
-/** What the kit tools reach of the rest of the engine. The agent runtime's tool context satisfies it. */
 export interface KitToolContext {
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;
   readonly apply: (project: string, change: CanvasChange, origin: ChangeOrigin) => Promise<Applied>;
@@ -23,7 +17,6 @@ export interface KitToolContext {
 
 const DOCUMENT_ID = "document:document";
 
-/** The kit a read answers: its tokens with their CSS names, and the values as stored. */
 export const kitReadAnswer = (kit: Kit | null) => {
   if (kit === null) return { kit: null };
   const defaultMode = kit.modes[0]!;
@@ -51,11 +44,6 @@ export const kitReadAnswer = (kit: Kit | null) => {
 
 const isArtifactShape = (record: TLRecord): boolean => record.typeName === "shape" && (record.type === "page" || record.type === "motion");
 
-/**
- * The shape puts a kit op needs in the same write: a renamed mode moves every page and
- * motion on the old name to the new one. A deleted mode needs none: a mode the kit lacks is
- * read as the default.
- */
 const modeMoves = (records: ReadonlyArray<TLRecord>, ops: ReadonlyArray<KitOp>): TLRecord[] => {
   const renames = new Map<string, string>();
   for (const op of ops) if (op.op === "renameMode") renames.set(op.name, op.to);
@@ -134,7 +122,6 @@ export class KitTools {
     return { value: { ok: true, tokens: result.kit.tokens.length, modes: result.kit.modes, clock: applied.clock } };
   }
 
-  /** The two kit tools, as the MCP server registers them. */
   tools(): McpTool[] {
     return [
       {

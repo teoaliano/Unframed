@@ -1,8 +1,3 @@
-/**
- * Engine-seam helpers for chats: an engine running the scripted agent over the fixture
- * scripts, and a chat driven the way the web drives one, by dispatching commands and
- * folding a `subscribeThread` stream with the domain projector.
- */
 import type { ElementChip } from "@unframed/contracts";
 import { randomUUID } from "node:crypto";
 import { readdir, readFile, writeFile } from "node:fs/promises";
@@ -15,7 +10,6 @@ import type { Subscription, TestRpcClient } from "./rpcClient.ts";
 export const FIXTURES = join(repoRoot, "assets", "fixtures");
 export const PROJECT = "board";
 
-/** Every tool the Unframed MCP server registers, in order: spec 07's two canvas tools, spec 09's artifact and preview tools, then spec 14's generate. */
 export const UNFRAMED_TOOLS = [
   "canvas_read",
   "canvas_write",
@@ -50,7 +44,6 @@ export interface AgentEngine {
   readonly rpc: TestRpcClient;
   readonly folder: string;
   dispatch(command: CommandInput): Promise<{ sequence: number }>;
-  /** Creates a chat on Claude, in the modes a new chat gets unless overridden. */
   createChat(overrides?: Partial<Extract<CommandInput, { type: "thread.create" }>>): Promise<string>;
   send(
     chatId: string,
@@ -58,7 +51,6 @@ export interface AgentEngine {
     options?: { selection?: string[]; elements?: ElementChip[]; attachments?: Array<{ id: string; name: string }>; steer?: boolean },
   ): Promise<{ sequence: number }>;
   watch(chatId: string): Promise<ChatWatch>;
-  /** Waits for the chat's latest turn to leave running, and answers the chat. */
   settled(chatId: string, turnCount?: number, timeoutMs?: number): Promise<Chat>;
   sidecars(): Promise<Array<Record<string, unknown>>>;
 }
@@ -80,7 +72,6 @@ const until = async <T>(check: () => T | undefined | false, what: string, timeou
   }
 };
 
-/** Folds a thread stream into the chat it describes. */
 export const watchThread = (subscription: Subscription<ThreadStreamItem>): ChatWatch => {
   let current: Chat | undefined;
   let seen = 0;
@@ -187,7 +178,6 @@ export const startAgentEngine = async (options: EngineOptions & { script?: strin
   return agent;
 };
 
-/** The shell stream's items, folded into the summaries it describes. */
 export const shellChats = (items: ReadonlyArray<ShellStreamItem>): Map<string, ChatSummary> => {
   const chats = new Map<string, ChatSummary>();
   for (const item of items) {
@@ -198,7 +188,6 @@ export const shellChats = (items: ReadonlyArray<ShellStreamItem>): Map<string, C
   return chats;
 };
 
-/** A folder of scripts, one file per entry, for a test that needs its own. */
 export const scriptFolder = async (scripts: Record<string, unknown>): Promise<string> => {
   const dir = await makeTempDir("unframed-scripts-");
   for (const [name, script] of Object.entries(scripts)) await writeFile(join(dir, `${name}.json`), typeof script === "string" ? script : JSON.stringify(script));

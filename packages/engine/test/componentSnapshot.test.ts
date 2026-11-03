@@ -6,8 +6,6 @@ import { describe, expect, it } from "vitest";
 import { startAgentEngine, type AgentEngine } from "./agent.ts";
 import { pageShape } from "./canvasRecords.ts";
 
-/** Spec 20, task 9: a snapshot ensures the compiled files its page pins before the capture. */
-
 const SHEET_FILE = "1761400000000-button.html";
 const COMPILED = compiledFileName(SHEET_FILE);
 const SHEET = `<!doctype html><html><head>

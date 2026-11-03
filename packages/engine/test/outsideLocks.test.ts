@@ -8,7 +8,6 @@ import { outsideLink as outside } from "./outsideCalls.ts";
 
 const HEADING = '<h1 data-hf-id="hf-aaaa">Hi</h1>';
 
-/** A page with one locked element, its file on disk, and an outside connection to write it. */
 const lockedCanvas = async () => {
   const agent = await startAgentEngine();
   await writeFile(join(agent.folder, "1-locked.html"), `<script src="unframed-dials.js"></script>\n${HEADING}`);

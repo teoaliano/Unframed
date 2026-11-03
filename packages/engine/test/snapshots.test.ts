@@ -6,7 +6,6 @@ import { scriptFolder, startAgentEngine, type AgentEngine } from "./agent.ts";
 import { roomShape } from "./agentCanvas.ts";
 import { pageShape } from "./canvasRecords.ts";
 
-/** What the test renderer's picture says it showed: the JSON in its `tEXt` chunk. */
 const pictured = (png: Buffer): any => {
   for (let at = 8; at < png.length; ) {
     const length = png.readUInt32BE(at);
@@ -31,7 +30,6 @@ const until = async <T>(check: () => Promise<T | undefined | false>, what: strin
   }
 };
 
-/** Writes records as a tab or the agent would: the room's commit hooks see a change with origin `system` not at all. */
 const seed = async (agent: AgentEngine, records: unknown[]) =>
   agent.rpc.call("testCanvas.apply", { project: "board", change: { put: records, remove: [] }, origin: { kind: "server", id: "test" } });
 
@@ -64,16 +62,13 @@ describe("artifact snapshots", () => {
       dials: { accent: "#ff0000" },
     });
     await until(async () => stream.values.length === 1, "the stream to say so");
-    // No kit in this project: the record names no mode and no kit stamp (spec 19).
     expect(stream.values[0]).toEqual({ file: "1-landing.html", w: 480, h: 320, at: expect.any(Number), mode: null, kit: null });
     const served = await agent.engine.request("/api/file/board/1-landing.html?snapshot=480x320");
     expect(served.status).toBe(200);
     expect(served.headers["content-type"]).toBe("image/png");
     expect(pictured(served.body)).toMatchObject({ file: "1-landing.html" });
-    // Nothing about it is a project file: no sidecar anywhere.
     expect((await readdir(agent.folder)).some((name) => name.includes("480x320"))).toBe(false);
 
-    // A later subscriber starts from what the cache holds.
     const later = agent.rpc.subscribe("artifact.snapshots", { project: "board" });
     await until(async () => later.values.length === 1, "the cached snapshot");
     expect(later.values[0]).toMatchObject({ file: "1-landing.html", w: 480, h: 320 });
@@ -139,7 +134,6 @@ describe("artifact snapshots", () => {
   it("renders, on first opening a project, every artifact whose file has no snapshot that fits", async () => {
     const agent = await startSnapshotting();
     await writeFile(join(agent.folder, "2-other.html"), "<h1>Other</h1>");
-    // Written as an import would, before any room hook runs: nothing renders yet.
     await agent.rpc.call("testCanvas.apply", {
       project: "board",
       change: { put: [pageShape("pg1", "100", { file: "1-landing.html" }), pageShape("pg2", "101", { file: "2-other.html" }, { y: 500 })], remove: [] },

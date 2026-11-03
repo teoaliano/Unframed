@@ -1,7 +1,3 @@
-/**
- * `component.updates` (spec 20): the components a page or motion pins an older version of, one row
- * each, with the sentences of what the newer version changes for the instances in the artifact.
- */
 import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { ComponentUpdate } from "@unframed/contracts";
@@ -16,7 +12,6 @@ const declarationOf = async (folder: string, sheet: string): Promise<ComponentDe
   return read.ok ? read.sheet.declaration : undefined;
 };
 
-/** The updates of the artifact file `file`, against the components on the canvas. */
 export const componentUpdatesOf = async (folder: string, records: ReadonlyArray<TLRecord>, file: string): Promise<ComponentUpdate[]> => {
   const html = await readFile(join(folder, basename(file)), "utf8").catch(() => undefined);
   if (html === undefined) return [];

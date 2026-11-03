@@ -6,7 +6,6 @@ import { startAgentEngine, type AgentEngine } from "./agent.ts";
 import { roomShape } from "./agentCanvas.ts";
 import { pageShape } from "./canvasRecords.ts";
 
-/** What the test renderer\x27s picture says it showed: the JSON in its `tEXt` chunk. */
 const pictured = (png: Buffer): any => {
   for (let at = 8; at < png.length; ) {
     const length = png.readUInt32BE(at);

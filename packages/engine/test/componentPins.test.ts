@@ -5,13 +5,10 @@ import { startAgentEngine, type AgentEngine } from "./agent.ts";
 import { motionShape, seed } from "./agentCanvas.ts";
 import { componentShape, pageShape } from "./canvasRecords.ts";
 
-/** Spec 20, task 31: `component.pins` streams each artifact file's pins, then each newly named file's. */
-
 const LANDING = `<!doctype html><html><head><script src="1-button.component.js" data-uf-component="uf-button"></script><script src="2-card.component.js" data-uf-component="uf-card"></script></head><body></body></html>`;
 const INTRO = `<!doctype html><html><head><script src="1-button.component.js" data-uf-component="uf-button"></script></head><body></body></html>`;
 const PLAIN = `<!doctype html><html><body><h1>No components</h1></body></html>`;
 
-/** A write the canvas hooks see: a seed is system-origin, which the hooks skip. */
 const commit = async (agent: AgentEngine, records: unknown[]) =>
   agent.rpc.call("testCanvas.apply", { project: "board", change: { put: records, remove: [] }, origin: { kind: "server", id: "test-commit" } });
 
@@ -49,7 +46,6 @@ describe("component.pins", () => {
       { file: "2-intro.html", pins: [{ tag: "uf-button", sheet: "1-button.html" }] },
     ]);
 
-    // A new shape naming a file with no pins, then one naming a file already read, then a new file with one pin.
     await commit(agent, [pageShape("pg2", "102", { file: "3-plain.html", title: "Plain" }, { y: 800 })]);
     await until(() => stream.values.length === 3, "the new file's pins");
     expect(stream.values[2]).toEqual({ file: "3-plain.html", pins: [] });

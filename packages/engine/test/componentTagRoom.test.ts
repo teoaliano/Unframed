@@ -3,8 +3,6 @@ import { scriptFolder, startAgentEngine } from "./agent.ts";
 import { roomRecords, seed } from "./agentCanvas.ts";
 import { componentShape } from "./canvasRecords.ts";
 
-/** Spec 20, one shape per tag: the room refuses a change that gives a second component shape a tag the canvas holds. */
-
 describe("one component shape per tag in the room (spec 20)", () => {
   const start = async () => startAgentEngine({ script: await scriptFolder({ components: { when: "^go", turns: [] } }) });
 

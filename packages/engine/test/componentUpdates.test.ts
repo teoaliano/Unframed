@@ -6,8 +6,6 @@ import { componentShape, pageShape } from "./canvasRecords.ts";
 import { startEngine, type TestEngine } from "./harness.ts";
 import { connectTab } from "./syncClient.ts";
 
-/** Spec 20, task 33: `component.updates` lists each older pin's warnings; `artifact.edit` with `componentUpdate` moves the pin. */
-
 const sheet = (tag: string, kinds: string) =>
   `<!doctype html><html><head>
 <script src="unframed-dials.js"></script>

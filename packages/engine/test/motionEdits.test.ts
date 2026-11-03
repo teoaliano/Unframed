@@ -6,8 +6,6 @@ import { pageShape } from "./canvasRecords.ts";
 import { startEngine, type TestEngine } from "./harness.ts";
 import { connectTab } from "./syncClient.ts";
 
-// artifact.edit with motion edits (spec 21, tasks 15 and 16): a new version through spec 18's
-// writer, the lock check from the shape's lockedElements, and no render touched.
 const SAMPLE = readFileSync(join(import.meta.dirname, "../../../assets/fixtures/motion-samples/01-literal-two-clips.html"), "utf8");
 
 describe("artifact.edit with motion edits", () => {

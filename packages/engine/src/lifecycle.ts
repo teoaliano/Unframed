@@ -1,9 +1,3 @@
-/**
- * The changes that could strand paid work (spec 10): a settings update (spec 01's rules
- * with spec 10's steps inserted), removing the key, and renaming or deleting a project.
- * Each reads the job store strictly, touches the job records first and takes the
- * destructive step last, compensating when a later step fails. They run one at a time.
- */
 import { settleTokens } from "./kits/tokensFile.ts";
 import { lstat, mkdir, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -32,7 +26,6 @@ export const PROJECT_DELETED_ERROR =
 
 export const MOVED_WHILE_REMOVED_ERROR = "The OpenRouter key was removed while this render was being moved to a new folder.";
 
-/** Two spellings of one directory: same device and inode. A folder that cannot be read is no match. */
 const sameDirectory = async (a: string, b: string): Promise<boolean> => {
   try {
     const [first, second] = await Promise.all([stat(a), stat(b)]);
@@ -47,7 +40,6 @@ const exists = (path: string): Promise<boolean> => lstat(path).then(() => true, 
 interface FolderMove {
   readonly from: string;
   readonly to: string;
-  /** The folder as `.env` spells it. */
   readonly written: string;
 }
 
@@ -61,12 +53,9 @@ export class Lifecycle extends Context.Service<
   Lifecycle,
   {
     readonly updateSettings: (patch: SettingsPatch) => Effect.Effect<Settings, UnframedError>;
-    /** Removing a key is a security action: it stands even when the job store cannot be read. */
     readonly removeKey: Effect.Effect<RemovedKey, UnframedError>;
-    /** `oauth.cancel`: ends the attempt; when its key write was in flight or landed, removes the key as `removeKey` does. */
     readonly cancelConnection: Effect.Effect<Omit<RemovedKey, "settings">, UnframedError>;
     readonly renameProject: (name: string, to: string) => Effect.Effect<{ name: string; movedRenders: number }, UnframedError>;
-    /** Refuses with `conflict` and `details.pendingRenders` while renders are in progress, unless `confirmRenders`. */
     readonly deleteProject: (name: string, confirmRenders: boolean) => Effect.Effect<{ endedRenders: number }, UnframedError>;
   }
 >()("unframed/engine/Lifecycle") {}
@@ -82,10 +71,6 @@ export const lifecycleLayer = Layer.effect(
     const runs = yield* Runs;
     const lock = yield* Semaphore.make(1);
 
-    /**
-     * Image and text runs are not durable, so they have no record to move or fail: a change
-     * that touches their project waits for them. This comes before every other step.
-     */
     const refuseLiveRuns = (project?: string) =>
       Effect.flatMap(runs.liveRuns(project), (count) =>
         count === 0
@@ -95,7 +80,6 @@ export const lifecycleLayer = Layer.effect(
             ),
       );
 
-    /** Every change that wrote `.env` ends here: subscribers hear of it, and the caller gets what the web may see. */
     const published = Effect.andThen(settings.emit, settings.view);
 
     const writeEnv = (changes: Readonly<Record<string, string | null>>, options?: { readonly holdOutputDir?: boolean }) =>
@@ -108,7 +92,6 @@ export const lifecycleLayer = Layer.effect(
         if (typeof outputDir === "string") {
           const to = resolveOutputDir(outputDir, config.dataDir);
           const from = yield* settings.outputDir;
-          // Every project is in the folder being left.
           if (to !== from) yield* refuseLiveRuns();
           yield* Effect.tryPromise({
             try: () => mkdir(to, { recursive: true }),
@@ -121,12 +104,6 @@ export const lifecycleLayer = Layer.effect(
         return yield* published;
       });
 
-    /**
-     * The strip is the commit point and comes last, so no failing step loses a record: the
-     * worst a failure leaves is a duplicate in a store nothing reads. A render created
-     * between the copy's read and the `.env` commit stays behind in the old store; a tab
-     * watching it still collects it through spec 04's poll fallback.
-     */
     const moveOutputDir = (changes: Readonly<Record<string, string | null>>, move: FolderMove) =>
       Effect.gen(function* () {
         const copied = yield* Effect.tryPromise({
@@ -141,15 +118,12 @@ export const lifecycleLayer = Layer.effect(
         );
         yield* writeEnv(changes, { holdOutputDir: true }).pipe(Effect.tapError(() => rollBack));
 
-        // Every committed change is already on disk, so a closer that fails does not stop the move.
         for (const failure of yield* openProjects.closeAll) {
           logError(`could not flush ${join(move.from, failure.project)} before changing the output folder: ${failure.reason}`);
         }
-        // From here the new store is the one the sweep reads.
         yield* settings.useOutputDir(move.written);
 
         if (copied.length > 0 && (yield* settings.read).key === "") {
-          // The sweep cannot poll the copies without a key: they fail as a key removal fails renders.
           yield* renderJobs
             .failPending({ ids: copied, error: MOVED_WHILE_REMOVED_ERROR })
             .pipe(Effect.catch((error) => Effect.sync(() => logError(`could not stop the moved renders: ${error.reason}`))));
@@ -170,19 +144,14 @@ export const lifecycleLayer = Layer.effect(
         const normalised = normaliseSettingsPatch(patch);
         if (!normalised.ok) return yield* unframedError("bad_request", normalised.message);
         const { changes } = normalised;
-        // Right after validation, before anything that waits (the lock included): a save
-        // made just before a Connect must not cancel the attempt that Connect created after.
         if ("OPENROUTER_API_KEY" in changes) yield* oauth.cancelAttempt;
         return yield* applyChanges(changes).pipe(lock.withPermits(1));
       });
 
-    /** Deletes the key line and fails every pending render; `writeFailure` names a `.env` write that did not land. */
     const removeKeyLine = (writeFailure: (reason: string) => string) =>
       Effect.gen(function* () {
-        // A delete, not an empty line, so a key the shell environment provides is not shadowed.
         yield* Effect.mapError(settings.write({ OPENROUTER_API_KEY: null }), (error) => unframedError("internal", writeFailure(error.reason)));
         const view = yield* published;
-        // The sweep cannot poll without a key, so pending renders would sit stranded for 24 hours.
         return yield* renderJobs.failPending({ error: KEY_REMOVED_ERROR }).pipe(
           Effect.map((endedRenders): RemovedKey => ({ settings: view, endedRenders })),
           Effect.catch((error) =>
@@ -195,11 +164,8 @@ export const lifecycleLayer = Layer.effect(
         );
       });
 
-    // The attempt is cancelled first, outside the lock: the key is being removed anyway.
     const removeKey = Effect.andThen(oauth.cancelAttempt, removeKeyLine((reason) => `Could not write .env: ${reason}`).pipe(lock.withPermits(1)));
 
-    // A waiting attempt wrote nothing. A committed one's key write is queued before this
-    // delete, so the key ends up removed either way.
     const cancelConnection = Effect.flatMap(oauth.cancelAttempt, (wrote) =>
       wrote
         ? removeKeyLine((reason) => `Could not remove the key the cancelled connection had written: ${reason}`).pipe(
@@ -216,7 +182,6 @@ export const lifecycleLayer = Layer.effect(
         }),
       );
 
-    /** The project's folder; an empty slug names none, and would otherwise name the output folder itself. */
     const projectFolder = (slug: string) =>
       Effect.gen(function* () {
         if (slug === "") return yield* unframedError("not_found", 'There is no project named "".');
@@ -225,7 +190,6 @@ export const lifecycleLayer = Layer.effect(
 
     const renameProject = (name: string, target: string) =>
       Effect.gen(function* () {
-        // One slug for the folder and for the job records, so the two never disagree.
         const from = projectSlug(name);
         const to = projectSlug(target);
         yield* refuseLiveRuns(from);
@@ -235,8 +199,6 @@ export const lifecycleLayer = Layer.effect(
         const destination = join(outputDir, to);
         if (yield* Effect.promise(() => exists(destination))) return yield* unframedError("conflict", `A project named "${to}" already exists.`);
 
-        // Records first: a render finishing after the rename would otherwise recreate the old
-        // folder, and undoing a record write is another record write.
         const moved = yield* Effect.tryPromise({
           try: () => reassignPendingJobsIn(outputDir, from, to),
           catch: (error) => unframedError("internal", `Could not update the renders in progress for this project, so it was not renamed: ${errorText(error)}`),
@@ -259,7 +221,6 @@ export const lifecycleLayer = Layer.effect(
 
     const deleteProject = (name: string, confirmRenders: boolean) =>
       Effect.gen(function* () {
-        // One slug for the gate and the folder, so the confirm cannot check one spelling and remove another.
         const slug = projectSlug(name);
         yield* refuseLiveRuns(slug);
         const folder = yield* projectFolder(slug);
@@ -273,8 +234,6 @@ export const lifecycleLayer = Layer.effect(
             pendingRenders: pending.length,
           });
         }
-        // Records first, folder second: a failed removal leaves an intact project to retry on,
-        // where the other order would leave records pointing at a folder that is gone.
         const ended =
           pending.length === 0
             ? 0
@@ -282,11 +241,9 @@ export const lifecycleLayer = Layer.effect(
                 .failPending({ project: slug, error: PROJECT_DELETED_ERROR })
                 .pipe(Effect.mapError((error) => unframedError("internal", `Could not stop the renders in progress, so the project was not deleted: ${error.reason}`)));
         yield* closeProject(slug);
-        // A tokens write a room started while it opened must end before the folder goes (spec 19).
         yield* Effect.promise(() => settleTokens());
         const removed = yield* Effect.promise(() => rm(folder, { recursive: true, force: true }).then(() => undefined, (error: unknown) => errorText(error)));
         if (removed !== undefined) {
-          // No compensation: un-failing a record would claim a render is watched when its project may be half gone.
           return yield* unframedError(
             "internal",
             ended > 0 ? `Stopped ${ended} render(s), but the project folder could not be deleted: ${removed}. Deleting again is safe.` : `Could not delete the project: ${removed}`,

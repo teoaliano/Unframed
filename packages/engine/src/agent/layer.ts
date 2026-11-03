@@ -34,10 +34,6 @@ import { Artifacts } from "../artifacts/layer.ts";
 import { PreviewTools } from "../artifacts/previewTools.ts";
 import { openShell, openThread } from "./subscriptions.ts";
 
-/**
- * The agent runtime at the Effect boundary (spec 07): the RPC methods and the two plain HTTP
- * routes (the MCP endpoint and the signed attachment upload path).
- */
 export class Agents extends Context.Service<
   Agents,
   {
@@ -78,7 +74,6 @@ export const agentsLayer = Layer.effect(
         throw error instanceof UnframedError ? new Error(error.message) : error;
       });
 
-    /** Every project in the output folder, sorted by name, with its folder and the active one (spec 14). */
     const outsideProjects = (): Promise<ReadonlyArray<OutsideProject>> =>
       run(
         Effect.gen(function* () {
@@ -188,7 +183,6 @@ export const agentsLayer = Layer.effect(
     return Agents.of({
       runtime,
       dispatch: (command) => {
-        // The wire schema and the domain type describe one command: this assignment fails to compile if they drift.
         const decided: ClientCommand = command;
         return Effect.tryPromise({ try: () => runtime.dispatch(decided), catch: toUnframed });
       },

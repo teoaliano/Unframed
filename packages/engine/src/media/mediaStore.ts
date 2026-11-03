@@ -27,7 +27,6 @@ import { byteSize, isHtmlFileName, kindOfArtifactHtml, prepareArtifactHtml } fro
 import { ensureBridge, ensureLibrary } from "../artifacts/artifactStore.ts";
 import { pinComponents } from "../artifacts/componentRegistry.ts";
 
-/** What the upload route answers. */
 export interface SavedFile {
   readonly file: string;
   readonly fileName: string;
@@ -35,14 +34,10 @@ export interface SavedFile {
   readonly mime: string;
 }
 
-/** The only preview sizes: WebP at longest side 512 and 2048. */
-
 export const PREVIEW_FOLDER = join(".cache", "previews");
 
-/** A preview's name in the cache folder. */
 export const previewFileName = (file: string, size: PreviewSize): string => `${file}-${size}.webp`;
 
-/** Why a save was refused: the route maps each to its status. */
 export class SaveRefused extends Error {
   readonly status: 400 | 404 | 413 | 500;
   constructor(status: 400 | 404 | 413 | 500, message: string) {
@@ -53,35 +48,19 @@ export class SaveRefused extends Error {
 
 export const EMPTY_BODY_MESSAGE = "No file bytes in the request body.";
 
-/**
- * Project media files: saves uploaded bytes as a project file with a sidecar, copies a
- * file within or across projects, and rewrites any data URL that reaches a room into a
- * file (a blob URL, which cannot be recovered, loses its source).
- */
 export class MediaStore extends Context.Service<
   MediaStore,
   {
-    /**
-     * Streams `body` into a new project file and writes its sidecar, whose source is
-     * `upload` unless `source` says otherwise. Rejects with `SaveRefused`.
-     */
     readonly save: (
       project: string,
       input: { originalName: string; mime: string; body: AsyncIterable<Buffer>; rendered?: RenderedSidecar | undefined; source?: MediaSidecar["source"] },
     ) => Promise<SavedFile>;
-    /** Writes a regenerable display preview of `file` into the cache folder. No sidecar. */
     readonly savePreview: (project: string, file: string, size: PreviewSize, body: AsyncIterable<Buffer>) => Promise<{ bytes: number }>;
-    /** `ofProject` names the source project in the copy's sidecar (spec 06's preset copies). */
     readonly copy: (project: string, file: string, from?: string, ofProject?: string) => Effect.Effect<string, UnframedError>;
-    /** The absolute project folder, when the project exists. */
     readonly folder: (project: string) => Promise<string | undefined>;
   }
 >()("unframed/engine/MediaStore") {}
 
-/**
- * Copies the sheets and compiled files a page pins into another project under their own names
- * (spec 20), each only when the destination lacks it: a name holds the same file wherever it is.
- */
 const copyPinnedComponents = async (sourceDir: string, targetDir: string, file: string): Promise<void> => {
   if (!file.endsWith(".html")) return;
   const html = await readFile(join(sourceDir, file), "utf8").catch(() => undefined);
@@ -137,11 +116,6 @@ export const mediaStoreLayer = Layer.effect(
 
     const taken = (dir: string) => (name: string) => existsSync(join(dir, name)) || existsSync(join(dir, sidecarFileName(name)));
 
-    /**
-     * Writes `body` to a temp file, then, in one synchronous step, picks a name that is free
-     * (file and sidecar), moves the file there and writes its sidecar, so two uploads never
-     * pick the same name.
-     */
     const writeNew = async (
       dir: string,
       originalName: string,
@@ -179,11 +153,6 @@ export const mediaStoreLayer = Layer.effect(
       }
     };
 
-    /**
-     * An uploaded `.html` is a page (spec 18): it is read whole, under the upload limit, and given
-     * spec 09's tags and element ids. Bytes that are empty pass through, so the empty-body refusal
-     * stays as it was. The artifact limit does not apply to uploads.
-     */
     const artifactBody = async (project: string, dir: string, name: string, body: AsyncIterable<Buffer>): Promise<AsyncIterable<Buffer>> => {
       if (!isHtmlFileName(name)) return body;
       const chunks: Buffer[] = [];
@@ -277,13 +246,10 @@ export const mediaStoreLayer = Layer.effect(
             const sidecar = JSON.parse(await readFile(join(sourceDir, sidecarFileName(file)), "utf8")) as { mime?: unknown };
             if (typeof sidecar.mime === "string" && sidecar.mime !== "") mime = sidecar.mime;
           } catch {
-            // no sidecar: the copy's type is unknown
           }
           const fileName = copyFileName(file);
           const temp = join(targetDir, `.copy-${randomUUID()}.tmp`);
           if (isHtmlFileName(file)) {
-            // A pasted page or motion is a new file of its kind: tags and ids, as every artifact write gets (spec 18).
-            // Its pinned sheets come first, so the pins it carries are valid when the pins are injected (spec 20).
             if (sourceDir !== targetDir) await copyPinnedComponents(sourceDir, targetDir, file);
             const text = await readFile(source, "utf8");
             const kind = kindOfArtifactHtml(text);
@@ -311,7 +277,6 @@ export const mediaStoreLayer = Layer.effect(
           error instanceof UnframedError ? error : unframedError("internal", `Could not copy the file: ${errorText(error)}`),
       });
 
-    /** Saves a data URL that reached a room, and answers the marker that replaces it. */
     const saveDataUrl = async (project: string, url: string, name: string) => {
       const decoded = decodeDataUrl(url);
       if (!decoded) return undefined;
@@ -346,7 +311,6 @@ export const mediaStoreLayer = Layer.effect(
 
     yield* rooms.afterCommit((project, change, room) => {
       const worth = [...change.records.values()].some((record) => {
-        // A shape's own url prop is a link URL in tldraw's schema, so only asset sources can hold these.
         const src = record.typeName === "asset" ? (record.props as { src?: unknown }).src : undefined;
         return typeof src === "string" && (src.startsWith("data:") || src.startsWith("blob:"));
       });
