@@ -125,3 +125,56 @@ test("Undo takes back the whole move, and the file the shape names goes back to 
   expect(moved).not.toBe(before);
   await expect.poll(async () => Number(await bar(page).getAttribute("data-start"))).toBeCloseTo(0, 2);
 });
+
+/** The dot's fade is a `set`: a single instant at 1.5 s, with a move beside it so the strip has a bar to compare with. */
+const SETTER = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}#dot{position:absolute;left:20px;top:120px;width:80px;height:80px;background:#f00}</style></head><body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360"><div id="dot" data-uf-name="Dot" class="clip" data-start="0" data-duration="4"></div></div>
+<script src="gsap.js"></script><script>
+const tl = gsap.timeline({ paused: true });
+tl.to("#dot", { x: 400, duration: 4 }, 0);
+tl.set("#dot", { opacity: 0.5 }, 1.5);
+window.__timelines = { main: tl };
+</script></body></html>`;
+
+/** The frame's `set` start: the second tween of the composition, read from its own timeline. */
+const setStart = async (page: Page): Promise<number> => {
+  for (const frame of page.frames()) {
+    if (!new URL(frame.url()).pathname.endsWith("-intro.html")) continue;
+    const start = await frame.evaluate(() => {
+      const timeline = (window as unknown as { __timelines?: { main: { getChildren(a: boolean, b: boolean, c: boolean): Array<{ startTime(): number; vars?: unknown }> } } }).__timelines;
+      return timeline?.main.getChildren(true, true, false)[1]?.startTime();
+    });
+    if (typeof start === "number") return start;
+  }
+  throw new Error("no composition frame");
+};
+
+test("dragging a set's diamond moves its instant in the frame, and the version says so", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await filledArtifact(agent, { id: SHAPE, kind: "motion", ref: "150", at: { x: -520, y: -40 }, size: { w: 480, h: 270 }, title: "Intro", html: SETTER });
+  await expect(shapeOnScreen(page, SHAPE)).toBeVisible();
+  await page.mouse.click(640, 600);
+  const at = await centre(shapeOnScreen(page, SHAPE));
+  await page.mouse.dblclick(at.x, at.y);
+  await expect(region(page)).toBeVisible();
+  await expect(bar(page).first()).toBeVisible({ timeout: 40_000 });
+  const pxPerSecond = await zoomOf(page);
+
+  const before = await fileOf(agent);
+  const diamond = timeline(page).locator('[data-testid="timeline-diamond"][data-tween="1"]').first();
+  await expect(diamond).toBeVisible();
+  const box = await diamond.boundingBox();
+  if (!box) throw new Error("no diamond");
+  const y = box.y + box.height / 2;
+  const x = box.x + box.width / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 0.5 * pxPerSecond, y, { steps: 8 });
+  await expect.poll(() => setStart(page)).toBeCloseTo(2, 1);
+  await page.mouse.up();
+
+  await expect.poll(() => fileOf(agent), { timeout: 15_000 }).not.toBe(before);
+  const latest = (await editSummaries(agent)).at(-1) ?? [];
+  expect(latest).toHaveLength(1);
+  expect(latest[0]).toMatch(/^Moved Dot visual to 2(\.0+)? s$/);
+});

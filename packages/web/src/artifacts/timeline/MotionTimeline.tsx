@@ -673,7 +673,9 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
   /** What a bar may do, from the reading: a move needs an editable start, an end an editable duration, a left edge both. */
   const allowed = (bar: BarView, row: RowView): { move: boolean; start: boolean; end: boolean } => {
     const tween = tweens.get(bar.tween);
-    if (tween === undefined || tween.readOnly !== null || row.locked || bar.tween < 0 || tween.method === "set") return { move: false, start: false, end: false };
+    if (tween === undefined || tween.readOnly !== null || row.locked || bar.tween < 0) return { move: false, start: false, end: false };
+    // A set has one instant and no duration: its diamond moves, and it has no edges to stretch (spec 21, Editing on the strip).
+    if (tween.method === "set") return { move: editable(tween.start), start: false, end: false };
     const startOk = editable(tween.start);
     const endOk = editable(tween.duration);
     return { move: startOk, start: startOk && endOk, end: endOk };
@@ -690,7 +692,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
     setSelectedTween(bar.tween);
     if (row.element !== null && !session.selection.includes(row.element)) session.setSelection([row.element]);
     const rights = allowed(bar, row);
-    // The edge within 6 px is the stretch; a narrow bar's nearer edge wins.
+    // The edge within 6 px is the stretch; a narrow bar's nearer edge wins. A set has no edges, so its press always moves it.
     const nearStart = local <= EDGE_PIXELS && rights.start;
     const nearEnd = width - local <= EDGE_PIXELS && rights.end;
     const mode: GestureMode | null = nearStart && nearEnd ? (local <= width / 2 ? "start" : "end") : nearStart ? "start" : nearEnd ? "end" : rights.move ? "move" : null;
