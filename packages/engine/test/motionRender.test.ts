@@ -68,6 +68,17 @@ describe("motion.upload", () => {
     expect(unnamed.file).toMatch(/^\d+-motion\.html$/);
   });
 
+  it("takes a body of exactly 20 MB, whose tags and ids would go past it, and refuses one byte more", async () => {
+    const { rpc } = await startRendering();
+    const limit = 20 * 1_048_576;
+    const open = "<div id=root>";
+    const close = "</div>";
+    const exact = open + "a".repeat(limit - open.length - close.length) + close;
+    const saved = await rpc.call("motion.upload", { project: "board", fileName: "edge.html", html: exact });
+    expect(saved.bytes).toBeGreaterThan(limit);
+    await expect(rpc.call("motion.upload", { project: "board", fileName: "x.html", html: exact + "a" })).rejects.toMatchObject({ code: "bad_request" });
+  }, 60_000);
+
   it("refuses an empty body and one over 20 MB", async () => {
     const { rpc, folder } = await startRendering();
     for (const html of ["", "  \n\t "]) {

@@ -182,7 +182,6 @@ export const artifactsLayer = Layer.effect(
         const fileName = input.fileName.split(/[\\/]/).pop()?.trim() || "motion.html";
         const records = yield* rooms.read(input.project);
         const html = (yield* Effect.promise(() => pinComponents(folder, records, prepareArtifactHtml(input.html, "motion")))).html;
-        if (byteSize(html) > UPLOAD_LIMIT) return yield* unframedError("bad_request", `The composition is too large (${(byteSize(html) / 1_048_576).toFixed(1)}MB). The limit is 20MB.`);
         return yield* Effect.tryPromise({
           try: async () => {
             await ensureLibrary(folder);
