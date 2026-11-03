@@ -7,8 +7,6 @@ import { filledArtifact, writeProjectFile } from "./artifacts.ts";
 import { componentShape, SHEET_FILE } from "./components.ts";
 import { putRecords } from "./media.ts";
 
-/** Spec 20, task 30: Go to main component opens the component's editor; it is disabled when the shape is gone. */
-
 const SHEET = stampElementIds(`<!doctype html><html><head><meta charset="utf-8">${BRIDGE_TAG}${COMPONENT_HELPER_TAG}</head><body style="margin:0">
 <script type="application/json" data-uf-component>{"tag":"uf-price-card","variants":{},"props":{"label":"text"},"slots":[]}</script>
 <style type="text/x-uf-component" data-uf-component-style>:host { display: inline-block; } button { padding: 8px 12px; }</style>
@@ -29,7 +27,6 @@ const openPageEditor = async (page: Page) => {
   await expect(region(page, "Landing")).toBeVisible();
 };
 
-/** Clicks the instance until the bridge answers with a selection, after the page is swapped in. */
 const selectInstance = async (page: Page) => {
   await expect(async () => {
     await frame(page).locator("uf-price-card").first().locator("button").click();
@@ -50,7 +47,6 @@ test("Go to main component opens the component's editor", async ({ page, agent }
   await selectInstance(page);
   await design(page).getByRole("button", { name: "Go to main component", exact: true }).click();
 
-  // The component's editor opens in place of the page's: its kind word and its title name it.
   await expect(region(page, "Price card").getByTestId("artifact-editor-kind")).toHaveText("component", { timeout: 20_000 });
 });
 

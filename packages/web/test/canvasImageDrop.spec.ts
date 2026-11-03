@@ -8,10 +8,8 @@ import { artifactShape, filledArtifact, projectPath, writeBridge } from "./artif
 import { filledMedia, putRecords } from "./media.ts";
 import { pngBytes } from "./images.ts";
 
-/** A 1 by 1 PNG: the drop only needs an image file in the project. */
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64");
 
-/** A page with a picture the bridge can name: its id is written, so a lock can name it too. */
 const PAGE = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}</style>${BRIDGE_TAG}</head><body><main><h1 data-hf-id="hf-head">Welcome</h1><img data-hf-id="hf-pic1" alt="Hero picture" src="old.png" width="200" height="120" style="display:block"></main></body></html>`;
 
 const PAGE_AT = { x: -520, y: -40 };
@@ -19,7 +17,6 @@ const PHOTO_AT = { x: -120, y: 300 };
 
 const outline = (page: Page): Locator => page.locator("[data-drop-outline]");
 
-/** The file the Landing page shape names in the room. The room lags the canvas by a sync round, so reads poll. */
 const pageFile = async (engine: TestEngine): Promise<string | undefined> => (await roomShapes(engine, "default", "page")).find((record) => record.id === "shape:landing")?.props?.file;
 
 const photoAt = async (engine: TestEngine): Promise<{ x: number; y: number } | undefined> => {
@@ -40,7 +37,6 @@ const onBoard = async (page: Page, engine: TestEngine, locked: string[] = []) =>
   await expect(shapeOnScreen(page, "shape:photo")).toBeVisible();
 };
 
-/** Selects the page, and waits until its frame runs and shows its picture. */
 const selectPage = async (page: Page) => {
   await page.mouse.click(640, 600);
   const at = await centre(shapeOnScreen(page, "shape:landing"));
@@ -48,17 +44,14 @@ const selectPage = async (page: Page) => {
   await expect(shapeOnScreen(page, "shape:landing").frameLocator("iframe[data-artifact-frame]").locator("img[alt='Hero picture']")).toBeVisible({ timeout: 20_000 });
 };
 
-/** The picture's centre on screen, read from inside the page's frame. */
 const pictureCentre = async (page: Page) => {
   const picture = shapeOnScreen(page, "shape:landing").frameLocator("iframe[data-artifact-frame]").locator("img[alt='Hero picture']");
   const box = (await picture.boundingBox())!;
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 };
 
-/** Presses on the photo and moves it, in steps, to a point; the press is held until the caller releases. */
 const dragPhotoTo = async (page: Page, to: { x: number; y: number }) => {
   const from = await centre(shapeOnScreen(page, "shape:photo"));
-  // Two moves: tldraw marks the shape under the pointer on a move, and the press needs that mark.
   await page.mouse.move(from.x - 2, from.y);
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
@@ -76,14 +69,12 @@ test("dragging an image over a selected page outlines the picture under the poin
   await page.mouse.up();
   await expect(outline(page)).toHaveCount(0);
 
-  // The move is not recorded: the photo is where the drag began.
   await expect.poll(() => photoAt(agent), { timeout: 4000 }).toEqual(start);
   await expect.poll(async () => {
     const file = await pageFile(agent);
     return file === undefined || file === before ? "" : await readFile(projectPath(agent, file), "utf8");
   }, { timeout: 8000 }).toMatch(/<img[^>]*src="[^"]*photo[^"]*"/i);
 
-  // Cmd-Z takes back the swap and nothing else: the photo stays where it was.
   await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(() => pageFile(agent), { timeout: 8000 }).toBe(before);
   await expect.poll(() => photoAt(agent), { timeout: 4000 }).toEqual(start);
@@ -95,7 +86,6 @@ test("a drop off any picture is an ordinary move, and a locked picture is no tar
   const start = await photoAt(agent);
   await selectPage(page);
 
-  // Off the picture: the photo moves where it was dropped and the page is not rewritten.
   const from = await centre(shapeOnScreen(page, "shape:photo"));
   await dragPhotoTo(page, { x: from.x + 600, y: from.y });
   await expect(outline(page)).toHaveCount(0);

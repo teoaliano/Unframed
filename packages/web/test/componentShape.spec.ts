@@ -7,7 +7,6 @@ import { expect, startHostedEngine } from "./fixtures.ts";
 import { clickShape, toolbar } from "./generation.ts";
 import { putRecords } from "./media.ts";
 
-/** Pictures are stubs here (`ok`), so a snapshot exists once the engine has made one. */
 const test = base.extend<{ engine: TestEngine }>({
   engine: async ({}, use) => {
     const engine = await startHostedEngine({ env: { UNFRAMED_TEST_RENDERER: "ok" } });

@@ -5,10 +5,8 @@ import { expect, test } from "./agent.ts";
 import { filledArtifact, projectPath, writeProjectFile } from "./artifacts.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
-/** A 1 by 1 PNG: the picker lists files by their type and name, so the bytes only need to be an image. */
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64");
 
-/** An image, two elements with a picture each: an <img>, and a card whose background is a picture. */
 const PAGE = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}.card{width:200px;height:120px;background-size:cover}</style></head><body><main><h1>Welcome</h1><img alt="Hero picture" src="old.png" width="200" height="120"><div class="card" style="background-image: url(&quot;old.png&quot;)">Card</div></main></body></html>`;
 
 const editor = (page: Page) => page.getByTestId("artifact-editor");
@@ -18,12 +16,10 @@ const parameters = (page: Page) => editor(page).locator('[data-editor-column="pa
 const outline = (page: Page, kind: "hover" | "selected") => page.locator(`[data-edit-outline="${kind}"]`);
 const picker = (page: Page) => page.getByRole("dialog", { name: "Choose an image" });
 
-/** The file the Landing page shape names in the room. */
 const fileOf = async (engine: TestEngine): Promise<string | undefined> => (await roomShapes(engine, "default", "page")).find((record) => record.id === "shape:landing")?.props?.file;
 
 const textOf = async (engine: TestEngine, file: string): Promise<string> => readFile(projectPath(engine, file), "utf8");
 
-/** Puts an image in the project folder with a set time, so the picker's newest-first order is known. */
 const putImage = async (engine: TestEngine, name: string, secondsAgo: number): Promise<void> => {
   await writeProjectFile(engine, name, PNG);
   const when = new Date(Date.now() - secondsAgo * 1000);
@@ -43,7 +39,6 @@ const openEditor = async (page: Page) => {
   await expect(region(page)).toBeVisible();
 };
 
-/** Selects a frame element once the bridge is live: the page is prepared and swapped in first. */
 const select = async (page: Page, target: Locator) => {
   await expect(async () => {
     await target.click();
@@ -51,7 +46,6 @@ const select = async (page: Page, target: Locator) => {
   }).toPass({ timeout: 20_000 });
 };
 
-/** The names the picker lists, in the order they show. */
 const listed = (page: Page): Promise<string[]> => picker(page).locator("[data-image-file]").evaluateAll((items) => items.map((item) => item.getAttribute("data-image-file") ?? ""));
 
 test("the picker lists the project's images newest first, filters them, and swaps an img and a background image", async ({ page, agent }) => {
@@ -72,13 +66,11 @@ test("the picker lists the project's images newest first, filters them, and swap
   await expect(picker(page)).toHaveCount(0);
   await expect(frameOf(page).getByRole("img", { name: "Hero picture" })).toHaveAttribute("src", "older.png");
 
-  // The card's background is a picture too: choosing one there swaps the background image.
   await select(page, frameOf(page).getByText("Card"));
   await parameters(page).getByRole("button", { name: "Replace image" }).click();
   await picker(page).getByRole("button", { name: "newer.png" }).click();
   await expect(frameOf(page).getByText("Card")).toHaveCSS("background-image", /newer\.png/);
 
-  // Both edits reach the file once the element changes are saved.
   await page.getByRole("region", { name: "Editing Landing" }).getByTestId("artifact-editor-title").click();
   await expect.poll(async () => (await fileOf(agent)) ?? "", { timeout: 8000 }).not.toBe("");
   await expect

@@ -1,9 +1,3 @@
-/**
- * The editor's Design tab (spec 18, The Design tab): the selected elements' fields in sections. A
- * field shows the computed value and writes through the owner rule: a source value becomes a source
- * edit in the burst, and a read-only value says why. With several elements selected a value they
- * share shows, a value they differ on shows Mixed, and an edit reaches each of them.
- */
 import type { OffTokenFound, SourceEdit } from "@unframed/contracts";
 import { cssName, dialAt, DESIGN_FIELDS, fieldOwner, kitCssNames, resolve, styleValueRefusal, TEXT_STYLE_SUFFIX, tokensForField, type ArtifactKind, type ChipElement, type ComponentDeclaration, type FieldOwner, type Kit, type TextStyleField, type Token } from "@unframed/domain";
 import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Component, Diamond, Link, MessageSquarePlus, SlidersHorizontal, Unlink } from "lucide-react";
@@ -41,7 +35,6 @@ const DIRECTIONS = ["row", "column", "row-reverse", "column-reverse"];
 const ALIGN_ITEMS = ["flex-start", "center", "flex-end", "stretch", "baseline"];
 const JUSTIFY = ["flex-start", "center", "flex-end", "space-between", "space-around", "space-evenly"];
 const WRAPS = ["nowrap", "wrap"];
-/** The generic families the Font field always offers, after the document's own. */
 const GENERIC_FAMILIES = ["system-ui", "serif", "monospace"];
 const FLEX_DISPLAYS = ["flex", "inline-flex"];
 const GAP_DISPLAYS = ["flex", "inline-flex", "grid", "inline-grid"];
@@ -51,7 +44,6 @@ const LOCKED = "Locked. Unlock it in Layers to edit it.";
 const OVERRIDDEN = "A stylesheet rule wins over this value.";
 const SEVERAL_SHADOWS = "Several shadows. Ask the agent to change them.";
 
-/** A computed colour as `#rrggbb`, with two more digits below full opacity. */
 export const hexOf = (value: string | undefined): string => {
   const match = /rgba?\(([^)]+)\)/.exec(value ?? "");
   if (match === null) return "#000000";
@@ -60,16 +52,11 @@ export const hexOf = (value: string | undefined): string => {
   return `#${pair(r)}${pair(g)}${pair(b)}${a < 1 ? pair(a * 255) : ""}`;
 };
 
-/** The number a computed length shows, without its unit; empty when it has none (`normal`). */
 const numberOf = (value: string | undefined): string => {
   const parsed = Number.parseFloat(value ?? "");
   return Number.isFinite(parsed) ? String(Math.round(parsed * 100) / 100) : "";
 };
 
-/**
- * The value a typed number writes: a unitless line height stays unitless when the source set it so;
- * otherwise the unit the inline value already uses (px, em, rem or %), and px when it has none.
- */
 export const numberValue = (property: string, typed: number, inline: string | null | undefined): string => {
   const written = (inline ?? "").trim();
   if (property === "line-height" && /^\d*\.?\d+$/.test(written)) return String(typed);
@@ -77,10 +64,8 @@ export const numberValue = (property: string, typed: number, inline: string | nu
   return `${typed}${unit}`;
 };
 
-/** The first family of a computed font stack, unquoted. */
 const firstFamily = (value: string): string => value.split(",")[0]?.trim().replace(/^["']|["']$/g, "") ?? "";
 
-/** One shadow: its offsets, blur and spread as numbers in px, and its colour as hex. A value with several shadows reads its first. */
 export interface Shadow {
   readonly x: string;
   readonly y: string;
@@ -94,7 +79,6 @@ const SHADOW_CAPTION: Record<Exclude<ShadowPart, "colour">, string> = { x: "X", 
 const SHADOW_PARTS = ["x", "y", "blur", "spread", "colour"] as const;
 type ShadowPart = (typeof SHADOW_PARTS)[number];
 
-/** Reads a computed `box-shadow`: the first shadow's lengths and colour, and whether a second one follows it. */
 export const shadowOf = (computed: string | undefined): Shadow => {
   const text = computed ?? "";
   let depth = 0;
@@ -116,43 +100,32 @@ export const shadowOf = (computed: string | undefined): Shadow => {
   };
 };
 
-/** The shadow's value with one part replaced: lengths in px, the colour as written. */
 const shadowWith = (shadow: Shadow, part: ShadowPart, value: string): string => {
   const next = { x: shadow.x, y: shadow.y, blur: shadow.blur, spread: shadow.spread, colour: shadow.colour, [part]: value };
   return `${next.x}px ${next.y}px ${next.blur}px ${next.spread}px ${next.colour}`;
 };
 
-/** The value a field shows: the one the selection shares, or Mixed, with the owner that blocks an edit. */
 interface View {
   readonly value: string;
   readonly mixed: boolean;
   readonly owner: FieldOwner;
   readonly editable: boolean;
-  /** Asks the agent to make the field editable, with the read-only elements' chips. */
   readonly ask: () => void;
-  /** Opens the motion's timeline at the tween that animates the field (spec 21, The Design tab link), when an element is animated. */
   readonly reveal?: (() => void) | undefined;
-  /** A board copy's field in its component sheet (spec 20): the variants it covers, and the rule that sets it. */
   readonly sheet?: SheetField | null;
 }
 
-/** The parameter a view's field is driven by, when it is editable as a dial. */
 const dialPathOf = (view: View): string | undefined => (view.owner.owner === "dial" && view.editable ? view.owner.path : undefined);
 
 interface Subject {
   readonly id: string;
   readonly report: EditReport;
-  /** The element in the source, or undefined for a runtime element. */
   readonly element: { readonly style: Record<string, string>; readonly text: string | null; readonly src?: string | undefined; readonly hidden: boolean } | undefined;
   readonly locked: boolean;
 }
 
 const noteText = (text: string) => <p className="m-0 text-xs text-muted-foreground">{text}</p>;
 
-/**
- * The line a read-only owner shows under its section, or null when the value is the source's own or locked (the tab says that once).
- * A dial's value is editable with one element selected, so it shows no line then; with several it names its parameter.
- */
 const ownerLine = (owner: FieldOwner, single: boolean, ask: () => void, reveal?: () => void, sentence = "Set by the agent's code."): ReactNode => {
   if (owner.owner === "source" || owner.owner === "locked") return null;
   if (owner.owner === "script") {
@@ -181,7 +154,6 @@ const ownerLine = (owner: FieldOwner, single: boolean, ask: () => void, reveal?:
   return noteText(`Set by parameter ${owner.path}.`);
 };
 
-/** The parameter mark a dial-owned field carries, its tooltip naming the parameter. */
 const ParameterMark = ({ path }: { readonly path: string }) => (
   <Tip label={`Parameter ${path}`}>
     <span role="img" aria-label={`Parameter ${path}`} className="inline-flex shrink-0 text-muted-foreground">
@@ -223,7 +195,6 @@ const NumberControl = ({
       onKeyDown={(event) => {
         if (event.key === "Enter") commit();
         if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
-        // Arrow keys step by 1, Shift by 10, and each step is applied at once.
         event.preventDefault();
         const base = Number(draft === "" ? value : draft);
         if (!Number.isFinite(base)) return;
@@ -241,7 +212,6 @@ const FontControl = ({ value, disabled, families, onCommit }: { readonly value: 
   const commit = (typed: string) => {
     const next = typed.trim();
     if (next === "" || next === value) return;
-    // A refused family goes back to the one the element had, so the field never shows a value the file does not hold.
     if (!onCommit(next)) setDraft(value);
   };
   const items = [...new Set([...families, ...GENERIC_FAMILIES])];
@@ -251,7 +221,6 @@ const FontControl = ({ value, disabled, families, onCommit }: { readonly value: 
       value={draft}
       onValueChange={(next, details) => {
         setDraft(next);
-        // Picking a family from the list applies it at once; typing waits for Enter or leaving the field.
         if (details.reason === "item-press") commit(next);
       }}
     >
@@ -299,7 +268,6 @@ const KeywordControl = ({
   </Select>
 );
 
-/** A colour as a swatch that opens a popover with the browser's colour input and a hex field. */
 const ColourControl = ({ label, hex, mixed, disabled, onCommit }: { readonly label: string; readonly hex: string; readonly mixed: boolean; readonly disabled: boolean; readonly onCommit: (next: string) => void }) => {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(hex);
@@ -368,10 +336,8 @@ const Section = ({ name, note, action, children }: { readonly name: string; read
   </fieldset>
 );
 
-/** The fields that offer a token: the Design tab's slot (spec 19, the token button). Opacity, keywords and visibility offer none. */
 const TOKEN_FIELDS = new Set(["font-family", "font-size", "font-weight", "line-height", "letter-spacing", "color", "background-color", "border-width", "border-color", "border-radius", "box-shadow", "padding", "margin", "gap", "text-style"]);
 
-/** The text a token shows for the artifact's mode: its colour as a swatch, a text style as its family and size, or one field of it (`suffix`, a CSS property name). */
 const tokenValueOf = (token: Token, kit: Kit, mode: string, suffix?: string): { readonly text: string; readonly colour?: string } => {
   const value = resolve(kit, token.path, mode);
   if (value === undefined) return { text: "" };
@@ -382,7 +348,6 @@ const tokenValueOf = (token: Token, kit: Kit, mode: string, suffix?: string): { 
   return token.type === "color" ? { text: String(value), colour: String(value) } : { text: String(value) };
 };
 
-/** The literal values a token's properties take when detached: one for a plain token, one per longhand for a text style. */
 const literalsOf = (token: Token, kit: Kit, mode: string, properties: readonly string[]): Array<{ readonly property: string; readonly value: string }> => {
   const value = resolve(kit, token.path, mode);
   if (value === undefined) return [];
@@ -392,10 +357,8 @@ const literalsOf = (token: Token, kit: Kit, mode: string, properties: readonly s
     .map((field) => ({ property: TEXT_STYLE_SUFFIX[field], value: String(value[field]) }));
 };
 
-/** The last two segments of a token's path: what a chip shows (the whole path is its tooltip). */
 const shortPathOf = (path: string): string => path.split("/").slice(-2).join("/");
 
-/** The token a kit custom property belongs to, and the text style field it names when the token is a text style. */
 const tokenNamed = (kit: Kit | null, name: string): { readonly token: Token; readonly suffix?: string } | undefined => {
   for (const token of kit?.tokens ?? []) {
     for (const base of [cssName(token.path), ...(token.formerNames ?? [])]) {
@@ -409,7 +372,6 @@ const tokenNamed = (kit: Kit | null, name: string): { readonly token: Token; rea
   return undefined;
 };
 
-/** A token's value as a chip shows it: the short path, a swatch for a colour, and the mode's value in muted text. */
 const ChipFace = ({ token, suffix, kit, mode }: { readonly token: Token; readonly suffix?: string | undefined; readonly kit: Kit; readonly mode: string }) => {
   const { text, colour } = tokenValueOf(token, kit, mode, suffix);
   return (
@@ -421,10 +383,6 @@ const ChipFace = ({ token, suffix, kit, mode }: { readonly token: Token; readonl
   );
 };
 
-/**
- * The token button of a field (spec 19, The token button): a popover with a search field, the tokens the field offers with their
- * value in the artifact's mode, and Edit kit at the foot. Hovering a token previews it in the frame; choosing one writes its source edits.
- */
 const TokenPicker = ({
   field,
   label,
@@ -439,20 +397,15 @@ const TokenPicker = ({
   onOpenChange,
 }: {
   readonly field: string;
-  /** The field's name as the Design tab shows it, for the trigger's accessible name. */
   readonly label: string;
   readonly kit: Kit | null;
   readonly mode: string;
   readonly editable: boolean;
-  /** The source edits that set the field to a token, one list per token. */
   readonly edits: (token: Token) => SourceEdit[];
   readonly session: EditSession;
   readonly onOpenKit: () => void;
-  /** A field that holds a token shows it as a chip, which opens this popover (spec 19, The token chip). */
   readonly chip?: { readonly token: Token; readonly suffix?: string } | undefined;
-  /** Writes the token's resolved value as literals, for Detach. */
   readonly detach?: (() => void) | undefined;
-  /** Tells the Design tab the popover is open, so a chip stays while a preview changes the field's owner. */
   readonly onOpenChange?: ((open: boolean) => void) | undefined;
 }) => {
   const [open, setOpen] = useState(false);
@@ -478,7 +431,6 @@ const TokenPicker = ({
           <ChipFace token={chip.token} suffix={chip.suffix} kit={kit} mode={mode} />
         </PopoverTrigger>
       )}
-      {/* Escape or a choice hands focus back to the field's trigger, or to the chip that replaces it. */}
       <PopoverPopup
         side="left"
         align="start"
@@ -520,7 +472,6 @@ const TokenPicker = ({
                     onFocus={() => session.previewEdits(edits(token))}
                     onBlur={() => session.previewEdits(null)}
                     onClick={() => {
-                      // The frame goes back to its own values first: a patch of a value the hover already showed reads as overridden.
                       close(false);
                       for (const edit of edits(token)) session.patch(edit);
                     }}
@@ -550,7 +501,6 @@ const TokenPicker = ({
   );
 };
 
-/** Four sides of one spacing property (padding or margin), with a link toggle that sets all four at once. */
 const SidesRow = ({
   label,
   prefix,
@@ -594,14 +544,12 @@ const SidesRow = ({
   );
 };
 
-/** The picture an element shows: an img's file, or the one url() of its background image; null when it shows none. */
 const pictureOf = (report: EditReport): { readonly target: "src" | "background"; readonly file: string } | null => {
   if (report.tag === "img") return { target: "src", file: report.src ?? "" };
   const match = /^url\(\s*["']?([^"')]*)["']?\s*\)$/.exec(report.computed["background-image"] ?? "");
   return match === null ? null : { target: "background", file: match[1] ?? "" };
 };
 
-/** The bare project file name a picture's URL ends in: a computed background is an absolute URL. */
 const fileNameOf = (url: string): string => {
   const last = url.split("/").pop() ?? "";
   try {
@@ -611,10 +559,6 @@ const fileNameOf = (url: string): string => {
   }
 };
 
-/**
- * The Off-token values section (spec 19, Off-token values): the literals in the file that sit close to a kit token, one row per place.
- * Closed by default. A row selects its element (a rule selects the elements its selector matches); Use token writes a token edit for it.
- */
 const OffTokens = ({
   values,
   labelOf,
@@ -660,42 +604,27 @@ export interface DesignTabProps {
   readonly project: string;
   readonly dials: Readonly<Record<string, unknown>> | undefined;
   readonly locked: readonly string[];
-  /** The project kit (spec 19), or null when the project has none. */
   readonly kit: Kit | null;
-  /** The artifact's kit mode, as stored on the shape. */
   readonly mode: string | undefined;
-  /** Opens the Kit dialog. */
   readonly onOpenKit: () => void;
-  /** Tell the agent: the selected elements' chips go into the artifact's chat (spec 18, Point and tell). */
   readonly onTell: (elements: ChipElement[]) => void;
-  /** Ask the agent to make a read-only field editable, with the read-only elements' chips. */
   readonly onAsk: (field: string, elements: ChipElement[]) => void;
-  /** Opens a motion's timeline at the tween that animates a property of an element (spec 21). */
   readonly onShowOnTimeline?: (element: string, property: string) => void;
-  /** A component sheet's declaration (spec 20), shown read-only when nothing is selected. */
   readonly component?: ComponentDeclaration | null;
-  /** Asks the agent to change the component. */
   readonly onAskComponent?: () => void;
-  /** The component's title, named in the variant line of a picked board copy (spec 20). */
   readonly componentTitle?: string | undefined;
-  /** The component shape a tag names, or undefined when no shape holds it (spec 20). Its file is its current sheet. */
   readonly componentOf?: ((tag: string) => { readonly shapeId: string; readonly title: string; readonly file?: string | undefined } | undefined) | undefined;
-  /** Accepts the component's update for this artifact (spec 20, the Instance section's Update). */
   readonly onUpdateComponent?: ((tag: string) => void) | undefined;
-  /** Opens the editor on a component shape, after the pending burst is written (spec 20, Go to main component). */
   readonly onGoToMain?: ((shapeId: string) => void) | undefined;
-  /** Make component: sends the selected element to the artifact's chat with the fixed instruction (spec 20). */
   readonly onMake?: ((element: ChipElement) => void) | undefined;
 }
 
-/** The value a dial takes for a CSS value written to its field: a number dial takes the number, anything else the text. */
 const dialValueFor = (current: unknown, css: string): unknown => {
   if (typeof current !== "number") return css;
   const parsed = Number.parseFloat(css);
   return Number.isFinite(parsed) ? parsed : current;
 };
 
-/** The computed value of a property normalised by the browser, so two spellings of one value compare equal. */
 const normaliserFor = (property: string) => (value: string) => {
   const probe = document.createElement("i");
   probe.style.setProperty(property, value);
@@ -703,7 +632,6 @@ const normaliserFor = (property: string) => (value: string) => {
 };
 
 export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, onOpenKit, onTell, onAsk, onShowOnTimeline, component, onAskComponent, componentTitle, componentOf, onGoToMain, onMake, onUpdateComponent }: DesignTabProps) => {
-  // The token chip whose popover is open. A preview of a token changes the frame, so the field's owner can change while the popover is up.
   const [openChip, setOpenChip] = useState<{ readonly field: string; readonly named: { readonly token: Token; readonly suffix?: string } } | null>(null);
   const { selection, reports, tree, preparing, prepareError, pending, families, overridden } = session;
   if (preparing) return <p className="m-0 p-2.5 text-sm text-muted-foreground">{`Getting this ${kind} ready for editing…`}</p>;
@@ -733,7 +661,6 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   });
   const [first] = subjects;
   const single = subjects.length === 1;
-  // A selected instance (spec 20): its Instance section, and only its margin, opacity and visibility fields.
   const instance = single && first!.report.component ? first!.report.component : null;
   const instanceFields =
     instance === null
@@ -747,8 +674,6 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   const anyLocked = subjects.some((subject) => subject.locked);
   const name = single ? (elements.find((candidate) => candidate.id === first!.id)?.name ?? first!.report.tag) : `${subjects.length} elements`;
 
-  /** Who holds a style value of one element. An edit still in the burst is the person's own, so the owner stays the source until it is written. */
-  /** A board copy's field in its component sheet (spec 20): the variants it covers, and the rule that sets it. Null for a page's element. */
   const sheetOf = (subject: Subject, property: string): SheetField | null =>
     sheetFieldOf(subject.report.sheetRules, subject.report.inline, property, expandShorthand, kit === null ? [] : kitCssNames(kit), subject.report.sheetOverrides);
 
@@ -775,19 +700,16 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     });
   };
 
-  /** One selected element as the chip a message carries (see chipData.ts). */
   const chipDataOf = (subject: Subject): ChipElement => {
     const source = elements.find((candidate) => candidate.id === subject.id);
     return chipDataFor(subject.id, source, subject.report, source !== undefined && elements.some((candidate) => candidate.parent === subject.id));
   };
 
-  /** The field's value across the selection: the shared one, or Mixed; the owner that blocks an edit, if any. */
   const viewOf = (property: string, pick: (subject: Subject) => string = (subject) => subject.report.computed[property] ?? ""): View => {
     const owners = subjects.map((subject) => ownerOf(subject, property));
     const values = subjects.map(pick);
     const mixed = values.some((value) => value !== values[0]);
     const owner = owners.find((candidate) => candidate.owner !== "source") ?? { owner: "source" as const };
-    // A dial's value moves its parameter, so it is editable with one element only.
     const ask = () => onAsk(fieldNameOf(property), subjects.filter((_, index) => owners[index]!.owner !== "source").map(chipDataOf));
     const animated = owners.findIndex((candidate) => candidate.owner === "animated");
     const reveal = animated === -1 || onShowOnTimeline === undefined ? undefined : () => onShowOnTimeline(subjects[animated]!.id, property);
@@ -795,7 +717,6 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     return { value: mixed ? "" : (values[0] ?? ""), mixed, owner, editable: owner.owner === "source" || (owner.owner === "dial" && single), ask, reveal, sheet };
   };
 
-  /** Writes a value to a property of every selected element, refusing the whole write when one value cannot be written. A dial-owned value moves its dial. */
   const write = (property: string, valueOf: (subject: Subject) => string) => {
     const writes = subjects.map((subject) => ({ subject, value: valueOf(subject) }));
     for (const { value } of writes) {
@@ -808,7 +729,6 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     for (const { subject, value } of writes) {
       const owner = ownerOf(subject, property);
       const sheet = sheetOf(subject, property);
-      // A value a component's rule sets is that rule's declaration: the edit changes the variants the rule covers (spec 20).
       if (owner.owner === "source" && sheet?.kind === "variants" && sheet.rule !== undefined) {
         session.patch({ type: "componentRule", rule: sheet.rule, property, value });
       } else if (owner.owner === "dial") session.patchDial(owner.path, dialValueFor(dialAt(dials ?? {}, owner.path), value));
@@ -817,7 +737,6 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     return true;
   };
 
-  // The token slot of a field: the tokens it offers, written to every selected element. The padding and margin rows pass their four sides.
   const currentMode = kit === null ? "" : mode !== undefined && kit.modes.includes(mode) ? mode : (kit.modes[0] ?? "");
   const tokenEdits =
     (properties: readonly string[]) =>
@@ -834,7 +753,6 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     TOKEN_FIELDS.has(field) ? (
       <TokenPicker field={field} label={label} kit={kit} mode={currentMode} editable={editable} edits={tokenEdits(properties)} session={session} onOpenKit={onOpenKit} />
     ) : undefined;
-  /** Writes a token's resolved values to the properties as literals, to every selected element (Detach). */
   const detachWith = (token: Token, properties: readonly string[]) => {
     if (kit === null) return;
     for (const subject of subjects) {
@@ -845,7 +763,6 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
       }
     }
   };
-  /** The chip of a field that holds a token (spec 19, The token chip), or null when the field holds none the kit has. */
   const chipFor = (field: string, view: View, properties: readonly string[] = [field], label: string = field): ReactNode => {
     const named = view.owner.owner === "token" ? tokenNamed(kit, view.owner.name) : openChip?.field === field ? openChip.named : undefined;
     if (named === undefined || kit === null) return null;
@@ -866,10 +783,8 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     );
   };
 
-  /** A board copy's chip (spec 20) beside the token slot: a rule-set field shows its chip alone, since its edit is the rule's. */
   const withSheet = (view: View, slot: ReactNode): ReactNode => {
     if (view.sheet?.kind !== "variants") return slot;
-    // A long scope truncates, with the whole text in the kit Tip, so it never runs under the field's control (spec 20).
     const chip = (
       <Tip label={view.sheet.chip}>
         <Badge variant="outline" size="sm" className="min-w-0 max-w-full">
@@ -923,12 +838,10 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     return null;
   };
 
-  // Text
   const fontView = viewOf("font-family", (subject) => firstFamily(subject.report.computed["font-family"] ?? ""));
   const fontChip = chipFor("font-family", fontView, undefined, "Font");
   const weightView = viewOf("font-weight");
   const weightChip = chipFor("font-weight", weightView, undefined, "Weight");
-  // A text style: the five text fields all hold sub-names of one text style token, which the Text header shows as a chip.
   const TEXT_PROPERTIES = ["font-family", "font-size", "font-weight", "line-height", "letter-spacing"];
   const textStyleOwned = (() => {
     if (openChip?.field === "text-style") return openChip.named.token;
@@ -943,7 +856,6 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   const alignView = viewOf("text-align");
   const textNote = noteOf(fontView, viewOf("font-size"), weightView, viewOf("line-height"), viewOf("letter-spacing"), alignView, viewOf("color"));
 
-  // Shape
   const borderWidthView = viewOf("border-width");
   const borderWidthChip = chipFor("border-width", borderWidthView, undefined, "Border");
   const borderStyleView = viewOf("border-style");
@@ -977,7 +889,6 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     );
   };
 
-  // Spacing and layout: a flex element shows Layout, and Gap shows for flex or grid.
   const sideViews = (prefix: "padding" | "margin") =>
     Object.fromEntries(SIDES.map((side) => [side, viewOf(`${prefix}-${side}`)])) as Record<(typeof SIDES)[number], View>;
   const displayOf = (subject: Subject) => subject.report.computed.display ?? "";
@@ -990,7 +901,6 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     return withSheet(views.top, tokenSlot(prefix, editable, SIDES.map((side) => `${prefix}-${side}`), prefix === "padding" ? "Padding" : "Margin"));
   };
 
-  // Off-token values: a row names its element (the Layers tab's name) or its rule; a row selects the place, and Use token writes a token edit for it.
   const labelOfOff = (value: OffTokenFound): string => {
     const place = value.place;
     if ("elementId" in place) return elements.find((candidate) => candidate.id === place.elementId)?.name ?? place.elementId;
@@ -1007,8 +917,6 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     session.patch(edit);
   };
 
-  // Visibility: a hide edit, for elements the source holds with an id and nothing locks them.
-  // The switch shows the burst's pending hide at once, before the commit writes it (spec 18, Visibility).
   const hiddenNow = (subject: Subject): boolean => {
     const edit = session.pending.find((item) => item.type === "hide" && item.elementId === subject.id);
     return edit?.type === "hide" ? edit.hidden : subject.element?.hidden === true;
@@ -1016,7 +924,6 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   const visible = subjects.every((subject) => subject.element === undefined || !hiddenNow(subject));
   const visibleEditable = subjects.every((subject) => subject.element !== undefined && !subject.locked);
 
-  // Image: one element at a time. An image edit still in the burst is the person's own, so its owner stays the source until it is written.
   const picture = single ? pictureOf(first!.report) : null;
   const pictureOwner: FieldOwner =
     picture === null ? { owner: "source" }
@@ -1035,9 +942,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     : ownerOf(first!, "background-image");
   const pictureLine = picture === null ? null : ownerLine(pictureOwner, true, () => onAsk("Picture", [chipDataOf(first!)]));
 
-  // Make component (spec 20): one plain element with an id, in a page or motion (never in a sheet, never an instance).
   const makeShown = single && instance === null && kind !== "component" && first!.report.id !== null && onMake !== undefined;
-  // A picked board copy names the variant it shows: `Editing Button · secondary · md`.
   const variant = single && first!.report.variant ? Object.values(first!.report.variant) : null;
   return (
     <div className="flex min-h-0 flex-col gap-3 overflow-auto p-2.5" data-testid="design-tab">
@@ -1052,7 +957,6 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
           Tell the agent
         </Button>
         {makeShown &&
-          // aria-disabled, not disabled: a disabled button would not show its tooltip.
           (() => {
             const button = (
               <Button variant="outline" size="sm" className="shrink-0" aria-disabled={first!.locked} onClick={() => !first!.locked && onMake?.(chipDataOf(first!))}>
@@ -1075,7 +979,6 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
         <InstanceSection
           title={componentOf?.(instance.tag)?.title || instance.tag}
           older={(() => {
-            // The pinned sheet is not the component shape's current one: the Update line (spec 20, the Instance section).
             const main = componentOf?.(instance.tag);
             return main?.file !== undefined && main.file !== instance.sheet && onUpdateComponent !== undefined ? () => onUpdateComponent(instance.tag) : null;
           })()}

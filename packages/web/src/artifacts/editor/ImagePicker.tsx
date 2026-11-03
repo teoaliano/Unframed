@@ -1,7 +1,3 @@
-/**
- * The picture chooser of the Design tab's Image section (spec 18, Images): the project's images,
- * newest first, a filter, and an upload. Choosing an image hands its file to the caller.
- */
 import type { ArtifactImage } from "@unframed/contracts";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
@@ -14,11 +10,9 @@ import { showError } from "../../toasts.tsx";
 
 export interface ImagePickerProps {
   readonly project: string;
-  /** Hands the chosen project file to the caller; the picker closes. */
   readonly onChoose: (file: string) => void;
 }
 
-/** The picker's images, loaded each time it opens, so a new upload shows the next time. */
 const useImages = (project: string, open: boolean): readonly ArtifactImage[] | undefined => {
   const engine = useEngine();
   const [images, setImages] = useState<readonly ArtifactImage[] | undefined>(undefined);

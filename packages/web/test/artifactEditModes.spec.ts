@@ -3,7 +3,6 @@ import { centre, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 import { filledArtifact } from "./artifacts.ts";
 
-/** A page with a heading, a paragraph inside a main element, and a link that would leave the page if followed. */
 const PAGE = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}</style></head><body><main><h1>Welcome</h1><p>Lead text</p><a href="https://example.invalid/">Go</a></main></body></html>`;
 
 const editor = (page: Page) => page.getByTestId("artifact-editor");
@@ -20,14 +19,12 @@ const onBoard = async (page: Page, engine: Parameters<typeof openCanvas>[1]) => 
 };
 
 const openEditor = async (page: Page) => {
-  // Deselect first: a selected artifact's frame takes a double-click as its own.
   await page.mouse.click(640, 600);
   const at = await centre(shapeOnScreen(page, "shape:landing"));
   await page.mouse.dblclick(at.x, at.y);
   await expect(region(page)).toBeVisible();
 };
 
-/** Waits until the bridge is live: the page is prepared and swapped in first, so early input can land on the old document. */
 const live = async (page: Page) => {
   await expect(async () => {
     await heading(page).click();
@@ -49,14 +46,12 @@ test("the editor opens in Edit mode, with a Mode toggle and the Design, Layers a
   await expect(tabs.getByRole("tab")).toHaveText(["Design", "Layers", "Parameters"]);
   await expect(column(page, "parameters").getByRole("tab", { name: "Design" })).toHaveAttribute("aria-selected", "true");
 
-  // Keys typed in the editor switch the mode.
   await region(page).getByTestId("artifact-editor-title").click();
   await page.keyboard.press("i");
   await expect(modeButton(page, "Interact")).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("v");
   await expect(modeButton(page, "Edit")).toHaveAttribute("aria-pressed", "true");
 
-  // Keys typed inside the frame reach the editor through the bridge.
   await live(page);
   await heading(page).click();
   await expect(outline(page, "selected")).toHaveCount(1);
@@ -82,7 +77,6 @@ test("the header fits a 1024 px window with the Mode toggle in it", async ({ pag
   await page.setViewportSize({ width: 1024, height: 700 });
   await onBoard(page, agent);
   const shown = (await shapeOnScreen(page, "shape:landing").boundingBox())!;
-  // The window shows only part of the page: double-click the middle of what shows.
   await page.mouse.dblclick((Math.max(shown.x, 0) + Math.min(shown.x + shown.width, 1024)) / 2, shown.y + shown.height / 2);
   await expect(region(page)).toBeVisible();
   const header = column(page, "centre").locator("header").first();
@@ -96,7 +90,6 @@ test("Edit mode on a page: hover outline, click selects, Shift-click adds, Shift
   await openEditor(page);
 
   await live(page);
-  // The outline follows the pointer over an element that is not selected.
   const at = await centre(heading(page));
   await expect(async () => {
     await page.mouse.move(at.x - 2, at.y);
@@ -116,7 +109,6 @@ test("Edit mode on a page: hover outline, click selects, Shift-click adds, Shift
   await expect(outline(page, "selected")).toHaveCount(1);
   await expect(outline(page, "selected")).toContainText("main");
 
-  // Esc clears the selection first; the editor stays open.
   await page.keyboard.press("Escape");
   await expect(outline(page, "selected")).toHaveCount(0);
   await expect(editor(page)).toBeVisible();
@@ -133,7 +125,6 @@ test("a link does not navigate in Edit mode, and Interact leaves a click on the 
   await expect(heading(page)).toBeVisible();
   await expect(outline(page, "selected")).toHaveCount(1);
 
-  // Esc clears the link's selection, so Interact starts with nothing selected.
   await page.keyboard.press("Escape");
   await expect(outline(page, "selected")).toHaveCount(0);
   await modeButton(page, "Interact").click();

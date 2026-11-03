@@ -4,7 +4,6 @@ import { expect, test } from "./agent.ts";
 import { filledArtifact, projectPath } from "./artifacts.ts";
 import { readFile } from "node:fs/promises";
 
-/** A page written before element editing: no element ids and no bridge tag. */
 const OLD = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}</style></head><body><main><h1>Welcome</h1><p>Old text</p></main></body></html>`;
 
 const region = (page: Page) => page.getByRole("region", { name: "Editing Landing" });
@@ -22,7 +21,6 @@ test("an artifact written before element editing opens in Edit mode, is prepared
   await page.mouse.dblclick(at.x, at.y);
   await expect(region(page)).toBeVisible();
 
-  // The shape moves to the prepared version, which carries the bridge tag and an id on every element.
   await expect.poll(() => fileOf(agent), { timeout: 15_000 }).not.toBe(old);
   const prepared = (await fileOf(agent))!;
   const text = await readFile(projectPath(agent, prepared), "utf8");
@@ -30,14 +28,12 @@ test("an artifact written before element editing opens in Edit mode, is prepared
   expect(text).toMatch(/<h1 data-hf-id="hf-[0-9a-z]{4}">Welcome<\/h1>/);
   await expect(readFile(projectPath(agent, old), "utf8")).resolves.toBe(OLD);
 
-  // Editable: a click selects the heading.
   await expect(async () => {
     await frameOf(page).getByRole("heading", { name: "Welcome" }).click();
     await expect(page.locator('[data-edit-outline="selected"]')).toHaveCount(1, { timeout: 1000 });
   }).toPass({ timeout: 20_000 });
   await expect(page.getByTestId("design-tab")).toContainText("Welcome");
 
-  // Cmd-Z after the prepare does not bring the unprepared file back.
   await region(page).getByTestId("artifact-editor-title").click();
   await page.keyboard.press("ControlOrMeta+z");
   await page.waitForTimeout(1500);

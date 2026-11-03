@@ -6,8 +6,6 @@ import { componentShape, SHEET_FILE, writeSheet } from "./components.ts";
 import { filledArtifact, projectPath } from "./artifacts.ts";
 import { putRecords } from "./media.ts";
 
-/** Spec 20, task 40: a pasted component shape is a new component with its own tag; a page pasted into another project brings its components. */
-
 test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 
 const PAGE = `<!doctype html><html><head><script src="${compiledFileName(SHEET_FILE)}" data-uf-component="uf-price-card"></script></head><body style="margin:0;font:16px sans-serif"><uf-price-card label="Buy"></uf-price-card></body></html>`;
@@ -58,7 +56,6 @@ test("pasting a page into another project brings the component files it pins", a
 
   const pastedPage = await waitForRoom(engine, "beta", (records) => records.find((record) => record.type === "page"));
   expect(pastedPage.props.file).not.toBe("");
-  // The sheet and its compiled file are in beta under the same names, so the pasted page's pin resolves there.
   const sheet = await readFile(projectPath(engine, SHEET_FILE, "beta"), "utf8");
   expect(sheet).toBe(await readFile(projectPath(engine, SHEET_FILE, "alpha"), "utf8"));
   await stat(projectPath(engine, compiledFileName(SHEET_FILE), "beta"));

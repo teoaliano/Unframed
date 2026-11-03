@@ -5,7 +5,6 @@ import { engineChats, engineChat, expect, say, test } from "./agent.ts";
 import { filledArtifact, projectPath } from "./artifacts.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
-/** A page whose heading the scripted agent tries to rewrite: `hf-aaaa` is the element the fixture names. */
 const PAGE = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}</style></head><body><main><h1 data-hf-id="hf-aaaa">Welcome</h1><p data-hf-id="hf-bbbb">Lead text</p></main></body></html>`;
 
 const editor = (page: Page) => page.getByTestId("artifact-editor");
@@ -16,7 +15,6 @@ const outline = (page: Page, kind: "hover" | "selected") => page.locator(`[data-
 const rows = (page: Page) => column(page, "parameters").locator("[data-layer-row]");
 const rowOf = (page: Page, label: string): Locator => rows(page).filter({ hasText: label }).first();
 
-/** The Landing page's file and the lock it carries in the room. The room lags the editor by a sync round, so reads poll. */
 const pageShape = async (engine: TestEngine) => (await roomShapes(engine, "default", "page")).find((record) => record.id === "shape:pg1");
 const textOf = async (engine: TestEngine): Promise<string> => {
   const file = (await pageShape(engine))?.props?.file;
@@ -49,13 +47,11 @@ test("locking in Layers writes lockedElements as one undo step, refuses a pick i
   await column(page, "parameters").getByRole("button", { name: "Locked Welcome" }).click();
   await expect.poll(async () => (await pageShape(agent))?.props?.lockedElements, { timeout: 8000 }).toEqual(["hf-aaaa"]);
 
-  // One undo step: Cmd-Z takes the lock back and nothing else.
   await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(async () => (await pageShape(agent))?.props?.lockedElements, { timeout: 8000 }).toBeUndefined();
   await column(page, "parameters").getByRole("button", { name: "Locked Welcome" }).click();
   await expect.poll(async () => (await pageShape(agent))?.props?.lockedElements, { timeout: 8000 }).toEqual(["hf-aaaa"]);
 
-  // A locked element cannot be picked in the frame.
   await expect(async () => {
     await frameOf(page).getByRole("heading", { name: "Welcome" }).click();
     await page.waitForTimeout(150);
@@ -64,7 +60,6 @@ test("locking in Layers writes lockedElements as one undo step, refuses a pick i
   await frameOf(page).getByText("Lead text").click();
   await expect(outline(page, "selected")).toHaveCount(1);
 
-  // Selected from its row, a locked element is read-only in Design, with the plain reason.
   await rowOf(page, "Welcome").locator("[data-layer]").click();
   await column(page, "parameters").getByRole("tab", { name: "Design" }).click();
   await expect(column(page, "parameters").getByText("Locked. Unlock it in Layers to edit it.")).toBeVisible();
@@ -78,7 +73,6 @@ test("the agent's write that changes a locked element is refused and leaves the 
   await column(page, "parameters").getByRole("button", { name: "Locked Welcome" }).click();
   await expect.poll(async () => (await pageShape(agent))?.props?.lockedElements, { timeout: 8000 }).toEqual(["hf-aaaa"]);
 
-  // The scripted agent's first turn rewrites the heading: refused, so the page keeps its heading.
   await say(column(page, "rail"), "locked: rewrite the heading");
   await expect.poll(async () => (await engineChats(agent)).length, { timeout: 15_000 }).toBeGreaterThan(0);
   await expect
@@ -90,7 +84,6 @@ test("the agent's write that changes a locked element is refused and leaves the 
   expect(await textOf(agent)).toContain("Welcome");
   expect(await textOf(agent)).not.toContain("Changed");
 
-  // Unlocked, the next turn's write goes through.
   await rowOf(page, "Welcome").getByRole("button", { name: "Locked Welcome" }).click();
   await expect.poll(async () => (await pageShape(agent))?.props?.lockedElements, { timeout: 8000 }).toBeUndefined();
   await say(column(page, "rail"), "locked: keep the heading and add a line");
@@ -107,7 +100,6 @@ test("undoing a lock sends the frame the unlocked list, so the element can be pi
   await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(async () => (await pageShape(agent))?.props?.lockedElements, { timeout: 8000 }).toBeUndefined();
 
-  // The lock is gone from the shape, and the frame must have heard it: the heading picks at once.
   await expect(async () => {
     await frameOf(page).getByRole("heading", { name: "Welcome" }).click();
     await expect(outline(page, "selected")).toHaveCount(1, { timeout: 1000 });

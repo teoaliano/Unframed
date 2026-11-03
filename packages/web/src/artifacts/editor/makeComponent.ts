@@ -1,7 +1,3 @@
-/**
- * Make component (spec 20): sends the element's chip and the fixed instruction to the artifact's own
- * chat, the newest idle one tagged with it or a new one, and opens the rail on that chat.
- */
 import { continuableChat, DEFAULT_RUNTIME_MODE, elementChip, makeComponentInstruction, type ArtifactKind, type ChipElement } from "@unframed/domain";
 import { readyProviders } from "../../agent/providers.ts";
 import { createChat, sendMessage } from "../../agent/send.ts";
@@ -10,7 +6,6 @@ import { showError } from "../../toasts.tsx";
 
 export interface MakeComponentInput {
   readonly client: ChatClient;
-  /** The provider statuses the store last read, used when the client has not loaded its own. */
   readonly statuses: Parameters<typeof readyProviders>[0];
   readonly shapeId: string;
   readonly kind: ArtifactKind;

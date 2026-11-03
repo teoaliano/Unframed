@@ -17,7 +17,6 @@ const openOnPage = async (page: Page, engine: TestEngine) => {
   const at = await centre(shapeOnScreen(page, "shape:tuned"));
   await page.mouse.dblclick(at.x, at.y);
   await expect(page.getByRole("region", { name: "Editing Tuned" })).toBeVisible();
-  // The add box lives in the Parameters tab; the editor opens on Design (spec 18).
   await editor(page).locator('[data-editor-column="parameters"]').getByRole("tab", { name: "Parameters" }).click();
 };
 

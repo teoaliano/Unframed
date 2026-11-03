@@ -17,7 +17,6 @@ const openEditor = async (page: Page, id: string, name: string) => {
   const at = await centre(shapeOnScreen(page, id));
   await page.mouse.dblclick(at.x, at.y);
   await expect(page.getByRole("region", { name: `Editing ${name}` })).toBeVisible();
-  // The dials live in the Parameters tab; the editor opens on Design (spec 18).
   await editor(page).locator('[data-editor-column="parameters"]').getByRole("tab", { name: "Parameters" }).click();
 };
 
@@ -38,7 +37,6 @@ test("an artifact that declares parameters shows them as DialKit controls; one t
   await expect(dials.getByText("Caption")).toBeVisible();
   await expect(dials.getByText("Scene")).toBeVisible();
   await expect(editor(page).getByRole("textbox", { name: "Add a parameter" })).toHaveAttribute("placeholder", "Add a parameter… (e.g. the background colour, the title size)");
-  // One inset down the column: the dials' title and the parameter box line up.
   await expect(dials.locator(".dialkit-folder-title-root")).toBeVisible();
   await expect(editor(page).getByRole("textbox", { name: "Add a parameter" })).toBeVisible();
   const lefts = await Promise.all([
@@ -66,7 +64,6 @@ test("dragging a dial moves the frame live and writes the values once it settles
   await expect.poll(() => shown(editorFrame(page))).toEqual({ size: 10 });
 
   const slider = editor(page).getByRole("slider", { name: "Size" });
-  // The kit renders after the frame reports its values: wait until the slider is on screen before measuring it.
   await expect(slider).toBeVisible();
   const box = (await slider.boundingBox())!;
   await page.mouse.move(box.x + box.width * 0.1, box.y + box.height / 2);
@@ -75,7 +72,6 @@ test("dragging a dial moves the frame live and writes the values once it settles
     await page.mouse.move(box.x + box.width * (0.1 + step * 0.05), box.y + box.height / 2);
     await page.waitForTimeout(30);
   }
-  // Live in the frame while the drag is still going.
   await expect.poll(async () => (await shown(editorFrame(page))).size).toBeGreaterThan(50);
   await page.mouse.up();
   const dragged = Number(await slider.getAttribute("aria-valuenow"));
@@ -85,7 +81,6 @@ test("dragging a dial moves the frame live and writes the values once it settles
 
   await page.keyboard.press("Escape");
   await expect(editor(page)).toHaveCount(0);
-  // One step: the whole drag goes back at once.
   await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(async () => (await settledRecord(agent, "default", "shape:tuned"))?.props.dials).toBeUndefined();
 });
@@ -127,7 +122,6 @@ test("saved values show in canvas frames of pages and motions, and a change from
   await clickShape(page, "shape:intro");
   await expect.poll(() => shown(insideComposition(insideFrame(page, "shape:intro"))), { timeout: 15_000 }).toEqual({ accent: "#a78bfa", speed: 2.5 });
 
-  // Another tab tunes the motion: this tab's frame follows at once.
   const tab = await connectTab(agent.port, "default");
   await tab.loaded;
   const current = tab.get("shape:intro");
@@ -155,9 +149,7 @@ test("a new version that drops or retypes a parameter keeps the rest and rebuild
   await expect(dials.getByRole("slider", { name: "Size" })).toHaveAttribute("aria-valuenow", "30");
   await expect.poll(() => shown(editorFrame(page))).toEqual({ accent: "#ff0000", size: 30, caption: "Saved" });
 
-  // The editor prepares the page first (its ids and tags), so the room names the prepared file from here on.
   await expect.poll(async () => (await readFile(projectPath(agent, (await roomRecords(agent, "default")).find((item) => item.id === "shape:tuned")!.props.file), "utf8")).includes("data-hf-id"), { timeout: 20_000 }).toBe(true);
-  // The agent's next version: caption gone, size now text, a new switch.
   await writeProjectFile(agent, "2-tuned.html", dialsPage({ accent: "#a78bfa", size: "big", glow: true }).replace(BRIDGE_TAG, `${BRIDGE_TAG}<!-- v2 -->`));
   const record = (await roomRecords(agent, "default")).find((item) => item.id === "shape:tuned")!;
   expect(record.props.file).not.toBe(file);
@@ -176,22 +168,18 @@ test("DialKit follows the app's scheme in the kit's tokens, as one card with its
   await filledArtifact(agent, { id: "shape:tuned", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Tuned", html: dialsPage({ size: [12, 8, 40] }) });
   await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible();
 
-  // DialKit's own class names, as tldraw's are in the tldraw tests: they are the library's, not ours.
   const themed = async (dials: ReturnType<Page["locator"]>, card: ReturnType<Page["locator"]>) => {
     const panel = dials.locator(".dialkit-panel-inner");
     await expect(dials.locator(".dialkit-folder-title-root")).toHaveText("Look");
     await inBothSchemes(page, async (scheme) => {
       await expect(dials.locator(".dialkit-root")).toHaveAttribute("data-theme", scheme);
-      // The same fill as the card around it: one surface, not a dark block on a light card.
       await expectToken(panel, "background-color", "--card");
       await expectToken(card, "background-color", "--card");
-      // A control is the kit's field: the --background fill, under the --input border.
       await expectToken(dials.locator(".dialkit-slider"), "background-color", "--background");
       await expectToken(dials.locator(".dialkit-slider"), "border-top-color", "--input");
       await expectToken(dials.locator(".dialkit-folder-title-root"), "color", "--foreground");
       await expectToken(dials.locator(".dialkit-slider-label"), "color", "--muted-foreground");
       expect(await styleOf(panel, "font-family")).toBe(await styleOf(page.locator("body"), "font-family"));
-      // The kit's type: the app's sans for labels, 14 px as the kit's text-sm, and the mono for numbers.
       expect(await styleOf(dials.locator(".dialkit-slider-label"), "font-size")).toBe("14px");
       expect(await styleOf(dials.locator(".dialkit-slider-label"), "font-family")).toBe(await styleOf(page.locator("body"), "font-family"));
       expect(await styleOf(dials.locator(".dialkit-slider-value"), "font-family")).toMatch(/mono/i);
@@ -209,7 +197,6 @@ test("DialKit follows the app's scheme in the kit's tokens, as one card with its
   await themed(editor(page).getByTestId("artifact-dials"), editor(page).locator('[data-editor-column="parameters"]'));
 });
 
-/** Whether DialKit's own stylesheet is on the page (the app's theme only sets its variables): it comes with the first panel. */
 const dialKitLoaded = (page: Page) =>
   page.evaluate(() =>
     [...document.styleSheets].some((sheet) => {
@@ -232,7 +219,6 @@ test("Parameters on a selected page opens its dials beside it on the canvas: the
 
   await clickShape(page, "shape:tuned");
   await expect.poll(() => shown(insideFrame(page, "shape:tuned")), { timeout: 10_000 }).toEqual({ size: 10 });
-  // Neither the board nor a selected page loads DialKit: only opening the panel does.
   expect(await dialKitLoaded(page)).toBe(false);
   await expect(parametersToggle(page)).toHaveAttribute("aria-pressed", "false");
   await parametersToggle(page).click();
@@ -241,9 +227,7 @@ test("Parameters on a selected page opens its dials beside it on the canvas: the
   await expect(parametersToggle(page)).toHaveAttribute("aria-pressed", "true");
   await expect(editor(page)).toHaveCount(0);
   expect(await dialKitLoaded(page)).toBe(true);
-  // Its header says Parameters once: DialKit names the declaration, and the page is beside it.
   await expect(panel.locator("header")).toHaveText("Parameters");
-  // Beside the page, not over it.
   const shapeBox = (await shapeOnScreen(page, "shape:tuned").boundingBox())!;
   const panelBox = (await panel.boundingBox())!;
   expect(panelBox.x).toBeGreaterThanOrEqual(shapeBox.x + shapeBox.width);
@@ -257,14 +241,12 @@ test("Parameters on a selected page opens its dials beside it on the canvas: the
   await page.keyboard.press("ArrowRight");
   await expect.poll(() => shown(insideFrame(page, "shape:tuned"))).toEqual({ size: 13 });
   await expect.poll(() => dialsOf(agent, "shape:tuned"), { timeout: 10_000 }).toEqual({ size: 13 });
-  // Keys in the panel are the panel's: the arrows did not nudge the page, and Backspace deletes nothing.
   await page.keyboard.press("Backspace");
   await page.waitForTimeout(300);
   const after = (await roomRecords(agent, "default")).find((record) => record.id === "shape:tuned");
   expect(after).toBeDefined();
   expect({ x: after!.x, y: after!.y }).toEqual({ x: before.x, y: before.y });
 
-  // Escape closes the panel and leaves the page selected; Cmd-Z then takes the whole change back, in the frame too.
   await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0);
   await expect(parametersToggle(page)).toHaveAttribute("aria-pressed", "false");
@@ -292,7 +274,6 @@ test("the canvas panel saves a change made just before it closes, shows one arti
   await expect(tuned).toHaveCount(0);
   await expect.poll(() => dialsOf(agent, "shape:tuned"), { timeout: 10_000 }).toEqual({ size: 12 });
 
-  // Open again on the saved values. Selecting the motion closes it; the motion has its own.
   await parametersToggle(page).click();
   await expect(tuned.getByRole("slider", { name: "Size" })).toHaveAttribute("aria-valuenow", "12");
   await clickShape(page, "shape:intro");
@@ -306,7 +287,6 @@ test("the canvas panel saves a change made just before it closes, shows one arti
   await page.keyboard.press("Shift+ArrowRight");
   await expect.poll(async () => (await shown(insideComposition(insideFrame(page, "shape:intro")))).speed, { timeout: 10_000 }).toBeGreaterThan(1);
 
-  // While its panel is open the motion stays live, however far the canvas pans.
   const width = page.viewportSize()!.width;
   await page.mouse.move(200, 600);
   for (let step = 0; step < 30; step++) {
@@ -320,7 +300,6 @@ test("the canvas panel saves a change made just before it closes, shows one arti
     await page.waitForTimeout(16);
   }
 
-  // Opening the editor closes the canvas panel; a click on empty canvas closes it too.
   await page.getByTestId("selection-toolbar").getByRole("button", { name: "Editor", exact: true }).click();
   await expect(page.getByRole("region", { name: "Editing Intro" })).toBeVisible();
   await expect(intro).toHaveCount(0);
@@ -347,12 +326,10 @@ test("a page with no parameters opens a panel that asks the agent for one, in th
   await expect(box).toHaveAttribute("placeholder", "Describe a parameter… (e.g. the accent colour and the intro speed)");
   await expect(panel.getByText("The agent writes it")).toBeVisible();
   await expect(panel.getByRole("button", { name: "Add", exact: true })).toBeDisabled();
-  // Typing stays in the box: Backspace deletes a letter, not the page.
   await box.fill("the background colourx");
   await page.keyboard.press("Backspace");
   await expect(box).toHaveValue("the background colour");
   await panel.getByRole("button", { name: "Add", exact: true }).click();
-  // The instruction goes to a new chat tagged with the page, and the rail opens on it.
   await expect(box).toHaveValue("", { timeout: 10_000 });
   const [chat] = await engineChats(agent);
   expect(chat?.tags).toEqual(["shape:plain"]);
@@ -360,7 +337,6 @@ test("a page with no parameters opens a panel that asks the agent for one, in th
   await expect(page.getByRole("complementary", { name: "Agent" })).toBeVisible();
 });
 
-/** A parameter set shaped like a motion's panel in the screenshot: a select, a colour, toggles, numbers, and a collapsible section. */
 const PANEL_FIT_DIALS = `<!doctype html><html><head><style>body{margin:0;font:14px sans-serif}</style>${BRIDGE_TAG}</head><body><pre id="values">none</pre>
 <script>
 unframed.dials("Blueprint loader", {
@@ -410,10 +386,8 @@ test("a slider's label stays readable while it is hovered and while it is dragge
   const slider = panel.getByRole("slider", { name: "Radius" });
   await expect(slider).toBeVisible();
   const row = panel.locator(".dialkit-slider").first();
-  // The WCAG contrast of the label against what is painted under it: the fill where it reaches, else the row.
   const contrast = () =>
     row.evaluate((element) => {
-      // Linear RGB of `over` painted on `under`, so a translucent fill is judged as it looks.
       const paint = (over: string, under: string) => {
         const canvas = document.createElement("canvas");
         canvas.width = canvas.height = 1;
@@ -433,7 +407,6 @@ test("a slider's label stays readable while it is hovered and while it is dragge
       const fill = element.querySelector<HTMLElement>(".dialkit-slider-fill")!;
       const fillColour = getComputedStyle(fill).backgroundColor;
       const fillEnd = fill.getBoundingClientRect().right;
-      // The part's backdrop: the fill's colour over the surface where the fill reaches the part, else the surface.
       const backdropUnder = (part: Element) => {
         const box = part.getBoundingClientRect();
         return box.left + box.width / 2 < fillEnd ? paint(fillColour, surface) : paint(surface, surface);

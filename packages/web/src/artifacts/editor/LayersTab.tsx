@@ -1,8 +1,3 @@
-/**
- * The editor's Layers tab (spec 18, The Layers tab): the artifact's elements as a tree in document
- * order, with the frame's runtime elements greyed under their nearest parent with an id. A row
- * selects its element, hovers it in the frame, renames it, hides it and locks it.
- */
 import type { SourceTreeElement } from "@unframed/contracts";
 import type { ArtifactKind, ChipElement } from "@unframed/domain";
 import { Eye, EyeOff, Film, Frame, Image, Link, Lock, LockOpen, MessageSquarePlus, MousePointerClick, Pencil, Square, Type, ChevronDown, ChevronRight } from "lucide-react";
@@ -14,16 +9,13 @@ import { cn } from "~/lib/utils";
 import { chipDataFor } from "./chipData.ts";
 import type { EditSession, LiveNode } from "./editSession.ts";
 
-/** The hidden trigger a Layers menu is opened through (the menu is controlled, anchored to the row). */
 const LAYER_MENU_TRIGGER = "layers-row-menu-trigger";
 
 const INDENT_PX = 12;
 const NAME_MAX = 60;
 
-/** Layer open state per artifact, kept for the session: a parent is open until it is collapsed. */
 const collapsedBy = new Map<string, Set<string>>();
 
-/** One row: a source element, or a runtime element the script made (no id, read-only). */
 interface Row {
   readonly key: string;
   readonly id: string | null;
@@ -37,7 +29,6 @@ interface Row {
 
 const KIND_ICON: Record<string, typeof Type> = { image: Image, link: Link, button: MousePointerClick, media: Film, frame: Frame, text: Type, shape: Square };
 
-/** The icon a row shows, from its tag and whether it holds text only. */
 const iconOf = (tag: string, text: string | null): typeof Type => {
   if (tag === "img" || tag === "picture" || tag === "svg") return KIND_ICON.image!;
   if (tag === "a") return KIND_ICON.link!;
@@ -48,10 +39,6 @@ const iconOf = (tag: string, text: string | null): typeof Type => {
   return KIND_ICON.shape!;
 };
 
-/**
- * The rows in document order. Source elements nest by their parent's id; each runtime element
- * sits under the nearest source element above it, after that element's source children.
- */
 export const layerRows = (elements: readonly SourceTreeElement[], live: readonly LiveNode[], collapsed: ReadonlySet<string>, locked: readonly string[]): Row[] => {
   const known = new Set(elements.map((element) => element.id));
   const childrenOf = new Map<string | null, SourceTreeElement[]>();
@@ -98,12 +85,9 @@ export const layerRows = (elements: readonly SourceTreeElement[], live: readonly
 export interface LayersTabProps {
   readonly session: EditSession;
   readonly kind: ArtifactKind;
-  /** The artifact's shape id, which keys the open state of its layers. */
   readonly shapeId: string;
   readonly locked: readonly string[];
-  /** Locks or unlocks an element. The editor writes the shape and its one undo step. */
   readonly onLock: (id: string, on: boolean) => void;
-  /** Tell the agent: the chips of the selected elements go into the artifact's chat (spec 18, Point and tell). */
   readonly onTell: (elements: ChipElement[]) => void;
 }
 
@@ -111,15 +95,12 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
   const { tree, preparing, selection, pending, live, reports } = session;
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => collapsedBy.get(shapeId) ?? new Set());
   const [renaming, setRenaming] = useState<string | null>(null);
-  /** The row whose context menu is open, and the row it is anchored to. */
   const [menuFor, setMenuFor] = useState<{ readonly id: string; readonly anchor: HTMLElement }>();
   const [draft, setDraft] = useState("");
   const cancelled = useRef(false);
 
-  // The frame is asked for its live tree when the tab opens, so a runtime element the script added since is listed.
   useEffect(() => session.requestLive(), []);
 
-  // A selection made in the frame opens the rows above it and brings its row into view.
   useEffect(() => {
     const [only] = selection;
     if (only === undefined || !tree) return;
@@ -133,7 +114,6 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
       collapsedBy.set(shapeId, next);
       setCollapsed(next);
     }
-    // Only a change of the selection reveals a row; a collapse the person made stays made.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selection.join(",")]);
 
@@ -171,7 +151,6 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
     else session.setSelection([id]);
   };
 
-  /** The chips of the selected elements, for Tell the agent: a selected element with no source and no report is left out. */
   const chipsOfSelection = (): ChipElement[] =>
     selection.flatMap((id) => {
       const source = tree.elements.find((candidate) => candidate.id === id);
@@ -203,7 +182,6 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
     <ul aria-label="Layers" className="m-0 flex min-h-0 list-none flex-col gap-0.5 overflow-auto p-1.5" onMouseLeave={() => session.hoverLayer(null)}>
       {rows.map((row) => {
         if (row.element === null) {
-          // A runtime element: greyed, labelled by its tag, read-only.
           return (
             <li key={`runtime-${row.key}`} data-layer-runtime="" style={{ paddingInlineStart: `${row.depth * INDENT_PX}px` }}>
               <div className="flex min-w-0 items-center gap-1.5 px-1 py-0.5 text-sm text-muted-foreground">
@@ -267,7 +245,6 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
                   onDoubleClick={() => startRename(element)}
                   onKeyDown={(event) => {
                     if (event.key !== "Enter" || event.target !== event.currentTarget) return;
-                    // A text element's Enter starts its in-place text edit (spec 18, Keys); any other row renames.
                     if (element.text !== null) {
                       event.preventDefault();
                       session.setSelection([id]);
@@ -321,7 +298,6 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
   );
 };
 
-/** The row menu: Tell the agent, then the same rename, hide and lock the row's controls do. */
 const LayerMenu = ({
   anchor,
   label,

@@ -4,7 +4,6 @@ import { expect, test } from "./agent.ts";
 import { filledArtifact, insideComposition } from "./artifacts.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
-/** A motion whose dot moves across the composition, so an outline on it has to follow the timeline. */
 const MOVER = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}#dot{position:absolute;left:20px;top:120px;width:80px;height:80px;background:#f00}</style></head><body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360"><div id="dot" class="clip" data-start="0" data-duration="4"></div></div>
 <script src="gsap.js"></script><script>window.__timelines = { main: gsap.timeline({ paused: true }).to("#dot", { x: 400, duration: 4 }, 0) };</script></body></html>`;
@@ -14,7 +13,6 @@ const region = (page: Page) => page.getByRole("region", { name: "Editing Intro" 
 const outline = (page: Page, kind: "hover" | "selected") => page.locator(`[data-edit-outline="${kind}"]`);
 const viewer = (page: Page) => region(page).frameLocator("iframe[data-artifact-frame]");
 
-/** The composition's own frame, the one that holds the timeline. */
 const compositionFrame = async (page: Page) => {
   for (let attempt = 0; attempt < 100; attempt++) {
     for (const frame of page.frames()) {
@@ -25,10 +23,8 @@ const compositionFrame = async (page: Page) => {
   throw new Error("no composition frame");
 };
 
-// A motion takes a while to load its player and its composition: the pick waits for both.
 test.setTimeout(150_000);
 
-/** Opens the mover in the editor, in Edit mode, and picks its dot through the viewer. */
 const openMoverWithDotPicked = async (page: Page, agent: TestEngine) => {
   await openCanvas(page, agent);
   await filledArtifact(agent, { id: "shape:intro", kind: "motion", ref: "150", at: { x: -520, y: -40 }, size: { w: 480, h: 270 }, title: "Intro", html: MOVER });
@@ -50,10 +46,8 @@ const openMoverWithDotPicked = async (page: Page, agent: TestEngine) => {
 test("Edit mode on a motion: the player pauses on entering Edit, an element is picked through the viewer, and its outline follows it when the motion seeks", async ({ page, agent }) => {
   await openMoverWithDotPicked(page, agent);
 
-  // Seeking the motion moves the element; the outline follows it.
   const before = (await outline(page, "selected").boundingBox())!;
   const frame = await compositionFrame(page);
-  // seek returns the timeline itself, so the evaluate returns nothing: the timeline is not sent back.
   await frame.evaluate(() => {
     (window as unknown as { __timelines: { main: { seek(time: number): void } } }).__timelines.main.seek(3);
   });
@@ -63,7 +57,6 @@ test("Edit mode on a motion: the player pauses on entering Edit, an element is p
 test("an edit commit on a motion paused at 1.5 s shows the new version at 1.5 s", async ({ page, agent }) => {
   await openMoverWithDotPicked(page, agent);
 
-  // Seek and pause through the viewer, the way the editor's transport will: the viewer is the editor's frame, and the page may post to it.
   await region(page).locator("iframe[data-artifact-frame]").evaluate((frame: HTMLIFrameElement) => {
     frame.contentWindow?.postMessage({ type: "unframed:player:control", action: "seek", seconds: 1.5 }, "*");
   });
@@ -73,7 +66,6 @@ test("an edit commit on a motion paused at 1.5 s shows the new version at 1.5 s"
   };
   await expect.poll(() => timeOf(page), { timeout: 10_000 }).toBeCloseTo(1.5, 1);
 
-  // A Design edit on the dot commits after the pause: the new version loads, and the playhead must follow it.
   await editor(page).getByRole("spinbutton", { name: "Corner radius", exact: true }).fill("12");
   await editor(page).getByRole("spinbutton", { name: "Corner radius", exact: true }).press("Enter");
   await expect

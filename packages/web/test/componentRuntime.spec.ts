@@ -1,12 +1,6 @@
 import { compileComponent, compiledFileName } from "@unframed/domain";
 import { expect, test, type Page } from "@playwright/test";
 
-/**
- * The component runtime in Chrome (spec 20, task 6). A fixture page pins a compiled sheet the way
- * an artifact does, from a fake origin that Playwright serves. The sheet is compiled by the same
- * compiler the engine uses, so the test runs the real bytes.
- */
-
 const ORIGIN = "http://component-fixture.test";
 const SHEET_FILE = "1761400000000-button.html";
 const COMPILED_FILE = compiledFileName(SHEET_FILE);

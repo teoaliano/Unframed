@@ -1,7 +1,3 @@
-/**
- * The Component section (spec 20): a component's declaration, read only, at the top of the Design
- * tab when nothing is selected. Changing it is a change of code, so it goes through the agent.
- */
 import type { ComponentDeclaration } from "@unframed/domain";
 import { Component } from "lucide-react";
 import type { ReactNode } from "react";
@@ -11,7 +7,6 @@ import { Button } from "~/components/ui/button";
 
 export interface ComponentSectionProps {
   readonly declaration: ComponentDeclaration;
-  /** Asks the agent to change the component: its chip goes into the rail's composer. */
   readonly onAsk: () => void;
 }
 

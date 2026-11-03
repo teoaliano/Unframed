@@ -7,12 +7,9 @@ import { filledArtifact, projectPath, writeProjectFile } from "./artifacts.ts";
 import { componentShape, SHEET_FILE, sheetHtml } from "./components.ts";
 import { putRecords } from "./media.ts";
 
-/** Spec 20, task 34: updates on screen. A component edit gives the page using it an Updates badge, the editor's header button and popover, and an Instance section line. */
-
 const PRICE_CARD = { tag: "uf-price-card", variants: { kind: ["primary", "secondary"] } };
 const NEW_SHEET = "1761400005000-price-card.html";
 
-// A page with one instance, pinned to the first sheet.
 const CARD_PAGE = `<!doctype html><html><head><script src="${compiledFileName(SHEET_FILE)}" data-uf-component="uf-price-card"></script></head><body style="margin:0;font:16px sans-serif"><uf-price-card kind="primary" label="Buy"></uf-price-card></body></html>`;
 
 const editor = (page: Page) => page.getByRole("region", { name: "Editing Landing" });
@@ -33,14 +30,11 @@ test("a component edit shows Updates on the page, the editor offers Update and t
   await putRecords(agent, [componentShape({ id: "shape:card", ref: "150", at: { x: 420, y: 60 }, tag: "uf-price-card", title: "Price card" })]);
   await filledArtifact(agent, { id: "shape:landing", kind: "page", ref: "151", at: { x: -520, y: -40 }, size: { w: 400, h: 260 }, title: "Landing", html: CARD_PAGE });
   await expect(shapeOnScreen(page, "shape:landing")).toBeVisible();
-  // No edit yet: the page shows no badge.
   await expect(canvasBadge(page)).toHaveCount(0);
 
-  // The person changes the component: its shape points at a new sheet (the sheet's own write, as the component editor's commit leaves it).
   await writeProjectFile(agent, NEW_SHEET, sheetHtml({ ...PRICE_CARD, variants: { kind: ["primary", "secondary", "ghost"] } }));
   await putRecords(agent, [componentShape({ id: "shape:card", ref: "150", at: { x: 420, y: 60 }, file: NEW_SHEET, tag: "uf-price-card", title: "Price card" })]);
 
-  // The page shows the badge on its label line; a click opens the editor with the popover.
   await expect(canvasBadge(page)).toBeVisible({ timeout: 20_000 });
   await canvasBadge(page).click();
   await expect(editor(page)).toBeVisible();
@@ -48,7 +42,6 @@ test("a component edit shows Updates on the page, the editor offers Update and t
   await expect(popover(page).getByText("Price card", { exact: true })).toBeVisible();
   await expect(popover(page).getByText("1 instance", { exact: true })).toBeVisible();
 
-  // The Instance section of the one instance says it is older, with its own Update. Closing the popover first.
   await headerButton(page).click();
   await expect(popover(page)).toHaveCount(0);
   await expect(async () => {
@@ -59,11 +52,9 @@ test("a component edit shows Updates on the page, the editor offers Update and t
   await expect(instance.getByText("This instance uses an older version of Price card.", { exact: true })).toBeVisible({ timeout: 20_000 });
   await instance.getByRole("button", { name: "Update Price card", exact: true }).click();
 
-  // Accepting is one new version: the pin moves, the header button and the badge go, and the result is announced.
   await expect(headerButton(page)).toHaveCount(0, { timeout: 20_000 });
   await expect(editor(page).getByRole("status")).toHaveText("Updated Price card.", { timeout: 20_000 });
   await expect.poll(() => pageFile(agent).then((file) => readFile(projectPath(agent, file), "utf8")), { timeout: 15_000 }).toContain(compiledFileName(NEW_SHEET));
-  // Undo in the editor brings the old pin back, and with it the header button and the badge.
   await editor(page).getByTestId("artifact-editor-title").click();
   await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(() => pageFile(agent).then((file) => readFile(projectPath(agent, file), "utf8")), { timeout: 15_000 }).toContain(compiledFileName(SHEET_FILE));
