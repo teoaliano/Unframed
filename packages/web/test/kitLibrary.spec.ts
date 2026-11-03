@@ -232,7 +232,8 @@ test("a library kit that is gone is said so, and the project keeps its copy", as
   await writePresets(engine, []);
   const dialog = await openSeededKit(page, engine, linkedKit);
 
-  await expect(dialog).toContainText("The library kit “Brand” is gone. This project keeps its copy.");
+  // The dialog never read the library kit, so its name is not known; the project's kit name is not used in its place.
+  await expect(dialog).toContainText("The library kit is gone. This project keeps its copy.");
   await expect(dialog.getByRole("button", { name: "Update from kit", exact: true })).toHaveCount(0);
   await dialog.getByRole("button", { name: "More" }).click();
   await expect(page.getByRole("menuitem", { name: "Update in library" })).toHaveCount(0);
