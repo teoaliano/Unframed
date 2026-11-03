@@ -5,7 +5,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tokensScript, type Kit } from "@unframed/domain";
 
 export const TOKENS_FILE = "unframed-tokens.js";
@@ -27,7 +27,8 @@ const writeOne = async (folder: string, kit: Kit | null): Promise<void> => {
   if (current === text) return;
   // A helper file never makes a project folder: a write that lands after a rename or a removal would bring the old project back.
   if (!(await stat(folder).then((info) => info.isDirectory(), () => false))) return;
-  const temp = `${path}.${randomUUID()}.tmp`;
+  // The temp file sits beside the folder, not in it: a rename of the folder mid-write would carry an in-folder temp out of reach of the cleanup.
+  const temp = join(dirname(folder), `.${TOKENS_FILE}.${randomUUID()}.tmp`);
   try {
     await writeFile(temp, text, "utf8");
     await rename(temp, path);

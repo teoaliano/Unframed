@@ -13,11 +13,35 @@ describe("token names", () => {
     ["a", null],
     ["Color/brand", "A token name is words joined by slashes, like color/brand/primary."],
     ["color//x", "A token name is words joined by slashes, like color/brand/primary."],
-    ["a/b/c/d/e/f/g", "A token name is words joined by slashes, like color/brand/primary."],
-    ["x".repeat(41), "A token name is words joined by slashes, like color/brand/primary."],
-    ["color/" + "x".repeat(115), "A token name is words joined by slashes, like color/brand/primary."],
+    ["a/b/c/d/e/f/g", "A token name has at most 6 parts, like color/brand/primary."],
+    ["x".repeat(41), "A part of a token name is at most 40 characters."],
+    ["color/" + "x".repeat(115), "A token name is at most 120 characters."],
   ])("%s", (path, expected) => {
     expect(pathRefusal(path)).toBe(expected);
+  });
+
+  it("refuses a font family that could write CSS outside its declaration, and accepts a family list", () => {
+    const sentence = (value: string) => `${value} is not a font family. Use a list of family names, like Inter, sans-serif.`;
+    for (const value of ["Inter; } body { display:none } .x {", "Inter { x }", "Inter < x", "Inter > x", "Inter\\x", "Inter /* x */", "Inter */", "@import x", "Inter url(x.woff)", "Inter\nx", '"Inter, sans-serif', "'Inter"]) {
+      expect(one(literal("font/body", "fontFamily", value))).toBe(sentence(value));
+    }
+    for (const value of ["Inter, sans-serif", "'Playfair Display', serif", '"Helvetica Neue", Arial']) {
+      expect(one(literal("font/body", "fontFamily", value))).toBeNull();
+    }
+  });
+
+  it("refuses a shadow with a comment mark or an unbalanced quote", () => {
+    expect(one(literal("shadow/x", "shadow", "0 0 0 /* "))).toBe("0 0 0 /*  is not a shadow. Use CSS box-shadow, like 0 2px 8px rgba(0, 0, 0, 0.2).");
+    expect(one(literal("shadow/x", "shadow", "0 2px 8px red */"))).toBe("0 2px 8px red */ is not a shadow. Use CSS box-shadow, like 0 2px 8px rgba(0, 0, 0, 0.2).");
+    expect(one(literal("shadow/x", "shadow", '0 2px 8px "red'))).toBe('0 2px 8px "red is not a shadow. Use CSS box-shadow, like 0 2px 8px rgba(0, 0, 0, 0.2).');
+  });
+
+  it("refuses a former name that is not a CSS name", () => {
+    const named = (former: string) => kitRefusal(kit({ tokens: [{ ...literal("color/main", "color", "#000"), formerNames: [former] }] }));
+    expect(named("--color-old")).toBeNull();
+    for (const former of ["--old: red; } body{display:none} :root{--z", "color-old", "--Color-Old", "--"]) {
+      expect(named(former)).toBe("A former name is a CSS name in lower case, like --color-brand-primary.");
+    }
   });
 
   it("refuses a second token with the same path", () => {
