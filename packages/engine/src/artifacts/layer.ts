@@ -3,6 +3,7 @@
  * and the snapshot stream, over the artifact store, the renderer and the snapshot service.
  */
 import { join } from "node:path";
+import type { TLRecord } from "@tldraw/tlschema";
 import type { ArtifactImage, ArtifactSnapshot, RenderStatus, SourceEdit, SourceTreeElement } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
 import { projectSlug } from "@unframed/domain";
@@ -13,7 +14,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Stream from "effect/Stream";
-import { CanvasRooms } from "../canvas/rooms.ts";
+import { CanvasRooms, type ChangeOrigin } from "../canvas/rooms.ts";
 import { errorText } from "../log.ts";
 import { MediaStore } from "../media/mediaStore.ts";
 import { OpenProjects } from "../openProjects.ts";
@@ -30,6 +31,9 @@ import { Shutdown } from "../shutdown.ts";
 
 /** A composition upload may be at most 20 MB. */
 const UPLOAD_LIMIT = 20 * 1_048_576;
+
+/** The engine pointing a shape at its prepared version (spec 18): no person and no chat made it. */
+const PREPARE_ORIGIN: ChangeOrigin = { kind: "server", id: "artifact:prepare" };
 
 export class Artifacts extends Context.Service<
   Artifacts,
@@ -97,7 +101,30 @@ export const artifactsLayer = Layer.effect(
     });
     yield* rooms.afterCommit((project, change) => snapshots.committed(project, [...change.records.values()]));
 
-    const edits = artifactEditService({ folder: (project) => media.folder(project), read: (project) => run(rooms.read(project)) });
+    const edits = artifactEditService({
+      folder: (project) => media.folder(project),
+      read: (project) => run(rooms.read(project)),
+      swapFile: async (project, shapeId, from, to) => {
+        let current = to;
+        await run(
+          rooms.applyWhen(
+            project,
+            (get) => {
+              const record = get(shapeId);
+              const shape = record?.typeName === "shape" ? record : undefined;
+              const file = shape === undefined ? undefined : (shape.props as { file?: unknown }).file;
+              if (shape === undefined || file !== from) {
+                current = typeof file === "string" ? file : from;
+                return undefined;
+              }
+              return { put: [{ ...shape, props: { ...shape.props, file: to } } as TLRecord], remove: [] };
+            },
+            PREPARE_ORIGIN,
+          ),
+        );
+        return current;
+      },
+    });
     yield* rooms.afterCommit((project, change) => edits.committed(project, change));
     const fromEdits = <A>(attempt: () => Promise<A>): Effect.Effect<A, UnframedError> =>
       Effect.tryPromise({

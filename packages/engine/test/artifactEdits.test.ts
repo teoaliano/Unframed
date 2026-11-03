@@ -71,6 +71,15 @@ describe("artifact.sourceTree and artifact.prepareEdit (spec 18)", () => {
     });
   });
 
+  it("points the shape at the stamped version itself, so a newer file set meanwhile is never overwritten by the web", async () => {
+    await writeFile(join(folder, "1-swap.html"), UNSTAMPED);
+    await rpc.call("testCanvas.apply", { project: "board", change: { put: [pageShape("swap", "104", { file: "1-swap.html", title: "Swap" })], remove: [] }, origin: { kind: "server", id: "test" } });
+    const answer = await rpc.call("artifact.prepareEdit", { project: "board", shapeId: "shape:swap" });
+    expect(answer.file).toMatch(/^\d+-swap\.html$/);
+    const records = (await rpc.call("testCanvas.read", { project: "board" })).records as Array<{ id: string; props: { file?: string } }>;
+    expect(records.find((record) => record.id === "shape:swap")?.props.file).toBe(answer.file);
+  });
+
   it("answers the current file for a page that is already ready, writing nothing", async () => {
     const before = (await readdir(folder)).length;
     expect(await rpc.call("artifact.prepareEdit", { project: "board", shapeId: "shape:ready" })).toEqual({ file: "1-ready.html" });
