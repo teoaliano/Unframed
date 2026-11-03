@@ -9,8 +9,6 @@ const EXCLUDED = new Set(NON_ELEMENT_TAGS);
 
 const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]);
 
-const isVoid = (el: Element): boolean => VOID.has(el.tagName.toLowerCase());
-
 export const parseSource = (html: string): Document => parse(html, { sourceCodeLocationInfo: true });
 
 export const isElement = (node: ChildNode): node is Element => "tagName" in node;
@@ -114,6 +112,6 @@ export const ownText = (el: Element): string =>
   el.childNodes.filter(isText).map((node) => node.value).join("");
 
 export const isTextOnly = (el: Element): boolean =>
-  !isVoid(el) && el.childNodes.every((node) => isText(node) || isComment(node));
+  !VOID.has(el.tagName.toLowerCase()) && el.childNodes.every((node) => isText(node) || isComment(node));
 
 export const collapse = (text: string): string => text.replace(/\s+/g, " ").trim();
