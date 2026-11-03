@@ -73,18 +73,41 @@ const zoomIn = async (page: Page, times: number) => {
 const fileOf = async (engine: TestEngine) => (await roomShapes(engine, "default", "motion")).find((record) => record.id === SHAPE)?.props;
 const fileText = async (engine: TestEngine) => textOf(engine, (await fileOf(engine))!.file);
 
+/** One tween that moves the dot's rotation and scale and fades its background, so the panel has the names the Design tab uses. */
+const NAMES = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}#dot{position:absolute;left:20px;top:120px;width:60px;height:60px;background:#f00}</style></head><body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360"><div id="dot" data-uf-name="Dot" class="clip" data-start="0" data-duration="4"></div></div>
+<script src="gsap.js"></script><script>
+const tl = gsap.timeline({ paused: true });
+window.__timelines = { main: tl };
+tl.to("#dot", { rotation: 90, scale: 2, backgroundColor: "#00ff00", duration: 1 }, 0);
+</script></body></html>`;
+
+test("the values panel names each property as the Design tab does, and a rotation shows its degree sign", async ({ page, agent }) => {
+  await openMotion(page, agent, NAMES);
+  await clickDiamond(page, 0, 1);
+
+  await expect(panel(page).getByRole("textbox", { name: "Rotation" })).toHaveValue("90");
+  await expect(panel(page).getByRole("textbox", { name: "Scale" })).toHaveValue("2");
+  await expect(panel(page).getByRole("textbox", { name: "Background" })).toHaveValue("#00ff00");
+  await expect(panel(page).getByRole("textbox", { name: "rotation", exact: true })).toHaveCount(0);
+  await expect(panel(page).getByRole("textbox", { name: "backgroundColor", exact: true })).toHaveCount(0);
+  // Rotation has no unit in the file, so the panel shows the degree sign after it; the file keeps the number as written.
+  await expect(panel(page).getByText("°", { exact: true })).toBeVisible();
+  await expect(panel(page).getByRole("textbox", { name: "Rotation", exact: true }).locator("xpath=ancestor::span[1]")).toContainText("°");
+});
+
 test("a diamond opens the values panel with the numbers and colours at that keyframe, with units and an oklch and a named colour", async ({ page, agent }) => {
   await openMotion(page, agent, VALUES);
   await clickDiamond(page, 0, 1);
 
   await expect(panel(page)).toContainText("Dot");
   await expect(panel(page)).toContainText("Position");
-  await expect(panel(page).getByRole("textbox", { name: "x" })).toHaveValue("120");
-  await expect(panel(page).getByRole("textbox", { name: "color" })).toHaveValue("oklch(70% 0.2 150)");
+  await expect(panel(page).getByRole("textbox", { name: "X", exact: true })).toHaveValue("120");
+  await expect(panel(page).getByRole("textbox", { name: "Colour", exact: true })).toHaveValue("oklch(70% 0.2 150)");
 
   // A number takes its unit and a typed value writes the tween value at once, as one burst edit.
-  await panel(page).getByRole("textbox", { name: "x" }).fill("150");
-  await panel(page).getByRole("textbox", { name: "x" }).press("Enter");
+  await panel(page).getByRole("textbox", { name: "X", exact: true }).fill("150");
+  await panel(page).getByRole("textbox", { name: "X", exact: true }).press("Enter");
   await expect.poll(() => editSummaries(agent).then((all) => all.at(-1)?.[0]), { timeout: 15_000 }).toBe("Set Dot x to 150");
 });
 
@@ -92,7 +115,7 @@ test("a to tween's start diamond and a from tween's end diamond open the values 
   await openMotion(page, agent, VALUES);
   await clickDiamond(page, 1, 0);
   await expect(panel(page).getByText("Starts from the element's current look.")).toBeVisible();
-  await expect(panel(page).getByRole("textbox", { name: "backgroundColor" })).toHaveCount(0);
+  await expect(panel(page).getByRole("textbox", { name: "Background", exact: true })).toHaveCount(0);
   await panel(page).getByRole("button", { name: "Close values" }).click();
 
   await clickDiamond(page, 4, 1);
@@ -116,7 +139,7 @@ test("a press on a middle keyframe with no movement opens the values panel at th
   await openMotion(page, agent, VALUES);
   await zoomIn(page, 2);
   await diamond(page, 5, 0.5).click();
-  await expect(panel(page).getByRole("textbox", { name: "x" })).toHaveValue("200");
+  await expect(panel(page).getByRole("textbox", { name: "X", exact: true })).toHaveValue("200");
 });
 
 test("a press on a middle keyframe that moves 3 px or more moves the tween and opens no panel", async ({ page, agent }) => {
@@ -155,9 +178,9 @@ test("a press on a keyframe that moves under 3 px still opens the values panel",
 test("a named colour at a diamond shows its name and takes a hex value", async ({ page, agent }) => {
   await openMotion(page, agent, VALUES);
   await clickDiamond(page, 1, 1);
-  await expect(panel(page).getByRole("textbox", { name: "backgroundColor" })).toHaveValue("rebeccapurple");
-  await panel(page).getByRole("textbox", { name: "backgroundColor" }).fill("#112233");
-  await panel(page).getByRole("textbox", { name: "backgroundColor" }).press("Enter");
+  await expect(panel(page).getByRole("textbox", { name: "Background", exact: true })).toHaveValue("rebeccapurple");
+  await panel(page).getByRole("textbox", { name: "Background", exact: true }).fill("#112233");
+  await panel(page).getByRole("textbox", { name: "Background", exact: true }).press("Enter");
   await expect.poll(() => editSummaries(agent).then((all) => all.at(-1)?.[0]), { timeout: 15_000 }).toBe("Set Dot backgroundColor to #112233");
 });
 
@@ -198,8 +221,8 @@ test("a value a parameter sets shows its parameter, and typing in it moves the p
   await clickDiamond(page, 1, 1);
 
   await expect(panel(page).getByRole("img", { name: "Parameter toX" })).toBeVisible();
-  await panel(page).getByRole("textbox", { name: "x" }).fill("200");
-  await panel(page).getByRole("textbox", { name: "x" }).press("Enter");
+  await panel(page).getByRole("textbox", { name: "X", exact: true }).fill("200");
+  await panel(page).getByRole("textbox", { name: "X", exact: true }).press("Enter");
   await expect.poll(async () => (await fileOf(agent))?.dials?.toX, { timeout: 10_000 }).toBe(200);
 });
 

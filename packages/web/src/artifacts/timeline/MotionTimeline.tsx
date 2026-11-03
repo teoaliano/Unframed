@@ -26,6 +26,7 @@ import { resolve, scriptValue } from "@unframed/domain";
 import { ValuesPanel, type PanelControl, type PanelField, type ValuesPanelProps } from "./ValuesPanel.tsx";
 import { carriedDialsOf, carriedTimingOf, clipNoteOf, type ClipOf } from "./clips.ts";
 import { MotionTransport, SPEEDS, readoutParts } from "./transport.ts";
+import { bareUnitOf, propertyLabel } from "./properties.ts";
 
 /** The transport row alone, which is what Hide leaves showing. */
 const TRANSPORT_HEIGHT = 40;
@@ -1066,29 +1067,29 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
         const at = timing.at;
         if (owner.kind === "source") {
           const value = owner.value;
-          if (typeof value === "number") fields.push({ key: property, label: property, control: { kind: "number", value, unit: "", editable: true, onCommit: (next) => write(property, at, next, String(next)) } });
+          if (typeof value === "number") fields.push({ key: property, label: propertyLabel(property), control: { kind: "number", value, unit: bareUnitOf(property), editable: true, onCommit: (next) => write(property, at, next, String(next)) } });
           else {
             const match = /^(-?\d+(?:\.\d+)?)([a-z%]*)$/i.exec(value.trim());
             if (match) {
               const unit = match[2]!;
-              fields.push({ key: property, label: property, control: { kind: "number", value: Number(match[1]), unit, editable: true, onCommit: (next) => write(property, at, next, `${next}${unit}`) } });
+              fields.push({ key: property, label: propertyLabel(property), control: { kind: "number", value: Number(match[1]), unit, editable: true, onCommit: (next) => write(property, at, next, `${next}${unit}`) } });
             } else if (COLOUR.test(value.trim())) {
-              fields.push({ key: property, label: property, control: { kind: "colour", value, editable: true, onCommit: (next) => write(property, at, next, next) } });
-            } else fields.push({ key: property, label: property, control: { kind: "text", value } });
+              fields.push({ key: property, label: propertyLabel(property), control: { kind: "colour", value, editable: true, onCommit: (next) => write(property, at, next, next) } });
+            } else fields.push({ key: property, label: propertyLabel(property), control: { kind: "text", value } });
           }
         } else if (owner.kind === "dial") {
           const current = dialAt(dials, owner.path.join("."));
           const path = owner.path.join(".");
           const parameter = owner.path.join(" › ");
           const editable = dialLimitOf(schema, owner.path) !== null || schema === undefined;
-          if (typeof current === "number") fields.push({ key: property, label: property, parameter, control: { kind: "number", value: current, unit: "", editable, onCommit: (next) => session.patchDial(path, next) } });
-          else fields.push({ key: property, label: property, parameter, control: { kind: "text", value: String(current ?? "") } });
+          if (typeof current === "number") fields.push({ key: property, label: propertyLabel(property), parameter, control: { kind: "number", value: current, unit: bareUnitOf(property), editable, onCommit: (next) => session.patchDial(path, next) } });
+          else fields.push({ key: property, label: propertyLabel(property), parameter, control: { kind: "text", value: String(current ?? "") } });
         } else if (owner.kind === "token") {
           const text = tokenText(owner.name);
           const types = COLOUR.test(text) ? ["color"] : ["dimension"];
           fields.push({
             key: property,
-            label: property,
+            label: propertyLabel(property),
             control: { kind: "text", value: text },
             token: {
               name: owner.name,
@@ -1099,7 +1100,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
             },
           });
         } else {
-          fields.push({ key: property, label: property, control: { kind: "text", value: owner.text }, note: "Set by the agent's code.", ask: () => askAgent(property, tween, target) });
+          fields.push({ key: property, label: propertyLabel(property), control: { kind: "text", value: owner.text }, note: "Set by the agent's code.", ask: () => askAgent(property, tween, target) });
         }
       }
     }
