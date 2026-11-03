@@ -185,7 +185,7 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
           Loading changes…
         </p>
       ) : files.length === 0 ? (
-        <p className={EMPTY_CLASS}>No page or motion changed in this selection.</p>
+        <p className={EMPTY_CLASS}>No page, motion or component changed in this selection.</p>
       ) : (
         <div className="flex min-h-0 flex-1">
           <nav className="flex w-45 shrink-0 flex-col gap-px overflow-auto border-r border-border/60 p-1.5" aria-label="Changed files">

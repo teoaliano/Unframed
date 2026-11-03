@@ -1,6 +1,6 @@
 import type { TLRecord } from "@tldraw/tlschema";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { groupShape, pageShape, promptShape, videoShape } from "./canvasRecords.ts";
+import { componentShape, groupShape, pageShape, promptShape, videoShape } from "./canvasRecords.ts";
 import { startEngine, type TestEngine } from "./harness.ts";
 import { connectTab } from "./syncClient.ts";
 
@@ -50,6 +50,16 @@ describe("the canvas schema in the room", () => {
     ];
     for (const record of records) expect(await pushOne(engine, record)).toBe("committed");
     expect(await stored(engine, "shape:m")).toMatchObject({ type: "motion", props: { dials: { speed: 2 } } });
+  });
+
+  it("keeps a component shape whose tag follows the tag rule, and refuses one that breaks it", async () => {
+    expect(await pushOne(engine, componentShape("c-ok", "uf-price-card", { file: "1-price-card.html", title: "Price card" }))).toBe("committed");
+    expect(await stored(engine, "shape:c-ok")).toMatchObject({ type: "component", props: { tag: "uf-price-card" } });
+    for (const tag of ["button", "uf-Button", "uf-", "uf-a--b", `uf-${"a".repeat(50)}`]) {
+      const record = componentShape(`c-${tag.length}`, tag);
+      expect(await pushOne(engine, record)).toEqual({ closed: "INVALID_RECORD" });
+      expect(await stored(engine, record.id)).toBeUndefined();
+    }
   });
 
   it("keeps a page with its locked element ids and refuses locks that are not a list of strings", async () => {

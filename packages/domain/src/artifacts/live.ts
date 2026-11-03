@@ -73,7 +73,7 @@ export const parseLivePointer = (text: string): LivePointer | undefined => {
   if (!match) return undefined;
   try {
     const value = JSON.parse(match[1]!) as Partial<LivePointer> | null;
-    if (typeof value !== "object" || value === null || (value.kind !== "page" && value.kind !== "motion")) return undefined;
+    if (typeof value !== "object" || value === null || (value.kind !== "page" && value.kind !== "motion" && value.kind !== "component")) return undefined;
     return {
       kind: value.kind,
       file: typeof value.file === "string" ? value.file : "",

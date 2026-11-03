@@ -1,0 +1,19 @@
+{
+  "when": "^motion race",
+  "turns": [
+    {
+      "title": "Rewrite the motion",
+      "text": "I rewrote the motion while you were editing it.",
+      "tools": [
+        {
+          "name": "motion_write",
+          "input": {
+            "shapeId": "intro",
+            "title": "Intro",
+            "html": "<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}#dot{position:absolute;left:20px;top:120px;width:80px;height:80px;background:#0f0}</style></head><body><div id=\"root\" data-composition-id=\"main\" data-start=\"0\" data-duration=\"4\" data-width=\"640\" data-height=\"360\"><div id=\"dot\" data-uf-name=\"Dot\" class=\"clip\" data-start=\"0\" data-duration=\"4\">Agent motion</div></div><script src=\"gsap.js\"></script><script>const tl = gsap.timeline({ paused: true });\ntl.to(\"#dot\", { x: 300, duration: 2 }, 0);\nwindow.__timelines = { main: tl };</script></body></html>"
+          }
+        }
+      ]
+    }
+  ]
+}

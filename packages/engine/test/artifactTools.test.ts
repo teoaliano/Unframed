@@ -255,7 +255,9 @@ describe("motion_write", () => {
     const viewer = await readFile(join(agent.folder, "hyperframes-viewer.html"), "utf8");
     expect(viewer).toContain("<title>motion</title>");
     expect(viewer).toContain('<script src="hyperframes-player.js"></script>');
-    expect(viewer).toContain('<hyperframes-player runtime-src="hyperframes-runtime.js" controls muted autoplay></hyperframes-player>');
+    // The player is made from script, with controls and autoplay outside the editor (spec 21, task 18).
+    expect(viewer).toContain('document.createElement("hyperframes-player")');
+    expect(viewer).toContain('player.setAttribute("runtime-src", "hyperframes-runtime.js")');
     expect(JSON.parse(await readFile(join(agent.folder, shape.props.file.replace(/\.html$/, ".json")), "utf8"))).toMatchObject({ source: "agent", kind: "motion", shapeId: "m1", title: "Intro" });
   });
 

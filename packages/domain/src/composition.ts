@@ -216,6 +216,7 @@ export const composeSelection = (input: CompositionInput): Composition => {
         break;
       case "page":
       case "motion":
+      case "component":
         roles[shape.id] = UNUSED_ROLE;
         break;
       case "mark": {
