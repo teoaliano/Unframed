@@ -111,8 +111,7 @@ interface LiveWindow {
   unframedLiveRunning?: () => void;
 }
 
-function liveViewer(win: LiveWindow, doc: LiveDocument): void {
-  const KEY = /^[A-Za-z0-9_-]{1,150}$/;
+function liveViewer(win: LiveWindow, doc: LiveDocument, KEY: RegExp): void {
   const FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.html?$/;
   const UNKNOWN_AFTER = 3;
   const own = win.location.origin;
@@ -272,7 +271,7 @@ export const liveViewerSource = (): string =>
     '<p id="note">Looking for this page or motion in Unframed.</p>',
     '<p id="status" role="status" hidden></p>',
     "<script>",
-    `(${liveViewer.toString()})(window, document);`,
+    `(${liveViewer.toString()})(window, document, ${LIVE_KEY});`,
     "</script>",
     "</body>",
     "</html>",

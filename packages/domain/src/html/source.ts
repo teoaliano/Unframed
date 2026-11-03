@@ -1,10 +1,11 @@
 import { parse, type DefaultTreeAdapterMap } from "parse5";
+import { NON_ELEMENT_TAGS } from "../nonElementTags.ts";
 
 export type Element = DefaultTreeAdapterMap["element"];
 export type ChildNode = DefaultTreeAdapterMap["childNode"];
 export type Document = DefaultTreeAdapterMap["document"];
 
-const EXCLUDED = new Set(["script", "style", "template", "meta", "link", "noscript", "base"]);
+const EXCLUDED = new Set(NON_ELEMENT_TAGS);
 
 const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]);
 
