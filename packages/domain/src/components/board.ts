@@ -2,9 +2,9 @@ import type { ComponentDeclaration } from "./sheet.ts";
 
 export const BOARD_CAP = 48;
 
-export type BoardCell = { readonly values: Readonly<Record<string, string>>; readonly label: string };
+type BoardCell = { readonly values: Readonly<Record<string, string>>; readonly label: string };
 
-export type BoardCells = { readonly cells: readonly BoardCell[]; readonly line?: string };
+type BoardCells = { readonly cells: readonly BoardCell[]; readonly line?: string };
 
 export const boardCellsRule = (declaration: Pick<ComponentDeclaration, "variants">, cap: number): BoardCells => {
   const labelOf = (values: Readonly<Record<string, string>>, names: readonly string[]): string =>

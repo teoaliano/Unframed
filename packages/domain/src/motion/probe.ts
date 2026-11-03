@@ -2,8 +2,8 @@ import { isTweenConfigKey } from "@hyperframes/parsers/gsap-constants";
 import { findTimelineScript, parseGsapScriptAcornForWrite, type TweenCallInfo } from "@hyperframes/parsers/gsap-parser-acorn";
 import { dialsCallback, ownerContextFor, ownerOf, type OwnerContext, type ScriptNode } from "./owners.ts";
 
-export type OwnerKind = "source" | "dial" | "token" | "script";
-export type OwnerCounts = Record<OwnerKind, number>;
+type OwnerKind = "source" | "dial" | "token" | "script";
+type OwnerCounts = Record<OwnerKind, number>;
 
 export interface ProbeCounts {
   readonly tweens: number;

@@ -4,7 +4,7 @@ export const OFF_TOKEN_NOTE_LIMIT = 10;
 
 export const OFF_TOKEN_ADVICE = "These values sit close to kit tokens. Use the token unless the difference is intended.";
 
-export interface OffTokenNote {
+interface OffTokenNote {
   readonly count: number;
   readonly notes: string[];
   readonly advice: string;

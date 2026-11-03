@@ -1,8 +1,8 @@
 import type { ChatActivity } from "./chatModel.ts";
 
-export type WorkTone = "thinking" | "tool" | "info" | "error";
-export type WorkState = "inProgress" | "completed" | "failed" | "declined" | "stopped";
-export type WorkAction = "read" | "change" | "command" | "web" | "code" | "tool" | "canvas" | "browser";
+type WorkTone = "thinking" | "tool" | "info" | "error";
+type WorkState = "inProgress" | "completed" | "failed" | "declined" | "stopped";
+type WorkAction = "read" | "change" | "command" | "web" | "code" | "tool" | "canvas" | "browser";
 
 export interface WorkRow {
   readonly kind: "row";
@@ -18,7 +18,7 @@ export interface WorkRow {
   readonly image?: string;
 }
 
-export interface SubagentTask {
+interface SubagentTask {
   readonly taskId: string;
   readonly title: string;
   readonly state: "working" | "completed" | "failed";

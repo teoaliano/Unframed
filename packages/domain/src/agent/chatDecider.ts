@@ -14,7 +14,7 @@ import { DEFAULT_RUNTIME_MODE } from "./chatModel.ts";
 import { requestActivity } from "./chatProjector.ts";
 import { offersDecision } from "./permissionPolicy.ts";
 
-export const TITLE_MAX = 60;
+const TITLE_MAX = 60;
 
 export const NO_EVENTS = "Command produced no events.";
 
@@ -29,7 +29,7 @@ const event = (type: PendingEvent["type"], chatId: string, payload: Record<strin
   ...(metadata === undefined ? {} : { metadata }),
 });
 
-export const userTitle = (typed: string): string => typed.trim().slice(0, TITLE_MAX).trim();
+const userTitle = (typed: string): string => typed.trim().slice(0, TITLE_MAX).trim();
 
 export const agentTitle = (reply: string): string => {
   const first = reply.trim().split(/\r?\n/)[0] ?? "";

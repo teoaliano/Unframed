@@ -3,7 +3,7 @@ import { EASE_CSS } from "./easings.ts";
 import type { Kit } from "./types.ts";
 import { kitCss } from "./runtime.ts";
 
-export interface TokensWindow {
+interface TokensWindow {
   readonly parent: unknown;
   readonly location: { readonly origin: string };
   readonly document: {

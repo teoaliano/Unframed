@@ -15,13 +15,13 @@ export type ComponentSheet = {
   readonly examples: string;
 };
 
-export type ComponentSheetRead = { readonly ok: true; readonly sheet: ComponentSheet } | { readonly ok: false; readonly refusal: string };
+type ComponentSheetRead = { readonly ok: true; readonly sheet: ComponentSheet } | { readonly ok: false; readonly refusal: string };
 
 export const COMPONENT_TAG_MAX = 50;
-export const COMPONENT_VARIANTS_MAX = 4;
-export const COMPONENT_VARIANT_VALUES_MAX = 12;
-export const COMPONENT_PROPS_MAX = 16;
-export const COMPONENT_SLOTS_MAX = 8;
+const COMPONENT_VARIANTS_MAX = 4;
+const COMPONENT_VARIANT_VALUES_MAX = 12;
+const COMPONENT_PROPS_MAX = 16;
+const COMPONENT_SLOTS_MAX = 8;
 
 const TAG = /^uf-[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 const NAME = /^[a-z][a-z0-9-]{0,30}$/;
@@ -33,7 +33,7 @@ const isReservedName = (name: string): boolean => RESERVED.has(name) || name.sta
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
-export const componentTagRefusal = (tag: string): string =>
+const componentTagRefusal = (tag: string): string =>
   `the tag ${tag} is not a component tag; use uf- and lowercase words joined by hyphens, like uf-price-card`;
 
 const nameRefusal = (name: string): string =>

@@ -11,11 +11,11 @@ export type StyleRule = {
   readonly declarations: readonly StyleDeclaration[];
 };
 
-export type StyleMatch = boolean | "unknown";
+type StyleMatch = boolean | "unknown";
 
 export type VariantCondition = { readonly name: string; readonly value: string | null };
 
-export type StyleOwner =
+type StyleOwner =
   | { readonly owner: "inline"; readonly value: string; readonly important: boolean }
   | {
       readonly owner: "rule";
@@ -128,14 +128,14 @@ export const styleOwner = (
   };
 };
 
-export type SheetOwnerInput = {
+type SheetOwnerInput = {
   readonly locked: boolean;
   readonly runtime: boolean;
   readonly token: string | null;
   readonly style: StyleOwner;
 };
 
-export type SheetOwner =
+type SheetOwner =
   | { readonly owner: "locked" }
   | { readonly owner: "script" }
   | { readonly owner: "token"; readonly token: string }

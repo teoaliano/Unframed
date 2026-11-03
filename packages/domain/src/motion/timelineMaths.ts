@@ -39,7 +39,7 @@ const inReach = (time: number, targets: readonly SnapTarget[], reach: number): S
   return null;
 };
 
-export interface SnapOptions {
+interface SnapOptions {
   readonly targets: readonly SnapTarget[];
   readonly pxPerSecond: number;
   readonly free?: boolean;
@@ -66,7 +66,7 @@ export function snapMove(start: number, duration: number, options: SnapOptions):
 
 export const fitZoom = (viewport: number, length: number): number => viewport / length;
 
-export interface ZoomView {
+interface ZoomView {
   readonly pxPerSecond: number;
   readonly scrollLeft: number;
 }

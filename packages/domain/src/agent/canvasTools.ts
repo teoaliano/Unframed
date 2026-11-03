@@ -45,7 +45,7 @@ export const shapeKind = (type: string | undefined): ShapeKind => {
 
 const isShape = (record: CanvasRecord): boolean => record.typeName === "shape";
 
-export const paintOrder = (records: ReadonlyArray<CanvasRecord>): CanvasRecord[] => {
+const paintOrder = (records: ReadonlyArray<CanvasRecord>): CanvasRecord[] => {
   const shapes = records.filter(isShape);
   const children = new Map<string, CanvasRecord[]>();
   for (const shape of shapes) {
@@ -88,12 +88,12 @@ const isDefaultCrop = (crop: unknown): boolean => {
   return value.isCircle !== true && topLeft.x === 0 && topLeft.y === 0 && bottomRight.x === 1 && bottomRight.y === 1;
 };
 
-export interface ShapeBoxes {
+interface ShapeBoxes {
   readonly local: Box;
   readonly page: Box;
 }
 
-export interface CanvasViewInput {
+interface CanvasViewInput {
   readonly records: ReadonlyArray<CanvasRecord>;
   readonly boxes: ReadonlyMap<string, ShapeBoxes>;
   readonly recipes: ReadonlyMap<string, unknown>;
@@ -102,7 +102,7 @@ export interface CanvasViewInput {
   readonly pins?: ReadonlyMap<string, ReadonlyArray<Pin>>;
 }
 
-export interface CanvasView {
+interface CanvasView {
   readonly shapes: ReadonlyArray<Record<string, unknown>>;
   readonly selection: ReadonlyArray<string>;
 }
@@ -130,7 +130,7 @@ export const canvasShapesOf = (records: ReadonlyArray<CanvasRecord>, boxes: Read
   });
 };
 
-export const markOwner = (shapes: ReadonlyArray<CanvasShape>): Map<string, string> => {
+const markOwner = (shapes: ReadonlyArray<CanvasShape>): Map<string, string> => {
   const images = shapes.filter((shape) => shape.kind === "image" && shape.file !== undefined);
   const owners = new Map<string, string>();
   for (const mark of shapes) {
@@ -242,7 +242,7 @@ const round = (value: number, places = 2): number => {
   return Math.round(value * factor) / factor;
 };
 
-export const MAX_OPS = 200;
+const MAX_OPS = 200;
 
 const OP_TYPES = new Set(["create", "update", "move", "resize", "delete", "reparent", "rename"]);
 const CREATE_KINDS = new Set(["prompt", "image", "video", "group", "mark"]);
@@ -267,7 +267,7 @@ export interface BatchContext {
   readonly modes?: ReadonlyArray<string>;
 }
 
-export type PreparedBatch =
+type PreparedBatch =
   | {
       readonly ok: true;
       readonly put: ReadonlyArray<CanvasRecord>;

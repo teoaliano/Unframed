@@ -11,7 +11,7 @@ import {
   FAILURE_SENTENCES,
 } from "./prompts.ts";
 
-export interface ToolsCheck {
+interface ToolsCheck {
   readonly failure?: string;
   readonly foreign: ReadonlyArray<string>;
 }
@@ -43,7 +43,7 @@ export const codexFailureSentence = (message: string | undefined): string => {
   return FAILURE_OTHER_SUBTYPE.replace("<subtype>", text.replace(/\.$/, ""));
 };
 
-export type ChangeAuthor =
+type ChangeAuthor =
   | { readonly kind: "person" }
   | { readonly kind: "chat"; readonly chatId: string }
   | { readonly kind: "revert"; readonly chatId: string; readonly turn: number }
@@ -109,7 +109,7 @@ export interface PreambleAttachment {
   readonly path: string;
 }
 
-export const selectionLine = (selected: ReadonlyArray<SelectedShape>): string | undefined =>
+const selectionLine = (selected: ReadonlyArray<SelectedShape>): string | undefined =>
   selected.length === 0
     ? undefined
     : `Selected: ${selected.map((shape) => `${shape.kind} ${shape.id}${shape.label ? ` ("${shape.label}")` : ""}`).join(", ")}.`;
@@ -121,7 +121,7 @@ export const selectionLabel = (shape: { readonly title?: string; readonly fileNa
   return text ? text.slice(0, 40) : undefined;
 };
 
-export const attachmentLines = (attachments: ReadonlyArray<PreambleAttachment>): string | undefined =>
+const attachmentLines = (attachments: ReadonlyArray<PreambleAttachment>): string | undefined =>
   attachments.length === 0
     ? undefined
     : attachments.map((attachment) => `Attached ${attachment.kind === "image" ? "image" : "file"} "${attachment.name}": ${attachment.path}`).join("\n");

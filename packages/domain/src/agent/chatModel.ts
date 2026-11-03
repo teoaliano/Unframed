@@ -14,7 +14,7 @@ export interface Traits {
 
 export type ChatProvider = AgentProvider | "outside";
 
-export interface AgentSelection {
+interface AgentSelection {
   readonly provider: AgentProvider;
   readonly model: string;
   readonly traits: Traits;
@@ -44,7 +44,7 @@ export interface MessageContext {
   readonly elements?: ReadonlyArray<ElementChip>;
 }
 
-export type MessageRole = "user" | "assistant" | "reasoning";
+type MessageRole = "user" | "assistant" | "reasoning";
 
 export interface ChatMessage {
   readonly id: string;
@@ -58,7 +58,7 @@ export interface ChatMessage {
   readonly context?: MessageContext;
 }
 
-export type ActivityTone = "info" | "tool" | "approval" | "error";
+type ActivityTone = "info" | "tool" | "approval" | "error";
 
 export interface ChatActivity {
   readonly id: string;
@@ -138,7 +138,7 @@ export interface ChatSession {
   readonly lastError: string | null;
 }
 
-export type TitledBy = "user" | "agent";
+type TitledBy = "user" | "agent";
 
 export interface Chat {
   readonly id: string;
@@ -186,7 +186,7 @@ interface CommandBase {
   readonly threadId: string;
 }
 
-export interface ProjectCommand {
+interface ProjectCommand {
   readonly commandId: string;
   readonly projectId: string;
   readonly type: "project.chats.clear";
@@ -194,7 +194,7 @@ export interface ProjectCommand {
 
 export type ClientCommand = ThreadClientCommand | ProjectCommand;
 
-export type ThreadClientCommand = CommandBase &
+type ThreadClientCommand = CommandBase &
   (
     | {
         readonly type: "thread.create";
@@ -247,7 +247,7 @@ export interface ActivityInput {
   readonly createdAt: string;
 }
 
-export type InternalCommand = CommandBase &
+type InternalCommand = CommandBase &
   (
     | { readonly type: "thread.session.set"; readonly session: ChatSession }
     | {
@@ -284,7 +284,7 @@ export interface PendingEvent {
   readonly metadata?: Readonly<Record<string, unknown>>;
 }
 
-export type ChatEventType =
+type ChatEventType =
   | "thread.created"
   | "thread.deleted"
   | "thread.meta-updated"

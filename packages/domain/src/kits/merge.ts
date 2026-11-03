@@ -1,18 +1,18 @@
 import { type Kit, type Token, type TokenValue } from "./types.ts";
 
-export interface KitSide {
+interface KitSide {
   readonly modes: string[];
   readonly tokens: Token[];
 }
 
-export interface MergeCounts {
+interface MergeCounts {
   readonly updated: number;
   readonly added: number;
   readonly kept: number;
   readonly removed: number;
 }
 
-export interface MergeConflict {
+interface MergeConflict {
   readonly path: string;
   readonly mode: string;
   readonly here: string;

@@ -9,7 +9,7 @@ const ALIAS = /^\{(.+)\}$/;
 const SEGMENT = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const MODE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
-export const NAME_SENTENCE = "A token name is words joined by slashes, like color/brand/primary.";
+const NAME_SENTENCE = "A token name is words joined by slashes, like color/brand/primary.";
 const FORMER_NAME = /^--[a-z0-9-]+$/;
 const FORMER_NAME_SENTENCE = "A former name is a CSS name in lower case, like --color-brand-primary.";
 

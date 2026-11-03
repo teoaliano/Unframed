@@ -1,5 +1,5 @@
 
-export interface CssDeclaration {
+interface CssDeclaration {
   readonly property: string;
   readonly value: string;
   readonly important: boolean;

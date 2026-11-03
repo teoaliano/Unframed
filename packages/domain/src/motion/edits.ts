@@ -22,11 +22,11 @@ export interface MotionEditOptions {
   readonly tokenKind?: (name: string) => string | undefined;
 }
 
-export const MOTION_EDIT_TYPES: ReadonlySet<string> = new Set(["tween-time", "tween-ease", "tween-stagger", "tween-value", "clip-time", "composition-duration"]);
+const MOTION_EDIT_TYPES: ReadonlySet<string> = new Set(["tween-time", "tween-ease", "tween-stagger", "tween-value", "clip-time", "composition-duration"]);
 
 export const isMotionEdit = (edit: { readonly type: string }): edit is MotionEdit => MOTION_EDIT_TYPES.has(edit.type);
 
-export type MotionEditResult = { readonly ok: true; readonly html: string; readonly summary: string[] } | { readonly ok: false; readonly refusal: string };
+type MotionEditResult = { readonly ok: true; readonly html: string; readonly summary: string[] } | { readonly ok: false; readonly refusal: string };
 
 const MIN_DURATION = 0.033;
 const SCRIPT = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;

@@ -3,11 +3,11 @@ import type { Owner } from "./owners.ts";
 
 export type Carry = { readonly tweens: TweenRef[]; readonly dials: string[][] } | { readonly refused: string };
 
-export interface CarryOptions {
+interface CarryOptions {
   readonly stretch?: boolean;
 }
 
-export interface CarryModel {
+interface CarryModel {
   readonly clips: readonly Clip[];
   readonly tweens: readonly Tween[];
   readonly elements: Readonly<Record<string, ElementInfo>>;

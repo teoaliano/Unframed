@@ -4,16 +4,16 @@ import { classifyRequest, type RequestType } from "./runtimeEvents.ts";
 
 export const UNFRAMED_TOOL_PREFIX = "mcp__unframed__";
 
-export const UNFRAMED_WRITE_TOOLS: ReadonlySet<string> = new Set(["canvas_write", "page_write", "motion_write", "component_write", "generate", "kit_write"]);
+const UNFRAMED_WRITE_TOOLS: ReadonlySet<string> = new Set(["canvas_write", "page_write", "motion_write", "component_write", "generate", "kit_write"]);
 
-export type PolicyAnswer =
+type PolicyAnswer =
   | { readonly kind: "question" }
   | { readonly kind: "capture-plan"; readonly plan: string; readonly message: string }
   | { readonly kind: "allow" }
   | { readonly kind: "deny"; readonly message: string }
   | { readonly kind: "ask"; readonly requestType: RequestType };
 
-export interface PolicyInput {
+interface PolicyInput {
   readonly runtimeMode: RuntimeMode;
   readonly interactionMode: InteractionMode;
   readonly tool: string;
@@ -42,7 +42,7 @@ export interface PermissionUpdate {
   readonly [key: string]: unknown;
 }
 
-export type AnsweredPermission =
+type AnsweredPermission =
   | { readonly behavior: "allow"; readonly updatedPermissions?: ReadonlyArray<PermissionUpdate> }
   | { readonly behavior: "deny"; readonly message: string; readonly interrupt: boolean };
 
@@ -124,7 +124,7 @@ export const claudePermissionMode = (mode: RuntimeMode): { permissionMode?: Clau
 export const claudeTurnPermissionMode = (runtime: RuntimeMode, interaction: InteractionMode): ClaudePermissionMode =>
   interaction === "plan" ? "plan" : (claudePermissionMode(runtime).permissionMode ?? "default");
 
-export interface CodexPolicy {
+interface CodexPolicy {
   readonly approvalPolicy: "untrusted" | "on-request" | "never";
   readonly sandbox: "read-only" | "workspace-write" | "danger-full-access";
   readonly approvalsReviewer: "user" | "auto_review";

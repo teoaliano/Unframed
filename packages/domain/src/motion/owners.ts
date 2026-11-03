@@ -5,7 +5,7 @@ export type Owner =
   | { readonly kind: "token"; readonly name: string }
   | { readonly kind: "script"; readonly text: string };
 
-export interface DialScope {
+interface DialScope {
   readonly param: string | null;
   readonly reassigned: boolean;
   readonly destructured: boolean;
@@ -92,7 +92,7 @@ export function ownerOf(node: ScriptNode | null | undefined, context: OwnerConte
   return { kind: "script", text: text() };
 }
 
-export interface DialsCallback {
+interface DialsCallback {
   readonly call: ScriptNode;
   readonly fn: ScriptNode;
   readonly scope: DialScope;
