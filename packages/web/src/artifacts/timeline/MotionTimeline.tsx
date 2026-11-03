@@ -7,7 +7,7 @@
  */
 import { ChevronDown, ChevronLeft, ChevronRight, Lock, Maximize2, PanelBottom, Pause, Play, Repeat, Volume2, VolumeX, ZoomIn, ZoomOut } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
-import { fitZoom, rulerStep, snapMove, snapTime, zoomAt, zoomButton, type SnapTarget, type Tween, type TweenRef } from "@unframed/domain";
+import { clampDialValue, fitZoom, rulerStep, snapMove, snapTime, zoomAt, zoomButton, type DialSchema, type Owner, type SnapTarget, type Tween, type TweenRef } from "@unframed/domain";
 import type { MotionTimelineReading } from "@unframed/contracts";
 import { Button } from "~/components/ui/button";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "~/components/ui/menu";
@@ -18,7 +18,7 @@ import type { EngineConnection } from "../../rpc/engine.ts";
 import { messageOf } from "../../agent/store.ts";
 import type { EditSession } from "../editor/editSession.ts";
 import { TIMELINE_MIN_HEIGHT, clampTimelineHeight, useTimelinePrefs } from "./timelinePrefs.ts";
-import { buildRows, channelsOf, type BarView, type RowView } from "./rows.ts";
+import { buildRows, channelsOf, dialLimitOf, type BarView, type RowView } from "./rows.ts";
 import { MotionTransport, SPEEDS, readoutParts } from "./transport.ts";
 
 /** The transport row alone, which is what Hide leaves showing. */
@@ -72,6 +72,8 @@ export interface MotionTimelineProps {
   readonly session: EditSession;
   /** The dial values the frame runs, by path, so a dial-owned timing is drawn where the dial puts it. */
   readonly dials: Readonly<Record<string, unknown>>;
+  /** The parameters the motion declares: a dial-owned timing stops at their limits (spec 21, Dial-owned timing). */
+  readonly schema: DialSchema | undefined;
   /** The locked elements of the shape. */
   readonly locked: readonly string[];
   /** The editor's column height, which caps the strip at 60 % of it. Zero until it is measured. */
@@ -226,7 +228,7 @@ const RowLine = ({
   );
 };
 
-export const MotionTimeline = ({ title, engine, project, file, session, dials, locked, column, transport, className }: MotionTimelineProps) => {
+export const MotionTimeline = ({ title, engine, project, file, session, dials, schema, locked, column, transport, className }: MotionTimelineProps) => {
   const [prefs, save] = useTimelinePrefs(engine);
   const { open } = prefs;
   const transportState = useSyncExternalStore(transport.subscribe, transport.getSnapshot);
@@ -404,13 +406,15 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, l
   const [barDragging, setBarDragging] = useState(false);
   const pendingTiming = (index: number): { start?: number; duration?: number } | undefined =>
     session.pending.find((edit): edit is Extract<typeof edit, { type: "tween-time" }> => edit.type === "tween-time" && edit.tween.index === index);
-  /** What a bar may do, from the reading: a move needs a literal start, an end a literal duration, a left edge both. */
+  /** A timing value this strip can change: a literal in the file, or a parameter the schema names (its limits are where a drag stops). */
+  const editable = (owner: Owner): boolean => owner.kind === "source" || (owner.kind === "dial" && dialLimitOf(schema, owner.path) !== null);
+  /** What a bar may do, from the reading: a move needs an editable start, an end an editable duration, a left edge both. */
   const allowed = (bar: BarView, row: RowView): { move: boolean; start: boolean; end: boolean } => {
     const tween = tweens.get(bar.tween);
     if (tween === undefined || tween.readOnly !== null || row.locked || bar.tween < 0 || tween.method === "set") return { move: false, start: false, end: false };
-    const literalStart = tween.start.kind === "source";
-    const literalDuration = tween.duration.kind === "source";
-    return { move: literalStart, start: literalStart && literalDuration, end: literalDuration };
+    const startOk = editable(tween.start);
+    const endOk = editable(tween.duration);
+    return { move: startOk, start: startOk && endOk, end: endOk };
   };
   const cursorOf = (bar: BarView, row: RowView): string => {
     const rights = allowed(bar, row);
@@ -457,14 +461,37 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, l
       changed.duration = round(current.end - at);
       setGuide(snapped.guide ? at : null);
     }
+    // A field the file owns is a tween edit; a field a parameter owns moves the parameter, which the frame shows at once and the
+    // burst writes at its commit with no version of its own (spec 21, Dial-owned timing).
+    const tween = tweens.get(current.ref.index);
+    const literal: { start?: number; duration?: number } = {};
+    const dialed: Array<{ path: string; value: number }> = [];
+    const route = (owner: Owner | undefined, field: "start" | "duration", value: number | undefined) => {
+      if (value === undefined || owner === undefined) return;
+      if (owner.kind === "source") literal[field] = value;
+      else if (owner.kind === "dial") {
+        const limit = dialLimitOf(schema, owner.path);
+        if (limit !== null) dialed.push({ path: owner.path.join("."), value: clampDialValue(limit, value) });
+      }
+    };
+    route(tween?.start, "start", changed.start);
+    route(tween?.duration, "duration", changed.duration);
+    for (const { path, value } of dialed) {
+      const key = `dial:${path}:${value}`;
+      if (current.last === key) continue;
+      current.last = key;
+      session.patchDial(path, value);
+    }
+    if (literal.start === undefined && literal.duration === undefined) return;
     // The burst keeps one timing entry per tween, so the fields it does not change keep their pending values.
     const pending = pendingTiming(current.ref.index);
-    const fields = { start: changed.start ?? pending?.start, duration: changed.duration ?? pending?.duration };
+    const fields = { start: literal.start ?? pending?.start, duration: literal.duration ?? pending?.duration };
     const key = JSON.stringify(fields);
     if (key === current.last) return;
     current.last = key;
     const edit = { type: "tween-time" as const, tween: current.ref, ...(fields.start === undefined ? {} : { start: fields.start }), ...(fields.duration === undefined ? {} : { duration: fields.duration }) };
-    session.patchTween(edit, { selector: current.target, channels: current.channels, change: edit });
+    const change = { ...(fields.start === undefined ? {} : { start: fields.start }), ...(fields.duration === undefined ? {} : { duration: fields.duration }) };
+    session.patchTween(edit, { selector: current.target, channels: current.channels, change });
   };
   const onBarUp = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (gesture.current === null) return;

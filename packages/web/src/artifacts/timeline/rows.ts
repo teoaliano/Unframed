@@ -3,7 +3,7 @@
  * motion's reading, the dial values the frame runs, the burst's pending timing and the live tween report.
  * Pure: the strip only draws what this returns.
  */
-import { dialAt, type PropertyGroup, type Tween, type Owner } from "@unframed/domain";
+import { dialAt, type DialLimit, type DialSchema, type PropertyGroup, type Tween, type Owner } from "@unframed/domain";
 import type { MotionTimelineReading, SourceEdit } from "@unframed/contracts";
 
 /** A row's height in pixels, and a lane's: the strip's row grid. */
@@ -258,3 +258,17 @@ export const buildRows = (input: RowsInput): RowView[] => {
 };
 
 const startOf = (owner: Owner, dials: Readonly<Record<string, unknown>>): number => numberOf(owner, dials) ?? 0;
+
+/** The limits a drag on a parameter stops at (spec 21, Dial-owned timing): a range's min, max and step, or a number's floor. Null when the schema does not name it. */
+export const dialLimitOf = (schema: DialSchema | undefined, path: readonly string[]): DialLimit | null => {
+  let folder: DialSchema | undefined = schema;
+  for (let at = 0; at < path.length - 1; at++) {
+    const entry = folder?.[path[at]!];
+    if (entry?.kind !== "folder") return null;
+    folder = entry.of;
+  }
+  const entry = folder?.[path[path.length - 1] ?? ""];
+  if (entry?.kind === "range") return { kind: "range", min: entry.min, max: entry.max, ...(entry.step === undefined ? {} : { step: entry.step }) };
+  if (entry?.kind === "number") return { kind: "number", value: entry.value };
+  return null;
+};

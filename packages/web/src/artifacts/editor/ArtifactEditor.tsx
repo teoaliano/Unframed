@@ -434,6 +434,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
           file={facts.file}
           session={session}
           dials={current ?? {}}
+          schema={normalised?.ok ? normalised.schema : undefined}
           locked={facts.locked}
           column={columnHeight}
           transport={transport}

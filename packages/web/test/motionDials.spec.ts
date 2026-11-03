@@ -70,9 +70,10 @@ test("dragging a dial-owned bar's end moves the parameter at once, writes no ver
   // The bar, the frame's tween and the parameter all say three seconds while the drag goes on.
   await expect.poll(async () => Number(await bar(page).getAttribute("data-duration"))).toBeCloseTo(3, 1);
   await expect.poll(async () => (await tweenPlace(page)).duration).toBeCloseTo(3, 1);
+  await page.mouse.up();
+  // The Parameters tab shows the held value at once, before the burst's pause writes it.
   await parameters(page).getByRole("tab", { name: "Parameters" }).click();
   await expect(parameters(page).getByRole("slider", { name: "Speed" })).toHaveAttribute("aria-valuenow", "3", { timeout: 5000 });
-  await page.mouse.up();
 
   // No version: the file the shape names is the one it had, and no edit sidecar was written for the drag.
   await page.waitForTimeout(2500);
@@ -123,6 +124,7 @@ test("a left-edge stretch on a dial-owned timing moves the start and the paramet
 
   await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(async () => (await fileOf(agent))?.file, { timeout: 15_000 }).toBe(before);
-  await expect.poll(async () => (await fileOf(agent))?.dials?.speed, { timeout: 15_000 }).not.toBeCloseTo(1.5, 1);
+  // The parameter is back where it was (the default, 2 s, as nothing saved it before).
+  await expect.poll(async () => Number((await fileOf(agent))?.dials?.speed ?? 2), { timeout: 15_000 }).toBeCloseTo(2, 1);
   expect(moved).not.toBe(before);
 });
