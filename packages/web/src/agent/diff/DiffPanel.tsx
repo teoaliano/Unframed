@@ -7,6 +7,7 @@ import { ChevronDown, Columns2, Pilcrow, Rows3, TextWrap, X } from "lucide-react
 import { useEffect, useRef, useState } from "react";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
+import { Empty, EmptyDescription } from "~/components/ui/empty";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "~/components/ui/menu";
 import { Toggle } from "~/components/ui/toggle";
 import { Toggle as GroupToggle, ToggleGroup } from "~/components/ui/toggle-group";
@@ -166,19 +167,23 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
         </div>
       </header>
       {!latest ? (
-        <p className={EMPTY_CLASS}>No completed turns yet.</p>
+        <Empty>
+          <EmptyDescription>No completed turns yet.</EmptyDescription>
+        </Empty>
       ) : current && "error" in current ? (
-        <div className={EMPTY_CLASS}>
+        <Empty>
           <Alert variant="error">
             <AlertDescription>{current.error}</AlertDescription>
           </Alert>
-        </div>
+        </Empty>
       ) : !files ? (
-        <p className={EMPTY_CLASS} role="status">
-          Loading changes…
-        </p>
+        <Empty role="status">
+          <EmptyDescription>Loading changes…</EmptyDescription>
+        </Empty>
       ) : files.length === 0 ? (
-        <p className={EMPTY_CLASS}>No page, motion or component changed in this selection.</p>
+        <Empty>
+          <EmptyDescription>No page, motion or component changed in this selection.</EmptyDescription>
+        </Empty>
       ) : (
         <div className="flex min-h-0 flex-1">
           <nav className="flex w-45 shrink-0 flex-col gap-px overflow-auto border-r border-border/60 p-1.5" aria-label="Changed files">
@@ -209,7 +214,9 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
                     <span className="min-w-0 truncate font-mono text-2xs text-muted-foreground" data-testid="diff-names">{`${file.before ?? "new"} → ${file.after ?? "removed"}`}</span>
                   </header>
                   {file.tooLarge ? (
-                    <p className={EMPTY_CLASS}>{file.patch}</p>
+                    <Empty>
+                      <EmptyDescription>{file.patch}</EmptyDescription>
+                    </Empty>
                   ) : (
                     <PatchDiff
                       patch={file.patch}
@@ -234,7 +241,6 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
   );
 };
 
-const EMPTY_CLASS = "m-0 flex flex-1 items-center justify-center px-5 py-6 text-center text-xs text-muted-foreground/70";
 
 const DiffStat = ({ additions, deletions }: { readonly additions: number; readonly deletions: number }) => (
   <span className="flex shrink-0 items-center gap-1 font-mono text-xs tabular-nums">

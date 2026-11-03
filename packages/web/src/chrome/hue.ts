@@ -2,7 +2,8 @@ import type { CSSProperties } from "react";
 
 const HUES = {
   amber: "var(--color-amber-500)",
-  blue: "var(--color-blue-500)",  orange: "var(--color-orange-500)",
+  blue: "var(--color-blue-500)",
+  orange: "var(--color-orange-500)",
   purple: "var(--color-purple-500)",
   green: "var(--color-green-500)",
   pink: "var(--color-pink-500)",

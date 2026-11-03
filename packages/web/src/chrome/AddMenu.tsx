@@ -19,7 +19,7 @@ export const ToolbarEnd = () => {
         <TldrawUiButtonIcon icon="plus" />
       </TldrawUiToolbarButton>
       <Menu open={open} onOpenChange={setOpen}>
-        <MenuPopup anchor={add} side="top" align="end" sideOffset={8} className="w-[152px] min-w-0" finalFocus={() => editor.getEditingShapeId() === null}>
+        <MenuPopup anchor={add} side="top" align="end" sideOffset={8} className="w-38 min-w-0" finalFocus={() => editor.getEditingShapeId() === null}>
           {ADD_SECTIONS.map((section) => (
             <MenuGroup key={section.heading}>
               <MenuGroupLabel>{section.heading}</MenuGroupLabel>
