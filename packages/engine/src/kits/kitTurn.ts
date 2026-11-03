@@ -1,6 +1,7 @@
 /**
  * The kit's rows in a turn's changes (spec 19, Turn changes). A kit is recorded per part: one
- * row per token path (`kit:<path>`), `kit:modes` for the modes and default, and `kit:name`.
+ * row per token path (`kit:<path>`), `kit:modes` for the modes and default, `kit:name`, and
+ * `kit::guidance` for the guidance.
  * Each row holds the part as a small record, so the turn changes table keeps one shape for
  * shapes and kit parts alike. Revert restores a part only when it still holds what the turn
  * left, the same rule shapes follow, and names the part it skipped.
@@ -12,6 +13,9 @@ import type { ChangeLogRow } from "../canvas/rooms.ts";
 import { changedBy, type TurnChangeRow } from "../agent/turnChanges.ts";
 
 export const KIT_KEY_PREFIX = "kit:";
+
+/** The guidance's row key. A token path has no colon, so `kit::guidance` never meets a token's row. */
+export const KIT_GUIDANCE_KEY = `${KIT_KEY_PREFIX}:guidance`;
 
 /** A kit part as the turn changes table holds it: a record-shaped value that is not a shape. */
 interface KitPart {
@@ -27,6 +31,7 @@ export const kitEntries = (kit: Kit | null): Map<string, TLRecord | undefined> =
   const part = (key: string, value: unknown) => parts.set(key, { typeName: "kit", id: key, value } as unknown as TLRecord);
   part(`${KIT_KEY_PREFIX}name`, kit.name);
   part(`${KIT_KEY_PREFIX}modes`, { modes: kit.modes, defaultMode: kit.modes[0] });
+  if (kit.guidance !== undefined) part(KIT_GUIDANCE_KEY, kit.guidance);
   for (const token of kit.tokens) part(`${KIT_KEY_PREFIX}${token.path}`, token);
   return parts;
 };
@@ -84,6 +89,11 @@ export const planKitRevert = (
     if (row.shapeId === `${KIT_KEY_PREFIX}modes`) {
       const modes = (before as { modes?: string[] } | undefined)?.modes;
       if (modes !== undefined) kit = { ...kit, modes };
+      continue;
+    }
+    if (row.shapeId === KIT_GUIDANCE_KEY) {
+      const { guidance: _guidance, ...rest } = kit;
+      kit = typeof before === "string" ? { ...rest, guidance: before } : rest;
       continue;
     }
     const path = row.shapeId.slice(KIT_KEY_PREFIX.length);

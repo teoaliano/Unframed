@@ -121,3 +121,37 @@ describe("kit_read and kit_write (spec 19, task 11)", () => {
     expect(await kitOnRoom(agent)).toMatchObject({ tokens: [{ values: { light: "#1a73e8" } }] });
   });
 });
+
+describe("the kit's guidance through kit_read and kit_write (spec 19)", () => {
+  const GUIDE = [{ name: "kit_write", input: { ops: [{ op: "setGuidance", guidance: "## Voice\n\nShort sentences. One accent per screen." }] } }];
+
+  it("sets the guidance with setGuidance and reads it back", async () => {
+    const agent = await startAgentEngine({ script: await script([KIT_TURN, GUIDE, [{ name: "kit_read", input: {} }]]) });
+    await seed(agent, []);
+    const chatId = await agent.createChat();
+    for (let turn = 1; turn <= 3; turn++) {
+      await agent.send(chatId, "go", {});
+      await agent.settled(chatId, turn);
+    }
+    const chat = await agent.settled(chatId, 3);
+    expect(toolResults(chat, "kit_write")[1]?.status).toBe("completed");
+    expect(toolResults(chat, "kit_read")[0]?.result).toMatchObject({ name: "Brand", guidance: "## Voice\n\nShort sentences. One accent per screen." });
+    expect(await kitOnRoom(agent)).toMatchObject({ guidance: "## Voice\n\nShort sentences. One accent per screen." });
+  });
+
+  it("reverts the guidance a turn set, recorded as its own row", async () => {
+    const agent = await startAgentEngine({ script: await script([KIT_TURN, GUIDE]) });
+    await seed(agent, []);
+    const chatId = await agent.createChat();
+    for (let turn = 1; turn <= 2; turn++) {
+      await agent.send(chatId, "go", {});
+      await agent.settled(chatId, turn);
+    }
+    await agent.dispatch({ type: "thread.turn.revert", threadId: chatId, turnCount: 2 });
+    const chat = await (await agent.watch(chatId)).until((current) => current.turns[1]?.reverted !== undefined, "the revert");
+    expect(chat.turns[1]?.reverted).toMatchObject({ restored: ["kit::guidance"], skipped: [] });
+    const kit = await kitOnRoom(agent);
+    expect(kit).toMatchObject({ name: "Brand", tokens: [{ path: "color/brand/primary" }] });
+    expect(kit?.guidance).toBeUndefined();
+  });
+});
