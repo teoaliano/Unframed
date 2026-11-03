@@ -21,7 +21,6 @@ import {
   isHideDeclaration,
   isText,
   isTextOnly,
-  parseDeclarations,
   parseSource,
   type ChildNode,
   type Declaration,
@@ -45,7 +44,8 @@ const SUMMARY_LINES = 20;
 /** A layer name is at most this many characters. */
 const NAME_MAX = 60;
 
-const IMAGE_FILE = /\.(png|jpe?g|webp|gif|svg)$/i;
+/** A bare file name with an image extension. The name goes into a url() and a style value, so nothing else gets in. */
+const IMAGE_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,200}\.(png|jpe?g|webp|gif|svg)$/i;
 
 type Step = { readonly html: string; readonly line: string } | { readonly refusal: string };
 
@@ -305,8 +305,7 @@ const replaceRuleValue = (html: string, ref: { block: number; selector: string; 
   return html.slice(0, found.block.start + declaration.start) + value + html.slice(found.block.start + declaration.end);
 };
 
-const isImageFile = (file: string): boolean =>
-  IMAGE_FILE.test(file) && file !== "" && !file.includes("/") && !file.includes("\\") && !file.includes("..");
+const isImageFile = (file: string): boolean => IMAGE_FILE.test(file);
 
 const escapeText = (text: string): string => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -369,38 +368,150 @@ const setAttribute = (html: string, id: string, name: string, rendered: string |
   return html.slice(0, at) + lead + rendered + html.slice(at);
 };
 
-const writeDeclarations = (html: string, id: string, declarations: readonly string[]): string =>
-  setAttribute(html, id, "style", declarations.length === 0 ? null : renderAttribute("style", declarations.join("; ")));
+/** A declaration with its byte range in the raw value of a style attribute. */
+type RawDeclaration = Declaration & { readonly start: number; readonly end: number };
 
-const declarationsOf = (html: string, id: string): Declaration[] => {
-  const el = findById(parseSource(html), id)?.el;
-  return parseDeclarations(el === undefined ? "" : (attr(el, "style") ?? ""));
+/** A style attribute's value: its raw bytes at `start` to `end`, the quote it is written in (empty when unquoted), and the whole attribute's span. */
+interface StyleSpan {
+  readonly start: number;
+  readonly end: number;
+  readonly quote: string;
+  readonly attrStart: number;
+  readonly attrEnd: number;
+}
+
+/**
+ * Splits a raw style value into its declarations, as `splitDeclarations` does, with each one's byte
+ * range. An entity counts as the character it stands for when it is a quote, and is never a semicolon.
+ */
+const rawDeclarations = (raw: string): RawDeclaration[] => {
+  const masked = raw
+    .replace(/&(?:quot|#0*34|#x0*22);/gi, (m) => `"${" ".repeat(m.length - 1)}`)
+    .replace(/&(?:apos|#0*39|#x0*27);/gi, (m) => `'${" ".repeat(m.length - 1)}`)
+    .replace(/&[#A-Za-z0-9]+;/g, (m) => " ".repeat(m.length));
+  const cuts: Array<[number, number]> = [];
+  let depth = 0;
+  let quote: string | null = null;
+  let start = 0;
+  for (let i = 0; i < masked.length; i++) {
+    const c = masked.charAt(i);
+    if (quote !== null) {
+      if (c === "\\") i++;
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'") quote = c;
+    else if (c === "(") depth++;
+    else if (c === ")") depth = Math.max(0, depth - 1);
+    else if (c === ";" && depth === 0) {
+      cuts.push([start, i]);
+      start = i + 1;
+    }
+  }
+  cuts.push([start, masked.length]);
+  return cuts.flatMap(([from, to]) => {
+    const piece = raw.slice(from, to);
+    const text = piece.trim();
+    const colon = text.indexOf(":");
+    const property = colon < 0 ? "" : text.slice(0, colon).trim().toLowerCase();
+    if (text === "" || property === "") return [];
+    const begin = from + piece.indexOf(text);
+    return [{ text, property, value: text.slice(colon + 1).trim(), start: begin, end: begin + text.length }];
+  });
+};
+
+/** The style attribute's value span in `html`, or null when the element has no style attribute with a value. */
+const styleSpan = (html: string, id: string): StyleSpan | null => {
+  const location = findById(parseSource(html), id)?.el.sourceCodeLocation;
+  const attrLocation = location?.attrs?.style;
+  if (attrLocation === undefined) return null;
+  const { startOffset: attrStart, endOffset: attrEnd } = attrLocation;
+  const eq = html.indexOf("=", attrStart);
+  if (eq < 0 || eq >= attrEnd) return null;
+  let valueStart = eq + 1;
+  while (valueStart < attrEnd && /\s/.test(html.charAt(valueStart))) valueStart += 1;
+  const opening = html.charAt(valueStart);
+  if (opening === '"' || opening === "'") return { start: valueStart + 1, end: attrEnd - 1, quote: opening, attrStart, attrEnd };
+  return { start: valueStart, end: attrEnd, quote: "", attrStart, attrEnd };
+};
+
+/** The declarations of the element's style attribute, with their ranges in that attribute's raw value. */
+const styleDeclarations = (html: string, id: string): RawDeclaration[] => {
+  const span = styleSpan(html, id);
+  return span === null ? [] : rawDeclarations(html.slice(span.start, span.end));
+};
+
+/** Escapes a declaration for the attribute it goes into. A single quote is written as a reference inside a single-quoted attribute. */
+const escapeStyle = (text: string, quote: string): string => {
+  const escaped = escapeAttribute(text);
+  return quote === "'" ? escaped.replace(/'/g, "&#39;") : escaped;
+};
+
+/**
+ * Rewrites the raw value of the element's style attribute with `change`, which gets the raw value,
+ * its declarations and the attribute's quote, and returns the new raw value. Every byte outside the
+ * change stays where it is. An empty result removes the attribute.
+ */
+const editStyle = (html: string, id: string, change: (raw: string, decls: readonly RawDeclaration[], quote: string) => string): string => {
+  const span = styleSpan(html, id);
+  if (span === null) {
+    const text = change("", [], '"');
+    return text === "" ? html : setAttribute(html, id, "style", `style="${text}"`);
+  }
+  const raw = html.slice(span.start, span.end);
+  const next = change(raw, rawDeclarations(raw), span.quote === "'" ? "'" : '"');
+  if (next === raw) return html;
+  if (next.trim() === "") return setAttribute(html, id, "style", null);
+  if (span.quote === "") return setAttribute(html, id, "style", `style="${next}"`);
+  return html.slice(0, span.start) + next + html.slice(span.end);
+};
+
+/** Removes the declaration at `index` with the separator before it (or after it, when it comes first). */
+const removeAt = (raw: string, decls: readonly RawDeclaration[], index: number): string => {
+  if (decls.length === 1) return "";
+  const at = decls[index]!;
+  if (index > 0) return raw.slice(0, decls[index - 1]!.end) + raw.slice(at.end);
+  return raw.slice(0, at.start) + raw.slice(decls[1]!.start);
+};
+
+/** Adds `text` after the last declaration with the separator the others use, or before the hide declaration. */
+const insertAt = (raw: string, decls: readonly RawDeclaration[], text: string, quote: string): string => {
+  const escaped = escapeStyle(text, quote);
+  if (decls.length === 0) return escaped;
+  const separator = decls.length >= 2 ? raw.slice(decls[0]!.end, decls[1]!.start) : "; ";
+  const hide = decls.find(isHideDeclaration);
+  if (hide !== undefined) return raw.slice(0, hide.start) + escaped + separator + raw.slice(hide.start);
+  const last = decls[decls.length - 1]!;
+  return raw.slice(0, last.end) + separator + escaped + raw.slice(last.end);
+};
+
+/** Removes every declaration of the element's style that `matches`, one at a time, so each removal reads the bytes left. */
+const removeDeclarations = (html: string, id: string, matches: (declaration: Declaration) => boolean): string => {
+  let next = html;
+  let index = styleDeclarations(next, id).findIndex(matches);
+  while (index >= 0) {
+    const at = index;
+    next = editStyle(next, id, (raw, decls) => removeAt(raw, decls, at));
+    index = styleDeclarations(next, id).findIndex(matches);
+  }
+  return next;
 };
 
 /**
  * Sets one declaration of the element's style attribute, or removes it when `value` is null.
  * An existing declaration is replaced in place and keeps its `!important`; a new one goes
- * after the others and before the hide declaration.
+ * after the others and before the hide declaration, with the separator the others use.
  */
 const setDeclaration = (html: string, id: string, property: string, value: string | null): string => {
-  const declarations = declarationsOf(html, id);
-  const index = declarations.map((declaration) => declaration.property).lastIndexOf(property);
-  if (value === null) {
-    if (index < 0) return html;
-    return writeDeclarations(html, id, declarations.filter((d) => d.property !== property).map((d) => d.text));
-  }
-  if (index >= 0) {
-    const old = declarations[index];
-    const important = old !== undefined && /!\s*important$/i.test(old.value);
-    const text = `${property}: ${value}${important ? " !important" : ""}`;
-    return writeDeclarations(html, id, declarations.map((d, i) => (i === index ? text : d.text)));
-  }
+  if (value === null) return removeDeclarations(html, id, (declaration) => declaration.property === property);
   const text = `${property}: ${value}`;
-  const hideAt = declarations.findIndex(isHideDeclaration);
-  const texts = declarations.map((d) => d.text);
-  if (hideAt >= 0) texts.splice(hideAt, 0, text);
-  else texts.push(text);
-  return writeDeclarations(html, id, texts);
+  return editStyle(html, id, (raw, decls, quote) => {
+    const index = decls.map((declaration) => declaration.property).lastIndexOf(property);
+    const old = decls[index];
+    if (old === undefined) return insertAt(raw, decls, text, quote);
+    const important = /!\s*important$/i.test(old.value);
+    return raw.slice(0, old.start) + escapeStyle(`${text}${important ? " !important" : ""}`, quote) + raw.slice(old.end);
+  });
 };
 
 /** Adds or removes `data-uf-hidden` and its hide declaration, and nothing else. */
@@ -408,15 +519,14 @@ const setHidden = (html: string, id: string, hidden: boolean): string => {
   const el = findById(parseSource(html), id)?.el;
   if (el === undefined) return html;
   const isHidden = attr(el, "data-uf-hidden") !== undefined;
-  const hasHideDeclaration = declarationsOf(html, id).some(isHideDeclaration);
+  const hasHideDeclaration = styleDeclarations(html, id).some(isHideDeclaration);
   if (hidden) {
     if (isHidden && hasHideDeclaration) return html;
     const withAttribute = isHidden ? html : setAttribute(html, id, "data-uf-hidden", "data-uf-hidden");
-    const texts = declarationsOf(withAttribute, id).map((d) => d.text);
-    if (!hasHideDeclaration) texts.push(HIDE_DECLARATION);
-    return writeDeclarations(withAttribute, id, texts);
+    if (hasHideDeclaration) return withAttribute;
+    return editStyle(withAttribute, id, (raw, decls, quote) => insertAt(raw, decls, HIDE_DECLARATION, quote));
   }
   if (!isHidden && !hasHideDeclaration) return html;
   const withoutAttribute = isHidden ? setAttribute(html, id, "data-uf-hidden", null) : html;
-  return writeDeclarations(withoutAttribute, id, declarationsOf(withoutAttribute, id).filter((d) => !isHideDeclaration(d)).map((d) => d.text));
+  return removeDeclarations(withoutAttribute, id, isHideDeclaration);
 };

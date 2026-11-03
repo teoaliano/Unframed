@@ -11,7 +11,7 @@ import { ARTIFACT_SIZE_LIMIT, artifactTitle, compiledFileName, projectSlug, read
 import { applySourceEdits, offTokenValues, ruleLockHit, sourceTreeOf, stampElementIds } from "@unframed/domain/html";
 import { isMotionEdit } from "@unframed/domain/motion";
 import type { CommittedChange } from "../canvas/rooms.ts";
-import { byteSize, prepareArtifactHtml, prepareComponentHtml, tooLargeMessage } from "./artifactHtml.ts";
+import { byteSize, isHtmlFileName, prepareArtifactHtml, prepareComponentHtml, tooLargeMessage } from "./artifactHtml.ts";
 import { kitOf } from "../kits/tokensFile.ts";
 import { ensureBridge, ensureComponentLibrary, ensureCompiledComponent, ensureLibrary, writeEditArtifact } from "./artifactStore.ts";
 import { instanceDeclarations, pinComponents } from "./componentRegistry.ts";
@@ -21,6 +21,7 @@ const motionKindOf = (type: string | undefined): string | undefined =>
   type === "color" ? "colour" : type === "dimension" ? "number" : type === "easing" || type === "duration" ? type : undefined;
 
 const BRIDGE_PRESENT = /unframed-dials\.js/i;
+const RUNTIME_PRESENT = /data-hyperframes-preview-runtime|hyperframes-runtime\.js|hyperframe\.runtime\.iife\.js/i;
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"]);
 const PREPARE_EDIT = "Element ids added";
 
@@ -59,7 +60,13 @@ const folderOf = async (deps: EditServiceDeps, project: string): Promise<string>
   return dir;
 };
 
-const isReady = (html: string): boolean => BRIDGE_PRESENT.test(html) && stampElementIds(html) === html;
+/** A file is ready when it has the bridge, a motion's runtime tag, and ids on every element (spec 18). */
+const isReady = (html: string, kind: ArtifactKind): boolean =>
+  BRIDGE_PRESENT.test(html) && (kind !== "motion" || RUNTIME_PRESENT.test(html)) && stampElementIds(html) === html;
+
+/** The kind a file is edited as: a motion when a motion shape of the project holds it. */
+const kindOfFile = (records: ReadonlyArray<TLRecord>, file: string): ArtifactKind =>
+  records.some((record) => record.typeName === "shape" && record.type === "motion" && (record.props as { file?: unknown }).file === file) ? "motion" : "page";
 
 export const artifactEditService = (deps: EditServiceDeps) => {
   /** The origin that last set each artifact's file, by project and shape: a chat's makes an agent conflict. */
@@ -79,14 +86,16 @@ export const artifactEditService = (deps: EditServiceDeps) => {
   sourceTree: async (project: string, file: string): Promise<{ ready: boolean; elements: SourceTreeElement[]; offTokens: OffTokenFound[] }> => {
     const dir = await folderOf(deps, project);
     if (!isBareFileName(file)) throw unframedError("bad_request", "That is not a file in this project.");
+    if (!isHtmlFileName(file)) throw unframedError("not_found", `No file ${file} in this project.`);
     let html: string;
     try {
       html = await readFile(join(dir, file), "utf8");
     } catch {
       throw unframedError("not_found", `No file ${file} in this project.`);
     }
-    const kit = kitOf(await deps.read(project));
-    return { ready: isReady(html), elements: sourceTreeOf(html), offTokens: kit === null ? [] : offTokenValues(html, kit) };
+    const records = await deps.read(project);
+    const kit = kitOf(records);
+    return { ready: isReady(html, kindOfFile(records, file)), elements: sourceTreeOf(html), offTokens: kit === null ? [] : offTokenValues(html, kit) };
   },
 
   /** A page or motion's file, stamped and bridged in a new version when it is not ready; the current file when it is. */
@@ -114,7 +123,7 @@ export const artifactEditService = (deps: EditServiceDeps) => {
       const written = await writeEditArtifact(dir, { kind, html: prepared, title: artifactTitle(props), of: file, shapeId, edits: [PREPARE_EDIT], tag: sheet.sheet.declaration.tag });
       return { file: written.file };
     }
-    const prepared = (await pinComponents(dir, records, isReady(html) ? html : prepareArtifactHtml(html, kind))).html;
+    const prepared = (await pinComponents(dir, records, isReady(html, kind) ? html : prepareArtifactHtml(html, kind))).html;
     if (prepared === html) return { file };
     if (byteSize(prepared) > ARTIFACT_SIZE_LIMIT) throw unframedError("bad_request", tooLargeMessage(kind, byteSize(prepared)));
     await (kind === "motion" ? ensureLibrary(dir) : ensureBridge(dir));
@@ -177,6 +186,11 @@ export const artifactEditService = (deps: EditServiceDeps) => {
       tokenKind: (name) => motionKindOf(kit?.tokens.find((token) => token.path === name)?.type),
     });
     if (!result.ok) throw unframedError("bad_request", result.refusal);
+    for (const edit of edits) {
+      if (edit.type !== "image") continue;
+      const info = await stat(join(dir, edit.file)).catch(() => undefined);
+      if (info === undefined || !info.isFile()) throw unframedError("bad_request", `No file ${edit.file} in this project.`);
+    }
     const ready = kind === "component" ? prepareComponentHtml(result.html) : prepareArtifactHtml(result.html, kind);
     let tag: string | undefined;
     if (kind === "component") {

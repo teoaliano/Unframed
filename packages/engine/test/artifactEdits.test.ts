@@ -52,6 +52,27 @@ describe("artifact.sourceTree and artifact.prepareEdit (spec 18)", () => {
     });
   });
 
+  it("refuses a file that is not HTML, even when it is in the project", async () => {
+    await writeFile(join(folder, "1-notes.txt"), READY);
+    await expect(rpc.call("artifact.sourceTree", { project: "board", file: "1-notes.txt" })).rejects.toMatchObject({
+      code: "not_found",
+      message: "No file 1-notes.txt in this project.",
+    });
+  });
+
+  it("answers ready false for a motion whose file has the bridge and the ids but no runtime tag, and prepares it with the runtime", async () => {
+    await writeFile(join(folder, "1-mnoruntime.html"), READY);
+    const tab = await connectTab(engine.port, "board");
+    await tab.loaded;
+    await tab.pushRaw([{ ...pageShape("mnoruntime", "104", { file: "1-mnoruntime.html", title: "No runtime" }), type: "motion" } as never]);
+    await tab.close();
+    expect((await rpc.call("artifact.sourceTree", { project: "board", file: "1-mnoruntime.html" })).ready).toBe(false);
+    const prepared = await rpc.call("artifact.prepareEdit", { project: "board", shapeId: "shape:mnoruntime" });
+    expect(prepared.file).not.toBe("1-mnoruntime.html");
+    expect(await readFile(join(folder, prepared.file), "utf8")).toContain("data-hyperframes-preview-runtime");
+    expect((await rpc.call("artifact.sourceTree", { project: "board", file: prepared.file })).ready).toBe(true);
+  });
+
   it("writes a stamped version with the bridge and its edit sidecar for an unready page, and leaves the base file alone", async () => {
     const answer = await rpc.call("artifact.prepareEdit", { project: "board", shapeId: "shape:plain" });
     expect(answer.file).toMatch(/^\d+-plain\.html$/);
@@ -169,6 +190,31 @@ describe("artifact.sourceTree and artifact.prepareEdit (spec 18)", () => {
         rpc.call("artifact.edit", { project: "board", shapeId: "shape:e5", baseFile: "1-big.html", edits: [{ type: "text", elementId: "hf-aaaa", text: "b".repeat(200_000) }] }),
       ).rejects.toMatchObject({ code: "bad_request", message: expect.stringMatching(/^The page would be too large \(\d+ bytes; the limit is 2097152\)\.$/) });
       expect((await readdir(folder)).length).toBe(before + 1);
+    });
+
+    it("refuses an image file the project does not hold, and a name that would write CSS, and writes nothing", async () => {
+      await put(editable("e7"));
+      const before = (await readdir(folder)).length;
+      await expect(
+        rpc.call("artifact.edit", { project: "board", shapeId: "shape:e7", baseFile: "1-ready.html", edits: [{ type: "image", elementId: "hf-aaaa", target: "background", file: "gone.png" }] }),
+      ).rejects.toMatchObject({ code: "bad_request", message: "No file gone.png in this project." });
+      await expect(
+        rpc.call("artifact.edit", {
+          project: "board",
+          shapeId: "shape:e7",
+          baseFile: "1-ready.html",
+          edits: [{ type: "image", elementId: "hf-aaaa", target: "background", file: 'a");position:fixed;inset:0;x:("b.png' }],
+        }),
+      ).rejects.toMatchObject({ code: "bad_request" });
+      expect((await readdir(folder)).length).toBe(before);
+    });
+
+    it("writes a background image from a project file that exists", async () => {
+      await writeFile(join(folder, "1-pic.png"), "x");
+      await put(editable("e8"));
+      const answer = await rpc.call("artifact.edit", { project: "board", shapeId: "shape:e8", baseFile: "1-ready.html", edits: [{ type: "image", elementId: "hf-aaaa", target: "background", file: "1-pic.png" }] });
+      expect(answer.summary).toEqual(["Image · Hi"]);
+      expect(await readFile(join(folder, answer.file), "utf8")).toContain('background-image: url(&quot;1-pic.png&quot;)');
     });
 
     it("refuses a text edit on a locked element and lets rename and hide through", async () => {
