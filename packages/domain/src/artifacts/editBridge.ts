@@ -494,6 +494,8 @@ export function installEditBridge(win: EditWindow): void {
     event.preventDefault();
     const el = hoverTarget(targetOf(event));
     if (el !== null && isCopy(el)) picked.set(validId(el)!, el);
+    // The press did not move keyboard focus (the bridge prevents it), so the frame takes it: Enter and Escape then reach the frame.
+    if (win.focus) win.focus();
     post({ type: "unframed:edit:pick", element: el === null ? null : reportOf(el), additive: event.shiftKey === true });
   };
 

@@ -4,7 +4,7 @@ import type { Page } from "@playwright/test";
 import { BRIDGE_TAG } from "@unframed/domain";
 import { centre, openCanvas, roomShapes, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
-import { filledArtifact, projectPath, writeBridge } from "./artifacts.ts";
+import { filledArtifact, projectPath, writeBridge, writeProjectFile } from "./artifacts.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
 /**
@@ -206,4 +206,24 @@ test("a dial behind a border or a padding field shows the parameter mark on that
   await expect(parameters(page).getByRole("img", { name: "Parameter edge" })).toBeVisible();
   await expect(parameters(page).getByRole("img", { name: "Parameter pad" })).toBeVisible();
   await expect(parameters(page).getByRole("group", { name: "Padding" }).getByRole("spinbutton", { name: "Padding top" })).toBeEnabled();
+});
+
+test("a burst that holds only a dial, and loses its file to the agent, says the agent rewrote it", async ({ page, agent }) => {
+  await onBoard(page, agent);
+  await openEditor(page);
+  await select(page, "title");
+  const before = await preparedFile(agent);
+
+  await parameters(page).getByRole("button", { name: "Colour", exact: true }).click();
+  await page.getByRole("textbox", { name: "Hex", exact: true }).fill("#00ff00");
+  await page.getByRole("textbox", { name: "Hex", exact: true }).press("Enter");
+  await page.keyboard.press("Escape");
+
+  // The agent's chat writes a new file while the dial burst waits for its pause.
+  await writeProjectFile(agent, "agent.html", await readFile(projectPath(agent, before), "utf8"));
+  const shape = (await roomShapes(agent, "default", "page")).find((record) => record.id === "shape:owners")!;
+  await (await agent.rpc()).call("testCanvas.apply", { project: "default", change: { put: [{ ...shape, props: { ...shape.props, file: "agent.html" } }], remove: [] }, origin: { kind: "server", id: "chat:c9" } });
+
+  await expect(page.getByText("The agent rewrote this. Your last change wasn't saved.", { exact: true }).first()).toBeVisible({ timeout: 2000 });
+  expect(await dialsOf(agent)).toBeUndefined();
 });

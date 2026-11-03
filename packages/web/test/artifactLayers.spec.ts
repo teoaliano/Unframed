@@ -165,3 +165,15 @@ test("Enter in the frame on a selected text element starts its in-place text edi
   await page.keyboard.press("Escape");
   await expect(frameOf(page).getByText("Lead text")).not.toHaveAttribute("contenteditable");
 });
+
+test("the selected outline keeps a white and a black ring outside its primary line, so it shows on a dark or a white page", async ({ page, agent }) => {
+  await onBoard(page, agent);
+  await openLayers(page);
+  await expect(async () => {
+    await frameOf(page).getByText("Lead text").click();
+    await expect(outline(page, "selected")).toHaveCount(1, { timeout: 1000 });
+  }).toPass({ timeout: 20_000 });
+  const shadow = await outline(page, "selected").evaluate((element) => getComputedStyle(element).boxShadow);
+  expect(shadow).toContain("rgb(255, 255, 255)");
+  expect(shadow).toContain("rgb(0, 0, 0)");
+});
