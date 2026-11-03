@@ -157,11 +157,16 @@ test("keys pressed in the frame in Edit mode reach the transport: Space plays, S
   await expect(readout(page)).toContainText("0:04.00", { timeout: 40_000 });
   // A press does not move the keyboard focus into the frame (the bridge keeps it out), but a double-click on text does: the
   // frame then has the keys, and its bridge forwards them in Edit mode. The text edit it starts ends on Esc, which keeps the focus.
+  // The keys typed while the editor answers the double-click are held and replayed into the text, so the keys wait for the edit to begin.
+  const label = insideComposition(region(page).frameLocator("iframe[data-artifact-frame]")).locator("#label");
   await expect(async () => {
-    await insideComposition(region(page).frameLocator("iframe[data-artifact-frame]")).locator("#label").dblclick();
-    await expect(page.locator("iframe[data-artifact-frame]")).toBeFocused({ timeout: 1000 });
+    await label.dblclick();
+    await expect(label).toHaveAttribute("contenteditable", "plaintext-only", { timeout: 1000 });
   }).toPass({ timeout: 40_000 });
+  await expect(page.locator("iframe[data-artifact-frame]")).toBeFocused({ timeout: 2000 });
   await page.keyboard.press("Escape");
+  // The Esc ends the text edit and keeps the focus in the frame, so the next keys are the frame's.
+  await expect(page.locator("iframe[data-artifact-frame]")).toBeFocused({ timeout: 2000 });
 
   await page.keyboard.press("Space");
   await expect(timeline(page).getByRole("button", { name: "Pause (Space)", exact: true })).toBeVisible();
@@ -169,6 +174,8 @@ test("keys pressed in the frame in Edit mode reach the transport: Space plays, S
   await expect(timeline(page).getByRole("button", { name: "Play (Space)", exact: true })).toBeVisible();
   // Paused where the Space left it: Shift+Right then steps ten frames from there.
   const framed = async () => Number(/(\d+)f$/.exec((await readout(page).textContent()) ?? "")?.[1]);
+  // The last report of the playback can still move the frame by one after the pause: it settles before it is read.
+  await page.waitForTimeout(400);
   const paused = await framed();
   await page.keyboard.press("Shift+ArrowRight");
   await expect.poll(framed).toBe(paused + 10);
