@@ -570,6 +570,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
       </section>
       {timeline && (
         <MotionTimeline
+          key={shapeId}
           title={title}
           engine={engine}
           project={project}

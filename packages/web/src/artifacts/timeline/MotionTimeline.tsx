@@ -116,6 +116,8 @@ export interface MotionTimelineProps {
 }
 
 /** The motion's reading as this strip holds it: the file it is for, and either the reading or why it could not be read. */
+const NO_EDITS: readonly SourceEdit[] = [];
+
 interface ReadingState {
   readonly file: string;
   readonly value?: MotionTimelineReading;
@@ -353,7 +355,10 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
       live = false;
     };
   }, [engine, project, file]);
-  const current = reading?.file === file ? reading : undefined;
+  // The last reading stays on screen while a new version's reading loads, so its bars do not vanish (spec 21, After a version loads).
+  const current = reading?.file === file || reading?.value !== undefined ? reading : undefined;
+  // The edits the last commit wrote are drawn over the old reading until the new file's reading is in.
+  const settledEdits = session.settled !== undefined && session.settled.base === current?.file ? session.settled.edits : NO_EDITS;
 
   // The rows: which elements are open. The tween the last bar click chose is the editor's selection (session.tween).
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
@@ -365,10 +370,10 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
   const hidden = useMemo(() => new Set((session.tree?.elements ?? []).filter((element) => element.hidden).map((element) => element.id)), [session.tree]);
   const names = useMemo(() => Object.fromEntries((session.tree?.elements ?? []).map((element) => [element.id, element.name])), [session.tree]);
   // The burst's timing as drawn: a pending clip edit also draws the tweens it carries (spec 21, Clips).
-  const shownPending = useMemo(
-    () => (current?.value === undefined ? session.pending : [...session.pending, ...carriedTimingOf(current.value, session.pending, dials)]),
-    [current?.value, session.pending, dials],
-  );
+  const shownPending = useMemo(() => {
+    const pending = [...session.pending, ...settledEdits];
+    return current?.value === undefined ? pending : [...pending, ...carriedTimingOf(current.value, pending, dials)];
+  }, [current?.value, session.pending, settledEdits, dials]);
   const rows = useMemo<RowView[]>(
     () =>
       current?.value === undefined

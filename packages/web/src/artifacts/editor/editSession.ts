@@ -151,6 +151,11 @@ export interface EditSession {
   readonly prepareError: string | undefined;
   /** The source edits of the burst not yet written: they are the element's own, so the owner stays `source`. */
   readonly pending: readonly SourceEdit[];
+  /**
+   * The edits of the commit in progress, the file they were made on, and the file they were written to: the strip draws them over
+   * the reading of the base until a newer reading is in (spec 21). Cleared when the shape goes back to the base, or on another file.
+   */
+  readonly settled: { readonly base: string; readonly result?: string; readonly edits: readonly SourceEdit[] } | undefined;
   /** The dial values the burst holds, by path. The frame shows them and they are written at commit. */
   readonly held: Readonly<Record<string, unknown>>;
   /** Holds a dial value from the Design tab: the burst writes it at commit, and no version is written for it alone. */
@@ -204,6 +209,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   const [preparing, setPreparing] = useState(false);
   const [prepareError, setPrepareError] = useState<string | undefined>(undefined);
   const [pending, setPending] = useState<readonly SourceEdit[]>([]);
+  const [settled, setSettled] = useState<{ base: string; result?: string; edits: readonly SourceEdit[] } | undefined>(undefined);
   const [held, setHeld] = useState<Readonly<Record<string, unknown>>>({});
   const [overridden, setOverridden] = useState<Readonly<Record<string, boolean>>>({});
   // The dial values a commit is writing now: shown until the commit has answered.
@@ -286,10 +292,16 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     burstRef.current = emptyBurst();
     baseRef.current = undefined;
     setPending([]);
+    // The edits stay on screen over the old reading while they are written, so the bars do not jump back at the commit.
+    if (edits.length > 0) setSettled({ base, edits });
     inFlight.current = Object.fromEntries(dials.map(({ path, value }) => [path, value]));
     const finish = () => {
       inFlight.current = {};
       setHeld(heldNow());
+    };
+    const dropped = () => {
+      setSettled(undefined);
+      finish();
     };
     // Each commit is its own undo step, so Cmd-Z takes back one save at a time.
     if (edits.length === 0) {
@@ -309,7 +321,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     try {
       const answer = await send(base, edits);
       if (fileRef.current !== base) {
-        finish();
+        dropped();
         showNotice(conflictSentence(kind, "elsewhere"), "warning");
         return;
       }
@@ -319,11 +331,12 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       const props = dials.length > 0 ? { file: answer.file, dials: dialsWith(shapeDials(), inFlight.current) } : { file: answer.file };
       editor.updateShape({ id: shapeId as TLShapeId, type: kind, props } as never);
       lastSet.current = answer.file;
+      setSettled((previous) => (previous?.base === base ? { ...previous, result: answer.file } : previous));
       finish();
       undoable.current += 1;
       redoable.current = 0;
     } catch (error) {
-      finish();
+      dropped();
       post({ type: "unframed:edit:reset" });
       const code = (error as { code?: unknown }).code;
       const details = (error as { details?: { reason?: unknown } }).details;
@@ -661,6 +674,11 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     }
   };
 
+  // The edits a commit wrote stay drawn until the shape is back on their base (an undo) or on another file than the commit's.
+  useEffect(() => {
+    setSettled((previous) => (previous === undefined || file === previous.result || (file === previous.base && previous.result === undefined) ? previous : undefined));
+  }, [file]);
+
   // The shape's file changed under a pending burst: the agent or another writer rewrote it. The burst is dropped
   // at once. Committing it now lets the engine answer the conflict and say who changed the file, and it writes nothing.
   useEffect(() => {
@@ -731,6 +749,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     preparing,
     prepareError,
     pending,
+    settled,
     held,
     patchDial,
     releaseDials,

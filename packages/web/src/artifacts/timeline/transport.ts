@@ -48,9 +48,17 @@ export class MotionTransport {
   // The settings go to the player once per connection and document: the runtime posts its timeline again whenever its manifest moves (a seek does that),
   // and a rate message would end a running shuttle.
   private pendingSync = false;
+  // The document on screen before a new one (a new version): its playhead and play state, put back once the new runtime has its timeline.
+  private shown = false;
+  private carried: { readonly time: number; readonly playing: boolean } | undefined;
+  // The play state the person chose: the player's own report can say paused while a version is being swapped, so it is not what is carried.
+  private wantsPlay = false;
 
   /** Points the transport at the frame: the viewer's control messages go there. */
   connect = (send: Send): void => {
+    // A second connection is a new document: it takes over the time and the play state this one had.
+    if (this.shown) this.carried = { time: this.current(), playing: this.wantsPlay };
+    this.shown = true;
     this.send = send;
     this.pendingSync = true;
     this.sync();
@@ -93,13 +101,22 @@ export class MotionTransport {
         this.pendingSync = false;
         this.sync();
       }
+      const carried = this.carried;
+      if (carried !== undefined) {
+        this.carried = undefined;
+        this.seek(carried.time, "commit");
+        if (carried.playing) this.play();
+      }
       this.paint();
       return;
     }
     if (data.type !== "unframed:player:state" || typeof data.time !== "number" || !Number.isFinite(data.time)) return;
+    // Until the carried time has landed, the new document's own report (time zero) is not the playhead.
+    if (this.carried !== undefined) return;
     const now = performance.now();
     this.base = data.time;
     this.baseAt = now;
+    if (data.ended === true) this.wantsPlay = false;
     // The player's own report says whether it plays, except while a shuttle runs (the player is paused under it)
     // and while a start the person made is still on its way.
     if (typeof data.playing === "boolean" && this.snap.shuttle === undefined && (now >= this.expectPlay || data.playing)) {
@@ -115,6 +132,7 @@ export class MotionTransport {
   };
 
   play = (): void => {
+    this.wantsPlay = true;
     if (this.snap.playing) return;
     const now = performance.now();
     this.base = this.current(now);
@@ -127,6 +145,7 @@ export class MotionTransport {
   };
 
   pause = (): void => {
+    this.wantsPlay = false;
     if (!this.snap.playing) return;
     const now = performance.now();
     this.base = this.current(now);
@@ -142,7 +161,10 @@ export class MotionTransport {
     this.base = time;
     this.baseAt = performance.now();
     this.send({ type: "unframed:player:control", action: "seek", seconds: time, mode });
-    if (mode === "commit") this.update({ playing: false, shuttle: undefined });
+    if (mode === "commit") {
+      this.wantsPlay = false;
+      this.update({ playing: false, shuttle: undefined });
+    }
     this.paint();
   };
 
@@ -168,6 +190,7 @@ export class MotionTransport {
     } else {
       this.send({ type: "unframed:player:control", action: "rate", rate });
     }
+    this.wantsPlay = true;
     this.update({ playing: true, shuttle: rate });
     this.scheduleTick();
   };
@@ -180,6 +203,7 @@ export class MotionTransport {
     this.baseAt = now;
     this.send({ type: "unframed:player:control", action: "pause" });
     this.send({ type: "unframed:player:control", action: "rate", rate: this.snap.speed });
+    this.wantsPlay = false;
     this.update({ playing: false, shuttle: undefined });
     this.paint();
   };
