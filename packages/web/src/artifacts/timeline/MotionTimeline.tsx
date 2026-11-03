@@ -114,6 +114,37 @@ const toggled = (set: ReadonlySet<string>, key: string): ReadonlySet<string> => 
   return next;
 };
 
+/** One of the loop range's handles on the ruler: a thin bar a pointer can take hold of, labelled for its side. */
+const LoopHandle = ({
+  label,
+  testId,
+  at,
+  onDown,
+  onMove,
+  onUp,
+}: {
+  readonly label: string;
+  readonly testId: string;
+  readonly at: number;
+  readonly onDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  readonly onMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  readonly onUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
+}) => (
+  <div
+    data-testid={testId}
+    aria-label={label}
+    role="presentation"
+    className="absolute inset-y-0 z-[5] w-3 -translate-x-1/2 cursor-ew-resize touch-none"
+    style={{ left: at }}
+    onPointerDown={onDown}
+    onPointerMove={onMove}
+    onPointerUp={onUp}
+    onPointerCancel={onUp}
+  >
+    <span className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-primary" />
+  </div>
+);
+
 /** One row: its label beside the time area, its bars, and its diamonds. A lane is a thinner row under its element. */
 const RowLine = ({
   row,
@@ -286,7 +317,8 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
   const rulerTime = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [zoom, setZoom] = useState<number | null>(null);
-  const fit = width > 0 && length > 0 ? fitZoom(width, length) : 0;
+  // Fit shows the whole length in the time area, which is the strip's width less the label column.
+  const fit = width > LABEL_WIDTH && length > 0 ? fitZoom(width - LABEL_WIDTH, length) : 0;
   const pxPerSecond = zoom ?? fit;
   // The clock reads the zoom from here, outside React, and the zoom handlers read the fit the same way.
   const pxRef = useRef(pxPerSecond);
@@ -379,6 +411,30 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
     if (!scrubbing.current) return;
     scrubbing.current = false;
     transport.seek(timeUnder(event.clientX), "commit");
+  };
+
+  // The loop range's In and Out handles (spec 21, The ruler): a drag sets the side at the pointer, a frame at a time, and the
+  // transport refuses an In at or past the Out, or an Out at or before the In.
+  const handleSide = useRef<"in" | "out" | null>(null);
+  const onHandleDown = (side: "in" | "out", event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    // The handle is not a scrub: the ruler under it does not start one.
+    event.stopPropagation();
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    handleSide.current = side;
+  };
+  const onHandleMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const side = handleSide.current;
+    if (side === null) return;
+    const at = Math.round(timeUnder(event.clientX) * 30) / 30;
+    if (side === "in") transport.setIn(at);
+    else transport.setOut(at);
+  };
+  const onHandleUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (handleSide.current === null) return;
+    handleSide.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
 
   // A resize drag on the top border.
@@ -664,7 +720,13 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
                       style={{ left: rangeStart * pxPerSecond, width: Math.max(0, rangeEnd - rangeStart) * pxPerSecond }}
                     />
                   )}
-                  {ticks.map((at) => (
+                  {range.start !== null && length > 0 && (
+                  <LoopHandle label="Loop In" testId="timeline-loop-in" at={range.start * pxPerSecond} onDown={(event) => onHandleDown("in", event)} onMove={onHandleMove} onUp={onHandleUp} />
+                )}
+                {range.end !== null && length > 0 && (
+                  <LoopHandle label="Loop Out" testId="timeline-loop-out" at={range.end * pxPerSecond} onDown={(event) => onHandleDown("out", event)} onMove={onHandleMove} onUp={onHandleUp} />
+                )}
+                {ticks.map((at) => (
                     <span key={at} data-testid="timeline-tick" data-time={at} aria-hidden className="pointer-events-none absolute inset-y-0 border-l pl-1 text-[10px] leading-6 text-muted-foreground" style={{ left: at * pxPerSecond }}>
                       {tickLabel(at)}
                     </span>

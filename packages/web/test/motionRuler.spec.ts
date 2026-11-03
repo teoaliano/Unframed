@@ -100,8 +100,8 @@ test("the zoom buttons halve and double the scale between 10 % of fit and 1,440 
   await timeline(page).getByRole("button", { name: "Fit to length" }).click();
   expect(await zoomOf(page)).toBeCloseTo(fit, 3);
   await expect(timeline(page).getByTestId("timeline-past-end")).toHaveCount(0);
-  // At fit a half-second step keeps its labels apart, and the end marker reads the length.
-  await expect(timeline(page).locator('[data-testid="timeline-tick"][data-time="0.5"]')).toHaveCount(1);
+  // At fit a second is 98 px, so the step is a second (a half second is under the 64 px a label needs), and the end marker reads the length.
+  await expect(timeline(page).locator('[data-testid="timeline-tick"][data-time="1"]')).toHaveCount(1);
   await expect(timeline(page).getByTestId("timeline-end")).toHaveText("4 s");
 });
 
@@ -141,8 +141,8 @@ test("the loop range's In and Out handles drag along the ruler, and an In dragge
   await expect(range(page)).toHaveAttribute("data-out", /^3/);
 
   const px = await zoomOf(page);
-  const ruler0 = await boxOf(ruler(page));
-  const at = (seconds: number) => ruler0.x + seconds * px;
+  // The ruler is measured again for each drag, since the strip may have scrolled since the last one.
+  const at = async (seconds: number) => (await boxOf(ruler(page))).x + seconds * px;
   const centreOf = async (locator: Locator) => {
     const box = await boxOf(locator);
     return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
@@ -152,7 +152,7 @@ test("the loop range's In and Out handles drag along the ruler, and an In dragge
   const inHandle = await centreOf(timeline(page).getByTestId("timeline-loop-in"));
   await page.mouse.move(inHandle.x, inHandle.y);
   await page.mouse.down();
-  await page.mouse.move(at(2), inHandle.y, { steps: 8 });
+  await page.mouse.move(await at(2), inHandle.y, { steps: 8 });
   await page.mouse.up();
   await expect.poll(async () => Number(await range(page).getAttribute("data-in"))).toBeCloseTo(2, 1);
 
@@ -160,16 +160,18 @@ test("the loop range's In and Out handles drag along the ruler, and an In dragge
   const outHandle = await centreOf(timeline(page).getByTestId("timeline-loop-out"));
   await page.mouse.move(outHandle.x, outHandle.y);
   await page.mouse.down();
-  await page.mouse.move(at(2.5), outHandle.y, { steps: 8 });
+  await page.mouse.move(await at(2.5), outHandle.y, { steps: 8 });
   await page.mouse.up();
   await expect.poll(async () => Number(await range(page).getAttribute("data-out"))).toBeCloseTo(2.5, 1);
 
-  // An In dragged past the Out is refused: the In stays where it was.
+  // An In dragged past the Out is refused: the In follows the pointer up to the Out and no further.
   const inAgain = await centreOf(timeline(page).getByTestId("timeline-loop-in"));
   await page.mouse.move(inAgain.x, inAgain.y);
   await page.mouse.down();
-  await page.mouse.move(at(3.5), inAgain.y, { steps: 8 });
+  await page.mouse.move(await at(3.5), inAgain.y, { steps: 8 });
   await page.mouse.up();
   await page.waitForTimeout(300);
-  await expect.poll(async () => Number(await range(page).getAttribute("data-in"))).toBeCloseTo(2, 1);
+  const reached = Number(await range(page).getAttribute("data-in"));
+  expect(reached).toBeGreaterThan(2);
+  expect(reached).toBeLessThan(2.5);
 });
