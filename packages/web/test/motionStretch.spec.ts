@@ -112,6 +112,25 @@ test("pressing a bar's end diamond and dragging it stretches the bar with its st
   await expect(page.getByRole("region", { name: /^Values for/ })).toHaveCount(0);
 });
 
+test("the snap guide is a dashed line two pixels wide, so it reads apart from the playhead's one-pixel line", async ({ page, agent }) => {
+  await openMotion(page, agent);
+  const ruler = await rulerOf(page);
+  const edge = await edgeOf(bar(page), "right");
+  await page.mouse.move(edge.x, edge.y);
+  await page.mouse.down();
+  await page.mouse.move(ruler.x(3.02), edge.y, { steps: 8 });
+  const guide = timeline(page).getByTestId("timeline-snap-guide");
+  await expect(guide).toHaveCount(1);
+  const drawn = (locator: typeof guide) => locator.evaluate((element) => ({ style: getComputedStyle(element).borderLeftStyle, width: element.getBoundingClientRect().width }));
+  const line = await drawn(guide);
+  const head = await drawn(timeline(page).getByTestId("timeline-playhead"));
+  expect(line.style).toBe("dashed");
+  expect(line.width).toBeGreaterThanOrEqual(2);
+  expect(head.style).toBe("solid");
+  expect(head.width).toBeLessThan(2);
+  await page.mouse.up();
+});
+
 test("a stretched edge snaps to another bar's edge within 8 px, and a guide shows the snap", async ({ page, agent }) => {
   await openMotion(page, agent);
   const ruler = await rulerOf(page);

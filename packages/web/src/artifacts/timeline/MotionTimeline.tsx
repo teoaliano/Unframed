@@ -1369,7 +1369,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
                 <div data-testid="timeline-past-end" aria-hidden className="pointer-events-none absolute inset-y-0 bg-background/60" style={{ left: labelWidth + length * pxPerSecond, right: 0 }} />
               )}
               {guide !== null && (
-                <div data-testid="timeline-snap-guide" aria-hidden className="pointer-events-none absolute inset-y-0 w-px bg-foreground/70" style={{ left: labelWidth + guide * pxPerSecond }} />
+                <div data-testid="timeline-snap-guide" aria-hidden className="pointer-events-none absolute inset-y-0 w-0 border-l-2 border-dashed border-foreground/80" style={{ left: labelWidth + guide * pxPerSecond }} />
               )}
               <div ref={playhead} data-testid="timeline-playhead" aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-px bg-primary" />
             </div>
