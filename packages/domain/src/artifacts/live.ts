@@ -1,40 +1,20 @@
-/**
- * The live viewer (spec 09), `unframed-live.html`: what "Open in a new tab" opens. It frames
- * a shape's current file and follows the shape: every second it loads the shape's pointer,
- * `unframed-live-<key>.js`, which the engine keeps current once the shape has been opened in
- * a tab, and it swaps to a new version or posts new dials without a reload. All of it is
- * plain files on the preview origin's one path shape, read with a re-added `<script src>`,
- * because the origin's policy allows no fetch.
- */
 import { previewHostFor, type ArtifactKind } from "./artifactRules.ts";
 
 export const LIVE_VIEWER_FILE = "unframed-live.html";
 
-/**
- * The check: a script that exists whenever the viewer does, so a pointer that fails to load
- * tells "Unframed has no such shape" (the check loads) from "Unframed is not running" (it
- * fails too). A script's error event says nothing about why it failed.
- */
 export const LIVE_CHECK_FILE = "unframed-live.js";
 
 export const liveCheckSource = (): string => 'typeof unframedLiveRunning === "function" && unframedLiveRunning();\n';
 
 const LIVE_KEY = /^[A-Za-z0-9_-]{1,150}$/;
 
-/**
- * The part of a shape id the live files are named by: the id without `shape:`, when it is
- * a name the preview origin can serve. tldraw's ids always are; anything else has no live
- * viewer, and "Open in a new tab" opens the file itself.
- */
 export const liveKey = (shapeId: string): string | undefined => {
   const key = shapeId.startsWith("shape:") ? shapeId.slice("shape:".length) : shapeId;
   return LIVE_KEY.test(key) ? key : undefined;
 };
 
-/** A shape's pointer file: `unframed-live-<key>.js`. */
 export const livePointerFileName = (key: string): string => `unframed-live-${key}.js`;
 
-/** The key a pointer file is named by, or `undefined` for any other file. */
 export const livePointerKey = (fileName: string): string | undefined => {
   const match = /^unframed-live-(.+)\.js$/.exec(fileName);
   return match && LIVE_KEY.test(match[1]!) ? match[1] : undefined;
@@ -45,17 +25,13 @@ export interface LivePointer {
   readonly file: string;
   readonly title: string;
   readonly dials: Readonly<Record<string, unknown>> | null;
-  /** The kit mode the shape shows (spec 19); `null` or absent is the kit's default mode. */
   readonly mode?: string | null;
-  /** The project kit's stamp (spec 19). A new stamp makes the viewer load a fresh frame. */
   readonly kit?: string;
-  /** The shape is no longer on the canvas. An undo can bring it back, so the pointer stays. */
   readonly deleted?: true;
 }
 
 const POINTER = /^typeof unframedLive === "function" && unframedLive\((.*)\);\n$/s;
 
-/** The pointer's text: one call to the viewer's `unframedLive` with the shape's current file and dials. */
 export const livePointerSource = (pointer: LivePointer): string =>
   `typeof unframedLive === "function" && unframedLive(${JSON.stringify({
     kind: pointer.kind,
@@ -67,7 +43,6 @@ export const livePointerSource = (pointer: LivePointer): string =>
     ...(pointer.deleted ? { deleted: true } : {}),
   })});\n`;
 
-/** A pointer's text read back, or `undefined` when it is not one. */
 export const parseLivePointer = (text: string): LivePointer | undefined => {
   const match = POINTER.exec(text);
   if (!match) return undefined;
@@ -88,7 +63,6 @@ export const parseLivePointer = (text: string): LivePointer | undefined => {
   }
 };
 
-/** The live viewer's URL for a shape, under the loopback name the app is not using; `undefined` when the shape has no live viewer. */
 export const liveViewerUrl = (input: {
   readonly appHostname: string;
   readonly previewPort: number;
@@ -137,17 +111,9 @@ export interface LiveWindow {
   unframedLiveRunning?: () => void;
 }
 
-/**
- * The viewer's script. Self-contained on purpose: the viewer page embeds this function's
- * source text. It is the dials' canvas side for its frame: hello on load, the saved values
- * in answer to an announcement, and set again whenever the pointer's dials change. A page is
- * framed directly; a motion through `hyperframes-viewer.html`, which relays to the composition.
- */
 export function liveViewer(win: LiveWindow, doc: LiveDocument): void {
   const KEY = /^[A-Za-z0-9_-]{1,150}$/;
   const FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.html?$/;
-  // The button opens the tab before the engine has written the pointer: a shape counts as
-  // unknown only after this many checks in a row found Unframed running and no pointer.
   const UNKNOWN_AFTER = 3;
   const own = win.location.origin;
   const show = (element: LiveText | null, text: string) => {
@@ -169,9 +135,7 @@ export function liveViewer(win: LiveWindow, doc: LiveDocument): void {
   const nonEmpty = (dials: unknown): dials is Dials => typeof dials === "object" && dials !== null && !Array.isArray(dials) && Object.keys(dials).length > 0;
   const frames: LiveFrame[] = [];
   let shown: { kind: string; file: string; dials: string } | undefined;
-  // The kit mode the pointer names, sent to each frame on load and when it changes.
   let mode: string | null = null;
-  // The kit stamp the pointer last named: a new one swaps in a fresh frame, so the kit is read from the file.
   let stamp: string | undefined;
   let saved: Dials | null = null;
   let missed = 0;
@@ -181,7 +145,6 @@ export function liveViewer(win: LiveWindow, doc: LiveDocument): void {
     try {
       frame.contentWindow?.postMessage(message, own);
     } catch {
-      // A frame mid-navigation has no window to post to.
     }
   };
   const clear = () => {
@@ -189,7 +152,6 @@ export function liveViewer(win: LiveWindow, doc: LiveDocument): void {
     shown = undefined;
   };
 
-  // The new version loads hidden behind the one on screen and replaces it once loaded.
   const mount = (kind: string, file: string) => {
     const frame = doc.createElement("iframe");
     frame.className = "next";
@@ -248,7 +210,6 @@ export function liveViewer(win: LiveWindow, doc: LiveDocument): void {
     const nextStamp = typeof read.kit === "string" ? read.kit : undefined;
     const kitChanged = stamp !== undefined && nextStamp !== stamp;
     stamp = nextStamp;
-    // Values that went back to none need a fresh document: a set only ever adds values.
     if (before === undefined || before.kind !== kind || before.file !== file || (before.dials !== "null" && dials === null) || kitChanged) mount(kind, file);
     else {
       if (before.dials !== text && dials !== null) for (const frame of frames) post(frame, { type: "unframed:dials:set", values: dials });
@@ -256,7 +217,6 @@ export function liveViewer(win: LiveWindow, doc: LiveDocument): void {
     }
   };
 
-  // The pointer failed: the check tells whether Unframed is running at all.
   const checkRunning = () => {
     let running = false;
     win.unframedLiveRunning = () => {
@@ -299,7 +259,6 @@ export function liveViewer(win: LiveWindow, doc: LiveDocument): void {
   win.setInterval(check, 1000);
 }
 
-/** The live viewer page's HTML, as the engine writes it into a project folder. */
 export const liveViewerSource = (): string =>
   [
     "<!doctype html>",

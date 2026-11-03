@@ -1,7 +1,3 @@
-/**
- * Source edits (spec 18): each typed change to an artifact's HTML, spliced into the file so
- * that only the bytes it changes move. All or nothing: the first refusal stops the list.
- */
 import type { SourceEdit } from "@unframed/contracts";
 import { applyMotionEdits, isMotionEdit, type MotionEditOptions } from "../motion/edits.ts";
 import type { ArtifactKind } from "../artifacts/artifactRules.ts";
@@ -28,34 +24,22 @@ import {
 } from "./source.ts";
 import { sourceTreeOf } from "./sourceTree.ts";
 
-/** An instance's pinned component, by tag: its title and the declaration of the version it pins (spec 20). */
 export type InstanceDeclarations = ReadonlyMap<string, { readonly title: string; readonly declaration: ComponentDeclaration }>;
 
-/** The longest text a text property takes (spec 20). */
 const TEXT_PROPERTY_MAX = 500;
 
 export type SourceEditResult =
   | { readonly ok: true; readonly html: string; readonly summary: string[] }
   | { readonly ok: false; readonly refusal: string };
 
-/** The summary holds at most this many lines, then `and {n} more`. */
 const SUMMARY_LINES = 20;
 
-/** A layer name is at most this many characters. */
 const NAME_MAX = 60;
 
-/** A bare file name with an image extension. The name goes into a url() and a style value, so nothing else gets in. */
 const IMAGE_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,200}\.(png|jpe?g|webp|gif|svg)$/i;
 
 type Step = { readonly html: string; readonly line: string } | { readonly refusal: string };
 
-/**
- * Applies `edits` and returns the new source with its summary lines, or the first refusal (and no
- * source). Element edits go in order, then the motion edits (spec 21) in one pass: the two kinds
- * touch different bytes, so their order does not change the result. `kind` only words the
- * refusals. `kit` is the project kit (spec 19): a token edit needs it, and a style value may use
- * its custom properties. `instances` holds the component declarations of the instances on the page (spec 20). `options` carries the artifact's locks and token kinds to the motion edits.
- */
 export const applySourceEdits = (
   html: string,
   edits: readonly SourceEdit[],
@@ -81,10 +65,8 @@ export const applySourceEdits = (
     current = result.html;
     lines.push(...result.summary);
   }
-  // Accepting several component updates at once is one line, not one for each (spec 20).
   const updates = edits.filter((edit) => edit.type === "componentUpdate").length;
   if (updates > 1) {
-    // `lines` holds one line for each element edit, in order, then the motion summary.
     const elementEdits = edits.filter((edit) => !isMotionEdit(edit));
     let merged = false;
     const folded = lines.flatMap((line, index) => {
@@ -98,7 +80,6 @@ export const applySourceEdits = (
   return { ok: true, html: current, summary: summaryLines(lines) };
 };
 
-/** Each line once, at most 20 of them, then `and {n} more` for the rest. */
 export const summaryLines = (lines: readonly string[]): string[] => {
   const unique = [...new Set(lines)];
   const shown = unique.slice(0, SUMMARY_LINES);
@@ -164,10 +145,6 @@ const applyEdit = (html: string, edit: Exclude<SourceEdit, { readonly type: "twe
   }
 };
 
-/**
- * An instance's own variant or property (spec 20): its attribute, set or removed. A variant's value
- * must be one it lists, and the default value removes the attribute. Each property kind has its value rule.
- */
 const instanceAttribute = (
   html: string,
   id: string,
@@ -201,10 +178,6 @@ const instanceAttribute = (
   return { html: next, line: `${label} · ${after(next)}` };
 };
 
-/**
- * A token edit (spec 19): sets a design property to a kit token's custom property, on an element's
- * inline style or on the declaration of one style rule. A text style writes its five longhands.
- */
 const applyToken = (html: string, edit: Extract<SourceEdit, { type: "token" }>, kind: ArtifactKind, kit: Kit | null): Step => {
   if ((edit.elementId === undefined) === (edit.rule === undefined)) return { refusal: "A token goes to one element or one style rule." };
   const token = kit?.tokens.find((candidate) => candidate.path === edit.token);
@@ -226,7 +199,6 @@ const applyToken = (html: string, edit: Extract<SourceEdit, { type: "token" }>, 
   }
 
   const ref = edit.rule!;
-  // A text style's field takes its own custom property (`--type-font-size`); any other property cannot take a text style.
   const textProperty = Object.values(TEXT_STYLE_SUFFIX).find((candidate) => candidate === edit.property);
   if (token.type === "textStyle" && textProperty === undefined) return { refusal: `${edit.property} cannot be edited here.` };
   const value = token.type === "textStyle" ? `var(${name}-${textProperty})` : `var(${name})`;
@@ -235,10 +207,6 @@ const applyToken = (html: string, edit: Extract<SourceEdit, { type: "token" }>, 
   return { html: next, line: `Token · In styles: ${ref.selector}` };
 };
 
-/**
- * A componentRule edit (spec 20): sets one declaration of the rule its StyleRuleRef names, adding it
- * when the rule lacks it. The rest of the source stays byte for byte.
- */
 const applyComponentRule = (html: string, edit: Extract<SourceEdit, { type: "componentRule" }>, kit: Kit | null): Step => {
   const field = DESIGN_FIELDS.find((candidate) => candidate.property === edit.property);
   if (field === undefined) return { refusal: `${edit.property} cannot be edited here.` };
@@ -252,7 +220,6 @@ const applyComponentRule = (html: string, edit: Extract<SourceEdit, { type: "com
   return { html: next, line: `${field.label} · ${edit.rule.selector}` };
 };
 
-/** The `<style>` elements of a source in document order, each with the offsets of its text. A block without a location is left out. */
 const styleBlocks = (doc: Document): Array<{ start: number; end: number }> => {
   const found: Array<{ start: number; end: number }> = [];
   const walk = (nodes: readonly ChildNode[]) => {
@@ -269,7 +236,6 @@ const styleBlocks = (doc: Document): Array<{ start: number; end: number }> => {
   return found;
 };
 
-/** Adds a declaration at the end of a rule's block, before the closing brace and any space before it. */
 const addDeclaration = (html: string, blockStart: number, rule: CssRule, property: string, value: string): string => {
   const open = blockStart + rule.body.open;
   let at = blockStart + rule.body.close;
@@ -279,7 +245,6 @@ const addDeclaration = (html: string, blockStart: number, rule: CssRule, propert
   return html.slice(0, at) + `${lead}${property}: ${value};` + html.slice(at);
 };
 
-/** The rule `ref` names, with the start offset of its style block in the source. Null when the rule is gone. */
 const findRule = (html: string, ref: { block: number; selector: string; occurrence: number }): { rule: CssRule; block: { start: number; end: number } } | null => {
   const block = styleBlocks(parseSource(html))[ref.block];
   if (block === undefined) return null;
@@ -294,10 +259,6 @@ const findRule = (html: string, ref: { block: number; selector: string; occurren
   return null;
 };
 
-/**
- * Replaces the value of the last `property` declaration of the rule `ref` names, keeping every
- * other byte. Null when the rule, or its declaration of that property, is gone.
- */
 const replaceRuleValue = (html: string, ref: { block: number; selector: string; occurrence: number }, property: string, value: string): string | null => {
   const found = findRule(html, ref);
   const declaration = found?.rule.declarations.filter((candidate) => candidate.property === property).at(-1);
@@ -313,7 +274,6 @@ const escapeAttribute = (value: string): string => value.replace(/&/g, "&amp;").
 
 const renderAttribute = (name: string, value: string): string => `${name}="${escapeAttribute(value)}"`;
 
-/** Replaces the text of a text-only element. The comments stay where they are. */
 const setText = (html: string, el: Element, text: string): string => {
   const startTag = el.sourceCodeLocation?.startTag;
   if (startTag === undefined) return html;
@@ -343,11 +303,6 @@ const splice = (html: string, pieces: readonly Splice[]): string =>
     .sort((a, b) => b.start - a.start)
     .reduce((acc, piece) => acc.slice(0, piece.start) + piece.text + acc.slice(piece.end), html);
 
-/**
- * Sets an attribute to `rendered` (a whole `name="value"` or a bare name), or removes it when
- * `rendered` is null. An existing attribute is replaced where it stands; a new one goes before
- * the tag's closing bracket.
- */
 const setAttribute = (html: string, id: string, name: string, rendered: string | null): string => {
   const el = findById(parseSource(html), id)?.el;
   const location = el?.sourceCodeLocation;
@@ -368,10 +323,8 @@ const setAttribute = (html: string, id: string, name: string, rendered: string |
   return html.slice(0, at) + lead + rendered + html.slice(at);
 };
 
-/** A declaration with its byte range in the raw value of a style attribute. */
 type RawDeclaration = Declaration & { readonly start: number; readonly end: number };
 
-/** A style attribute's value: its raw bytes at `start` to `end`, the quote it is written in (empty when unquoted), and the whole attribute's span. */
 interface StyleSpan {
   readonly start: number;
   readonly end: number;
@@ -380,10 +333,6 @@ interface StyleSpan {
   readonly attrEnd: number;
 }
 
-/**
- * Splits a raw style value into its declarations, as `splitDeclarations` does, with each one's byte
- * range. An entity counts as the character it stands for when it is a quote, and is never a semicolon.
- */
 const rawDeclarations = (raw: string): RawDeclaration[] => {
   const masked = raw
     .replace(/&(?:quot|#0*34|#x0*22);/gi, (m) => `"${" ".repeat(m.length - 1)}`)
@@ -420,7 +369,6 @@ const rawDeclarations = (raw: string): RawDeclaration[] => {
   });
 };
 
-/** The style attribute's value span in `html`, or null when the element has no style attribute with a value. */
 const styleSpan = (html: string, id: string): StyleSpan | null => {
   const location = findById(parseSource(html), id)?.el.sourceCodeLocation;
   const attrLocation = location?.attrs?.style;
@@ -435,23 +383,16 @@ const styleSpan = (html: string, id: string): StyleSpan | null => {
   return { start: valueStart, end: attrEnd, quote: "", attrStart, attrEnd };
 };
 
-/** The declarations of the element's style attribute, with their ranges in that attribute's raw value. */
 const styleDeclarations = (html: string, id: string): RawDeclaration[] => {
   const span = styleSpan(html, id);
   return span === null ? [] : rawDeclarations(html.slice(span.start, span.end));
 };
 
-/** Escapes a declaration for the attribute it goes into. A single quote is written as a reference inside a single-quoted attribute. */
 const escapeStyle = (text: string, quote: string): string => {
   const escaped = escapeAttribute(text);
   return quote === "'" ? escaped.replace(/'/g, "&#39;") : escaped;
 };
 
-/**
- * Rewrites the raw value of the element's style attribute with `change`, which gets the raw value,
- * its declarations and the attribute's quote, and returns the new raw value. Every byte outside the
- * change stays where it is. An empty result removes the attribute.
- */
 const editStyle = (html: string, id: string, change: (raw: string, decls: readonly RawDeclaration[], quote: string) => string): string => {
   const span = styleSpan(html, id);
   if (span === null) {
@@ -466,7 +407,6 @@ const editStyle = (html: string, id: string, change: (raw: string, decls: readon
   return html.slice(0, span.start) + next + html.slice(span.end);
 };
 
-/** Removes the declaration at `index` with the separator before it (or after it, when it comes first). */
 const removeAt = (raw: string, decls: readonly RawDeclaration[], index: number): string => {
   if (decls.length === 1) return "";
   const at = decls[index]!;
@@ -474,7 +414,6 @@ const removeAt = (raw: string, decls: readonly RawDeclaration[], index: number):
   return raw.slice(0, at.start) + raw.slice(decls[1]!.start);
 };
 
-/** Adds `text` after the last declaration with the separator the others use, or before the hide declaration. */
 const insertAt = (raw: string, decls: readonly RawDeclaration[], text: string, quote: string): string => {
   const escaped = escapeStyle(text, quote);
   if (decls.length === 0) return escaped;
@@ -485,7 +424,6 @@ const insertAt = (raw: string, decls: readonly RawDeclaration[], text: string, q
   return raw.slice(0, last.end) + separator + escaped + raw.slice(last.end);
 };
 
-/** Removes every declaration of the element's style that `matches`, one at a time, so each removal reads the bytes left. */
 const removeDeclarations = (html: string, id: string, matches: (declaration: Declaration) => boolean): string => {
   let next = html;
   let index = styleDeclarations(next, id).findIndex(matches);
@@ -497,11 +435,6 @@ const removeDeclarations = (html: string, id: string, matches: (declaration: Dec
   return next;
 };
 
-/**
- * Sets one declaration of the element's style attribute, or removes it when `value` is null.
- * An existing declaration is replaced in place and keeps its `!important`; a new one goes
- * after the others and before the hide declaration, with the separator the others use.
- */
 const setDeclaration = (html: string, id: string, property: string, value: string | null): string => {
   if (value === null) return removeDeclarations(html, id, (declaration) => declaration.property === property);
   const text = `${property}: ${value}`;
@@ -514,7 +447,6 @@ const setDeclaration = (html: string, id: string, property: string, value: strin
   });
 };
 
-/** Adds or removes `data-uf-hidden` and its hide declaration, and nothing else. */
 const setHidden = (html: string, id: string, hidden: boolean): string => {
   const el = findById(parseSource(html), id)?.el;
   if (el === undefined) return html;

@@ -1,15 +1,7 @@
-/**
- * The motion viewer (spec 09), `hyperframes-viewer.html`: a page on the preview origin that
- * plays one composition in HyperFrames' player and relays dial and kit (spec 19) messages between the canvas
- * above it and the composition inside it. Opened outside Unframed it relays nothing. With
- * `ui=editor` (spec 21) the editor drives the player through `unframed:player:*` messages, and
- * the runtime's state and timeline come back the same way.
- */
 
 export interface ViewerWindow {
   readonly location: { readonly origin: string; readonly search: string };
   addEventListener(type: "message", listener: (event: { source: unknown; origin: string; data: unknown }) => void): void;
-  /** The frame clock the backward shuttle seeks on. */
   requestAnimationFrame?(callback: (now: number) => void): unknown;
 }
 
@@ -33,11 +25,6 @@ export interface ViewerPlayer {
   readonly iframeElement?: { readonly contentWindow?: unknown; readonly offsetWidth?: number; readonly style?: { pointerEvents: string }; getBoundingClientRect?(): ViewerRect } | null;
 }
 
-/**
- * The relay. Self-contained on purpose: the viewer page embeds this function's source text.
- * Edit messages (spec 18) go both ways, and the boxes in them are mapped from the composition's
- * coordinates into the viewer's: scaled by the frame's size and moved by where the frame sits.
- */
 export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
   const LOOPBACK = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
   const COMPOSITION = /^[A-Za-z0-9][A-Za-z0-9._-]*\.html?$/;
@@ -48,13 +35,11 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
   let composition: Target | undefined;
   let announcement: unknown;
   let canvas: { window: Target; origin: string } | undefined;
-  // The editor's transport (spec 21): the editor that said player hello controls the player and gets the runtime's last state and timeline.
   let controller: { window: Target; origin: string } | undefined;
   let lastState: Loose | undefined;
   let lastTimeline: Loose | undefined;
   let shuttle: { rate: number; time: number; prev: number | undefined } | undefined;
   let framing = false;
-  // Between a drag seek and the next commit, the runtime's states go to the editor as their time only (spec 21, scrub).
   let scrubbing = false;
 
   const wanted = new URLSearchParams(win.location.search).get("c");
@@ -80,7 +65,6 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
     };
   };
 
-  // A composition's message on its way to the canvas: every box it carries moves into viewer coordinates.
   const outward = (data: Loose, frame: Frame): Loose => {
     const copy: Loose = { ...data };
     if ("box" in data) copy.box = mapBox(data.box, frame);
@@ -99,7 +83,6 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
     if (controller !== undefined) controller.window.postMessage(message, controller.origin);
   };
 
-  // The backward shuttle seeks the player on each animation frame, since the player plays forward only.
   const schedule = (): void => {
     if (framing || shuttle === undefined || win.requestAnimationFrame === undefined) return;
     framing = true;
@@ -121,9 +104,6 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
     schedule();
   };
 
-  // One player control from the editor (spec 21). `seek` lands paused; `root-duration` is the runtime's own control.
-  // A `drag` seek (the scrub while the person moves) is cheap: the runtime seeks its own timeline, and the player
-  // keeps its play state and media, which its seek would resync. Only the time goes back to the editor.
   const control = (data: Loose): void => {
     if (data.action === "play") {
       shuttle = undefined;
@@ -166,7 +146,6 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
   win.addEventListener("message", (event) => {
     const data = event.data as { type?: unknown } | null;
     if (typeof data !== "object" || data === null) return;
-    // The runtime's state and timeline come from the player's own frame only, and go to the editor.
     const runtime = data as Loose;
     if (runtime.source === "hf-preview" && event.source !== undefined && event.source === playerFrame()) {
       if (runtime.type === "state") {
@@ -186,11 +165,9 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
     }
     const type = typeof data.type === "string" ? data.type : "";
     if (type.startsWith("unframed:edit:") && event.origin === own) {
-      // From the composition, which shares this origin.
       if (canvas !== undefined) canvas.window.postMessage(outward(data as Loose, frameNow()), canvas.origin);
       return;
     }
-    // The composition is never a controller or a peer, whether or not it has announced its dials yet.
     if (!LOOPBACK.test(event.origin) || event.source === composition || event.source === playerFrame()) return;
     if (data.type === "unframed:dials:hello") {
       canvas = { window: event.source as Target, origin: event.origin };
@@ -205,13 +182,10 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
     } else if (type === "unframed:player:control") {
       if (controller !== undefined && event.source === controller.window) control(data as Loose);
     } else if ((data.type === "unframed:tokens:mode" || data.type === "unframed:tokens:set") && event.source === canvas?.window) {
-      // Only the canvas that said hello drives the tokens: the kit and the mode come from the app.
       const target = composition ?? (player.iframeElement?.contentWindow as Target | undefined);
       target?.postMessage(data, own);
     } else if (type.startsWith("unframed:edit:")) {
       if (type === "unframed:edit:hello") canvas = { window: event.source as Target, origin: event.origin };
-      // Edit mode holds the motion still. The pointer reaches the composition in both modes: Edit picks through the bridge, and
-      // Interact is the motion itself (the player's own rule would turn the pointer off, so a click would never reach it).
       if (type === "unframed:edit:mode") {
         if ((data as Loose).mode === "edit") player.pause?.();
         const style = player.iframeElement?.style;
@@ -219,7 +193,6 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
       }
       let message: unknown = data;
       if (type === "unframed:edit:hitTest" && typeof (data as Loose).x === "number" && typeof (data as Loose).y === "number") {
-        // The editor's point is in viewer coordinates; the composition's own are the inverse.
         const at = frameNow();
         const point = data as Loose & { x: number; y: number };
         message = { ...point, x: (point.x - at.x) / at.scale, y: (point.y - at.y) / at.scale };
@@ -230,7 +203,6 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
   });
 }
 
-/** The viewer page's HTML, as the engine writes it into the motion library. The player is made from script: with `ui=editor` it has no controls and no autoplay, so the editor's transport starts it. */
 export const viewerPageSource = (): string =>
   [
     "<!doctype html>",

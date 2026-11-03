@@ -1,31 +1,16 @@
-/**
- * Field owner (spec 18): what holds a value on screen, which decides what an edit to it changes.
- * The owner rule is decided at run time by comparing the live element with its source, so no
- * script is read. Spec 19 adds `token` before the style comparison: a source value that is a kit
- * token's custom property belongs to the token.
- *
- * A longhand the source sets only through a shorthand (`background: #fff` sets background-color)
- * counts as the source's own value: the browser expands the shorthand, through `expand`.
- */
 
-/** The field an owner question is about: a style property, the text, or an image's `src`. */
 export type OwnerField = { readonly kind: "style"; readonly property: string } | { readonly kind: "text" } | { readonly kind: "src" };
 
-/** What the source says about the element. `null` in `fieldOwner` means no id in the source (a runtime element). */
 export interface OwnerSource {
-  /** The element's inline declarations, property names lowercased, values as written. */
   readonly inline: Readonly<Record<string, string>>;
-  /** The text when the element is text-only, else null. */
   readonly text: string | null;
   readonly src: string | null;
 }
 
-/** What the live element shows. `null` in `inline` means no inline value. */
 export interface OwnerLive {
   readonly inline: Readonly<Record<string, string | null>>;
   readonly text: string | null;
   readonly src: string | null;
-  /** The CSS properties a motion animates on the element. */
   readonly animated: readonly string[];
 }
 
@@ -39,19 +24,13 @@ export interface FieldOwnerInput {
   readonly field: OwnerField;
   readonly source: OwnerSource | null;
   readonly live: OwnerLive;
-  /** The saved dial values, nested by folder. */
   readonly dials: Readonly<Record<string, unknown>>;
-  /** The project kit's custom property names, former names included (spec 19). Empty with no kit. */
   readonly kitNames?: readonly string[];
-  /** The element or one of its ancestors is locked. */
   readonly locked: boolean;
-  /** Reads a value into the form the browser compares by, for example colours to `rgb()`. */
   readonly normalise: (value: string) => string;
-  /** The value the browser gives `longhand` when `shorthand: value` is the only declaration (spec 18). */
   readonly expand: (shorthand: string, value: string, longhand: string) => string;
 }
 
-/** The shorthands in the Design fields that set a longhand, so a literal shorthand in the source sets the longhand too. */
 const SHORTHANDS: Readonly<Record<string, readonly string[]>> = {
   "background-color": ["background"],
   "border-width": ["border"],
@@ -73,10 +52,6 @@ const SHORTHANDS: Readonly<Record<string, readonly string[]>> = {
   "flex-wrap": ["flex-flow"],
 };
 
-/**
- * The value the source gives a property: its own declaration, else the value a shorthand in the
- * source gives it. A longhand declared after its shorthand is the longhand's own (the cascade).
- */
 const sourceValueOf = (inline: Readonly<Record<string, string>>, property: string, expand: FieldOwnerInput["expand"]): string | null => {
   const declared = inline[property] ?? null;
   if (declared !== null) return declared;
@@ -89,7 +64,6 @@ const sourceValueOf = (inline: Readonly<Record<string, string>>, property: strin
 
 const collapse = (text: string): string => text.replace(/\s+/g, " ").trim();
 
-/** `var(--name)` or `var(--name, fallback)` with a kit name: the name, else null. */
 const kitVarName = (value: string | null, kitNames: readonly string[]): string | null => {
   if (value === null) return null;
   const match = /^var\((--[A-Za-z0-9_-]+)(?:\s*,[\s\S]*)?\)$/.exec(value.trim());
@@ -98,7 +72,6 @@ const kitVarName = (value: string | null, kitNames: readonly string[]): string |
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** Every dial leaf whose value the predicate accepts, by its dotted path, in declaration order. */
 const dialPaths = (dials: Readonly<Record<string, unknown>>, accepts: (value: unknown) => boolean, prefix = ""): string[] => {
   const found: string[] = [];
   for (const key of Object.keys(dials)) {
@@ -110,7 +83,6 @@ const dialPaths = (dials: Readonly<Record<string, unknown>>, accepts: (value: un
   return found;
 };
 
-/** The owner of a field. Checked in order: locked, script (a runtime element), animated, then the value's own comparison. */
 export function fieldOwner(input: FieldOwnerInput): FieldOwner {
   if (input.locked) return { owner: "locked" };
   const { source, live, dials, normalise } = input;
@@ -119,7 +91,6 @@ export function fieldOwner(input: FieldOwnerInput): FieldOwner {
 
   if (field.kind === "style") {
     if (live.animated.includes(field.property)) return { owner: "animated" };
-    // Spec 19: a source value that is exactly a kit token's custom property, still in the live element, is the token's.
     const tokenName = kitVarName(source.inline[field.property] ?? null, input.kitNames ?? []);
     if (tokenName !== null && live.inline[field.property] === source.inline[field.property]) return { owner: "token", name: tokenName };
     const liveValue = live.inline[field.property] ?? null;
@@ -128,7 +99,6 @@ export function fieldOwner(input: FieldOwnerInput): FieldOwner {
       return { owner: "source" };
     }
     if (liveValue === null) return { owner: "script" };
-    // A dial that set the value: its number with or without a CSS unit, or its colour after normalising.
     const matches = (value: unknown): boolean => {
       const forms = typeof value === "number" ? [String(value), `${value}px`] : typeof value === "string" ? [value] : [];
       return forms.some((form) => form === liveValue || normalise(form) === normalise(liveValue));

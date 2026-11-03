@@ -4,7 +4,6 @@ import { editBridgeSource } from "../../src/index.ts";
 
 type Listener = (event: any) => void;
 
-/** A minimal element: attributes, inline style, a box, and text-only children when given text. */
 class FakeStyle {
   readonly values = new Map<string, { value: string; priority: string }>();
   getPropertyValue(name: string): string {
@@ -33,7 +32,6 @@ class FakeElement {
   readonly listeners = new Map<string, Listener[]>();
   readonly tagName: string;
   rect = { left: 0, top: 0, width: 10, height: 10 };
-  /** Computed values this element reports; a property not set reads as its inline value. */
   computed: Record<string, string> = {};
   private text: string | null = null;
 
@@ -72,7 +70,6 @@ class FakeElement {
   blur(): void {
     for (const listener of this.listeners.get("blur") ?? []) listener({});
   }
-  /** Adds a child element; the child's parent is this one. */
   add(child: FakeElement): FakeElement {
     child.parentElement = this;
     this.children.push(child);
@@ -111,7 +108,6 @@ class FakeDocument {
   listening(type: string): number {
     return this.listeners.filter((each) => each.type === type).length;
   }
-  /** Fires an event at the document's capture listeners; answers whether a listener prevented its default. */
   fire(type: string, target: FakeElement | null, init: Record<string, unknown> = {}): boolean {
     let prevented = false;
     const event = { type, target, key: "", shiftKey: false, metaKey: false, ctrlKey: false, clientX: 0, clientY: 0, ...init, preventDefault: () => (prevented = true) };
@@ -122,7 +118,6 @@ class FakeDocument {
 
 const ORIGIN = "http://localhost:18787";
 
-/** The shipped edit bridge, run against a stub window whose parent records what it is sent. */
 const stubEditWindow = (options: { peer?: string; timelines?: unknown; loading?: boolean } = {}) => {
   const posted: Array<{ message: any; targetOrigin: string }> = [];
   const errors: unknown[][] = [];
@@ -163,12 +158,10 @@ const stubEditWindow = (options: { peer?: string; timelines?: unknown; loading?:
     ...(options.peer === undefined ? {} : { unframedEditPeer: options.peer }),
     ...(options.timelines === undefined ? {} : { __timelines: options.timelines }),
   };
-  // The shipped file, evaluated as a browser would run it.
   new Function("window", editBridgeSource())(win);
   const send = (data: unknown, from: { source?: unknown; origin?: string } = {}) => {
     for (const listener of listeners) listener({ source: from.source ?? parent, origin: from.origin ?? "http://127.0.0.1:5001", data });
   };
-  /** Runs the frames queued so far, as the browser would at the next paint. */
   const flush = () => {
     for (const frame of frames.splice(0)) frame();
   };
@@ -176,14 +169,12 @@ const stubEditWindow = (options: { peer?: string; timelines?: unknown; loading?:
   const messages = (type: string) => posted.filter((entry) => entry.message.type === type).map((entry) => entry.message);
   const element = (id: string, options: { tag?: string; text?: string; attrs?: Record<string, string>; parent?: FakeElement } = {}) =>
     (options.parent ?? document.body).add(new FakeElement(options.tag ?? "div", { ...(options.text === undefined ? {} : { text: options.text }), attrs: { "data-hf-id": id, ...options.attrs } }));
-  /** Fires every timer still waiting, as the time passing would. */
   const runTimers = () => {
     for (const [timer, entry] of [...timers]) {
       timers.delete(timer);
       entry.callback();
     }
   };
-  /** Fires a window event (`load`, `scroll`) at the listeners the bridge added. */
   const fire = (type: string) => {
     for (const listener of others.get(type) ?? []) listener();
   };
@@ -228,7 +219,6 @@ describe("the built edit bridge", () => {
     expect(el.style.getPropertyValue("color")).toBe("#a78bfa");
     patch("blue");
     expect(el.style.getPropertyValue("color")).toBe("blue");
-    // A property that had no inline value is removed again on reset.
     send({ type: "unframed:edit:patch", patches: [{ type: "style", elementId: "hf-aaaa", property: "gap", value: "8px" }] });
     expect(el.style.getPropertyValue("gap")).toBe("8px");
     send({ type: "unframed:edit:reset" });
@@ -340,7 +330,6 @@ describe("the built edit bridge", () => {
     const el = element("hf-aaaa", { text: "Welcome" });
     mode("edit");
     document.fire("dblclick", el);
-    // Typed before the answer: nothing is forwarded to the editor, and the page takes none of it.
     expect(document.fire("keydown", el, { key: "H" })).toBe(true);
     document.fire("keydown", el, { key: "i" });
     document.fire("keydown", el, { key: " " });
@@ -352,7 +341,6 @@ describe("the built edit bridge", () => {
     send({ type: "unframed:edit:textEdit", id: "hf-aaaa" });
     expect(el.textContent).toBe("Hi V I");
     expect(el.getAttribute("contenteditable")).toBe("plaintext-only");
-    // Enter after the held keys writes the text as typed.
     document.fire("keydown", el, { key: "Enter" });
     expect(messages("unframed:edit:text")).toEqual([{ type: "unframed:edit:text", id: "hf-aaaa", text: "Hi V I" }]);
   });
@@ -463,7 +451,6 @@ describe("the built edit bridge", () => {
     expect(messages("unframed:edit:scroll")).toEqual([]);
     flush();
     expect(messages("unframed:edit:scroll")).toEqual([{ type: "unframed:edit:scroll", x: 0, y: 240 }]);
-    // A later scroll is reported in its own frame.
     win.scrollY = 300;
     fire("scroll");
     flush();
@@ -480,7 +467,6 @@ describe("the built edit bridge", () => {
     expect(loading.scrolls).toEqual([]);
     loading.fire("load");
     expect(loading.scrolls).toEqual([[0, 512]]);
-    // A hello without a scroll leaves the position alone.
     loading.send({ type: "unframed:edit:hello" });
     expect(loading.scrolls).toEqual([[0, 512]]);
   });
@@ -511,12 +497,10 @@ describe("the motion's live tween report and transport keys (spec 21, task 19)",
     const first = messages("unframed:edit:tweens");
     expect(first).toHaveLength(1);
     expect(first[0].tweens).toEqual([{ targets: ["hf-aaaa"], start: 1, duration: 0.5, keyframes: [0, 100], props: ["x", "opacity"], repeat: 2, yoyo: true }]);
-    // Two dials applies in one frame are one report.
     win.unframedDialsApplied();
     win.unframedDialsApplied();
     flush();
     expect(messages("unframed:edit:tweens")).toHaveLength(2);
-    // A tween on an element with no id is named by its selector.
     const bare = document.body.add(new FakeElement("span"));
     tweens.push({ targets: () => [bare], startTime: () => 0, duration: () => 1, vars: { y: 4 } });
     win.unframedDialsApplied();
@@ -561,8 +545,6 @@ describe("the tween patcher, against real GSAP (spec 21, task 20)", () => {
     const stub = stubEditWindow({ timelines: { main: tl } });
     return { tl, ...stub };
   };
-  // The GSAP property values on a stub element, read without a type.
-  // GSAP writes plain-object values as strings, so they are read as numbers.
   const at = (el: object) => ({ get x() { return Number((el as { x?: unknown }).x); }, get opacity() { return Number((el as { opacity?: unknown }).opacity); } });
   const tweenOn = (tl: ReturnType<typeof gsap.timeline>, property: string) =>
     tl.getChildren(false, true, false).find((tween) => property in (tween as { vars: object }).vars) as any;
@@ -614,7 +596,6 @@ describe("the tween patcher, against real GSAP (spec 21, task 20)", () => {
     send({ type: "unframed:edit:patch", patches: [patch("hf-aaaa", ["x"], { stagger: 0.5 })] });
     const [tween] = tl.getChildren(false, true, false) as any[];
     expect(tween.vars.stagger).toBe(0.5);
-    // With a spacing of 0.5 s, b has not started at 1.4 s, and a is 0.4 s into its 1 s move.
     tl.seek(1.4, false);
     expect(at(b).x || 0).toBe(0);
     expect(at(a).x).toBeCloseTo(4, 6);
@@ -647,14 +628,12 @@ describe("the tween patcher, against real GSAP (spec 21, task 20)", () => {
     motion.tl.to(mel, { x: 40, motionPath: { path: [] }, duration: 1 }, 1);
     motion.send({ type: "unframed:edit:patch", patches: [patch("hf-aaaa", ["motionPath", "x"], { values: { at: 1, props: { x: 5 } } })] });
     expect((motion.tl.getChildren(false, true, false)[0] as any).vars.x).toBe(40);
-    // Two tweens with the same channels on one element: which one is the edit is not known, so none is patched.
     const twin = setup();
     const tel = twin.element("hf-aaaa");
     twin.tl.to(tel, { x: 40, duration: 1 }, 1);
     twin.tl.to(tel, { x: 60, duration: 1 }, 3);
     twin.send({ type: "unframed:edit:patch", patches: [patch("hf-aaaa", ["x"], { values: { at: 1, props: { x: 0 } } })] });
     expect(twin.tl.getChildren(false, true, false).map((t: any) => t.vars.x)).toEqual([40, 60]);
-    // A move that passes the tween on the same element and channel is declined.
     const order = setup();
     const oel = order.element("hf-aaaa");
     order.tl.to(oel, { x: 40, duration: 1 }, 1);
@@ -682,7 +661,6 @@ describe("the tween patcher, against real GSAP (spec 21, task 20)", () => {
     const el = element("hf-aaaa");
     tl.to(el, { x: 40, duration: 1 }, 1);
     send({ type: "unframed:edit:patch", patches: [patch("hf-aaaa", ["x"], { values: { at: 1, props: { x: 80 } } })] });
-    // The dials callback clears the timeline and builds it again with the parameter's value.
     tl.clear();
     tl.to(el, { x: 40, duration: 1 }, 1);
     win.unframedDialsApplied();

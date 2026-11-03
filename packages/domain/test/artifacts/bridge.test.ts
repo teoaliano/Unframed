@@ -3,7 +3,6 @@ import { dialsBridgeSource } from "../../src/index.ts";
 
 type Listener = (event: { source: unknown; origin: string; data: unknown }) => void;
 
-/** A window for the shipped bridge to run against: a parent that records what it is sent. */
 const stubWindow = (options: { origin?: string; framed?: boolean; variables?: unknown } = {}) => {
   const posted: Array<{ message: any; targetOrigin: string }> = [];
   const errors: unknown[][] = [];
@@ -29,26 +28,22 @@ const stubWindow = (options: { origin?: string; framed?: boolean; variables?: un
     ...(options.variables === undefined ? {} : { __hfVariables: options.variables }),
   };
   win.parent = options.framed === false ? win : parent;
-  // The shipped file, evaluated as a browser would run it.
   new Function("window", dialsBridgeSource())(win);
   const send = (data: unknown, from: { source?: unknown; origin?: string } = {}) => {
     for (const listener of listeners) listener({ source: from.source ?? parent, origin: from.origin ?? "http://localhost:8787", data });
   };
-  /** A wheel over the document; answers whether the bridge kept it from the browser. */
   const wheel = (init: Partial<Record<"ctrlKey" | "metaKey", boolean>> & { deltaY?: number }) => {
     let prevented = false;
     const event = { ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, deltaX: 0, deltaY: 0, deltaZ: 0, deltaMode: 0, clientX: 40, clientY: 30, ...init, preventDefault: () => (prevented = true) };
     for (const listener of wheels) listener(event);
     return prevented;
   };
-  /** A right-click in the document; answers whether the bridge kept it from the browser. */
   const rightClick = () => {
     let prevented = false;
     const event = { clientX: 40, clientY: 30, preventDefault: () => (prevented = true) };
     for (const listener of menus) listener(event);
     return prevented;
   };
-  /** The window's unframed:tokens event, as the tokens script dispatches it. */
   const tokensChanged = () => {
     for (const listener of tokenEvents) listener();
   };
@@ -171,9 +166,7 @@ describe("the built bridge", () => {
 
   it("hands a right-click to a canvas that asked for menus, and leaves it to the page otherwise", () => {
     const { posted, send, rightClick } = stubWindow();
-    // No canvas has asked: the page keeps its own menu.
     expect(rightClick()).toBe(false);
-    // The editor's frame says hello without asking: still the page's.
     send({ type: "unframed:dials:hello" });
     expect(rightClick()).toBe(false);
     send({ type: "unframed:dials:hello", menus: true });
@@ -186,7 +179,6 @@ describe("the built bridge", () => {
 
   it("keeps a pinch from zooming the app and hands it to the canvas that said hello; a plain scroll passes", () => {
     const { posted, send, wheel } = stubWindow();
-    // Before any hello there is no canvas to hand it to: the pinch is still kept from the browser.
     expect(wheel({ ctrlKey: true, deltaY: -10 })).toBe(true);
     expect(posted).toEqual([]);
     send({ type: "unframed:dials:hello" });

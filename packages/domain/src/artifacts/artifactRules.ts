@@ -1,7 +1,3 @@
-/**
- * Artifact rules (spec 09): file names, tag injection, where an agent-made artifact goes,
- * the artifact URLs, the add-a-parameter instruction and the few facts read from a file.
- */
 import { projectSlug } from "../slug.ts";
 import { ADD_PARAMETER_TEMPLATE } from "./prompts.ts";
 
@@ -9,24 +5,16 @@ export type ArtifactKind = "page" | "motion" | "component";
 
 export const isArtifactKind = (type: unknown): type is ArtifactKind => type === "page" || type === "motion" || type === "component";
 
-/** An artifact file may be at most this many bytes once its tags are in (2 MiB). */
 export const ARTIFACT_SIZE_LIMIT = 2_097_152;
 
-/** An artifact title the agent or a render passes is cut to this many characters. */
 export const ARTIFACT_TITLE_MAX = 120;
 
-/** Agent-created sizes; the add menu makes both kinds 480 by 320. */
 export const AGENT_ARTIFACT_SIZE: Readonly<Record<ArtifactKind, { readonly w: number; readonly h: number }>> = {
   page: { w: 480, h: 320 },
   motion: { w: 480, h: 300 },
   component: { w: 480, h: 320 },
 };
 
-/**
- * `<epochMs>-<slug>[-<n>].<ext>`: the slug of `title`, or of `fallback` when the title is
- * empty, or `upload` when the slug comes out empty. `n` starts at 1 and counts up while
- * `exists` says the name is taken.
- */
 export const artifactFileName = (input: {
   readonly title: string;
   readonly fallback: string;
@@ -54,13 +42,6 @@ const HEAD_OPEN = /<head(?:\s[^>]*)?>/i;
 const HEAD_CLOSE = /<\/head\s*>/i;
 const BODY_OPEN = /<body(?:\s[^>]*)?>/i;
 
-/**
- * The tags a written file carries. The tokens tag goes first, right after the opening head
- * tag (so it runs before anything the artifact puts in its head). Then, before the head's
- * close, come the runtime (a motion only) and the bridge. A document with no head gets them
- * after its opening body tag, else at the very top. A tag the document already has (by its
- * marker) is skipped, so reading a file back and writing it again adds nothing.
- */
 export const injectTags = (html: string, kind: ArtifactKind): string => {
   const tags: string[] = [];
   if (kind === "motion" && !HAS_RUNTIME.test(html)) tags.push(RUNTIME_TAG);
@@ -92,7 +73,6 @@ export const injectTags = (html: string, kind: ArtifactKind): string => {
   return `${TOKENS_TAG}\n${out}`;
 };
 
-/** The title an artifact shows: its title, else its original file name without `.html` or `.htm`, else nothing. */
 export const artifactTitle = (props: { readonly title?: unknown; readonly fileName?: unknown }): string => {
   const title = typeof props.title === "string" ? props.title.trim() : "";
   if (title !== "") return title;
@@ -107,7 +87,6 @@ export interface PlacementBox {
   readonly h: number;
 }
 
-/** Where an agent-created artifact goes: right of the selection (right edge + 60, top of the topmost), else (80, 80). */
 export const placeBesideSelection = (selected: ReadonlyArray<PlacementBox>): { x: number; y: number } => {
   if (selected.length === 0) return { x: 80, y: 80 };
   return {
@@ -116,16 +95,11 @@ export const placeBesideSelection = (selected: ReadonlyArray<PlacementBox>): { x
   };
 };
 
-/**
- * The loopback name artifact documents load under: the one the app is NOT using, so the
- * browser runs them in a process of their own (index contract 9).
- */
 export const previewHostFor = (appHostname: string): string => {
   const host = appHostname.toLowerCase();
   return host === "localhost" ? "127.0.0.1" : "localhost";
 };
 
-/** An artifact's URL on the preview origin; a motion opens its viewer on the composition, in editor mode when the editor frames it (spec 21). */
 export const artifactUrl = (input: {
   readonly appHostname: string;
   readonly previewPort: number;
@@ -135,24 +109,20 @@ export const artifactUrl = (input: {
   readonly editor?: boolean;
 }): string => {
   const base = `http://${previewHostFor(input.appHostname)}:${input.previewPort}/p/${encodeURIComponent(input.project)}`;
-  // A component is framed as a page: its sheet is the document, board and all (spec 20).
   if (input.kind !== "motion") return `${base}/${encodeURIComponent(input.file)}`;
   const editor = input.editor === true ? "&ui=editor" : "";
   return `${base}/hyperframes-viewer.html?c=${encodeURIComponent(input.file)}${editor}`;
 };
 
-/** The instruction the editor's Add a parameter box sends: "parameters" when the text has the word "and" or a comma. */
 export const addParameterInstruction = (input: { readonly wanted: string; readonly kind: ArtifactKind; readonly title: string }): string => {
   const wanted = input.wanted.trim();
   const plural = /,|\band\b/i.test(wanted);
-  // Function replacers, so a `$` the person typed is taken literally.
   return ADD_PARAMETER_TEMPLATE.replace("<wanted>", () => wanted)
     .replace("<a parameter | parameters>", plural ? "parameters" : "a parameter")
     .replace("<kind>", input.kind)
     .replace("<title>", () => input.title);
 };
 
-/** A composition's pixel size, from its root's `data-width` and `data-height`; 16:9 when absent. */
 export const compositionSize = (html: string): { w: number; h: number } => {
   const root = /<[a-z][^>]*\bdata-composition-id\s*=[^>]*>/i.exec(html)?.[0] ?? /<[a-z][^>]*\bid\s*=\s*["']?root\b[^>]*>/i.exec(html)?.[0];
   const read = (name: string) => {
@@ -165,16 +135,10 @@ export const compositionSize = (html: string): { w: number; h: number } => {
   return w !== undefined && h !== undefined ? { w, h } : { w: 16, h: 9 };
 };
 
-/** At most this many artifacts run through the selection, and at most this many pinned per project. */
 export const LIVE_SELECTED_LIMIT = 3;
 export const PIN_LIMIT = 3;
 export const PIN_LIMIT_MESSAGE = "Three are already playing. Stop one first.";
 
-/**
- * Which artifacts run a live frame: the selected ones (the three nearest the viewport
- * centre when more are selected), the pinned ones, the one open in the editor and the one
- * whose parameters panel is open on the canvas.
- */
 export const liveArtifacts = (input: {
   readonly selected: ReadonlyArray<{ readonly id: string; readonly centre: { readonly x: number; readonly y: number } }>;
   readonly pinned: ReadonlyArray<string>;
@@ -191,7 +155,6 @@ export const liveArtifacts = (input: {
   return live;
 };
 
-/** Whether a live frame is so far off screen (more than one viewport width beyond it) that it unmounts. */
 export const farOffscreen = (box: PlacementBox, viewport: PlacementBox): boolean => {
   const margin = viewport.w;
   return (
@@ -202,20 +165,16 @@ export const farOffscreen = (box: PlacementBox, viewport: PlacementBox): boolean
   );
 };
 
-/** A snapshot still fits a shape of this size when neither side changed by more than 10 %. */
 export const snapshotFits = (snapshot: { readonly w: number; readonly h: number }, shape: { readonly w: number; readonly h: number }): boolean =>
   Math.abs(shape.w - snapshot.w) <= snapshot.w * 0.1 && Math.abs(shape.h - snapshot.h) <= snapshot.h * 0.1;
 
-/** Where a motion's snapshot catches it: 1 s in, or half way through a motion shorter than 1 s. An unknown length counts as long enough. */
 export const snapshotSeekSeconds = (duration: number): number => (Number.isFinite(duration) && duration > 0 && duration < 1 ? duration / 2 : 1);
 
-/** A snapshot's file in the cache folder: named after the artifact file, its size, and the kit mode and stamp it was made with (`none` for no mode or no kit). */
 export type SnapshotKit = { readonly mode: string | null; readonly kit: string | null };
 
 export const snapshotFileName = (file: string, size: { readonly w: number; readonly h: number }, kit: SnapshotKit): string =>
   `${file}-${Math.round(size.w)}x${Math.round(size.h)}-${kit.mode ?? "none"}-${kit.kit ?? "none"}.png`;
 
-/** Reads a snapshot file name back: the artifact file, the size, the kit mode and the kit stamp, or nothing for any other name. */
 export const parseSnapshotFileName = (name: string): { file: string; w: number; h: number; mode: string | null; kit: string | null } | undefined => {
   const match = /^(.+\.html?)-(\d+)x(\d+)-([a-z0-9][a-z0-9-]{0,31}|none)-([0-9a-f]{8}|none)\.png$/i.exec(name);
   if (!match) return undefined;

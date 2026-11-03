@@ -1,4 +1,3 @@
-/** A small page whose elements carry ids, for the element rules. Each id is written by hand, as the engine would stamp it. */
 export const PAGE = `<!doctype html>
 <html><head><title>T</title><style>.x{color:red}</style></head>
 <body>

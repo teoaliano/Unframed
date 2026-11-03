@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import { applySourceEdits } from "../../src/html/index.ts";
 import { motionTimeline, type MotionEdit } from "../../src/motion/index.ts";
 
-// The motion edits join spec 18's source edits in one list (spec 21, tasks 14 to 16): element
-// edits and motion edits apply in one call, and each kind keeps its own refusals and summaries.
 const stage = `<div id="root" data-composition-id="main" data-start="0" data-duration="6" data-width="640" data-height="360">
   <div id="c" class="clip" data-start="0" data-duration="6">
     <div data-hf-id="title1" id="title">Launch</div><div data-hf-id="logo1" id="logo"></div>

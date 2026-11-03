@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DESIGN_FIELDS, editBridgeSource } from "../../src/index.ts";
 
-/** The style properties the edit bridge reports, read from its generated source (the bridge keeps its own list). */
 const bridgeProperties = (): string[] => {
   const match = /const PROPERTIES = \[([\s\S]*?)\];/.exec(editBridgeSource());
   if (match === null) throw new Error("the edit bridge has no PROPERTIES list");

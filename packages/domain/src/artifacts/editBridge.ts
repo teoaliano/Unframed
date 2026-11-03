@@ -1,10 +1,3 @@
-/**
- * The edit bridge (spec 18): `unframed-edit.js`, which the dials bridge loads into an artifact
- * the first time the editor says `unframed:edit:hello`. It reports hovers, picks, element
- * reports and boxes to the editor, applies preview patches, and draws nothing: the editor draws
- * the outlines. The shipped file is this function's source text, so nothing inside it may refer
- * to anything outside it.
- */
 
 export type EditBox = { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
 
@@ -31,7 +24,6 @@ export interface EditElement {
   removeEventListener?(type: string, listener: () => void): void;
   focus?(): void;
   blur?(): void;
-  /** The element's open shadow root, where a component instance keeps its markup (spec 20). */
   readonly shadowRoot?: { querySelector(selector: string): EditElement | null } | null;
   getRootNode?(): unknown;
   matches?(selector: string): boolean;
@@ -41,7 +33,6 @@ export interface EditElement {
 export interface EditEvent {
   readonly type: string;
   readonly target: EditElement | null;
-  /** The path from the target out through shadow roots, innermost first (spec 20: board copies). */
   composedPath?(): ReadonlyArray<unknown>;
   readonly key: string;
   readonly shiftKey: boolean;
@@ -63,7 +54,6 @@ export interface EditDocument {
   createRange?(): { selectNodeContents(node: EditElement): void; collapse?(toEnd: boolean): void };
 }
 
-/** The window the edit bridge runs against: a browser's, or a test's stub. */
 export interface EditWindow {
   readonly parent: { postMessage(message: unknown, targetOrigin: string): void };
   readonly location: { readonly origin: string };
@@ -80,24 +70,15 @@ export interface EditWindow {
   setTimeout(callback: () => void, ms: number): unknown;
   clearTimeout(timer: unknown): void;
   getSelection?(): { removeAllRanges(): void; addRange(range: unknown): void } | null;
-  /** Set by the dials bridge before it loads this file: the origin that said hello. */
   unframedEditPeer?: unknown;
-  /** HyperFrames' GSAP timelines by name, in a motion. */
   __timelines?: unknown;
-  /** HyperFrames' player, when the page has one: the tween preview seeks it (spec 21). */
   __player?: { getTime?: () => number; seek?: (time: number) => void };
-  /** Set by this bridge; the dials bridge calls it after each apply (spec 21). */
   unframedDialsApplied?: () => void;
 }
 
-/**
- * The bridge: runs the edit protocol on `window`. Self-contained on purpose, like `dialRules`:
- * the shipped file is this function's source text.
- */
 export function installEditBridge(win: EditWindow): void {
   const LOOPBACK = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
   const ID = /^[A-Za-z0-9_-]+$/;
-  // The style properties the editor's Design tab reads. Mirrors DESIGN_FIELDS' properties (spec 18).
   const PROPERTIES = [
     "font-family", "font-size", "font-weight", "line-height", "letter-spacing", "text-align", "color",
     "background-color", "background-image", "border-width", "border-style", "border-color", "border-radius",
@@ -105,7 +86,6 @@ export function installEditBridge(win: EditWindow): void {
     "margin-top", "margin-right", "margin-bottom", "margin-left", "gap", "display", "flex-direction",
     "align-items", "justify-content", "flex-wrap",
   ];
-  // Elements a pointer or a Layers row never reaches, and the ones the source tree leaves out.
   const EXCLUDED = ["script", "style", "template", "meta", "link", "noscript", "base", "head", "html", "body"];
   const GSAP_KEYS = [
     "duration", "ease", "delay", "repeat", "repeatDelay", "yoyo", "yoyoEase", "stagger", "paused", "parent", "lazy",
@@ -113,11 +93,9 @@ export function installEditBridge(win: EditWindow): void {
   ];
   const TRANSFORM = ["x", "y", "z", "scale", "scaleX", "scaleY", "scaleZ", "rotation", "rotationX", "rotationY", "rotationZ", "skewX", "skewY", "xPercent", "yPercent"];
   const KEYS_FORWARDED = ["v", "V", "i", "I", "Escape"];
-  // A motion's transport keys, forwarded to the editor from the frame in Edit mode (spec 21). A page keeps them.
   const TRANSPORT_KEYS = [" ", "ArrowLeft", "ArrowRight", "j", "J", "k", "K", "l", "L", "m", "M", "o", "O"];
 
   const doc = win.document;
-  // A board cell's host carries this attribute (the sheet helper sets it). Its shadow root holds one copy of the template.
   const CELL = "data-uf-cell";
   const cellOf = (el: EditElement): EditElement | null => {
     const root = el.getRootNode?.() as { host?: EditElement } | undefined;
@@ -125,7 +103,6 @@ export function installEditBridge(win: EditWindow): void {
     return host !== undefined && host.getAttribute(CELL) !== null ? host : null;
   };
   const isCopy = (el: EditElement): boolean => el.getAttribute("data-hf-id") !== null && cellOf(el) !== null;
-  // The copy the person picked for each template id, kept while the copy is on the board.
   const picked = new Map<string, EditElement>();
   const copiesOf = (id: string): EditElement[] => {
     if (typeof doc.querySelectorAll !== "function") return [];
@@ -136,14 +113,12 @@ export function installEditBridge(win: EditWindow): void {
     }
     return found;
   };
-  // The copy an id shows in the frame: the one picked, else the first. Null when the id has no copies.
   const primaryOf = (id: string): EditElement | null => {
     const all = copiesOf(id);
     const kept = picked.get(id);
     if (kept !== undefined && all.includes(kept)) return kept;
     return all[0] ?? null;
   };
-  // The innermost copy an event passed through, if it came from a board cell.
   const copyAt = (event: EditEvent): EditElement | null => {
     for (const node of event.composedPath?.() ?? []) {
       const el = node as EditElement;
@@ -156,19 +131,15 @@ export function installEditBridge(win: EditWindow): void {
   let listening = false;
   let locked: string[] = [];
   let hovered: EditElement | null = null;
-  // The editor's Layers row under the pointer: outlined through the boxes, never echoed back.
   let external: EditElement | null = null;
   let selection: string[] = [];
   let frame: unknown = null;
   let last: Record<string, EditBox> = {};
-  // The boxes of the copies of each targeted board element, as last sent.
   let lastCopies = "";
   let editing: { el: EditElement; id: string; original: string | null } | null = null;
-  // The keys typed while a double-click's text edit waits for the editor's answer. They are held, not forwarded.
   type HeldKey = { key: string; shiftKey: boolean; metaKey: boolean; ctrlKey: boolean };
   let pendingText: { id: string; keys: HeldKey[]; timer: unknown } | null = null;
   const TEXT_ANSWER_MS = 1000;
-  // The first value of every property a patch touched, per element, as a function that puts it back.
   const originals = new Map<EditElement, Map<string, () => void>>();
 
   const post = (message: Record<string, unknown>) => {
@@ -179,7 +150,6 @@ export function installEditBridge(win: EditWindow): void {
     }
   };
 
-  // The document's scroll, reported at most once a frame, so the editor keeps it for the swap (spec 18, The swap).
   let scrolling: unknown = null;
   win.addEventListener("scroll", () => {
     if (scrolling !== null) return;
@@ -189,7 +159,6 @@ export function installEditBridge(win: EditWindow): void {
     });
   });
 
-  // A swapped-in document restores the scroll its predecessor had, once it has loaded.
   const restoreScroll = (x: unknown, y: unknown) => {
     if (typeof x !== "number" || typeof y !== "number") return;
     const restore = () => win.scrollTo(x, y);
@@ -240,11 +209,9 @@ export function installEditBridge(win: EditWindow): void {
   };
 
   const keyOf = (el: EditElement): string => validId(el) ?? selectorOf(el);
-  // A selection key is an element id, or a live selector for a runtime element.
   const resolveKey = (key: string): EditElement | null => {
     try {
       const el = doc.querySelector(ID.test(key) ? '[data-hf-id="' + key + '"]' : key);
-      // A board's template id shows as its copy, so the outline sits on the copy the person picked.
       if (el !== null && ID.test(key)) return primaryOf(key) ?? el;
       return el;
     } catch {
@@ -280,7 +247,6 @@ export function installEditBridge(win: EditWindow): void {
     return found;
   };
 
-  // A copy's variant values, by variant name in the declaration's order (its cell's attributes). Null for anything else.
   const variantOf = (el: EditElement): Record<string, string> | null => {
     const host = cellOf(el);
     if (host === null) return null;
@@ -291,7 +257,6 @@ export function installEditBridge(win: EditWindow): void {
     return values;
   };
 
-  // An instance's pinned component: its tag, sheet and declaration (the defined element's static fields), and the live value of each declared attribute (spec 20).
   const componentOf = (el: EditElement) => {
     const ctor = (el as unknown as { constructor: { declaration?: { tag: string; variants?: Record<string, string[]>; props?: Record<string, string> }; sheet?: unknown } }).constructor;
     const declaration = ctor?.declaration;
@@ -305,8 +270,6 @@ export function installEditBridge(win: EditWindow): void {
     };
   };
 
-  // A board copy's rules (spec 20): each rule of the sheet's component style that reaches the copy in its cell, with its declarations.
-  // `unknown` marks a rule with `:has()`, which the bridge cannot test. The block is the index of the component style among the source's <style> elements, as spec 19 counts them.
   const RULE_HOST = /:host(?:\(((?:[^()]|\([^()]*\))*)\))?/g;
   const RULE_ATTRIBUTE = /\[\s*([A-Za-z][\w-]*)\s*(?:=\s*(?:"([^"]*)"|'([^']*)'|([^\]\s]+)))?\s*\]/g;
   const reachesCopy = (host: EditElement, el: EditElement, selector: string): boolean | "unknown" => {
@@ -339,12 +302,9 @@ export function installEditBridge(win: EditWindow): void {
     }
     return found;
   };
-  // The rules of the component style that reach the copy (`rules`), and the rules with a variant condition that do not
-  // (`overrides`): a variant rule that sets a property in other cells can take over the field there (spec 20's owner rule).
   const sheetRulesOf = (el: EditElement) => {
     const host = cellOf(el);
     if (host === null || typeof doc.querySelectorAll !== "function") return undefined;
-    // The kit's custom properties sit in a <style id="unframed-tokens"> the tokens script adds at run time; the source does not hold it.
     const styles = Array.from(doc.querySelectorAll("style")).filter((style) => style.id !== "unframed-tokens");
     const block = styles.findIndex((style) => style.getAttribute("data-uf-component-style") !== null);
     if (block < 0) return { rules: [], overrides: [] };
@@ -419,7 +379,6 @@ export function installEditBridge(win: EditWindow): void {
     return found;
   };
 
-  // Boxes follow: compared once per frame while anything is hovered or selected, sent when one moved.
   const tick = () => {
     frame = null;
     const targets = current();
@@ -446,7 +405,6 @@ export function installEditBridge(win: EditWindow): void {
     schedule();
   };
 
-  // The first family of each element's computed font, unquoted: the families the Font field offers.
   const familiesOf = (): string[] => {
     const found: string[] = [];
     const walk = (el: EditElement) => {
@@ -466,7 +424,6 @@ export function installEditBridge(win: EditWindow): void {
         return id === null ? [] : [id];
       });
     } catch {
-      // A selector the document cannot match (an invalid one) selects nothing.
       return [];
     }
   };
@@ -491,7 +448,6 @@ export function installEditBridge(win: EditWindow): void {
     schedule();
   };
 
-  // Presses, drags and submits never reach the page's own default action in Edit mode.
   const block = (event: EditEvent) => {
     if (!listening || (editing !== null && event.target === editing.el)) return;
     event.preventDefault();
@@ -503,7 +459,6 @@ export function installEditBridge(win: EditWindow): void {
     event.preventDefault();
     const el = hoverTarget(targetOf(event));
     if (el !== null && isCopy(el)) picked.set(validId(el)!, el);
-    // The press did not move keyboard focus (the bridge prevents it), so the frame takes it: Enter and Escape then reach the frame.
     if (win.focus) win.focus();
     post({ type: "unframed:edit:pick", element: el === null ? null : reportOf(el), additive: event.shiftKey === true });
   };
@@ -514,12 +469,10 @@ export function installEditBridge(win: EditWindow): void {
     const id = el === null ? null : validId(el);
     if (el === null || id === null || !textOnly(el)) return;
     event.preventDefault();
-    // The press did not move keyboard focus (the bridge prevents it), so the frame takes the focus here: keys typed now reach the frame.
     if (win.focus) win.focus();
     if (pendingText !== null) win.clearTimeout(pendingText.timer);
     const pending: { id: string; keys: HeldKey[]; timer: unknown } = { id, keys: [], timer: null };
     pending.timer = win.setTimeout(() => {
-      // No answer in time counts as a refusal: the held keys are dropped, never sent late.
       if (pendingText === pending) pendingText = null;
     }, TEXT_ANSWER_MS);
     pendingText = pending;
@@ -541,7 +494,6 @@ export function installEditBridge(win: EditWindow): void {
   const beginEdit = (id: string) => {
     const el = doc.querySelector('[data-hf-id="' + id + '"]');
     if (el === null || validId(el) !== id || !textOnly(el) || isLocked(el)) return;
-    // The text as the source gave it, so a reset puts it back even after a saved edit.
     touch(el, "text", () => {
       const value = el.textContent;
       return () => {
@@ -555,7 +507,6 @@ export function installEditBridge(win: EditWindow): void {
     if (el.focus) el.focus();
   };
 
-  /** Selects an element's whole text, or puts the caret at its end. */
   const selectText = (el: EditElement, atEnd: boolean) => {
     if (!doc.createRange || !win.getSelection) return;
     const range = doc.createRange();
@@ -568,13 +519,12 @@ export function installEditBridge(win: EditWindow): void {
     }
   };
 
-  /** Applies the keys held during a pending edit to its text, in order, as typing would: a letter replaces the selection, Backspace removes it, Enter ends the edit, Escape puts the original back. */
   const replay = (keys: HeldKey[]) => {
     const active = editing;
     if (active === null || keys.length === 0) return;
     const el = active.el;
     let text = el.textContent ?? "";
-    let whole = true; // the selection still covers all the text
+    let whole = true;
     for (const held of keys) {
       if (held.key === "Escape") {
         el.textContent = active.original;
@@ -596,7 +546,6 @@ export function installEditBridge(win: EditWindow): void {
     selectText(el, true);
   };
 
-  // A field the page owns keeps its keys, in either mode.
   const typingIn = (event: EditEvent): boolean => {
     const target = event.target as { tagName?: string; isContentEditable?: boolean } | null;
     return target?.isContentEditable === true || target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT";
@@ -604,7 +553,6 @@ export function installEditBridge(win: EditWindow): void {
 
   const onKey = (event: EditEvent) => {
     if (!listening) {
-      // Interact leaves the page's keys alone, but the mode keys and Escape still reach the editor (spec 18, Mode).
       if (KEYS_FORWARDED.includes(event.key) && !typingIn(event)) post({ type: "unframed:edit:key", key: event.key, shift: event.shiftKey === true, meta: event.metaKey === true, ctrl: event.ctrlKey === true });
       return;
     }
@@ -614,14 +562,12 @@ export function installEditBridge(win: EditWindow): void {
       return;
     }
     if (editing !== null) {
-      // While a text edit runs only Esc and Enter are the bridge's; every other key is the text's.
       if (event.key === "Escape") {
         event.preventDefault();
         editing.el.textContent = editing.original;
         endEdit(false);
       } else if (event.key === "Enter") {
         event.preventDefault();
-        // A text edit holds one run of text, so Shift+Enter inserts nothing and ends nothing.
         if (event.shiftKey) return;
         const el = editing.el;
         endEdit(true);
@@ -631,7 +577,6 @@ export function installEditBridge(win: EditWindow): void {
     }
     event.preventDefault();
     const undo = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z";
-    // A motion also forwards its transport keys, so the editor's transport answers them from the frame.
     const transport = win.__timelines !== undefined && TRANSPORT_KEYS.includes(event.key);
     if (KEYS_FORWARDED.includes(event.key) || event.key === "Enter" || undo || transport) {
       post({ type: "unframed:edit:key", key: event.key, shift: event.shiftKey === true, meta: event.metaKey === true, ctrl: event.ctrlKey === true });
@@ -665,7 +610,6 @@ export function installEditBridge(win: EditWindow): void {
     }
   };
 
-  // The live tweens of a motion: reported after load and after each dials apply, at most once a frame (spec 21).
   let tweenFrame: unknown = null;
   const keyframePercents = (vars: Record<string, unknown>): number[] => {
     const steps = vars.keyframes;
@@ -673,7 +617,6 @@ export function installEditBridge(win: EditWindow): void {
     if (typeof steps === "object" && steps !== null) return Object.keys(steps).map((key) => parseFloat(key)).filter((value) => Number.isFinite(value));
     return [];
   };
-  // A report asked for before the composition's script has made its timelines is asked again, for a few seconds.
   let tweenWaits = 0;
   const reportTweens = () => {
     tweenFrame = null;
@@ -714,14 +657,9 @@ export function installEditBridge(win: EditWindow): void {
   if (doc.readyState === "complete") scheduleTweens();
   else win.addEventListener("load", scheduleTweens);
 
-  // ---- Tween patches (spec 21, the preview of a timeline edit before its commit) ----
   // Ported from HyperFrames Studio's gsapRuntimePatch, packages/studio/src/hooks/gsapRuntimePatch.ts
   // in HyperFrames 0.8.206 (https://github.com/heygen-com/hyperframes), Copyright 2026 HeyGen, Inc.,
   // licensed under the Apache License, Version 2.0 (THIRD_PARTY_NOTICES).
-  // NOTICE: this part is changed by Unframed. Tweens are found by target and channels across
-  // window.__timelines, never by index. A value is set and its tween invalidated alone. Object keyframes,
-  // eases and staggers are recreated, since GSAP reads them only when a tween is made. A move is a remove
-  // and an add. Held patches are applied again after each dials apply, and seeks are one per message.
   interface GsapTween {
     readonly parent: GsapTimeline | null;
     readonly vars: Record<string, unknown>;
@@ -738,7 +676,6 @@ export function installEditBridge(win: EditWindow): void {
     time(): number;
     seek(time: number, suppressEvents: boolean): unknown;
   }
-  // The first value of each tween the preview changed, kept with its tween until a reset.
   interface TweenSlot {
     parent: GsapTimeline;
     targets: unknown[];
@@ -748,7 +685,6 @@ export function installEditBridge(win: EditWindow): void {
   }
   const RELATIVE = /^[+\-*/]=/;
   const touchedTweens = new Map<GsapTween, TweenSlot>();
-  // The tween patches of the burst, by key. Applied again after every dials apply, until a reset.
   const heldTweens = new Map<string, Record<string, unknown>>();
 
   const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -766,7 +702,6 @@ export function installEditBridge(win: EditWindow): void {
       .flatMap((timeline) => timeline.getChildren(true, true, false) as GsapTween[])
       .filter((tween) => typeof tween.targets === "function");
 
-  // The channels a tween animates, from its vars, its from-values and every keyframe step.
   const channelsOf = (vars: Record<string, unknown>): string[] => {
     const names = new Set<string>();
     const take = (source: unknown) => {
@@ -780,7 +715,6 @@ export function installEditBridge(win: EditWindow): void {
     return [...names].sort();
   };
 
-  // The one tween on the element whose channels are exactly these. Zero or several: nothing is patched.
   const findTween = (selector: string, channels: string[]): GsapTween | null => {
     const target = resolveKey(selector);
     if (target === null) return null;
@@ -789,7 +723,6 @@ export function installEditBridge(win: EditWindow): void {
     return matches.length === 1 ? (matches[0] ?? null) : null;
   };
 
-  // A move that would pass another tween on a shared element and channel changes an order the preview keeps.
   const orderFlips = (tween: GsapTween, start: number, channels: string[]): boolean => {
     const own = tween.targets();
     const at = tween.startTime();
@@ -810,12 +743,10 @@ export function installEditBridge(win: EditWindow): void {
     return copy;
   };
 
-  // The keyframe step an array's index holds: the first step at 0, the last at 1, as the reading gives them.
   const arrayIndex = (steps: unknown[], at: number): number => {
     const pct = Math.round(at * 100);
     return steps.findIndex((_, index) => (steps.length > 1 ? Math.round((index / (steps.length - 1)) * 100) : 0) === pct);
   };
-  // Where a value at a diamond lives: a holder object (to-vars at 1, from-vars at 0), an array step, or an object keyframe.
   const placeOf = (vars: Record<string, unknown>, at: number): "holder" | "array" | "object" | null => {
     if (Array.isArray(vars.keyframes)) return arrayIndex(vars.keyframes, at) === -1 ? null : "array";
     if (isRecord(vars.keyframes)) return "object";
@@ -848,7 +779,6 @@ export function installEditBridge(win: EditWindow): void {
     return slot;
   };
 
-  // One patch, applied to its tween. False when it declines (silently: the bar moves and the frame catches up at the commit).
   const applyTween = (patch: Record<string, unknown>): boolean => {
     const change = isRecord(patch.change) ? patch.change : {};
     const values = isRecord(change.values) ? change.values : null;
@@ -875,7 +805,6 @@ export function installEditBridge(win: EditWindow): void {
     const targets = tween.targets();
     const start = change.start !== undefined ? (change.start as number) : tween.startTime();
     if (rebuild || place === "object") {
-      // GSAP compiles object keyframes, eases and staggers when a tween is made: recreate it at the same place.
       const next = copyVars(vars);
       if (values !== null) writeAt(next, at, props);
       if (change.ease !== undefined) next.ease = change.ease;
@@ -918,7 +847,6 @@ export function installEditBridge(win: EditWindow): void {
     ]);
   };
 
-  // A reset puts every touched tween back as it was first seen.
   const restoreTweens = (): void => {
     const slots = [...touchedTweens];
     touchedTweens.clear();
@@ -929,7 +857,6 @@ export function installEditBridge(win: EditWindow): void {
     if (slots.length > 0) seekNow();
   };
 
-  // The dials callback rebuilds the timeline, so the tweens are new: the held patches go on, one seek for the lot.
   win.unframedDialsApplied = () => {
     touchedTweens.clear();
     let applied = false;
@@ -938,7 +865,6 @@ export function installEditBridge(win: EditWindow): void {
     scheduleTweens();
   };
 
-  // The first value of each touched property is kept once; reset puts every one back.
   const touch = (el: EditElement, key: string, capture: () => () => void) => {
     let slots = originals.get(el);
     if (slots === undefined) {
@@ -972,8 +898,6 @@ export function installEditBridge(win: EditWindow): void {
     return el !== null && validId(el) === id ? el : null;
   };
 
-  // Whether a stylesheet `!important` rule that matches the element sets the property (spec 18). Undefined where the document
-  // keeps no style sheets, as a test stub does.
   const importantRuleWins = (el: EditElement, property: string): boolean | undefined => {
     const sheets = (doc as { styleSheets?: ArrayLike<{ cssRules: ArrayLike<unknown> }> }).styleSheets;
     if (sheets === undefined) return undefined;
@@ -996,14 +920,11 @@ export function installEditBridge(win: EditWindow): void {
       try {
         return walk(sheet.cssRules);
       } catch {
-        // A sheet from another origin keeps its rules to itself.
         return false;
       }
     });
   };
 
-  // Whether a style value, as the browser would show it inline, is what the computed style became. In a browser the
-  // `!important` rules decide; a value that changes nothing on screen is not overridden by itself.
   const overriddenBy = (el: EditElement, property: string, value: string, before: string): boolean => {
     const important = importantRuleWins(el, property);
     if (important !== undefined) return important;
@@ -1044,7 +965,6 @@ export function installEditBridge(win: EditWindow): void {
           restore();
           originals.get(el)?.delete("style:display");
         } else if (el.style.getPropertyValue("display") === "none" && el.style.getPropertyPriority("display") === "important") {
-          // A hide the source carries is no preview's to restore, so the show takes its declaration out.
           el.style.removeProperty("display");
         }
       }
@@ -1070,7 +990,6 @@ export function installEditBridge(win: EditWindow): void {
     }
   };
 
-  // A component sheet's declaration, as its own document carries it (spec 20). Null in a page or a motion.
   const declarationOf = (): unknown => {
     const script = doc.querySelector('script[data-uf-component]');
     if (script === null || script.textContent === null) return null;
@@ -1088,7 +1007,6 @@ export function installEditBridge(win: EditWindow): void {
     children: Array.from(el.children).filter(pickable).map(treeOf),
   });
 
-  // The element under a point that holds an image, or a background image, walking up to the first one.
   const hitAt = (x: number, y: number) => {
     let el: EditElement | null = doc.elementFromPoint(x, y);
     while (el && el !== doc.body) {
@@ -1111,7 +1029,6 @@ export function installEditBridge(win: EditWindow): void {
     if (typeof data !== "object" || data === null || typeof data.type !== "string") return;
     const type = data.type;
     if (type === "unframed:dials:set") {
-      // The dials bridge has applied the values: report the selection again so the fields follow.
       if (selection.length > 0) reportSelection();
       return;
     }
@@ -1124,7 +1041,6 @@ export function installEditBridge(win: EditWindow): void {
       }
       post({ type: "unframed:edit:ready" });
     } else if (type === "unframed:edit:tweens") {
-      // The editor asks again once a document is shown: a report queued while it was hidden may never have run (spec 21).
       tweenWaits = 0;
       win.setTimeout(reportTweens, 0);
     } else if (type === "unframed:edit:mode") {
@@ -1134,7 +1050,6 @@ export function installEditBridge(win: EditWindow): void {
       selection = Array.isArray(data.ids) ? data.ids.filter((id): id is string => typeof id === "string") : [];
       reportSelection();
     } else if (type === "unframed:edit:selectMatching" && typeof data.selector === "string") {
-      // The elements a style rule's selector matches, with an id each, answered for the editor to select (spec 19, Off-token values).
       post({ type: "unframed:edit:matched", ids: idsMatching(data.selector) });
     } else if (type === "unframed:edit:hover") {
       external = typeof data.id === "string" ? resolveKey(data.id) : null;
@@ -1183,7 +1098,6 @@ export function installEditBridge(win: EditWindow): void {
   post({ type: "unframed:edit:ready" });
 }
 
-/** `unframed-edit.js`, as the engine writes it beside the dials bridge. */
 export const editBridgeSource = (): string =>
   [
     "/* unframed-edit.js: generated by Unframed and rewritten on every write. Do not edit it here: changes are lost. */",
