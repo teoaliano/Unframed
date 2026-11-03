@@ -73,15 +73,16 @@ describe("snapping", () => {
 });
 
 describe("zoom", () => {
-  it("multiplies by exp(-deltaY * 0.014) around the cursor", () => {
+  it("multiplies by 1.2 for each 100 px of wheel, around the cursor", () => {
     const next = zoomAt({ pxPerSecond: 100, scrollLeft: 0 }, { deltaY: -10, cursorX: 200, fit: 10 });
-    expect(next.pxPerSecond).toBeCloseTo(100 * Math.exp(0.14), 6);
+    expect(next.pxPerSecond).toBeCloseTo(100 * Math.pow(1.2, 0.1), 6);
+    expect(zoomAt({ pxPerSecond: 100, scrollLeft: 0 }, { deltaY: -100, cursorX: 0, fit: 10 }).pxPerSecond).toBeCloseTo(120, 6);
     // the time under the cursor (2 s) stays under the cursor
     expect(2 * next.pxPerSecond - next.scrollLeft).toBeCloseTo(200, 6);
   });
 
   it("limits the zoom to 10% of fit at the low end and 1,440 px a second at the high end", () => {
-    expect(zoomAt({ pxPerSecond: 100, scrollLeft: 0 }, { deltaY: 1000, cursorX: 0, fit: 50 }).pxPerSecond).toBe(5);
+    expect(zoomAt({ pxPerSecond: 100, scrollLeft: 0 }, { deltaY: 5000, cursorX: 0, fit: 50 }).pxPerSecond).toBe(5);
     expect(zoomAt({ pxPerSecond: 1000, scrollLeft: 0 }, { deltaY: -1000, cursorX: 0, fit: 50 }).pxPerSecond).toBe(ZOOM_LIMITS.max);
   });
 
