@@ -125,19 +125,20 @@ export const previewHostFor = (appHostname: string): string => {
   return host === "localhost" ? "127.0.0.1" : "localhost";
 };
 
-/** An artifact's URL on the preview origin; a motion opens its viewer on the composition. */
+/** An artifact's URL on the preview origin; a motion opens its viewer on the composition, in editor mode when the editor frames it (spec 21). */
 export const artifactUrl = (input: {
   readonly appHostname: string;
   readonly previewPort: number;
   readonly project: string;
   readonly file: string;
   readonly kind: ArtifactKind;
+  readonly editor?: boolean;
 }): string => {
   const base = `http://${previewHostFor(input.appHostname)}:${input.previewPort}/p/${encodeURIComponent(input.project)}`;
   // A component is framed as a page: its sheet is the document, board and all (spec 20).
-  return input.kind === "motion"
-    ? `${base}/hyperframes-viewer.html?c=${encodeURIComponent(input.file)}`
-    : `${base}/${encodeURIComponent(input.file)}`;
+  if (input.kind !== "motion") return `${base}/${encodeURIComponent(input.file)}`;
+  const editor = input.editor === true ? "&ui=editor" : "";
+  return `${base}/hyperframes-viewer.html?c=${encodeURIComponent(input.file)}${editor}`;
 };
 
 /** The instruction the editor's Add a parameter box sends: "parameters" when the text has the word "and" or a comma. */

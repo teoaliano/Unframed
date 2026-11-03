@@ -7,13 +7,18 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { extname, join } from "node:path";
 import type { TLRecord } from "@tldraw/tlschema";
 import { isBareFileName, unframedError, type ArtifactImage, type OffTokenFound, type SourceEdit, type SourceTreeElement } from "@unframed/contracts";
-import { ARTIFACT_SIZE_LIMIT, artifactTitle, compiledFileName, offTokenValues, projectSlug, readComponentSheet, shapeKind, sidecarFileName, type ArtifactKind } from "@unframed/domain";
-import { applySourceEdits, ruleLockHit, sourceTreeOf, stampElementIds } from "@unframed/domain/html";
+import { ARTIFACT_SIZE_LIMIT, artifactTitle, compiledFileName, projectSlug, readComponentSheet, shapeKind, sidecarFileName, type ArtifactKind } from "@unframed/domain";
+import { applySourceEdits, offTokenValues, ruleLockHit, sourceTreeOf, stampElementIds } from "@unframed/domain/html";
+import { isMotionEdit } from "@unframed/domain/motion";
 import type { CommittedChange } from "../canvas/rooms.ts";
 import { byteSize, prepareArtifactHtml, prepareComponentHtml, tooLargeMessage } from "./artifactHtml.ts";
 import { kitOf } from "../kits/tokensFile.ts";
 import { ensureBridge, ensureComponentLibrary, ensureCompiledComponent, ensureLibrary, writeEditArtifact } from "./artifactStore.ts";
 import { instanceDeclarations, pinComponents } from "./componentRegistry.ts";
+
+/** The kind a motion edit checks a token against: the kit's token type, named as spec 21 names it. */
+const motionKindOf = (type: string | undefined): string | undefined =>
+  type === "color" ? "colour" : type === "dimension" ? "number" : type === "easing" || type === "duration" ? type : undefined;
 
 const BRIDGE_PRESENT = /unframed-dials\.js/i;
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"]);
@@ -141,6 +146,8 @@ export const artifactEditService = (deps: EditServiceDeps) => {
     const locked = new Set(Array.isArray(props.lockedElements) ? (props.lockedElements as string[]) : []);
     if (locked.size > 0) {
       for (const edit of edits) {
+        // Motion edits check their own targets against the same locks (spec 21), inside applyMotionEdits.
+        if (isMotionEdit(edit)) continue;
         // A component rule is held by a lock when its selector reaches a locked template element (spec 20).
         if (edit.type === "componentRule") {
           const hit = ruleLockHit(html, edit.rule.selector, [...locked]);
@@ -153,6 +160,7 @@ export const artifactEditService = (deps: EditServiceDeps) => {
         if (holder !== undefined) throw unframedError("bad_request", `${byId.get(holder)?.name ?? holder} is locked. Unlock it in Layers to edit it.`);
       }
     }
+    const kit = kitOf(records);
     for (const edit of edits) {
       if (edit.type !== "componentUpdate") continue;
       // The version a person accepts must be a sheet of its tag in this project (spec 20).
@@ -161,7 +169,10 @@ export const artifactEditService = (deps: EditServiceDeps) => {
       if (read === undefined || !read.ok || read.sheet.declaration.tag !== edit.tag) throw unframedError("bad_request", "That component version is not in this project.");
       await ensureCompiledComponent(dir, compiledFileName(edit.to));
     }
-    const result = applySourceEdits(html, edits, kind, kitOf(records), await instanceDeclarations(dir, records, html));
+    const result = applySourceEdits(html, edits, kind, kit, await instanceDeclarations(dir, records, html), {
+      lockedElements: locked,
+      tokenKind: (name) => motionKindOf(kit?.tokens.find((token) => token.path === name)?.type),
+    });
     if (!result.ok) throw unframedError("bad_request", result.refusal);
     const ready = kind === "component" ? prepareComponentHtml(result.html) : prepareArtifactHtml(result.html, kind);
     let tag: string | undefined;

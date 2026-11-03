@@ -1,0 +1,15 @@
+<html><head><style>
+#root{position:relative;overflow:hidden;background:#111}
+.clip{position:absolute;inset:0;display:grid;place-items:center}
+#card{width:240px;height:140px;background:#1f2937;border-radius:16px}
+</style></head><body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="3" data-width="640" data-height="360">
+  <div id="c" class="clip" data-start="0" data-duration="3"><div id="card"></div></div>
+</div>
+<script src="gsap.js"></script>
+<script>
+window.__timelines = window.__timelines || {};
+window.__timelines.main = gsap.timeline({ paused: true });
+window.__timelines.main.fromTo('#card', { opacity: 0 }, { opacity: 1, duration: 0.6, ease: unframed.token('ease/fast') }, 0.1);
+window.__timelines.main.to('#card', { color: unframed.token('color/accent'), duration: 0.4 }, '+=0.2');
+</script></body></html>

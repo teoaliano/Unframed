@@ -28,6 +28,7 @@ import { messageOf } from "../../agent/store.ts";
 import { expandShorthand } from "./expandShorthand.ts";
 import { showError, showNotice } from "../../toasts.tsx";
 import type { EditMessage } from "../ArtifactFrame.tsx";
+import type { LiveTween } from "../timeline/rows.ts";
 import type { SheetRuleReport } from "./sheetOwner.ts";
 
 export type EditMode = "edit" | "interact";
@@ -56,6 +57,20 @@ export interface EditReport {
   };
   /** A board copy's rules that reach it, from its sheet's component style (spec 20); undefined for any other element. */
   readonly sheetRules?: ReadonlyArray<SheetRuleReport>;
+}
+
+/** A tween's live change for the frame (spec 21, Live preview): its target, its channels, and the values it changes. */
+export interface TweenPatch {
+  readonly selector: string;
+  readonly channels: readonly string[];
+  readonly change: {
+    readonly start?: number;
+    readonly duration?: number;
+    readonly ease?: string;
+    readonly stagger?: number;
+    /** The values at one keyframe (`at` 0, 1 or a step), by property, as the frame shows them (static text or a number). */
+    readonly values?: { readonly at: number; readonly props: Readonly<Record<string, string | number>> };
+  };
 }
 
 export interface SourceTree {
@@ -105,6 +120,9 @@ export interface EditSession {
   readonly showDials: (values: Readonly<Record<string, unknown>>) => void;
   readonly selection: readonly string[];
   readonly setSelection: (ids: readonly string[]) => void;
+  /** The motion tween the timeline has selected, by its source order, or null. Part of the selection: a change commits the burst (spec 21, Rows). */
+  readonly tween: number | null;
+  readonly setTween: (index: number | null) => void;
   /** Selects the elements a style rule's selector matches in the frame (spec 19, Off-token values). */
   readonly selectMatching: (selector: string) => void;
   readonly hovered: EditReport | null;
@@ -117,6 +135,8 @@ export interface EditSession {
   readonly tree: SourceTree | undefined;
   /** The frame's live elements, for the Layers tab's runtime rows. Asked for when the frame is ready and on request. */
   readonly live: readonly LiveNode[];
+  /** A motion's live tweens, as the bridge reports them after load and after each dials apply (spec 21). */
+  readonly liveTweens: readonly LiveTween[];
   /** The declaration of a component sheet, as its frame reports it; null in a page or a motion (spec 20). */
   readonly declaration: ComponentDeclaration | null;
   /** Hovers an element from Layers: the frame outlines it. Null clears it. */
@@ -131,6 +151,11 @@ export interface EditSession {
   readonly prepareError: string | undefined;
   /** The source edits of the burst not yet written: they are the element's own, so the owner stays `source`. */
   readonly pending: readonly SourceEdit[];
+  /**
+   * The edits of the commit in progress, the file they were made on, and the file they were written to: the strip draws them over
+   * the reading of the base until a newer reading is in (spec 21). Cleared when the shape goes back to the base, or on another file.
+   */
+  readonly settled: { readonly base: string; readonly result?: string; readonly edits: readonly SourceEdit[] } | undefined;
   /** The dial values the burst holds, by path. The frame shows them and they are written at commit. */
   readonly held: Readonly<Record<string, unknown>>;
   /** Holds a dial value from the Design tab: the burst writes it at commit, and no version is written for it alone. */
@@ -140,6 +165,16 @@ export interface EditSession {
   /** Elements a stylesheet `!important` rule wins over, as the bridge last reported them. */
   readonly overridden: Readonly<Record<string, boolean>>;
   readonly patch: (edit: SourceEdit) => void;
+  /**
+   * A motion tween's timing edit: collected into the burst as the edit, and shown in the frame at once as a tween patch.
+   * Nothing is written until the burst commits (spec 21, Bursts).
+   */
+  readonly patchTween: (edit: SourceEdit, frame: TweenPatch) => void;
+  /**
+   * Shows a tween's timing in the frame without adding anything to the burst: a clip drag's carried tweens, which the clip's own
+   * `clip-time` edit writes at the commit (spec 21, Live preview).
+   */
+  readonly previewTween: (frame: TweenPatch) => void;
   /**
    * Shows edits in the frame without adding them to the burst (a token's hover preview). The burst's
    * own edits are shown again over the reset frame; null shows only the burst.
@@ -164,6 +199,8 @@ const conflictSentence = (kind: ArtifactKind, reason: unknown): string =>
 export const useEditSession = ({ editor, engine, project, shapeId, kind, file, locked, kit }: EditSessionInput): EditSession => {
   const [mode, setModeState] = useState<EditMode>("edit");
   const [selection, setSelectionState] = useState<readonly string[]>([]);
+  const [tween, setTweenState] = useState<number | null>(null);
+  const tweenRef = useRef<number | null>(null);
   const [hovered, setHovered] = useState<EditReport | null>(null);
   const [reports, setReports] = useState<Readonly<Record<string, EditReport>>>({});
   const [families, setFamilies] = useState<readonly string[]>([]);
@@ -171,11 +208,13 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   const [copies, setCopies] = useState<Readonly<Record<string, readonly EditBox[]>>>({});
   const [tree, setTree] = useState<SourceTree | undefined>(undefined);
   const [live, setLive] = useState<readonly LiveNode[]>([]);
+  const [liveTweens, setLiveTweens] = useState<readonly LiveTween[]>([]);
   const [declaration, setDeclaration] = useState<ComponentDeclaration | null>(null);
   const [layerHover, setLayerHover] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [prepareError, setPrepareError] = useState<string | undefined>(undefined);
   const [pending, setPending] = useState<readonly SourceEdit[]>([]);
+  const [settled, setSettled] = useState<{ base: string; result?: string; edits: readonly SourceEdit[] } | undefined>(undefined);
   const [held, setHeld] = useState<Readonly<Record<string, unknown>>>({});
   const [overridden, setOverridden] = useState<Readonly<Record<string, boolean>>>({});
   // The dial values a commit is writing now: shown until the commit has answered.
@@ -258,10 +297,16 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     burstRef.current = emptyBurst();
     baseRef.current = undefined;
     setPending([]);
+    // The edits stay on screen over the old reading while they are written, so the bars do not jump back at the commit.
+    if (edits.length > 0) setSettled({ base, edits });
     inFlight.current = Object.fromEntries(dials.map(({ path, value }) => [path, value]));
     const finish = () => {
       inFlight.current = {};
       setHeld(heldNow());
+    };
+    const dropped = () => {
+      setSettled(undefined);
+      finish();
     };
     // Each commit is its own undo step, so Cmd-Z takes back one save at a time.
     if (edits.length === 0) {
@@ -281,7 +326,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     try {
       const answer = await send(base, edits);
       if (fileRef.current !== base) {
-        finish();
+        dropped();
         showNotice(conflictSentence(kind, "elsewhere"), "warning");
         return;
       }
@@ -291,11 +336,12 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       const props = dials.length > 0 ? { file: answer.file, dials: dialsWith(shapeDials(), inFlight.current) } : { file: answer.file };
       editor.updateShape({ id: shapeId as TLShapeId, type: kind, props } as never);
       lastSet.current = answer.file;
+      setSettled((previous) => (previous?.base === base ? { ...previous, result: answer.file } : previous));
       finish();
       undoable.current += 1;
       redoable.current = 0;
     } catch (error) {
-      finish();
+      dropped();
       post({ type: "unframed:edit:reset" });
       const code = (error as { code?: unknown }).code;
       const details = (error as { details?: { reason?: unknown } }).details;
@@ -342,6 +388,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   const collect = useCallback(
     (edit: SourceEdit, showInFrame: boolean) => {
       burstRef.current = addToBurst(burstRef.current, edit);
+      // A motion edit names a tween, not an element, so only element edits are remembered per element.
       if ("elementId" in edit && edit.elementId !== undefined) lastEdit.current[edit.elementId] = edit;
       if (baseRef.current === undefined) baseRef.current = fileRef.current;
       setPending(burstEdits(burstRef.current));
@@ -378,6 +425,16 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   );
 
   const patch = useCallback((edit: SourceEdit) => collect(edit, true), [collect]);
+
+  const patchTween = useCallback(
+    (edit: SourceEdit, frame: TweenPatch) => {
+      collect(edit, false);
+      post({ type: "unframed:edit:patch", patches: [{ kind: "tween", ...frame }] });
+    },
+    [collect, post],
+  );
+
+  const previewTween = useCallback((frame: TweenPatch) => post({ type: "unframed:edit:patch", patches: [{ kind: "tween", ...frame }] }), [post]);
 
   const previewEdits = useCallback(
     (edits: readonly SourceEdit[] | null) => {
@@ -450,6 +507,16 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     [commit, post],
   );
 
+  const setTween = useCallback(
+    (index: number | null) => {
+      if (tweenRef.current === index) return;
+      void commit();
+      tweenRef.current = index;
+      setTweenState(index);
+    },
+    [commit],
+  );
+
   const shownFile = (): string | undefined => (editor.getShape(shapeId as TLShapeId)?.props as { file?: string } | undefined)?.file;
 
   const undo = () => {
@@ -494,6 +561,11 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       if (parent) setSelection([parent]);
       return true;
     }
+    // A motion's tween selection goes first, then the element selection (spec 21, Esc).
+    if (key === "Escape" && tweenRef.current !== null) {
+      setTween(null);
+      return true;
+    }
     if (key === "Escape" && selectionRef.current.length > 0) {
       setSelection([]);
       return true;
@@ -510,6 +582,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
         post({ type: "unframed:edit:mode", mode: modeRef.current, locked: lockedRef.current });
         if (selectionRef.current.length > 0) post({ type: "unframed:edit:select", ids: selectionRef.current });
         post({ type: "unframed:edit:tree" });
+        post({ type: "unframed:edit:tweens" });
         return;
       }
       case "unframed:edit:matched": {
@@ -520,6 +593,10 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       case "unframed:edit:tree": {
         setLive(Array.isArray(message.nodes) ? (message.nodes as LiveNode[]) : []);
         setDeclaration(typeof message.declaration === "object" && message.declaration !== null ? (message.declaration as ComponentDeclaration) : null);
+        return;
+      }
+      case "unframed:edit:tweens": {
+        setLiveTweens(Array.isArray(message.tweens) ? (message.tweens as LiveTween[]) : []);
         return;
       }
       case "unframed:edit:report": {
@@ -609,6 +686,11 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     }
   };
 
+  // The edits a commit wrote stay drawn until the shape is back on their base (an undo) or on another file than the commit's.
+  useEffect(() => {
+    setSettled((previous) => (previous === undefined || file === previous.result || (file === previous.base && previous.result === undefined) ? previous : undefined));
+  }, [file]);
+
   // The shape's file changed under a pending burst: the agent or another writer rewrote it. The burst is dropped
   // at once. Committing it now lets the engine answer the conflict and say who changed the file, and it writes nothing.
   useEffect(() => {
@@ -660,6 +742,8 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     showDials,
     selection,
     setSelection,
+    tween,
+    setTween,
     selectMatching,
     hovered,
     reports,
@@ -668,6 +752,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     copies,
     tree,
     live,
+    liveTweens,
     declaration,
     hoverLayer,
     layerHover,
@@ -676,11 +761,14 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     preparing,
     prepareError,
     pending,
+    settled,
     held,
     patchDial,
     releaseDials,
     overridden,
     patch,
+    patchTween,
+    previewTween,
     previewEdits,
     commit,
     discard,

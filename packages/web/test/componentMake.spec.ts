@@ -36,6 +36,21 @@ test("Make component sends the element's chip and the fixed instruction to a new
   await expect(editor(page).locator('[data-editor-column="rail"]').getByText("Make a component from the element attached to this message", { exact: false }).first()).toBeVisible();
 });
 
+test("with Tell the agent beside it, Make component stays inside the Design tab's column, and the header wraps rather than cutting it off", async ({ page, agent }) => {
+  await onBoard(page, agent, PAGE);
+  await openEditor(page);
+  await selectByText(page, "Lead text");
+  await expect(makeButton(page)).toBeVisible();
+  const tab = await parameters(page).getByTestId("design-tab").boundingBox();
+  const make = await makeButton(page).boundingBox();
+  const tell = await parameters(page).getByRole("button", { name: "Tell the agent", exact: true }).boundingBox();
+  if (!tab || !make || !tell) throw new Error("no header on screen");
+  // Both buttons are whole: neither runs past the tab's right edge, and Make component does not sit over Tell the agent.
+  expect(make.x + make.width).toBeLessThanOrEqual(tab.x + tab.width + 0.5);
+  expect(tell.x + tell.width).toBeLessThanOrEqual(tab.x + tab.width + 0.5);
+  expect(make.x >= tell.x + tell.width - 0.5 || make.y >= tell.y + tell.height - 0.5).toBe(true);
+});
+
 test("Make component is disabled on a locked element, with its tooltip", async ({ page, agent }) => {
   await onBoard(page, agent, PAGE);
   await openEditor(page);

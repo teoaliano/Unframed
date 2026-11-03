@@ -3,6 +3,7 @@
  * that only the bytes it changes move. All or nothing: the first refusal stops the list.
  */
 import type { SourceEdit } from "@unframed/contracts";
+import { applyMotionEdits, isMotionEdit, type MotionEditOptions } from "../motion/edits.ts";
 import type { ArtifactKind } from "../artifacts/artifactRules.ts";
 import type { ComponentDeclaration } from "../components/sheet.ts";
 import { setPin } from "../components/pins.ts";
@@ -49,9 +50,11 @@ const IMAGE_FILE = /\.(png|jpe?g|webp|gif|svg)$/i;
 type Step = { readonly html: string; readonly line: string } | { readonly refusal: string };
 
 /**
- * Applies `edits` in order and returns the new source with its summary lines, or the first
- * refusal (and no source). `kind` only words the refusals. `kit` is the project kit (spec 19):
- * a token edit needs it, and a style value may use its custom properties.
+ * Applies `edits` and returns the new source with its summary lines, or the first refusal (and no
+ * source). Element edits go in order, then the motion edits (spec 21) in one pass: the two kinds
+ * touch different bytes, so their order does not change the result. `kind` only words the
+ * refusals. `kit` is the project kit (spec 19): a token edit needs it, and a style value may use
+ * its custom properties. `instances` holds the component declarations of the instances on the page (spec 20). `options` carries the artifact's locks and token kinds to the motion edits.
  */
 export const applySourceEdits = (
   html: string,
@@ -59,21 +62,33 @@ export const applySourceEdits = (
   kind: ArtifactKind = "page",
   kit: Kit | null = null,
   instances: InstanceDeclarations = new Map(),
+  options: MotionEditOptions = {},
 ): SourceEditResult => {
   let current = html;
   const lines: string[] = [];
   for (const edit of edits) {
+    if (isMotionEdit(edit)) continue;
     const step = applyEdit(current, edit, kind, kit, instances);
     if ("refusal" in step) return { ok: false, refusal: step.refusal };
     current = step.html;
     lines.push(step.line);
   }
+  const motion = edits.filter(isMotionEdit);
+  if (motion.length > 0) {
+    if (kind !== "motion") return { ok: false, refusal: `This ${kind} has no timeline.` };
+    const result = applyMotionEdits(current, motion, options);
+    if (!result.ok) return { ok: false, refusal: result.refusal };
+    current = result.html;
+    lines.push(...result.summary);
+  }
   // Accepting several component updates at once is one line, not one for each (spec 20).
   const updates = edits.filter((edit) => edit.type === "componentUpdate").length;
   if (updates > 1) {
+    // `lines` holds one line for each element edit, in order, then the motion summary.
+    const elementEdits = edits.filter((edit) => !isMotionEdit(edit));
     let merged = false;
     const folded = lines.flatMap((line, index) => {
-      if (edits[index]?.type !== "componentUpdate") return [line];
+      if (elementEdits[index]?.type !== "componentUpdate") return [line];
       if (merged) return [];
       merged = true;
       return [`Updated ${updates} components`];
@@ -91,7 +106,7 @@ export const summaryLines = (lines: readonly string[]): string[] => {
   return rest > 0 ? [...shown, `and ${rest} more`] : shown;
 };
 
-const applyEdit = (html: string, edit: SourceEdit, kind: ArtifactKind, kit: Kit | null, instances: InstanceDeclarations): Step => {
+const applyEdit = (html: string, edit: Exclude<SourceEdit, { readonly type: "tween-time" | "tween-ease" | "tween-stagger" | "tween-value" | "clip-time" | "composition-duration" }>, kind: ArtifactKind, kit: Kit | null, instances: InstanceDeclarations): Step => {
   if (edit.type === "token") return applyToken(html, edit, kind, kit);
   if (edit.type === "componentRule") return applyComponentRule(html, edit, kit);
   if (edit.type === "componentUpdate") return { html: setPin(html, edit.tag, edit.to), line: `Updated ${instances.get(edit.tag)?.title ?? edit.tag}` };

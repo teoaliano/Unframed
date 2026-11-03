@@ -1,0 +1,20 @@
+<html><head><style>
+#root{position:relative;overflow:hidden;background:#111}
+.clip{position:absolute;inset:0;display:flex;gap:24px;align-items:center;justify-content:center}
+.bar{width:160px;height:24px;background:#f472b6;border-radius:6px}
+</style></head><body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="3" data-width="640" data-height="360">
+  <div id="c" class="clip" data-start="0" data-duration="3">
+    <div id="a" class="bar"></div><div id="b" class="bar"></div>
+  </div>
+</div>
+<script src="gsap.js"></script>
+<script>
+window.__timelines = window.__timelines || {};
+window.__timelines.main = gsap.timeline({ paused: true });
+function reveal(sel, at) {
+  window.__timelines.main.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: 0.5 }, at);
+}
+reveal('#a', 0);
+reveal('#b', 0.4);
+</script></body></html>

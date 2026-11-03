@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { centre, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 import { filledArtifact, insideComposition } from "./artifacts.ts";
+import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
 /** A motion whose dot moves across the composition, so an outline on it has to follow the timeline. */
 const MOVER = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}#dot{position:absolute;left:20px;top:120px;width:80px;height:80px;background:#f00}</style></head><body>
@@ -27,7 +28,8 @@ const compositionFrame = async (page: Page) => {
 // A motion takes a while to load its player and its composition: the pick waits for both.
 test.setTimeout(150_000);
 
-test("Edit mode on a motion: the player pauses on entering Edit, an element is picked through the viewer, and its outline follows it when the motion seeks", async ({ page, agent }) => {
+/** Opens the mover in the editor, in Edit mode, and picks its dot through the viewer. */
+const openMoverWithDotPicked = async (page: Page, agent: TestEngine) => {
   await openCanvas(page, agent);
   await filledArtifact(agent, { id: "shape:intro", kind: "motion", ref: "150", at: { x: -520, y: -40 }, size: { w: 480, h: 270 }, title: "Intro", html: MOVER });
   await expect(shapeOnScreen(page, "shape:intro")).toBeVisible();
@@ -43,6 +45,10 @@ test("Edit mode on a motion: the player pauses on entering Edit, an element is p
     await expect(outline(page, "selected")).toHaveCount(1, { timeout: 1000 });
   }).toPass({ timeout: 40_000 });
   await expect(editor(page).getByTestId("design-tab")).toContainText("dot");
+};
+
+test("Edit mode on a motion: the player pauses on entering Edit, an element is picked through the viewer, and its outline follows it when the motion seeks", async ({ page, agent }) => {
+  await openMoverWithDotPicked(page, agent);
 
   // Seeking the motion moves the element; the outline follows it.
   const before = (await outline(page, "selected").boundingBox())!;
@@ -52,4 +58,28 @@ test("Edit mode on a motion: the player pauses on entering Edit, an element is p
     (window as unknown as { __timelines: { main: { seek(time: number): void } } }).__timelines.main.seek(3);
   });
   await expect.poll(async () => (await outline(page, "selected").boundingBox())!.x, { timeout: 5000 }).toBeGreaterThan(before.x + 60);
+});
+
+test("an edit commit on a motion paused at 1.5 s shows the new version at 1.5 s", async ({ page, agent }) => {
+  await openMoverWithDotPicked(page, agent);
+
+  // Seek and pause through the viewer, the way the editor's transport will: the viewer is the editor's frame, and the page may post to it.
+  await region(page).locator("iframe[data-artifact-frame]").evaluate((frame: HTMLIFrameElement) => {
+    frame.contentWindow?.postMessage({ type: "unframed:player:control", action: "seek", seconds: 1.5 }, "*");
+  });
+  const timeOf = async (page: Page) => {
+    const frame = await compositionFrame(page);
+    return frame.evaluate(() => (window as unknown as { __timelines: { main: { time(): number } } }).__timelines.main.time());
+  };
+  await expect.poll(() => timeOf(page), { timeout: 10_000 }).toBeCloseTo(1.5, 1);
+
+  // A Design edit on the dot commits after the pause: the new version loads, and the playhead must follow it.
+  await editor(page).getByRole("spinbutton", { name: "Corner radius", exact: true }).fill("12");
+  await editor(page).getByRole("spinbutton", { name: "Corner radius", exact: true }).press("Enter");
+  await expect
+    .poll(async () => {
+      const frame = await compositionFrame(page);
+      return frame.evaluate(() => ({ radius: getComputedStyle(document.getElementById("dot")!).borderRadius, time: (window as unknown as { __timelines: { main: { time(): number } } }).__timelines.main.time() }));
+    }, { timeout: 15_000 })
+    .toEqual({ radius: "12px", time: expect.closeTo(1.5, 1) });
 });

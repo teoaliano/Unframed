@@ -73,13 +73,13 @@ describe("the built motion viewer relay", () => {
     ]);
   });
 
-  it("lets the pointer reach the composition in Edit mode, and gives it back to the player in Interact", () => {
+  it("lets the pointer reach the composition in Edit and in Interact, so a click in Interact reaches the motion (spec 21, task 38)", () => {
     const { player, canvas, from } = stubViewer();
     const frame = player.iframeElement as { style: { pointerEvents: string } };
     from(canvas, CANVAS, { type: "unframed:edit:mode", mode: "edit", locked: [] });
     expect(frame.style.pointerEvents).toBe("auto");
     from(canvas, CANVAS, { type: "unframed:edit:mode", mode: "interact", locked: [] });
-    expect(frame.style.pointerEvents).toBe("");
+    expect(frame.style.pointerEvents).toBe("auto");
   });
 
   it("pauses the motion when the editor switches to Edit mode, and leaves it running for Interact", () => {

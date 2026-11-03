@@ -34,6 +34,8 @@ import { COLUMN, ColumnHeader, ParametersBody } from "./Parameters.tsx";
 import { PreviewSizeControl, usePreviewSize } from "./PreviewSize.tsx";
 import { useEditSession, type EditMode } from "./editSession.ts";
 import { makeEditableInstruction, tellAgent } from "./tellAgent.ts";
+import { MotionTimeline } from "../timeline/MotionTimeline.tsx";
+import { MotionTransport, type TransportZone } from "../timeline/transport.ts";
 
 export interface ArtifactEditorProps {
   readonly shapeId: TLShapeId;
@@ -52,6 +54,14 @@ const typingIn = (target: EventTarget | null): boolean => {
   const element = target instanceof HTMLElement ? target : null;
   if (!element) return false;
   return element.isContentEditable || element.tagName === "INPUT" || element.tagName === "TEXTAREA" || element.closest("[contenteditable='true']") !== null;
+};
+
+/** Where the focus is, for a motion's transport keys: the page body, the frame, or the strip's time area. Undefined elsewhere (spec 21). */
+const transportZone = (): TransportZone | undefined => {
+  const active = document.activeElement;
+  if (active === null || active === document.body || active === document.documentElement) return "body";
+  if (active instanceof HTMLIFrameElement) return "frame";
+  return active instanceof HTMLElement && active.closest("[data-timeline-focus]") !== null ? "strip" : undefined;
 };
 
 const stop = (event: { stopPropagation(): void }) => event.stopPropagation();
@@ -122,6 +132,15 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   });
   const sessionRef = useRef(session);
   sessionRef.current = session;
+  // The motion strip's values panel, which an Esc closes first (spec 21): the strip sets the closer when it mounts.
+  const closePanel = useRef<(() => boolean) | undefined>(undefined);
+  // A motion's transport (spec 21): the strip's buttons and keys drive the player through its viewer.
+  const [transport] = useState(() => new MotionTransport());
+  useEffect(() => () => transport.dispose(), [transport]);
+  const onPlayerReady = useCallback((send: (message: unknown) => void) => transport.connect(send), [transport]);
+  // Whether the shown artifact is a motion with a file: only then do the transport's keys act.
+  const motionShown = useRef(false);
+  motionShown.current = facts !== undefined && facts.kind === "motion" && facts.file !== "";
 
   // Component updates (spec 20): the tags this artifact pins at an older sheet, and the engine's rows for them. The popover opens from the header or the canvas badge.
   const updateKey = useValue("component update tags", () => updateTagsOf(editor, project, facts?.file ?? "").join(","), [editor, project, facts?.file]);
@@ -222,8 +241,19 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      // Esc ends the innermost open thing first: a motion's values panel (spec 21), then the session's own selections (spec 18).
+      if (event.key === "Escape" && !event.defaultPrevented && closePanel.current?.()) {
+        event.preventDefault();
+        return;
+      }
       if (event.defaultPrevented || editor.wasEventAlreadyHandled(event) || typingIn(event.target) || typingIn(document.activeElement)) return;
       if (isUndo(event)) return;
+      // The transport takes its keys only where the focus is the frame, the strip or the page body (spec 21, the shortcuts).
+      const zone = transportZone();
+      if (motionShown.current && zone !== undefined && transport.handleKey(event.key, { shift: event.shiftKey, meta: event.metaKey, ctrl: event.ctrlKey }, zone)) {
+        event.preventDefault();
+        return;
+      }
       if (sessionRef.current.handleKey(event.key, { shift: event.shiftKey, meta: event.metaKey, ctrl: event.ctrlKey })) {
         event.preventDefault();
         return;
@@ -243,7 +273,17 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   const onReady = useCallback((send: (values: unknown) => void) => {
     post.current = send;
   }, []);
-  const onEdit = useCallback((message: EditMessage) => sessionRef.current.onFrameMessage(message), []);
+  const onEdit = useCallback(
+    (message: EditMessage) => {
+      // A motion's keys from the frame (Edit mode only) reach the transport first, as the same keys typed in the editor would.
+      if (message.type === "unframed:edit:key" && motionShown.current) {
+        const modifiers = { shift: message.shift === true, meta: message.meta === true, ctrl: message.ctrl === true };
+        if (transport.handleKey(String(message.key ?? ""), modifiers, "frame")) return;
+      }
+      sessionRef.current.onFrameMessage(message);
+    },
+    [transport],
+  );
   const onEditReady = useCallback((send: (message: unknown) => void) => sessionRef.current.onFrameReady(send), []);
 
   const [panel, setPanelState] = useState<Panel>(() => (panelRemembered.get(shapeId) ?? "design") as Panel);
@@ -267,6 +307,24 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   }, [facts === undefined]);
   const viewport = editorPreviewViewport(size);
   const scale = viewport === undefined ? 1 : previewScale(viewport, area);
+  // The editor's column height, which caps the motion timeline at 60 % of it (spec 21). It is the grid's height less its padding,
+  // not the centre column's, which shrinks as the timeline grows.
+  const grid = useRef<HTMLDivElement>(null);
+  const [columnHeight, setColumnHeight] = useState(0);
+  // The Design tab's Show on timeline: the element and property, with a count so a repeat of the same request is still a request (spec 21).
+  const [reveal, setReveal] = useState<{ readonly element: string; readonly property: string; readonly nonce: number }>();
+  useLayoutEffect(() => {
+    const element = grid.current;
+    if (!element) return;
+    const measure = () => {
+      const padding = getComputedStyle(element);
+      setColumnHeight(element.clientHeight - parseFloat(padding.paddingTop) - parseFloat(padding.paddingBottom));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [facts === undefined]);
 
   if (!facts) return null;
   const displayTitle = artifactTitle(facts);
@@ -297,17 +355,24 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   const names: Record<string, string> = {};
   for (const element of session.tree?.elements ?? []) names[element.id] = element.name;
 
+  // A motion with a file has its timeline in a second row under the centre column (spec 21). Below a 1280 px window
+  // the timeline spans the centre and right columns, and the right column stops above it.
+  const timeline = facts.kind === "motion" && facts.file !== "";
   return (
     // Full height. tldraw's watermark stays over its bottom-right corner: tldraw.css lifts the tldraw container above this layer.
     <div
+      ref={grid}
       data-testid="artifact-editor"
-      className="pointer-events-auto absolute inset-0 z-[700] box-border grid grid-cols-[360px_minmax(0,1fr)_320px] gap-3 bg-background p-3 font-sans text-foreground"
+      className={cn(
+        "pointer-events-auto absolute inset-0 z-[700] box-border grid grid-cols-[360px_minmax(0,1fr)_320px] gap-3 bg-background p-3 font-sans text-foreground",
+        timeline ? "grid-rows-[minmax(0,1fr)_auto]" : "grid-rows-[minmax(0,1fr)]",
+      )}
       {...KEEP_FROM_CANVAS}
     >
-      <section data-editor-column="rail" className={COLUMN}>
+      <section data-editor-column="rail" className={cn(COLUMN, "col-start-1 row-span-full")}>
         <AgentRail project={project} embedded filterTo={[shapeId]} onOpenEditor={onOpen} onClose={close} />
       </section>
-      <section data-editor-column="centre" className={COLUMN} aria-label={`Editing ${title}`}>
+      <section data-editor-column="centre" className={cn(COLUMN, "col-start-2 row-start-1")} aria-label={`Editing ${title}`}>
         {/* A container, so a narrow column folds its labels into icons rather than overflow. */}
         <ColumnHeader className="@container/editor-header gap-1">
           <Tip label="Back to canvas (Esc)">
@@ -316,11 +381,12 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             </Button>
           </Tip>
           <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-          <span className="flex min-w-10 flex-1 items-baseline gap-2">
-            <span data-testid="artifact-editor-title" className="truncate text-sm font-semibold">
+          {/* The title and the use count keep their width and the kind word truncates first, so neither is squeezed away (spec 09, the header). */}
+          <span className="flex min-w-0 flex-1 items-baseline gap-2">
+            <span data-testid="artifact-editor-title" className="shrink-0 truncate text-sm font-semibold">
               {title}
             </span>
-            <span data-testid="artifact-editor-kind" className="shrink-0 text-sm text-muted-foreground @max-[520px]/editor-header:hidden">
+            <span data-testid="artifact-editor-kind" className="min-w-0 truncate text-sm text-muted-foreground @max-[760px]/editor-header:hidden">
               {facts.kind}
             </span>
             {component && uses > 0 && (
@@ -439,6 +505,8 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
                   onEdit={onEdit}
                   onEditReady={onEditReady}
                   onSwapped={clearAnnouncement}
+                  onPlayer={transport.onPlayerMessage}
+                  onPlayerReady={onPlayerReady}
                 />
                 {mode === "edit" && (
                   <EditOverlay hovered={session.hovered} layerHover={session.layerHover} selection={session.selection} reports={session.reports} boxes={session.boxes} copies={session.copies} names={names} />
@@ -449,7 +517,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
         </div>
       </section>
       {/* The bottom 40 px hold tldraw's watermark, which sits over this corner, so the controls end above it. */}
-      <section data-editor-column="parameters" className={cn(COLUMN, "pb-10")}>
+      <section data-editor-column="parameters" className={cn(COLUMN, "col-start-3 row-span-full pb-10 max-[1279px]:row-span-1 max-[1279px]:row-start-1")}>
         <ColumnHeader>
           <Tabs value={shownPanel} onValueChange={(next) => setPanel(String(next) as Panel)} className="h-12 min-w-0">
             <TabsList variant="underline" aria-label="Editor panels">
@@ -476,6 +544,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             onOpenKit={() => kitUi(editor).update((state) => ({ ...state, open: true }))}
             onTell={(elements) => tellAgent(chatClient, shapeId, elements)}
             onAsk={(field, elements) => tellAgent(chatClient, shapeId, elements, makeEditableInstruction(field))}
+            onShowOnTimeline={(element, property) => setReveal({ element, property, nonce: (reveal?.nonce ?? 0) + 1 })}
             component={component ? session.declaration : null}
             componentTitle={component ? displayTitle || facts.tag : undefined}
             onAskComponent={askAboutComponent}
@@ -507,6 +576,27 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
           />
         )}
       </section>
+      {timeline && (
+        <MotionTimeline
+          key={shapeId}
+          title={title}
+          closePanel={closePanel}
+          engine={engine}
+          project={project}
+          file={facts.file}
+          session={session}
+          dials={current ?? {}}
+          schema={normalised?.ok ? normalised.schema : undefined}
+          locked={facts.locked}
+          column={columnHeight}
+          transport={transport}
+          onAsk={(field, elements) => tellAgent(chatClient, shapeId, elements, makeEditableInstruction(field))}
+          kit={kit}
+          mode={facts.mode}
+          reveal={reveal}
+          className="col-start-2 row-start-2 max-[1279px]:col-span-2"
+        />
+      )}
     </div>
   );
 };

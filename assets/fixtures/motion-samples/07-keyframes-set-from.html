@@ -1,0 +1,20 @@
+<html><head><style>
+#root{position:relative;overflow:hidden;background:#111}
+.clip{position:absolute;inset:0;display:grid;place-items:center}
+#ring{width:160px;height:160px;border:12px solid #facc15;border-radius:50%}
+#pill{width:200px;height:56px;background:#c084fc;border-radius:28px}
+#flash{position:absolute;inset:0;background:#fff}
+</style></head><body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360">
+  <div id="c" class="clip" data-start="0" data-duration="4">
+    <div id="flash"></div><div id="ring"></div><div id="pill"></div>
+  </div>
+</div>
+<script src="gsap.js"></script>
+<script>
+window.__timelines = window.__timelines || {};
+window.__timelines.main = gsap.timeline({ paused: true });
+window.__timelines.main.set('#flash', { opacity: 0 }, 0);
+window.__timelines.main.to('#ring', { keyframes: { '0%': { scale: 0.8, opacity: 0 }, '50%': { scale: 1.1, opacity: 1 }, '100%': { scale: 1, opacity: 1 } }, duration: 1.2, ease: 'sine.inOut' }, 0.5);
+window.__timelines.main.from('#pill', { x: -40, duration: 0.4, ease: 'expo.out' }, 1);
+</script></body></html>

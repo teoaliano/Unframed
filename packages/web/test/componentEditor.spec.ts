@@ -80,3 +80,28 @@ test("a component nothing uses shows no use count", async ({ page, agent }) => {
   await expect(column(page, "parameters").getByText("uf-price-card", { exact: true })).toBeVisible({ timeout: 20_000 });
   await expect(region(page).getByText(/Used in/)).toHaveCount(0);
 });
+
+/** A title of 24 characters: the longest a person is likely to give a component at 1440 px. */
+const LONG = "Price card for summer 26";
+
+test("at 1440 px the editor's title shows in full beside the Kit mode picker and the Mode toggle", async ({ page, agent }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openCanvas(page, agent);
+  await writeKit(agent);
+  await writeSheet(agent, PRICE_CARD);
+  await putRecords(agent, [componentShape({ id: "shape:card", ref: "150", at: { x: 420, y: 60 }, tag: "uf-price-card", title: LONG })]);
+  await filledArtifact(agent, { id: "shape:landing", kind: "page", ref: "151", at: { x: -520, y: -40 }, size: { w: 400, h: 260 }, title: "Landing", html: CARD_PAGE });
+  await expect(shapeOnScreen(page, "shape:card")).toBeVisible();
+
+  await page.mouse.click(640, 600);
+  const at = await centre(shapeOnScreen(page, "shape:card"));
+  await page.mouse.dblclick(at.x, at.y);
+  const longRegion = page.getByRole("region", { name: `Editing ${LONG}` });
+  await expect(longRegion).toBeVisible();
+  await expect(longRegion.getByText("Used in 1 artifact", { exact: true })).toBeVisible();
+  await expect(longRegion.getByRole("combobox", { name: "Kit mode" })).toBeVisible();
+  const title = longRegion.getByTestId("artifact-editor-title");
+  await expect(title).toHaveText(LONG);
+  // A cut title is one whose content is wider than its box: the ellipsis hides the end of it.
+  expect(await title.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+});

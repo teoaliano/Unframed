@@ -2,10 +2,13 @@
  * Artifacts at the Effect boundary (spec 09): the motion upload, render start and status RPCs
  * and the snapshot stream, over the artifact store, the renderer and the snapshot service.
  */
-import { join } from "node:path";
-import type { ArtifactImage, ArtifactSnapshot, ComponentPins as ComponentPinsItem, ComponentUpdate, OffTokenFound, RenderStatus, SourceEdit, SourceTreeElement } from "@unframed/contracts";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { basename, join } from "node:path";
+import type { ArtifactImage, ArtifactSnapshot, ComponentPins as ComponentPinsItem, ComponentUpdate, MotionTimelineReading, OffTokenFound, RenderStatus, SourceEdit, SourceTreeElement } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
-import { projectSlug, shapeKind } from "@unframed/domain";
+import { injectTags, projectSlug, shapeKind } from "@unframed/domain";
+import { motionTimeline } from "@unframed/domain/motion";
 import { byteSize, prepareArtifactHtml } from "./artifactHtml.ts";
 import { artifactEditService } from "./editService.ts";
 import * as Context from "effect/Context";
@@ -51,6 +54,8 @@ export class Artifacts extends Context.Service<
     }) => Effect.Effect<{ id: string; status: "queued"; placeholder: string }, UnframedError>;
     readonly renderStatus: (project: string, id: string) => Effect.Effect<RenderStatus, UnframedError>;
     readonly snapshots: (project: string) => Stream.Stream<ArtifactSnapshot, UnframedError>;
+    /** The timeline reading of a motion file (spec 21), cached per file for the life of the engine. */
+    readonly timeline: (project: string, file: string) => Effect.Effect<MotionTimelineReading, UnframedError>;
     /** Every page and motion file's component pins, then each newly named file's (spec 20). */
     readonly componentPins: (project: string) => Stream.Stream<ComponentPinsItem, UnframedError>;
     /** `component.copy` (spec 20): a sheet copied under its fresh tag. */
@@ -189,8 +194,27 @@ export const artifactsLayer = Layer.effect(
         });
       });
 
+    const readings = new Map<string, MotionTimelineReading>();
+    const timeline = (project: string, file: string) =>
+      Effect.gen(function* () {
+        if (file.trim() === "") return yield* unframedError("bad_request", "Which composition? Pass its .html file name.");
+        const folder = yield* Effect.promise(() => media.folder(project));
+        const name = basename(file);
+        if (folder === undefined || name !== file || !existsSync(join(folder, name))) {
+          return yield* unframedError("not_found", `No file ${file} in this project.`);
+        }
+        const key = `${folder}\0${name}`;
+        const cached = readings.get(key);
+        if (cached) return cached;
+        const html = yield* Effect.promise(() => readFile(join(folder, name), "utf8"));
+        const reading = motionTimeline(html, { file: name });
+        readings.set(key, reading);
+        return reading;
+      });
+
     return Artifacts.of({
       upload,
+      timeline,
       renderStart: (input) => Effect.tryPromise({ try: () => renderer.start(input), catch: refused }),
       renderStatus: (project, id) => Effect.try({ try: () => renderer.status(project, id), catch: refused }),
       snapshots: (project) =>
