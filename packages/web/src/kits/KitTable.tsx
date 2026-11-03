@@ -317,7 +317,6 @@ const NameField = ({ label, initial, onCommit, onCancel }: { readonly label: str
   );
 };
 
-/** A row's or a column's options menu: its trigger, and the items it offers (a false item is left out). */
 const OptionsMenu = ({ label, align, items }: { readonly label: string; readonly align: "start" | "end"; readonly items: ReadonlyArray<false | readonly [string, () => void]> }) => {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
