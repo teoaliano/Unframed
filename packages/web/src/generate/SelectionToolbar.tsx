@@ -346,7 +346,7 @@ const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind
             Editor
           </Button>
           {Render && editor.getShape(state.shapeId as TLShapeId)?.type === "motion" && <Render shapeId={state.shapeId as TLShapeId} />}
-          {ParametersToggle && <ParametersToggle shapeId={state.shapeId as TLShapeId} />}
+          {ParametersToggle && editor.getShape(state.shapeId as TLShapeId)?.type !== "component" && <ParametersToggle shapeId={state.shapeId as TLShapeId} />}
           {KitModeToggle && <KitModeToggle shapeId={state.shapeId as TLShapeId} />}
           {agent}
         </div>

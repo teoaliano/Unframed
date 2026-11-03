@@ -28,7 +28,7 @@ import { overrides } from "./overrides.ts";
 import { installRefMinting, RefMinter } from "./refs.ts";
 import { installRename } from "./rename.ts";
 import { watchRunProgress } from "../generate/recipeRuns.ts";
-import { MotionShapeUtil, PageShapeUtil } from "./shapes/artifact.tsx";
+import { ComponentShapeUtil, MotionShapeUtil, PageShapeUtil } from "./shapes/artifact.tsx";
 import { GroupShapeUtil } from "./shapes/group.tsx";
 import { ImageMediaUtil, VideoMediaUtil } from "./shapes/media.tsx";
 import { PromptShapeUtil } from "./shapes/prompt.tsx";
@@ -39,7 +39,7 @@ import { TLDRAW_ASSET_URLS, TLDRAW_CHROME, TLDRAW_OPTIONS } from "./tldrawChrome
 /** How long a project switch waits for the room to acknowledge this tab's pending edits. */
 const SETTLE_BEFORE_SWITCH_MS = 2000;
 
-const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil];
+const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil, ComponentShapeUtil];
 
 /** Unframed's tldraw chrome, and the canvas's own parts: the dot grid behind, badges and overlays on top, the context menu. */
 const COMPONENTS: TLComponents = {

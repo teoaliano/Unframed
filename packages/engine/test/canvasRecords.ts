@@ -58,6 +58,13 @@ export const pageShape = (id: string, ref: string, props: Record<string, unknown
     meta: { ref },
   }) as unknown as TLRecord;
 
+export const componentShape = (id: string, tag: string, props: Record<string, unknown> = {}, at: At = {}): TLRecord =>
+  ({
+    ...base(id, "component", at),
+    props: { w: 480, h: 320, file: "", title: "", fileName: "", tag, ...props },
+    meta: { ref: id },
+  }) as unknown as TLRecord;
+
 export const imageAsset = (id: string, src: string | null, props: Record<string, unknown> = {}): TLRecord =>
   ({
     id: `asset:${id}`,

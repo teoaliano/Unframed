@@ -16,6 +16,7 @@ import {
   withoutEdit,
   type ArtifactKind,
   type Burst,
+  type ComponentDeclaration,
   type EditBox,
   type FieldOwner,
   type Kit,
@@ -27,6 +28,7 @@ import { messageOf } from "../../agent/store.ts";
 import { expandShorthand } from "./expandShorthand.ts";
 import { showError, showNotice } from "../../toasts.tsx";
 import type { EditMessage } from "../ArtifactFrame.tsx";
+import type { SheetRuleReport } from "./sheetOwner.ts";
 
 export type EditMode = "edit" | "interact";
 
@@ -43,6 +45,17 @@ export interface EditReport {
   readonly animated: readonly string[];
   /** Set on a report after a patch: a stylesheet `!important` rule wins over the edited value. */
   readonly overridden?: boolean;
+  /** A board copy's variant values, in the declaration's order (spec 20); null for any other element. */
+  readonly variant?: Readonly<Record<string, string>> | null;
+  /** An instance's pinned component: its declaration, and the live value of each declared attribute (spec 20). */
+  readonly component?: {
+    readonly tag: string;
+    readonly sheet: string;
+    readonly declaration: ComponentDeclaration;
+    readonly attributes: Readonly<Record<string, string | null>>;
+  };
+  /** A board copy's rules that reach it, from its sheet's component style (spec 20); undefined for any other element. */
+  readonly sheetRules?: ReadonlyArray<SheetRuleReport>;
 }
 
 export interface SourceTree {
@@ -99,9 +112,13 @@ export interface EditSession {
   /** The font families the document's elements use, first family of each, as the bridge reports them. */
   readonly families: readonly string[];
   readonly boxes: Readonly<Record<string, EditBox>>;
+  /** The boxes of every copy of a selected or hovered board element, by its template id (spec 20). */
+  readonly copies: Readonly<Record<string, readonly EditBox[]>>;
   readonly tree: SourceTree | undefined;
   /** The frame's live elements, for the Layers tab's runtime rows. Asked for when the frame is ready and on request. */
   readonly live: readonly LiveNode[];
+  /** The declaration of a component sheet, as its frame reports it; null in a page or a motion (spec 20). */
+  readonly declaration: ComponentDeclaration | null;
   /** Hovers an element from Layers: the frame outlines it. Null clears it. */
   readonly hoverLayer: (id: string | null) => void;
   /** The element a Layers row hovers, outlined in the frame. */
@@ -151,8 +168,10 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   const [reports, setReports] = useState<Readonly<Record<string, EditReport>>>({});
   const [families, setFamilies] = useState<readonly string[]>([]);
   const [boxes, setBoxes] = useState<Readonly<Record<string, EditBox>>>({});
+  const [copies, setCopies] = useState<Readonly<Record<string, readonly EditBox[]>>>({});
   const [tree, setTree] = useState<SourceTree | undefined>(undefined);
   const [live, setLive] = useState<readonly LiveNode[]>([]);
+  const [declaration, setDeclaration] = useState<ComponentDeclaration | null>(null);
   const [layerHover, setLayerHover] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [prepareError, setPrepareError] = useState<string | undefined>(undefined);
@@ -323,7 +342,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   const collect = useCallback(
     (edit: SourceEdit, showInFrame: boolean) => {
       burstRef.current = addToBurst(burstRef.current, edit);
-      if (edit.elementId !== undefined) lastEdit.current[edit.elementId] = edit;
+      if ("elementId" in edit && edit.elementId !== undefined) lastEdit.current[edit.elementId] = edit;
       if (baseRef.current === undefined) baseRef.current = fileRef.current;
       setPending(burstEdits(burstRef.current));
       const patches = framePatchesOf(edit, kitRef.current);
@@ -500,6 +519,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       }
       case "unframed:edit:tree": {
         setLive(Array.isArray(message.nodes) ? (message.nodes as LiveNode[]) : []);
+        setDeclaration(typeof message.declaration === "object" && message.declaration !== null ? (message.declaration as ComponentDeclaration) : null);
         return;
       }
       case "unframed:edit:report": {
@@ -526,6 +546,11 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       }
       case "unframed:edit:boxes": {
         if (typeof message.boxes === "object" && message.boxes !== null) setBoxes(message.boxes as Record<string, EditBox>);
+        return;
+      }
+      case "unframed:edit:copies": {
+        // The boxes of every copy of each targeted board element: a copy outlines in every cell (spec 20).
+        if (typeof message.copies === "object" && message.copies !== null) setCopies(message.copies as Record<string, EditBox[]>);
         return;
       }
       case "unframed:edit:hover": {
@@ -640,8 +665,10 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     reports,
     families,
     boxes,
+    copies,
     tree,
     live,
+    declaration,
     hoverLayer,
     layerHover,
     requestLive,

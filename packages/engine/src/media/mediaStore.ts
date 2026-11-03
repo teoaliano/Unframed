@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, renameSync, writeFileSync } from "node:fs";
+import { constants, existsSync, renameSync, writeFileSync } from "node:fs";
 import { copyFile, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isBareFileName, projectFileMarker, UnframedError, unframedError } from "@unframed/contracts";
 import {
+  compiledFileName,
   copyFileName,
   mediaFileName,
   projectSlug,
+  readPins,
   sidecarFileName,
   sidecarText,
   UPLOAD_BODY_LIMIT,
@@ -23,6 +25,7 @@ import { errorText, logError } from "../log.ts";
 import { SettingsStore } from "../settingsStore.ts";
 import { byteSize, isHtmlFileName, kindOfArtifactHtml, prepareArtifactHtml } from "../artifacts/artifactHtml.ts";
 import { ensureBridge, ensureLibrary } from "../artifacts/artifactStore.ts";
+import { pinComponents } from "../artifacts/componentRegistry.ts";
 
 /** What the upload route answers. */
 export interface SavedFile {
@@ -74,6 +77,22 @@ export class MediaStore extends Context.Service<
     readonly folder: (project: string) => Promise<string | undefined>;
   }
 >()("unframed/engine/MediaStore") {}
+
+/**
+ * Copies the sheets and compiled files a page pins into another project under their own names
+ * (spec 20), each only when the destination lacks it: a name holds the same file wherever it is.
+ */
+const copyPinnedComponents = async (sourceDir: string, targetDir: string, file: string): Promise<void> => {
+  if (!file.endsWith(".html")) return;
+  const html = await readFile(join(sourceDir, file), "utf8").catch(() => undefined);
+  if (html === undefined) return;
+  for (const pin of readPins(html)) {
+    for (const name of [pin.sheet, compiledFileName(pin.sheet), sidecarFileName(pin.sheet)]) {
+      if (existsSync(join(targetDir, name))) continue;
+      await copyFile(join(sourceDir, name), join(targetDir, name), constants.COPYFILE_EXCL).catch(() => undefined);
+    }
+  }
+};
 
 const isDirectory = (path: string) =>
   stat(path).then(
@@ -165,7 +184,7 @@ export const mediaStoreLayer = Layer.effect(
      * spec 09's tags and element ids. Bytes that are empty pass through, so the empty-body refusal
      * stays as it was. The artifact limit does not apply to uploads.
      */
-    const artifactBody = async (dir: string, name: string, body: AsyncIterable<Buffer>): Promise<AsyncIterable<Buffer>> => {
+    const artifactBody = async (project: string, dir: string, name: string, body: AsyncIterable<Buffer>): Promise<AsyncIterable<Buffer>> => {
       if (!isHtmlFileName(name)) return body;
       const chunks: Buffer[] = [];
       let read = 0;
@@ -176,7 +195,7 @@ export const mediaStoreLayer = Layer.effect(
       }
       const raw = Buffer.concat(chunks);
       if (raw.length === 0) return once(raw);
-      const html = prepareArtifactHtml(raw.toString("utf8"), "page");
+      const html = (await pinComponents(dir, await runPromise(rooms.read(project)), prepareArtifactHtml(raw.toString("utf8"), "page"))).html;
       await ensureBridge(dir);
       return once(Buffer.from(html, "utf8"));
     };
@@ -189,7 +208,7 @@ export const mediaStoreLayer = Layer.effect(
       if (dir === undefined) throw new SaveRefused(404, `There is no project named "${projectSlug(project)}".`);
       const mime = input.mime || "application/octet-stream";
       try {
-        const body = await artifactBody(dir, input.originalName, input.body);
+        const body = await artifactBody(project, dir, input.originalName, input.body);
         const { file, bytes } = await writeNew(dir, input.originalName, mime, body, (bytes) => ({
           source: input.source ?? "upload",
           fileName: input.originalName,
@@ -266,7 +285,7 @@ export const mediaStoreLayer = Layer.effect(
             // A pasted page or motion is a new file of its kind: tags and ids, as every artifact write gets (spec 18).
             const text = await readFile(source, "utf8");
             const kind = kindOfArtifactHtml(text);
-            const prepared = prepareArtifactHtml(text, kind);
+            const prepared = (await pinComponents(targetDir, await runPromise(rooms.read(project)), prepareArtifactHtml(text, kind))).html;
             await (kind === "motion" ? ensureLibrary(targetDir) : ensureBridge(targetDir));
             await writeFile(temp, prepared, "utf8");
             bytes = byteSize(prepared);
@@ -280,6 +299,7 @@ export const mediaStoreLayer = Layer.effect(
               join(targetDir, sidecarFileName(target)),
               sidecarText({ source: "copy", fileName, mime, bytes, at: new Date().toISOString(), of: file, ...(ofProject === undefined ? {} : { ofProject }) }),
             );
+            if (sourceDir !== targetDir) await copyPinnedComponents(sourceDir, targetDir, file);
             return target;
           } catch (error) {
             await rm(temp, { force: true });

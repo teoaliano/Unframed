@@ -5,7 +5,7 @@ import { pressLabel, renamingShape, startRename } from "../rename.ts";
 import { RenameField } from "./RenameField.tsx";
 import { shapeLabelClass } from "./looks.ts";
 
-const KIND_WORDS: Readonly<Record<string, string>> = { prompt: "Prompt", group: "Group", image: "Image", video: "Video", page: "Page", motion: "Motion" };
+const KIND_WORDS: Readonly<Record<string, string>> = { prompt: "Prompt", group: "Group", image: "Image", video: "Video", page: "Page", motion: "Motion", component: "Component" };
 
 /**
  * The label above a shape's top-left corner, in a 22 px band that is part of the shape and
@@ -23,6 +23,7 @@ export const ShapeLabel = ({
   width,
   name,
   after,
+  end,
 }: {
   readonly shapeId: TLShapeId;
   readonly text: string;
@@ -30,13 +31,15 @@ export const ShapeLabel = ({
   readonly width: number;
   readonly name?: string | undefined;
   readonly after?: ReactNode;
+  /** Sits at the label's right end, on the same line (spec 20's Updates badge). */
+  readonly end?: ReactNode;
 }) => {
   noteRender(shapeId);
   const editor = useEditor();
   const renaming = useValue("label renaming", () => renamingShape(editor).get() === shapeId, [editor, shapeId]);
   const open = renaming && name !== undefined;
   // An untitled, unnamed artifact has no label until its name field opens.
-  if (!open && text === "" && !after) return null;
+  if (!open && text === "" && !after && !end) return null;
 
   const onPointerDown = (event: PointerEvent) => {
     if (open || editor.wasEventAlreadyHandled(event)) return;
@@ -88,6 +91,7 @@ export const ShapeLabel = ({
         </span>
       )}
       {!open && after}
+      {!open && end !== undefined && <span className="pointer-events-auto ml-auto flex shrink-0 items-center pl-2">{end}</span>}
     </div>
   );
 };

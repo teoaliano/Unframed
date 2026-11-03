@@ -5,9 +5,9 @@
 import { projectSlug } from "../slug.ts";
 import { ADD_PARAMETER_TEMPLATE } from "./prompts.ts";
 
-export type ArtifactKind = "page" | "motion";
+export type ArtifactKind = "page" | "motion" | "component";
 
-export const isArtifactKind = (type: unknown): type is ArtifactKind => type === "page" || type === "motion";
+export const isArtifactKind = (type: unknown): type is ArtifactKind => type === "page" || type === "motion" || type === "component";
 
 /** An artifact file may be at most this many bytes once its tags are in (2 MiB). */
 export const ARTIFACT_SIZE_LIMIT = 2_097_152;
@@ -19,6 +19,7 @@ export const ARTIFACT_TITLE_MAX = 120;
 export const AGENT_ARTIFACT_SIZE: Readonly<Record<ArtifactKind, { readonly w: number; readonly h: number }>> = {
   page: { w: 480, h: 320 },
   motion: { w: 480, h: 300 },
+  component: { w: 480, h: 320 },
 };
 
 /**
@@ -133,9 +134,10 @@ export const artifactUrl = (input: {
   readonly kind: ArtifactKind;
 }): string => {
   const base = `http://${previewHostFor(input.appHostname)}:${input.previewPort}/p/${encodeURIComponent(input.project)}`;
-  return input.kind === "page"
-    ? `${base}/${encodeURIComponent(input.file)}`
-    : `${base}/hyperframes-viewer.html?c=${encodeURIComponent(input.file)}`;
+  // A component is framed as a page: its sheet is the document, board and all (spec 20).
+  return input.kind === "motion"
+    ? `${base}/hyperframes-viewer.html?c=${encodeURIComponent(input.file)}`
+    : `${base}/${encodeURIComponent(input.file)}`;
 };
 
 /** The instruction the editor's Add a parameter box sends: "parameters" when the text has the word "and" or a comma. */

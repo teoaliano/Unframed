@@ -119,6 +119,10 @@ export const describeTool = (input: { readonly toolName: string; readonly itemTy
         return { label: `Wrote motion ${artifactTitle(toolInput, result, "motion")}`, action: "canvas" };
       case "motion_read":
         return { label: `Read motion ${artifactTitle(toolInput, result, "motion")}`, action: "read" };
+      case "component_write":
+        return { label: `Wrote component ${artifactTitle(toolInput, result, "component")}`, action: "canvas" };
+      case "component_read":
+        return { label: `Read component ${artifactTitle(toolInput, result, "component")}`, action: "read" };
       default:
         if (own.startsWith("preview")) return { label: `Looked at ${artifactTitle(toolInput, result, "the page")} in a browser`, action: "browser" };
         return { label: own, action: "tool" };
@@ -319,6 +323,8 @@ const ACTIVITY_BY_TOOL: ReadonlyArray<readonly [RegExp, string]> = [
   [/^mcp__unframed__page_read$/, "Reading the page…"],
   [/^mcp__unframed__motion_write$/, "Writing the motion…"],
   [/^mcp__unframed__motion_read$/, "Reading the motion…"],
+  [/^mcp__unframed__component_write$/, "Writing the component…"],
+  [/^mcp__unframed__component_read$/, "Reading the component…"],
   [/^read$/i, "Reading a file…"],
   [/^write$/i, "Writing a file…"],
   [/^(edit|multiedit|notebookedit)$/i, "Editing a file…"],

@@ -3,25 +3,30 @@
  * left filtered to it, the artifact live in the centre, and on the right the Design, Layers and
  * Parameters tabs. Spec 18 adds the Edit and Interact modes and the edit session behind them.
  */
-import type { ArtifactShapeProps } from "@unframed/contracts";
-import { artifactTitle, dialsWith, editorPreviewViewport, isArtifactKind, mergeDialValues, normaliseDials, previewScale, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
-import { AppWindow, ArrowLeft, Clapperboard, ExternalLink, Hand, MousePointer2, SlidersHorizontal } from "lucide-react";
+import type { ArtifactShapeProps, ComponentUpdate } from "@unframed/contracts";
+import { artifactTitle, dialsWith, editorPreviewViewport, isArtifactKind, mergeDialValues, normaliseDials, previewScale, type ArtifactKind, type ChipElement, type DialsAnnouncement } from "@unframed/domain";
+import { AppWindow, ArrowLeft, Clapperboard, Component, ExternalLink, Hand, MousePointer2, SlidersHorizontal } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useEditor, useValue, type TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
+import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Tabs, TabsList, TabsTab } from "~/components/ui/tabs";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { cn } from "~/lib/utils";
 import { AgentRail } from "../../agent/rail/AgentRail.tsx";
-import { useChatClient } from "../../agent/store.ts";
+import { useChatClient, useProviders } from "../../agent/store.ts";
 import { Tip } from "../../chrome/ui.tsx";
 import { useCanvasProject, useEngine } from "../../context.ts";
 import { ArtifactFrame, outsideUrlOf, type EditMessage } from "../ArtifactFrame.tsx";
 import { kitOf } from "../kit.ts";
 import { kitUi } from "../../kits/state.ts";
 import { KitModePicker } from "../KitMode.tsx";
-import { previewPort } from "../state.ts";
+import { countUsing } from "../componentPins.ts";
+import { updateTagsOf } from "../updates.ts";
+import { makeComponent } from "./makeComponent.ts";
+import { artifactsOf, previewPort } from "../state.ts";
 import { RenderButton } from "../render.tsx";
+import { ComponentSection } from "./ComponentSection.tsx";
 import { EditOverlay } from "./EditOverlay.tsx";
 import { DesignTab } from "./DesignTab.tsx";
 import { LayersTab } from "./LayersTab.tsx";
@@ -68,21 +73,39 @@ const KEEP_FROM_CANVAS = {
 
 const isUndo = (event: KeyboardEvent): boolean => (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z";
 
+/** How often, and how many times, an empty `component.updates` answer is asked again while the canvas shows an update (spec 20). */
+const UPDATE_RETRIES = 8;
+const UPDATE_RETRY_MS = 250;
+
 export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps) => {
   const editor = useEditor();
   const project = useCanvasProject();
   const engine = useEngine();
   const kit = useValue("project kit", () => kitOf(editor), [editor]);
   const chatClient = useChatClient(engine, project);
+  const { statuses } = useProviders(chatClient);
   const facts = useValue(
     "edited artifact",
     () => {
       const shape = editor.getShape(shapeId);
       if (!shape || !isArtifactKind(shape.type)) return undefined;
       const props = shape.props as ArtifactShapeProps;
-      return { kind: shape.type as ArtifactKind, file: props.file, title: props.title, fileName: props.fileName, dials: props.dials, mode: props.mode, locked: props.lockedElements ?? [] };
+      return { kind: shape.type as ArtifactKind, file: props.file, title: props.title, fileName: props.fileName, dials: props.dials, mode: props.mode, locked: props.lockedElements ?? [], tag: (props as { tag?: string }).tag ?? "" };
     },
     [editor, shapeId],
+  );
+  // How many page and motion shapes on this canvas pin the component's tag (spec 20, the editor's header).
+  const uses = useValue(
+    "component uses",
+    () => {
+      if (facts?.kind !== "component") return 0;
+      const files = editor
+        .getCurrentPageShapes()
+        .filter((shape) => shape.type === "page" || shape.type === "motion")
+        .map((shape) => (shape.props as { file?: string }).file ?? "");
+      return countUsing(project, facts.tag, files);
+    },
+    [editor, project, facts?.kind, facts?.tag],
   );
   const port = useValue("preview port", () => previewPort.get(), []);
   const gone = facts === undefined;
@@ -99,6 +122,55 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   });
   const sessionRef = useRef(session);
   sessionRef.current = session;
+
+  // Component updates (spec 20): the tags this artifact pins at an older sheet, and the engine's rows for them. The popover opens from the header or the canvas badge.
+  const updateKey = useValue("component update tags", () => updateTagsOf(editor, project, facts?.file ?? "").join(","), [editor, project, facts?.file]);
+  const [updateRows, setUpdateRows] = useState<ReadonlyArray<ComponentUpdate>>([]);
+  const [updatesShown, setUpdatesShown] = useState(false);
+  const badgeRequested = useValue("component updates requested", () => artifactsOf(editor).updatesOpen.get() === shapeId, [editor, shapeId]);
+  useEffect(() => {
+    if (!badgeRequested) return;
+    setUpdatesShown(true);
+    artifactsOf(editor).updatesOpen.set(undefined);
+  }, [badgeRequested, editor]);
+  // The engine reads the canvas as it holds it, which can lag an edit made a moment ago (an undo, say): an empty answer while the canvas shows an update is asked again.
+  const retries = useRef(0);
+  useEffect(() => {
+    if (updateKey === "") {
+      setUpdateRows([]);
+      return;
+    }
+    let live = true;
+    let timer: number | undefined;
+    retries.current = 0;
+    const ask = (): void => {
+      void engine.call("component.updates", { project, shapeId }).then((rows) => {
+        if (!live) return;
+        setUpdateRows(rows);
+        if (rows.length > 0) return;
+        if (retries.current < UPDATE_RETRIES) {
+          retries.current += 1;
+          timer = window.setTimeout(ask, UPDATE_RETRY_MS);
+        } else {
+          setUpdatesShown(false);
+        }
+      }, () => undefined);
+    };
+    ask();
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
+  }, [engine, project, shapeId, updateKey]);
+  /** Accepts the update of each listed component: one undoable version, written at once (spec 20, Accepting). */
+  const acceptUpdates = useCallback(
+    (tags: readonly string[]) => {
+      const session = sessionRef.current;
+      for (const row of updateRows) if (tags.includes(row.tag)) session.patch({ type: "componentUpdate", tag: row.tag, to: row.to });
+      void session.commit();
+    },
+    [updateRows],
+  );
   // The saved dials with the burst's held values over them: the frame and the Parameters tab show what the person set.
   const dials = dialsWith(facts?.dials, session.held);
 
@@ -199,7 +271,24 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   if (!facts) return null;
   const displayTitle = artifactTitle(facts);
   const title = displayTitle === "" ? shapeId.replace(/^shape:/, "") : displayTitle;
-  const Icon = facts.kind === "page" ? AppWindow : Clapperboard;
+  const component = facts.kind === "component";
+  const Icon = facts.kind === "page" ? AppWindow : component ? Component : Clapperboard;
+  // A component has no Parameters tab: its values are the sheet's own, and a motion's dials do not apply.
+  const shownPanel: Panel = component && panel === "parameters" ? "design" : panel;
+  const askAboutComponent = () => {
+    // The component's chip names its tag, so the agent can find every instance of it.
+    const chip: ChipElement = { elementId: null, liveSelector: facts.tag, tag: facts.tag, label: displayTitle || facts.tag, startTag: `<${facts.tag}>`, text: "", hasChildren: false };
+    tellAgent(chatClient, shapeId, [chip]);
+  };
+  // The component shape a tag names: the Instance section's header and its Go to main component (spec 20). Undefined when no shape holds it.
+  const componentOf = (tag: string) => {
+    const shape = editor.getCurrentPageShapes().find((candidate) => candidate.type === "component" && (candidate.props as { tag?: string }).tag === tag);
+    return shape === undefined ? undefined : { shapeId: shape.id, title: artifactTitle(shape.props as { title?: unknown; fileName?: unknown }), file: (shape.props as { file?: string }).file };
+  };
+  // The pending burst is written first, as switching the editor does, so the page's last change is not lost.
+  const goToMain = (id: string) => {
+    void sessionRef.current.commit().then(() => onOpen(id));
+  };
   const mode: EditMode = session.mode;
   // The values the frame is running: the saved ones over the artifact's declared defaults, which is what a field's owner is matched against.
   const normalised = announcement === undefined ? undefined : normaliseDials(announcement.config);
@@ -234,6 +323,11 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             <span data-testid="artifact-editor-kind" className="shrink-0 text-sm text-muted-foreground @max-[520px]/editor-header:hidden">
               {facts.kind}
             </span>
+            {component && uses > 0 && (
+              <span data-testid="artifact-editor-uses" className="shrink-0 text-sm text-muted-foreground @max-[520px]/editor-header:hidden">
+                {uses === 1 ? "Used in 1 artifact" : `Used in ${uses} artifacts`}
+              </span>
+            )}
           </span>
           {facts.file !== "" && (
             <ToggleGroup
@@ -258,6 +352,42 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             </ToggleGroup>
           )}
           {facts.file !== "" && kit && <KitModePicker shapeId={shapeId} variant="header" />}
+          {facts.file !== "" && updateRows.length > 0 && (
+            <Popover open={updatesShown} onOpenChange={setUpdatesShown}>
+              <PopoverTrigger render={<Button variant="outline" size="sm" className="shrink-0" aria-label="Component updates available" />}>
+                <Component aria-hidden />
+                <span className="@max-[520px]/editor-header:sr-only">Component updates available</span>
+              </PopoverTrigger>
+              <PopoverPopup side="bottom" align="end" padding="compact" className="w-80" aria-label="Component updates" initialFocus={false}>
+                <div className="flex flex-col gap-3">
+                  {updateRows.map((row) => {
+                    const uses = session.tree?.elements.filter((element) => element.tag === row.tag).length ?? 0;
+                    return (
+                      <div key={row.tag} className="flex flex-col gap-1">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="min-w-0 truncate text-sm font-medium">{row.title}</span>
+                          <span className="shrink-0 text-xs text-muted-foreground">{uses === 1 ? "1 instance" : `${uses} instances`}</span>
+                          <Button variant="outline" size="xs" className="ml-auto shrink-0" onClick={() => acceptUpdates([row.tag])}>
+                            Update
+                          </Button>
+                        </div>
+                        {row.warnings.map((warning) => (
+                          <p key={warning} className="m-0 text-xs text-warning-foreground">{warning}</p>
+                        ))}
+                      </div>
+                    );
+                  })}
+                  {updateRows.length >= 2 && (
+                    <div className="border-t pt-2">
+                      <Button variant="outline" size="sm" onClick={() => acceptUpdates(updateRows.map((row) => row.tag))}>
+                        Update all
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </PopoverPopup>
+            </Popover>
+          )}
           {facts.file !== "" && <PreviewSizeControl size={size} onChange={setSize} scale={scale} />}
           {facts.kind === "motion" && facts.file !== "" && <RenderButton shapeId={shapeId} />}
           {facts.file !== "" && port !== undefined && (
@@ -311,7 +441,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
                   onSwapped={clearAnnouncement}
                 />
                 {mode === "edit" && (
-                  <EditOverlay hovered={session.hovered} layerHover={session.layerHover} selection={session.selection} reports={session.reports} boxes={session.boxes} names={names} />
+                  <EditOverlay hovered={session.hovered} layerHover={session.layerHover} selection={session.selection} reports={session.reports} boxes={session.boxes} copies={session.copies} names={names} />
                 )}
               </div>
             </div>
@@ -321,18 +451,20 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
       {/* The bottom 40 px hold tldraw's watermark, which sits over this corner, so the controls end above it. */}
       <section data-editor-column="parameters" className={cn(COLUMN, "pb-10")}>
         <ColumnHeader>
-          <Tabs value={panel} onValueChange={(next) => setPanel(String(next) as Panel)} className="h-12 min-w-0">
+          <Tabs value={shownPanel} onValueChange={(next) => setPanel(String(next) as Panel)} className="h-12 min-w-0">
             <TabsList variant="underline" aria-label="Editor panels">
               <TabsTab value="design">Design</TabsTab>
               <TabsTab value="layers">Layers</TabsTab>
-              <TabsTab value="parameters">
-                <SlidersHorizontal aria-hidden />
-                Parameters
-              </TabsTab>
+              {!component && (
+                <TabsTab value="parameters">
+                  <SlidersHorizontal aria-hidden />
+                  Parameters
+                </TabsTab>
+              )}
             </TabsList>
           </Tabs>
         </ColumnHeader>
-        {panel === "design" && (
+        {shownPanel === "design" && (
           <DesignTab
             session={session}
             kind={facts.kind}
@@ -344,9 +476,16 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             onOpenKit={() => kitUi(editor).update((state) => ({ ...state, open: true }))}
             onTell={(elements) => tellAgent(chatClient, shapeId, elements)}
             onAsk={(field, elements) => tellAgent(chatClient, shapeId, elements, makeEditableInstruction(field))}
+            component={component ? session.declaration : null}
+            componentTitle={component ? displayTitle || facts.tag : undefined}
+            onAskComponent={askAboutComponent}
+            componentOf={componentOf}
+            onUpdateComponent={(tag) => acceptUpdates([tag])}
+            onGoToMain={goToMain}
+            onMake={(element) => void makeComponent({ client: chatClient, statuses, shapeId: String(shapeId), kind: facts.kind, title: displayTitle, element })}
           />
         )}
-        {panel === "layers" && (
+        {shownPanel === "layers" && (
           <LayersTab
             session={session}
             kind={facts.kind}
@@ -356,7 +495,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             onTell={(elements) => tellAgent(chatClient, shapeId, elements)}
           />
         )}
-        {panel === "parameters" && (
+        {shownPanel === "parameters" && (
           <ParametersBody
             shapeId={shapeId}
             kind={facts.kind}
