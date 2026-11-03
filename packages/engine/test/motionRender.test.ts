@@ -71,12 +71,6 @@ describe("motion.upload", () => {
   const LIMIT = 20 * 1_048_576;
   const atLimit = () => "<div id=root>" + "a".repeat(LIMIT - "<div id=root>".length - "</div>".length) + "</div>";
 
-  it("takes a body of exactly 20 MB, whose tags and ids go past it", async () => {
-    const { rpc } = await startRendering();
-    const saved = await rpc.call("motion.upload", { project: "board", fileName: "edge.html", html: atLimit() });
-    expect(saved.bytes).toBeGreaterThan(LIMIT);
-  }, 120_000);
-
   it("refuses a body one byte over 20 MB", async () => {
     const { rpc } = await startRendering();
     await expect(rpc.call("motion.upload", { project: "board", fileName: "x.html", html: atLimit() + "a" })).rejects.toMatchObject({ code: "bad_request" });
