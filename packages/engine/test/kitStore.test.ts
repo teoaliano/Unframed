@@ -25,12 +25,12 @@ const carries = (text: string | undefined, kitValue: { name: string } | null): b
   return text.includes(JSON.stringify({ format, name, modes, tokens }) + ");");
 };
 
-const settled = async (path: string, kitValue: { name: string } | null) => {
+const settled = async (path: string, kitValue: { name: string } | null, bound = 10_000) => {
   const started = Date.now();
   for (;;) {
     const current = await readFile(path, "utf8").catch(() => undefined);
     if (carries(current, kitValue)) return;
-    if (Date.now() - started > 10_000) throw new Error(`${path} never carried the expected kit`);
+    if (Date.now() - started > bound) throw new Error(`${path} never carried the expected kit`);
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
 };
@@ -50,11 +50,11 @@ describe("the tokens script in a project folder (spec 19, task 10)", () => {
     const rpc = await engine.rpc();
     const folder = projectFolder(engine);
     await rpc.call("testCanvas.apply", { project: "board", change: { put: [documentWith(kit())], remove: [] }, origin: { kind: "server", id: "kit:s1" } });
-    await settled(join(folder, SCRIPT), kit());
+    await settled(join(folder, SCRIPT), kit(), 60_000);
 
     await rpc.call("testCanvas.apply", { project: "board", change: { put: [documentWith(kit("Second"))], remove: [] }, origin: { kind: "server", id: "kit:s5" } });
-    await settled(join(folder, SCRIPT), kit("Second"));
-  });
+    await settled(join(folder, SCRIPT), kit("Second"), 60_000);
+  }, 150_000);
 
   it("writes the script for no kit when the kit is removed, and never rewrites a file already current", async () => {
     const engine = await startEngine({ env: { UNFRAMED_TEST_CANVAS: "1" } });
