@@ -61,6 +61,27 @@ const round = (seconds: number): number => Math.round(seconds * 1000) / 1000;
 
 type GestureMode = "move" | "start" | "end";
 
+/**
+ * Each bar's lane within its row. A bar that overlaps an earlier bar in time takes the next lane down, so neither covers the other
+ * and each can be pressed (spec 21, Rows). A row with no overlap has one lane, as before.
+ */
+const laneOf = (bars: readonly BarView[]): { readonly lane: readonly number[]; readonly lanes: number } => {
+  const order = bars.map((_, index) => index).sort((a, b) => bars[a]!.start - bars[b]!.start);
+  const ends: number[] = [];
+  const lane = new Array<number>(bars.length).fill(0);
+  for (const index of order) {
+    const bar = bars[index]!;
+    let slot = ends.findIndex((end) => end <= bar.start + 1e-9);
+    if (slot < 0) {
+      slot = ends.length;
+      ends.push(0);
+    }
+    ends[slot] = bar.start + bar.duration;
+    lane[index] = slot;
+  }
+  return { lane, lanes: Math.max(1, ends.length) };
+};
+
 /** A bar drag in progress: which bar, what it changes, and where it began. */
 interface Gesture {
   readonly mode: GestureMode;
@@ -241,6 +262,7 @@ const RowLine = ({
 }) => {
   const runtime = row.kind === "runtime";
   const name = row.name;
+  const lanes = laneOf(row.bars);
   return (
     <div
       data-testid="timeline-row"
@@ -318,8 +340,10 @@ const RowLine = ({
           />
         )}
         {row.bars.map((bar, index) => {
-          const thin = row.kind === "element" && !row.expanded;
+          const thin = (row.kind === "element" && !row.expanded) || lanes.lanes > 1;
           const chosen = bar.tween >= 0 && bar.tween === selectedTween;
+          // Each lane's centre sits at its share of the row: one lane is the middle, as before.
+          const centre = ((lanes.lane[index] ?? 0) + 0.5) / lanes.lanes;
           return (
             <div
               key={`${bar.tween}:${bar.target}:${bar.group ?? ""}:${index}`}
@@ -343,13 +367,13 @@ const RowLine = ({
               onClick={(event) => event.stopPropagation()}
               onDoubleClick={() => onOpenValues(bar, null)}
               className={cn(
-                "absolute top-1/2 -translate-y-1/2 rounded-sm",
+                "absolute -translate-y-1/2 rounded-sm",
                 cursorOf(bar),
                 thin ? "h-1.5" : "h-3",
                 bar.copy ? "bg-primary/25" : bar.readOnly !== null ? "bg-muted-foreground/50" : "bg-primary/70",
                 chosen && "ring-1 ring-foreground",
               )}
-              style={{ left: bar.start * pxPerSecond, width: Math.max(bar.duration * pxPerSecond, 2) }}
+              style={{ left: bar.start * pxPerSecond, width: Math.max(bar.duration * pxPerSecond, 2), top: `${centre * 100}%` }}
             />
           );
         })}

@@ -37,7 +37,7 @@ const viewer = (page: Page) => region(page).frameLocator("iframe[data-artifact-f
 test.setTimeout(150_000);
 
 /** Puts the motion on the board (with extra shape props when given) and opens its editor on it. */
-const openRows = async (page: Page, engine: TestEngine, props: Record<string, unknown> = {}, html = ROWS) => {
+const openRows = async (page: Page, engine: TestEngine, props: Record<string, unknown> = {}, html = ROWS, loaded = "Logo") => {
   await openCanvas(page, engine);
   const { file } = await filledArtifact(engine, { id: SHAPE, kind: "motion", ref: "150", at: { x: -520, y: -40 }, size: { w: 480, h: 270 }, title: "Intro", html });
   if (Object.keys(props).length > 0) {
@@ -49,7 +49,9 @@ const openRows = async (page: Page, engine: TestEngine, props: Record<string, un
   const at = await centre(shapeOnScreen(page, SHAPE));
   await page.mouse.dblclick(at.x, at.y);
   await expect(region(page)).toBeVisible();
-  await expect(row(page, "Logo")).toBeVisible({ timeout: 40_000 });
+  await expect(row(page, loaded)).toBeVisible({ timeout: 40_000 });
+  // The bars have their places once the strip has its zoom, which waits for the frame to report the motion's length.
+  await expect.poll(async () => Number(await timeline(page).getByTestId("timeline-track").getAttribute("data-px-per-second"))).toBeGreaterThan(0);
 };
 
 test("clips come in track order, element rows sit under their clip or under Composition, and a run-time tween gets a greyed row", async ({ page, agent }) => {
@@ -108,6 +110,35 @@ test("a hidden element's row is greyed, and its bars still take a drag", async (
   // The visible row next to it is not greyed.
   await expect(row(page, "Dot 1")).not.toHaveAttribute("data-hidden", "true");
   await expect(row(page, "Dot 1")).not.toHaveClass(/opacity-50/);
+});
+
+/** A fade on Dot 2 that a later stagger's bar for Dot 2 starts over: the stagger is the tween drawn on top. */
+const OVERLAP = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}.dot{position:absolute;top:120px;width:40px;height:40px;background:#f00}</style></head><body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360">
+<div class="dot" id="d1" data-hf-id="hf-d1" data-uf-name="Dot 1" style="left:20px"></div><div class="dot" id="d2" data-hf-id="hf-d2" data-uf-name="Dot 2" style="left:140px"></div>
+</div>
+<script src="gsap.js"></script><script>
+const tl = gsap.timeline({ paused: true });
+tl.to("#d2", { opacity: 0, duration: 0.5 }, 0);
+tl.to(".dot", { y: -40, duration: 1, stagger: 0.2 }, 0);
+window.__timelines = { main: tl };
+</script></body></html>`;
+
+test("a bar that a later bar on its row overlaps in time keeps its own lane, so a press on it reaches it", async ({ page, agent }) => {
+  await openRows(page, agent, {}, OVERLAP, "Dot 2");
+  const fade = row(page, "Dot 2").locator('[data-testid="timeline-bar"][data-tween="0"]');
+  await expect(fade).toHaveCount(1);
+  const box = await fade.boundingBox();
+  if (!box) throw new Error("no fade bar");
+  // Six tenths in (0.3 s) the stagger's bar starts over the fade, so the fade is under it unless the two have their own lanes.
+  const top = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('[data-testid="timeline-bar"]')?.getAttribute("data-tween"), { x: box.x + box.width * 0.6, y: box.y + box.height / 2 });
+  expect(top).toBe("0");
+  // The stagger's own bar for Dot 2 is in its own lane, and a press on its middle reaches it too.
+  const stagger = row(page, "Dot 2").locator('[data-testid="timeline-bar"][data-tween="1"]');
+  const other = await stagger.boundingBox();
+  if (!other) throw new Error("no stagger bar");
+  const reached = await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.closest('[data-testid="timeline-bar"]')?.getAttribute("data-tween"), { x: other.x + other.width * 0.75, y: other.y + other.height / 2 });
+  expect(reached).toBe("1");
 });
 
 test("in a strip narrower than 900 px the label column collapses to 24 px of icons, and each name is in a tooltip", async ({ page, agent }) => {
