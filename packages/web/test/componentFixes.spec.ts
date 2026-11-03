@@ -1,3 +1,4 @@
+import { mkdirSync } from "node:fs";
 import { unlink } from "node:fs/promises";
 import type { Page } from "@playwright/test";
 import { openCanvas, shapeOnScreen, centre } from "./canvas.ts";
@@ -7,6 +8,13 @@ import { componentShape, SHEET_FILE, sheetHtml, writeSheet } from "./components.
 import { putRecords } from "./media.ts";
 
 /** Spec 20, audit fixes: a rename is the component's name everywhere; a broken or deleted sheet says so in one line; a long variant value stays in its column. */
+
+/** Proof screenshots of the fixes (audit run only; the folder is outside the repo). */
+const SHOTS = "/private/tmp/claude-502/-Users-matteoaliano-Unframed/9f8b89a0-8999-4809-bafb-93847319fc84/scratchpad/audit/fixshots/components";
+const shot = (page: Page, name: string) => {
+  mkdirSync(SHOTS, { recursive: true });
+  return page.screenshot({ path: `${SHOTS}/${name}.png` });
+};
 
 const PRICE_CARD = { tag: "uf-price-card", variants: { kind: ["primary", "secondary"] } };
 const LONG = "a".repeat(200);
@@ -41,6 +49,7 @@ test("renaming a component shows its new name in the editor header, the Design t
   await openComponentEditor(page, "shape:card", "renamed-price-card");
   await expect(page.getByTestId("artifact-editor-title")).toHaveText("renamed-price-card");
   await expect(design(page).getByTestId("component-section")).toBeVisible();
+  await shot(page, "02-rename-editor-header");
 });
 
 test("a sheet whose declaration is not valid JSON shows one line in the board instead of a blank frame", async ({ page, agent }) => {
@@ -52,6 +61,7 @@ test("a sheet whose declaration is not valid JSON shows one line in the board in
   await openComponentEditor(page, "shape:card", "Broken card");
 
   await expect(frame(page, "Broken card").getByText("This component's declaration is not valid JSON, so it cannot be shown.")).toBeVisible({ timeout: 20_000 });
+  await shot(page, "03-malformed-sheet-line");
 });
 
 test("a sheet deleted on disk while its component is on the canvas says so in one readable line", async ({ page, agent }) => {
@@ -64,6 +74,7 @@ test("a sheet deleted on disk while its component is on the canvas says so in on
 
   await expect(frame(page, "Gone card").getByText("This file is no longer in the project.")).toBeVisible({ timeout: 20_000 });
   await expect(frame(page, "Gone card").locator("body")).not.toContainText("not found");
+  await shot(page, "04-deleted-sheet-line");
 });
 
 test("a 200-character variant value truncates in the board and the Component section, and stays inside the Design column", async ({ page, agent }) => {
@@ -82,4 +93,5 @@ test("a 200-character variant value truncates in the board and the Component sec
     return [...element.querySelectorAll("*")].filter((node) => node.getBoundingClientRect().right > right + 1).map((node) => `${node.tagName}.${String(node.className).slice(0, 60)} ${Math.round(node.getBoundingClientRect().right - right)}`);
   });
   expect(past).toEqual([]);
+  await shot(page, "01-long-variant-value");
 });
