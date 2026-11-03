@@ -76,5 +76,10 @@ test("a 200-character variant value truncates in the board and the Component sec
   await expect(frame(page, "Long value").getByTitle(LONG)).toHaveCSS("text-overflow", "ellipsis", { timeout: 20_000 });
   const section = design(page).getByTestId("component-section");
   await expect(section.getByText(LONG)).toBeVisible();
-  expect(await section.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  // Nothing in the section reaches past its right edge.
+  const past = await section.evaluate((element) => {
+    const right = element.getBoundingClientRect().right;
+    return [...element.querySelectorAll("*")].filter((node) => node.getBoundingClientRect().right > right + 1).map((node) => `${node.tagName}.${String(node.className).slice(0, 60)} ${Math.round(node.getBoundingClientRect().right - right)}`);
+  });
+  expect(past).toEqual([]);
 });

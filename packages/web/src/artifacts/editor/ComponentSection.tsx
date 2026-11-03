@@ -34,13 +34,13 @@ export const ComponentSection = ({ declaration, onAsk }: ComponentSectionProps) 
       <Row label="Variants">
         {variants.length === 0 && <span className="text-sm text-muted-foreground">None</span>}
         {variants.map(([name, values]) => (
-          <span key={name} className="flex flex-wrap items-center gap-1">
+          <span key={name} className="flex min-w-0 max-w-full flex-wrap items-center gap-1">
             <span className="text-sm">{name}</span>
             {values.map((value, index) => (
-              <span key={value} className="flex min-w-0 max-w-full items-center gap-1">
+              <span key={value} className="flex min-w-0 max-w-full flex-wrap items-center gap-1">
                 <Tip label={value}>
-                  <Badge variant="outline" size="sm" className="max-w-full">
-                    <span className="truncate">{value}</span>
+                  <Badge variant="outline" size="sm" className="min-w-0 max-w-full">
+                    <span className="block min-w-0 truncate">{value}</span>
                   </Badge>
                 </Tip>
                 {index === 0 && <span className="shrink-0 text-xs text-muted-foreground">default</span>}
