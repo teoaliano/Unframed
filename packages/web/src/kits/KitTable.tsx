@@ -7,7 +7,7 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/c
 import { Tip } from "../chrome/ui.tsx";
 import { keepEscapeInField, ValueCell } from "./KitCells.tsx";
 
-export const STARTING_VALUE: Record<TokenType, TokenValue> = {
+const STARTING_VALUE: Record<TokenType, TokenValue> = {
   color: "#000000",
   dimension: "0px",
   fontFamily: "sans-serif",
@@ -18,11 +18,11 @@ export const STARTING_VALUE: Record<TokenType, TokenValue> = {
   easing: "power2.out",
 };
 
-export const valueIn = (token: Token, mode: string, kit: Kit): TokenValue | undefined => token.value ?? token.values?.[mode] ?? token.values?.[kit.modes[0]!];
+const valueIn = (token: Token, mode: string, kit: Kit): TokenValue | undefined => token.value ?? token.values?.[mode] ?? token.values?.[kit.modes[0]!];
 
 const groupOf = (path: string): string => path.split("/")[0]!;
 
-export const VIRTUAL_ROWS = 200;
+const VIRTUAL_ROWS = 200;
 const ROW_HEIGHT = 56;
 const VIEWPORT_HEIGHT = 480;
 const OVERSCAN = 8;
@@ -42,7 +42,7 @@ const tokenOp = (token: Token, body: { readonly value: TokenValue } | { readonly
   ...(description !== undefined ? { description } : {}),
 });
 
-export const usedByLabel = (ids: ReadonlyArray<string>, titleOf: (id: string) => string): string => {
+const usedByLabel = (ids: ReadonlyArray<string>, titleOf: (id: string) => string): string => {
   const titles = ids.slice(0, 10).map(titleOf);
   const rest = ids.length - titles.length;
   return rest > 0 ? [...titles, `and ${rest} more`].join("\n") : titles.join("\n");
@@ -53,7 +53,7 @@ export interface KitUsageCounts {
   readonly modes: Readonly<Record<string, readonly string[]>>;
 }
 
-export interface KitTableProps {
+interface KitTableProps {
   readonly kit: Kit;
   readonly usage: KitUsageCounts;
   readonly apply: (ops: ReadonlyArray<KitOp>) => string | undefined;
@@ -63,8 +63,7 @@ export interface KitTableProps {
 }
 
 export const KitTable = (props: KitTableProps) => {
-  const { kit, apply, titleOf, onAskDeleteToken, onAskDeleteMode } = props;
-  const usage = props.usage;
+  const { kit, usage, apply, titleOf, onAskDeleteToken, onAskDeleteMode } = props;
   const [group, setGroup] = useState("All");
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
@@ -153,14 +152,15 @@ export const KitTable = (props: KitTableProps) => {
                       <span className="inline-flex items-center gap-1">
                         {mode}
                         {index === 0 && mode !== "default" && <span className="text-muted-foreground">default</span>}
-                        <ModeMenu
-                          mode={mode}
-                          isDefault={index === 0}
-                          canDelete={kit.modes.length > 1}
-                          onRename={() => startEdit(() => setRenamingMode(mode))}
-                          onDefault={() => commit([{ op: "setDefaultMode", name: mode }])}
-                          onDuplicate={() => commit([{ op: "addMode", name: `${mode}-copy`, copyFrom: mode }])}
-                          onDelete={() => onAskDeleteMode(mode)}
+                        <OptionsMenu
+                          label={`Mode options ${mode}`}
+                          align="start"
+                          items={[
+                            ["Rename mode", () => startEdit(() => setRenamingMode(mode))],
+                            index > 0 && ["Make default", () => commit([{ op: "setDefaultMode", name: mode }])],
+                            ["Duplicate mode", () => commit([{ op: "addMode", name: `${mode}-copy`, copyFrom: mode }])],
+                            kit.modes.length > 1 && ["Delete mode", () => onAskDeleteMode(mode)],
+                          ]}
                         />
                       </span>
                     )}
@@ -244,15 +244,16 @@ export const KitTable = (props: KitTableProps) => {
                       )}
                     </td>
                     <td className="w-9 px-1 py-2">
-                      <RowMenu
-                        token={token}
-                        oneValue={oneValue}
-                        hasFormer={former.length > 0}
-                        onePerMode={(perMode) => onePerMode(token, perMode)}
-                        onRename={() => startEdit(() => setRenaming(token.path))}
-                        onDescribe={() => startEdit(() => setDescribing(token.path))}
-                        onForget={() => former.forEach((name) => commit([{ op: "forgetFormerName", path: token.path, cssName: name }]))}
-                        onDelete={() => onAskDeleteToken(token.path)}
+                      <OptionsMenu
+                        label={`Token options ${token.path}`}
+                        align="end"
+                        items={[
+                          oneValue ? ["A value per mode", () => onePerMode(token, true)] : ["One value for all modes", () => onePerMode(token, false)],
+                          ["Rename", () => startEdit(() => setRenaming(token.path))],
+                          ["Description", () => startEdit(() => setDescribing(token.path))],
+                          former.length > 0 && ["Forget old names", () => former.forEach((name) => commit([{ op: "forgetFormerName", path: token.path, cssName: name }]))],
+                          ["Delete", () => onAskDeleteToken(token.path)],
+                        ]}
                       />
                     </td>
                   </tr>
@@ -314,38 +315,17 @@ const NameField = ({ label, initial, onCommit, onCancel }: { readonly label: str
   );
 };
 
-const ModeMenu = ({ mode, isDefault, canDelete, onRename, onDefault, onDuplicate, onDelete }: { readonly mode: string; readonly isDefault: boolean; readonly canDelete: boolean; readonly onRename: () => void; readonly onDefault: () => void; readonly onDuplicate: () => void; readonly onDelete: () => void }) => {
+/** A row's or a column's options menu: its trigger, and the items it offers (a false item is left out). */
+const OptionsMenu = ({ label, align, items }: { readonly label: string; readonly align: "start" | "end"; readonly items: ReadonlyArray<false | readonly [string, () => void]> }) => {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   return (
     <Menu open={open} onOpenChange={setOpen}>
-      <Button ref={trigger} variant="ghost" size="icon-xs" aria-label={`Mode options ${mode}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((was) => !was)}>
+      <Button ref={trigger} variant="ghost" size="icon-xs" aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((was) => !was)}>
         …
       </Button>
-      <MenuPopup anchor={trigger} side="bottom" align="start">
-        <MenuItem onClick={onRename}>Rename mode</MenuItem>
-        {!isDefault && <MenuItem onClick={onDefault}>Make default</MenuItem>}
-        <MenuItem onClick={onDuplicate}>Duplicate mode</MenuItem>
-        {canDelete && <MenuItem onClick={onDelete}>Delete mode</MenuItem>}
-      </MenuPopup>
-    </Menu>
-  );
-};
-
-const RowMenu = ({ token, oneValue, hasFormer, onePerMode, onRename, onDescribe, onForget, onDelete }: { readonly token: Token; readonly oneValue: boolean; readonly hasFormer: boolean; readonly onePerMode: (perMode: boolean) => void; readonly onRename: () => void; readonly onDescribe: () => void; readonly onForget: () => void; readonly onDelete: () => void }) => {
-  const [open, setOpen] = useState(false);
-  const trigger = useRef<HTMLButtonElement>(null);
-  return (
-    <Menu open={open} onOpenChange={setOpen}>
-      <Button ref={trigger} variant="ghost" size="icon-xs" aria-label={`Token options ${token.path}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((was) => !was)}>
-        …
-      </Button>
-      <MenuPopup anchor={trigger} side="bottom" align="end">
-        {oneValue ? <MenuItem onClick={() => onePerMode(true)}>A value per mode</MenuItem> : <MenuItem onClick={() => onePerMode(false)}>One value for all modes</MenuItem>}
-        <MenuItem onClick={onRename}>Rename</MenuItem>
-        <MenuItem onClick={onDescribe}>Description</MenuItem>
-        {hasFormer && <MenuItem onClick={onForget}>Forget old names</MenuItem>}
-        <MenuItem onClick={onDelete}>Delete</MenuItem>
+      <MenuPopup anchor={trigger} side="bottom" align={align}>
+        {items.map((item) => item && <MenuItem key={item[0]} onClick={item[1]}>{item[0]}</MenuItem>)}
       </MenuPopup>
     </Menu>
   );

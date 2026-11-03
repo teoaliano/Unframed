@@ -6,7 +6,7 @@ export const kitOf = (editor: Editor): Kit | null => {
   return document?.meta?.unframed?.kit ?? null;
 };
 
-export type KitCommit = { readonly ok: true } | { readonly ok: false; readonly refusal: string };
+type KitCommit = { readonly ok: true } | { readonly ok: false; readonly refusal: string };
 
 export const writeKit = (editor: Editor, kit: Kit | null): void => {
   const document = editor.store.get(TLDOCUMENT_ID)!;

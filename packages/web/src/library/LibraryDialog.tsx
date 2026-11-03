@@ -26,8 +26,8 @@ import { labelHue, type Hue } from "../chrome/hue.ts";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
-export const DELETE_FAILED_MESSAGE = "Could not delete that preset. Is the local server running?";
-export const EMPTY_LIBRARY_MESSAGE = "Nothing here yet. Try another category or clear the search.";
+const DELETE_FAILED_MESSAGE = "Could not delete that preset. Is the local server running?";
+const EMPTY_LIBRARY_MESSAGE = "Nothing here yet. Try another category or clear the search.";
 const VIEW_PREFERENCE = "library.view";
 
 type View = "card" | "list";

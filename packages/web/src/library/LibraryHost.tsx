@@ -13,7 +13,7 @@ import { captureSelection, libraryUi } from "./state.ts";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
-export const LIBRARY_TOOLTIP = "Ready-made flows and styles";
+const LIBRARY_TOOLTIP = "Ready-made flows and styles";
 
 const LibraryButton = () => {
   const editor = useEditor();

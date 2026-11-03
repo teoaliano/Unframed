@@ -7,7 +7,7 @@ import { Textarea } from "~/components/ui/textarea";
 import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { commitKit } from "./kitRoom.ts";
 
-export const importOps = (kit: Kit | null, fragment: ImportFragment, fallbackName: string): KitOp[] => {
+const importOps = (kit: Kit | null, fragment: ImportFragment, fallbackName: string): KitOp[] => {
   const ops: KitOp[] = [];
   if (kit === null) ops.push({ op: "create", name: fragment.name ?? fallbackName, modes: fragment.modes.length > 0 ? fragment.modes : ["default"] });
   else for (const mode of fragment.modes) if (!kit.modes.includes(mode)) ops.push({ op: "addMode", name: mode });
@@ -25,7 +25,7 @@ export const importOps = (kit: Kit | null, fragment: ImportFragment, fallbackNam
   return ops;
 };
 
-export const importSummary = (kit: Kit | null, fragment: ImportFragment): string => {
+const importSummary = (kit: Kit | null, fragment: ImportFragment): string => {
   const existing = new Set(kit?.tokens.map((token) => token.path) ?? []);
   const changes = fragment.tokens.filter((token) => existing.has(token.path)).length;
   const adds = fragment.tokens.length - changes;
@@ -38,7 +38,7 @@ const baseName = (name: string) => name.replace(/\.json$/i, "").replace(/\.token
 
 const isJsonText = (text: string) => text.trimStart().startsWith("{");
 
-export const readImport = (sources: ReadonlyArray<ImportFile>) => {
+const readImport = (sources: ReadonlyArray<ImportFile>) => {
   if (sources.length === 0) return undefined;
   if (sources.every((source) => isJsonText(source.text))) return fromDtcg(sources);
   return fromCss(sources.map((source) => source.text).join("\n"));

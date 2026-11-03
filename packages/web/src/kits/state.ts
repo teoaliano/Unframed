@@ -1,7 +1,7 @@
 import type { KitPreset } from "@unframed/domain";
 import { atom, type Atom, type Editor } from "tldraw";
 
-export interface KitUi {
+interface KitUi {
   readonly open: boolean;
   readonly merging?: KitPreset | undefined;
 }

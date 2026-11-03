@@ -9,7 +9,7 @@ export interface Captured {
   readonly recipe: boolean;
 }
 
-export interface LibraryUi {
+interface LibraryUi {
   readonly open: boolean;
   readonly saving?: Captured | undefined;
   readonly type?: "kit" | undefined;

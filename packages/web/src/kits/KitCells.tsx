@@ -6,7 +6,7 @@ import { Input } from "~/components/ui/input";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 
-export const CUBIC_BEZIER = "cubic-bezier";
+const CUBIC_BEZIER = "cubic-bezier";
 const BEZIER_DEFAULT = "cubic-bezier(0.25, 0.1, 0.25, 1)";
 
 export const displayOf = (value: TokenValue | undefined): string => (value === undefined ? "" : typeof value === "object" ? JSON.stringify(value) : String(value));
@@ -39,13 +39,13 @@ const WEIGHT_ITEMS = FONT_WEIGHTS.map((value) => ({ value, label: value }));
 const UNITS = { dimension: ["px", "rem", "em", "%"], duration: ["ms", "s"] } as const;
 const NUMBER_UNIT = /^(-?\d*\.?\d+)(px|rem|em|%|ms|s)$/;
 
-export const parseHex = (text: string): { hex: string; alpha: number } | undefined => {
+const parseHex = (text: string): { hex: string; alpha: number } | undefined => {
   const match = /^#([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(text.trim());
   if (match === null) return undefined;
   return { hex: `#${match[1]!.toLowerCase()}`, alpha: match[2] === undefined ? 100 : Math.round((parseInt(match[2], 16) / 255) * 100) };
 };
 
-export const colourText = (hex: string, alpha: number): string => (alpha >= 100 ? hex : `${hex}${Math.round((alpha / 100) * 255).toString(16).padStart(2, "0")}`);
+const colourText = (hex: string, alpha: number): string => (alpha >= 100 ? hex : `${hex}${Math.round((alpha / 100) * 255).toString(16).padStart(2, "0")}`);
 
 const TextCell = ({ label, value, swatch, invalid, font = "mono", onCommit }: { readonly label: string; readonly value: string; readonly swatch?: boolean; readonly invalid: boolean; readonly font?: "default" | "mono"; readonly onCommit: (text: string) => void }) => {
   const [draft, setDraft] = useState(value);

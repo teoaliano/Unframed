@@ -11,7 +11,7 @@ import { showError, showNotice } from "../toasts.tsx";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
-export const kitSaveSubtitle = (kit: Pick<Kit, "tokens" | "modes">): string =>
+const kitSaveSubtitle = (kit: Pick<Kit, "tokens" | "modes">): string =>
   `${kit.tokens.length} ${kit.tokens.length === 1 ? "token" : "tokens"} and ${kit.modes.length} ${kit.modes.length === 1 ? "mode" : "modes"}, saved as you have them now.`;
 
 export const linkFor = (presetId: string, revision: number, kit: { readonly modes: ReadonlyArray<string>; readonly tokens: ReadonlyArray<Token> }) => ({
@@ -77,7 +77,7 @@ export const SaveKitDialog = ({ kit, onClose, onSaved }: { readonly kit: Kit; re
   );
 };
 
-export type UpdateOutcome = { readonly kind: "updated"; readonly presetId: string; readonly revision: number } | { readonly kind: "newer"; readonly message: string } | { readonly kind: "failed" };
+type UpdateOutcome = { readonly kind: "updated"; readonly presetId: string; readonly revision: number } | { readonly kind: "newer"; readonly message: string } | { readonly kind: "failed" };
 
 export const updateInLibrary = async (engine: ReturnType<typeof useEngine>, project: string): Promise<UpdateOutcome> => {
   try {

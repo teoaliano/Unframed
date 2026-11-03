@@ -17,8 +17,8 @@ import { kitUi } from "./state.ts";
 import { ImportKitDialog } from "./KitImport.tsx";
 import { showError, showReveal } from "../toasts.tsx";
 
-export const NO_KIT_MESSAGE = "This project has no kit yet. A kit holds the colours, sizes, fonts and motion values its pages and motions share.";
-export const DEFAULT_KIT_NAME = "Kit";
+const NO_KIT_MESSAGE = "This project has no kit yet. A kit holds the colours, sizes, fonts and motion values its pages and motions share.";
+const DEFAULT_KIT_NAME = "Kit";
 
 type Ask = { readonly kind: "token"; readonly path: string } | { readonly kind: "mode"; readonly mode: string } | { readonly kind: "kit" };
 
