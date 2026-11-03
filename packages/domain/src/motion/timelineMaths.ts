@@ -15,8 +15,8 @@ export const ZOOM_LIMITS = {
   minFraction: 0.1,
   /** The highest zoom: 48 px a frame. */
   max: 1440,
-  /** A wheel or pinch step is exp(-deltaY * rate). */
-  rate: 0.014,
+  /** A wheel or pinch step is exp(-deltaY * rate): 100 px of wheel, one notch, is a 1.2x step. */
+  rate: Math.log(1.2) / 100,
 } as const;
 
 /** A thing a dragged edge may snap to. Lower priority wins when several are in reach. */

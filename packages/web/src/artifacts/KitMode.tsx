@@ -34,7 +34,7 @@ export const KitModePicker = ({ shapeId, variant }: { readonly shapeId: TLShapeI
   const trigger = (
     <SelectTrigger aria-label="Kit mode" size="sm" data-testid="kit-mode" className="w-auto shrink-0">
       <SunMoon aria-hidden />
-      <span className={variant === "header" ? "@max-[520px]/editor-header:sr-only" : undefined}>
+      <span className={variant === "header" ? "@max-[760px]/editor-header:sr-only" : undefined}>
         <SelectValue>{current}</SelectValue>
       </span>
     </SelectTrigger>

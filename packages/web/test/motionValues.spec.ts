@@ -206,8 +206,12 @@ test("a token-owned duration shows a token chip, and Detach writes it as a numbe
   await openCanvas(page, agent);
   await putRecords(agent, [{ id: "document:document", typeName: "document", gridSize: 10, name: "", meta: { unframed: { kit: KIT } } }]);
   await openMotion(page, agent, VALUES);
-  // A short bar's diamonds cover its middle at the fitted zoom, so the strip is zoomed in twice first.
-  await zoomIn(page, 2);
+  // A short bar's diamonds cover its middle until the strip is zoomed in enough for their hit areas (24 px) to leave a gap between them,
+  // so the strip is zoomed in three times, then scrolled to its end, where the bar is in view with its label column at 160 px.
+  await zoomIn(page, 3);
+  await timeline(page).getByTestId("timeline-scroll").evaluate((element) => {
+    element.scrollLeft = element.scrollWidth;
+  });
   await bar(page, 3).dblclick();
 
   await expect(panel(page).getByRole("button", { name: /duration\/fast/ })).toContainText("0.25");
@@ -249,4 +253,25 @@ test("clearing the tween selection commits the open burst at once, as any change
   // A click on empty track clears the tween selection. The burst commits then, well before its 1.5 s pause would.
   await timeline(page).getByTestId("timeline-rows").click({ position: { x: 4, y: 4 } });
   await expect.poll(async () => (await fileOf(agent))?.file, { timeout: 1000 }).not.toBe(before);
+});
+
+test("at fit the last keyframe sits inside the strip and opens its panel, and at half the fit a keyframe 12 px from the next takes the press nearer it", async ({ page, agent }) => {
+  await openMotion(page, agent, VALUES);
+  await timeline(page).getByRole("button", { name: "Fit to length" }).click();
+  const scroller = timeline(page).getByTestId("timeline-scroll");
+  const area = await scroller.boundingBox();
+  const last = await diamond(page, 5, 1).boundingBox();
+  if (!area || !last) throw new Error("no boxes");
+  // The end of the motion is inside the visible strip, not half under its edge, and the strip does not scroll sideways.
+  expect(last.x).toBeGreaterThanOrEqual(area.x);
+  expect(last.x + last.width).toBeLessThanOrEqual(area.x + area.width);
+  expect(await scroller.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  await diamond(page, 5, 1).click();
+  await expect(panel(page)).toBeVisible();
+  await panel(page).getByRole("button", { name: "Close values" }).click();
+
+  // Half the fit: the keyframes at 6.5 s and 7 s are 12 px apart, and the 6.5 s one is reached at its left tip.
+  await timeline(page).getByRole("button", { name: "Zoom out" }).click();
+  await clickDiamond(page, 4, 1);
+  await expect(panel(page).getByText("Ends at the element's own style.")).toBeVisible();
 });

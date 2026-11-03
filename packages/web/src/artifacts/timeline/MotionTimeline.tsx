@@ -6,7 +6,7 @@
  * after that column, so the ruler and the playhead share one coordinate system with the bars.
  */
 import { ChevronDown, ChevronLeft, ChevronRight, Code, Film, Layers, Lock, Maximize2, Minus, PanelBottom, Pause, Play, Repeat, Square, Volume2, VolumeX, ZoomIn, ZoomOut } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent, type KeyboardEvent as ReactKeyboardEvent, type CSSProperties } from "react";
 import { clampDialValue, dialAt, fitZoom, rulerStep, snapMove, snapTime, zoomAt, zoomButton, type DialSchema, type Kit, type Owner, type SnapTarget, type Tween, type TweenRef } from "@unframed/domain";
 import type { SourceEdit } from "@unframed/contracts";
 import type { ChipElement } from "@unframed/domain";
@@ -34,8 +34,11 @@ const TRANSPORT_HEIGHT = 40;
 /** The label column beside the time area: 160 px (spec 21, Layout). */
 const LABEL_WIDTH = 160;
 
+/** Room the fit leaves after the motion's end, so the last keyframe's hit area stays inside the strip. */
+const END_INSET = 24;
+
 /** Under this strip width the label column is 24 px of icons, each name in a tooltip (spec 21, Layout). */
-const COMPACT_WIDTH = 900;
+const COMPACT_WIDTH = 480;
 const COMPACT_LABEL = 24;
 
 /** A bar's edge within this many pixels is its stretch handle (spec 21, Editing on the strip). */
@@ -272,6 +275,21 @@ const RowLine = ({
   const runtime = row.kind === "runtime";
   const name = row.name;
   const lanes = laneOf(row.bars);
+  // A keyframe's hit area is 24 px, but no wider than the room to its nearest neighbour in the row: two keyframes closer than that split
+  // the presses between them, so the press goes to the one nearer it (spec 21, Rows, lanes and diamonds). Each side adds half of what is left.
+  const keyframes = row.bars.flatMap((bar) => (bar.copy ? [] : bar.diamonds));
+  const hitSide = (at: number): number => {
+    let gap = Infinity;
+    let skipped = false;
+    for (const other of keyframes) {
+      if (other === at && !skipped) {
+        skipped = true;
+        continue;
+      }
+      gap = Math.min(gap, Math.abs(other - at) * pxPerSecond);
+    }
+    return Math.max(0, (Math.min(24, gap) - 10) / 2);
+  };
   return (
     <div
       data-testid="timeline-row"
@@ -321,11 +339,15 @@ const RowLine = ({
           <span className="size-4 flex-none" />
         )}
         {row.kind === "element" && row.element !== null ? (
-          <Button variant="ghost" size="xs" className="h-6" aria-label={`Select ${name}`} onClick={() => onSelectElement(row.element!)}>
-            <span className="truncate">{name}</span>
-          </Button>
+          <Tip label={name}>
+            <Button variant="ghost" size="xs" className="h-6 min-w-0" aria-label={`Select ${name}`} onClick={() => onSelectElement(row.element!)}>
+              <span className="truncate">{name}</span>
+            </Button>
+          </Tip>
         ) : (
-          <span className={cn("truncate", row.kind === "composition" && "font-medium", row.kind === "clip" && "font-medium")}>{name}</span>
+          <Tip label={name}>
+            <span className={cn("truncate", row.kind === "composition" && "font-medium", row.kind === "clip" && "font-medium")}>{name}</span>
+          </Tip>
         )}
         {row.locked && <Lock aria-hidden data-testid="timeline-lock" aria-label="Locked. Unlock it in Layers to edit it." className="ml-auto size-3 flex-none text-muted-foreground" />}
       </div>
@@ -409,8 +431,8 @@ const RowLine = ({
                     data-tween={bar.tween}
                     data-target={bar.target}
                     data-fraction={fraction}
-                    className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rotate-45 bg-foreground before:absolute before:-inset-[7px] before:-rotate-45 before:content-[''] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    style={{ left: at * pxPerSecond }}
+                    className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rotate-45 bg-foreground before:absolute before:-inset-y-[7px] before:-inset-x-[var(--hit-side)] before:-rotate-45 before:content-[''] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    style={{ left: at * pxPerSecond, "--hit-side": `${hitSide(at)}px` } as CSSProperties}
                     onPointerDown={(event) => {
                       event.stopPropagation();
                       onDiamondDown(bar, event);
@@ -597,7 +619,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
   labelRef.current = labelWidth;
   const [zoom, setZoom] = useState<number | null>(null);
   // Fit shows the whole length in the time area, which is the strip's width less the label column.
-  const fit = width > labelWidth && length > 0 ? fitZoom(width - labelWidth, length) : 0;
+  const fit = width > labelWidth && length > 0 ? fitZoom(width - labelWidth - END_INSET, length) : 0;
   const pxPerSecond = zoom === null ? fit : zoom * fit;
   // The clock reads the zoom from here, outside React, and the zoom handlers read the fit the same way.
   const pxRef = useRef(pxPerSecond);
@@ -678,6 +700,8 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
   const onRulerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || length <= 0) return;
     event.preventDefault();
+    // The press keeps the focus where the transport's keys act: the strip's time area, not a row or a button left focused before.
+    event.currentTarget.closest<HTMLElement>("[data-timeline-focus]")?.focus();
     event.currentTarget.setPointerCapture(event.pointerId);
     scrubbing.current = true;
     transport.pause();
@@ -1234,6 +1258,8 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
   const ticks: number[] = [];
   for (let at = 0; length > 0 && at <= length + 1e-9; at += step) ticks.push(Math.round(at * 1000) / 1000);
   const trackWidth = Math.max(length * pxPerSecond, width - labelWidth);
+  // The end label's room: about 40 px for its text to the right of the end line.
+  const endFlip = length * pxPerSecond + 40 > trackWidth;
   const trackTotal = trackWidth + labelWidth;
 
   return (
@@ -1258,7 +1284,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
           onPointerCancel={onResizeUp}
         />
       )}
-      <header data-testid="timeline-transport" className="flex h-10 flex-none items-center gap-1 border-b px-2">
+      <header data-testid="timeline-transport" className="flex min-h-10 flex-none flex-wrap items-center gap-x-1 gap-y-1 border-b px-2 py-1">
         <Tip label={playing ? "Pause (Space)" : "Play (Space)"}>
           <Button variant="ghost" size="icon-sm" aria-label={playing ? "Pause (Space)" : "Play (Space)"} onClick={() => transport.togglePlay()}>
             {playing ? <Pause aria-hidden /> : <Play aria-hidden />}
@@ -1385,7 +1411,12 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
                     </span>
                   ))}
                   {length > 0 && (
-                    <span data-testid="timeline-end" className="pointer-events-none absolute inset-y-0 border-l-2 border-foreground pl-1 text-[10px] leading-6 font-medium" style={{ left: length * pxPerSecond }}>
+                    // Its label sits left of the end line where the strip has no room for it to the right, so it never runs past the strip's edge.
+                    <span
+                      data-testid="timeline-end"
+                      className={cn("pointer-events-none absolute inset-y-0 border-foreground text-[10px] leading-6 font-medium", endFlip ? "border-r-2 pr-1 text-right" : "border-l-2 pl-1")}
+                      style={{ left: length * pxPerSecond, transform: endFlip ? "translateX(-100%)" : undefined }}
+                    >
                       {tickLabel(length)}
                     </span>
                   )}
@@ -1441,7 +1472,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
                 ))}
                 <div aria-hidden style={{ height: bottomSpace }} />
               </div>
-              {length > 0 && length * pxPerSecond < trackWidth && (
+              {length > 0 && length * pxPerSecond + END_INSET < trackWidth && (
                 <div data-testid="timeline-past-end" aria-hidden className="pointer-events-none absolute inset-y-0 bg-background/60" style={{ left: labelWidth + length * pxPerSecond, right: 0 }} />
               )}
               {guide !== null && (

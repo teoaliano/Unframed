@@ -130,3 +130,30 @@ test("Esc closes the values panel first, then clears the tween selection, then t
   await page.keyboard.press("Escape");
   await expect(region(page)).toHaveCount(0);
 });
+
+test("the arrows, Shift+arrows and J, K and L act after a press on the ruler or with a transport button focused", async ({ page, agent }) => {
+  await openMotion(page, agent);
+  const frameNumber = async (): Promise<number> => Number(((await readout(page).textContent()) ?? "").match(/(\d+)f\s*$/)?.[1] ?? Number.NaN);
+
+  // A click on the ruler scrubs, and the arrows then step from there.
+  const ruler = await timeline(page).getByTestId("timeline-ruler").boundingBox();
+  if (!ruler) throw new Error("no ruler");
+  await page.mouse.click(ruler.x + ruler.width * 0.5, ruler.y + ruler.height / 2);
+  const scrubbed = await frameNumber();
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(frameNumber).toBe(scrubbed + 1);
+  await page.keyboard.press("Shift+ArrowRight");
+  await expect.poll(frameNumber).toBe(scrubbed + 11);
+
+  // A transport button has the focus: the arrows step, and L shuttles forward until K stops it.
+  await timeline(page).getByRole("button", { name: "Next frame (→)" }).focus();
+  const focused = await frameNumber();
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(frameNumber).toBe(focused + 1);
+  await page.keyboard.press("l");
+  await expect.poll(frameNumber).toBeGreaterThan(focused + 1);
+  await page.keyboard.press("k");
+  const stopped = await frameNumber();
+  await page.waitForTimeout(400);
+  expect(await frameNumber()).toBe(stopped);
+});

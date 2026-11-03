@@ -57,11 +57,12 @@ test("pressing and dragging on the ruler scrubs the motion, and the release comm
   await openStrip(page, agent);
   const box = await boxOf(ruler(page));
 
-  // Press at half the ruler (two seconds of four), then drag to three quarters (three seconds).
+  // Press at two seconds, then drag to three, read off the ruler's scale.
+  const scale = Number(await track(page).getAttribute("data-px-per-second"));
   const y = box.y + box.height / 2;
-  await page.mouse.move(box.x + box.width * 0.5, y);
+  await page.mouse.move(box.x + 2 * scale, y);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width * 0.75, y, { steps: 8 });
+  await page.mouse.move(box.x + 3 * scale, y, { steps: 8 });
   await expect.poll(() => secondsOf(page)).toBeCloseTo(3, 0);
   await page.mouse.up();
 
@@ -174,4 +175,16 @@ test("the loop range's In and Out handles drag along the ruler, and an In dragge
   const reached = Number(await range(page).getAttribute("data-in"));
   expect(reached).toBeGreaterThan(2);
   expect(reached).toBeLessThan(2.5);
+});
+
+test("one Ctrl+wheel notch zooms 1.2x around the cursor", async ({ page, agent }) => {
+  await openStrip(page, agent);
+  const before = await zoomOf(page);
+  const area = await timeline(page).getByTestId("timeline-scroll").boundingBox();
+  if (!area) throw new Error("no time area");
+  await page.mouse.move(area.x + area.width / 2, area.y + area.height / 2);
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, -100);
+  await page.keyboard.up("Control");
+  await expect.poll(async () => (await zoomOf(page)) / before).toBeCloseTo(1.2, 2);
 });
