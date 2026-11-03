@@ -26,7 +26,7 @@ describe("files.copy brings a page's pinned components", () => {
   const folder = (project: string) => join(engine.dataDir, "output", project);
 
   beforeAll(async () => {
-    engine = await startEngine();
+    engine = await startEngine({ env: { UNFRAMED_TEST_CANVAS: "1" } });
     const rpc = await engine.rpc();
     await rpc.call("projects.create", { name: "one" });
     await rpc.call("projects.create", { name: "two" });

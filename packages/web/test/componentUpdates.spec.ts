@@ -57,10 +57,11 @@ test("a component edit shows Updates on the page, the editor offers Update and t
   }).toPass({ timeout: 20_000 });
   const instance = design(page).getByTestId("instance-section");
   await expect(instance.getByText("This instance uses an older version of Price card.", { exact: true })).toBeVisible({ timeout: 20_000 });
-  await instance.getByRole("button", { name: "Update", exact: true }).click();
+  await instance.getByRole("button", { name: "Update Price card", exact: true }).click();
 
-  // Accepting is one new version: the pin moves, the header button and the badge go.
+  // Accepting is one new version: the pin moves, the header button and the badge go, and the result is announced.
   await expect(headerButton(page)).toHaveCount(0, { timeout: 20_000 });
+  await expect(editor(page).getByRole("status")).toHaveText("Updated Price card.", { timeout: 20_000 });
   await expect.poll(() => pageFile(agent).then((file) => readFile(projectPath(agent, file), "utf8")), { timeout: 15_000 }).toContain(compiledFileName(NEW_SHEET));
   // Undo in the editor brings the old pin back, and with it the header button and the badge.
   await editor(page).getByTestId("artifact-editor-title").click();
