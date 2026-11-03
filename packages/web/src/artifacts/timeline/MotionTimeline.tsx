@@ -1472,7 +1472,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
                 ))}
                 <div aria-hidden style={{ height: bottomSpace }} />
               </div>
-              {length > 0 && length * pxPerSecond < trackWidth && (
+              {length > 0 && length * pxPerSecond + END_INSET < trackWidth && (
                 <div data-testid="timeline-past-end" aria-hidden className="pointer-events-none absolute inset-y-0 bg-background/60" style={{ left: labelWidth + length * pxPerSecond, right: 0 }} />
               )}
               {guide !== null && (

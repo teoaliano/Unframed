@@ -206,8 +206,12 @@ test("a token-owned duration shows a token chip, and Detach writes it as a numbe
   await openCanvas(page, agent);
   await putRecords(agent, [{ id: "document:document", typeName: "document", gridSize: 10, name: "", meta: { unframed: { kit: KIT } } }]);
   await openMotion(page, agent, VALUES);
-  // A short bar's diamonds cover its middle at the fitted zoom, so the strip is zoomed in twice first.
-  await zoomIn(page, 2);
+  // A short bar's diamonds cover its middle until the strip is zoomed in enough for their hit areas (24 px) to leave a gap between them,
+  // so the strip is zoomed in three times, then scrolled to its end, where the bar is in view with its label column at 160 px.
+  await zoomIn(page, 3);
+  await timeline(page).getByTestId("timeline-scroll").evaluate((element) => {
+    element.scrollLeft = element.scrollWidth;
+  });
   await bar(page, 3).dblclick();
 
   await expect(panel(page).getByRole("button", { name: /duration\/fast/ })).toContainText("0.25");
