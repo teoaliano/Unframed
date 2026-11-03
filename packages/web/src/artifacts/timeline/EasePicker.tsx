@@ -5,6 +5,7 @@
 import { Button } from "~/components/ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { useState } from "react";
+import { Tip } from "../../chrome/ui.tsx";
 import { type EaseChoice, type EaseValue } from "./ease.ts";
 
 /** A curve as a small polyline, y up. Overshoot past 0 or 1 draws past the box, as the curve does. */
@@ -41,28 +42,37 @@ export const EasePicker = ({ label, choices, onChoose, disabled }: EasePickerPro
             const title = GROUP_HEADING[choice.group];
             const showHeading = title !== null && title !== heading;
             heading = title;
+            const option = (
+              <Button
+                variant={choice.checked ? "secondary" : "ghost"}
+                size="sm"
+                role="menuitemradio"
+                aria-checked={choice.checked}
+                aria-label={choice.label}
+                disabled={choice.disabled}
+                className="w-full justify-start"
+                onClick={() => {
+                  setOpen(false);
+                  onChoose(choice.value);
+                }}
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  {choice.samples !== null && <Curve samples={choice.samples} />}
+                  <span className="truncate">{choice.label}</span>
+                </span>
+              </Button>
+            );
             return (
               <div key={choice.key} className="contents">
                 {showHeading && <p className="px-2 pt-2 text-xs text-muted-foreground">{title}</p>}
-                <Button
-                  variant={choice.checked ? "secondary" : "ghost"}
-                  size="sm"
-                  role="menuitemradio"
-                  aria-checked={choice.checked}
-                  aria-label={choice.label}
-                  disabled={choice.disabled}
-                  title={choice.title}
-                  className="justify-start"
-                  onClick={() => {
-                    setOpen(false);
-                    onChoose(choice.value);
-                  }}
-                >
-                  <span className="flex min-w-0 items-center gap-2">
-                    {choice.samples !== null && <Curve samples={choice.samples} />}
-                    <span className="truncate">{choice.label}</span>
-                  </span>
-                </Button>
+                {choice.disabled ? (
+                  <Tip label={choice.title}>
+                    {/* A disabled button takes no pointer, so the tooltip hangs on the wrapper that does. */}
+                    <span className="flex">{option}</span>
+                  </Tip>
+                ) : (
+                  option
+                )}
               </div>
             );
           })}

@@ -47,7 +47,8 @@ const diamond = (page: Page, tween: number, fraction: number) => timeline(page).
 const clickDiamond = async (page: Page, tween: number, fraction: number) => {
   await diamond(page, tween, fraction).click({ position: { x: fraction === 1 ? 8 : 2, y: 5 } });
 };
-const panel = (page: Page) => timeline(page).getByRole("region", { name: /^Values for/ });
+// The values panel is a popover, so it sits in the page, not in the strip.
+const panel = (page: Page) => page.getByRole("region", { name: /^Values for/ });
 const region = (page: Page) => page.getByRole("region", { name: "Editing Intro" });
 
 test.setTimeout(180_000);
@@ -97,6 +98,18 @@ test("a to tween's start diamond and a from tween's end diamond open the values 
   await clickDiamond(page, 4, 1);
   await expect(panel(page).getByText("Ends at the element's own style.")).toBeVisible();
   await expect(panel(page).getByText("Starts from the element's current look.")).toHaveCount(0);
+});
+
+test("the values panel is a popover beside the keyframe it opened from, not a box at the strip's start", async ({ page, agent }) => {
+  await openMotion(page, agent, VALUES);
+  await clickDiamond(page, 1, 0);
+  await expect(panel(page)).toBeVisible();
+  const keyframe = await diamond(page, 1, 0).boundingBox();
+  const box = await panel(page).boundingBox();
+  if (!keyframe || !box) throw new Error("no keyframe or panel");
+  // Above or below the keyframe, a few pixels off, whichever side the popover finds room on.
+  const gap = Math.min(Math.abs(box.y - (keyframe.y + keyframe.height)), Math.abs(box.y + box.height - keyframe.y));
+  expect(gap).toBeLessThan(16);
 });
 
 test("a press on a middle keyframe with no movement opens the values panel at that keyframe", async ({ page, agent }) => {

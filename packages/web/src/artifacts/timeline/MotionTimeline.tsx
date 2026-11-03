@@ -977,8 +977,15 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
     const first = timing.at === null ? undefined : Object.keys(tween.keyframes.find((candidate) => Math.abs(candidate.at - timing.at!) < 1e-6)?.values ?? {})[0];
     const groupName = timingBar.group ?? (first !== undefined ? groupOfKey(first) : tween.groups.length === 1 ? tween.groups[0]! : null);
     const group = groupName === null ? null : groupName.charAt(0).toUpperCase() + groupName.slice(1);
-    const anchor = LABEL_WIDTH + timingBar.start * pxPerSecond - (scroller.current?.scrollLeft ?? 0);
-    const left = Math.max(8, Math.min(anchor, Math.max(8, width - 288)));
+    // The popover sits beside the bar, or the keyframe, it opened from: found again by its tween and target each time it is placed.
+    const opened = timing;
+    const anchor = () => {
+      const selector =
+        opened.at === null
+          ? `[data-testid="timeline-bar"][data-tween="${tween.ref.index}"][data-target="${CSS.escape(target)}"]`
+          : `[data-testid="timeline-diamond"][data-tween="${tween.ref.index}"][data-target="${CSS.escape(target)}"][data-fraction="${opened.at}"]`;
+      return scroller.current?.querySelector(selector) ?? null;
+    };
     // A read-only tween shows its computed layout as text: nothing in it takes a value, and the sentence above says why once.
     const shown = tween.readOnly === null ? fields : fields.map((field): PanelField => readOnlyField(field));
     return {
@@ -992,7 +999,7 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
       sentence,
       readOnly: tween.readOnly,
       ask: tween.readOnly === null ? null : () => askAgent("animation", tween, target),
-      left,
+      anchor,
     };
   };
   const panel = panelOf();

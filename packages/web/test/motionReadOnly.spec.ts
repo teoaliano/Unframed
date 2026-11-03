@@ -27,7 +27,7 @@ tl.to("#dot", { rotation: 90, duration: 0.5 }, Math.min(5, 6));
 const SHAPE = "shape:intro";
 const timeline = (page: Page) => page.getByRole("region", { name: "Timeline for Intro" });
 const bar = (page: Page, tween: number) => timeline(page).locator(`[data-testid="timeline-bar"][data-tween="${tween}"]`).first();
-const panel = (page: Page) => timeline(page).getByRole("region", { name: /^Values for/ });
+const panel = (page: Page) => page.getByRole("region", { name: /^Values for/ });
 const region = (page: Page) => page.getByRole("region", { name: "Editing Intro" });
 const rail = (page: Page) => editor(page).locator('[data-editor-column="rail"]');
 

@@ -91,7 +91,7 @@ test("pressing a bar's end diamond with no movement opens the values panel and w
   await openMotion(page, agent);
   const before = (await editSummaries(agent)).length;
   await row(page, "Dot").locator('[data-testid="timeline-diamond"][data-fraction="1"]').click();
-  await expect(timeline(page).getByRole("region", { name: /^Values for Dot/ })).toBeVisible();
+  await expect(page.getByRole("region", { name: /^Values for Dot/ })).toBeVisible();
   await page.waitForTimeout(1_500);
   expect((await editSummaries(agent)).length).toBe(before);
 });
@@ -109,7 +109,7 @@ test("pressing a bar's end diamond and dragging it stretches the bar with its st
   await page.mouse.up();
   await expect.poll(async () => Number(await bar(page).getAttribute("data-duration"))).toBeCloseTo(3, 1);
   expect(Number(await bar(page).getAttribute("data-start"))).toBeCloseTo(0, 3);
-  await expect(timeline(page).getByRole("region", { name: /^Values for/ })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: /^Values for/ })).toHaveCount(0);
 });
 
 test("a stretched edge snaps to another bar's edge within 8 px, and a guide shows the snap", async ({ page, agent }) => {

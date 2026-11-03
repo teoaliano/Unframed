@@ -63,8 +63,8 @@ export interface ValuesPanelProps {
   /** Ask the agent to make a read-only tween editable (spec 18's point and tell), or null when there is nothing to ask. */
   readonly ask: (() => void) | null;
   readonly onClose: () => void;
-  /** Where the panel sits, from the strip's left edge in pixels. */
-  readonly left: number;
+  /** The bar or keyframe the panel opened from: the popover sits beside it (spec 21, The values panel). */
+  readonly anchor: () => Element | null;
   readonly className?: string;
 }
 
@@ -190,13 +190,11 @@ const FieldRow = ({ field }: { readonly field: PanelField }) => (
   </div>
 );
 
-export const ValuesPanel = ({ title, group, method, fields, ease, onEase, repeat, sentence, readOnly, ask, onClose, left, className }: ValuesPanelProps) => (
-  <section
-    aria-label={`Values for ${title}`}
-    data-testid="values-panel"
-    className={`absolute top-12 z-30 w-[280px] rounded-lg border bg-popover p-3 text-popover-foreground shadow-md ${className ?? ""}`}
-    style={{ left }}
-  >
+export const ValuesPanel = ({ title, group, method, fields, ease, onEase, repeat, sentence, readOnly, ask, onClose, anchor, className }: ValuesPanelProps) => (
+  // A non-modal popover: Esc and a press outside close it. It takes no focus when it opens, so the strip's keys keep working.
+  <Popover open onOpenChange={(open) => !open && onClose()}>
+    <PopoverPopup anchor={anchor} side="bottom" align="start" padding="none" initialFocus={false} finalFocus={false} className={`w-[280px] ${className ?? ""}`}>
+  <section aria-label={`Values for ${title}`} data-testid="values-panel" className="p-3">
     <header className="mb-2 flex items-center gap-2">
       <span className="min-w-0 flex-1 truncate text-sm font-medium">
         {group === null ? title : `${title} · ${group}`}
@@ -231,4 +229,6 @@ export const ValuesPanel = ({ title, group, method, fields, ease, onEase, repeat
       {sentence !== null && <p className="m-0 text-xs text-muted-foreground">{sentence}</p>}
     </div>
   </section>
+    </PopoverPopup>
+  </Popover>
 );
