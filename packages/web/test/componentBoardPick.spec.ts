@@ -36,6 +36,8 @@ test("a click on a board cell picks the element inside it, names its variant, an
 
   // The fourth cell is secondary and md: the variant line names it in the declaration's order.
   await expect(design(page).getByTestId("variant-line")).toHaveText("Editing Price card · secondary · md");
+  // On screen, not only in the DOM: a squeezed line has the text and no height.
+  await expect(design(page).getByTestId("variant-line")).toBeVisible();
   // The picked copy is outlined, and each of the other three cells shows a fainter outline.
   await expect(outline(page, "copy")).toHaveCount(3);
 });

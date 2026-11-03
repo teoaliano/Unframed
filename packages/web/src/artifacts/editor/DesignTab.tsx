@@ -992,7 +992,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   return (
     <div className="flex min-h-0 flex-col gap-3 overflow-auto p-2.5" data-testid="design-tab">
       {variant !== null && componentTitle !== undefined && (
-        <p className="m-0 min-w-0 truncate text-xs text-muted-foreground" data-testid="variant-line">{`Editing ${[componentTitle, ...variant].join(" · ")}`}</p>
+        <p className="m-0 min-w-0 shrink-0 truncate text-xs text-muted-foreground" data-testid="variant-line">{`Editing ${[componentTitle, ...variant].join(" · ")}`}</p>
       )}
       <div className="flex min-w-0 items-baseline gap-2">
         <span className="truncate text-sm font-semibold">{name}</span>
