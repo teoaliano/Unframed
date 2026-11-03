@@ -6,6 +6,16 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
 
+/** The draft's text with chips as placeholders: two drafts that read the same have their positions in the same places. */
+const docText = (doc: { readonly content: { readonly size: number }; textBetween: (from: number, to: number, block?: string, leaf?: string) => string }) =>
+  doc.textBetween(0, doc.content.size, "\n", "\ufffc");
+
+/** A caret position and the draft it was in: it still holds while the draft has not changed. */
+export interface CaretMark {
+  readonly pos: number;
+  readonly doc: string;
+}
+
 /**
  * An inline chip in the draft: a mention of a shape or a file, or a skill. It is one atom,
  * so the arrow keys step over it in one press, and it serialises into the text the model
@@ -157,7 +167,9 @@ export interface PromptEditorHandle {
   replaceTrigger(trigger: Trigger, insert: DraftChip | string): void;
   insertText(text: string): void;
   /** Puts a chip at the caret, a space on either side as needed, without taking the focus (t3code's attachment reference). */
-  insertChip(chip: DraftChip): void;
+  insertChip(chip: DraftChip, at?: CaretMark): void;
+  /** Where the caret is now, to put a chip there later (an upload that finishes after a paste). */
+  caretMark(): CaretMark | undefined;
   /** Removes every chip of `ref`, each with the space after it; not an edit the person typed. */
   removeChips(ref: string): void;
   /** Puts text at the end of the draft and focuses it; false when the box takes no typing now. */
@@ -300,9 +312,26 @@ export const PromptEditor = ({ placeholder, label, onChange, onFocus, onBlur, on
       insertText: (text) => {
         editor?.chain().focus().insertContent(lineBreaks(text)).run();
       },
-      insertChip: (chip) => {
+      caretMark: () => {
+        if (!editor || editor.isDestroyed) return undefined;
+        // The page's selection, not the editor's: the editor learns of a caret moved by a key a moment later.
+        const view = editor.view;
+        const selection = view.dom.ownerDocument.getSelection();
+        let pos = editor.state.selection.from;
+        if (selection?.focusNode && view.dom.contains(selection.focusNode)) {
+          try {
+            pos = view.posAtDOM(selection.focusNode, selection.focusOffset);
+          } catch {
+            // A node the editor does not map: its own selection stands.
+          }
+        }
+        return { pos, doc: docText(editor.state.doc) };
+      },
+      insertChip: (chip, at) => {
         if (!editor || editor.isDestroyed) return;
-        const { from, to, $from } = editor.state.selection;
+        // The caret of the paste, while the draft is as it was then: a draft put back in the box meanwhile moved the caret, not the place.
+        const marked = at !== undefined && at.pos <= editor.state.doc.content.size && docText(editor.state.doc) === at.doc ? editor.state.doc.resolve(at.pos) : undefined;
+        const { from, to, $from } = marked ? { from: marked.pos, to: marked.pos, $from: marked } : editor.state.selection;
         const before = $from.parent.textBetween(0, $from.parentOffset, undefined, "￼");
         const after = editor.state.doc.textBetween(to, Math.min(to + 1, editor.state.doc.content.size - 1), undefined, "￼");
         const content: JSONContent[] = [

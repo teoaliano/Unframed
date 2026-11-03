@@ -675,7 +675,23 @@ test("a file pasted or dropped into a prompt with text puts its chip at the care
   const inline = box.locator("[data-agent-chip]");
   await box.click();
   await box.pressSequentially("compare  with the brief");
-  for (let n = 0; n < " with the brief".length; n++) await page.keyboard.press("ArrowLeft");
+  // A person pastes once the caret has moved. A loaded headless page can lose the editor's
+  // hold on a caret moved by keys, so the caret is placed again until it stays.
+  const beforeCaret = () =>
+    box.evaluate((element) => {
+      const selection = element.ownerDocument.getSelection();
+      if (!selection?.focusNode) return null;
+      const range = element.ownerDocument.createRange();
+      range.setStart(element, 0);
+      range.setEnd(selection.focusNode, selection.focusOffset);
+      return range.toString();
+    });
+  await expect(async () => {
+    await page.keyboard.press("End");
+    for (let n = 0; n < " with the brief".length; n++) await page.keyboard.press("ArrowLeft");
+    await page.waitForTimeout(250);
+    expect(await beforeCaret()).toBe("compare ");
+  }).toPass({ timeout: 15_000 });
 
   // A paste into the text: the chip lands where the caret was, once the image is uploaded.
   await fileEvents(page, "aside[aria-label='Agent'] .ProseMirror", ["paste"], [{ name: "pasted.png", mime: "image/png", bytes: pngBytes(12, 12, 3) }]);

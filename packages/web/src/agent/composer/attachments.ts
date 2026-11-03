@@ -2,6 +2,7 @@ import type { ChatAttachment } from "@unframed/contracts";
 import { ATTACHMENT_LIMITS, attachmentLimitError, classifyAttachment, mergeRestored } from "@unframed/domain";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EngineConnection } from "../../rpc/engine.ts";
+import type { CaretMark } from "./PromptEditor.tsx";
 
 const MIB = 1024 * 1024;
 const HEIC_SOURCE_LIMIT = 50 * MIB;
@@ -22,6 +23,8 @@ export interface Staged {
   readonly owner?: string;
   /** Whether it goes into the text as a chip once uploaded (a paste or a drop into a prompt with text). */
   readonly chip?: boolean;
+  /** Where that chip goes: the caret when it was pasted or dropped. */
+  readonly at?: CaretMark;
 }
 
 export interface AttachmentEvents {
@@ -34,6 +37,7 @@ export interface AttachmentEvents {
 export interface AddOptions {
   readonly owner?: string;
   readonly chip?: boolean;
+  readonly at?: CaretMark;
 }
 
 export const tooLargeAfterCompression = (name: string) => `'${name}' is too large to attach, even after compression.`;
@@ -223,7 +227,7 @@ export const useAttachments = (engine: EngineConnection, onError: (message: stri
           progress: 0,
           ...(kind === "image" ? { preview: URL.createObjectURL(file) } : {}),
           ...(options.owner !== undefined ? { owner: options.owner } : {}),
-          ...(options.chip === true ? { chip: true } : {}),
+          ...(options.chip === true ? { chip: true, ...(options.at !== undefined ? { at: options.at } : {}) } : {}),
         };
       });
       const refusal = attachmentLimitError([...current.current, ...incoming]);

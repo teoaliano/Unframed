@@ -81,7 +81,7 @@ import { ComposerMenu, type MenuItem } from "./ComposerMenu.tsx";
 import { mentionItems } from "./mentions.tsx";
 import { slashItems, skillMenuItems } from "./commands.tsx";
 import { CompactControlsMenu, ContextMeter, declaredTraits, latestUsage, ModelPicker, TraitsPicker } from "./pickers.tsx";
-import { chipOfToken, PromptEditor, type PromptEditorHandle, type Trigger } from "./PromptEditor.tsx";
+import { chipOfToken, PromptEditor, type CaretMark, type PromptEditorHandle, type Trigger } from "./PromptEditor.tsx";
 import { UpNext } from "./UpNext.tsx";
 import { useRestingComposer, useRestingTransition } from "./resting.ts";
 import { useMaybeEditor, useValue } from "tldraw";
@@ -162,6 +162,9 @@ interface OpenMenu {
  */
 /** A pointed-at element, by its artifact and selector: the same element pointed at twice is one chip. */
 const elementKey = (chip: ElementChip): string => `${chip.shapeId}\u0000${chip.selector}`;
+
+/** A caret mark for an attachment's chip, only when there is one. */
+const markAt = (at: CaretMark | undefined) => (at === undefined ? {} : { at });
 
 /** A message's element chips, only when it has some. */
 const withElements = (elements: ReadonlyArray<ElementChip>) => (elements.length > 0 ? { elements } : {});
@@ -323,7 +326,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     onReady: (item, attachment) => {
       client.rememberAttachments([attachment]);
       const chip = chipOfToken(attachmentChip(attachment));
-      if (item.chip && chip && !answeringRef.current) box.current?.insertChip(chip);
+      if (item.chip && chip && !answeringRef.current) box.current?.insertChip(chip, item.at);
     },
     // t3code's insertAttachmentReferencesForDraft: the draft switched away from gets the file, and its chip at the end.
     onMoved: (owner, attachment, chip) => {
@@ -351,7 +354,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       : {
           // A file for an edit is the edit's: one still uploading when the edit ends goes with it.
           ...(draftKeyRef.current !== undefined && editingRef.current === null ? { owner: draftKeyRef.current } : {}),
-          chip: chip && withoutChips(box.current?.text() ?? "").trim() !== "",
+          ...(chip && withoutChips(box.current?.text() ?? "").trim() !== "" ? { chip: true, ...markAt(box.current?.caretMark()) } : { chip: false }),
         };
   /** A question that takes only its options takes no file either (t3code's). */
   const refusesFiles = useRef(false);
