@@ -1,14 +1,15 @@
+import { readFile } from "node:fs/promises";
 import type { Page } from "@playwright/test";
 import { BRIDGE_TAG, COMPONENT_HELPER_TAG, compiledFileName } from "@unframed/domain";
 import { stampElementIds } from "@unframed/domain/html";
-import { centre, openCanvas, shapeOnScreen } from "./canvas.ts";
+import { centre, openCanvas, roomShapes, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
-import { filledArtifact, writeProjectFile } from "./artifacts.ts";
+import { filledArtifact, projectPath, writeProjectFile } from "./artifacts.ts";
 import { SHEET_FILE } from "./components.ts";
 
 /**
  * Spec 20, task 29: the Instance section in the Design tab. Variant selects and property fields come from the
- * pinned declaration; a change restyles the instance live. The commit path waits on task 27's allow-list.
+ * pinned declaration; a change restyles the instance live and commits as one attribute edit through the burst (task 27's allow-list).
  */
 
 // A price card with a variant, a text property and a boolean property, declared as the sheet format asks.
@@ -76,6 +77,19 @@ test("the Instance section sets an instance's variant, text and boolean live, an
   // A boolean property: the switch sets the attribute, and the style matches it.
   await design(page).getByRole("switch", { name: "disabled", exact: true }).click();
   await expect(firstButton(page)).toHaveCSS("opacity", "0.5");
+
+  // The burst commits: the page's new version carries the attributes on the first instance.
+  await expect
+    .poll(
+      async () => {
+        const file = (await roomShapes(agent, "default", "page")).find((record) => record.id === "shape:landing")?.props?.file;
+        if (file === undefined) return "";
+        const html = await readFile(projectPath(agent, file), "utf8");
+        return html.match(/<uf-price-card\b[^>]*>/)?.[0] ?? "";
+      },
+      { timeout: 15_000 },
+    )
+    .toMatch(/^(?=.*kind="secondary")(?=.*label="Buy now")(?=.*\bdisabled\b)/);
 
   // The second instance's variant comes from a script: it is read-only, with the owner's sentence.
   await clickUntilSelected(page, () => secondButton(page));
