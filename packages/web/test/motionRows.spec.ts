@@ -141,13 +141,15 @@ test("a bar that a later bar on its row overlaps in time keeps its own lane, so 
   expect(reached).toBe("1");
 });
 
-test("in a strip narrower than 900 px the label column collapses to 24 px of icons, and each name is in a tooltip", async ({ page, agent }) => {
-  // A window of 1100 px gives the strip under 900 px: the centre and right columns share it.
+test("in a strip narrower than 480 px the label column collapses to 24 px of icons, and each name is in a tooltip", async ({ page, agent }) => {
+  // A window of 480 px gives the strip under 480 px: the editor's columns fold, and the strip spans the window.
+  // The shape is off the window at 480 px, so the strip opens wide and the window is narrowed with the editor open.
   await page.setViewportSize({ width: 1100, height: 800 });
   await openRows(page, agent);
+  await page.setViewportSize({ width: 480, height: 800 });
   const strip = await timeline(page).boundingBox();
   if (!strip) throw new Error("no strip");
-  expect(strip.width).toBeLessThan(900);
+  expect(strip.width).toBeLessThan(480);
   const label = await row(page, "Dot 1").locator("xpath=./div[1]").boundingBox();
   if (!label) throw new Error("no label column");
   expect(label.width).toBeLessThanOrEqual(24);
@@ -160,16 +162,19 @@ test("in a strip narrower than 900 px the label column collapses to 24 px of ico
   await expect(page.getByText("Dot 1", { exact: true })).toBeVisible();
 });
 
-test("in a strip of 900 px or more the label column is 160 px and shows each name", async ({ page, agent }) => {
-  await page.setViewportSize({ width: 2200, height: 900 });
+test("in a strip of 480 px or more the label column is 160 px and shows each name, each name in a tooltip", async ({ page, agent }) => {
+  await page.setViewportSize({ width: 1100, height: 800 });
   await openRows(page, agent);
   const strip = await timeline(page).boundingBox();
   if (!strip) throw new Error("no strip");
-  expect(strip.width).toBeGreaterThanOrEqual(900);
+  expect(strip.width).toBeGreaterThanOrEqual(480);
   const label = await row(page, "Dot 1").locator("xpath=./div[1]").boundingBox();
   if (!label) throw new Error("no label column");
   expect(label.width).toBeCloseTo(160, 0);
   await expect(row(page, "Dot 1").getByText("Dot 1", { exact: true })).toBeVisible();
+  // Hovering a name shows the whole name in a tooltip, so a name the column cuts short is still readable.
+  await row(page, "Dot 1").getByRole("button", { name: "Select Dot 1" }).hover();
+  await expect(page.locator("[data-slot='tooltip-popup']")).toHaveText("Dot 1");
 });
 
 test("a row selects its element in the frame, and an element picked in the frame selects its row", async ({ page, agent }) => {

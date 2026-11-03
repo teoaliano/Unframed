@@ -35,7 +35,7 @@ const TRANSPORT_HEIGHT = 40;
 const LABEL_WIDTH = 160;
 
 /** Under this strip width the label column is 24 px of icons, each name in a tooltip (spec 21, Layout). */
-const COMPACT_WIDTH = 900;
+const COMPACT_WIDTH = 480;
 const COMPACT_LABEL = 24;
 
 /** A bar's edge within this many pixels is its stretch handle (spec 21, Editing on the strip). */
@@ -312,11 +312,15 @@ const RowLine = ({
           <span className="size-4 flex-none" />
         )}
         {row.kind === "element" && row.element !== null ? (
-          <Button variant="ghost" size="xs" aria-label={`Select ${name}`} onClick={() => onSelectElement(row.element!)}>
-            <span className="truncate">{name}</span>
-          </Button>
+          <Tip label={name}>
+            <Button variant="ghost" size="xs" className="min-w-0" aria-label={`Select ${name}`} onClick={() => onSelectElement(row.element!)}>
+              <span className="truncate">{name}</span>
+            </Button>
+          </Tip>
         ) : (
-          <span className={cn("truncate", row.kind === "composition" && "font-medium", row.kind === "clip" && "font-medium")}>{name}</span>
+          <Tip label={name}>
+            <span className={cn("truncate", row.kind === "composition" && "font-medium", row.kind === "clip" && "font-medium")}>{name}</span>
+          </Tip>
         )}
         {row.locked && <Lock aria-hidden data-testid="timeline-lock" aria-label="Locked. Unlock it in Layers to edit it." className="ml-auto size-3 flex-none text-muted-foreground" />}
       </div>
