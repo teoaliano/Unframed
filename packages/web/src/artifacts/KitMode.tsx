@@ -4,7 +4,7 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/c
 import { Tip } from "../chrome/ui.tsx";
 import { kitOf } from "./kit.ts";
 
-export const setShapeMode = (editor: Editor, shapeId: TLShapeId, mode: string): void => {
+const setShapeMode = (editor: Editor, shapeId: TLShapeId, mode: string): void => {
   const shape = editor.getShape(shapeId);
   const kit = kitOf(editor);
   if (!shape || !kit || !kit.modes.includes(mode)) return;

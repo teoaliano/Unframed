@@ -57,7 +57,7 @@ const numberOf = (value: string | undefined): string => {
   return Number.isFinite(parsed) ? String(Math.round(parsed * 100) / 100) : "";
 };
 
-export const numberValue = (property: string, typed: number, inline: string | null | undefined): string => {
+const numberValue = (property: string, typed: number, inline: string | null | undefined): string => {
   const written = (inline ?? "").trim();
   if (property === "line-height" && /^\d*\.?\d+$/.test(written)) return String(typed);
   const unit = /(px|em|rem|%)$/.exec(written)?.[1] ?? "px";
@@ -268,6 +268,8 @@ const KeywordControl = ({
   </Select>
 );
 
+const Swatch = ({ colour }: { readonly colour: string | undefined }) => <span aria-hidden className="size-3.5 shrink-0 rounded-sm border" style={{ background: colour }} />;
+
 const ColourControl = ({ label, hex, mixed, disabled, onCommit }: { readonly label: string; readonly hex: string; readonly mixed: boolean; readonly disabled: boolean; readonly onCommit: (next: string) => void }) => {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(hex);
@@ -282,7 +284,7 @@ const ColourControl = ({ label, hex, mixed, disabled, onCommit }: { readonly lab
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger render={<Button variant="outline" size="sm" className="min-w-0 justify-start" aria-label={label} disabled={disabled} />}>
         <span className="flex min-w-0 items-center gap-2">
-          <span aria-hidden className="size-3.5 shrink-0 rounded-sm border" style={{ background: mixed ? undefined : hex }} />
+          <Swatch colour={mixed ? undefined : hex} />
           <span className="truncate font-mono text-xs">{mixed ? MIXED : hex}</span>
         </span>
       </PopoverTrigger>
@@ -336,6 +338,7 @@ const Section = ({ name, note, action, children }: { readonly name: string; read
   </fieldset>
 );
 
+const TEXT_PROPERTIES = ["font-family", "font-size", "font-weight", "line-height", "letter-spacing"];
 const TOKEN_FIELDS = new Set(["font-family", "font-size", "font-weight", "line-height", "letter-spacing", "color", "background-color", "border-width", "border-color", "border-radius", "box-shadow", "padding", "margin", "gap", "text-style"]);
 
 const tokenValueOf = (token: Token, kit: Kit, mode: string, suffix?: string): { readonly text: string; readonly colour?: string } => {
@@ -372,15 +375,17 @@ const tokenNamed = (kit: Kit | null, name: string): { readonly token: Token; rea
   return undefined;
 };
 
+const TokenLine = ({ path, text, colour }: { readonly path: string; readonly text: string; readonly colour?: string | undefined }) => (
+  <>
+    {colour !== undefined && <Swatch colour={colour} />}
+    <span className="truncate font-mono text-xs">{path}</span>
+    <span className="ml-auto truncate text-xs text-muted-foreground">{text}</span>
+  </>
+);
+
 const ChipFace = ({ token, suffix, kit, mode }: { readonly token: Token; readonly suffix?: string | undefined; readonly kit: Kit; readonly mode: string }) => {
   const { text, colour } = tokenValueOf(token, kit, mode, suffix);
-  return (
-    <>
-      {colour !== undefined && <span aria-hidden className="size-3.5 shrink-0 rounded-sm border" style={{ background: colour }} />}
-      <span className="truncate font-mono text-xs">{shortPathOf(token.path)}</span>
-      <span className="ml-auto truncate text-xs text-muted-foreground">{text}</span>
-    </>
-  );
+  return <TokenLine path={shortPathOf(token.path)} text={text} colour={colour} />;
 };
 
 const TokenPicker = ({
@@ -427,9 +432,11 @@ const TokenPicker = ({
           <Diamond aria-hidden />
         </PopoverTrigger>
       ) : (
-        <PopoverTrigger render={<Button variant="outline" size="sm" className="min-w-0 justify-start" title={chip.token.path} data-token-trigger={field} />}>
-          <ChipFace token={chip.token} suffix={chip.suffix} kit={kit} mode={mode} />
-        </PopoverTrigger>
+        <Tip label={chip.token.path}>
+          <PopoverTrigger render={<Button variant="outline" size="sm" className="min-w-0 justify-start" data-token-trigger={field} />}>
+            <ChipFace token={chip.token} suffix={chip.suffix} kit={kit} mode={mode} />
+          </PopoverTrigger>
+        </Tip>
       )}
       <PopoverPopup
         side="left"
@@ -476,9 +483,7 @@ const TokenPicker = ({
                       for (const edit of edits(token)) session.patch(edit);
                     }}
                   >
-                    {colour !== undefined && <span aria-hidden className="size-3.5 shrink-0 rounded-sm border" style={{ background: colour }} />}
-                    <span className="truncate font-mono text-xs">{token.path}</span>
-                    <span className="ml-auto truncate text-xs text-muted-foreground">{text}</span>
+                    <TokenLine path={token.path} text={text} colour={colour} />
                   </Button>
                 );
               })}
@@ -598,7 +603,7 @@ const OffTokens = ({
   );
 };
 
-export interface DesignTabProps {
+interface DesignTabProps {
   readonly session: EditSession;
   readonly kind: ArtifactKind;
   readonly project: string;
@@ -679,16 +684,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
 
   const ownerOf = (subject: Subject, property: string): FieldOwner => {
     if (pending.some((edit) => (edit.type === "style" || edit.type === "token") && edit.elementId === subject.id && edit.property === property)) return { owner: "source" };
-    const owner = fieldOwnerOf(subject, property);
-    if (owner.owner !== "source") return owner;
-    const sheet = sheetOf(subject, property);
-    if (sheet?.kind === "script") return { owner: "script" };
-    if (sheet?.kind === "token") return { owner: "token", name: sheet.name };
-    return owner;
-  };
-
-  const fieldOwnerOf = (subject: Subject, property: string): FieldOwner => {
-    return fieldOwner({
+    const owner = fieldOwner({
       field: { kind: "style", property },
       source: subject.element === undefined ? null : { inline: subject.element.style, text: subject.element.text, src: subject.element.src ?? null },
       live: { inline: subject.report.inline, text: subject.report.text, src: subject.report.src, animated: subject.report.animated },
@@ -698,6 +694,11 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
       expand: expandShorthand,
       kitNames: kit === null ? [] : kitCssNames(kit),
     });
+    if (owner.owner !== "source") return owner;
+    const sheet = sheetOf(subject, property);
+    if (sheet?.kind === "script") return { owner: "script" };
+    if (sheet?.kind === "token") return { owner: "token", name: sheet.name };
+    return owner;
   };
 
   const chipDataOf = (subject: Subject): ChipElement => {
@@ -705,6 +706,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     return chipDataFor(subject.id, source, subject.report, source !== undefined && elements.some((candidate) => candidate.parent === subject.id));
   };
 
+  const colourView = (property: string) => viewOf(property, (subject) => hexOf(subject.report.computed[property]));
   const viewOf = (property: string, pick: (subject: Subject) => string = (subject) => subject.report.computed[property] ?? ""): View => {
     const owners = subjects.map((subject) => ownerOf(subject, property));
     const values = subjects.map(pick);
@@ -821,7 +823,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   };
 
   const colourField = (label: string, property: string) => {
-    const view = viewOf(property, (subject) => hexOf(subject.report.computed[property]));
+    const view = colourView(property);
     const chip = chipFor(property, view, [property], label);
     return (
       <Row label={label} mark={dialPathOf(view)} token={chip === null ? (withSheet(view, tokenSlot(property, view.editable, [property], label)) ?? <span aria-hidden className="size-6 shrink-0" />) : undefined}>
@@ -842,7 +844,6 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   const fontChip = chipFor("font-family", fontView, undefined, "Font");
   const weightView = viewOf("font-weight");
   const weightChip = chipFor("font-weight", weightView, undefined, "Weight");
-  const TEXT_PROPERTIES = ["font-family", "font-size", "font-weight", "line-height", "letter-spacing"];
   const textStyleOwned = (() => {
     if (openChip?.field === "text-style") return openChip.named.token;
     const named = TEXT_PROPERTIES.map((property) => {
@@ -859,14 +860,14 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   const borderWidthView = viewOf("border-width");
   const borderWidthChip = chipFor("border-width", borderWidthView, undefined, "Border");
   const borderStyleView = viewOf("border-style");
-  const borderColourView = viewOf("border-color", (subject) => hexOf(subject.report.computed["border-color"]));
+  const borderColourView = colourView("border-color");
   const radiusView = viewOf("border-radius");
   const opacityView = viewOf("opacity");
   const opacityField = numberField("Opacity", "opacity", {
     format: (value) => (value === "" ? "" : String(Math.round(Number(value) * 100))),
     write: (typed) => String(Math.min(100, Math.max(0, typed)) / 100),
   });
-  const shadowOwner = viewOf("box-shadow", (subject) => subject.report.computed["box-shadow"] ?? "");
+  const shadowOwner = viewOf("box-shadow");
   const several = subjects.some((subject) => shadowOf(subject.report.computed["box-shadow"]).several);
   const shadowEditable = shadowOwner.editable && !several;
   const shadowPart = (part: ShadowPart) => viewOf("box-shadow", (subject) => shadowOf(subject.report.computed["box-shadow"])[part]);
@@ -889,14 +890,14 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     );
   };
 
-  const sideViews = (prefix: "padding" | "margin") =>
-    Object.fromEntries(SIDES.map((side) => [side, viewOf(`${prefix}-${side}`)])) as Record<(typeof SIDES)[number], View>;
+  const sideViews = (prefix: "padding" | "margin") => Object.fromEntries(SIDES.map((side) => [side, viewOf(`${prefix}-${side}`)])) as Record<(typeof SIDES)[number], View>;
+  const paddingViews = sideViews("padding");
+  const marginViews = sideViews("margin");
   const displayOf = (subject: Subject) => subject.report.computed.display ?? "";
   const flex = subjects.every((subject) => FLEX_DISPLAYS.includes(displayOf(subject)));
   const gapped = subjects.every((subject) => GAP_DISPLAYS.includes(displayOf(subject)));
   const sidesWrite = (property: string, typed: number) => write(property, (subject) => numberValue(property, typed, subject.report.inline[property]));
-  const sidesToken = (prefix: "padding" | "margin") => {
-    const views = sideViews(prefix);
+  const sidesToken = (prefix: "padding" | "margin", views: Record<(typeof SIDES)[number], View>) => {
     const editable = SIDES.every((side) => views[side].editable);
     return withSheet(views.top, tokenSlot(prefix, editable, SIDES.map((side) => `${prefix}-${side}`), prefix === "padding" ? "Padding" : "Margin"));
   };
@@ -1055,7 +1056,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
         {colourField("Colour", "color")}
       </Section>
 
-      <Section name="Fill" note={noteOf(viewOf("background-color", (subject) => hexOf(subject.report.computed["background-color"])))}>
+      <Section name="Fill" note={noteOf(colourView("background-color"))}>
         {colourField("Background", "background-color")}
       </Section>
 
@@ -1107,9 +1108,9 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
         </Row>
       </Section>
 
-      <Section name="Spacing" note={noteOf(...SIDES.map((side) => sideViews("padding")[side]), ...SIDES.map((side) => sideViews("margin")[side]))}>
-        <SidesRow label="Padding" prefix="padding" views={sideViews("padding")} onWrite={sidesWrite} token={sidesToken("padding")} />
-        <SidesRow label="Margin" prefix="margin" views={sideViews("margin")} onWrite={sidesWrite} token={sidesToken("margin")} />
+      <Section name="Spacing" note={noteOf(...Object.values(paddingViews), ...Object.values(marginViews))}>
+        <SidesRow label="Padding" prefix="padding" views={paddingViews} onWrite={sidesWrite} token={sidesToken("padding", paddingViews)} />
+        <SidesRow label="Margin" prefix="margin" views={marginViews} onWrite={sidesWrite} token={sidesToken("margin", marginViews)} />
         {gapped && numberField("Gap", "gap")}
       </Section>
 
@@ -1125,8 +1126,8 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
         </>
       ) : (
         <>
-          <Section name="Spacing" note={noteOf(...SIDES.map((side) => sideViews("margin")[side]))}>
-            <SidesRow label="Margin" prefix="margin" views={sideViews("margin")} onWrite={sidesWrite} token={sidesToken("margin")} />
+          <Section name="Spacing" note={noteOf(...Object.values(marginViews))}>
+            <SidesRow label="Margin" prefix="margin" views={marginViews} onWrite={sidesWrite} token={sidesToken("margin", marginViews)} />
           </Section>
           <Section name="Shape" note={noteOf(opacityView)}>
             {opacityField}

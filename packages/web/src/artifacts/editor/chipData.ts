@@ -4,7 +4,7 @@ import type { EditReport } from "./editSession.ts";
 
 const SELECTOR_MAX = 200;
 
-export const liveSelectorOf = (selector: string): string => selector.replace(/\s*[\r\n]+\s*/g, " ").slice(0, SELECTOR_MAX);
+const liveSelectorOf = (selector: string): string => selector.replace(/\s*[\r\n]+\s*/g, " ").slice(0, SELECTOR_MAX);
 
 export const chipDataFor = (
   id: string,

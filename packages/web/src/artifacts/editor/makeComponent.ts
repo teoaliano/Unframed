@@ -4,7 +4,7 @@ import { createChat, sendMessage } from "../../agent/send.ts";
 import type { ChatClient } from "../../agent/store.ts";
 import { showError } from "../../toasts.tsx";
 
-export interface MakeComponentInput {
+interface MakeComponentInput {
   readonly client: ChatClient;
   readonly statuses: Parameters<typeof readyProviders>[0];
   readonly shapeId: string;

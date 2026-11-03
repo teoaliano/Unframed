@@ -22,7 +22,7 @@ interface Opened {
 
 const saved = new WeakMap<Editor, Opened>();
 
-export const openArtifactEditor = (editor: Editor, shapeId: TLShapeId): void => {
+const openArtifactEditor = (editor: Editor, shapeId: TLShapeId): void => {
   const shape = editor.getShape(shapeId);
   if (!shape || !isArtifactKind(shape.type)) return;
   const state = artifactsOf(editor);
@@ -32,7 +32,7 @@ export const openArtifactEditor = (editor: Editor, shapeId: TLShapeId): void => 
   state.editing.set(shapeId);
 };
 
-export const closeArtifactEditor = (editor: Editor): void => {
+const closeArtifactEditor = (editor: Editor): void => {
   const state = artifactsOf(editor);
   if (state.editing.get() === undefined) return;
   state.editing.set(undefined);

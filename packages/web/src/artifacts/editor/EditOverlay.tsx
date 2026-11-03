@@ -2,7 +2,7 @@ import { Fragment } from "react";
 import type { EditBox } from "@unframed/domain";
 import type { EditReport } from "./editSession.ts";
 
-export interface EditOverlayProps {
+interface EditOverlayProps {
   readonly hovered: EditReport | null;
   readonly layerHover?: string | null;
   readonly selection: readonly string[];

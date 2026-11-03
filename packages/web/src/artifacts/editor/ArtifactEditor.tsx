@@ -78,7 +78,7 @@ const useWindowQuery = (query: string): boolean =>
     () => window.matchMedia(query).matches,
   );
 
-export interface ArtifactEditorProps {
+interface ArtifactEditorProps {
   readonly shapeId: TLShapeId;
   readonly onClose: () => void;
   readonly onOpen: (shapeId: string) => void;
@@ -88,16 +88,8 @@ type Panel = "design" | "layers" | "parameters";
 
 const panelRemembered = new Map<string, Panel>();
 
-const typingIn = (target: EventTarget | null): boolean => {
-  const element = target instanceof HTMLElement ? target : null;
-  if (!element) return false;
-  return (
-    element.isContentEditable ||
-    element.tagName === "INPUT" ||
-    element.tagName === "TEXTAREA" ||
-    element.closest("[contenteditable='true']") !== null
-  );
-};
+const typingIn = (target: EventTarget | null): boolean =>
+  target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, [contenteditable='true']") !== null);
 
 const transportZone = (): TransportZone | undefined => {
   const active = document.activeElement;
@@ -490,6 +482,9 @@ export const ArtifactEditor = ({
   }, [facts === undefined]);
 
   if (!facts) return null;
+  const hasFile = facts.file !== "";
+  const tell = (elements: ChipElement[]) => tellAgent(chatClient, shapeId, elements);
+  const ask = (field: string, elements: ChipElement[]) => tellAgent(chatClient, shapeId, elements, makeEditableInstruction(field));
   const displayTitle = artifactTitle(facts);
   const title =
     displayTitle === "" ? shapeId.replace(/^shape:/, "") : displayTitle;
@@ -531,7 +526,6 @@ export const ArtifactEditor = ({
   const goToMain = (id: string) => {
     void sessionRef.current.commit().then(() => onOpen(id));
   };
-  const mode: EditMode = session.mode;
   const normalised =
     announcement === undefined
       ? undefined
@@ -544,7 +538,7 @@ export const ArtifactEditor = ({
   for (const element of session.tree?.elements ?? [])
     names[element.id] = element.name;
 
-  const timeline = facts.kind === "motion" && facts.file !== "";
+  const timeline = facts.kind === "motion" && hasFile;
   const columns = railFolded
     ? parametersFolded
       ? "grid-cols-[minmax(0,1fr)]"
@@ -579,18 +573,9 @@ export const ArtifactEditor = ({
           locked={facts.locked}
           kit={kit}
           mode={facts.mode}
-          onOpenKit={() =>
-            kitUi(editor).update((state) => ({ ...state, open: true }))
-          }
-          onTell={(elements) => tellAgent(chatClient, shapeId, elements)}
-          onAsk={(field, elements) =>
-            tellAgent(
-              chatClient,
-              shapeId,
-              elements,
-              makeEditableInstruction(field),
-            )
-          }
+          onOpenKit={() => kitUi(editor).update((state) => ({ ...state, open: true }))}
+          onTell={tell}
+          onAsk={ask}
           onShowOnTimeline={(element, property) =>
             setReveal({ element, property, nonce: (reveal?.nonce ?? 0) + 1 })
           }
@@ -619,7 +604,7 @@ export const ArtifactEditor = ({
           shapeId={shapeId}
           locked={facts.locked}
           onLock={setLocked}
-          onTell={(elements) => tellAgent(chatClient, shapeId, elements)}
+          onTell={tell}
         />
       )}
       {shownPanel === "parameters" && (
@@ -728,13 +713,13 @@ export const ArtifactEditor = ({
               </span>
             )}
           </span>
-          {facts.file !== "" && (
+          {hasFile && (
             <ToggleGroup
               aria-label="Mode"
               variant="default"
               size="xs"
               className="shrink-0"
-              value={[mode]}
+              value={[session.mode]}
               onValueChange={(next) => {
                 const [picked] = next as EditMode[];
                 if (picked === "edit" || picked === "interact")
@@ -759,13 +744,13 @@ export const ArtifactEditor = ({
               </Tip>
             </ToggleGroup>
           )}
-          {facts.file !== "" && kit && (
+          {hasFile && kit && (
             <KitModePicker shapeId={shapeId} variant="header" />
           )}
           <span role="status" className="sr-only">
             {updateNote}
           </span>
-          {facts.file !== "" && updateRows.length > 0 && (
+          {hasFile && updateRows.length > 0 && (
             <Popover open={updatesShown} onOpenChange={setUpdatesShown}>
               <PopoverTrigger
                 render={
@@ -855,13 +840,13 @@ export const ArtifactEditor = ({
               </PopoverPopup>
             </Popover>
           )}
-          {facts.file !== "" && (
+          {hasFile && (
             <PreviewSizeControl size={size} onChange={setSize} scale={scale} />
           )}
-          {facts.kind === "motion" && facts.file !== "" && (
+          {facts.kind === "motion" && hasFile && (
             <RenderButton shapeId={shapeId} />
           )}
-          {facts.file !== "" && port !== undefined && (
+          {hasFile && port !== undefined && (
             <Tip label="Open in a new tab">
               <Button
                 variant="ghost"
@@ -968,7 +953,7 @@ export const ArtifactEditor = ({
                   onPlayer={transport.onPlayerMessage}
                   onPlayerReady={onPlayerReady}
                 />
-                {mode === "edit" && (
+                {session.mode === "edit" && (
                   <EditOverlay
                     hovered={session.hovered}
                     layerHover={session.layerHover}
@@ -1010,14 +995,7 @@ export const ArtifactEditor = ({
           locked={facts.locked}
           column={columnHeight}
           transport={transport}
-          onAsk={(field, elements) =>
-            tellAgent(
-              chatClient,
-              shapeId,
-              elements,
-              makeEditableInstruction(field),
-            )
-          }
+          onAsk={ask}
           kit={kit}
           mode={facts.mode}
           reveal={reveal}

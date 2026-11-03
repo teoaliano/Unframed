@@ -14,7 +14,7 @@ import {
 import { Switch } from "~/components/ui/switch";
 import { ImagePicker } from "./ImagePicker.tsx";
 
-export interface InstanceField {
+interface InstanceField {
   readonly name: string;
   readonly type: "variant" | "text" | "boolean" | "image";
   readonly values: readonly string[];
@@ -56,7 +56,7 @@ export const instanceFieldsOf = (input: {
   return fields;
 };
 
-export interface InstanceSectionProps {
+interface InstanceSectionProps {
   readonly title: string;
   readonly goToMain: (() => void) | null;
   readonly fields: readonly InstanceField[];

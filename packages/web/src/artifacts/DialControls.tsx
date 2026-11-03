@@ -6,7 +6,7 @@ import { useEditor, type TLShapeId } from "tldraw";
 
 const WRITE_DELAY_MS = 400;
 
-export interface DialControlsProps {
+interface DialControlsProps {
   readonly shapeId: TLShapeId;
   readonly announcement: DialsAnnouncement;
   readonly saved: Readonly<Record<string, unknown>> | undefined;

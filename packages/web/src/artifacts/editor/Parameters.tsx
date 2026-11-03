@@ -17,7 +17,7 @@ export const ColumnHeader = ({ children, className }: { readonly children: React
   <header className={cn("flex h-12 min-w-0 flex-none items-center gap-2 border-b px-2.5", className)}>{children}</header>
 );
 
-export interface ParametersProps {
+interface ParametersProps {
   readonly shapeId: TLShapeId;
   readonly kind: ArtifactKind;
   readonly title: string;

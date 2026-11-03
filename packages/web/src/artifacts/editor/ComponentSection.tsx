@@ -5,7 +5,7 @@ import { Tip } from "../../chrome/ui.tsx";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 
-export interface ComponentSectionProps {
+interface ComponentSectionProps {
   readonly declaration: ComponentDeclaration;
   readonly onAsk: () => void;
 }

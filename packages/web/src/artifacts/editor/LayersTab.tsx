@@ -18,28 +18,23 @@ const collapsedBy = new Map<string, Set<string>>();
 
 interface Row {
   readonly key: string;
-  readonly id: string | null;
   readonly tag: string;
   readonly depth: number;
-  readonly parent: string | null;
   readonly element: SourceTreeElement | null;
   readonly hasChildren: boolean;
   readonly inLocked: boolean;
 }
 
-const KIND_ICON: Record<string, typeof Type> = { image: Image, link: Link, button: MousePointerClick, media: Film, frame: Frame, text: Type, shape: Square };
-
 const iconOf = (tag: string, text: string | null): typeof Type => {
-  if (tag === "img" || tag === "picture" || tag === "svg") return KIND_ICON.image!;
-  if (tag === "a") return KIND_ICON.link!;
-  if (tag === "button") return KIND_ICON.button!;
-  if (tag === "video" || tag === "audio") return KIND_ICON.media!;
-  if (tag === "iframe") return KIND_ICON.frame!;
-  if (text !== null) return KIND_ICON.text!;
-  return KIND_ICON.shape!;
+  if (tag === "img" || tag === "picture" || tag === "svg") return Image;
+  if (tag === "a") return Link;
+  if (tag === "button") return MousePointerClick;
+  if (tag === "video" || tag === "audio") return Film;
+  if (tag === "iframe") return Frame;
+  return text !== null ? Type : Square;
 };
 
-export const layerRows = (elements: readonly SourceTreeElement[], live: readonly LiveNode[], collapsed: ReadonlySet<string>, locked: readonly string[]): Row[] => {
+const layerRows = (elements: readonly SourceTreeElement[], live: readonly LiveNode[], collapsed: ReadonlySet<string>, locked: readonly string[]): Row[] => {
   const known = new Set(elements.map((element) => element.id));
   const childrenOf = new Map<string | null, SourceTreeElement[]>();
   for (const element of elements) {
@@ -71,18 +66,18 @@ export const layerRows = (elements: readonly SourceTreeElement[], live: readonly
     if (!open) return;
     for (const element of childrenOf.get(parent) ?? []) {
       const kids = (childrenOf.get(element.id)?.length ?? 0) > 0 || (runtimeOf.get(element.id)?.length ?? 0) > 0;
-      rows.push({ key: element.id, id: element.id, tag: element.tag, depth, parent, element, hasChildren: kids, inLocked: underLocked(element.id) && !lockedSet.has(element.id) });
+      rows.push({ key: element.id, tag: element.tag, depth, element, hasChildren: kids, inLocked: underLocked(element.id) && !lockedSet.has(element.id) });
       emit(element.id, depth + 1);
     }
     for (const node of runtimeOf.get(parent) ?? []) {
-      rows.push({ key: node.selector, id: null, tag: node.tag, depth, parent, element: null, hasChildren: false, inLocked: false });
+      rows.push({ key: node.selector, tag: node.tag, depth, element: null, hasChildren: false, inLocked: false });
     }
   };
   emit(null, 0);
   return rows;
 };
 
-export interface LayersTabProps {
+interface LayersTabProps {
   readonly session: EditSession;
   readonly kind: ArtifactKind;
   readonly shapeId: string;
@@ -197,7 +192,7 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
         const selected = selection.includes(id);
         const hidden = pendingHidden(id) ?? element.hidden;
         const name = pendingName(id);
-        const label = name === undefined ? element.name : name === null ? element.name : name;
+        const label = name ?? element.name;
         const Icon = iconOf(element.tag, element.text);
         const isLocked = locked.includes(id);
         const open = !collapsed.has(id);
@@ -317,7 +312,7 @@ const LayerMenu = ({
   readonly onHide: () => void;
   readonly onLock: () => void;
 }) => (
-  <MenuPopup anchor={anchor} side="right" align="start" sideOffset={4} className="max-w-[260px]" finalFocus={() => false} aria-label={`${label} actions`}>
+  <MenuPopup anchor={anchor} side="right" align="start" sideOffset={4} className="max-w-65" finalFocus={() => false} aria-label={`${label} actions`}>
     <MenuItem onClick={onTell}>
       <MessageSquarePlus aria-hidden />
       Tell the agent

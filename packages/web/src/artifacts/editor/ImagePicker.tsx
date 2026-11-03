@@ -6,9 +6,10 @@ import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { previewUrl, uploadFile } from "../../canvas/assetStore.ts";
 import { useEngine } from "../../context.ts";
 import { messageOf } from "../../agent/store.ts";
+import { Tip } from "../../chrome/ui.tsx";
 import { showError } from "../../toasts.tsx";
 
-export interface ImagePickerProps {
+interface ImagePickerProps {
   readonly project: string;
   readonly onChoose: (file: string) => void;
 }
@@ -68,29 +69,29 @@ export const ImagePicker = ({ project, onChoose }: ImagePickerProps) => {
       onOpenChange={(next) => (next ? setOpen(true) : close())}
     >
       <PopoverTrigger render={<Button variant="outline" size="sm" />}>Replace image</PopoverTrigger>
-      <PopoverPopup side="bottom" align="start" sideOffset={6} padding="compact" className="w-[280px]" aria-label="Choose an image" initialFocus={false}>
+      <PopoverPopup side="bottom" align="start" sideOffset={6} padding="compact" className="w-70" aria-label="Choose an image" initialFocus={false}>
         <div className="flex flex-col gap-2">
           <Input aria-label="Filter images" placeholder="Filter images" value={filter} onChange={(event) => setFilter(event.currentTarget.value)} />
           {images !== undefined && images.length === 0 && <p className="m-0 text-sm text-muted-foreground">No images in this project yet.</p>}
           {images !== undefined && images.length > 0 && shown.length === 0 && <p className="m-0 text-sm text-muted-foreground">No images match.</p>}
           <div className="grid max-h-72 grid-cols-3 gap-1.5 overflow-auto">
             {shown.map((image) => (
-              <Button
-                key={image.file}
-                variant="ghost"
-                size="sm-multiline"
-                data-image-file={image.file}
-                aria-label={image.fileName}
-                title={image.fileName}
-                className="min-w-0 flex-col items-stretch"
-                onClick={() => {
-                  close();
-                  onChoose(image.file);
-                }}
-              >
-                <img alt="" src={previewUrl(project, image.file, 512)} className="aspect-square w-full rounded-sm object-cover" />
-                <span className="truncate text-xs text-muted-foreground">{image.fileName}</span>
-              </Button>
+              <Tip key={image.file} label={image.fileName}>
+                <Button
+                  variant="ghost"
+                  size="sm-multiline"
+                  data-image-file={image.file}
+                  aria-label={image.fileName}
+                  className="min-w-0 flex-col items-stretch"
+                  onClick={() => {
+                    close();
+                    onChoose(image.file);
+                  }}
+                >
+                  <img alt="" src={previewUrl(project, image.file, 512)} className="aspect-square w-full rounded-sm object-cover" />
+                  <span className="truncate text-xs text-muted-foreground">{image.fileName}</span>
+                </Button>
+              </Tip>
             ))}
           </div>
           {/* oxlint-disable-next-line react/forbid-elements -- a hidden native file picker, opened by Upload image */}

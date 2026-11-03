@@ -50,7 +50,7 @@ export interface EditReport {
   readonly sheetOverrides?: ReadonlyArray<SheetRuleReport>;
 }
 
-export interface TweenPatch {
+interface TweenPatch {
   readonly selector: string;
   readonly channels: readonly string[];
   readonly change: {
@@ -62,7 +62,7 @@ export interface TweenPatch {
   };
 }
 
-export interface SourceTree {
+interface SourceTree {
   readonly ready: boolean;
   readonly elements: readonly SourceTreeElement[];
   readonly offTokens: readonly OffTokenFound[];
@@ -75,14 +75,14 @@ export interface LiveNode {
   readonly children: readonly LiveNode[];
 }
 
-export const COMMIT_DELAY_MS = 1_500;
+const COMMIT_DELAY_MS = 1_500;
 const HELLO_RETRY_MS = 250;
 const HELLO_RETRIES = 60;
 
 const LAG_RETRY_MS = 300;
 const LAG_RETRIES = 12;
 
-export interface EditSessionInput {
+interface EditSessionInput {
   readonly editor: Editor;
   readonly engine: EngineConnection;
   readonly project: string;
