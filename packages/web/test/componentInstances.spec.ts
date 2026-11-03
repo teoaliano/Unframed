@@ -81,6 +81,6 @@ test("hover and click pick an instance, never its insides, and a slotted child i
   // Layers: one row per instance, and no rows for the instance's insides.
   await design(page).getByRole("tab", { name: "Layers" }).click();
   const layers = design(page).getByRole("list", { name: "Layers" });
-  await expect(layers.getByRole("button", { name: "Hide uf-price-card" })).toHaveCount(2);
-  await expect(layers.getByRole("button", { name: "Hide button" })).toHaveCount(0);
+  await expect(layers.getByRole("button", { name: "Hidden uf-price-card" })).toHaveCount(2);
+  await expect(layers.getByRole("button", { name: "Hidden button" })).toHaveCount(0);
 });

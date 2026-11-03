@@ -89,10 +89,10 @@ test("a Layers row's menu tells the agent about that row, and holds rename, hide
   // Hide from the menu does what the row's eye does.
   await row.locator("[data-layer]").click({ button: "right" });
   await page.getByRole("menuitem", { name: "Hide", exact: true }).click();
-  await expect(parameters(page).getByRole("button", { name: "Show Lead text", exact: true })).toBeVisible();
+  await expect(parameters(page).getByRole("button", { name: "Hidden Lead text", exact: true })).toHaveAttribute("aria-pressed", "true");
 
   // Lock from the menu locks the element, as the row's lock does.
   await row.locator("[data-layer]").click({ button: "right" });
   await page.getByRole("menuitem", { name: "Lock", exact: true }).click();
-  await expect(parameters(page).getByRole("button", { name: "Unlock Lead text", exact: true })).toBeVisible();
+  await expect(parameters(page).getByRole("button", { name: "Locked Lead text", exact: true })).toHaveAttribute("aria-pressed", "true");
 });

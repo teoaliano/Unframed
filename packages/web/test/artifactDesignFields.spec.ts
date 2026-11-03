@@ -119,3 +119,55 @@ test("Visible switches an element off with the hide edit, and back on", async ({
   expect(hidden).toMatch(/data-uf-hidden/);
   expect(hidden).toMatch(/display:\s*none\s*!important/);
 });
+
+test("Visible shows the new state at once, and a shown element returns in the frame before the burst commits", async ({ page, agent }) => {
+  await onBoard(page, agent, PAGE);
+  await openEditor(page);
+  await selectByText(page, "Lead text");
+  await preparedFile(agent);
+  const visible = parameters(page).getByRole("switch", { name: "Visible", exact: true });
+
+  await visible.click();
+  // Both the switch and the frame change within the burst's 1.5 s pause, not at its commit.
+  await expect(visible).toHaveAttribute("aria-checked", "false", { timeout: 500 });
+  await expect(frameOf(page).getByText("Lead text")).toBeHidden({ timeout: 500 });
+  await expect.poll(async () => (await textOf(agent, (await fileOf(agent))!)).match(/data-uf-hidden/) !== null, { timeout: 8000 }).toBe(true);
+
+  await visible.click();
+  await expect(visible).toHaveAttribute("aria-checked", "true", { timeout: 500 });
+  await expect(frameOf(page).getByText("Lead text")).toBeVisible({ timeout: 500 });
+});
+
+test("a refused Font value goes back to the family the element had, with the refusal sentence", async ({ page, agent }) => {
+  await onBoard(page, agent, PAGE);
+  await openEditor(page);
+  await selectByText(page, "Lead text");
+  await preparedFile(agent);
+  const font = parameters(page).getByLabel("Font", { exact: true });
+  await expect(font).toHaveValue("Georgia");
+
+  await font.fill("</style><script>window.__pwned=1</script>");
+  await font.press("Enter");
+  await expect(page.getByText(/Font cannot be/).first()).toBeVisible();
+  await expect(font).toHaveValue("Georgia");
+  expect(await textOf(agent, (await fileOf(agent))!)).not.toMatch(/__pwned|<script>window/);
+});
+
+test("Design rows: Opacity lines up with the other number fields, the Shape sub-fields have labels, and empty line height and letter spacing show their keyword", async ({ page, agent }) => {
+  await onBoard(page, agent, PAGE);
+  await openEditor(page);
+  await selectByText(page, "Lead text");
+  await preparedFile(agent);
+
+  const size = await field(page, "Size").boundingBox();
+  const opacity = await field(page, "Opacity").boundingBox();
+  const radius = await field(page, "Corner radius").boundingBox();
+  expect(opacity!.width).toBeCloseTo(size!.width, 0);
+  expect(radius!.width).toBeCloseTo(size!.width, 0);
+
+  for (const caption of ["Width", "Style", "Colour", "X", "Y", "Blur", "Spread"]) {
+    await expect(parameters(page).getByText(caption, { exact: true }).first()).toBeVisible();
+  }
+  await expect(field(page, "Line height")).toHaveAttribute("placeholder", "auto");
+  await expect(field(page, "Letter spacing")).toHaveAttribute("placeholder", "normal");
+});

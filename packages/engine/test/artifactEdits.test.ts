@@ -168,6 +168,19 @@ describe("artifact.sourceTree and artifact.prepareEdit (spec 18)", () => {
       });
     });
 
+    it("names the reason for an empty list too, so a burst with only held dials can say why its file moved", async () => {
+      await put(editable("e5"));
+      await rpc.call("testCanvas.apply", {
+        project: "board",
+        change: { put: [{ ...editable("e5"), props: { ...(editable("e5") as { props: object }).props, file: "3-agent.html" } }], remove: [] },
+        origin: { kind: "server", id: "chat:c2" },
+      });
+      await expect(rpc.call("artifact.edit", { project: "board", shapeId: "shape:e5", baseFile: "1-ready.html", edits: [] })).rejects.toMatchObject({
+        code: "conflict",
+        details: { reason: "agent" },
+      });
+    });
+
     it("refuses an empty list, a refused edit with its sentence, an unknown element, and a page over the limit, and writes nothing", async () => {
       await put(editable("e4"));
       const before = (await readdir(folder)).length;
