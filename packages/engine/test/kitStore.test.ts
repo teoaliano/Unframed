@@ -109,3 +109,13 @@ describe("the tokens script in a project folder (spec 19, task 10)", () => {
     );
   });
 });
+
+describe("the tokens script and a project folder that is gone", () => {
+  it("writes nothing and never recreates a folder that a rename or removal took away", async () => {
+    const { ensureTokens } = await import("../src/kits/tokensFile.ts");
+    const root = await makeTempDir();
+    const gone = join(root, "renamed-away");
+    await ensureTokens(gone, kit() as Parameters<typeof ensureTokens>[1]);
+    await expect(stat(gone)).rejects.toThrow();
+  });
+});
