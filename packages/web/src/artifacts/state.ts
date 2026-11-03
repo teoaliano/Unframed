@@ -45,6 +45,8 @@ interface CanvasArtifacts {
   readonly editing: Atom<TLShapeId | undefined>;
   /** The artifact whose Parameters panel is open on the canvas. */
   readonly tuning: Atom<TLShapeId | undefined>;
+  /** The artifact whose editor opens with its component updates popover (spec 20, the Updates badge). */
+  readonly updatesOpen: Atom<TLShapeId | undefined>;
   /** What each live canvas frame last announced, by shape, and how to post `unframed:dials:set` to it. */
   readonly heard: Atom<ReadonlyMap<string, DialsAnnouncement>>;
   readonly posts: Map<string, (values: unknown) => void>;
@@ -86,6 +88,7 @@ export const artifactsOf = (editor: Editor): CanvasArtifacts => {
   if (!found) {
     const editing = atom<TLShapeId | undefined>("editing artifact", undefined);
     const tuning = atom<TLShapeId | undefined>("tuning artifact", undefined);
+    const updatesOpen = atom<TLShapeId | undefined>("component updates open", undefined);
     const project = atom("artifact project", "");
     const dropHolds = atom<ReadonlySet<string>>("image drop holds", new Set());
     const live = computed<ReadonlySet<string>>("live artifacts", () => {
@@ -106,6 +109,7 @@ export const artifactsOf = (editor: Editor): CanvasArtifacts => {
       project,
       editing,
       tuning,
+      updatesOpen,
       heard: atom("artifact announcements", new Map()),
       posts: new Map(),
       hold: atom("frame hold", false),

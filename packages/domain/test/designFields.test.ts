@@ -1,5 +1,5 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DESIGN_FIELDS, styleValueRefusal } from "../src/index.ts";
 
@@ -74,23 +74,32 @@ describe("styleValueRefusal", () => {
 });
 
 describe("the web-facing domain", () => {
+  // Every file the root entry reaches through value imports (type-only imports ship no code) must
+  // be free of HTML parsers. That covers the motion folder too: its parser modules sit behind
+  // `@unframed/domain/motion`, and only parser-free motion modules are reachable from the root.
+  const PARSER = /from "(parse5|linkedom|@hyperframes\/parsers[^"]*)"/;
+  const VALUE_IMPORT = /\b(?:import|export)\s+(?!type\b)[^;]*?\bfrom\s+"(\.{1,2}\/[^"]+)"/g;
+
   it("keeps the HTML parsers out of the root entry", () => {
     const srcRoot = new URL("../src/", import.meta.url).pathname;
-    const files: string[] = [];
-    const walk = (dir: string): void => {
-      for (const name of readdirSync(dir)) {
-        const path = join(dir, name);
-        if (statSync(path).isDirectory()) {
-          if (name !== "html") walk(path);
-        } else if (name.endsWith(".ts")) files.push(path);
+    const root = join(srcRoot, "index.ts");
+    const reached = new Set<string>();
+    const visit = (file: string): void => {
+      if (reached.has(file)) return;
+      reached.add(file);
+      const text = readFileSync(file, "utf8");
+      expect(text, file).not.toMatch(PARSER);
+      expect(text, file).not.toMatch(/from "\.\.?\/[^"]*html\//);
+      for (const match of text.matchAll(VALUE_IMPORT)) {
+        const target = resolve(dirname(file), match[1]!);
+        expect(target.startsWith(srcRoot), file).toBe(true);
+        expect(target, file).not.toMatch(/\/src\/html\//);
+        visit(target);
       }
     };
-    walk(srcRoot);
-    for (const file of files) {
-      const text = readFileSync(file, "utf8");
-      expect(text, file).not.toMatch(/from "(parse5|@hyperframes\/parsers[^"]*)"/);
-      expect(text, file).not.toMatch(/from "\.\.?\/[^"]*html\//);
-    }
-    expect(readFileSync(join(srcRoot, "index.ts"), "utf8")).not.toMatch(/html\//);
+    visit(root);
+    expect(reached.size).toBeGreaterThan(50);
+    expect([...reached].some((file) => file.includes("/motion/"))).toBe(true);
+    expect(readFileSync(root, "utf8")).not.toMatch(/html\//);
   });
 });

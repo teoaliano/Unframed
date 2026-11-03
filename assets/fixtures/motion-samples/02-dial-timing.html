@@ -1,0 +1,20 @@
+<html><head><style>
+#root{position:relative;overflow:hidden;background:#111}
+.clip{position:absolute;inset:0}
+#box{position:absolute;left:0;top:140px;width:80px;height:80px;background:#fb7185}
+</style></head><body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360">
+  <div id="c" class="clip" data-start="0" data-duration="4"><div id="box"></div></div>
+</div>
+<script src="gsap.js"></script>
+<script>
+window.__timelines = window.__timelines || {};
+window.__timelines = window.__timelines || {};
+window.__timelines.main = gsap.timeline({ paused: true });
+unframed.dials('Move', { fromX: [0, 0, 500], toX: [300, 0, 500], dur: [2, 0.5, 3], delay: [0, 0, 2] }, function (v) {
+  var at = window.__timelines.main.time();
+  window.__timelines.main.clear();
+  window.__timelines.main.fromTo('#box', { x: v.fromX }, { x: v.toX, duration: v.dur }, v.delay);
+  window.__timelines.main.seek(at);
+});
+</script></body></html>

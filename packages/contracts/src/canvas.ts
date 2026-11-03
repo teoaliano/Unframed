@@ -132,15 +132,39 @@ const artifactMigrations = (kind: ArtifactType) => {
 export const ARTIFACT_TYPES = ["page", "motion"] as const;
 export type ArtifactType = (typeof ARTIFACT_TYPES)[number];
 
+/** A component's tag: `uf-` and lowercase words joined by hyphens, at most 50 characters (spec 20). */
+export const COMPONENT_TAG = /^uf-[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+export const COMPONENT_TAG_MAX = 50;
+
+/**
+ * A component shape: the current sheet of a shared custom element (spec 20). `tag` is set at
+ * creation and never changes; the room refuses a shape whose tag breaks the tag rule.
+ */
+export interface ComponentShapeProps {
+  w: number;
+  h: number;
+  file: string;
+  title: string;
+  fileName: string;
+  tag: string;
+}
+
+const componentTag = T.string.check((tag) => {
+  if (tag.length > COMPONENT_TAG_MAX || !COMPONENT_TAG.test(tag)) {
+    throw new T.ValidationError(`Expected a component tag like uf-price-card, got ${JSON.stringify(tag)}`);
+  }
+});
+
 declare module "@tldraw/tlschema" {
   interface TLGlobalShapePropsMap {
     page: ArtifactShapeProps;
     motion: ArtifactShapeProps;
+    component: ComponentShapeProps;
   }
 }
 
 /** The shape kinds Unframed adds meaning to. Every other tldraw shape is a mark. */
-export type UnframedKind = "prompt" | "image" | "video" | "group" | "page" | "motion";
+export type UnframedKind = "prompt" | "image" | "video" | "group" | "page" | "motion" | "component";
 
 export const kindOfShapeType = (type: string): UnframedKind | "mark" => {
   switch (type) {
@@ -150,6 +174,7 @@ export const kindOfShapeType = (type: string): UnframedKind | "mark" => {
     case "video":
     case "page":
     case "motion":
+    case "component":
       return type;
     case "frame":
       return "group";
@@ -200,6 +225,11 @@ const buildSchema = (refusalOf?: (kit: Kit) => string | null): TLSchema => {
       frame: { ...keptShapes.frame, meta: unframedMeta },
       page: { props: artifactProps, meta: refMeta, migrations: artifactMigrations("page") },
       motion: { props: artifactProps, meta: refMeta, migrations: artifactMigrations("motion") },
+      component: {
+        props: { ...artifactProps, tag: componentTag },
+        meta: refMeta,
+        migrations: createShapePropsMigrationSequence({ sequence: [] }),
+      },
     },
     bindings: defaultBindingSchemas,
     assets: {

@@ -7,13 +7,20 @@ import { UnframedError } from "./errors.ts";
 export const StyleRuleRef = Schema.Struct({ block: Schema.Number, selector: Schema.String, occurrence: Schema.Number });
 export type StyleRuleRef = typeof StyleRuleRef.Type;
 
-/** One typed change to an artifact's HTML. Specs 20 and 21 add members. */
+const TweenRefSchema = Schema.Struct({ index: Schema.Number, id: Schema.String });
+const TokenRefSchema = Schema.Struct({ token: Schema.String });
+
+/** One typed change to an artifact's HTML. Spec 18 gives the first five, spec 19 the token edit, spec 21 the six motion edits (`tween` names a tween by source order and its HyperFrames id). */
 export const SourceEdit = Schema.Union([
   Schema.Struct({ type: Schema.Literal("text"), elementId: Schema.String, text: Schema.String }),
   Schema.Struct({ type: Schema.Literal("style"), elementId: Schema.String, property: Schema.String, value: Schema.NullOr(Schema.String) }),
   Schema.Struct({ type: Schema.Literal("attribute"), elementId: Schema.String, name: Schema.String, value: Schema.NullOr(Schema.String) }),
   Schema.Struct({ type: Schema.Literal("hide"), elementId: Schema.String, hidden: Schema.Boolean }),
   Schema.Struct({ type: Schema.Literal("image"), elementId: Schema.String, target: Schema.Literals(["src", "background"]), file: Schema.String }),
+  // A declaration in one rule of a component sheet's style (spec 20). The rule's selector is checked against locks by the engine.
+  Schema.Struct({ type: Schema.Literal("componentRule"), rule: StyleRuleRef, property: Schema.String, value: Schema.String }),
+  // Moves a page or motion's pin of one tag to a newer sheet of that tag (spec 20). `to` is a sheet file of the project.
+  Schema.Struct({ type: Schema.Literal("componentUpdate"), tag: Schema.String, to: Schema.String }),
   // Exactly one of elementId and rule is set; the source edit refuses a token edit with both or neither (spec 19).
   Schema.Struct({
     type: Schema.Literal("token"),
@@ -22,6 +29,12 @@ export const SourceEdit = Schema.Union([
     property: Schema.String,
     token: Schema.String,
   }),
+  Schema.Struct({ type: Schema.Literal("tween-time"), tween: TweenRefSchema, start: Schema.optionalKey(Schema.Number), duration: Schema.optionalKey(Schema.Union([Schema.Number, TokenRefSchema])) }),
+  Schema.Struct({ type: Schema.Literal("tween-ease"), tween: TweenRefSchema, ease: Schema.Union([Schema.String, TokenRefSchema]) }),
+  Schema.Struct({ type: Schema.Literal("tween-stagger"), tween: TweenRefSchema, each: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("tween-value"), tween: TweenRefSchema, at: Schema.Number, property: Schema.String, value: Schema.Union([Schema.Number, Schema.String, TokenRefSchema]) }),
+  Schema.Struct({ type: Schema.Literal("clip-time"), clip: Schema.String, start: Schema.optionalKey(Schema.Number), duration: Schema.optionalKey(Schema.Number) }),
+  Schema.Struct({ type: Schema.Literal("composition-duration"), seconds: Schema.Number }),
 ]);
 export type SourceEdit = typeof SourceEdit.Type;
 
@@ -49,6 +62,7 @@ export const SourceTreeElement = Schema.Struct({
   hidden: Schema.Boolean,
   src: Schema.optionalKey(Schema.String),
   inPicture: Schema.optionalKey(Schema.Boolean),
+  attributes: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
 });
 export type SourceTreeElement = typeof SourceTreeElement.Type;
 

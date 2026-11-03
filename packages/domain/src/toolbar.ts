@@ -93,7 +93,7 @@ export const toolbarState = (input: ToolbarInput): ToolbarState => {
       if (only.generating) return { kind: "generating", shapeId: only.id };
       return { kind: "result", shapeId: only.id, generate: input.usable };
     }
-    if ((only.kind === "page" || only.kind === "motion") && only.file) return { kind: "open", shapeId: only.id };
+    if ((only.kind === "page" || only.kind === "motion" || only.kind === "component") && only.file) return { kind: "open", shapeId: only.id };
   }
   const recipeGroup = recipeGroupOf(selected);
   if (recipeGroup?.recipe) return { kind: "recipe", groupId: recipeGroup.id, name: recipeGroup.ref ?? "", runs: recipeGroup.recipe.runs };

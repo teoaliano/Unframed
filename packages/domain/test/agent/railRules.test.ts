@@ -201,6 +201,15 @@ describe("the recap rows", () => {
     ]);
   });
 
+  it("lists the component a turn wrote as a component row, offering a diff when its sheet changed", () => {
+    const rows = recapRows(
+      call("mcp__unframed__component_write", { shapeId: "c1", title: "Button" }),
+      [{ shapeId: "shape:c1", kind: "component", change: "updated", file: "2-button.html", previousFile: "1-button.html" }],
+      [{ id: "shape:c1", kind: "component", title: "Button" }],
+    );
+    expect(rows).toEqual([{ shapeId: "shape:c1", kind: "component", label: "Button", deleted: false, rewritten: true }]);
+  });
+
   it("marks a shape no longer on the canvas deleted, keeping the title the tool gave it", () => {
     const rows = recapRows(call("mcp__unframed__page_write", { shapeId: "g1", title: "Landing" }), [], []);
     expect(rows).toEqual([{ shapeId: "shape:g1", kind: "page", label: "Landing", deleted: true, rewritten: false }]);

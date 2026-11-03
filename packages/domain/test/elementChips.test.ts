@@ -13,6 +13,21 @@ const stamped = {
   hasChildren: false,
 };
 
+describe("elementChip: a tween's excerpt (spec 21, Rules this spec bends, 9)", () => {
+  it("takes the excerpt the caller gives in place of the element's markup, cut to 240 characters", () => {
+    const call = "tl.to(\"#hero\", { x: v.speed }, 1)";
+    expect(elementChip({ ...stamped, excerpt: call }, { shapeId: "s1" })).toEqual({
+      shapeId: "s1",
+      elementId: "hf-ab12",
+      selector: '[data-hf-id="hf-ab12"]',
+      tag: "h1",
+      label: "Hero title",
+      excerpt: call,
+    });
+    expect(elementChip({ ...stamped, excerpt: "x".repeat(300) }, { shapeId: "s1" }).excerpt).toHaveLength(240);
+  });
+});
+
 describe("elementChip: a stamped element", () => {
   it("selects by its element id and excerpts its start tag, text and end tag", () => {
     expect(elementChip(stamped, { shapeId: "s1" })).toEqual({

@@ -5,6 +5,7 @@
 import type { ArtifactKind } from "../artifacts/artifactRules.ts";
 import { attr, type ChildNode, type Element, flatten, isComment, isElement, isText, parseSource, scopeRoots } from "./source.ts";
 import type { SourceTreeElement } from "./sourceTree.ts";
+import { parseHTML } from "linkedom";
 
 /** Elements whose text is kept exactly as written. */
 const EXACT_TEXT = new Set(["pre", "textarea", "script", "style"]);
@@ -49,6 +50,36 @@ const firstById = (html: string): Map<string, Element> => {
   return found;
 };
 
+/**
+ * The locked element a style rule's selector reaches in a component sheet's template (spec 20), or
+ * null. `:host` and its conditions are set aside, so `:host([kind="secondary"]) button` reaches the
+ * template's buttons. A selector the scanner cannot test counts as reaching the first locked element,
+ * so a lock is never bypassed by a selector this check does not understand.
+ */
+export const ruleLockHit = (html: string, selector: string, locked: readonly string[]): string | null => {
+  if (locked.length === 0) return null;
+  let reach = selector.replace(/:host(?:\([^()]*\))?/g, "").trim();
+  if (reach === "") return null;
+  if (/^[>+~]/.test(reach)) reach = `* ${reach}`;
+  type DomElement = { getAttribute(name: string): string | null; parentElement: DomElement | null; querySelectorAll(selector: string): ArrayLike<DomElement> };
+  const { document } = parseHTML(html) as unknown as { document: { querySelector(selector: string): DomElement | null; querySelectorAll(selector: string): ArrayLike<DomElement> } };
+  const root = document.querySelector("[data-uf-template]");
+  if (root === null) return null;
+  let matches: ArrayLike<DomElement>;
+  try {
+    matches = root.querySelectorAll(reach);
+  } catch {
+    return locked[0] ?? null;
+  }
+  for (const match of Array.from(matches)) {
+    for (let node: DomElement | null = match; node !== null && node !== root; node = node.parentElement) {
+      const id = node.getAttribute("data-hf-id");
+      if (id !== null && locked.includes(id)) return id;
+    }
+  }
+  return null;
+};
+
 export interface LockCheck {
   readonly current: string;
   readonly next: string;
@@ -76,7 +107,7 @@ export const lockRefusal = (check: LockCheck): string | null => {
   const first = hits[0];
   if (first === undefined) return null;
   const name = check.tree.find((entry) => entry.id === first.id)?.name ?? first.id;
-  const readTool = kind === "motion" ? "motion_read" : "page_read";
+  const readTool = kind === "motion" ? "motion_read" : kind === "component" ? "component_read" : "page_read";
   const more = hits.length > 1 ? ` ${hits.length - 1} more locked elements are changed too.` : "";
   return `The element data-hf-id="${first.id}" ("${name}") is locked by the person, and this write ${first.verb} it. Keep that element exactly as it is in the current file (${readTool} shows it), or ask the person to unlock it in the editor's Layers tab.${more}`;
 };

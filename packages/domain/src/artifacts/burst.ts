@@ -18,9 +18,19 @@ export const emptyBurst = (): Burst => ({ edits: new Map(), dials: new Map() });
 
 /** The target and field an edit replaces: a later edit with the same key takes its place. */
 const burstKey = (edit: SourceEdit): string => {
+  // Motion edits (spec 21): a tween is keyed by its source order, a clip by its element id, the length by the root.
+  // One timing entry per tween: a start, a duration or both replace the tween's earlier timing (spec 21, Motion edits).
+  if (edit.type === "tween-time") return JSON.stringify([`tween:${edit.tween.index}`, "time"]);
+  if (edit.type === "tween-ease") return JSON.stringify([`tween:${edit.tween.index}`, "ease"]);
+  if (edit.type === "tween-stagger") return JSON.stringify([`tween:${edit.tween.index}`, "stagger"]);
+  if (edit.type === "tween-value") return JSON.stringify([`tween:${edit.tween.index}`, `value:${edit.at}:${edit.property}`]);
+  if (edit.type === "clip-time") return JSON.stringify([`clip:${edit.clip}`, edit.start !== undefined ? "start" : "duration"]);
+  if (edit.type === "composition-duration") return JSON.stringify(["root", "duration"]);
   if (edit.type === "token" && edit.rule !== undefined) {
     return JSON.stringify(["rule", edit.rule.block, edit.rule.selector, edit.rule.occurrence, `style:${edit.property}`]);
   }
+  if (edit.type === "componentRule") return JSON.stringify(["rule", edit.rule.block, edit.rule.selector, edit.rule.occurrence, `style:${edit.property}`]);
+  if (edit.type === "componentUpdate") return JSON.stringify(["component", edit.tag]);
   const field =
     edit.type === "text" ? "text"
     : edit.type === "style" || edit.type === "token" ? `style:${edit.property}`

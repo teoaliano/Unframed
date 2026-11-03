@@ -9,9 +9,10 @@ import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promi
 import { join } from "node:path";
 import { crc32, deflateSync } from "node:zlib";
 import type { ArtifactSnapshot } from "@unframed/contracts";
-import { artifactUrl, isArtifactKind, kitStamp, parseSnapshotFileName, snapshotFileName, snapshotFits, snapshotSeekSeconds, type Kit } from "@unframed/domain";
+import { artifactUrl, isArtifactKind, kitStamp, parseSnapshotFileName, type ArtifactKind, snapshotFileName, snapshotFits, snapshotSeekSeconds, type Kit } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import { errorText, logError } from "../log.ts";
+import { ensurePinnedComponents } from "./artifactStore.ts";
 import type { HeadlessChrome } from "./headlessChrome.ts";
 
 export const SNAPSHOT_FOLDER = join(".cache", "snapshots");
@@ -23,7 +24,7 @@ const SETTLE_MS = 500;
 
 export interface SnapshotJob {
   readonly project: string;
-  readonly kind: "page" | "motion";
+  readonly kind: ArtifactKind;
   readonly file: string;
   readonly w: number;
   readonly h: number;
@@ -113,7 +114,7 @@ interface Seen {
   readonly kit: string | null;
 }
 
-type ArtifactRecord = TLRecord & { type: "page" | "motion"; props: { w: number; h: number; file: string; dials?: Record<string, unknown>; mode?: string } };
+type ArtifactRecord = TLRecord & { type: ArtifactKind; props: { w: number; h: number; file: string; dials?: Record<string, unknown>; mode?: string } };
 
 const isArtifact = (record: TLRecord | undefined): record is ArtifactRecord =>
   record?.typeName === "shape" && isArtifactKind(record.type) && typeof (record.props as { file?: unknown }).file === "string";
@@ -210,6 +211,7 @@ export class Snapshots {
     if (folder === undefined) return;
     const size = { w: shape.props.w, h: shape.props.h };
     if (onlyIfTokens && !(await readFile(join(folder, shape.props.file), "utf8").catch(() => "")).includes("unframed-tokens.js")) return;
+    await ensurePinnedComponents(folder, shape.props.file);
     if (this.fresh.delete(key)) {
       const want = this.seen.get(key);
       const cached = (await this.list(project)).some((snapshot) => snapshot.file === shape.props.file && snapshotFits(snapshot, size) && (snapshot.mode ?? null) === (want?.mode ?? null) && (snapshot.kit ?? null) === (want?.kit ?? null));

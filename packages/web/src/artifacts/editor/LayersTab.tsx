@@ -4,7 +4,7 @@
  * selects its element, hovers it in the frame, renames it, hides it and locks it.
  */
 import type { SourceTreeElement } from "@unframed/contracts";
-import type { ChipElement } from "@unframed/domain";
+import type { ArtifactKind, ChipElement } from "@unframed/domain";
 import { Eye, EyeOff, Film, Frame, Image, Link, Lock, LockOpen, MessageSquarePlus, MousePointerClick, Pencil, Square, Type, ChevronDown, ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
@@ -97,7 +97,7 @@ export const layerRows = (elements: readonly SourceTreeElement[], live: readonly
 
 export interface LayersTabProps {
   readonly session: EditSession;
-  readonly kind: "page" | "motion";
+  readonly kind: ArtifactKind;
   /** The artifact's shape id, which keys the open state of its layers. */
   readonly shapeId: string;
   readonly locked: readonly string[];
