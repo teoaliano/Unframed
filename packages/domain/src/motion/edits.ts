@@ -242,8 +242,8 @@ const applyClipTime = (session: Session, edit: Extract<MotionEdit, { type: "clip
   if (!parsed) return refuse(`The edit to ${clip.id} could not be applied.`);
   session.html = html;
   session.ids = parsed.located.map((entry) => entry.id);
-  if (edit.start !== undefined) session.summary.push(`Moved clip ${clip.id} to ${newStart} s`);
-  if (edit.duration !== undefined) session.summary.push(`Set clip ${clip.id} to ${newDuration} s long`);
+  if (edit.start !== undefined && newStart !== oldStart) session.summary.push(`Moved clip ${nameOf(base, clip.hfId)} to ${newStart} s`);
+  if (edit.duration !== undefined && newDuration !== oldDuration) session.summary.push(`Set clip ${nameOf(base, clip.hfId)} to ${newDuration} s long`);
   return null;
 };
 

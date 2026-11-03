@@ -232,6 +232,8 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   // not the centre column's, which shrinks as the timeline grows.
   const grid = useRef<HTMLDivElement>(null);
   const [columnHeight, setColumnHeight] = useState(0);
+  // The Design tab's Show on timeline: the element and property, with a count so a repeat of the same request is still a request (spec 21).
+  const [reveal, setReveal] = useState<{ readonly element: string; readonly property: string; readonly nonce: number }>();
   useLayoutEffect(() => {
     const element = grid.current;
     if (!element) return;
@@ -402,6 +404,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             onOpenKit={() => kitUi(editor).update((state) => ({ ...state, open: true }))}
             onTell={(elements) => tellAgent(chatClient, shapeId, elements)}
             onAsk={(field, elements) => tellAgent(chatClient, shapeId, elements, makeEditableInstruction(field))}
+            onShowOnTimeline={(element, property) => setReveal({ element, property, nonce: (reveal?.nonce ?? 0) + 1 })}
           />
         )}
         {panel === "layers" && (
@@ -441,6 +444,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
           onAsk={(field, elements) => tellAgent(chatClient, shapeId, elements, makeEditableInstruction(field))}
           kit={kit}
           mode={facts.mode}
+          reveal={reveal}
           className="col-start-2 row-start-2 max-[1279px]:col-span-2"
         />
       )}
