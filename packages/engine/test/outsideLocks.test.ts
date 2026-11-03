@@ -21,7 +21,7 @@ describe("locks through an outside connection (spec 14, spec 18)", () => {
     const { agent, link } = await lockedCanvas();
     const session = await link.open();
 
-    const refused = await link.call(session, "page_write", { project: PROJECT, shapeId: "pg1", html: '<h1 data-hf-id="hf-aaaa">Changed</h1>' });
+    const refused = await link.call(session, "page_write", { project: PROJECT, shapeId: "pg1", html: '<!doctype html><h1 data-hf-id="hf-aaaa">Changed</h1>' });
     expect(refused.isError).toBe(true);
     expect(refused.value).toEqual({
       error: 'The element data-hf-id="hf-aaaa" ("Hi") is locked by the person, and this write changes it. Keep that element exactly as it is in the current file (page_read shows it), or ask the person to unlock it in the editor\'s Layers tab.',
@@ -37,8 +37,22 @@ describe("locks through an outside connection (spec 14, spec 18)", () => {
     const kept = await link.call(session, "page_write", {
       project: PROJECT,
       shapeId: "pg1",
-      html: `${HEADING}<p>Added below</p>`,
+      html: `<!doctype html>${HEADING}<p>Added below</p>`,
     });
+    expect(kept.isError).toBe(false);
+    expect((await roomShape(agent, "pg1")).props.file).not.toBe("1-locked.html");
+  });
+
+  it("refuses a page_edit that changes a locked element, and accepts one that leaves it alone", async () => {
+    const { agent, link } = await lockedCanvas();
+    const session = await link.open();
+
+    const refused = await link.call(session, "page_edit", { project: PROJECT, shapeId: "pg1", edits: [{ old_string: ">Hi<", new_string: ">Changed<" }] });
+    expect(refused.isError).toBe(true);
+    expect(String((refused.value as { error?: string }).error)).toMatch(/^The element data-hf-id="hf-aaaa" \("Hi"\) is locked by the person/);
+    expect((await roomShape(agent, "pg1")).props.file).toBe("1-locked.html");
+
+    const kept = await link.call(session, "page_edit", { project: PROJECT, shapeId: "pg1", edits: [{ old_string: "</h1>", new_string: "</h1><p>Added below</p>" }] });
     expect(kept.isError).toBe(false);
     expect((await roomShape(agent, "pg1")).props.file).not.toBe("1-locked.html");
   });
