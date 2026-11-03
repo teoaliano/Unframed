@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { startAgentEngine, type AgentEngine } from "./agent.ts";
+import { until, startAgentEngine, type AgentEngine } from "./agent.ts";
 import { motionShape, seed } from "./agentCanvas.ts";
 import { componentShape, pageShape } from "./canvasRecords.ts";
 
@@ -11,14 +11,6 @@ const PLAIN = `<!doctype html><html><body><h1>No components</h1></body></html>`;
 
 const commit = async (agent: AgentEngine, records: unknown[]) =>
   agent.rpc.call("testCanvas.apply", { project: "board", change: { put: records, remove: [] }, origin: { kind: "server", id: "test-commit" } });
-
-const until = async (check: () => boolean, what: string) => {
-  const started = Date.now();
-  while (!check()) {
-    if (Date.now() - started > 10_000) throw new Error(`Timed out waiting for ${what}`);
-    await new Promise((resolve) => setTimeout(resolve, 15));
-  }
-};
 
 const startProject = async (): Promise<AgentEngine> => {
   const agent = await startAgentEngine();

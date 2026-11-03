@@ -3,7 +3,7 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { compileComponent, compiledFileName } from "@unframed/domain";
 import { describe, expect, it } from "vitest";
-import { startAgentEngine, type AgentEngine } from "./agent.ts";
+import { until, startAgentEngine, type AgentEngine } from "./agent.ts";
 import { pageShape } from "./canvasRecords.ts";
 
 const SHEET_FILE = "1761400000000-button.html";
@@ -16,14 +16,6 @@ const PAGE = `<!doctype html><html><head><script src="${COMPILED}" data-uf-compo
 
 const seed = async (agent: AgentEngine, records: unknown[]) =>
   agent.rpc.call("testCanvas.apply", { project: "board", change: { put: records, remove: [] }, origin: { kind: "server", id: "test" } });
-
-const until = async (check: () => boolean, what: string, timeoutMs = 8000): Promise<void> => {
-  const started = Date.now();
-  while (!check()) {
-    if (Date.now() - started > timeoutMs) throw new Error(`Timed out waiting for ${what}`);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-};
 
 describe("snapshots and the compiled components they pin", () => {
   it("recreates a pinned compiled file that is missing, with the compiler's bytes, before the capture", async () => {

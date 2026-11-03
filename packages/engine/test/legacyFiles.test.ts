@@ -7,15 +7,9 @@ import { plainText } from "@unframed/domain";
 import { describe, expect, it } from "vitest";
 import { startEngine } from "./harness.ts";
 import { byRef, canvasRecords, fileDigests, legacyDataDir, SAMPLE_PROJECTS, SAMPLES, startLegacyEngine } from "./legacy.ts";
+import { until } from "./agent.ts";
 
 const DATABASE = "unframed.sqlite";
-const until = async (check: () => boolean | Promise<boolean>, what: string, timeoutMs = 10_000) => {
-  const started = Date.now();
-  while (!(await check())) {
-    if (Date.now() - started > timeoutMs) throw new Error(`Timed out waiting for ${what}`);
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-};
 const leftovers = async (folder: string) => (await readdir(folder)).filter((name) => name.startsWith(`${DATABASE}.import-`));
 
 describe("the atomic write", () => {

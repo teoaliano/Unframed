@@ -62,10 +62,10 @@ export interface ChatWatch {
   close(): Promise<void>;
 }
 
-const until = async <T>(check: () => T | undefined | false, what: string, timeoutMs = 10_000): Promise<T> => {
+const until = async <T>(check: () => T | undefined | false | Promise<T | undefined | false>, what: string, timeoutMs = 10_000): Promise<T> => {
   const started = Date.now();
   for (;;) {
-    const value = check();
+    const value = await check();
     if (value !== undefined && value !== false) return value;
     if (Date.now() - started > timeoutMs) throw new Error(`Timed out waiting for ${what}`);
     await new Promise((resolve) => setTimeout(resolve, 15));

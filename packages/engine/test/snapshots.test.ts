@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { scriptFolder, startAgentEngine, type AgentEngine } from "./agent.ts";
+import { until, scriptFolder, startAgentEngine, type AgentEngine } from "./agent.ts";
 import { roomShape } from "./agentCanvas.ts";
 import { pageShape } from "./canvasRecords.ts";
 
@@ -19,16 +19,6 @@ const pictured = (png: Buffer): any => {
 const snapshotsDir = (agent: AgentEngine) => join(agent.folder, ".cache", "snapshots");
 const snapshotFiles = async (agent: AgentEngine) => (await readdir(snapshotsDir(agent)).catch(() => [] as string[])).filter((name) => name.endsWith(".png")).sort();
 const snapshot = async (agent: AgentEngine, name: string) => pictured(await readFile(join(snapshotsDir(agent), name)));
-
-const until = async <T>(check: () => Promise<T | undefined | false>, what: string, timeoutMs = 8000): Promise<T> => {
-  const started = Date.now();
-  for (;;) {
-    const value = await check();
-    if (value !== undefined && value !== false) return value;
-    if (Date.now() - started > timeoutMs) throw new Error(`Timed out waiting for ${what}`);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-};
 
 const seed = async (agent: AgentEngine, records: unknown[]) =>
   agent.rpc.call("testCanvas.apply", { project: "board", change: { put: records, remove: [] }, origin: { kind: "server", id: "test" } });

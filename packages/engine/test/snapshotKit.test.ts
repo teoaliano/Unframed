@@ -2,7 +2,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { kitStamp, type Kit } from "@unframed/domain";
 import { describe, expect, it } from "vitest";
-import { startAgentEngine, type AgentEngine } from "./agent.ts";
+import { until, startAgentEngine, type AgentEngine } from "./agent.ts";
 import { roomShape } from "./agentCanvas.ts";
 import { pageShape } from "./canvasRecords.ts";
 
@@ -20,14 +20,6 @@ const snapshotOf = async (agent: AgentEngine) => {
   const dir = join(agent.folder, ".cache", "snapshots");
   const names = (await readdir(dir).catch(() => [] as string[])).filter((name) => name.endsWith(".png"));
   return names.length === 0 ? undefined : pictured(await readFile(join(dir, names[0]!)));
-};
-
-const until = async (check: () => Promise<boolean>, what: string) => {
-  const started = Date.now();
-  while (!(await check())) {
-    if (Date.now() - started > 10_000) throw new Error(`Timed out waiting for ${what}`);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
 };
 
 const kit: Kit = {
