@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { isBareFileName, resultMetaOf } from "@unframed/contracts";
 import {
   canvasView,
@@ -10,7 +10,11 @@ import {
   imageDimensions,
   PLAN_NO_WRITES_MESSAGE,
   prepareBatch,
+  readComponentSheet,
+  readPins,
   type CanvasRecord,
+  type ComponentDeclaration,
+  type Pin,
   type FileFacts,
   type InteractionMode,
 } from "@unframed/domain";
@@ -66,6 +70,31 @@ export const fileFacts = async (folder: string, name: string): Promise<FileFacts
     mime ??= /\.png$/i.test(name) ? "image/png" : /\.gif$/i.test(name) ? "image/gif" : /\.webp$/i.test(name) ? "image/webp" : "image/jpeg";
   }
   return { fileName, ...(mime === undefined ? {} : { mime }), ...(size ? { w: size.w, h: size.h } : {}), bytes: info.size };
+};
+
+/**
+ * What `canvas_read` reads from the sheets (spec 20): each component shape's current declaration,
+ * and each page or motion's pins. A file that cannot be read contributes nothing.
+ */
+const componentFacts = async (folder: string, records: ReadonlyArray<TLRecord>) => {
+  const declarations = new Map<string, ComponentDeclaration>();
+  const pins = new Map<string, Pin[]>();
+  for (const record of records) {
+    if (record.typeName !== "shape") continue;
+    const file = (record.props as { file?: unknown }).file;
+    if (typeof file !== "string" || file === "") continue;
+    if (record.type !== "component" && record.type !== "page" && record.type !== "motion") continue;
+    const html = await readFile(join(folder, basename(file)), "utf8").catch(() => undefined);
+    if (html === undefined) continue;
+    if (record.type === "component") {
+      const read = readComponentSheet(html);
+      if (read.ok) declarations.set(record.id, read.sheet.declaration);
+    } else {
+      const found = readPins(html);
+      if (found.length > 0) pins.set(record.id, found);
+    }
+  }
+  return { declarations, pins };
 };
 
 /** The locked element ids of a page or motion record. */
@@ -134,6 +163,7 @@ export class CanvasTools {
       const sidecar = await readResultSidecar(folder, result.sidecar);
       if (sidecar) recipes.set(record.id, sidecar.recipe);
     }
+    const { declarations, pins } = await componentFacts(folder, records);
     const outside = this.deps.isOutside(binding.project, binding.chatId);
     const live = outside ? this.deps.liveSelection(binding.project) : undefined;
     const selection = live ? live.shapeIds : this.deps.chatTurn(binding.project, binding.chatId).selection;
@@ -142,6 +172,8 @@ export class CanvasTools {
       boxes: shapeBoxes(records),
       recipes,
       selection,
+      declarations,
+      pins,
     });
     const kit = kitOf(records);
     const withKit = { ...view, kit: kit === null ? null : { name: kit.name, tokens: kit.tokens.length, modes: kit.modes } };

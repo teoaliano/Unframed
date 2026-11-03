@@ -17,6 +17,10 @@ export const SourceEdit = Schema.Union([
   Schema.Struct({ type: Schema.Literal("attribute"), elementId: Schema.String, name: Schema.String, value: Schema.NullOr(Schema.String) }),
   Schema.Struct({ type: Schema.Literal("hide"), elementId: Schema.String, hidden: Schema.Boolean }),
   Schema.Struct({ type: Schema.Literal("image"), elementId: Schema.String, target: Schema.Literals(["src", "background"]), file: Schema.String }),
+  // A declaration in one rule of a component sheet's style (spec 20). The rule's selector is checked against locks by the engine.
+  Schema.Struct({ type: Schema.Literal("componentRule"), rule: StyleRuleRef, property: Schema.String, value: Schema.String }),
+  // Moves a page or motion's pin of one tag to a newer sheet of that tag (spec 20). `to` is a sheet file of the project.
+  Schema.Struct({ type: Schema.Literal("componentUpdate"), tag: Schema.String, to: Schema.String }),
   // Exactly one of elementId and rule is set; the source edit refuses a token edit with both or neither (spec 19).
   Schema.Struct({
     type: Schema.Literal("token"),
@@ -58,6 +62,7 @@ export const SourceTreeElement = Schema.Struct({
   hidden: Schema.Boolean,
   src: Schema.optionalKey(Schema.String),
   inPicture: Schema.optionalKey(Schema.Boolean),
+  attributes: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
 });
 export type SourceTreeElement = typeof SourceTreeElement.Type;
 

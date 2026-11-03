@@ -43,6 +43,7 @@ import { indexOnTop } from "../runs/placeholders.ts";
 import { shapeBoxes } from "../runs/shapeBounds.ts";
 import { lockRefusal, sourceTreeOf } from "@unframed/domain/html";
 import { byteSize, prepareArtifactHtml } from "./artifactHtml.ts";
+import { pinComponents } from "./componentRegistry.ts";
 import { ensureBridge, ensureLibrary, readArtifact, writeAgentArtifact } from "./artifactStore.ts";
 import { ensureTokens, kitOf } from "../kits/tokensFile.ts";
 
@@ -71,7 +72,7 @@ export interface AgentToolContext {
 type Shape = TLRecord & { type: string; props: Record<string, unknown>; meta: Record<string, unknown> };
 
 /** The locked element ids of an artifact shape (spec 18). */
-const lockedOf = (shape: Shape): string[] => (Array.isArray(shape.props.lockedElements) ? shape.props.lockedElements.filter((id): id is string => typeof id === "string") : []);
+export const lockedOf = (shape: Shape): string[] => (Array.isArray(shape.props.lockedElements) ? shape.props.lockedElements.filter((id): id is string => typeof id === "string") : []);
 
 const isShape = (record: TLRecord | undefined): record is Shape => record?.typeName === "shape";
 
@@ -99,11 +100,13 @@ export class ArtifactTools {
     const turn = context.chatTurn(binding.project, binding.chatId);
     if (turn.interactionMode === "plan") return refuse(PLAN_NO_WRITES_MESSAGE);
     if (typeof args.html !== "string" || args.html.trim() === "") return refuse("html must be a non-empty string");
-    const html = prepareArtifactHtml(args.html, kind);
+    const records = await context.read(binding.project);
+    const folder = await context.folder(binding.project);
+    const pinned = await pinComponents(folder, records, prepareArtifactHtml(args.html, kind));
+    const html = pinned.html;
     const size = byteSize(html);
     if (size > ARTIFACT_SIZE_LIMIT) return refuse(`the ${kind} is too large (${size} bytes; the limit is ${ARTIFACT_SIZE_LIMIT})`);
 
-    const records = await context.read(binding.project);
     const shapeId = typeof args.shapeId === "string" && args.shapeId.trim() !== "" ? args.shapeId.trim() : undefined;
     let target: Shape | undefined;
     if (shapeId !== undefined) {
@@ -117,7 +120,6 @@ export class ArtifactTools {
     const given = typeof args.title === "string" && !named ? args.title.slice(0, ARTIFACT_TITLE_MAX) : undefined;
     const title = (given ?? current).trim();
 
-    const folder = await context.folder(binding.project);
     if (target !== undefined && lockedOf(target).length > 0) {
       const currentFile = typeof target.props.file === "string" ? target.props.file : "";
       const current = currentFile === "" ? undefined : await readArtifact(folder, currentFile).catch(() => undefined);
@@ -199,6 +201,7 @@ export class ArtifactTools {
         previewUrl: artifactUrl({ appHostname: "localhost", previewPort: this.previewPort(), project: projectSlug(binding.project), file: written.file, kind }),
         clock: applied.clock,
         ...(offToken === undefined ? {} : { offToken }),
+        ...(pinned.pinned.length + pinned.unknownTags.length === 0 ? {} : { components: { pinned: pinned.pinned, olderVersions: pinned.olderVersions, unknownTags: pinned.unknownTags } }),
       },
     };
   }

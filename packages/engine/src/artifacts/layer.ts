@@ -5,9 +5,9 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import type { ArtifactImage, ArtifactSnapshot, MotionTimelineReading, OffTokenFound, RenderStatus, SourceEdit, SourceTreeElement } from "@unframed/contracts";
+import type { ArtifactImage, ArtifactSnapshot, ComponentPins as ComponentPinsItem, ComponentUpdate, MotionTimelineReading, OffTokenFound, RenderStatus, SourceEdit, SourceTreeElement } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
-import { injectTags, projectSlug } from "@unframed/domain";
+import { injectTags, projectSlug, shapeKind } from "@unframed/domain";
 import { motionTimeline } from "@unframed/domain/motion";
 import { byteSize, prepareArtifactHtml } from "./artifactHtml.ts";
 import { artifactEditService } from "./editService.ts";
@@ -24,11 +24,15 @@ import { OpenProjects } from "../openProjects.ts";
 import { Runs } from "../runs/runs.ts";
 import { Config } from "../services.ts";
 import { ensureLibrary, writeUploadedArtifact } from "./artifactStore.ts";
+import { pinComponents } from "./componentRegistry.ts";
 import { ensureTokensFor, kitOf, TOKENS_FILE, ensureTokens } from "../kits/tokensFile.ts";
 import { findChrome } from "./chrome.ts";
 import { producerBackend, Renderer, RenderRefused, stubBackend } from "./renderer.ts";
 import { HeadlessChrome } from "./headlessChrome.ts";
 import { LivePointers } from "./livePointers.ts";
+import { ComponentPins, type PinsItem } from "./componentPins.ts";
+import { copyComponentSheet, ComponentCopyRefused } from "./componentCopy.ts";
+import { componentUpdatesOf } from "./componentUpdates.ts";
 import { chromeSnapshotRenderer, Snapshots, stubSnapshotRenderer, type SnapshotRenderer } from "./snapshots.ts";
 import { SettingsStore } from "../settingsStore.ts";
 import { Shutdown } from "../shutdown.ts";
@@ -52,6 +56,12 @@ export class Artifacts extends Context.Service<
     readonly snapshots: (project: string) => Stream.Stream<ArtifactSnapshot, UnframedError>;
     /** The timeline reading of a motion file (spec 21), cached per file for the life of the engine. */
     readonly timeline: (project: string, file: string) => Effect.Effect<MotionTimelineReading, UnframedError>;
+    /** Every page and motion file's component pins, then each newly named file's (spec 20). */
+    readonly componentPins: (project: string) => Stream.Stream<ComponentPinsItem, UnframedError>;
+    /** `component.copy` (spec 20): a sheet copied under its fresh tag. */
+    readonly componentCopy: (input: { project: string; file: string; from?: string | undefined }) => Effect.Effect<{ file: string; tag: string }, UnframedError>;
+    /** `component.updates` (spec 20): the components a page or motion has an older version of. */
+    readonly componentUpdates: (project: string, shapeId: string) => Effect.Effect<ComponentUpdate[], UnframedError>;
     /** "Open in a new tab": the shape's live viewer pointer, kept current from then on. */
     readonly openLive: (project: string, shapeId: string) => Effect.Effect<{}, UnframedError>;
     /** The element editor's file operations (spec 18). */
@@ -125,6 +135,14 @@ export const artifactsLayer = Layer.effect(
         catch: (error) => (error instanceof UnframedError ? error : unframedError("internal", `Something went wrong: ${errorText(error)}`)),
       });
 
+    const pinned = yield* PubSub.unbounded<{ readonly project: string; readonly item: PinsItem }>();
+    const pins = new ComponentPins({
+      folder: (project) => media.folder(project),
+      read: (project) => run(rooms.read(project)),
+      publish: (project, item) => void run(PubSub.publish(pinned, { project, item })),
+    });
+    yield* rooms.afterCommit((project, change) => void pins.committed(project, [...change.records.values()]));
+
     const pointers = new LivePointers((project) => media.folder(project));
     yield* rooms.afterOpen((project, room) => pointers.opened(project, room.read(), kitOf(room.read())));
     yield* rooms.afterCommit((project, change, room) => {
@@ -162,7 +180,8 @@ export const artifactsLayer = Layer.effect(
         const folder = yield* Effect.promise(() => media.folder(input.project));
         if (folder === undefined) return yield* unframedError("not_found", `There is no project named "${projectSlug(input.project)}".`);
         const fileName = input.fileName.split(/[\\/]/).pop()?.trim() || "motion.html";
-        const html = prepareArtifactHtml(input.html, "motion");
+        const records = yield* rooms.read(input.project);
+        const html = (yield* Effect.promise(() => pinComponents(folder, records, prepareArtifactHtml(input.html, "motion")))).html;
         if (byteSize(html) > UPLOAD_LIMIT) return yield* unframedError("bad_request", `The composition is too large (${(byteSize(html) / 1_048_576).toFixed(1)}MB). The limit is 20MB.`);
         return yield* Effect.tryPromise({
           try: async () => {
@@ -211,6 +230,58 @@ export const artifactsLayer = Layer.effect(
             );
           }),
         ),
+      componentPins: (project) =>
+        Stream.unwrap(
+          Effect.gen(function* () {
+            const slug = projectSlug(project);
+            if ((yield* Effect.promise(() => media.folder(slug))) === undefined) return yield* unframedError("not_found", `There is no project named "${slug}".`);
+            const subscription = yield* PubSub.subscribe(pinned);
+            return Stream.concat(
+              Stream.unwrap(Effect.map(Effect.promise(() => pins.initial(slug)), (items) => Stream.fromIterable(items))),
+              Stream.fromSubscription(subscription).pipe(
+                Stream.filter((entry) => entry.project === slug),
+                Stream.map((entry) => entry.item),
+              ),
+            );
+          }),
+        ),
+      componentUpdates: (project, shapeId) =>
+        Effect.gen(function* () {
+          const records = yield* rooms.read(project);
+          const shape = records.find((record) => record.id === shapeId && record.typeName === "shape");
+          const kind = shape === undefined ? undefined : shapeKind((shape as { type: string }).type);
+          if (kind !== "page" && kind !== "motion") return yield* unframedError("not_found", `There is no page or motion ${shapeId} on this canvas.`);
+          const file = (shape as unknown as { props: { file?: unknown } }).props.file;
+          const folder = yield* Effect.promise(() => media.folder(project));
+          if (folder === undefined || typeof file !== "string" || file === "") return [];
+          return yield* Effect.promise(() => componentUpdatesOf(folder, records, file));
+        }),
+      componentCopy: (input) =>
+        Effect.gen(function* () {
+          const project = projectSlug(input.project);
+          const from = input.from === undefined ? project : projectSlug(input.from);
+          const destination = yield* Effect.promise(() => media.folder(project));
+          if (destination === undefined) return yield* unframedError("not_found", `There is no project named "${project}".`);
+          const source = yield* Effect.promise(() => media.folder(from));
+          if (source === undefined) return yield* unframedError("bad_request", "That is not a file in this project.");
+          const records = yield* rooms.read(project);
+          const taken = new Set<string>();
+          for (const record of records) {
+            const tag = (record as { type?: unknown; props?: { tag?: unknown } }).type === "component" ? (record as { props?: { tag?: unknown } }).props?.tag : undefined;
+            if (typeof tag === "string") taken.add(tag);
+          }
+          return yield* Effect.tryPromise({
+            try: () =>
+              copyComponentSheet({
+                source,
+                destination,
+                file: input.file,
+                taken,
+                ofProject: from === project ? undefined : from,
+              }),
+            catch: (error) => (error instanceof ComponentCopyRefused ? unframedError(error.code, error.message) : unframedError("internal", `Could not copy the component: ${errorText(error)}`)),
+          });
+        }),
       openLive,
       sourceTree: (project, file) => fromEdits(() => edits.sourceTree(project, file)),
       prepareEdit: (project, shapeId) => fromEdits(() => edits.prepareEdit(project, shapeId)),

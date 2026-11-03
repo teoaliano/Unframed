@@ -1,7 +1,7 @@
 import type { Box } from "./grouping.ts";
 
 /** What a shape is, for generation: spec 02's kinds. Every tldraw shape without one is a mark. */
-export type ShapeKind = "prompt" | "image" | "video" | "group" | "page" | "motion" | "mark";
+export type ShapeKind = "prompt" | "image" | "video" | "group" | "page" | "motion" | "component" | "mark";
 
 /** tldraw's image crop: the visible region as fractions of the picture. */
 export interface Crop {

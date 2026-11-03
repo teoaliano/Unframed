@@ -4,7 +4,7 @@
  * is "differs from the kit's output", and the write goes through a temp file and a rename.
  */
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tokensScript, type Kit } from "@unframed/domain";
 
@@ -25,7 +25,8 @@ const writeOne = async (folder: string, kit: Kit | null): Promise<void> => {
   const path = join(folder, TOKENS_FILE);
   const current = await readFile(path, "utf8").catch(() => undefined);
   if (current === text) return;
-  await mkdir(folder, { recursive: true });
+  // A helper file never makes a project folder: a write that lands after a rename or a removal would bring the old project back.
+  if (!(await stat(folder).then((info) => info.isDirectory(), () => false))) return;
   const temp = `${path}.${randomUUID()}.tmp`;
   try {
     await writeFile(temp, text, "utf8");

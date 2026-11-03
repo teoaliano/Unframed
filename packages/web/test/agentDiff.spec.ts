@@ -88,7 +88,7 @@ test("the scope menu moves between turns and all turns, with the empty states", 
   await expect(page.getByRole("menuitemradio")).toHaveText(["Latest turn", "Turn 1", "Turn 2", "All turns"]);
   await page.getByRole("menuitemradio", { name: "Latest turn" }).click();
   await expect(diff.getByRole("button", { name: "Diff scope: Latest turn" })).toBeVisible();
-  await expect(diff.getByText("No page or motion changed in this selection.", { exact: true })).toBeVisible();
+  await expect(diff.getByText("No page, motion or component changed in this selection.", { exact: true })).toBeVisible();
 
   await diff.getByRole("button", { name: "Diff scope: Latest turn" }).click();
   await page.getByRole("menuitemradio", { name: "Turn 1" }).click();

@@ -31,11 +31,18 @@ export interface EditElement {
   removeEventListener?(type: string, listener: () => void): void;
   focus?(): void;
   blur?(): void;
+  /** The element's open shadow root, where a component instance keeps its markup (spec 20). */
+  readonly shadowRoot?: { querySelector(selector: string): EditElement | null } | null;
+  getRootNode?(): unknown;
+  matches?(selector: string): boolean;
+  readonly id?: string;
 }
 
 export interface EditEvent {
   readonly type: string;
   readonly target: EditElement | null;
+  /** The path from the target out through shadow roots, innermost first (spec 20: board copies). */
+  composedPath?(): ReadonlyArray<unknown>;
   readonly key: string;
   readonly shiftKey: boolean;
   readonly metaKey: boolean;
@@ -110,6 +117,41 @@ export function installEditBridge(win: EditWindow): void {
   const TRANSPORT_KEYS = [" ", "ArrowLeft", "ArrowRight", "j", "J", "k", "K", "l", "L", "m", "M", "o", "O"];
 
   const doc = win.document;
+  // A board cell's host carries this attribute (the sheet helper sets it). Its shadow root holds one copy of the template.
+  const CELL = "data-uf-cell";
+  const cellOf = (el: EditElement): EditElement | null => {
+    const root = el.getRootNode?.() as { host?: EditElement } | undefined;
+    const host = root?.host;
+    return host !== undefined && host.getAttribute(CELL) !== null ? host : null;
+  };
+  const isCopy = (el: EditElement): boolean => el.getAttribute("data-hf-id") !== null && cellOf(el) !== null;
+  // The copy the person picked for each template id, kept while the copy is on the board.
+  const picked = new Map<string, EditElement>();
+  const copiesOf = (id: string): EditElement[] => {
+    if (typeof doc.querySelectorAll !== "function") return [];
+    const found: EditElement[] = [];
+    for (const host of Array.from(doc.querySelectorAll("[" + CELL + "]"))) {
+      const copy = host.shadowRoot?.querySelector('[data-hf-id="' + id + '"]');
+      if (copy) found.push(copy);
+    }
+    return found;
+  };
+  // The copy an id shows in the frame: the one picked, else the first. Null when the id has no copies.
+  const primaryOf = (id: string): EditElement | null => {
+    const all = copiesOf(id);
+    const kept = picked.get(id);
+    if (kept !== undefined && all.includes(kept)) return kept;
+    return all[0] ?? null;
+  };
+  // The innermost copy an event passed through, if it came from a board cell.
+  const copyAt = (event: EditEvent): EditElement | null => {
+    for (const node of event.composedPath?.() ?? []) {
+      const el = node as EditElement;
+      if (el.nodeType === 1 && isCopy(el)) return el;
+    }
+    return null;
+  };
+  const targetOf = (event: EditEvent): EditElement | null => copyAt(event) ?? event.target;
   let peer: string = typeof win.unframedEditPeer === "string" ? win.unframedEditPeer : win.location.origin;
   let listening = false;
   let locked: string[] = [];
@@ -119,6 +161,8 @@ export function installEditBridge(win: EditWindow): void {
   let selection: string[] = [];
   let frame: unknown = null;
   let last: Record<string, EditBox> = {};
+  // The boxes of the copies of each targeted board element, as last sent.
+  let lastCopies = "";
   let editing: { el: EditElement; id: string; original: string | null } | null = null;
   // The keys typed while a double-click's text edit waits for the editor's answer. They are held, not forwarded.
   type HeldKey = { key: string; shiftKey: boolean; metaKey: boolean; ctrlKey: boolean };
@@ -156,6 +200,7 @@ export function installEditBridge(win: EditWindow): void {
   const validId = (el: EditElement): string | null => {
     const id = el.getAttribute("data-hf-id");
     if (id === null || !ID.test(id)) return null;
+    if (cellOf(el) !== null) return id;
     return doc.querySelector('[data-hf-id="' + id + '"]') === el ? id : null;
   };
 
@@ -165,7 +210,7 @@ export function installEditBridge(win: EditWindow): void {
   };
 
   const pickable = (el: EditElement | null): boolean =>
-    el !== null && el.nodeType === 1 && el !== doc.body && isInBody(el) && !EXCLUDED.includes(el.tagName.toLowerCase());
+    el !== null && el.nodeType === 1 && (isCopy(el) || (el !== doc.body && isInBody(el) && !EXCLUDED.includes(el.tagName.toLowerCase())));
 
   const isLocked = (el: EditElement): boolean => {
     for (let e: EditElement | null = el; e; e = e.parentElement) {
@@ -198,7 +243,10 @@ export function installEditBridge(win: EditWindow): void {
   // A selection key is an element id, or a live selector for a runtime element.
   const resolveKey = (key: string): EditElement | null => {
     try {
-      return doc.querySelector(ID.test(key) ? '[data-hf-id="' + key + '"]' : key);
+      const el = doc.querySelector(ID.test(key) ? '[data-hf-id="' + key + '"]' : key);
+      // A board's template id shows as its copy, so the outline sits on the copy the person picked.
+      if (el !== null && ID.test(key)) return primaryOf(key) ?? el;
+      return el;
     } catch {
       return null;
     }
@@ -232,6 +280,87 @@ export function installEditBridge(win: EditWindow): void {
     return found;
   };
 
+  // A copy's variant values, by variant name in the declaration's order (its cell's attributes). Null for anything else.
+  const variantOf = (el: EditElement): Record<string, string> | null => {
+    const host = cellOf(el);
+    if (host === null) return null;
+    const declaration = (host as unknown as { constructor: { declaration?: { variants?: Record<string, string[]> } } }).constructor.declaration;
+    if (declaration?.variants === undefined) return null;
+    const values: Record<string, string> = {};
+    for (const name of Object.keys(declaration.variants)) values[name] = host.getAttribute(name) ?? "";
+    return values;
+  };
+
+  // An instance's pinned component: its tag, sheet and declaration (the defined element's static fields), and the live value of each declared attribute (spec 20).
+  const componentOf = (el: EditElement) => {
+    const ctor = (el as unknown as { constructor: { declaration?: { tag: string; variants?: Record<string, string[]>; props?: Record<string, string> }; sheet?: unknown } }).constructor;
+    const declaration = ctor?.declaration;
+    if (declaration === undefined || typeof ctor.sheet !== "string") return undefined;
+    const names = [...Object.keys(declaration.variants ?? {}), ...Object.keys(declaration.props ?? {})];
+    return {
+      tag: declaration.tag,
+      sheet: ctor.sheet,
+      declaration,
+      attributes: Object.fromEntries(names.map((name) => [name, el.getAttribute(name)])),
+    };
+  };
+
+  // A board copy's rules (spec 20): each rule of the sheet's component style that reaches the copy in its cell, with its declarations.
+  // `unknown` marks a rule with `:has()`, which the bridge cannot test. The block is the index of the component style among the source's <style> elements, as spec 19 counts them.
+  const RULE_HOST = /:host(?:\(((?:[^()]|\([^()]*\))*)\))?/g;
+  const RULE_ATTRIBUTE = /\[\s*([A-Za-z][\w-]*)\s*(?:=\s*(?:"([^"]*)"|'([^']*)'|([^\]\s]+)))?\s*\]/g;
+  const reachesCopy = (host: EditElement, el: EditElement, selector: string): boolean | "unknown" => {
+    if (/:has\(/.test(selector)) return "unknown";
+    for (const part of selector.matchAll(RULE_HOST)) {
+      for (const attribute of (part[1] ?? "").matchAll(RULE_ATTRIBUTE)) {
+        const value = attribute[2] ?? attribute[3] ?? attribute[4] ?? null;
+        const actual = host.getAttribute(attribute[1]!);
+        if (value === null ? actual === null : actual !== value) return false;
+      }
+    }
+    const rest = selector.replace(RULE_HOST, " ").trim();
+    if (rest === "" || el.matches === undefined) return false;
+    try {
+      return el.matches(rest);
+    } catch {
+      return false;
+    }
+  };
+  const declarationsOf = (body: string) => {
+    const found: Array<{ property: string; value: string; important: boolean }> = [];
+    for (const part of body.split(";")) {
+      const colon = part.indexOf(":");
+      if (colon < 0) continue;
+      const property = part.slice(0, colon).trim().toLowerCase();
+      const raw = part.slice(colon + 1).trim();
+      const important = /!\s*important$/i.test(raw);
+      const value = raw.replace(/!\s*important$/i, "").trim();
+      if (property !== "" && value !== "") found.push({ property, value, important });
+    }
+    return found;
+  };
+  const sheetRulesOf = (el: EditElement) => {
+    const host = cellOf(el);
+    if (host === null || typeof doc.querySelectorAll !== "function") return undefined;
+    // The kit's custom properties sit in a <style id="unframed-tokens"> the tokens script adds at run time; the source does not hold it.
+    const styles = Array.from(doc.querySelectorAll("style")).filter((style) => style.id !== "unframed-tokens");
+    const block = styles.findIndex((style) => style.getAttribute("data-uf-component-style") !== null);
+    if (block < 0) return [];
+    const css = (styles[block]!.textContent ?? "").replace(/\/\*[\s\S]*?\*\//g, "");
+    const seen = new Map<string, number>();
+    const found: Array<{ ref: { block: number; selector: string; occurrence: number }; declarations: Array<{ property: string; value: string; important: boolean }>; unknown: boolean }> = [];
+    for (const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const selector = match[1]!.trim();
+      if (selector === "" || selector.startsWith("@")) continue;
+      const occurrence = seen.get(selector) ?? 0;
+      seen.set(selector, occurrence + 1);
+      const reaches = reachesCopy(host, el, selector);
+      if (reaches === false) continue;
+      found.push({ ref: { block, selector, occurrence }, declarations: declarationsOf(match[2]!), unknown: reaches === "unknown" });
+    }
+    return found;
+  };
+
   const reportOf = (el: EditElement) => {
     const style = win.getComputedStyle(el);
     const inline: Record<string, string | null> = {};
@@ -252,6 +381,9 @@ export function installEditBridge(win: EditWindow): void {
       computed,
       src: tag === "img" ? el.getAttribute("src") : null,
       animated: animatedOf(el),
+      variant: variantOf(el),
+      component: componentOf(el),
+      sheetRules: sheetRulesOf(el),
     };
   };
 
@@ -286,14 +418,21 @@ export function installEditBridge(win: EditWindow): void {
     if (doc.visibilityState !== "hidden") {
       const boxes: Record<string, EditBox> = {};
       let moved = false;
+      const copies: Record<string, EditBox[]> = {};
       for (const [key, el] of targets) {
         const box = boxOf(el);
         boxes[key] = box;
         const before = last[key];
         if (before === undefined || before.x !== box.x || before.y !== box.y || before.w !== box.w || before.h !== box.h) moved = true;
+        if (isCopy(el)) copies[key] = copiesOf(key).map(boxOf);
       }
       if (moved) post({ type: "unframed:edit:boxes", boxes });
       last = boxes;
+      const serialised = JSON.stringify(copies);
+      if (serialised !== lastCopies) {
+        lastCopies = serialised;
+        post({ type: "unframed:edit:copies", copies });
+      }
     }
     schedule();
   };
@@ -336,7 +475,7 @@ export function installEditBridge(win: EditWindow): void {
 
   const onMove = (event: EditEvent) => {
     if (!listening || editing !== null) return;
-    const el = hoverTarget(event.target);
+    const el = hoverTarget(targetOf(event));
     if (el === hovered) return;
     hovered = el;
     post({ type: "unframed:edit:hover", element: el === null ? null : reportOf(el) });
@@ -353,7 +492,8 @@ export function installEditBridge(win: EditWindow): void {
     if (!listening) return;
     if (editing !== null && event.target === editing.el) return;
     event.preventDefault();
-    const el = hoverTarget(event.target);
+    const el = hoverTarget(targetOf(event));
+    if (el !== null && isCopy(el)) picked.set(validId(el)!, el);
     post({ type: "unframed:edit:pick", element: el === null ? null : reportOf(el), additive: event.shiftKey === true });
   };
 
@@ -886,6 +1026,11 @@ export function installEditBridge(win: EditWindow): void {
         }
       }
       flags.set(el, flags.get(el) === true);
+    } else if (patch.type === "attribute" && typeof patch.name === "string") {
+      touchAttribute(el, patch.name);
+      if (typeof patch.value === "string") el.setAttribute(patch.name, patch.value);
+      else el.removeAttribute(patch.name);
+      flags.set(el, flags.get(el) === true);
     } else if (patch.type === "image" && typeof patch.file === "string") {
       if (patch.target === "background") {
         touchStyle(el, "background-image");
@@ -899,6 +1044,17 @@ export function installEditBridge(win: EditWindow): void {
         el.removeAttribute("sizes");
       }
       flags.set(el, flags.get(el) === true);
+    }
+  };
+
+  // A component sheet's declaration, as its own document carries it (spec 20). Null in a page or a motion.
+  const declarationOf = (): unknown => {
+    const script = doc.querySelector('script[data-uf-component]');
+    if (script === null || script.textContent === null) return null;
+    try {
+      return JSON.parse(script.textContent);
+    } catch {
+      return null;
     }
   };
 
@@ -972,7 +1128,11 @@ export function installEditBridge(win: EditWindow): void {
         } else applyPatch(record, flags);
       }
       if (tweened) seekNow();
-      const elements = Array.from(flags.keys()).map((el) => ({ ...reportOf(el), overridden: flags.get(el) === true }));
+      const elements = Array.from(flags.keys()).map((el) => {
+        const id = validId(el);
+        const shown = id === null || cellOf(el) !== null ? el : (primaryOf(id) ?? el);
+        return { ...reportOf(shown), overridden: flags.get(el) === true };
+      });
       post({ type: "unframed:edit:report", elements, families: familiesOf() });
       last = {};
       schedule();
@@ -990,7 +1150,7 @@ export function installEditBridge(win: EditWindow): void {
       beginEdit(data.id);
       if (held !== null) replay(held.keys);
     } else if (type === "unframed:edit:tree") {
-      post({ type: "unframed:edit:tree", nodes: Array.from(doc.body.children).filter(pickable).map(treeOf) });
+      post({ type: "unframed:edit:tree", nodes: Array.from(doc.body.children).filter(pickable).map(treeOf), declaration: declarationOf() });
     } else if (type === "unframed:edit:hitTest" && typeof data.x === "number" && typeof data.y === "number") {
       post({ type: "unframed:edit:hit", ...hitAt(data.x, data.y) });
     }

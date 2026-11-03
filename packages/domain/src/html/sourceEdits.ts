@@ -5,8 +5,10 @@
 import type { SourceEdit } from "@unframed/contracts";
 import { applyMotionEdits, isMotionEdit, type MotionEditOptions } from "../motion/edits.ts";
 import type { ArtifactKind } from "../artifacts/artifactRules.ts";
+import type { ComponentDeclaration } from "../components/sheet.ts";
+import { setPin } from "../components/pins.ts";
 import { DESIGN_FIELDS, styleValueRefusal } from "../designFields.ts";
-import { parseStylesheet } from "../kits/css.ts";
+import { parseStylesheet, type CssRule } from "../kits/css.ts";
 import { kitCssNames } from "../kits/rules.ts";
 import { cssName } from "../kits/runtime.ts";
 import { TEXT_STYLE_SUFFIX, type Kit } from "../kits/types.ts";
@@ -27,6 +29,12 @@ import {
 } from "./source.ts";
 import { sourceTreeOf } from "./sourceTree.ts";
 
+/** An instance's pinned component, by tag: its title and the declaration of the version it pins (spec 20). */
+export type InstanceDeclarations = ReadonlyMap<string, { readonly title: string; readonly declaration: ComponentDeclaration }>;
+
+/** The longest text a text property takes (spec 20). */
+const TEXT_PROPERTY_MAX = 500;
+
 export type SourceEditResult =
   | { readonly ok: true; readonly html: string; readonly summary: string[] }
   | { readonly ok: false; readonly refusal: string };
@@ -46,20 +54,21 @@ type Step = { readonly html: string; readonly line: string } | { readonly refusa
  * source). Element edits go in order, then the motion edits (spec 21) in one pass: the two kinds
  * touch different bytes, so their order does not change the result. `kind` only words the
  * refusals. `kit` is the project kit (spec 19): a token edit needs it, and a style value may use
- * its custom properties. `options` carries the artifact's locks and token kinds to the motion edits.
+ * its custom properties. `instances` holds the component declarations of the instances on the page (spec 20). `options` carries the artifact's locks and token kinds to the motion edits.
  */
 export const applySourceEdits = (
   html: string,
   edits: readonly SourceEdit[],
   kind: ArtifactKind = "page",
   kit: Kit | null = null,
+  instances: InstanceDeclarations = new Map(),
   options: MotionEditOptions = {},
 ): SourceEditResult => {
   let current = html;
   const lines: string[] = [];
   for (const edit of edits) {
     if (isMotionEdit(edit)) continue;
-    const step = applyEdit(current, edit, kind, kit);
+    const step = applyEdit(current, edit, kind, kit, instances);
     if ("refusal" in step) return { ok: false, refusal: step.refusal };
     current = step.html;
     lines.push(step.line);
@@ -72,6 +81,20 @@ export const applySourceEdits = (
     current = result.html;
     lines.push(...result.summary);
   }
+  // Accepting several component updates at once is one line, not one for each (spec 20).
+  const updates = edits.filter((edit) => edit.type === "componentUpdate").length;
+  if (updates > 1) {
+    // `lines` holds one line for each element edit, in order, then the motion summary.
+    const elementEdits = edits.filter((edit) => !isMotionEdit(edit));
+    let merged = false;
+    const folded = lines.flatMap((line, index) => {
+      if (elementEdits[index]?.type !== "componentUpdate") return [line];
+      if (merged) return [];
+      merged = true;
+      return [`Updated ${updates} components`];
+    });
+    return { ok: true, html: current, summary: summaryLines(folded) };
+  }
   return { ok: true, html: current, summary: summaryLines(lines) };
 };
 
@@ -83,8 +106,10 @@ export const summaryLines = (lines: readonly string[]): string[] => {
   return rest > 0 ? [...shown, `and ${rest} more`] : shown;
 };
 
-const applyEdit = (html: string, edit: Exclude<SourceEdit, { readonly type: "tween-time" | "tween-ease" | "tween-stagger" | "tween-value" | "clip-time" | "composition-duration" }>, kind: ArtifactKind, kit: Kit | null): Step => {
+const applyEdit = (html: string, edit: Exclude<SourceEdit, { readonly type: "tween-time" | "tween-ease" | "tween-stagger" | "tween-value" | "clip-time" | "composition-duration" }>, kind: ArtifactKind, kit: Kit | null, instances: InstanceDeclarations): Step => {
   if (edit.type === "token") return applyToken(html, edit, kind, kit);
+  if (edit.type === "componentRule") return applyComponentRule(html, edit, kit);
+  if (edit.type === "componentUpdate") return { html: setPin(html, edit.tag, edit.to), line: `Updated ${instances.get(edit.tag)?.title ?? edit.tag}` };
   const before = sourceTreeOf(html).find((entry) => entry.id === edit.elementId);
   const target = findById(parseSource(html), edit.elementId);
   if (before === undefined || target === undefined) return { refusal: `There is no element ${edit.elementId} in this ${kind} any more.` };
@@ -110,7 +135,11 @@ const applyEdit = (html: string, edit: Exclude<SourceEdit, { readonly type: "twe
       return { html: next, line: `${field.label} · ${after(next)}` };
     }
     case "attribute": {
-      if (edit.name !== "data-uf-name") return { refusal: `The attribute ${edit.name} cannot be edited here.` };
+      const instance = instances.get(el.tagName.toLowerCase());
+      if (edit.name !== "data-uf-name") {
+        if (instance === undefined) return { refusal: `The attribute ${edit.name} cannot be edited here.` };
+        return instanceAttribute(html, id, instance, edit.name, edit.value, after);
+      }
       const value = edit.value === null ? "" : edit.value.trim().slice(0, NAME_MAX);
       const next = setAttribute(html, id, "data-uf-name", value === "" ? null : renderAttribute("data-uf-name", value));
       return { html: next, line: `Name · ${after(next)}` };
@@ -133,6 +162,43 @@ const applyEdit = (html: string, edit: Exclude<SourceEdit, { readonly type: "twe
       return { html: next, line: `Image · ${after(next)}` };
     }
   }
+};
+
+/**
+ * An instance's own variant or property (spec 20): its attribute, set or removed. A variant's value
+ * must be one it lists, and the default value removes the attribute. Each property kind has its value rule.
+ */
+const instanceAttribute = (
+  html: string,
+  id: string,
+  instance: { readonly title: string; readonly declaration: ComponentDeclaration },
+  name: string,
+  value: string | null,
+  after: (next: string) => string,
+): Step => {
+  const { declaration, title } = instance;
+  const label = name.charAt(0).toUpperCase() + name.slice(1);
+  if (Object.hasOwn(declaration.variants, name)) {
+    const values = declaration.variants[name]!;
+    if (value !== null && !values.includes(value)) return { refusal: `${value} is not a ${name} of ${title}.` };
+    if (value === null || value === values[0]) {
+      const next = setAttribute(html, id, name, null);
+      return { html: next, line: `${label} · ${after(next)}` };
+    }
+    const next = setAttribute(html, id, name, renderAttribute(name, value));
+    return { html: next, line: `${label} · ${after(next)}` };
+  }
+  if (!Object.hasOwn(declaration.props, name)) return { refusal: `The attribute ${name} cannot be edited here.` };
+  const type = declaration.props[name]!;
+  if (value === null) {
+    const next = setAttribute(html, id, name, null);
+    return { html: next, line: `${label} · ${after(next)}` };
+  }
+  if (type === "boolean" && value !== "") return { refusal: `${name} is on or off, so it takes no value.` };
+  if (type === "text" && value.length > TEXT_PROPERTY_MAX) return { refusal: `${name} is at most ${TEXT_PROPERTY_MAX} characters.` };
+  if (type === "image" && !isImageFile(value)) return { refusal: `${value} is not an image this component can show.` };
+  const next = setAttribute(html, id, name, renderAttribute(name, value));
+  return { html: next, line: `${label} · ${after(next)}` };
 };
 
 /**
@@ -169,6 +235,23 @@ const applyToken = (html: string, edit: Extract<SourceEdit, { type: "token" }>, 
   return { html: next, line: `Token · In styles: ${ref.selector}` };
 };
 
+/**
+ * A componentRule edit (spec 20): sets one declaration of the rule its StyleRuleRef names, adding it
+ * when the rule lacks it. The rest of the source stays byte for byte.
+ */
+const applyComponentRule = (html: string, edit: Extract<SourceEdit, { type: "componentRule" }>, kit: Kit | null): Step => {
+  const field = DESIGN_FIELDS.find((candidate) => candidate.property === edit.property);
+  if (field === undefined) return { refusal: `${edit.property} cannot be edited here.` };
+  const value = edit.value.trim();
+  const refusal = styleValueRefusal(edit.property, value, kit === null ? [] : kitCssNames(kit));
+  if (refusal !== null) return { refusal };
+  const found = findRule(html, edit.rule);
+  if (found === null) return { refusal: "That style rule is no longer in this component." };
+  const declaration = found.rule.declarations.filter((candidate) => candidate.property === edit.property).at(-1);
+  const next = declaration === undefined ? addDeclaration(html, found.block.start, found.rule, edit.property, value) : html.slice(0, found.block.start + declaration.start) + value + html.slice(found.block.start + declaration.end);
+  return { html: next, line: `${field.label} · ${edit.rule.selector}` };
+};
+
 /** The `<style>` elements of a source in document order, each with the offsets of its text. A block without a location is left out. */
 const styleBlocks = (doc: Document): Array<{ start: number; end: number }> => {
   const found: Array<{ start: number; end: number }> = [];
@@ -186,11 +269,18 @@ const styleBlocks = (doc: Document): Array<{ start: number; end: number }> => {
   return found;
 };
 
-/**
- * Replaces the value of the last `property` declaration of the rule `ref` names, keeping every
- * other byte. Null when the rule, or its declaration of that property, is gone.
- */
-const replaceRuleValue = (html: string, ref: { block: number; selector: string; occurrence: number }, property: string, value: string): string | null => {
+/** Adds a declaration at the end of a rule's block, before the closing brace and any space before it. */
+const addDeclaration = (html: string, blockStart: number, rule: CssRule, property: string, value: string): string => {
+  const open = blockStart + rule.body.open;
+  let at = blockStart + rule.body.close;
+  while (at > open && /\s/.test(html.charAt(at - 1))) at -= 1;
+  const before = html.slice(open, at).trimEnd();
+  const lead = before === "" || before.endsWith(";") ? " " : "; ";
+  return html.slice(0, at) + `${lead}${property}: ${value};` + html.slice(at);
+};
+
+/** The rule `ref` names, with the start offset of its style block in the source. Null when the rule is gone. */
+const findRule = (html: string, ref: { block: number; selector: string; occurrence: number }): { rule: CssRule; block: { start: number; end: number } } | null => {
   const block = styleBlocks(parseSource(html))[ref.block];
   if (block === undefined) return null;
   const text = html.slice(block.start, block.end);
@@ -199,12 +289,20 @@ const replaceRuleValue = (html: string, ref: { block: number; selector: string; 
     if (rule.selector !== ref.selector) continue;
     const occurrence = seen;
     seen += 1;
-    if (occurrence !== ref.occurrence) continue;
-    const declaration = rule.declarations.filter((candidate) => candidate.property === property).at(-1);
-    if (declaration === undefined) return null;
-    return html.slice(0, block.start + declaration.start) + value + html.slice(block.start + declaration.end);
+    if (occurrence === ref.occurrence) return { rule, block };
   }
   return null;
+};
+
+/**
+ * Replaces the value of the last `property` declaration of the rule `ref` names, keeping every
+ * other byte. Null when the rule, or its declaration of that property, is gone.
+ */
+const replaceRuleValue = (html: string, ref: { block: number; selector: string; occurrence: number }, property: string, value: string): string | null => {
+  const found = findRule(html, ref);
+  const declaration = found?.rule.declarations.filter((candidate) => candidate.property === property).at(-1);
+  if (found === null || declaration === undefined) return null;
+  return html.slice(0, found.block.start + declaration.start) + value + html.slice(found.block.start + declaration.end);
 };
 
 const isImageFile = (file: string): boolean =>

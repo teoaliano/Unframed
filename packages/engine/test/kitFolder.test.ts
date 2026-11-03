@@ -1,4 +1,4 @@
-import { cp, writeFile } from "node:fs/promises";
+import { cp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { startEngine, type TestEngine } from "./harness.ts";
@@ -27,8 +27,8 @@ describe("a project folder with a kit is self-contained (spec 19, task 42)", () 
   it("serves a copied folder's page, its tokens script and its kit from the preview origin with no help from the app", async () => {
     const board = join(engine.dataDir, "output", "board");
     await writeFile(join(board, "1-page.html"), `<!doctype html><html><head><script src="unframed-tokens.js"></script></head><body><h1 style="color: var(--color-brand-primary)">Hi</h1></body></html>`);
-    // Wait for the room's write of the tokens script before copying the folder.
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    // Wait for the room's write of the tokens script, carrying the kit, before copying the folder.
+    await expect.poll(() => readFile(join(board, "unframed-tokens.js"), "utf8").catch(() => ""), { timeout: 10_000 }).toContain("color/brand/primary");
     await cp(board, join(engine.dataDir, "output", "copied"), { recursive: true });
 
     const get = (path: string) => engine.request(path, { port: engine.previewPort, headers: { host: `localhost:${engine.previewPort}` } });

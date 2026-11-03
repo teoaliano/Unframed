@@ -42,7 +42,7 @@ describe("applySourceEdits with motion edits", () => {
   it("passes the locked elements through, so a locked tween refuses with the lock sentence", () => {
     const title = motionTimeline(motion).tweens[0]!;
     const edit: MotionEdit = { type: "tween-time", tween: title.ref, start: 1 };
-    const result = applySourceEdits(motion, [edit], "motion", null, { lockedElements: new Set(["title1"]) });
+    const result = applySourceEdits(motion, [edit], "motion", null, new Map(), { lockedElements: new Set(["title1"]) });
     expect(result).toEqual({ ok: false, refusal: "title is locked. Unlock it in Layers to edit it." });
   });
 });

@@ -14,6 +14,7 @@ import { ParametersButton } from "./ParametersButton.tsx";
 import { RenderButton } from "./render.tsx";
 import { artifactsOf, installFrameHold, installTuningWatch, previewPort } from "./state.ts";
 import { installImageDrop } from "./imageDrop.tsx";
+import { watchComponentPins } from "./componentPins.ts";
 import { watchSnapshots } from "./snapshots.ts";
 
 // Loaded with the editor or the first Parameters panel only: DialKit and its stylesheet never reach a board where neither opens.
@@ -64,6 +65,7 @@ export const ArtifactsHost = () => {
       installFrameHold(editor),
       installImageDrop(editor, engine, project),
       watchSnapshots(engine, project),
+      watchComponentPins(engine, project),
       registerSlot("openArtifact", openArtifactEditor),
       registerSlot("renderButton", RenderButton),
       registerSlot("parametersButton", ParametersButton),
