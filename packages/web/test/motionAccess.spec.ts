@@ -70,7 +70,8 @@ const hitAt = (page: Page, x: number, y: number) =>
 test("the values panel keeps its Background field after a refused colour, showing the last committed colour", async ({ page, agent }) => {
   // The shared motion helper lives in motionValues.spec.ts; this spec opens the same kind of motion itself.
   await openMotion(page, agent, WIDE.replace('tl.to("#dot", { x: 400, duration: 4 }, 0);', 'tl.to("#dot", { backgroundColor: "#00ff00", duration: 4 }, 0);'));
-  await bar(page).dblclick();
+  // The end keyframe holds the colour, so its diamond opens the panel with the Background field.
+  await timeline(page).locator('[data-testid="timeline-diamond"][data-tween="0"][data-fraction="1"]').first().click({ position: { x: 8, y: 5 } });
   const background = panel(page).getByRole("textbox", { name: "Background", exact: true });
   await expect(background).toHaveValue("#00ff00");
   await background.fill("rgb(</script><script>alert(1)</script>)");

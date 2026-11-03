@@ -1342,7 +1342,8 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
           tabIndex={-1}
           className="relative flex min-h-0 flex-1 flex-col outline-none"
           onKeyDown={(event) => {
-            if (event.key !== "Enter" || selectedTween === null) return;
+            // The values panel sits inside this area in the React tree, so its own Enter would bubble here and reopen the panel at the bar.
+            if (event.key !== "Enter" || selectedTween === null || (event.target as HTMLElement).closest('[data-testid="values-panel"]')) return;
             const bar = rows.flatMap((row) => row.bars).find((candidate) => candidate.tween === selectedTween);
             if (bar === undefined) return;
             event.preventDefault();
