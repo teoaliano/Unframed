@@ -53,6 +53,12 @@ export class CanvasRooms extends Context.Service<
     /** The room clock: it counts every committed change. */
     readonly clock: (project: string) => Effect.Effect<number, UnframedError>;
     readonly apply: (project: string, change: CanvasChange, origin: ChangeOrigin) => Effect.Effect<Applied, UnframedError>;
+    /** The change `decide` makes from the room's records as they are now, applied in the same step: no change lands between. Nothing when it makes none. */
+    readonly applyWhen: (
+      project: string,
+      decide: (get: (id: string) => TLRecord | undefined) => CanvasChange | undefined,
+      origin: ChangeOrigin,
+    ) => Effect.Effect<Applied | undefined, UnframedError>;
     /** The ids among `recordIds` a tab changed after `clock`. */
     readonly changedSince: (project: string, recordIds: ReadonlyArray<string>, clock: number) => Effect.Effect<ReadonlyArray<string>, UnframedError>;
     /** Every change log row after `clock`, with its origin (spec 07 reads the log through this). */
@@ -278,6 +284,11 @@ export const canvasRoomsLayer = Layer.effect(
       read: (project) => engineCall(project, (room) => room.read()),
       clock: (project) => engineCall(project, (room) => room.clock()),
       apply: (project, change, origin) => engineCall(project, (room) => room.apply(change, origin)),
+      applyWhen: (project, decide, origin) =>
+        engineCall(project, (room) => {
+          const change = decide((id) => room.get(id));
+          return change === undefined ? undefined : room.apply(change, origin);
+        }),
       changedSince: (project, recordIds, clock) => engineCall(project, (room) => room.changedSince(recordIds, clock)),
       changeLog: (project, clock) => engineCall(project, (room) => room.changeLog(clock)),
       close: (project) =>
