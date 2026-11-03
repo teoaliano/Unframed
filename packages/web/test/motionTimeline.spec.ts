@@ -128,6 +128,10 @@ test("Hide timeline collapses the strip to its transport row, Show timeline open
   await expect.poll(async () => (await boxOf(timeline(page))).height).toBeCloseTo(40, 0);
   await expect(timeline(page).getByRole("separator", { name: "Resize the timeline" })).toHaveCount(0);
   await expect(timeline(page).getByRole("button", { name: "Show timeline" })).toBeVisible();
+  // The choice is in the engine before the page reloads, which would otherwise cut the write short.
+  await expect
+    .poll(async () => (await (await agent.rpc()).call("preferences.get", { keys: ["editor.timeline"] })).values["editor.timeline"], { timeout: 10_000 })
+    .toEqual({ height: 240, open: false });
 
   await page.reload();
   await openCanvas(page, agent);

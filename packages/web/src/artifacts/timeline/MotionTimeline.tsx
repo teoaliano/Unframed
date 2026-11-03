@@ -235,7 +235,7 @@ export const MotionTimeline = ({ title, engine, column, transport, className }: 
           )}
           {open && (
             <Tip label="Loop (Shift+L)">
-              <Toggle aria-label="Loop (Shift+L)" pressed={loop} onPressedChange={(on) => transport.setLoop(on)} size="sm" variant="default" className="size-8 p-0">
+              <Toggle aria-label="Loop (Shift+L)" pressed={loop} onPressedChange={(on) => transport.setLoop(on)} size="sm" variant="default">
                 <Repeat aria-hidden />
               </Toggle>
             </Tip>
