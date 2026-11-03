@@ -61,7 +61,13 @@ const transportZone = (): TransportZone | undefined => {
   const active = document.activeElement;
   if (active === null || active === document.body || active === document.documentElement) return "body";
   if (active instanceof HTMLIFrameElement) return "frame";
-  return active instanceof HTMLElement && active.closest("[data-timeline-focus]") !== null ? "strip" : undefined;
+  if (!(active instanceof HTMLElement)) return undefined;
+  // The tldraw container holds the focus after a click on the editor's own surface, where the frame is.
+  if (active.classList.contains("tl-container")) return "frame";
+  // The time area itself, and the transport's buttons. A row, a bar, a diamond or a menu keeps its own keys.
+  if (active.hasAttribute("data-timeline-focus")) return "strip";
+  if (active.closest("[data-testid='timeline-transport']") !== null && active.matches("button:not([aria-haspopup])")) return "strip";
+  return undefined;
 };
 
 const stop = (event: { stopPropagation(): void }) => event.stopPropagation();
@@ -249,7 +255,8 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
       if (event.defaultPrevented || editor.wasEventAlreadyHandled(event) || typingIn(event.target) || typingIn(document.activeElement)) return;
       if (isUndo(event)) return;
       // The transport takes its keys only where the focus is the frame, the strip or the page body (spec 21, the shortcuts).
-      const zone = transportZone();
+      // Space on a focused button is that button's (Play, or a toggle), so the transport leaves it alone.
+      const zone = event.key === " " && document.activeElement instanceof HTMLButtonElement ? undefined : transportZone();
       if (motionShown.current && zone !== undefined && transport.handleKey(event.key, { shift: event.shiftKey, meta: event.metaKey, ctrl: event.ctrlKey }, zone)) {
         event.preventDefault();
         return;

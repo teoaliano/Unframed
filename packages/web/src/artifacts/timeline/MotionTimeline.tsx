@@ -664,6 +664,8 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
   const onRulerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || length <= 0) return;
     event.preventDefault();
+    // The press keeps the focus where the transport's keys act: the strip's time area, not a row or a button left focused before.
+    event.currentTarget.closest<HTMLElement>("[data-timeline-focus]")?.focus();
     event.currentTarget.setPointerCapture(event.pointerId);
     scrubbing.current = true;
     transport.pause();
