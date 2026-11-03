@@ -180,6 +180,8 @@ export const ClientChatCommand = Schema.Union([
     ...Base,
     requestId: Schema.String,
     answers: Schema.Record(Schema.String, Schema.Unknown),
+    /** Files attached to answers, by question id (t3code's `attachmentsByQuestionId`). */
+    attachmentsByQuestionId: Schema.optionalKey(Schema.Record(Schema.String, Schema.Array(AttachmentRef))),
   }),
   Schema.Struct({ type: Schema.Literal("thread.user-input.dismiss"), ...Base, requestId: Schema.String }),
   Schema.Struct({ type: Schema.Literal("thread.turn.revert"), ...Base, turnCount: Schema.Number }),

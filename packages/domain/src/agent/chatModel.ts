@@ -253,7 +253,13 @@ export type ThreadClientCommand = CommandBase &
       }
     | { readonly type: "thread.turn.interrupt"; readonly turnId?: string }
     | { readonly type: "thread.approval.respond"; readonly requestId: string; readonly decision: ApprovalDecision }
-    | { readonly type: "thread.user-input.respond"; readonly requestId: string; readonly answers: Readonly<Record<string, unknown>> }
+    | {
+        readonly type: "thread.user-input.respond";
+        readonly requestId: string;
+        readonly answers: Readonly<Record<string, unknown>>;
+        /** Files attached to each answer, by question id; resolved by the engine like a message's. */
+        readonly attachmentsByQuestionId?: Readonly<Record<string, ReadonlyArray<AttachmentRef | MessageAttachment>>>;
+      }
     | { readonly type: "thread.user-input.dismiss"; readonly requestId: string }
     | { readonly type: "thread.turn.revert"; readonly turnCount: number }
     | { readonly type: "thread.checkpoint.revert"; readonly turnCount: number; readonly restoreCanvas: boolean }

@@ -33,6 +33,7 @@ Scripted-agent scripts in spec 07's format. Specs 07 and 08 use them all; `fixtu
 - `fixtures/README.md`: the seeded shape ids and the rules every fixture follows. Specs 07 and 08.
 - `fixtures/attachment.json`: a message with an attached image; checks the attachment line in the preamble. Spec 07.
 - `fixtures/bad-shape.json`: `motion_write` on a shape that no longer exists, refused. Spec 07.
+- `fixtures/approval-options.json`: a delete outside the project whose ask offers no standing grant and gives a reason, then a command whose ask offers its own answers, one with a warning. Specs 07 and 08.
 - `fixtures/bulk-edit.json`: one `canvas_write` that retitles two motions, then a second turn that expects the change note. Spec 07.
 - `fixtures/canvas-question.json`: a question about the board, answered after `canvas_read`. Specs 07 and 08.
 - `fixtures/dials.json`: `motion_write` that exposes three parameters. Specs 07 and 09.
@@ -47,6 +48,7 @@ Scripted-agent scripts in spec 07's format. Specs 07 and 08 use them all; `fixtu
 - `fixtures/plan.json`: plan mode: `canvas_read` runs, `canvas_write` is refused, a plan is captured; turn 2 builds the page after Implement. Specs 07 and 08.
 - `fixtures/question.json`: the agent asks the person two questions (single and multi-select) and waits. Specs 07 and 08.
 - `fixtures/rate-limit.json`: a usage-limit warning, then a rejected turn, then `allowed` clearing the notice. Specs 07 and 08.
+- `fixtures/resume.json`: a turn that asks a question (so it can be stopped while it waits), then a second turn that answers Resume thread. Spec 08.
 - `fixtures/race.json`: a `page_write` on the landing page, sent while the editor holds a pending burst. Spec 18.
 - `fixtures/motion-race.json`: a `motion_write` on the motion `intro`, sent while the timeline holds a pending burst. Spec 21, task 37.
 - `fixtures/revise.json`: `motion_read` then `motion_write` on an existing motion. Specs 07 and 09.

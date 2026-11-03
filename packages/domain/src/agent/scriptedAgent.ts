@@ -3,11 +3,14 @@
  * first message, and the sentences a script fails a turn with. It replaces the model and
  * nothing else.
  */
+import type { ApprovalSignals } from "./permissionPolicy.ts";
 import type { UserQuestion } from "./runtimeEvents.ts";
 
 export interface ScriptCall {
   readonly name: string;
   readonly input: Readonly<Record<string, unknown>>;
+  /** For a provider tool: what the provider says about the ask, as Claude's `canUseTool` options say it. */
+  readonly permission?: ApprovalSignals;
 }
 
 export interface ScriptTurn {

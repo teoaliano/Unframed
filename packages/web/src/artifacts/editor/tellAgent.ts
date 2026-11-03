@@ -50,6 +50,6 @@ export const tellAgent = (client: ChatClient, shapeId: string, elements: Readonl
   const current = stored.elements ?? [];
   const merged = [...current, ...chips.filter((chip) => !current.some((existing) => sameChip(existing, chip)))];
   const text = instruction !== undefined && stored.text.trim() === "" ? instruction : stored.text;
-  client.setDraft(key, { text, mentions: stored.mentions, elements: merged });
+  client.setDraft(key, { ...stored, text, elements: merged });
   client.setUi({ chosen: key, pinned: null });
 };

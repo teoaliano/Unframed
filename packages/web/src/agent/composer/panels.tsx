@@ -1,14 +1,19 @@
-import type { ApprovalDecision } from "@unframed/contracts";
-import { openRequests, planTitle, type Chat, type ChatActivity, type ProposedPlan, type UserQuestion } from "@unframed/domain";
-import { Check, ChevronDown, ChevronRight, Ellipsis, ListChecks, ListTodo, MessageCircleQuestion, ShieldAlert, X } from "lucide-react";
-import { useEffect, useRef, useState, type RefObject } from "react";
+import type { ApprovalDecision, ChatAttachment } from "@unframed/contracts";
+import { DEFAULT_APPROVAL_OPTIONS, openRequests, planTitle, type ApprovalOption, type Chat, type ChatActivity, type ProposedPlan, type UserQuestion } from "@unframed/domain";
+import { Check, ChevronDown, ChevronRight, Ellipsis, ListChecks, ListTodo, MessageCircleQuestion, ShieldAlert, TriangleAlert, X } from "lucide-react";
+import { useEffect, useRef, useState, type ReactElement, type RefObject } from "react";
 import { Button } from "~/components/ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { MessageAction } from "../../chrome/MessageAction.tsx";
 import type { ChatClient } from "../store.ts";
 import type { PromptEditorHandle } from "./PromptEditor.tsx";
 import { record } from "../record.ts";
 import { composerGlassClass } from "../../chrome/composerSurface.ts";
+import { ChatMarkdown } from "../transcript/ChatMarkdown.tsx";
+
+/** A request's id, as its payload carries it. */
+export const requestIdOf = (activity: ChatActivity): string => String(record(activity.payload).requestId);
 
 /** The chat's open requests of a kind that its running turn waits on: a turn that ended waits on nothing. */
 export const waitingRequests = (chat: Chat, kind: "approval" | "user-input"): ChatActivity[] => {
@@ -28,34 +33,66 @@ const APPROVAL_HEADERS: Record<string, string> = {
  * t3code's composer banner (ComposerBanner): the glass strip above the composer that holds
  * what waits on the person. An approval takes its warning tint.
  */
-const BANNER =
+export const BANNER =
   `${composerGlassClass} relative flex flex-col gap-1.5 rounded-2xl border px-3 py-2 text-xs/4 shadow-composer dark:shadow-composer-dark`;
-const WARNING_BANNER = `${BANNER} border-warning/28 bg-linear-to-b from-warning/8 to-warning/8`;
+export const WARNING_BANNER = `${BANNER} border-warning/28 bg-linear-to-b from-warning/8 to-warning/8`;
 
 /** The banner's first line: its icon, what it is, and anything beside it. */
-const BANNER_ROW = "flex min-h-6 min-w-0 items-center gap-1.5";
+export const BANNER_ROW = "flex min-h-6 min-w-0 items-center gap-1.5";
 
 /** How much of a request's target the panel shows before it says how much it held back. */
 export const TARGET_SHOWN = 300;
 
+const DECISIONS: ReadonlySet<string> = new Set(["accept", "acceptForSession", "decline", "cancel"]);
+
+/** The answers a request offers: the provider's when it named them, else the fixed four (a request stored before options existed names none). */
+export const approvalOptions = (payload: Readonly<Record<string, unknown>>): ReadonlyArray<ApprovalOption> => {
+  if (!Array.isArray(payload.options)) return DEFAULT_APPROVAL_OPTIONS;
+  const options = payload.options
+    .map(record)
+    .filter((option) => typeof option.decision === "string" && DECISIONS.has(option.decision) && typeof option.label === "string" && option.label.trim() !== "")
+    .map((option) => ({
+      decision: option.decision as ApprovalDecision,
+      label: String(option.label),
+      ...(typeof option.warning === "string" && option.warning.trim() !== "" ? { warning: option.warning } : {}),
+    }));
+  return options.length > 0 ? options : DEFAULT_APPROVAL_OPTIONS;
+};
+
+/** An answer with a warning shows it on hover and to a screen reader (t3code's). */
+const withWarning = (option: ApprovalOption, element: ReactElement) =>
+  option.warning ? (
+    <Tooltip key={option.decision}>
+      <TooltipTrigger render={element} />
+      <TooltipPopup side="top">{option.warning}</TooltipPopup>
+    </Tooltip>
+  ) : (
+    element
+  );
+
 /**
- * The pending approval (t3code's panel): the request's kind, the tool, and its target in
- * full up to 300 characters with how many more it did not show, then Decline, Approve and
- * the other answers. It clears at once on a click; a refused answer shows what is really
- * pending again.
+ * The pending approval (t3code's panel): the request's kind, the tool, its target in full
+ * up to 300 characters with how many more it did not show, the provider's reason, then the
+ * answers it offers: Decline and Approve as buttons, the rest in the menu. It clears at once
+ * on a click; a refused answer shows what is really pending again. One the typing guard
+ * holds is not shown yet.
  */
-export const ApprovalPanel = ({ client, chat }: { readonly client: ChatClient; readonly chat: Chat }) => {
+export const ApprovalPanel = ({ client, chat, held }: { readonly client: ChatClient; readonly chat: Chat; readonly held: ReadonlySet<string> }) => {
   const [answered, setAnswered] = useState<ReadonlySet<string>>(new Set());
-  const pending = waitingRequests(chat, "approval").filter((activity) => !answered.has(String(record(activity.payload).requestId)));
+  const pending = waitingRequests(chat, "approval").filter((activity) => !answered.has(requestIdOf(activity)) && !held.has(requestIdOf(activity)));
   const request = pending[0];
   if (!request) return null;
   const payload = record(request.payload);
   const requestId = String(payload.requestId);
   const args = record(payload.args);
   const target = typeof payload.detail === "string" ? payload.detail : "";
+  const reason = typeof payload.reason === "string" && payload.reason.trim() !== "" ? payload.reason : undefined;
   const shown = target.slice(0, TARGET_SHOWN);
   const hidden = target.length - shown.length;
   const header = APPROVAL_HEADERS[String(payload.requestType)] ?? "File change approval";
+  const options = approvalOptions(payload);
+  const primary = options.filter((option) => option.decision === "decline" || option.decision === "accept");
+  const more = options.filter((option) => option.decision !== "decline" && option.decision !== "accept");
   const respond = (decision: ApprovalDecision) => {
     setAnswered((known) => new Set([...known, requestId]));
     client.dispatch({ type: "thread.approval.respond", threadId: chat.id, requestId, decision }).catch((error: unknown) => {
@@ -88,22 +125,45 @@ export const ApprovalPanel = ({ client, chat }: { readonly client: ChatClient; r
       {hidden > 0 && (
         <p className="m-0 text-xs text-warning-foreground" data-testid="approval-warning">{`and ${hidden} more characters not shown. Decline unless you know what they are.`}</p>
       )}
+      {reason !== undefined && (
+        <p className="m-0 w-full min-w-0 text-2xs text-muted-foreground wrap-break-word" data-testid="approval-reason">
+          {reason}
+        </p>
+      )}
       <div className="flex items-center justify-end gap-1.5">
-        <Button variant="outline" size="xs" onClick={() => respond("decline")}>
-          Decline
-        </Button>
-        <Button size="xs" onClick={() => respond("accept")}>
-          Approve
-        </Button>
-        <Menu>
-          <MenuTrigger render={<Button variant="outline" size="icon-xs" aria-label="More approval options" />}>
-            <Ellipsis aria-hidden />
-          </MenuTrigger>
-          <MenuPopup side="top" align="end">
-            <MenuItem onClick={() => respond("acceptForSession")}>Always allow this session</MenuItem>
-            <MenuItem onClick={() => respond("cancel")}>Cancel</MenuItem>
-          </MenuPopup>
-        </Menu>
+        {primary.map((option) =>
+          withWarning(
+            option,
+            <Button
+              key={option.decision}
+              variant={option.decision === "accept" ? "default" : "outline"}
+              size="xs"
+              aria-description={option.warning}
+              onClick={() => respond(option.decision)}
+            >
+              {option.warning ? <TriangleAlert aria-hidden className="size-3 shrink-0" /> : null}
+              <span className="max-w-40 truncate">{option.label}</span>
+            </Button>,
+          ),
+        )}
+        {more.length > 0 && (
+          <Menu>
+            <MenuTrigger render={<Button variant="outline" size="icon-xs" aria-label="More approval options" />}>
+              <Ellipsis aria-hidden />
+            </MenuTrigger>
+            <MenuPopup side="top" align="end">
+              {more.map((option) =>
+                withWarning(
+                  option,
+                  <MenuItem key={option.decision} aria-description={option.warning} onClick={() => respond(option.decision)}>
+                    {option.warning ? <TriangleAlert aria-hidden className="size-3 text-warning" /> : null}
+                    <span className="min-w-0 whitespace-normal wrap-break-word">{option.label}</span>
+                  </MenuItem>,
+                ),
+              )}
+            </MenuPopup>
+          </Menu>
+        )}
       </div>
     </section>
   );
@@ -190,9 +250,9 @@ export const QuestionPanel = ({
       </header>
       {!collapsed && (
         <div className="pe-1 pb-1 wrap-anywhere">
-          <p className="m-0 text-sm text-foreground/85" data-testid="panel-question">
-            {question.question}
-          </p>
+          <div className="text-foreground/85" data-testid="panel-question">
+            <ChatMarkdown text={question.question} />
+          </div>
           {question.multiSelect && (
             <p className="m-0 mt-1 flex items-center gap-1 text-xs text-secondary-label">
               <ListChecks aria-hidden className="size-3" /> Select one or more options.
@@ -271,21 +331,34 @@ export const PlanActions = ({ refine, busy, onSend, onNewChat }: { readonly refi
   );
 };
 
+/** The composer's staged files, as an answer takes them: each question keeps its own (t3code's per-question attachment draft). */
+export interface AnswerFiles {
+  readonly staged: ReadonlyArray<{ readonly status: "uploading" | "ready" | "failed" }>;
+  readonly ready: () => ChatAttachment[];
+  readonly settle: () => Promise<ChatAttachment[]>;
+  readonly replace: (attachments: ReadonlyArray<ChatAttachment>) => void;
+}
+
 /**
  * Answering the chat's open question from the composer (t3code's flow): an option chosen
- * in the panel or an answer typed in the box, per question; Send moves to the next and
- * sends every answer from the last. `text` is the box's current draft.
+ * in the panel or an answer typed in the box, per question, and files attached to it; Send
+ * moves to the next and sends every answer from the last. `text` is the box's current
+ * answer. A file alone answers a question that takes an answer of one's own. A question the
+ * typing guard holds is not asked yet.
  */
-export const useQuestionAnswers = (client: ChatClient, chat: Chat | undefined, box: RefObject<PromptEditorHandle | null>, text: string) => {
-  const asked = openQuestion(chat);
+export const useQuestionAnswers = (client: ChatClient, chat: Chat | undefined, box: RefObject<PromptEditorHandle | null>, text: string, held: ReadonlySet<string>, files: AnswerFiles) => {
+  const open = openQuestion(chat);
+  const asked = open && !held.has(open.requestId) ? open : undefined;
   const [index, setIndex] = useState(0);
   const [chosen, setChosen] = useState<Record<string, ReadonlyArray<string>>>({});
   const typedAnswers = useRef<Record<string, string>>({});
+  const attachedFiles = useRef<Record<string, ReadonlyArray<ChatAttachment>>>({});
   const [submitting, setSubmitting] = useState(false);
   useEffect(() => {
     setIndex(0);
     setChosen({});
     typedAnswers.current = {};
+    attachedFiles.current = {};
   }, [asked?.requestId]);
   const question = asked?.questions[index];
 
@@ -296,21 +369,27 @@ export const useQuestionAnswers = (client: ChatClient, chat: Chat | undefined, b
     if (picked.length === 0) return undefined;
     return current.multiSelect ? [...picked] : picked[0];
   };
+  /** How many files a question holds: the box's for the one shown. */
+  const fileCount = (current: UserQuestion): number =>
+    choiceOnly(current) ? 0 : current.id === question?.id ? files.staged.filter((item) => item.status !== "failed").length : (attachedFiles.current[current.id]?.length ?? 0);
+  const answers = (current: UserQuestion, typed: string): boolean => answerOf(current, typed) !== undefined || fileCount(current) > 0;
   const lastQuestion = asked !== undefined && index === asked.questions.length - 1;
   const ready =
     asked !== undefined &&
     question !== undefined &&
     !submitting &&
     (lastQuestion
-      ? asked.questions.every((each) => answerOf(each, each.id === question.id ? text : (typedAnswers.current[each.id] ?? "")) !== undefined)
-      : answerOf(question, text) !== undefined);
+      ? asked.questions.every((each) => answers(each, each.id === question.id ? text : (typedAnswers.current[each.id] ?? "")))
+      : answers(question, text));
 
   const move = (to: number) => {
     if (!asked || !question) return;
     typedAnswers.current = { ...typedAnswers.current, [question.id]: box.current?.text() ?? "" };
+    attachedFiles.current = { ...attachedFiles.current, [question.id]: files.ready() };
     setIndex(to);
     const next = asked.questions[to];
     box.current?.setText(next ? (typedAnswers.current[next.id] ?? "") : "");
+    files.replace(next ? (attachedFiles.current[next.id] ?? []) : []);
   };
   const choose = (current: UserQuestion, label: string) => {
     setChosen((known) => {
@@ -324,15 +403,25 @@ export const useQuestionAnswers = (client: ChatClient, chat: Chat | undefined, b
     if (!asked || !question || !chat || !ready) return;
     if (!lastQuestion) return move(index + 1);
     const typed = { ...typedAnswers.current, [question.id]: box.current?.text() ?? "" };
-    const answers: Record<string, string | string[]> = {};
-    for (const each of asked.questions) {
-      const value = answerOf(each, typed[each.id] ?? "");
-      if (value !== undefined) answers[each.id] = value;
-    }
     setSubmitting(true);
     try {
-      await client.dispatch({ type: "thread.user-input.respond", threadId: chat.id, requestId: asked.requestId, answers });
-      box.current?.clear();
+      const attached = { ...attachedFiles.current, [question.id]: await files.settle() };
+      const answers: Record<string, string | string[]> = {};
+      const attachmentsByQuestionId: Record<string, ChatAttachment[]> = {};
+      for (const each of asked.questions) {
+        const value = answerOf(each, typed[each.id] ?? "");
+        if (value !== undefined) answers[each.id] = value;
+        const eachFiles = choiceOnly(each) ? [] : (attached[each.id] ?? []);
+        if (eachFiles.length > 0) attachmentsByQuestionId[each.id] = [...eachFiles];
+      }
+      // The box keeps the answer until the question goes; then the composer puts the draft back.
+      await client.dispatch({
+        type: "thread.user-input.respond",
+        threadId: chat.id,
+        requestId: asked.requestId,
+        answers,
+        ...(Object.keys(attachmentsByQuestionId).length === 0 ? {} : { attachmentsByQuestionId }),
+      });
     } catch (error) {
       client.reportError(error);
     } finally {
@@ -345,5 +434,5 @@ export const useQuestionAnswers = (client: ChatClient, chat: Chat | undefined, b
   };
   const panel =
     asked && question ? <QuestionPanel state={{ ...asked, index, chosen }} onChoose={choose} onDismiss={dismiss} /> : null;
-  return { question, answering: question !== undefined, index, lastQuestion, ready, submitting, move, answer, panel };
+  return { question, requestId: asked?.requestId, answering: question !== undefined, index, lastQuestion, ready, submitting, move, answer, panel };
 };

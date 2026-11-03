@@ -11,6 +11,11 @@ export interface ClaudeMapState {
   readonly streamingMessageId: string | undefined;
   /** Text blocks that already streamed as deltas, by `<message id>:<index>`. */
   readonly streamedBlocks: ReadonlyArray<string>;
+  /**
+   * Blocks already delivered, by API message id. The CLI sends each block of a message as its
+   * own assistant message, so a block's index in the stream is this count plus its array index.
+   */
+  readonly deliveredBlocks: Readonly<Record<string, number>>;
   /** Each open tool use: its item type and name. */
   readonly tools: Readonly<Record<string, { readonly itemType: ItemType; readonly toolName: string; readonly agentId?: string }>>;
   /** The session id, once a message reported it. */
@@ -24,7 +29,7 @@ export interface ClaudeMapState {
   readonly lastCallTokens: number | undefined;
 }
 
-export const initialClaudeState = (): ClaudeMapState => ({ streamingMessageId: undefined, streamedBlocks: [], tools: {}, sessionId: undefined, lastAssistantUuid: undefined, lastCallTokens: undefined });
+export const initialClaudeState = (): ClaudeMapState => ({ streamingMessageId: undefined, streamedBlocks: [], deliveredBlocks: {}, tools: {}, sessionId: undefined, lastAssistantUuid: undefined, lastCallTokens: undefined });
 
 export interface ClaudeMapContext {
   /** The chat's turn these messages belong to. */
@@ -185,9 +190,12 @@ export const mapClaudeMessage = (state: ClaudeMapState, message: unknown, contex
       const callTokens = usageTotal(claudeUsage(body));
       if (agentId === undefined && body.model !== "<synthetic>" && callTokens > 0) next = { ...next, lastCallTokens: callTokens };
       const content: unknown[] = Array.isArray(body.content) ? body.content : [];
+      const messageId = String(body.id ?? "message");
+      const offset = next.deliveredBlocks[messageId] ?? 0;
+      next = { ...next, deliveredBlocks: { ...next.deliveredBlocks, [messageId]: offset + content.length } };
       for (const [index, raw] of content.entries()) {
         const block = obj(raw);
-        const itemId = `${String(body.id ?? "message")}:${index}`;
+        const itemId = `${messageId}:${offset + index}`;
         if (block.type === "tool_use") {
           const toolName = String(block.name ?? "tool");
           const input = obj(block.input);
@@ -274,7 +282,7 @@ export const mapClaudeMessage = (state: ClaudeMapState, message: unknown, contex
           ...(overloaded ? { errorMessage: "Claude's API is overloaded (529). Try again shortly." } : failed && errors[0] ? { errorMessage: errors[0] } : failed && typeof m.result === "string" && m.result !== "" ? { errorMessage: m.result } : {}),
         },
       });
-      next = { ...next, streamedBlocks: [], streamingMessageId: undefined, lastCallTokens: undefined };
+      next = { ...next, streamedBlocks: [], deliveredBlocks: {}, streamingMessageId: undefined, lastCallTokens: undefined };
       break;
     }
 
