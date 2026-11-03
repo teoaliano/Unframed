@@ -121,7 +121,8 @@ describe("the ten shipped DESIGN.md files", () => {
     expect(read.guidance).toContain("var(--color-");
     const preset = systemKitPreset(entry, shipped(folder));
     expect(preset).toMatchObject({ id: entry.id, source: "system", kind: "kit", name: entry.name, revision: 1, kit: { name: entry.name, modes: ["default"] } });
-    expect(kitRefusal({ format: 1, ...preset.kit, modes: [...preset.kit.modes], tokens: [...preset.kit.tokens] })).toBeNull();
+    const { guidance, ...rest } = preset.kit;
+    expect(kitRefusal({ format: 1, ...rest, modes: [...rest.modes], tokens: [...rest.tokens], ...(guidance === undefined ? {} : { guidance }) })).toBeNull();
   });
 
   it("ships ten kits with distinct ids", () => {
