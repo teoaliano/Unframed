@@ -1,0 +1,17 @@
+<html><head><style>
+#root{position:relative;overflow:hidden;background:#111}
+.clip{position:absolute;inset:0;display:grid;place-items:center}
+#title{font:700 64px system-ui;color:#fff}
+#logo{width:120px;height:120px;background:#a78bfa;border-radius:24px}
+</style></head><body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360">
+  <div id="intro" class="clip" data-start="0" data-duration="2"><span id="title">Launch</span></div>
+  <div id="outro" class="clip" data-start="2" data-duration="2"><div id="logo"></div></div>
+</div>
+<script src="gsap.js"></script>
+<script>
+window.__timelines = window.__timelines || {};
+window.__timelines.main = gsap.timeline({ paused: true });
+window.__timelines.main.fromTo('#title', { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.8, ease: 'power2.out' }, 0.2);
+window.__timelines.main.fromTo('#logo', { scale: 0 }, { scale: 1, duration: 0.6, ease: 'back.out' }, 2.2);
+</script></body></html>

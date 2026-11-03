@@ -28,13 +28,14 @@ test("a page opened in a new tab follows the shape: a new version swaps in witho
   // The shape's saved values, not the file's defaults.
   await expect.poll(() => shown(showing(tab)), { timeout: 10_000 }).toEqual({ size: 20 });
   await tab.evaluate(() => ((window as unknown as { kept: boolean }).kept = true));
+  // The editor was only the way to the tab: close it, so it does not prepare the agent's next file (spec 18) and move the shape again.
+  await page.getByRole("region", { name: "Editing Tuned" }).getByRole("button", { name: "Back to canvas" }).click();
+  await expect(page.getByRole("region", { name: "Editing Tuned" })).toHaveCount(0);
 
   // The agent's next version: a new file, and the shape pointed at it.
   await writeProjectFile(agent, "2-tuned.html", dialsPage({ size: [10, 0, 100] }).replace('<pre id="values">', '<h1>Version two</h1><pre id="values">'));
   const record = await recordOf(agent, "shape:tuned");
   await putRecords(agent, [{ ...record, props: { ...record.props, file: "2-tuned.html" } }]);
-  // The editor is still open on the canvas, so it prepares the agent's unstamped file (spec 18) and the shape moves on to the stamped copy:
-  // the tab may swap twice, and both versions carry the heading.
   await expect(showing(tab).getByRole("heading", { name: "Version two" })).toBeVisible({ timeout: 15_000 });
   await expect.poll(() => shown(showing(tab)), { timeout: 10_000 }).toEqual({ size: 20 });
   await expect(tab.locator("iframe")).toHaveCount(1, { timeout: 10_000 });

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { PROJECT, scriptFolder, startAgentEngine } from "./agent.ts";
 import { motionShape, seed } from "./agentCanvas.ts";
-import { pageShape } from "./canvasRecords.ts";
+import { componentShape, pageShape } from "./canvasRecords.ts";
 
 const point = (id: string, file: string) => ({ name: "canvas_write", input: { ops: [{ type: "update", id, props: { file } }] } });
 
@@ -89,5 +89,32 @@ describe("artifact diffs", () => {
     });
     await expect(agent.rpc.call("orchestration.getTurnDiff", { projectId: PROJECT, threadId: "no-such-chat", fromTurnCount: 0, toTurnCount: 1 })).rejects.toMatchObject({ code: "not_found" });
     expect((await agent.rpc.call("orchestration.getTurnDiff", { projectId: PROJECT, threadId: chatId, fromTurnCount: 0, toTurnCount: 0 })).files).toEqual([]);
+  });
+});
+
+describe("component diffs", () => {
+  const BUTTON = `<!doctype html><html><head>
+<script type="application/json" data-uf-component>{"tag":"uf-button","variants":{"kind":["primary","secondary"]},"props":{"label":"text"},"slots":[]}</script>
+<style type="text/x-uf-component" data-uf-component-style>:host { display: inline-block; }</style>
+</head><body><div data-uf-template hidden><button data-uf-prop="label">Buy</button></div></body></html>`;
+
+  it("diffs a component sheet a turn wrote, as it diffs a page", async () => {
+    const script = await scriptFolder({
+      sheets: { when: "^relabel", turns: [{ text: "Relabelled it.", tools: [{ name: "component_write", input: { shapeId: "c1", html: BUTTON.replace("Buy", "Buy now") } }] }] },
+    });
+    const agent = await startAgentEngine({ script });
+    await writeFile(join(agent.folder, "1-button.html"), BUTTON);
+    await seed(agent, [componentShape("c1", "uf-button", { file: "1-button.html", title: "Button" })]);
+    const chatId = await agent.createChat();
+    await agent.send(chatId, "relabel it");
+    await agent.settled(chatId, 1);
+
+    const diff = await agent.rpc.call("orchestration.getTurnDiff", { projectId: PROJECT, threadId: chatId, fromTurnCount: 0, toTurnCount: 1 });
+    expect(diff.files).toHaveLength(1);
+    const [file] = diff.files;
+    // The written sheet gains the tokens, bridge and helper tags in its head, and its template gets element ids (spec 20).
+    expect(file).toMatchObject({ shapeId: "shape:c1", label: "Button", kind: "component", before: "1-button.html", additions: 5, deletions: 2 });
+    expect(file!.after).toMatch(/^\d+-button\.html$/);
+    expect(file!.patch).toMatch(/<button data-hf-id="hf-[a-z0-9]+" data-uf-prop="label">Buy now<\/button>/);
   });
 });

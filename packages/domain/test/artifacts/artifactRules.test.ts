@@ -149,6 +149,9 @@ describe("artifact URLs", () => {
     expect(artifactUrl({ appHostname: "127.0.0.1", previewPort: 5001, project: "my board", file: "1-a.html", kind: "page" })).toBe(
       "http://localhost:5001/p/my%20board/1-a.html",
     );
+    expect(artifactUrl({ appHostname: "localhost", previewPort: 5001, project: "board", file: "1-intro.html", kind: "motion", editor: true })).toBe(
+      "http://127.0.0.1:5001/p/board/hyperframes-viewer.html?c=1-intro.html&ui=editor",
+    );
     expect(artifactUrl({ appHostname: "localhost", previewPort: 5001, project: "board", file: "1-intro.html", kind: "motion" })).toBe(
       "http://127.0.0.1:5001/p/board/hyperframes-viewer.html?c=1-intro.html",
     );

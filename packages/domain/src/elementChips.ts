@@ -21,6 +21,8 @@ export interface ChipElement {
   readonly text: string;
   /** True when it has element children; the excerpt marks them with an ellipsis. */
   readonly hasChildren: boolean;
+  /** A chip's excerpt in place of the element's markup: a motion tween's call as written (spec 21). */
+  readonly excerpt?: string;
 }
 
 const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]);
@@ -33,7 +35,8 @@ export const elementChip = (element: ChipElement, shape: { readonly shapeId: str
   const selector = element.elementId === null ? element.liveSelector : `[data-hf-id="${element.elementId}"]`;
   const endTag = VOID.has(element.tag.toLowerCase()) ? "" : `</${element.tag}>`;
   const children = element.hasChildren ? "…" : "";
-  const excerpt = `${element.startTag}${element.text.slice(0, EXCERPT_TEXT_MAX)}${children}${endTag}`.slice(0, EXCERPT_MAX);
+  const markup = `${element.startTag}${element.text.slice(0, EXCERPT_TEXT_MAX)}${children}${endTag}`;
+  const excerpt = (element.excerpt ?? markup).slice(0, EXCERPT_MAX);
   return { shapeId: shape.shapeId, elementId: element.elementId, selector, tag: element.tag, label: element.label, excerpt };
 };
 

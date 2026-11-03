@@ -5,14 +5,15 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./html": "./src/html/index.ts"
+    "./html": "./src/html/index.ts",
+    "./motion": "./src/motion/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
-    "@unframed/contracts": "workspace:*",
     "@hyperframes/parsers": "0.8.206",
+    "@unframed/contracts": "workspace:*",
     "linkedom": "0.18.13",
     "parse5": "8.0.1"
   },
