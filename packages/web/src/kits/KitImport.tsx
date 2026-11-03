@@ -117,7 +117,9 @@ export const ImportKitDialog = ({ kit, onClose }: { readonly kit: Kit | null; re
               {refusal}
             </p>
           ) : read?.ok ? (
-            <p className="m-0 text-sm">{importSummary(kit, read.fragment)}</p>
+            <p role="status" className="m-0 text-sm">
+              {importSummary(kit, read.fragment)}
+            </p>
           ) : null}
           {problem !== undefined && (
             <p role="alert" className="m-0 text-sm text-destructive-foreground">
