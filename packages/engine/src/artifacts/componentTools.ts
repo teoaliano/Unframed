@@ -25,7 +25,7 @@ import {
 } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import type { Applied } from "../canvas/rooms.ts";
-import { lockRefusal, sourceTreeOf, stampElementIds } from "@unframed/domain/html";
+import { lockRefusal, sourceTreeOf } from "@unframed/domain/html";
 import { prepareComponentHtml } from "./artifactHtml.ts";
 import { refusal as refuse, type McpBinding, type McpTool, type ToolAnswer } from "../agent/mcp.ts";
 import { indexOnTop } from "../runs/placeholders.ts";
