@@ -498,7 +498,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
               {facts.kind}
             </span>
             {component && uses > 0 && (
-              <span data-testid="artifact-editor-uses" className="shrink-0 text-sm text-muted-foreground @max-[520px]/editor-header:hidden">
+              <span data-testid="artifact-editor-uses" className="min-w-0 shrink-[10000] truncate text-sm text-muted-foreground @max-[520px]/editor-header:hidden">
                 {uses === 1 ? "Used in 1 artifact" : `Used in ${uses} artifacts`}
               </span>
             )}
