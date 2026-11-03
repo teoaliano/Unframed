@@ -210,12 +210,12 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
       target?.postMessage(data, own);
     } else if (type.startsWith("unframed:edit:")) {
       if (type === "unframed:edit:hello") canvas = { window: event.source as Target, origin: event.origin };
-      // Edit mode holds the motion still and lets the pointer reach it (the player turns it off); Interact leaves the player as the person left it.
+      // Edit mode holds the motion still. The pointer reaches the composition in both modes: Edit picks through the bridge, and
+      // Interact is the motion itself (the player's own rule would turn the pointer off, so a click would never reach it).
       if (type === "unframed:edit:mode") {
-        const editing = (data as Loose).mode === "edit";
-        if (editing) player.pause?.();
+        if ((data as Loose).mode === "edit") player.pause?.();
         const style = player.iframeElement?.style;
-        if (style !== undefined) style.pointerEvents = editing ? "auto" : "";
+        if (style !== undefined) style.pointerEvents = "auto";
       }
       let message: unknown = data;
       if (type === "unframed:edit:hitTest" && typeof (data as Loose).x === "number" && typeof (data as Loose).y === "number") {
