@@ -18,7 +18,8 @@ import type { EngineConnection } from "../../rpc/engine.ts";
 import { messageOf } from "../../agent/store.ts";
 import type { EditSession } from "../editor/editSession.ts";
 import { TIMELINE_MIN_HEIGHT, clampTimelineHeight, useTimelinePrefs } from "./timelinePrefs.ts";
-import { buildRows, channelsOf, dialLimitOf, type BarView, type RowView } from "./rows.ts";
+import { buildRows, channelsOf, dialLimitOf, staggerEachOf, type BarView, type RowView } from "./rows.ts";
+import { TimingPanel } from "./TimingPanel.tsx";
 import { MotionTransport, SPEEDS, readoutParts } from "./transport.ts";
 
 /** The transport row alone, which is what Hide leaves showing. */
@@ -126,6 +127,7 @@ const RowLine = ({
   onBarDown,
   onBarMove,
   onBarUp,
+  onOpenTiming,
 }: {
   readonly row: RowView;
   readonly pxPerSecond: number;
@@ -138,6 +140,7 @@ const RowLine = ({
   readonly onBarDown: (bar: BarView, event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onBarMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onBarUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  readonly onOpenTiming: (bar: BarView) => void;
 }) => {
   const runtime = row.kind === "runtime";
   const name = row.name;
@@ -199,6 +202,7 @@ const RowLine = ({
               onPointerMove={onBarMove}
               onPointerUp={onBarUp}
               onPointerCancel={onBarUp}
+              onDoubleClick={() => onOpenTiming(bar)}
               className={cn(
                 "absolute top-1/2 -translate-y-1/2 rounded-sm",
                 cursorOf(bar),
@@ -251,6 +255,8 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
   // The rows: which elements are open, and the tween the last bar click chose.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [selectedTween, setSelectedTween] = useState<number | null>(null);
+  // The timing panel: the bar it opened from, by its tween and target (spec 21, The values panel).
+  const [timing, setTiming] = useState<{ readonly tween: number; readonly target: string } | null>(null);
   const tweens = useMemo(() => new Map<number, Tween>((current?.value?.tweens ?? []).map((tween) => [tween.ref.index, tween])), [current?.value]);
   const hidden = useMemo(() => new Set((session.tree?.elements ?? []).filter((element) => element.hidden).map((element) => element.id)), [session.tree]);
   const names = useMemo(() => Object.fromEntries((session.tree?.elements ?? []).map((element) => [element.id, element.name])), [session.tree]);
@@ -461,37 +467,47 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
       changed.duration = round(current.end - at);
       setGuide(snapped.guide ? at : null);
     }
-    // A field the file owns is a tween edit; a field a parameter owns moves the parameter, which the frame shows at once and the
-    // burst writes at its commit with no version of its own (spec 21, Dial-owned timing).
-    const tween = tweens.get(current.ref.index);
+    applyTiming(current.ref, current.target, current.channels, changed);
+  };
+  /**
+   * Writes a tween's timing as the person changed it: a field the file owns is a tween edit, and a field a parameter owns moves the
+   * parameter, which the frame shows at once and the burst writes at its commit with no version of its own (spec 21, Dial-owned timing).
+   */
+  const applyTiming = (ref: TweenRef, target: string, channels: string[], changed: { start?: number; duration?: number }): void => {
+    const tween = tweens.get(ref.index);
     const literal: { start?: number; duration?: number } = {};
-    const dialed: Array<{ path: string; value: number }> = [];
-    const route = (owner: Owner | undefined, field: "start" | "duration", value: number | undefined) => {
-      if (value === undefined || owner === undefined) return;
+    for (const field of ["start", "duration"] as const) {
+      const value = changed[field];
+      const owner = tween?.[field];
+      if (value === undefined || owner === undefined) continue;
       if (owner.kind === "source") literal[field] = value;
       else if (owner.kind === "dial") {
         const limit = dialLimitOf(schema, owner.path);
-        if (limit !== null) dialed.push({ path: owner.path.join("."), value: clampDialValue(limit, value) });
+        if (limit !== null) session.patchDial(owner.path.join("."), clampDialValue(limit, value));
       }
-    };
-    route(tween?.start, "start", changed.start);
-    route(tween?.duration, "duration", changed.duration);
-    for (const { path, value } of dialed) {
-      const key = `dial:${path}:${value}`;
-      if (current.last === key) continue;
-      current.last = key;
-      session.patchDial(path, value);
     }
     if (literal.start === undefined && literal.duration === undefined) return;
     // The burst keeps one timing entry per tween, so the fields it does not change keep their pending values.
-    const pending = pendingTiming(current.ref.index);
+    const pending = pendingTiming(ref.index);
     const fields = { start: literal.start ?? pending?.start, duration: literal.duration ?? pending?.duration };
-    const key = JSON.stringify(fields);
-    if (key === current.last) return;
-    current.last = key;
-    const edit = { type: "tween-time" as const, tween: current.ref, ...(fields.start === undefined ? {} : { start: fields.start }), ...(fields.duration === undefined ? {} : { duration: fields.duration }) };
+    const edit = { type: "tween-time" as const, tween: ref, ...(fields.start === undefined ? {} : { start: fields.start }), ...(fields.duration === undefined ? {} : { duration: fields.duration }) };
     const change = { ...(fields.start === undefined ? {} : { start: fields.start }), ...(fields.duration === undefined ? {} : { duration: fields.duration }) };
-    session.patchTween(edit, { selector: current.target, channels: current.channels, change });
+    session.patchTween(edit, { selector: target, channels, change });
+  };
+
+  /** A stagger's spacing, as one literal number (spec 21, Staggers). */
+  const applyStagger = (ref: TweenRef, target: string, channels: string[], each: number): void => {
+    session.patchTween({ type: "tween-stagger", tween: ref, each }, { selector: target, channels, change: { stagger: each } });
+  };
+
+  /** The timing panel's bar: its tween's own start (the first target's, stagger offset taken off), its duration and its stagger. */
+  const timingBar = timing === null ? undefined : rows.flatMap((row) => row.bars).find((bar) => bar.tween === timing.tween && bar.target === timing.target);
+  const timingTween = timing === null ? undefined : tweens.get(timing.tween);
+  const timingEach = timingTween === undefined ? null : staggerEachOf(timingTween, session.pending);
+
+  const openTiming = (bar: BarView) => {
+    if (bar.tween < 0) return;
+    setTiming({ tween: bar.tween, target: bar.target });
   };
   const onBarUp = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (gesture.current === null) return;
@@ -611,7 +627,18 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
       </header>
       {open && (
         // The time area: its focus is where the transport's keys act, with the ruler and the rows (spec 21, the shortcuts).
-        <div data-timeline-focus tabIndex={-1} className="relative flex min-h-0 flex-1 flex-col outline-none">
+        <div
+          data-timeline-focus
+          tabIndex={-1}
+          className="relative flex min-h-0 flex-1 flex-col outline-none"
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || selectedTween === null) return;
+            const bar = rows.flatMap((row) => row.bars).find((candidate) => candidate.tween === selectedTween);
+            if (bar === undefined) return;
+            event.preventDefault();
+            openTiming(bar);
+          }}
+        >
           {/* The scroller scrolls the time (Shift and the wheel) and the rows (the wheel); the ruler stays on top. */}
           <div ref={scroller} data-testid="timeline-scroll" className="relative min-h-0 flex-1 overflow-auto">
             <div data-testid="timeline-track" data-px-per-second={pxPerSecond} className="relative flex min-h-full flex-col" style={{ width: trackTotal }}>
@@ -670,6 +697,7 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
                     onBarDown={(bar, event) => onBarDown(bar, row, event)}
                     onBarMove={onBarMove}
                     onBarUp={onBarUp}
+                    onOpenTiming={openTiming}
                   />
                 ))}
               </div>
@@ -682,6 +710,22 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
               <div ref={playhead} data-testid="timeline-playhead" aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-px bg-primary" />
             </div>
           </div>
+          {timing !== null && timingTween !== undefined && timingBar !== undefined && (
+            <TimingPanel
+              title={names[timing.target] ?? timing.target}
+              method={timingTween.method}
+              start={timingBar.start - (timingBar.stagger ?? 0)}
+              duration={timingBar.duration}
+              stagger={timingEach}
+              startEditable={timingTween.start.kind === "source" || (timingTween.start.kind === "dial" && dialLimitOf(schema, timingTween.start.path) !== null)}
+              durationEditable={timingTween.duration.kind === "source" || (timingTween.duration.kind === "dial" && dialLimitOf(schema, timingTween.duration.path) !== null)}
+              staggerEditable={timingTween.stagger?.kind === "source"}
+              onStart={(seconds) => applyTiming(timingTween.ref, timing.target, channelsOf(timingTween), { start: seconds })}
+              onDuration={(seconds) => applyTiming(timingTween.ref, timing.target, channelsOf(timingTween), { duration: seconds })}
+              onStagger={(each) => applyStagger(timingTween.ref, timing.target, channelsOf(timingTween), each)}
+              onClose={() => setTiming(null)}
+            />
+          )}
           {barDragging && (
             <p data-testid="timeline-free-hint" className="pointer-events-none absolute bottom-1 right-3 text-xs text-muted-foreground">
               {freeHint()}

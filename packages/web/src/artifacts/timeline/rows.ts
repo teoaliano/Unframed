@@ -83,13 +83,20 @@ const numberOf = (owner: Owner, dials: Readonly<Record<string, unknown>>): numbe
   return undefined;
 };
 
+/** The seconds between a tween's targets: the file's literal stagger, or the burst's pending one; null when the tween does not stagger. */
+export const staggerEachOf = (tween: Tween, pending: readonly SourceEdit[]): number | null => {
+  const edit = pending.find((candidate): candidate is Extract<SourceEdit, { type: "tween-stagger" }> => candidate.type === "tween-stagger" && candidate.tween.index === tween.ref.index);
+  if (edit !== undefined) return edit.each;
+  return tween.stagger?.kind === "source" && typeof tween.stagger.value === "number" ? tween.stagger.value : null;
+};
+
 /** Each target's offset in a stagger (spec 21, Staggers): the literal `each`, or the literal `amount` spread across the targets. */
-const offsetsOf = (tween: Tween, count: number): number[] => {
-  const owner = tween.stagger;
-  const each = owner?.kind === "source" && typeof owner.value === "number" ? owner.value : null;
+const offsetsOf = (tween: Tween, count: number, each: number | null, pending: readonly SourceEdit[]): number[] => {
   if (each === null || tween.staggerForm === null || tween.staggerForm === "other") return Array.from({ length: count }, () => 0);
+  const pendingEdit = pending.some((edit) => edit.type === "tween-stagger" && edit.tween.index === tween.ref.index);
+  const form = pendingEdit ? "number" : tween.staggerForm;
   return Array.from({ length: count }, (_, index) => {
-    if (tween.staggerForm === "amount") return count > 1 ? (index * each) / (count - 1) : 0;
+    if (form === "amount") return count > 1 ? (index * each) / (count - 1) : 0;
     return index * each;
   });
 };
@@ -168,7 +175,7 @@ export const buildRows = (input: RowsInput): RowView[] => {
   for (const tween of reading.tweens) {
     const timing = timingOf(tween, input, liveFor(tween));
     if (timing === null) continue;
-    const offsets = offsetsOf(tween, tween.targets.length);
+    const offsets = offsetsOf(tween, tween.targets.length, staggerEachOf(tween, input.pending), input.pending);
     tween.targets.forEach((target, index) => {
       const stagger = tween.targets.length > 1 ? (offsets[index] ?? 0) : null;
       const bars = barsOf(tween, target, offsets[index] ?? 0, timing, null, stagger);

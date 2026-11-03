@@ -66,7 +66,7 @@ test("the stagger field respaces the bars, one number for the whole cascade", as
 
   // A double-click on a bar opens its timing; the Stagger field sets the spacing between targets.
   await bars(page, "Dot 1").dblclick();
-  const stagger = timeline(page).getByRole("spinbutton", { name: "Stagger" });
+  const stagger = timeline(page).getByRole("textbox", { name: "Stagger" });
   await expect(stagger).toHaveValue("0.2");
   await stagger.fill("0.4");
   await stagger.press("Enter");
