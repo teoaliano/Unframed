@@ -85,15 +85,16 @@ import { chipOfToken, PromptEditor, type CaretMark, type PromptEditorHandle, typ
 import { UpNext } from "./UpNext.tsx";
 import { useRestingComposer, useRestingTransition } from "./resting.ts";
 import { useMaybeEditor, useValue } from "tldraw";
+import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Input } from "~/components/ui/input";
 import { composerGlassClass } from "../../chrome/composerSurface.ts";
 
-export const PROMPT_LABEL = "Message the agent";
+const PROMPT_LABEL = "Message the agent";
 
 const COMPOSER_SHELL =
   `${composerGlassClass} relative isolate flex flex-col gap-1.5 rounded-3xl px-3 pt-2.5 pb-2 shadow-composer dark:shadow-none after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-border data-dragging:after:border-ring`;
 
-export const PLACEHOLDERS = {
+const PLACEHOLDERS = {
   approval: "Resolve this approval request to continue",
   choiceOnly: "Choose an option above",
   customAnswer: "Type your own answer, or leave this blank to use the selected option",
@@ -1045,9 +1046,11 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           )}
         </div>
         {lengthError !== undefined && (
-          <p role="alert" className="m-0 px-0.5 text-xs text-destructive" data-testid="prompt-length-error">
-            {lengthError}
-          </p>
+          <div className="mx-1 mt-1">
+            <Alert variant="error" data-testid="prompt-length-error">
+              <AlertDescription>{lengthError}</AlertDescription>
+            </Alert>
+          </div>
         )}
         {menu && <ComposerMenu label={menu.label} items={menu.items} highlight={highlight} empty={menu.empty} anchor={boxElement} onPick={menu.pick} onHighlight={setHighlight} />}
         <div className={resting.resting ? "contents" : "flex items-center gap-1"}>

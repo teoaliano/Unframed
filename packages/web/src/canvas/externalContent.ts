@@ -44,7 +44,7 @@ const kindOf = (file: File): DroppedKind | undefined => {
 
 const withoutExtension = (name: string) => name.replace(/\.[^.]*$/, "");
 
-export const uploadMediaFile = async (editor: Editor, kind: MediaKind, file: File): Promise<TLAsset> => {
+const uploadMediaFile = async (editor: Editor, kind: MediaKind, file: File): Promise<TLAsset> => {
   if (kind === "video" && file.size > VIDEO_FILE_LIMIT) throw new MediaRefused(VIDEO_TOO_LARGE_MESSAGE);
   const util = editor.getAssetUtilForMimeType(file.type);
   if (!util) throw new Error(`${file.type || "this type"} is not a picture or clip the canvas can show`);
@@ -114,7 +114,7 @@ const replaceArtifactFile = async (editor: Editor, ctx: ContentContext, target: 
   }
 };
 
-export const handleDrop = async (editor: Editor, ctx: ContentContext, files: ReadonlyArray<File>, point: VecLike) => {
+const handleDrop = async (editor: Editor, ctx: ContentContext, files: ReadonlyArray<File>, point: VecLike) => {
   const [only] = files;
   if (files.length === 1 && only) {
     const target = editor.getShapeAtPoint(point, { hitInside: true, hitFrameInside: false });

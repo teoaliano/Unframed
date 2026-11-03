@@ -10,9 +10,9 @@ import { BANNER } from "./panels.tsx";
 import { showNotice } from "../../toasts.tsx";
 import { newId } from "../store.ts";
 
-export const STASH_LIMIT = 20;
+const STASH_LIMIT = 20;
 
-export interface StashEntry {
+interface StashEntry {
   readonly id: string;
   readonly text: string;
   readonly selection: ReadonlyArray<string>;
@@ -66,7 +66,7 @@ export const useStash = (engine: EngineConnection, project: string) => {
 
 const relative = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
 
-export const relativeTime = (at: string, now = Date.now()): string => {
+const relativeTime = (at: string, now = Date.now()): string => {
   const seconds = Math.round((Date.parse(at) - now) / 1000);
   if (Math.abs(seconds) < 60) return "just now";
   const minutes = Math.round(seconds / 60);

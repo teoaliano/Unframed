@@ -28,7 +28,7 @@ const KIND_NOUNS: Record<ShapeKind, string> = {
   mark: "mark",
 };
 
-export interface ChipShape {
+interface ChipShape {
   readonly id: string;
   readonly kind: ShapeKind;
   readonly label: string;

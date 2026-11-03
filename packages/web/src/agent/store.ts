@@ -66,7 +66,7 @@ export const TOOLBAR_DRAFT = "toolbar";
 
 const DRAFT_WRITE_MS = 400;
 
-export interface Handoff {
+interface Handoff {
   readonly text: string;
   readonly selection: ReadonlyArray<string>;
   readonly attachments: ReadonlyArray<ChatAttachment>;
@@ -522,7 +522,7 @@ export const useChats = (client: ChatClient): ChatSummary[] => {
   return client.chats();
 };
 
-export const useThread = (client: ChatClient, threadId: string | null | undefined): Chat | undefined => {
+const useThread = (client: ChatClient, threadId: string | null | undefined): Chat | undefined => {
   useKey(client, `thread:${threadId ?? ""}`);
   return threadId ? client.thread(threadId) : undefined;
 };

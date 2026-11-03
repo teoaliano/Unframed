@@ -12,7 +12,7 @@ export const latestCompletedTool = (chat: Chat | undefined): string | null => {
   return latest?.id ?? null;
 };
 
-export const isDue = (chat: Chat, message: QueuedMessage): boolean => {
+const isDue = (chat: Chat, message: QueuedMessage): boolean => {
   if (openRequests(chat, "approval").length > 0 || openRequests(chat, "user-input").length > 0) return false;
   if (chat.latestTurn?.state !== "running") return true;
   return latestCompletedTool(chat) !== message.after;

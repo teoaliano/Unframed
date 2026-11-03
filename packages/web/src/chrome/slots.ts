@@ -7,7 +7,7 @@ export interface AgentTrayProps {
   readonly onMenuOpen?: (key: string, open: boolean) => void;
 }
 
-export interface ChromeSlots {
+interface ChromeSlots {
   agentButton?: ComponentType;
   settingsButton?: ComponentType;
   libraryButton?: ComponentType;

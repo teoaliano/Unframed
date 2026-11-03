@@ -2,14 +2,14 @@ import type { ChatAttachment, ElementChip, ModelSelection } from "@unframed/cont
 import type { InteractionMode, RuntimeMode } from "@unframed/domain";
 import { newId, type ChatClient } from "./store.ts";
 
-export interface Outgoing {
+interface Outgoing {
   readonly text: string;
   readonly selection: ReadonlyArray<string>;
   readonly attachments: ReadonlyArray<ChatAttachment>;
   readonly elements?: ReadonlyArray<ElementChip>;
 }
 
-export interface NewChat {
+interface NewChat {
   readonly modelSelection: ModelSelection;
   readonly runtimeMode: RuntimeMode;
   readonly interactionMode: InteractionMode;

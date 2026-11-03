@@ -5,6 +5,7 @@ import { WorkerPoolContextProvider } from "@pierre/diffs/react";
 import DiffsWorker from "@pierre/diffs/worker/worker.js?worker";
 import { ChevronDown, Columns2, Pilcrow, Rows3, TextWrap, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "~/components/ui/menu";
 import { Toggle } from "~/components/ui/toggle";
@@ -167,9 +168,11 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
       {!latest ? (
         <p className={EMPTY_CLASS}>No completed turns yet.</p>
       ) : current && "error" in current ? (
-        <p className={EMPTY_CLASS} role="alert">
-          {current.error}
-        </p>
+        <div className={EMPTY_CLASS}>
+          <Alert variant="error">
+            <AlertDescription>{current.error}</AlertDescription>
+          </Alert>
+        </div>
       ) : !files ? (
         <p className={EMPTY_CLASS} role="status">
           Loading changes…

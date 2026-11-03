@@ -76,7 +76,7 @@ const UserMessage = ({ message, running, onEdit }: { readonly message: ChatMessa
   );
 };
 
-export interface TranscriptProps {
+interface TranscriptProps {
   readonly client: ChatClient;
   readonly chatId: string;
   readonly embedded: boolean;
@@ -280,7 +280,7 @@ const WorkedFor = ({ turn, children }: { readonly turn: ChatTurn; readonly child
 
 const NOTICE_CLASS = "m-0 px-1 text-sm leading-relaxed text-muted-foreground";
 
-export const retrySentence = (payload: unknown): string => {
+const retrySentence = (payload: unknown): string => {
   const p = record(payload);
   const status = typeof p.status === "number" || (typeof p.status === "string" && p.status !== "") ? ` (${String(p.status)})` : "";
   const wait = typeof p.delayMs === "number" && p.delayMs > 0 ? ` in ${Math.round(p.delayMs / 1000)}s` : "";

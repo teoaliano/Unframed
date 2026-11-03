@@ -10,6 +10,7 @@ import { Button } from "~/components/ui/button";
 import { snapshotsOf, snapshotUrl, stillOf } from "../../artifacts/snapshots.ts";
 import { kitOf } from "../../artifacts/kit.ts";
 import { artifactsOf, forgetEdit, forgetFrame, hearFrame, isInteractive, isLive, previewPort, reachEdit, reachFrame } from "../../artifacts/state.ts";
+import { Tip } from "../../chrome/ui.tsx";
 import { currentSlots } from "../../chrome/slots.ts";
 import { updateTagsOf } from "../../artifacts/updates.ts";
 import { useCanvasProject } from "../../context.ts";
@@ -19,7 +20,7 @@ import { ShapeLabel } from "./ShapeLabel.tsx";
 import { noteRender } from "../../fps/renders.ts";
 
 export const ARTIFACT_DEFAULT_SIZE = { w: 480, h: 320 };
-export const ARTIFACT_MIN = { w: 180, h: 96 };
+const ARTIFACT_MIN = { w: 180, h: 96 };
 
 type ArtifactShape = TLShape<"page"> | TLShape<"motion"> | TLShape<"component">;
 
@@ -88,21 +89,22 @@ const CanvasFrame = ({ shapeId, ...props }: Omit<ArtifactFrameProps, "onAnnounce
 const UpdatesBadge = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   const editor = useEditor();
   return (
-    <Button
-      variant="outline"
-      size="xs"
-      data-testid="component-updates-badge"
-      aria-label="Component updates available"
-      title="Component updates available"
-      onPointerDown={(event) => event.stopPropagation()}
-      onClick={() => {
-        artifactsOf(editor).updatesOpen.set(shapeId);
-        currentSlots().openArtifact?.(editor, shapeId);
-      }}
-    >
-      <Component aria-hidden />
-      Updates
-    </Button>
+    <Tip label="Component updates available">
+      <Button
+        variant="outline"
+        size="xs"
+        data-testid="component-updates-badge"
+        aria-label="Component updates available"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={() => {
+          artifactsOf(editor).updatesOpen.set(shapeId);
+          currentSlots().openArtifact?.(editor, shapeId);
+        }}
+      >
+        <Component aria-hidden />
+        Updates
+      </Button>
+    </Tip>
   );
 };
 
