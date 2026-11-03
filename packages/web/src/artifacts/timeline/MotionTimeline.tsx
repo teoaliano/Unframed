@@ -18,8 +18,9 @@ import type { EngineConnection } from "../../rpc/engine.ts";
 import { messageOf } from "../../agent/store.ts";
 import type { EditSession } from "../editor/editSession.ts";
 import { TIMELINE_MIN_HEIGHT, clampTimelineHeight, useTimelinePrefs } from "./timelinePrefs.ts";
-import { buildRows, channelsOf, dialLimitOf, staggerEachOf, type BarView, type RowView } from "./rows.ts";
+import { buildRows, channelsOf, dialLimitOf, numberOf, staggerEachOf, type BarView, type RowView } from "./rows.ts";
 import { TimingPanel } from "./TimingPanel.tsx";
+import { carriedDialsOf, carriedTimingOf, clipNoteOf, type ClipOf } from "./clips.ts";
 import { MotionTransport, SPEEDS, readoutParts } from "./transport.ts";
 
 /** The transport row alone, which is what Hide leaves showing. */
@@ -54,6 +55,19 @@ interface Gesture {
   readonly offset: number;
   /** The last change sent, so a move that stays put sends nothing. */
   last: string;
+}
+
+/** A clip drag in progress: which clip, what it changes, where it began, and the dial values it began with (spec 21, Clips). */
+interface ClipGesture {
+  readonly mode: GestureMode;
+  readonly clip: string;
+  readonly startX: number;
+  /** The clip's start and end as drawn when the drag began. */
+  readonly origin: number;
+  readonly end: number;
+  readonly dials: Readonly<Record<string, unknown>>;
+  /** The zoom at the press: the strip may refit while the frame rebuilds, and the drag keeps the scale it began with. */
+  readonly pxPerSecond: number;
 }
 
 /** The hint under a drag, as the platform names the key (spec 21, Snapping). */
@@ -159,6 +173,10 @@ const RowLine = ({
   onBarMove,
   onBarUp,
   onOpenTiming,
+  clipNote,
+  onClipDown,
+  onClipMove,
+  onClipUp,
 }: {
   readonly row: RowView;
   readonly pxPerSecond: number;
@@ -172,6 +190,11 @@ const RowLine = ({
   readonly onBarMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onBarUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onOpenTiming: (bar: BarView) => void;
+  /** A clip row's note: the sentence its bar shows, or null when it may move. Undefined for every other row. */
+  readonly clipNote?: string | null | undefined;
+  readonly onClipDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  readonly onClipMove?: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  readonly onClipUp?: (event: ReactPointerEvent<HTMLDivElement>) => void;
 }) => {
   const runtime = row.kind === "runtime";
   const name = row.name;
@@ -207,7 +230,17 @@ const RowLine = ({
         {row.span !== null && (
           <div
             data-testid="timeline-clip-bar"
-            className="absolute top-1/2 h-3 -translate-y-1/2 rounded-sm bg-muted-foreground/40"
+            data-start={row.span.start}
+            data-duration={row.span.duration}
+            title={clipNote ?? undefined}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+              onClipDown?.(event);
+            }}
+            onPointerMove={onClipMove}
+            onPointerUp={onClipUp}
+            onPointerCancel={onClipUp}
+            className={cn("absolute top-1/2 h-3 -translate-y-1/2 rounded-sm bg-muted-foreground/40", clipNote === undefined || clipNote === null ? "cursor-grab" : "cursor-not-allowed")}
             style={{ left: row.span.start * pxPerSecond, width: Math.max(row.span.duration * pxPerSecond, 2) }}
           />
         )}
@@ -291,12 +324,17 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
   const tweens = useMemo(() => new Map<number, Tween>((current?.value?.tweens ?? []).map((tween) => [tween.ref.index, tween])), [current?.value]);
   const hidden = useMemo(() => new Set((session.tree?.elements ?? []).filter((element) => element.hidden).map((element) => element.id)), [session.tree]);
   const names = useMemo(() => Object.fromEntries((session.tree?.elements ?? []).map((element) => [element.id, element.name])), [session.tree]);
+  // The burst's timing as drawn: a pending clip edit also draws the tweens it carries (spec 21, Clips).
+  const shownPending = useMemo(
+    () => (current?.value === undefined ? session.pending : [...session.pending, ...carriedTimingOf(current.value, session.pending, dials)]),
+    [current?.value, session.pending, dials],
+  );
   const rows = useMemo<RowView[]>(
     () =>
       current?.value === undefined
         ? []
-        : buildRows({ reading: current.value, names, dials, pending: session.pending, live: session.liveTweens, expanded, locked, hidden }),
-    [current?.value, names, dials, session.pending, session.liveTweens, expanded, locked, hidden],
+        : buildRows({ reading: current.value, names, dials, pending: shownPending, live: session.liveTweens, expanded, locked, hidden }),
+    [current?.value, names, dials, shownPending, session.liveTweens, expanded, locked, hidden],
   );
   const selected = new Set(session.selection);
   // A selection made in the frame or in Layers scrolls its row into view.
@@ -551,6 +589,87 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
     session.patchTween(edit, { selector: target, channels, change });
   };
 
+  // A clip drag (spec 21, Clips): its bar's body moves the clip, an edge stretches it. Each change is one `clip-time` edit in the burst,
+  // and the dials its carried tweens take are held with it, so one undo takes back the whole step.
+  const clipGesture = useRef<ClipGesture | null>(null);
+  const clipAt = (hfId: string): ClipOf | undefined => current?.value?.clips.find((clip) => clip.hfId === hfId);
+  /** The clip's drawn start and end, from the burst's pending clip edit, else the file. */
+  const clipSpan = (clip: ClipOf): { start: number; end: number } | null => {
+    const moved = session.pending.find((edit): edit is Extract<typeof edit, { type: "clip-time" }> => edit.type === "clip-time" && edit.clip === clip.hfId);
+    const start = moved?.start ?? numberOf(clip.start, dials);
+    const duration = moved?.duration ?? numberOf(clip.duration, dials);
+    return start === undefined || duration === undefined ? null : { start, end: start + duration };
+  };
+  /** A clip row's note: the locked line, the engine's refusal, or the agent's timing; null when the clip may move, undefined for other rows. */
+  const clipNoteFor = (row: RowView): string | null | undefined => {
+    if (row.kind !== "clip" || row.element === null) return undefined;
+    if (row.locked) return "Locked. Unlock it in Layers to edit it.";
+    const clip = clipAt(row.element);
+    return clip === undefined ? "This motion has no reading for this clip." : clipNoteOf(clip);
+  };
+  const onClipDown = (row: RowView, event: ReactPointerEvent<HTMLDivElement>) => {
+    const clip = row.element === null ? undefined : clipAt(row.element);
+    if (event.button !== 0 || clip === undefined || row.locked || row.span === null) return;
+    if (clipNoteOf(clip) !== null) return;
+    const span = clipSpan(clip);
+    if (span === null) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const local = event.clientX - rect.left;
+    const nearStart = local <= EDGE_PIXELS;
+    const nearEnd = rect.width - local <= EDGE_PIXELS;
+    const mode: GestureMode = nearStart && nearEnd ? (local <= rect.width / 2 ? "start" : "end") : nearStart ? "start" : nearEnd ? "end" : "move";
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    clipGesture.current = { mode, clip: clip.hfId, startX: event.clientX, origin: span.start, end: span.end, dials, pxPerSecond: pxRef.current };
+    setBarDragging(true);
+  };
+  const onClipMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = clipGesture.current;
+    if (drag === null) return;
+    const clip = clipAt(drag.clip);
+    if (clip === undefined) return;
+    // The clip's own rows and the bars it carries move with the drag, so they are not snap targets.
+    const carried = new Set("tweens" in clip.carry ? clip.carry.tweens.map((ref) => ref.index) : []);
+    const others = rows.filter((row) => !(row.kind === "clip" && row.element === drag.clip)).map((row) => ({ ...row, bars: row.bars.filter((bar) => !carried.has(bar.tween)) }));
+    const targets = snapTargets(others, -1, transport.current(), range, length);
+    const { pxPerSecond } = drag;
+    const dt = (event.clientX - drag.startX) / pxPerSecond;
+    const free = event.altKey;
+    let start = drag.origin;
+    let end = drag.end;
+    if (drag.mode === "move") {
+      const snapped = snapMove(drag.origin + dt, drag.end - drag.origin, { targets, pxPerSecond, free });
+      start = Math.max(0, round(snapped.start));
+      end = start + (drag.end - drag.origin);
+      setGuide(snapped.guide ? snapped.start : null);
+    } else if (drag.mode === "end") {
+      const snapped = snapTime(drag.end + dt, { targets, pxPerSecond, free });
+      end = Math.max(drag.origin + MIN_DURATION, round(snapped.time));
+      setGuide(snapped.guide ? snapped.time : null);
+    } else {
+      const snapped = snapTime(drag.origin + dt, { targets, pxPerSecond, free });
+      start = Math.max(0, Math.min(drag.end - MIN_DURATION, round(snapped.time)));
+      setGuide(snapped.guide ? start : null);
+    }
+    const duration = round(end - start);
+    // A move sends the duration only when the burst already holds one, so a move does not pin the clip's length.
+    const held = session.pending.some((edit) => edit.type === "clip-time" && edit.clip === drag.clip && edit.duration !== undefined);
+    session.patch({ type: "clip-time", clip: drag.clip, start, ...(drag.mode !== "move" || held ? { duration } : {}) });
+    if (current?.value !== undefined) {
+      for (const written of carriedDialsOf(current.value, clip, { start: drag.origin, duration: drag.end - drag.origin }, { start, duration }, drag.dials)) {
+        const limit = dialLimitOf(schema, written.path);
+        if (limit !== null) session.patchDial(written.path.join("."), clampDialValue(limit, written.value));
+      }
+    }
+  };
+  const onClipUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (clipGesture.current === null) return;
+    clipGesture.current = null;
+    setGuide(null);
+    setBarDragging(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
   /** A stagger's spacing, as one literal number (spec 21, Staggers). */
   const applyStagger = (ref: TweenRef, target: string, channels: string[], each: number): void => {
     session.patchTween({ type: "tween-stagger", tween: ref, each }, { selector: target, channels, change: { stagger: each } });
@@ -760,6 +879,10 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
                     onBarMove={onBarMove}
                     onBarUp={onBarUp}
                     onOpenTiming={openTiming}
+                    clipNote={clipNoteFor(row)}
+                    onClipDown={(event) => onClipDown(row, event)}
+                    onClipMove={onClipMove}
+                    onClipUp={onClipUp}
                   />
                 ))}
               </div>

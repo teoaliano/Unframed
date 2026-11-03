@@ -74,7 +74,7 @@ export interface RowsInput {
   readonly hidden: ReadonlySet<string>;
 }
 
-const numberOf = (owner: Owner, dials: Readonly<Record<string, unknown>>): number | undefined => {
+export const numberOf = (owner: Owner, dials: Readonly<Record<string, unknown>>): number | undefined => {
   if (owner.kind === "source") return typeof owner.value === "number" ? owner.value : undefined;
   if (owner.kind === "dial") {
     const value = dialAt(dials, owner.path.join("."));
@@ -230,8 +230,10 @@ export const buildRows = (input: RowsInput): RowView[] => {
   const clips = [...reading.clips].sort((a, b) => a.track - b.track || (startOf(a.start, dials) - startOf(b.start, dials)));
   const placed = new Set<string>();
   for (const clip of clips) {
-    const start = numberOf(clip.start, dials);
-    const duration = numberOf(clip.duration, dials);
+    // A clip the burst moves or stretches is drawn where the burst puts it (spec 21, Clips).
+    const moved = input.pending.find((edit): edit is Extract<SourceEdit, { type: "clip-time" }> => edit.type === "clip-time" && edit.clip === clip.hfId);
+    const start = moved?.start ?? numberOf(clip.start, dials);
+    const duration = moved?.duration ?? numberOf(clip.duration, dials);
     rows.push({
       key: `clip:${clip.hfId}`,
       kind: "clip",

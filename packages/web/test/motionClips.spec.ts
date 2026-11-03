@@ -21,7 +21,7 @@ const DIAL = CLIP.replace('tl.to("#dot", { x: 400, duration: 1 }, 1);', 'unframe
 const REFUSED = CLIP.replace('tl.to("#dot", { x: 400, duration: 1 }, 1);', 'tl.to("#dot", { x: 400, duration: 1 }, "<");');
 
 /** Another clip starts relative to Dot's id, so Dot cannot move. */
-const RELATIVE = CLIP.replace('<script src="gsap.js">', '<div id="other" data-uf-name="Other" class="clip" data-start="dot" data-duration="1"></div>\n<script src="gsap.js">');
+const RELATIVE = CLIP.replace('<div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360">', '<div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360"><div id="other" data-uf-name="Other" class="clip" data-start="dot" data-duration="1"></div>');
 
 const SHAPE = "shape:intro";
 const timeline = (page: Page) => page.getByRole("region", { name: "Timeline for Intro" });
