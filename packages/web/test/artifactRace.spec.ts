@@ -119,3 +119,24 @@ test("a file change made elsewhere under a pending burst drops it with the elsew
   expect(await htmlCount(agent)).toBe(countBefore);
   expect(await fileOf(agent)).toBe("elsewhere.html");
 });
+
+test("a file that replaces the page keeps the selected elements it still has, and drops the ones it does not", async ({ page, agent }) => {
+  await onBoard(page, agent);
+  await openEditor(page);
+  await selectHeading(page);
+  await expect(async () => {
+    await frameOf(page).getByText("Lead text").click({ modifiers: ["Shift"] });
+    await expect(outline(page, "selected")).toHaveCount(2, { timeout: 1000 });
+  }).toPass({ timeout: 20_000 });
+
+  // The other writer's file keeps the heading and drops the paragraph.
+  const prepared = await preparedFile(agent);
+  await writeProjectFile(agent, "elsewhere.html", (await textOf(agent, prepared)).replace("Welcome", "Elsewhere version").replace(/<p[^>]*>Lead text<\/p>/, ""));
+  const shape = (await roomShapes(agent, "default", "page")).find((record) => record.id === "shape:landing")!;
+  await (await agent.rpc()).call("testCanvas.apply", { project: "default", change: { put: [{ ...shape, props: { ...shape.props, file: "elsewhere.html" } }], remove: [] }, origin: { kind: "server", id: "test" } });
+
+  await expect(heading(page, "Elsewhere version")).toBeVisible({ timeout: 8000 });
+  await expect(outline(page, "selected")).toHaveCount(1);
+  await expect(parameters(page).getByText("2 elements")).toHaveCount(0);
+  await expect(parameters(page).getByText("Lead text")).toHaveCount(0);
+});

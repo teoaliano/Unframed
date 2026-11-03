@@ -48,7 +48,8 @@ test("Layers lists the elements in document order, with the runtime element grey
   expect(names).toEqual(["main", "Welcome", "Lead text", "box", "Inside"]);
   const runtime = column(page, "parameters").locator("[data-layer-runtime]");
   await expect(runtime).toContainText("Set by the agent's code");
-  await expect(runtime.locator("div").first()).toHaveClass(/opacity-60/);
+  // The runtime row is read-only but still readable: no dimming, so its text keeps 4.5:1 against the panel.
+  await expect(runtime.locator("div").first()).not.toHaveClass(/opacity-60/);
   // The box is a parent: it nests its span one step deeper than itself.
   expect(await rows(page).nth(4).evaluate((item) => (item as HTMLElement).style.paddingInlineStart)).toBe("24px");
 });
@@ -92,12 +93,75 @@ test("hide takes the element out of the frame and shows its row dimmed; show bri
   await onBoard(page, agent);
   await openLayers(page);
 
-  await column(page, "parameters").getByRole("button", { name: "Hide Lead text" }).click();
+  const hide = column(page, "parameters").getByRole("button", { name: "Hidden Lead text" });
+  await expect(hide).toHaveAttribute("aria-pressed", "false");
+  await hide.click();
+  await expect(hide).toHaveAttribute("aria-pressed", "true");
   await expect(frameOf(page).getByText("Lead text")).toBeHidden();
-  await expect(column(page, "parameters").getByRole("button", { name: "Show Lead text" })).toBeVisible();
   await expect(layerButton(page, "Lead text").locator("span").first()).toHaveClass(/opacity-50/);
   await expect.poll(() => textOf(agent), { timeout: 8000 }).toMatch(/data-uf-hidden/);
 
-  await column(page, "parameters").getByRole("button", { name: "Show Lead text" }).click();
+  await hide.click();
+  await expect(hide).toHaveAttribute("aria-pressed", "false");
   await expect(frameOf(page).getByText("Lead text")).toBeVisible();
+});
+
+test("rename starts with the whole name selected, so typing replaces it", async ({ page, agent }) => {
+  await onBoard(page, agent);
+  await openLayers(page);
+
+  await layerButton(page, "Lead text").dblclick();
+  const field = column(page, "parameters").getByRole("textbox", { name: "Layer name" });
+  await expect(field).toBeFocused();
+  expect(await field.evaluate((input) => (input as HTMLInputElement).selectionStart === 0 && (input as HTMLInputElement).selectionEnd === (input as HTMLInputElement).value.length)).toBe(true);
+  await page.keyboard.type("Renamed row");
+  await page.keyboard.press("Enter");
+  await expect(rowOf(page, "Renamed row")).toBeVisible();
+  await expect.poll(() => textOf(agent), { timeout: 8000 }).toMatch(/data-uf-name="Renamed row"/);
+});
+
+test("Hide and Lock keep their names and change only their pressed state; the selected element's row is highlighted", async ({ page, agent }) => {
+  await onBoard(page, agent);
+  await openLayers(page);
+
+  const lock = column(page, "parameters").getByRole("button", { name: "Locked Lead text" });
+  await expect(lock).toHaveAttribute("aria-pressed", "false");
+  await lock.click();
+  await expect(lock).toHaveAttribute("aria-pressed", "true");
+  await expect(column(page, "parameters").getByRole("button", { name: "Locked Lead text" })).toHaveCount(1);
+  await lock.click();
+  await expect(lock).toHaveAttribute("aria-pressed", "false");
+
+  await expect(async () => {
+    await frameOf(page).getByRole("heading", { name: "Welcome" }).click();
+    await expect(rowOf(page, "Welcome")).toHaveAttribute("data-selected", "true", { timeout: 1000 });
+  }).toPass({ timeout: 20_000 });
+  await expect(rowOf(page, "Lead text")).not.toHaveAttribute("data-selected", "true");
+});
+
+test("Enter on a focused row of a text element starts its in-place text edit", async ({ page, agent }) => {
+  await onBoard(page, agent);
+  await openLayers(page);
+
+  await layerButton(page, "Lead text").focus();
+  await page.keyboard.press("Enter");
+  await expect(frameOf(page).getByText("Lead text")).toHaveAttribute("contenteditable", "plaintext-only", { timeout: 5000 });
+  await page.keyboard.type("Typed");
+  await page.keyboard.press("Enter");
+  await expect.poll(() => textOf(agent), { timeout: 8000 }).toMatch(/>Typed</);
+});
+
+test("Enter in the frame on a selected text element starts its in-place text edit", async ({ page, agent }) => {
+  await onBoard(page, agent);
+  await openLayers(page);
+  await expect(async () => {
+    await frameOf(page).getByText("Lead text").click();
+    await expect(outline(page, "selected")).toHaveCount(1, { timeout: 1000 });
+  }).toPass({ timeout: 20_000 });
+
+  await frameOf(page).getByText("Lead text").focus();
+  await page.keyboard.press("Enter");
+  await expect(frameOf(page).getByText("Lead text")).toHaveAttribute("contenteditable", "plaintext-only", { timeout: 5000 });
+  await page.keyboard.press("Escape");
+  await expect(frameOf(page).getByText("Lead text")).not.toHaveAttribute("contenteditable");
 });
