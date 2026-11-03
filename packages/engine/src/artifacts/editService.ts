@@ -29,8 +29,6 @@ export interface EditServiceDeps {
   readonly folder: (project: string) => Promise<string | undefined>;
   /** The canvas records of a project. */
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;
-  /** Commits a change to a project's canvas. */
-  readonly apply: (project: string, change: { put: TLRecord[]; remove: string[] }, origin: Origin) => Promise<unknown>;
 }
 
 type Origin = CommittedChange["origin"];
@@ -126,13 +124,6 @@ export const artifactEditService = (deps: EditServiceDeps) => {
       shapeId,
       edits: [PREPARE_EDIT],
     });
-    // The swap happens here, against the room as it is now, never in the tab: a tab's swap could land after the
-    // agent's next version and put a copy of the old one back over it. A shape that moved on keeps its new file.
-    const now = (await deps.read(project)).find((candidate) => candidate.id === shapeId);
-    if (now?.typeName !== "shape") throw unframedError("not_found", `There is no page or motion ${shapeId} on this canvas.`);
-    const current = (now.props as { file?: unknown }).file;
-    if (current !== file) return { file: typeof current === "string" ? current : "" };
-    await deps.apply(project, { put: [{ ...now, props: { ...now.props, file: written.file } } as TLRecord], remove: [] }, { kind: "server", id: `prepare:${shapeId}` });
     return { file: written.file };
   },
 

@@ -55,9 +55,6 @@ describe("artifact.sourceTree and artifact.prepareEdit (spec 18)", () => {
   it("writes a stamped version with the bridge and its edit sidecar for an unready page, and leaves the base file alone", async () => {
     const answer = await rpc.call("artifact.prepareEdit", { project: "board", shapeId: "shape:plain" });
     expect(answer.file).toMatch(/^\d+-plain\.html$/);
-    // The engine points the shape at it; the tab never does.
-    const records = (await rpc.call("testCanvas.read", { project: "board" })).records as Array<{ id: string; props: { file?: string } }>;
-    expect(records.find((record) => record.id === "shape:plain")?.props.file).toBe(answer.file);
     const written = await readFile(join(folder, answer.file), "utf8");
     expect(written).toBe(stampElementIds(`${TOKENS_TAG}\n${BRIDGE_TAG}\n${UNSTAMPED}`));
     expect(await readFile(join(folder, "1-plain.html"), "utf8")).toBe(UNSTAMPED);

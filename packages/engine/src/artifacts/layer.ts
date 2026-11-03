@@ -130,11 +130,7 @@ export const artifactsLayer = Layer.effect(
       if (change.records.has(TLDOCUMENT_ID)) writeTokens(project, kitOf(room.read()));
     });
 
-    const edits = artifactEditService({
-      folder: (project) => media.folder(project),
-      read: (project) => run(rooms.read(project)),
-      apply: (project, change, origin) => run(rooms.apply(project, change, origin)),
-    });
+    const edits = artifactEditService({ folder: (project) => media.folder(project), read: (project) => run(rooms.read(project)) });
     yield* rooms.afterCommit((project, change) => edits.committed(project, change));
     const fromEdits = <A>(attempt: () => Promise<A>): Effect.Effect<A, UnframedError> =>
       Effect.tryPromise({
