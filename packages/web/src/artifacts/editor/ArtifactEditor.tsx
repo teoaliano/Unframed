@@ -381,7 +381,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             </Button>
           </Tip>
           <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-          {/* The title keeps its width and the kind and the use count shrink first, so a short title shows in full (spec 09, the header). */}
+          {/* The title and the use count keep their width and the kind word truncates first, so neither is squeezed away (spec 09, the header). */}
           <span className="flex min-w-0 flex-1 items-baseline gap-2">
             <span data-testid="artifact-editor-title" className="shrink-0 truncate text-sm font-semibold">
               {title}
@@ -390,7 +390,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
               {facts.kind}
             </span>
             {component && uses > 0 && (
-              <span data-testid="artifact-editor-uses" className="min-w-0 truncate text-sm text-muted-foreground @max-[520px]/editor-header:hidden">
+              <span data-testid="artifact-editor-uses" className="shrink-0 text-sm text-muted-foreground @max-[520px]/editor-header:hidden">
                 {uses === 1 ? "Used in 1 artifact" : `Used in ${uses} artifacts`}
               </span>
             )}
