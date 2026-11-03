@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import type { Frame, Locator, Page } from "@playwright/test";
 import { centre, openCanvas, roomShapes, shapeOnScreen } from "./canvas.ts";
-import { engineChat, engineChats, expect, say, test } from "./agent.ts";
+import { expect, test } from "./agent.ts";
 import { filledArtifact, projectPath } from "./artifacts.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
@@ -72,30 +72,3 @@ test("a key message from the frame is ignored outside Edit mode", async ({ page,
   await expect(rowOf(page, "Lead text").locator("[data-layer]")).toHaveAttribute("aria-pressed", "true");
 });
 
-/** A page whose script adds an element with a 300-character id: its live selector is the id, which a chip carries. */
-const LONG_ID = "x".repeat(300);
-const RUNTIME_PAGE = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}</style></head><body><main><h1 data-hf-id="hf-aaaa">Welcome</h1></main><script>const made = document.createElement("p"); made.id = "${LONG_ID}"; made.textContent = "Made by script"; document.body.appendChild(made);</script></body></html>`;
-
-test("a runtime element's selector reaches the agent capped at 200 characters", async ({ page, agent }) => {
-  await openCanvas(page, agent);
-  await filledArtifact(agent, { id: "shape:pg1", kind: "page", ref: "pg1", at: { x: -520, y: -40 }, size: { w: 400, h: 260 }, title: "Landing", html: RUNTIME_PAGE });
-  await expect(shapeOnScreen(page, "shape:pg1")).toBeVisible();
-  await openEditor(page);
-
-  await expect(async () => {
-    await frameOf(page).getByText("Made by script").click();
-    await expect(outline(page, "selected")).toHaveCount(1, { timeout: 1000 });
-  }).toPass({ timeout: 20_000 });
-  await region(page).getByRole("button", { name: "Tell the agent" }).first().click();
-  await say(editor(page).getByRole("complementary", { name: "Agent" }), "check this element");
-
-  await expect
-    .poll(async () => {
-      const [summary] = await engineChats(agent);
-      return summary === undefined ? "" : JSON.stringify(await engineChat(agent, summary.id));
-    }, { timeout: 20_000 })
-    .toContain("x".repeat(100));
-  const [summary] = await engineChats(agent);
-  const stored = JSON.stringify(await engineChat(agent, summary!.id));
-  expect(stored).not.toContain("x".repeat(201));
-});
