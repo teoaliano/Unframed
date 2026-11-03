@@ -166,6 +166,11 @@ export interface EditSession {
    */
   readonly patchTween: (edit: SourceEdit, frame: TweenPatch) => void;
   /**
+   * Shows a tween's timing in the frame without adding anything to the burst: a clip drag's carried tweens, which the clip's own
+   * `clip-time` edit writes at the commit (spec 21, Live preview).
+   */
+  readonly previewTween: (frame: TweenPatch) => void;
+  /**
    * Shows edits in the frame without adding them to the burst (a token's hover preview). The burst's
    * own edits are shown again over the reset frame; null shows only the burst.
    */
@@ -415,6 +420,8 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     },
     [collect, post],
   );
+
+  const previewTween = useCallback((frame: TweenPatch) => post({ type: "unframed:edit:patch", patches: [{ kind: "tween", ...frame }] }), [post]);
 
   const previewEdits = useCallback(
     (edits: readonly SourceEdit[] | null) => {
@@ -737,6 +744,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     overridden,
     patch,
     patchTween,
+    previewTween,
     previewEdits,
     commit,
     discard,

@@ -87,6 +87,25 @@ test("moving a clip moves its tweens: the clip and its tween land 0.5 s later in
   expect((await tweenPlace(page)).duration).toBeCloseTo(1, 2);
 });
 
+test("the carried tween moves in the frame while the clip is dragged, and no version is written until the drag is let go", async ({ page, agent }) => {
+  await openMotion(page, agent, CLIP);
+  const versions = (await editSummaries(agent)).length;
+  const box = await clipBar(page).boundingBox();
+  if (!box) throw new Error("no clip bar");
+  const y = box.y + box.height / 2;
+  const x = box.x + box.width / 2;
+  const pxPerSecond = await zoomOf(page);
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 0.5 * pxPerSecond, y, { steps: 8 });
+  // The frame shows the tween half a second later while the pointer is still down. The burst waits 1.5 s after the last move before
+  // it writes, so the frame is read within one second of it.
+  await expect.poll(() => tweenPlace(page).then((place) => place.start), { timeout: 1_000 }).toBeCloseTo(1.5, 2);
+  expect((await editSummaries(agent)).length).toBe(versions);
+  await page.mouse.up();
+  await awaitVersion(agent, versions);
+});
+
 test("stretching a clip's right edge scales its tween, and the version names the new length", async ({ page, agent }) => {
   await openMotion(page, agent, CLIP);
   const versions = (await editSummaries(agent)).length;

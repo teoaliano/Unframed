@@ -836,8 +836,20 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
     const duration = round(end - start);
     // A move sends the duration only when the burst already holds one, so a move does not pin the clip's length.
     const held = session.pending.some((edit) => edit.type === "clip-time" && edit.clip === drag.clip && edit.duration !== undefined);
-    session.patch({ type: "clip-time", clip: drag.clip, start, ...(drag.mode !== "move" || held ? { duration } : {}) });
+    const clipEdit = { type: "clip-time" as const, clip: drag.clip, start, ...(drag.mode !== "move" || held ? { duration } : {}) };
+    session.patch(clipEdit);
     if (current?.value !== undefined) {
+      // The carried tweens move in the frame as the clip does, from the timing the clip's edit gives them (spec 21, Live preview).
+      const others = session.pending.filter((edit) => !(edit.type === "clip-time" && edit.clip === drag.clip));
+      for (const timed of carriedTimingOf(current.value, [...others, clipEdit], dials)) {
+        if (timed.type !== "tween-time") continue;
+        const tween = tweens.get(timed.tween.index);
+        const selector = tween?.targets[0];
+        if (tween === undefined || selector === undefined) continue;
+        // The carry writes numbers; a token duration only reaches the frame at the commit.
+        const change = { ...(timed.start === undefined ? {} : { start: timed.start }), ...(typeof timed.duration === "number" ? { duration: timed.duration } : {}) };
+        session.previewTween({ selector, channels: channelsOf(tween), change });
+      }
       for (const written of carriedDialsOf(current.value, clip, { start: drag.origin, duration: drag.end - drag.origin }, { start, duration }, drag.dials)) {
         const limit = dialLimitOf(schema, written.path);
         if (limit !== null) session.patchDial(written.path.join("."), clampDialValue(limit, written.value));
