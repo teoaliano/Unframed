@@ -18,7 +18,8 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The browser suite alone takes 15 to 20 minutes on a shared runner; 30 cancelled runs that were passing.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
