@@ -51,7 +51,8 @@ const rulerOf = async (page: Page) => {
 const edgeOf = async (locator: Locator, side: "left" | "right") => {
   const box = await locator.boundingBox();
   if (!box) throw new Error("no bar");
-  return { x: side === "right" ? box.x + box.width - 2 : box.x + 1, y: box.y + box.height / 2 };
+  // Half a pixel inside each edge: at this zoom a pixel is a fiftieth of a second.
+  return { x: side === "right" ? box.x + box.width - 0.5 : box.x + 0.5, y: box.y + box.height / 2 };
 };
 
 test("dragging the right edge of a literal tween's bar stretches it with its start fixed, and the frame follows", async ({ page, agent }) => {
@@ -105,11 +106,11 @@ test("with no bar edge in reach, a stretched edge lands on a whole frame at 30 f
   const edge = await edgeOf(bar(page), "right");
   await page.mouse.move(edge.x, edge.y);
   await page.mouse.down();
-  // 2.85 s is 0.15 s from Other's end, far outside the 8 px reach at this zoom, so the edge lands on the frame at 86/30 s.
-  await page.mouse.move(ruler.x(2.85), edge.y, { steps: 8 });
+  // 2.75 s is a quarter second from Other's end, outside the 8 px reach at this zoom, so the edge lands on the frame at 83/30 s.
+  await page.mouse.move(ruler.x(2.75), edge.y, { steps: 8 });
   await expect(timeline(page).getByTestId("timeline-snap-guide")).toHaveCount(0);
   await page.mouse.up();
-  await expect.poll(async () => Number(await bar(page).getAttribute("data-duration"))).toBeCloseTo(86 / 30, 3);
+  await expect.poll(async () => Number(await bar(page).getAttribute("data-duration"))).toBeCloseTo(83 / 30, 3);
 });
 
 test("holding Alt places the edge freely, to the millisecond, and the strip says so while the drag goes on", async ({ page, agent }) => {
