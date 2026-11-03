@@ -178,6 +178,8 @@ describe("the preview origin", () => {
     const fresh = await preview(engine, "/p/board/fresh.html");
     expect(fresh.status).toBe(200);
     expect(fresh.text).toBe("<h1>new</h1>");
-    await expectNotFound(engine, "/p/board/landing.html");
+    const gone = await preview(engine, "/p/board/landing.html");
+    expect(gone.status).toBe(404);
+    expect(gone.text).toContain("This file is no longer in the project.");
   });
 });

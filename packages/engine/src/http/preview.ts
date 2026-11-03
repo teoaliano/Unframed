@@ -124,7 +124,7 @@ const handler =
     }
     const info = await stat(path).catch(() => undefined);
     if (!info?.isFile()) {
-      if (info === undefined && name.endsWith(".html")) return refuse(res, 404, MISSING_PAGE, head, "text/html; charset=utf-8");
+      if (info === undefined && folderExists && name.endsWith(".html")) return refuse(res, 404, MISSING_PAGE, head, "text/html; charset=utf-8");
       return refuse(res, 404, "not found", head);
     }
     const etag = etagOf(info.size, info.mtimeMs);
