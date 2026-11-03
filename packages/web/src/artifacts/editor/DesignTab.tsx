@@ -346,8 +346,8 @@ const Row = ({ label, mark, token, children }: { readonly label: string; readonl
       <span className="truncate">{label}</span>
       {mark !== undefined && <ParameterMark path={mark} />}
     </span>
-    <div className="flex min-w-0 items-center gap-1">
-      <div className="min-w-0 flex-1">{children}</div>
+    <div className="flex min-w-0 flex-wrap items-center gap-1">
+      <div className="min-w-[7rem] flex-1">{children}</div>
       {token}
     </div>
   </div>
