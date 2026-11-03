@@ -482,7 +482,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             <Tip label="Show agent">
               <Button variant="outline" size="sm" className="shrink-0" aria-label="Show agent" onClick={() => setSheet("agent")}>
                 <PanelLeft aria-hidden />
-                <span className="@max-[520px]/editor-header:sr-only">Show agent</span>
+                <span className="@max-[680px]/editor-header:sr-only">Show agent</span>
               </Button>
             </Tip>
           )}
@@ -590,7 +590,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             <Tip label="Show parameters">
               <Button variant="outline" size="sm" className="shrink-0" aria-label="Show parameters" onClick={() => setSheet("parameters")}>
                 <SlidersHorizontal aria-hidden />
-                <span className="@max-[520px]/editor-header:sr-only">Show parameters</span>
+                <span className="@max-[680px]/editor-header:sr-only">Show parameters</span>
               </Button>
             </Tip>
           )}
