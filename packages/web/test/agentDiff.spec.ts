@@ -27,7 +27,6 @@ const test = base.extend<{ agent: TestEngine }>({
 const V1 = '<!doctype html>\n<html>\n<body>\n<h1 class="title">Landing</h1>\n<p>One</p>\n</body>\n</html>\n';
 const V2 = '<!doctype html>\n<html>\n<body>\n<h1 class="title">Landing, again</h1>\n<p>One</p>\n<p>Two</p>\n</body>\n</html>\n';
 
-/** A page on landing-v1.html and a note; the chat's first turn points the page at v2, its second changes the note. */
 const twoTurns = async (page: Page, engine: TestEngine) => {
   await openCanvas(page, engine);
   const folder = join(engine.dataDir, "output", "default");
@@ -57,7 +56,6 @@ test("View diff opens the panel on that page: its turn, the changed file with it
   const patch = diff.locator("[data-diff-file='shape:pg1']");
   await expect(patch.getByTestId("diff-names")).toHaveText("landing-v1.html → landing-v2.html");
   await expect(patch).toContainText("Landing, again");
-  // Highlighted as HTML: a tag name is coloured apart from the text between tags.
   const colourOf = (text: string) =>
     patch.evaluate((element, wanted) => {
       const all = (scope: Element | ShadowRoot): Element[] => [...scope.querySelectorAll("*")].flatMap((node) => [node, ...(node.shadowRoot ? all(node.shadowRoot) : [])]);
@@ -67,7 +65,6 @@ test("View diff opens the panel on that page: its turn, the changed file with it
   await expect.poll(() => colourOf("html")).toBeDefined();
   await expect.poll(async () => (await colourOf("html")) !== (await colourOf("One"))).toBe(true);
 
-  // Escape closes it.
   await diff.focus();
   await page.keyboard.press("Escape");
   await expect(diff).toHaveCount(0);
@@ -94,7 +91,6 @@ test("the scope menu moves between turns and all turns, with the empty states", 
   await page.getByRole("menuitemradio", { name: "Turn 1" }).click();
   await expect(diff.getByRole("navigation", { name: "Changed files" }).getByRole("button")).toHaveText(["Landing+2−1"]);
 
-  // Rewound to before the first message, the chat has no completed turn left.
   await panel.locator("[data-role='user']").first().getByRole("button", { name: "Edit from here" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Revert and keep changes" }).click();
   await expect(diff.getByText("No completed turns yet.", { exact: true })).toBeVisible();
@@ -120,7 +116,6 @@ test("Stacked and Split are remembered; line wrapping and whitespace say what th
   await expect(diff.getByRole("button", { name: "Show whitespace changes" })).toHaveAttribute("aria-pressed", "true");
   await expect(diff.getByRole("navigation", { name: "Changed files" }).getByRole("button")).toHaveText(["Landing+2−1"]);
 
-  // Opened again after a reload, the panel keeps Split.
   await page.reload();
   const again = await openRail(page);
   await again.getByTestId("recap-card").first().getByRole("button", { name: "View diff" }).click();
@@ -133,7 +128,6 @@ test("the diff panel is t3code's diff panel shell: kit header controls, t3code's
   const diff = diffPanel(page);
   const patch = diff.locator("[data-diff-file='shape:pg1']");
   await expect(patch).toContainText("Landing, again");
-  /** The background the renderer paints its diff body with, inside its shadow root. */
   const surface = () =>
     patch.evaluate((element) => {
       const all = (scope: Element | ShadowRoot): Element[] => [...scope.querySelectorAll("*")].flatMap((node) => [node, ...(node.shadowRoot ? all(node.shadowRoot) : [])]);
