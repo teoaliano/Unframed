@@ -314,14 +314,14 @@ const RowLine = ({
       ) : (
       <div className="sticky left-0 z-10 flex w-40 flex-none items-center gap-1 border-b border-r bg-card pr-1 text-xs" style={{ paddingLeft: 4 + row.depth * 12 }}>
         {row.expandable ? (
-          <Button variant="ghost" size="icon-tiny" className="size-6 p-1.5" aria-label={`${row.expanded ? "Collapse" : "Expand"} ${name}`} onClick={onToggle}>
+          <Button variant="ghost" size="icon-tiny" className="size-6" aria-label={`${row.expanded ? "Collapse" : "Expand"} ${name}`} onClick={onToggle}>
             {row.expanded ? <ChevronDown aria-hidden /> : <ChevronRight aria-hidden />}
           </Button>
         ) : (
           <span className="size-4 flex-none" />
         )}
         {row.kind === "element" && row.element !== null ? (
-          <Button variant="ghost" size="xs" className="-my-1.5 py-1.5" aria-label={`Select ${name}`} onClick={() => onSelectElement(row.element!)}>
+          <Button variant="ghost" size="xs" className="h-6" aria-label={`Select ${name}`} onClick={() => onSelectElement(row.element!)}>
             <span className="truncate">{name}</span>
           </Button>
         ) : (
