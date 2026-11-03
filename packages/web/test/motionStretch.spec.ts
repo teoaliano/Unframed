@@ -32,8 +32,11 @@ const openMotion = async (page: Page, engine: TestEngine) => {
   await page.mouse.dblclick(at.x, at.y);
   await expect(region(page)).toBeVisible();
   await expect(bar(page)).toHaveCount(1, { timeout: 40_000 });
-  // The zoom is set once the strip has measured its width, so the pointer's places are real.
+  // The zoom is set once the strip has measured its width. One step out keeps a bar's right end clear of the scrollbar.
   await expect.poll(async () => Number(await timeline(page).getByTestId("timeline-track").getAttribute("data-px-per-second"))).toBeGreaterThan(0);
+  const fitted = Number(await timeline(page).getByTestId("timeline-track").getAttribute("data-px-per-second"));
+  await timeline(page).getByRole("button", { name: "Zoom out" }).click();
+  await expect.poll(async () => Number(await timeline(page).getByTestId("timeline-track").getAttribute("data-px-per-second"))).toBeCloseTo(fitted / 2, 3);
 };
 
 /** The strip's zoom and the x of the ruler's time zero, read at the moment the pointer needs them. */
@@ -48,7 +51,7 @@ const rulerOf = async (page: Page) => {
 const edgeOf = async (locator: Locator, side: "left" | "right") => {
   const box = await locator.boundingBox();
   if (!box) throw new Error("no bar");
-  return { x: side === "right" ? box.x + box.width - 2 : box.x + 2, y: box.y + box.height / 2 };
+  return { x: side === "right" ? box.x + box.width - 2 : box.x + 1, y: box.y + box.height / 2 };
 };
 
 test("dragging the right edge of a literal tween's bar stretches it with its start fixed, and the frame follows", async ({ page, agent }) => {
@@ -62,7 +65,7 @@ test("dragging the right edge of a literal tween's bar stretches it with its sta
   // Three seconds: the bar ends at 3 s, and the composition's tween is three seconds long.
   await expect.poll(async () => Number(await bar(page).getAttribute("data-duration"))).toBeCloseTo(3, 1);
   expect(Number(await bar(page).getAttribute("data-start"))).toBeCloseTo(0, 3);
-  await expect.poll(async () => (await tweenPlace(page)).duration).toBeCloseTo(3, 1);
+  await expect.poll(async () => (await tweenPlace(page).catch(() => ({ duration: Number.NaN }))).duration).toBeCloseTo(3, 1);
   await page.mouse.up();
 
   await expect.poll(async () => (await roomShapes(agent, "default", "motion")).find((record) => record.id === SHAPE)?.props?.file, { timeout: 15_000 }).not.toBe(before);
@@ -102,10 +105,11 @@ test("with no bar edge in reach, a stretched edge lands on a whole frame at 30 f
   const edge = await edgeOf(bar(page), "right");
   await page.mouse.move(edge.x, edge.y);
   await page.mouse.down();
-  await page.mouse.move(ruler.x(2.97), edge.y, { steps: 8 });
+  // 2.85 s is 0.15 s from Other's end, far outside the 8 px reach at this zoom, so the edge lands on the frame at 86/30 s.
+  await page.mouse.move(ruler.x(2.85), edge.y, { steps: 8 });
   await expect(timeline(page).getByTestId("timeline-snap-guide")).toHaveCount(0);
   await page.mouse.up();
-  await expect.poll(async () => Number(await bar(page).getAttribute("data-duration"))).toBeCloseTo(89 / 30, 3);
+  await expect.poll(async () => Number(await bar(page).getAttribute("data-duration"))).toBeCloseTo(86 / 30, 3);
 });
 
 test("holding Alt places the edge freely, to the millisecond, and the strip says so while the drag goes on", async ({ page, agent }) => {
@@ -120,6 +124,9 @@ test("holding Alt places the edge freely, to the millisecond, and the strip says
   await expect(timeline(page).getByTestId("timeline-snap-guide")).toHaveCount(0);
   await page.mouse.up();
   await page.keyboard.up("Alt");
-  await expect.poll(async () => Number(await bar(page).getAttribute("data-duration"))).toBeCloseTo(3.02, 3);
+  // The pointer's pixels set the place, so the edge is near 3.02 s but not on a frame (3.033 s) nor on a bar edge.
+  await expect.poll(async () => Number(await bar(page).getAttribute("data-duration"))).toBeCloseTo(3.02, 1);
+  const placed = Number(await bar(page).getAttribute("data-duration"));
+  expect(Math.abs(placed * 30 - Math.round(placed * 30))).toBeGreaterThan(0.05);
   await expect(timeline(page).getByText(/Hold (Alt|Option) to place freely/)).toHaveCount(0);
 });

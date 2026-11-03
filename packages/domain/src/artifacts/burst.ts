@@ -19,7 +19,8 @@ export const emptyBurst = (): Burst => ({ edits: new Map(), dials: new Map() });
 /** The target and field an edit replaces: a later edit with the same key takes its place. */
 const burstKey = (edit: SourceEdit): string => {
   // Motion edits (spec 21): a tween is keyed by its source order, a clip by its element id, the length by the root.
-  if (edit.type === "tween-time") return JSON.stringify([`tween:${edit.tween.index}`, edit.start !== undefined ? "start" : "duration"]);
+  // One timing entry per tween: a start, a duration or both replace the tween's earlier timing (spec 21, Motion edits).
+  if (edit.type === "tween-time") return JSON.stringify([`tween:${edit.tween.index}`, "time"]);
   if (edit.type === "tween-ease") return JSON.stringify([`tween:${edit.tween.index}`, "ease"]);
   if (edit.type === "tween-stagger") return JSON.stringify([`tween:${edit.tween.index}`, "stagger"]);
   if (edit.type === "tween-value") return JSON.stringify([`tween:${edit.tween.index}`, `value:${edit.at}:${edit.property}`]);

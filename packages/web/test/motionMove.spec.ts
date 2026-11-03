@@ -36,6 +36,8 @@ const openMover = async (page: Page, engine: TestEngine) => {
   await page.mouse.dblclick(at.x, at.y);
   await expect(region(page)).toBeVisible();
   await expect(bar(page)).toHaveCount(1, { timeout: 40_000 });
+  // The bar has its width once the strip has measured itself: a press before then would land on its edge.
+  await zoomOf(page);
 };
 
 /** The file the motion shape names in the room. The room lags the editor by a sync round, so reads poll. */
@@ -99,7 +101,8 @@ test("dragging a literal tween's bar moves the frame while the drag goes on, and
   await expect.poll(async () => (await editSummaries(agent)).length, { timeout: 10_000 }).toBe(summaries + 1);
   const latest = (await editSummaries(agent)).at(-1) ?? [];
   expect(latest).toEqual(["Moved Dot position to 0.5 s"]);
-  expect(await tweenStart(page)).toBeCloseTo(0.5, 2);
+  // The new version loads as a fresh document, so the frame is read again once it has settled.
+  await expect.poll(() => tweenStart(page).catch(() => Number.NaN), { timeout: 15_000 }).toBeCloseTo(0.5, 2);
 });
 
 test("Undo takes back the whole move, and the file the shape names goes back to the one before it", async ({ page, agent }) => {

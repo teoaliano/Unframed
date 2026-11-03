@@ -7,7 +7,7 @@
  */
 import { ChevronDown, ChevronLeft, ChevronRight, Lock, Maximize2, PanelBottom, Pause, Play, Repeat, Volume2, VolumeX, ZoomIn, ZoomOut } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
-import { fitZoom, rulerStep, snapMove, zoomAt, zoomButton, type SnapTarget, type Tween, type TweenRef } from "@unframed/domain";
+import { fitZoom, rulerStep, snapMove, snapTime, zoomAt, zoomButton, type SnapTarget, type Tween, type TweenRef } from "@unframed/domain";
 import type { MotionTimelineReading } from "@unframed/contracts";
 import { Button } from "~/components/ui/button";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "~/components/ui/menu";
@@ -26,6 +26,37 @@ const TRANSPORT_HEIGHT = 40;
 
 /** The label column beside the time area: 160 px (spec 21, Layout). */
 const LABEL_WIDTH = 160;
+
+/** A bar's edge within this many pixels is its stretch handle (spec 21, Editing on the strip). */
+const EDGE_PIXELS = 6;
+
+/** A tween's duration is at least one frame at 30 fps (spec 21, Motion edits). */
+const MIN_DURATION = 0.033;
+
+/** Seconds to the millisecond, as the writer keeps them. */
+const round = (seconds: number): number => Math.round(seconds * 1000) / 1000;
+
+type GestureMode = "move" | "start" | "end";
+
+/** A bar drag in progress: which bar, what it changes, and where it began. */
+interface Gesture {
+  readonly mode: GestureMode;
+  readonly bar: BarView;
+  readonly target: string;
+  readonly ref: TweenRef;
+  readonly channels: string[];
+  readonly startX: number;
+  /** The bar's own start and end, stagger offset included. */
+  readonly origin: number;
+  readonly end: number;
+  /** The bar's stagger offset: a tween's start is its bar's start less this. */
+  readonly offset: number;
+  /** The last change sent, so a move that stays put sends nothing. */
+  last: string;
+}
+
+/** The hint under a drag, as the platform names the key (spec 21, Snapping). */
+const freeHint = (): string => (typeof navigator !== "undefined" && /Mac/i.test(navigator.platform) ? "Hold Option to place freely" : "Hold Alt to place freely");
 
 /** A label on the ruler, in seconds: `0 s`, `0.5 s`, `10 s`. */
 const tickLabel = (seconds: number): string => `${Number(seconds.toFixed(2))} s`;
@@ -89,7 +120,7 @@ const RowLine = ({
   selectedTween,
   onToggle,
   onSelectElement,
-  movable,
+  cursorOf,
   onBarDown,
   onBarMove,
   onBarUp,
@@ -101,7 +132,7 @@ const RowLine = ({
   readonly selectedTween: number | null;
   readonly onToggle: () => void;
   readonly onSelectElement: (id: string) => void;
-  readonly movable: (bar: BarView) => boolean;
+  readonly cursorOf: (bar: BarView) => string;
   readonly onBarDown: (bar: BarView, event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onBarMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onBarUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -168,7 +199,7 @@ const RowLine = ({
               onPointerCancel={onBarUp}
               className={cn(
                 "absolute top-1/2 -translate-y-1/2 rounded-sm",
-                movable(bar) ? "cursor-grab" : "cursor-not-allowed",
+                cursorOf(bar),
                 thin ? "h-1.5" : "h-3",
                 bar.copy ? "bg-primary/25" : bar.readOnly !== null ? "bg-muted-foreground/50" : "bg-primary/70",
                 chosen && "ring-1 ring-foreground",
@@ -365,38 +396,81 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, l
     if (current.latest !== prefs.height) save({ height: current.latest, open: true });
   };
 
-  // A bar drag (spec 21, Editing on the strip). A move changes a literal start: each move is one tween edit in the burst and a tween
-  // patch in the frame, and the burst's pause writes the version after the release.
-  const gesture = useRef<{ bar: BarView; target: string; ref: TweenRef; channels: string[]; startX: number; origin: number; duration: number; offset: number; last: number } | null>(null);
-  /** Whether a bar may be moved: a literal start, outside a read-only tween, on an element nothing locks. */
-  const movable = (bar: BarView, row: RowView): boolean => {
+  // A bar drag (spec 21, Editing on the strip). A bar's body moves its start; a stretch from the right edge changes its duration,
+  // and from the left edge both (the end stays put). Each change is one tween edit in the burst and a tween patch in the frame,
+  // and the burst's pause writes the version after the release.
+  const gesture = useRef<Gesture | null>(null);
+  const [guide, setGuide] = useState<number | null>(null);
+  const [barDragging, setBarDragging] = useState(false);
+  const pendingTiming = (index: number): { start?: number; duration?: number } | undefined =>
+    session.pending.find((edit): edit is Extract<typeof edit, { type: "tween-time" }> => edit.type === "tween-time" && edit.tween.index === index);
+  /** What a bar may do, from the reading: a move needs a literal start, an end a literal duration, a left edge both. */
+  const allowed = (bar: BarView, row: RowView): { move: boolean; start: boolean; end: boolean } => {
     const tween = tweens.get(bar.tween);
-    return tween !== undefined && tween.readOnly === null && tween.start.kind === "source" && !row.locked && bar.tween >= 0;
+    if (tween === undefined || tween.readOnly !== null || row.locked || bar.tween < 0 || tween.method === "set") return { move: false, start: false, end: false };
+    const literalStart = tween.start.kind === "source";
+    const literalDuration = tween.duration.kind === "source";
+    return { move: literalStart, start: literalStart && literalDuration, end: literalDuration };
+  };
+  const cursorOf = (bar: BarView, row: RowView): string => {
+    const rights = allowed(bar, row);
+    return rights.move || rights.start || rights.end ? "cursor-grab" : "cursor-not-allowed";
   };
   const onBarDown = (bar: BarView, row: RowView, event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     setSelectedTween(bar.tween);
     if (row.element !== null && !session.selection.includes(row.element)) session.setSelection([row.element]);
-    if (!movable(bar, row)) return;
+    const rights = allowed(bar, row);
+    const rect = event.currentTarget.getBoundingClientRect();
+    const local = event.clientX - rect.left;
+    // The edge within 6 px is the stretch; a narrow bar's nearer edge wins.
+    const nearStart = local <= EDGE_PIXELS && rights.start;
+    const nearEnd = rect.width - local <= EDGE_PIXELS && rights.end;
+    const mode: GestureMode | null = nearStart && nearEnd ? (local <= rect.width / 2 ? "start" : "end") : nearStart ? "start" : nearEnd ? "end" : rights.move ? "move" : null;
+    if (mode === null) return;
     const tween = tweens.get(bar.tween)!;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
-    gesture.current = { bar, target: bar.target, ref: tween.ref, channels: channelsOf(tween), startX: event.clientX, origin: bar.start, duration: bar.duration, offset: bar.stagger ?? 0, last: Number.NaN };
+    gesture.current = { mode, bar, target: bar.target, ref: tween.ref, channels: channelsOf(tween), startX: event.clientX, origin: bar.start, end: bar.start + bar.duration, offset: bar.stagger ?? 0, last: "" };
+    setBarDragging(true);
   };
   const onBarMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     const current = gesture.current;
     if (current === null) return;
     const targets = snapTargets(rows, current.ref.index, transport.current(), range, length);
-    const candidate = current.origin + (event.clientX - current.startX) / pxRef.current;
-    const snapped = snapMove(candidate, current.duration, { targets, pxPerSecond: pxRef.current, free: event.altKey });
-    const start = Math.max(0, Math.round((snapped.start - current.offset) * 1000) / 1000);
-    if (start === current.last) return;
-    current.last = start;
-    session.patchTween({ type: "tween-time", tween: current.ref, start }, { selector: current.target, channels: current.channels, change: { start } });
+    const pxPerSecond = pxRef.current;
+    const dt = (event.clientX - current.startX) / pxPerSecond;
+    const free = event.altKey;
+    const changed: { start?: number; duration?: number } = {};
+    if (current.mode === "move") {
+      const snapped = snapMove(current.origin + dt, current.end - current.origin, { targets, pxPerSecond, free });
+      changed.start = Math.max(0, round(snapped.start - current.offset));
+      setGuide(snapped.guide ? snapped.start : null);
+    } else if (current.mode === "end") {
+      const snapped = snapTime(current.end + dt, { targets, pxPerSecond, free });
+      changed.duration = Math.max(MIN_DURATION, round(snapped.time - current.origin));
+      setGuide(snapped.guide ? snapped.time : null);
+    } else {
+      const snapped = snapTime(current.origin + dt, { targets, pxPerSecond, free });
+      const at = Math.min(current.end - MIN_DURATION, Math.max(current.offset, snapped.time));
+      changed.start = round(at - current.offset);
+      changed.duration = round(current.end - at);
+      setGuide(snapped.guide ? at : null);
+    }
+    // The burst keeps one timing entry per tween, so the fields it does not change keep their pending values.
+    const pending = pendingTiming(current.ref.index);
+    const fields = { start: changed.start ?? pending?.start, duration: changed.duration ?? pending?.duration };
+    const key = JSON.stringify(fields);
+    if (key === current.last) return;
+    current.last = key;
+    const edit = { type: "tween-time" as const, tween: current.ref, ...(fields.start === undefined ? {} : { start: fields.start }), ...(fields.duration === undefined ? {} : { duration: fields.duration }) };
+    session.patchTween(edit, { selector: current.target, channels: current.channels, change: edit });
   };
   const onBarUp = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (gesture.current === null) return;
     gesture.current = null;
+    setGuide(null);
+    setBarDragging(false);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
 
@@ -510,7 +584,7 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, l
       </header>
       {open && (
         // The time area: its focus is where the transport's keys act, with the ruler and the rows (spec 21, the shortcuts).
-        <div data-timeline-focus tabIndex={-1} className="flex min-h-0 flex-1 flex-col outline-none">
+        <div data-timeline-focus tabIndex={-1} className="relative flex min-h-0 flex-1 flex-col outline-none">
           {/* The scroller scrolls the time (Shift and the wheel) and the rows (the wheel); the ruler stays on top. */}
           <div ref={scroller} data-testid="timeline-scroll" className="relative min-h-0 flex-1 overflow-auto">
             <div data-testid="timeline-track" data-px-per-second={pxPerSecond} className="relative flex min-h-full flex-col" style={{ width: trackTotal }}>
@@ -548,7 +622,7 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, l
                   )}
                 </div>
               </div>
-              <div data-testid="timeline-rows" className="flex min-h-0 flex-1 flex-col" onClick={() => setSelectedTween(null)}>
+              <div data-testid="timeline-rows" className="relative flex min-h-0 flex-1 flex-col" onClick={() => setSelectedTween(null)}>
                 {current?.value?.script === "none" && <p className="sticky left-0 p-2 text-xs text-muted-foreground">This motion has no GSAP timeline the editor can read.</p>}
                 {current?.value?.script === "unreadable" && <p className="sticky left-0 p-2 text-xs text-muted-foreground">The timeline script could not be read.</p>}
                 {current?.error !== undefined && <p className="sticky left-0 p-2 text-xs text-muted-foreground">{current.error}</p>}
@@ -565,7 +639,7 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, l
                       setSelectedTween(null);
                       session.setSelection([id]);
                     }}
-                    movable={(bar) => movable(bar, row)}
+                    cursorOf={(bar) => cursorOf(bar, row)}
                     onBarDown={(bar, event) => onBarDown(bar, row, event)}
                     onBarMove={onBarMove}
                     onBarUp={onBarUp}
@@ -575,9 +649,17 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, l
               {length > 0 && length * pxPerSecond < trackWidth && (
                 <div data-testid="timeline-past-end" aria-hidden className="pointer-events-none absolute inset-y-0 bg-background/60" style={{ left: LABEL_WIDTH + length * pxPerSecond, right: 0 }} />
               )}
+              {guide !== null && (
+                <div data-testid="timeline-snap-guide" aria-hidden className="pointer-events-none absolute inset-y-0 w-px bg-foreground/70" style={{ left: LABEL_WIDTH + guide * pxPerSecond }} />
+              )}
               <div ref={playhead} data-testid="timeline-playhead" aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-px bg-primary" />
             </div>
           </div>
+          {barDragging && (
+            <p data-testid="timeline-free-hint" className="pointer-events-none absolute bottom-1 right-3 text-xs text-muted-foreground">
+              {freeHint()}
+            </p>
+          )}
         </div>
       )}
     </section>
