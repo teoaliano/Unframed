@@ -9,9 +9,7 @@ const MOTION = `<!doctype html><html><head><style>#root{position:relative;width:
 <script src="gsap.js"></script><script>window.__timelines = { main: gsap.timeline({ paused: true }) };</script></body></html>`;
 
 test("a canvas saved before element editing opens with its pages and motions intact, and a page carrying locks opens with them", async ({ page, agent }) => {
-  // The project folder comes into being when the canvas opens; the records are then saved and the app reopens them.
   await openCanvas(page, agent);
-  // A page saved before the lock field existed, a page with one locked element, and a motion.
   await filledArtifact(agent, { id: "shape:old", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Old", html: "<h1>Old page</h1>" });
   await writeFile(projectPath(agent, "2-locked.html"), '<script src="unframed-dials.js"></script>\n<h1 data-hf-id="hf-aaaa">Locked page</h1>');
   await putRecords(agent, [
@@ -26,7 +24,6 @@ test("a canvas saved before element editing opens with its pages and motions int
   await expect(shapeOnScreen(page, "shape:intro")).toBeVisible();
   await expect(page.locator("[data-slot='toast-title']")).toHaveCount(0);
 
-  // The records keep their props: the old page has no locks, the locked page keeps its one.
   const pages = await roomShapes(agent, "default", "page");
   expect(pages.find((record) => record.id === "shape:old")?.props).toMatchObject({ file: expect.stringMatching(/\.html$/), title: "Old" });
   expect(pages.find((record) => record.id === "shape:locked")?.props).toMatchObject({ file: "2-locked.html", lockedElements: ["hf-aaaa"] });

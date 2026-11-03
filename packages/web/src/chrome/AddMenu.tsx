@@ -5,10 +5,6 @@ import { addShape, kindOfAddAction, viewportCentre } from "../canvas/addShapes.t
 import { ADD_ICONS, ADD_SECTIONS } from "./addItems.tsx";
 import { useSlots } from "./slots.ts";
 
-/**
- * The end of the bottom bar: the Agent and Library slots and Add, as tldraw toolbar buttons beside
- * tldraw's tools. Add opens the kit menu above it.
- */
 export const ToolbarEnd = () => {
   const editor = useEditor();
   const { agentButton: Agent, kitButton: Kit, libraryButton: Library } = useSlots();
@@ -23,7 +19,6 @@ export const ToolbarEnd = () => {
         <TldrawUiButtonIcon icon="plus" />
       </TldrawUiToolbarButton>
       <Menu open={open} onOpenChange={setOpen}>
-        {/* A new prompt keeps the keyboard: focus does not go back to the button. */}
         <MenuPopup anchor={add} side="top" align="end" sideOffset={8} className="w-[152px] min-w-0" finalFocus={() => editor.getEditingShapeId() === null}>
           {ADD_SECTIONS.map((section) => (
             <MenuGroup key={section.heading}>

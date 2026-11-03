@@ -1,9 +1,3 @@
-/**
- * tldraw's UI icons drawn from Lucide, the set the rest of the app uses. tldraw paints each
- * icon as a mask from a URL it looks up by name, so each mapped name gets a Lucide SVG as a
- * data URL. Names left out (the style panel's fill, dash, size, font and arrowhead swatches,
- * which Lucide has no match for) keep tldraw's own icon.
- */
 import {
   AlignCenterHorizontal,
   AlignCenterVertical,
@@ -207,10 +201,8 @@ const LUCIDE: Partial<Record<TLUiIconType, LucideIcon>> = {
   "drag-handle-dots": GripVertical,
 };
 
-/** Icons Unframed's own toolbar buttons name, beside tldraw's. */
 const UNFRAMED: Readonly<Record<string, LucideIcon>> = { library: Library, palette: Palette, sparkles: Sparkles };
 
-/** Each mapped tldraw icon name and its Lucide SVG as a data URL, rendered once. */
 export const lucideIconUrls = (): Record<string, string> => {
   const host = document.createElement("div");
   const root = createRoot(host);

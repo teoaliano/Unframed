@@ -32,7 +32,6 @@ test.describe("dropping files on the canvas", () => {
     const pageShape = byType("page")[0]!;
     expect(pageShape.props).toMatchObject({ w: 480, h: 320, fileName: "Landing Page.html", title: "Landing Page" });
     expect(pageShape.props.file).toMatch(/^\d+-landing-page\.html$/);
-    // Spec 18, Tags on uploads, drops and pastes and When: a dropped .html gets the dials bridge tag, then an id on each element.
     const dropped = await readFile(join(engine.dataDir, "output", "default", pageShape.props.file), "utf8");
     expect(dropped).toContain('<script src="unframed-dials.js"></script>');
     expect(dropped).toMatch(/<h1 data-hf-id="hf-[a-z0-9]{4}">Hello<\/h1>/);

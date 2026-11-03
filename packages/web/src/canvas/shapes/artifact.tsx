@@ -33,16 +33,12 @@ const artifactProps: RecordProps<TLShape<"page"> | TLShape<"motion">> = {
   mode: T.string.optional(),
 };
 
-/** A component has no dials; its tag is set when it is made and never changes (spec 20). */
 const componentProps: RecordProps<TLShape<"component">> = { w: T.nonZeroNumber, h: T.nonZeroNumber, file: T.string, title: T.string, fileName: T.string, tag: T.string };
 
-/** The row under a motion (Render) is this tall; the status line goes below it. */
 const RENDER_ROW_HEIGHT = 34;
 
-/** The kind word of each artifact kind, as its label and icon name it. */
 const KIND_NAMES: Record<ArtifactKind, string> = { page: "Page", motion: "Motion", component: "Component" };
 
-/** An empty artifact: its frame, its kind tab and one Agent button, and why a drop onto it failed. */
 const EmptyArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readonly kind: ArtifactKind }) => {
   noteRender(shape.id);
   const word = KIND_NAMES[kind];
@@ -61,10 +57,6 @@ const EmptyArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readonl
   );
 };
 
-/**
- * What a filled artifact that is not live shows: the newest snapshot of its file (the last
- * one it showed while none exists yet), else a card with its title that asks to be selected.
- */
 const Still = ({ shape, title }: { readonly shape: ArtifactShape; readonly title: string }) => {
   const project = useCanvasProject();
   const file = (shape.props as ArtifactShapeProps).file;
@@ -82,20 +74,17 @@ const Still = ({ shape, title }: { readonly shape: ArtifactShape; readonly title
   );
 };
 
-/** A canvas frame tells the canvas what it announces and how to reach it, so the Parameters panel can drive it. */
 const CanvasFrame = ({ shapeId, ...props }: Omit<ArtifactFrameProps, "onAnnounce" | "onReady"> & { readonly shapeId: string }) => {
   const editor = useEditor();
   useEffect(() => () => forgetFrame(editor, shapeId), [editor, shapeId]);
   const onAnnounce = useCallback((announcement: DialsAnnouncement) => hearFrame(editor, shapeId, announcement), [editor, shapeId]);
   const onReady = useCallback((post: (values: unknown) => void) => reachFrame(editor, shapeId, post), [editor, shapeId]);
-  // The edit bridge is loaded into a canvas frame only for an image drop (spec 18); its answers come back here.
   useEffect(() => () => forgetEdit(editor, shapeId), [editor, shapeId]);
   const onEdit = useCallback((message: EditMessage) => onFrameEdit(editor, shapeId, message), [editor, shapeId]);
   const onEditReady = useCallback((post: (message: unknown) => void) => reachEdit(editor, shapeId, post), [editor, shapeId]);
   return <ArtifactFrame {...props} onAnnounce={onAnnounce} onReady={onReady} onEdit={onEdit} onEditReady={onEditReady} />;
 };
 
-/** The Updates badge on a page or motion whose component pins are older (spec 20): a click opens its editor with the updates popover. */
 const UpdatesBadge = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   const editor = useEditor();
   return (
@@ -117,7 +106,6 @@ const UpdatesBadge = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   );
 };
 
-/** A filled artifact: no card, the title above its corner, and its frame while live, else its still. */
 const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readonly kind: ArtifactKind }) => {
   noteRender(shape.id);
   const editor = useEditor();
@@ -129,7 +117,6 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
   const kit = useValue("project kit", () => kitOf(editor), [editor]);
   const title = artifactTitle(props);
   const name = nameOf(shape);
-  // The components this artifact pins that have a newer sheet on the canvas (spec 20, Component updates).
   const updates = useValue("component updates", () => updateTagsOf(editor, project, props.file).join(","), [editor, project, props.file]);
   return (
     <>
@@ -148,7 +135,6 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
   );
 };
 
-/** A page, a motion or a component: empty, it asks for the agent; filled, it shows its content. */
 const makeArtifactUtil = (kind: ArtifactKind) =>
   class ArtifactShapeUtil extends BaseBoxShapeUtil<ArtifactShape> {
     static override type = kind;
@@ -177,11 +163,6 @@ const makeArtifactUtil = (kind: ArtifactKind) =>
       return resizeBox(shape, info, { minWidth: ARTIFACT_MIN.w, minHeight: ARTIFACT_MIN.h });
     }
 
-    /**
-     * Double-click opens the editor; it never enters tldraw's editing state. It answers an
-     * empty change, because answering none makes tldraw put a new prompt where it landed. A
-     * double-click on the label is a rename, which the label handles.
-     */
     override onDoubleClick(shape: ArtifactShape) {
       currentSlots().openArtifact?.(this.editor, shape.id);
       return { id: shape.id, type: shape.type };

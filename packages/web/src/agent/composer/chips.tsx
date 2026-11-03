@@ -34,8 +34,6 @@ export interface ChipShape {
   readonly label: string;
 }
 
-
-/** A shape as a chip names it: an artifact by its title, else its file name without `.html`, else its kind. */
 export const describeShape = (editor: Editor, id: string): ChipShape | undefined => {
   const shape = editor.getShape(id as TLShapeId);
   if (!shape) return undefined;
@@ -47,7 +45,6 @@ export const describeShape = (editor: Editor, id: string): ChipShape | undefined
 
 export type Chip = { readonly kind: "artifact"; readonly shape: ChipShape } | { readonly kind: "count"; readonly ids: ReadonlyArray<string>; readonly label: string };
 
-/** One chip per artifact; everything else collapsed into one count chip ("3 inputs", or "1 image" when all the same kind). */
 export const chipsOf = (shapes: ReadonlyArray<ChipShape>): Chip[] => {
   const artifacts = shapes.filter((shape) => shape.kind === "page" || shape.kind === "motion");
   const rest = shapes.filter((shape) => shape.kind !== "page" && shape.kind !== "motion");
@@ -60,11 +57,6 @@ export const chipsOf = (shapes: ReadonlyArray<ChipShape>): Chip[] => {
   return chips;
 };
 
-/**
- * The message's context, as chips: the selection when the tray opens and whenever it
- * changes while the draft is empty; once the person has typed, a selection change only
- * adds. Removing a chip trims the context and leaves the canvas selection alone.
- */
 export const useSelectionChips = (editor: Editor | null, draftEmpty: boolean) => {
   const selectionKey = useValue("selection", () => (editor ? editor.getSelectedShapeIds().join(" ") : ""), [editor]);
   const [ids, setIds] = useState<ReadonlyArray<string>>(() => (selectionKey === "" ? [] : selectionKey.split(" ")));
@@ -84,13 +76,11 @@ export const useSelectionChips = (editor: Editor | null, draftEmpty: boolean) =>
     shapes,
     remove: (removed: ReadonlyArray<string>) => setIds((current) => current.filter((id) => !removed.includes(id))),
     add: (added: ReadonlyArray<string>) => setIds((current) => [...current, ...added.filter((id) => !current.includes(id))]),
-    /** Replaces the chips, for a message put back into the composer. */
     set: (next: ReadonlyArray<string>) => setIds(next),
     clear: () => setIds([]),
   };
 };
 
-/** The context a message carries: the chips' shapes, and every member of a chip that is a group. */
 export const contextSelection = (editor: Editor | null, shapes: ReadonlyArray<ChipShape>): string[] => {
   const ids: string[] = [];
   const add = (id: string) => {
@@ -103,7 +93,6 @@ export const contextSelection = (editor: Editor | null, shapes: ReadonlyArray<Ch
   return ids;
 };
 
-/** The element chips of a draft (spec 18): one per pointed-at element, `{tag} · {label}`, each with a remove button. */
 export const ElementChipRow = ({ chips, onRemove }: { readonly chips: ReadonlyArray<ElementChip>; readonly onRemove: (chip: ElementChip) => void }) => {
   if (chips.length === 0) return null;
   return (

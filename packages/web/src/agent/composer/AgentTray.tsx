@@ -90,10 +90,6 @@ import { composerGlassClass } from "../../chrome/composerSurface.ts";
 
 export const PROMPT_LABEL = "Message the agent";
 
-/**
- * t3code's composer shell (ComposerSurface): a rounded glass box with the composer shadow
- * and a hairline outline, the outline turning to the ring while files are dragged over.
- */
 const COMPOSER_SHELL =
   `${composerGlassClass} relative isolate flex flex-col gap-1.5 rounded-3xl px-3 pt-2.5 pb-2 shadow-composer dark:shadow-none after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-border data-dragging:after:border-ring`;
 
@@ -109,27 +105,17 @@ export const PLACEHOLDERS = {
 export interface AgentTrayProps {
   readonly client: ChatClient;
   readonly variant: "rail" | "toolbar";
-  /** The chat the next message goes to; `null` starts one. */
   readonly chatId: string | null;
-  /** What a new chat is tagged with: the selected artifacts. */
   readonly newChatTags: ReadonlyArray<string>;
-  /** Called with the target chat before the message goes out (the toolbar opens the rail on it). */
   readonly beforeSend?: (chatId: string) => void;
-  /** Called once the message was accepted. */
   readonly onSent?: () => void;
-  /** A line under the chips (the toolbar's "continues" line). */
   readonly underChips?: ReactNode;
-  /** A line beside Send (the toolbar's provider note). */
   readonly note?: (provider: string) => ReactNode;
-  /** Tells the composer shell a menu of the tray is open, so Esc closes the menu first. */
   readonly onMenuOpen?: (key: string, open: boolean) => void;
-  /** The element files may be dropped on (the whole rail); the tray itself when absent. */
   readonly dropTarget?: RefObject<HTMLElement | null>;
-  /** Notices above the composer (the rail's error line). */
   readonly notices?: ReadonlyArray<ComposerNotice>;
 }
 
-/** Whether Cmd or Ctrl, and Shift, are held: Send then shows the other follow-up action (t3code's). */
 const useModifiersHeld = (): { readonly command: boolean; readonly shift: boolean } => {
   const [held, setHeld] = useState({ command: false, shift: false });
   useEffect(() => {
@@ -155,18 +141,10 @@ interface OpenMenu {
   readonly pick: (item: MenuItem) => void;
 }
 
-/**
- * The composer's Agent tray (spec 08), built on t3code's composer: a Tiptap box, the
- * footer's pickers, Stop and Send. The rail's composer and the toolbar's are this one
- * component; only where a message goes differs.
- */
-/** A pointed-at element, by its artifact and selector: the same element pointed at twice is one chip. */
 const elementKey = (chip: ElementChip): string => `${chip.shapeId}\u0000${chip.selector}`;
 
-/** A caret mark for an attachment's chip, only when there is one. */
 const markAt = (at: CaretMark | undefined) => (at === undefined ? {} : { at });
 
-/** A message's element chips, only when it has some. */
 const withElements = (elements: ReadonlyArray<ElementChip>) => (elements.length > 0 ? { elements } : {});
 
 export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, onSent, underChips, note, onMenuOpen, dropTarget, notices = [] }: AgentTrayProps) => {
@@ -178,25 +156,16 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const ready = readyProviders(statuses);
   const canvas = useMaybeEditor();
   const box = useRef<PromptEditorHandle>(null);
-  // A rail's draft lives on the client, one per chat, so the editor's rail and the canvas
-  // rail show the same text whichever is mounted. The toolbar's tray keeps its own.
   const draftKey: string | undefined = variant === "rail" ? (chatId ?? NEW_CHAT) : TOOLBAR_DRAFT;
   const [initialDraft] = useState(() => (draftKey === undefined ? EMPTY_DRAFT : client.draft(draftKey)));
-  // A box that opens on a question shows its answer; the draft waits on the client.
   const [initialText] = useState(() => (variant === "rail" && openQuestion(chat) !== undefined ? "" : initialDraft.text));
   const [text, setText] = useState(initialText);
   const draftKeyRef = useRef(draftKey);
   const attachmentsRef = useRef<ReturnType<typeof useAttachments>>(null!);
   const draftVersion = useDraftVersion(client, draftKey ?? "");
   const chips = useSelectionChips(canvas, text.trim() === "");
-  /** The context chips this draft's @ mentions added: they belong to the draft, not to the canvas selection. */
   const mentionIds = useRef<ReadonlyArray<string>>([]);
-  /** A question holds the box for its answer: the draft is set aside on the client until it goes. */
   const answeringRef = useRef(false);
-  /**
-   * A queued message open in the composer (t3code's queued edit), with what it held when
-   * opened. The chat's draft waits on the client meanwhile, and its chips and mentions in `aside`.
-   */
   const [editing, setEditing] = useState<{ readonly id: string; readonly chatId: string; readonly original: QueuedEditContent } | null>(null);
   const editingRef = useRef(editing);
   const aside = useRef<{ readonly chips: ReadonlyArray<string>; readonly mentions: ReadonlyArray<string> }>({ chips: [], mentions: [] });
@@ -204,7 +173,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     editingRef.current = next;
     setEditing(next);
   };
-  /** The element chips (spec 18, Point and tell): they belong to the draft and go with its message. */
   const [elements, setElementsState] = useState<ReadonlyArray<ElementChip>>(initialDraft.elements ?? []);
   const elementsRef = useRef(elements);
   const setElements = (next: ReadonlyArray<ElementChip>) => {
@@ -215,7 +183,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     chatId ?? NEW_CHAT,
     variant === "rail" && chat ? [...waitingRequests(chat, "approval"), ...waitingRequests(chat, "user-input")].map(requestIdOf) : [],
   );
-  /** The draft this tray last wrote, and the key it last showed: only another writer's draft, or another key's, is put in the box. */
   const ownDraft = useRef<ChatDraft | undefined>(undefined);
   const shownKey = useRef<string | undefined>(undefined);
   const saveDraft = (value: string) => {
@@ -223,9 +190,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     ownDraft.current = { text: value, mentions: mentionIds.current, attachments: attachmentsRef.current.ready(), elements: elementsRef.current };
     client.setDraft(draftKeyRef.current, ownDraft.current);
   };
-  /** The attachments the draft's chips named at its last change. */
   const chipped = useRef<ReadonlyArray<string>>(chipRefs(initialText));
-  /** Unfolds a resting composer: typing in it is using it. */
   const expandResting = useRef(() => {});
   const onDraftChange = (value: string, typed: boolean) => {
     setText(value);
@@ -236,8 +201,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     chipped.current = refs;
     if (typed) {
       guard.onType();
-      // t3code's: a file's chip deleted takes the file with it (an image stays), and a chip of
-      // an attachment the draft lacks (undone, or copied from another draft) brings it back.
       const staged = attachmentsRef.current.staged;
       for (const item of staged) {
         const id = item.attachment?.id;
@@ -249,15 +212,12 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     }
     saveDraft(value);
   };
-  /** After a send or a stash the chips go back to the selection, and no mention is the draft's any more. */
   const forgetMentions = () => {
     mentionIds.current = [];
   };
-  // Declared before the handoff effect: on a chat switch the chat's draft lands first, then any handoff joins it.
   useEffect(() => {
     const sameChat = draftKeyRef.current === draftKey;
     draftKeyRef.current = draftKey;
-    // Another chat's draft ends an edit as Cancel would: the chips set aside come back first.
     let chipIds = chips.shapes.map((shape) => shape.id);
     if (editingRef.current !== null && editingRef.current.chatId !== chatId) {
       setEdit(null);
@@ -266,24 +226,19 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     }
     if (draftKey === undefined || editingRef.current !== null) return;
     const stored = client.draft(draftKey);
-    // Our own write comes back as a change; applying it could undo an upload or a keystroke since.
     if (shownKey.current === draftKey && stored === ownDraft.current) return;
     shownKey.current = draftKey;
     const shown = { text: box.current?.text() ?? "", mentions: mentionIds.current, attachments: attachmentsRef.current.ready(), elements: elementsRef.current };
     if (sameDraft(shown, stored)) return;
-    // The draft's attachments come with it; a question's answer keeps what it has staged.
     if (!answeringRef.current && !sameDraft({ ...EMPTY_DRAFT, attachments: shown.attachments }, { ...EMPTY_DRAFT, attachments: stored.attachments }))
       attachmentsRef.current.replace(stored.attachments);
     const kept = chipIds.filter((id) => !mentionIds.current.includes(id));
-    // Set first: the text below fires a change, which saves the draft with these mentions.
     mentionIds.current = stored.mentions;
     chips.set([...kept, ...stored.mentions.filter((id) => !kept.includes(id))]);
     const incoming = stored.elements ?? [];
     const added = incoming.some((chip) => !shown.elements.some((shownChip) => shownChip.shapeId === chip.shapeId && shownChip.selector === chip.selector));
-    // A question's answer and an open edit keep the draft's chips aside; the draft holds them meanwhile.
     if (!answeringRef.current) setElements(incoming);
     if (shown.text !== stored.text && !answeringRef.current) box.current?.setText(stored.text, { focus: false, undoable: false });
-    // Pointed-at elements that arrive from outside (Tell the agent) take the focus; a chat switch does not.
     if (added && sameChat && !answeringRef.current) box.current?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, draftKey, draftVersion]);
@@ -297,14 +252,12 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const [traitsOpen, setTraitsOpen] = useState(false);
   const [modeOpen, setModeOpen] = useState(false);
 
-  /** The model a message runs on: the chat's, or for a new chat the one picked here, else the first ready provider's default. */
   const selection: ModelSelection = useMemo(
     () => (chat ? agentSelectionOf(chat.modelSelection) : undefined) ?? draftModel ?? { provider: ready[0] ?? "claude", model: "", traits: {} },
     [chat?.modelSelection, draftModel, ready],
   );
   const runtimeMode = chat?.runtimeMode ?? draftRuntime;
   const planMode = usePlanMode(client);
-  // With plan mode off, as t3code ships it, every chat runs in build mode.
   const interactionMode = planMode ? (chat?.interactionMode ?? draftInteraction) : "default";
   const model = effectiveModel(statuses, selection.provider, selection.model);
   const status = statuses?.[selection.provider];
@@ -328,7 +281,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       const chip = chipOfToken(attachmentChip(attachment));
       if (item.chip && chip && !answeringRef.current) box.current?.insertChip(chip, item.at);
     },
-    // t3code's insertAttachmentReferencesForDraft: the draft switched away from gets the file, and its chip at the end.
     onMoved: (owner, attachment, chip) => {
       client.rememberAttachments([attachment]);
       const draft = client.draft(owner);
@@ -336,7 +288,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     },
   });
   attachmentsRef.current = attachments;
-  // A change to what is staged saves the draft; not at mount, nor before the box exists, which would save it empty.
   const stagedOnce = useRef(false);
   useEffect(() => {
     if (!stagedOnce.current) {
@@ -346,17 +297,13 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     if (box.current?.element()) saveDraft(box.current.text());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attachments.staged]);
-  /** Where an attachment goes: a paste or a drop into a prompt the person has written in also puts its chip at the caret. */
   const intake = (chip: boolean) =>
-    // A file for an answer is the answer's: no draft to land in, no chip in the text.
     answeringRef.current
       ? { chip: false }
       : {
-          // A file for an edit is the edit's: one still uploading when the edit ends goes with it.
           ...(draftKeyRef.current !== undefined && editingRef.current === null ? { owner: draftKeyRef.current } : {}),
           ...(chip && withoutChips(box.current?.text() ?? "").trim() !== "" ? { chip: true, ...markAt(box.current?.caretMark()) } : { chip: false }),
         };
-  /** A question that takes only its options takes no file either (t3code's). */
   const refusesFiles = useRef(false);
   const addFiles = (chosen: ReadonlyArray<File>, chip: boolean) => {
     if (refusesFiles.current) return;
@@ -417,10 +364,8 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     };
   }, [dropElement]);
 
-  /** Cmd+Shift+V (Ctrl+Shift+V off Mac) keeps the next large paste inline. */
   const inlineNext = useRef(0);
 
-  /** A large text paste becomes a text file attachment, unless Cmd+Shift+V asked for it inline. */
   const attachLargePaste = (pastedText: string): boolean => {
     const inline = Date.now() - inlineNext.current < 1500;
     inlineNext.current = 0;
@@ -432,7 +377,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     return true;
   };
 
-  /** A paste of files attaches them (text pasted with them stays text); a large text paste becomes a file. */
   const onPaste = (event: ClipboardEvent): boolean => {
     const data = event.clipboardData;
     const pasted = [...(data?.files ?? [])];
@@ -458,7 +402,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const [highlight, setHighlight] = useState(0);
   const [dismissedAt, setDismissedAt] = useState<number>();
   useEffect(() => setHighlight(0), [trigger?.char, trigger?.query, trigger?.from]);
-  // Reactive, so a shape that lands while the menu is open is offered.
   const mentionRows = useValue("mentions", () => (trigger?.char === "@" && canvas ? mentionItems(canvas, trigger.query) : undefined), [canvas, trigger]);
   const menu = useMemo((): OpenMenu | undefined => {
     if (!trigger || dismissedAt === trigger.from) return undefined;
@@ -524,13 +467,11 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     onMenuOpen?.("agent-menu", menu !== undefined);
   }, [onMenuOpen, menu]);
   useEffect(() => () => onMenuOpen?.("agent-menu", false), [onMenuOpen]);
-  // The More menu too: an Escape in it closes the menu, not the toolbar's composer.
   useEffect(() => {
     onMenuOpen?.("more-controls", modeOpen);
   }, [onMenuOpen, modeOpen]);
   useEffect(() => () => onMenuOpen?.("more-controls", false), [onMenuOpen]);
 
-  // ArrowUp recalls this chat's earlier messages (t3code's prompt history); editing one ends the recall.
   const historyPosition = useRef<PromptHistoryPosition | null>(null);
   useEffect(() => {
     historyPosition.current = null;
@@ -541,7 +482,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     const position = historyPosition.current;
     if (position === null && current.length > 0) return false;
     if (!box.current?.caretOnVisualEdge(direction === "backward" ? "start" : "end")) return false;
-    // Built on the keypress: the messages change with every streamed reply.
     const step = stepPromptHistory({ direction, entries: promptHistoryEntries(chat?.messages ?? []), position, currentPrompt: current });
     if (!step) return false;
     historyPosition.current = step.position;
@@ -549,7 +489,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     return true;
   };
 
-  /** Keys the box gives the tray first: an open menu takes its arrows, Enter, Tab and Esc. */
   const onKey = (event: KeyboardEvent): boolean => {
     const command = platform() === "darwin" ? event.metaKey : event.ctrlKey;
     if (command && event.shiftKey && event.key.toLowerCase() === "v") {
@@ -557,11 +496,9 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       return false;
     }
     if (command && !event.shiftKey && event.key.toLowerCase() === "s") {
-      // The box holds a queued message being edited, not a draft: stashing it would leave the edit open on an empty box.
       if (editingRef.current === null) stashKey();
       return true;
     }
-    // t3code's control chords; a held Cmd+Shift+M or E does not repeat its toggle.
     if (command && event.shiftKey && !event.altKey && event.key.toLowerCase() === "a") {
       setModeOpen(true);
       return true;
@@ -574,7 +511,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       if (!event.repeat && !running) setTraitsOpen(true);
       return true;
     }
-    // Alt+ArrowUp at the start of the box edits the newest queued message (t3code's).
     if (!menu && event.altKey && !event.shiftKey && !event.metaKey && !event.ctrlKey && event.key === "ArrowUp" && variant === "rail" && chatId !== null) {
       const latest = client.queue(chatId).at(-1);
       if (!latest || latest.state !== "waiting" || editingRef.current !== null || answeringRef.current || !box.current?.caretAtStart()) return false;
@@ -595,7 +531,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       setInteraction(interactionMode === "plan" ? "default" : "plan");
       return true;
     }
-    // An open menu takes Enter, whichever Enter sends; the other chords still send.
     if (menu && intent !== "alternate" && intent !== "background") {
       const count = menu.items.length;
       if (event.key === "ArrowDown" && count > 0) setHighlight((highlight + 1) % count);
@@ -614,13 +549,11 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     return true;
   };
 
-  // What waits on the person in this chat: an approval, a question, a plan to implement.
   const approvalPending = variant === "rail" && chat !== undefined && waitingRequests(chat, "approval").some((request) => !guard.held.has(requestIdOf(request)));
   const questions = useQuestionAnswers(client, variant === "rail" ? chat : undefined, box, text, guard.held, attachments);
   const { question, answering } = questions;
   answeringRef.current = answering;
   refusesFiles.current = answering && choiceOnly(question);
-  // A question takes the box for its answer; once it goes, the draft set aside comes back.
   const questionKey = answering ? `${chatId}:${questions.requestId}` : undefined;
   const shownQuestion = useRef<string | undefined>(undefined);
   useEffect(() => {
@@ -634,7 +567,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       }
       setEdit(null);
       box.current?.setText("", { focus: false, undoable: false });
-      // The draft keeps its files and pointed-at elements on the client; the answer starts with none.
       attachments.replace([]);
       setElements([]);
       return;
@@ -667,7 +599,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       ? lengthError === undefined && !sending && (text.trim() !== "" || attachments.staged.length > 0)
       : lengthError === undefined && (planFollowUp ? !sending : !noProvider && !sending && (text.trim() !== "" || attachments.staged.length > 0));
 
-  /** t3code's Resume thread: an empty composer on a chat whose turn was cut short offers to carry it on. */
   const showResume =
     variant === "rail" && chat !== undefined && !running && !answering && editing === null && !noProvider && resumableTurn(chat) && text.trim() === "" && attachments.staged.length === 0;
   const resume = async () => {
@@ -683,12 +614,10 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     }
   };
 
-  /** Implement: the chat back to building, then the plan after t3code's prefix; or the same in a new chat named after it. */
   const implementPlan = async (inNewChat: boolean) => {
     if (!chat || !planFollowUp || sending) return;
     const message = { text: implementPlanText(planFollowUp.planMarkdown), selection: [], attachments: [] };
     const source = { sourceProposedPlan: { threadId: chat.id, planId: planFollowUp.id } };
-    // A plan belongs to an in-app chat; an outside chat has no plan to implement.
     const planSelection = agentSelectionOf(chat.modelSelection);
     if (planSelection === undefined) return;
     setSending(true);
@@ -725,14 +654,8 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     setStashOpen(false);
     box.current?.focus();
   };
-  /**
-   * A draft put back (a stash entry, queued messages given back, Edit from here) joins the
-   * current one: its text after the draft's, its chips and attachments added (t3code's).
-   * While a question holds the box it joins the draft set aside.
-   */
   const restoreDraft = (draft: { readonly text: string; readonly selection: ReadonlyArray<string>; readonly attachments: ReadonlyArray<ChatAttachment>; readonly elements?: ReadonlyArray<ElementChip> }) => {
     const key = draftKeyRef.current;
-    // While a queued message is open the whole draft is set aside: what is put back joins it there.
     if (editingRef.current !== null && key !== undefined) {
       const current = client.draft(key);
       client.setDraft(key, {
@@ -755,7 +678,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     chips.add(draft.selection);
     attachments.restore(draft.attachments);
   };
-  /** Cmd+S: a draft goes to the stash; with an empty box the only entry comes back, or the menu opens. */
   const stashKey = () => {
     const draft = box.current?.text() ?? "";
     if (draft.trim() !== "" || attachments.staged.length > 0 || elementsRef.current.length > 0) {
@@ -773,7 +695,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       setStashOpen((open) => !open);
     }
   };
-  /** `invert` does the other follow-up action; `thenNewChat` opens the rail's new chat once the message is out. */
   const send = async (invert = false, thenNewChat = false) => {
     if (answering) {
       guard.onSend();
@@ -790,9 +711,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     setSending(true);
     client.setUi({ error: undefined });
     try {
-      // Before a new chat exists: the switch to it shows its own, empty, draft.
       const uploaded = await attachments.settle();
-      // The artifacts the pointed-at elements belong to join the context, as a selected artifact does.
       const context = [...new Set([...contextSelection(canvas, chips.shapes), ...pointed.map((chip) => chip.shapeId)])];
       const chipIds = chips.shapes.map((shape) => shape.id);
       let target = chatId;
@@ -803,7 +722,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       forgetMentions();
       setElements([]);
       box.current?.clear();
-      // A new chat's send switches this tray to the chat it made, so the draft it came from is cleared by key.
       if (sentFrom !== undefined) client.setDraft(sentFrom, EMPTY_DRAFT);
       attachments.clear();
       chips.set(canvas?.getSelectedShapeIds() ?? []);
@@ -811,11 +729,9 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       const current = client.thread(target);
       if (!planMode && current?.interactionMode === "plan") await client.dispatch({ type: "thread.interaction-mode.set", threadId: target, interactionMode: "default" });
       if (current?.latestTurn?.state === "running") {
-        // Queue waits for the turn's next tool call or its end; Steer joins the turn now. Cmd+Enter flips it once.
         if (followUpAction(followUp, invert) === "steer") await sendMessage(client, target, outgoing, { steer: true });
         else client.enqueue(target, outgoing, latestCompletedTool(current), chipIds);
       } else if (target === chatId && compactsBeforeSend({ tokens: compactTokens, keepFullHistory: keepFull, text: message })) {
-        // t3code's: the message waits behind the /compact turn, as a queued message does.
         await sendMessage(client, target, { text: "/compact", selection: [], attachments: [] });
         client.enqueue(target, outgoing, latestCompletedTool(client.thread(target)), chipIds);
       } else {
@@ -833,7 +749,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     }
   };
 
-  // A draft handed back to this chat (a cancelled queued message, Edit from here) lands in the box.
   const handoffs = useHandoffVersion(client);
   useEffect(() => {
     if (chatId === null) return;
@@ -850,7 +765,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
 
   const queue = useQueue(client, variant === "rail" ? chatId : null);
 
-  // Compact before send (t3code's): a Claude chat whose prompt cache has likely expired offers to compact first.
   const [, setMinute] = useState(0);
   const mayGoStale = selection.provider === "claude" && (usage?.usedTokens ?? 0) >= COMPACTION_SUGGESTION_MIN_TOKENS;
   useEffect(() => {
@@ -882,13 +796,11 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     offersCompactBeforeSend({ provider: selection.provider, usedTokens: usage.usedTokens, updatedAt: usage.updatedAt, now: new Date().toISOString() })
       ? usage.usedTokens
       : null;
-  /** What the composer holds as an edit: its text, its chips and its uploaded files. */
   const editContent = (): QueuedEditContent => ({
     text: box.current?.text() ?? "",
     chips: chips.shapes.map((shape) => shape.id),
     attachments: attachments.ready().map((attachment) => attachment.id),
   });
-  /** Opens a queued message in the composer: its text, chips and files in place of the draft's, which wait. */
   const beginEdit = (item: QueuedMessage) => {
     if (chatId === null || answeringRef.current) return;
     historyPosition.current = null;
@@ -901,7 +813,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     setElements(item.message.elements ?? []);
     box.current?.setText(item.message.text);
   };
-  /** Ends the edit and puts the chat's draft back: its text, chips, mentions and files. */
   const endEdit = (options?: { readonly focus?: boolean }) => {
     setEdit(null);
     const draft = draftKeyRef.current === undefined ? EMPTY_DRAFT : client.draft(draftKeyRef.current);
@@ -914,18 +825,15 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const stillQueued = (edit: { readonly id: string; readonly chatId: string }) => client.queue(edit.chatId).some((item) => item.id === edit.id && item.state === "waiting");
   const updateQueued = (edit: { readonly id: string; readonly chatId: string }, message: QueuedMessage["message"], chipIds: ReadonlyArray<string>) =>
     client.updateQueue(edit.chatId, (current) => current.map((item) => (item.id === edit.id ? { ...item, message, chips: chipIds } : item)));
-  /** Update queued message: the text, chips and files replace the queued ones in place, while it is still waiting. Uploads are waited for, as Send does; a failed one blocks it. */
   const saveEdit = async () => {
     const edit = editingRef.current;
     const message = box.current?.text() ?? "";
     if (!edit || sending || promptLengthError(message) !== undefined || (message.trim() === "" && attachments.staged.length === 0)) return;
-    // One that left the queue meanwhile is the watcher's below.
     if (!stillQueued(edit)) return;
     setSending(true);
     try {
       const uploaded = await attachments.settle();
       if (editingRef.current !== edit || !stillQueued(edit)) return;
-      // t3code's: a save never drops a file that did not upload.
       if (attachmentsRef.current.staged.some((item) => item.status === "failed")) return showError("Retry or remove failed uploads before saving.");
       updateQueued(edit, { text: message, selection: contextSelection(canvas, chips.shapes), attachments: uploaded, ...withElements(elementsRef.current) }, chips.shapes.map((shape) => shape.id));
       endEdit();
@@ -933,7 +841,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       setSending(false);
     }
   };
-  // The edited message went out (or came back) before it was saved: t3code's reconciliation, over the whole edit.
   useEffect(() => {
     const edit = editingRef.current;
     if (!edit || edit.chatId !== chatId || queue.some((item) => item.id === edit.id && item.state === "waiting")) return;
@@ -957,7 +864,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queue, chatId]);
 
-  // The rail is closed while the toolbar's tray is open: its errors show here.
   const trayNotices: ReadonlyArray<ComposerNotice> =
     variant === "toolbar" && ui.error !== undefined
       ? [...notices, { id: "error", variant: "error", icon: <CircleAlert />, title: ui.error, dismissLabel: "Dismiss error", onDismiss: () => client.setUi({ error: undefined }) }]
@@ -989,7 +895,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
 
   const interrupt = () => {
     if (!chat?.latestTurn) return;
-    // An edit in progress is kept: it goes back with the rest.
     const edit = editingRef.current;
     if (edit !== null) {
       const message = box.current?.text() ?? "";
@@ -997,12 +902,10 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         updateQueued(edit, { text: message, selection: contextSelection(canvas, chips.shapes), attachments: attachments.ready(), ...withElements(elementsRef.current) }, chips.shapes.map((shape) => shape.id));
       endEdit();
     }
-    // Stop gives every queued message back to the composer.
     returnQueued(client, chat.id);
     void client.dispatch({ type: "thread.turn.interrupt", threadId: chat.id, turnId: chat.latestTurn.turnId }).catch((error: unknown) => client.reportError(error));
   };
 
-  // Type-to-focus and paste-to-focus (t3code's): what goes into the rail outside a field lands in the box.
   const boxTakesText = !(answering && choiceOnly(question));
   const redirect = useRef({ attachLargePaste, boxTakesText });
   redirect.current = { attachLargePaste, boxTakesText };
@@ -1031,7 +934,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
 
   return (
     <div className="flex min-h-0 flex-col gap-1.5" data-variant={variant} data-testid="agent-tray" ref={root}>
-      {/* The panels give up height before the composer does, and scroll, so Send stays in the rail. */}
       <div className="-mx-1 flex min-h-0 shrink flex-col gap-1.5 overflow-y-auto overscroll-contain px-1 empty:hidden">
         <NoticeStack items={trayNotices} />
         {variant === "rail" && chatId !== null && (
@@ -1080,7 +982,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           <StashBadge count={stash.entries.length} open={stashOpen} pulse={stashPulse} onToggle={() => (stashOpen ? closeStash() : setStashOpen(true))} />
         </div>
       )}
-      {/* Resting (t3code's): the prompt on one line with Send beside it, the controls in a strip under it. */}
       <div
         className={`${COMPOSER_SHELL} ${resting.resting ? "grid! grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1.5 gap-y-1 pt-1.5! pb-1!" : ""}`}
         ref={boxElement}
@@ -1149,8 +1050,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           </p>
         )}
         {menu && <ComposerMenu label={menu.label} items={menu.items} highlight={highlight} empty={menu.empty} anchor={boxElement} onPick={menu.pick} onHighlight={setHighlight} />}
-        {/* One line: the access and plan controls sit in the More menu, as in t3code's compact footer. */}
-        {/* Nothing overlaps: the tools share the line's width, the traits and then the model label truncate first, and Send's group keeps its size. */}
         <div className={resting.resting ? "contents" : "flex items-center gap-1"}>
           <div
             className={
@@ -1268,13 +1167,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   );
 };
 
-/**
- * The round Send (t3code's primary action). While a turn runs it says what the message will
- * do, "Queue message" or "Steer message" by the Follow-up behavior setting, the other while
- * the other action's chord is held (Cmd, or Cmd+Shift when the Send shortcut needs Cmd for
- * this prompt), and a Cmd-click or Ctrl-click does the other for one message. While a queued
- * message is open in the box it is a check, "Update queued message".
- */
 const SendButton = ({
   running,
   compacts,
@@ -1285,7 +1177,6 @@ const SendButton = ({
   onSend,
 }: {
   readonly running: boolean;
-  /** This send runs /compact first. */
   readonly compacts: boolean;
   readonly editing: boolean;
   readonly followUp: "queue" | "steer";
@@ -1323,10 +1214,6 @@ const SendButton = ({
   );
 };
 
-/**
- * t3code's compact-before-send chip, beside Send: "Compact" with the tokens a send would
- * compact first, or "Full" once clicked, to send with the whole history.
- */
 const CompactChip = ({ tokens, keepFull, onToggle }: { readonly tokens: number; readonly keepFull: boolean; readonly onToggle: () => void }) => {
   const count = formatTokens(tokens);
   return (
@@ -1356,11 +1243,6 @@ const CompactChip = ({ tokens, keepFull, onToggle }: { readonly tokens: number; 
 
 const ARTIFACT_TYPES = new Set(["page", "motion"]);
 
-/**
- * The toolbar composer's Agent tray: the message continues the newest chat that has seen
- * every selected artifact, or starts one tagged with them, and says which; Send opens the
- * rail on that chat before the message goes out.
- */
 export const ToolbarAgentTray = ({ project, close, onMenuOpen }: SlotProps) => {
   const client = useChatClient(useEngine(), project);
   const canvas = useMaybeEditor();
@@ -1372,7 +1254,6 @@ export const ToolbarAgentTray = ({ project, close, onMenuOpen }: SlotProps) => {
   );
   const artifacts = useMemo(() => (artifactKey === "" ? [] : artifactKey.split(" ")), [artifactKey]);
   const continuable = continuableChat(chats, artifacts);
-  // An error the rail showed earlier is not about this message.
   useEffect(() => client.setUi({ error: undefined }), [client]);
   const [fresh, setFresh] = useState(false);
   const target = fresh || !continuable ? null : continuable.id;

@@ -19,13 +19,11 @@ const LAYOUT_PREFERENCE = "agent.diffLayout";
 type Layout = "stacked" | "split";
 type Scope = number | "all";
 
-/** Turns that have finished, oldest first: only they have a diff. */
 const completedTurns = (chat: Chat) => chat.turns.filter((turn) => turn.state !== "running").sort((a, b) => a.turnCount - b.turnCount);
 
 const POOL = { workerFactory: () => new DiffsWorker(), poolSize: 2 };
 const HIGHLIGHTER = { theme: { dark: "pierre-dark", light: "pierre-light" }, langs: ["html" as const] };
 
-/** The layout, remembered as the `agent.diffLayout` preference. */
 const useLayout = (client: ChatClient): [Layout, (next: Layout) => void] => {
   const [layout, setLayout] = useState<Layout>("stacked");
   useEffect(() => {
@@ -51,11 +49,6 @@ const useLayout = (client: ChatClient): [Layout, (next: Layout) => void] => {
 
 type Loaded = { readonly key: string; readonly files: ReadonlyArray<ArtifactDiffFile> } | { readonly key: string; readonly error: string };
 
-/**
- * The diff panel (t3code's): the pages and motions a turn, or the whole chat, rewrote.
- * A scope menu, the changed files down the side, each patch rendered by `@pierre/diffs`
- * in a worker. Read-only: taking a change back is Revert.
- */
 export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient; readonly chat: Chat; readonly diff: NonNullable<RailUi["diff"]> }) => {
   const [layout, setLayout] = useLayout(client);
   const [wrap, setWrap] = useState(false);
@@ -90,7 +83,6 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
   const current = loaded?.key === key ? loaded : undefined;
   const files = current && "files" in current ? current.files : undefined;
 
-  // Opened from a row's View diff: that artifact's patch comes into view.
   useEffect(() => {
     if (!files || diff.shapeId === undefined) return;
     root.current?.querySelector(`[data-diff-file="${CSS.escape(diff.shapeId)}"]`)?.scrollIntoView({ block: "start" });
@@ -100,8 +92,6 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
   const wrapLabel = wrap ? "Disable line wrapping" : "Enable line wrapping";
   const whitespaceLabel = ignoreWhitespace ? "Show whitespace changes" : "Hide whitespace changes";
   return (
-    // t3code's diff panel shell, beside the rail on its canvas side: 8 px under the top bar, which the rail starts at, and
-    // clear of the canvas's bottom row, which the full-height rail no longer stops above.
     <section
       ref={root}
       className="absolute top-2 left-[calc(100%+8px)] bottom-[52px] flex w-[min(760px,calc(100vw-540px))] min-w-0 flex-col overflow-hidden rounded-xl border bg-background text-sm shadow-lg/5 outline-none"
@@ -241,10 +231,8 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
   );
 };
 
-/** t3code's empty and loading lines in the diff panel. */
 const EMPTY_CLASS = "m-0 flex flex-1 items-center justify-center px-5 py-6 text-center text-xs text-muted-foreground/70";
 
-/** Added and removed line counts, in t3code's diff colours. */
 const DiffStat = ({ additions, deletions }: { readonly additions: number; readonly deletions: number }) => (
   <span className="flex shrink-0 items-center gap-1 font-mono text-xs tabular-nums">
     <span className="text-diff-addition" data-testid="diff-additions">{`+${additions}`}</span>

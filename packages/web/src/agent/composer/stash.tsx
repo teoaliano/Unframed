@@ -12,7 +12,6 @@ import { newId } from "../store.ts";
 
 export const STASH_LIMIT = 20;
 
-/** A draft set aside: its text, its chips and its uploaded attachments (the files stay in the data folder). */
 export interface StashEntry {
   readonly id: string;
   readonly text: string;
@@ -25,13 +24,10 @@ export interface StashEntry {
 const isEntry = (value: unknown): value is StashEntry =>
   typeof value === "object" && value !== null && typeof (value as StashEntry).id === "string" && typeof (value as StashEntry).text === "string";
 
-/** The prompt stash of one project, kept as the `agent.stash.<project>` preference, newest first. */
 export const useStash = (engine: EngineConnection, project: string) => {
   const key = `agent.stash.${project}`;
   const [entries, setEntries] = useState<ReadonlyArray<StashEntry>>([]);
   const latest = useRef<ReadonlyArray<StashEntry>>([]);
-  // Our own writes come back as changes, and not always in order: an echo of one, or any
-  // change while one is in flight, is older than what we hold. Only another tab's counts.
   const writing = useRef(0);
   const written = useRef<string[]>([]);
   useEffect(
@@ -80,7 +76,6 @@ export const relativeTime = (at: string, now = Date.now()): string => {
   return relative.format(Math.round(hours / 24), "day");
 };
 
-/** The Stash shoulder tab above the composer (t3code's ComposerStashBadge): shown while the stash holds something; its count pulses on each stash. */
 export const StashBadge = ({ count, open, pulse, onToggle }: { readonly count: number; readonly open: boolean; readonly pulse: number; readonly onToggle: () => void }) => {
   if (count === 0) return null;
   const pulsed = pulse > 0;
@@ -98,9 +93,7 @@ export const StashBadge = ({ count, open, pulse, onToggle }: { readonly count: n
         onClick={onToggle}
       >
         <Bookmark aria-hidden className="size-3" />
-        {/* Swapping between two identical keyframes restarts the pulse and keeps the button's focus. */}
         <span className={pulsed ? (pulse % 2 === 0 ? "animate-stash-pulse-row-alt motion-reduce:animate-none" : "animate-stash-pulse-row motion-reduce:animate-none") : undefined}>Stash</span>
-        {/* Remounted per stash, which restarts its pulse. */}
         <span key={pulse} className={cn("min-w-4 text-center tabular-nums", pulsed && "animate-stash-pulse-count motion-reduce:animate-none")} data-testid="stash-count">
           {count}
         </span>
@@ -109,13 +102,6 @@ export const StashBadge = ({ count, open, pulse, onToggle }: { readonly count: n
   );
 };
 
-/**
- * The stash drawer docked above the composer (t3code's ComposerStashMenu): each entry as a
- * snippet, what it holds and when it was stashed. Its keys are caught first, but only while
- * the focus is in the drawer, on the badge or in the composer's box (t3code's scoping):
- * the arrows move the highlight, Enter restores, Cmd+Backspace deletes, Escape closes. A
- * pointer down outside closes it.
- */
 export const StashDrawer = ({
   entries,
   box,
@@ -124,7 +110,6 @@ export const StashDrawer = ({
   onClose,
 }: {
   readonly entries: ReadonlyArray<StashEntry>;
-  /** The composer's box, whose keys the drawer takes while it is open. */
   readonly box: () => HTMLElement | null;
   readonly onRestore: (entry: StashEntry) => void;
   readonly onDelete: (entry: StashEntry) => void;
@@ -169,7 +154,6 @@ export const StashDrawer = ({
         button?.scrollIntoView({ block: "nearest" });
         if (element.contains(document.activeElement)) button?.focus({ preventScroll: true });
       } else if (event.key === "Enter") {
-        // Enter on the delete button is the button's.
         if (target instanceof HTMLElement && target.closest("[data-stash-delete]")) return;
         if (!entry) return;
         take();
@@ -210,7 +194,6 @@ export const StashDrawer = ({
         ) : (
           entries.map((entry) => {
             const pointed = entry.elements?.length ?? 0;
-            // An entry that holds only pointed-at elements (spec 18) says so, as one holding only files does.
             const snippet = entry.text.trim() === "" && entry.attachments.length === 0 && pointed > 0 ? `(${pointed} element${pointed === 1 ? "" : "s"})` : stashSnippet(entry.text, entry.attachments);
             const images = entry.attachments.filter((item) => item.kind === "image").length;
             const files = entry.attachments.length - images;
