@@ -145,6 +145,8 @@ export interface EditSession {
   readonly hoverLayer: (id: string | null) => void;
   /** The element a Layers row hovers, outlined in the frame. */
   readonly layerHover: string | null;
+  /** Starts the in-place text edit of a selected text element, when the owner rule allows it (spec 18, Keys). */
+  readonly startText: (id: string) => void;
   /** Asks the frame for its live tree again. */
   readonly requestLive: () => void;
   /** Sets the locked elements the bridge and the next writes see. The shape's own write is the editor's. */
@@ -249,6 +251,10 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   // recorded against the file the engine is replacing (an undo would bring it back).
   const preparingFile = useRef<string | undefined>(undefined);
   const helloTimer = useRef<number | undefined>(undefined);
+  // The element whose in-place text edit the editor allowed and the frame may answer with text (spec 18, Text in place).
+  const textPending = useRef<string | null>(null);
+  // A text start asked for before the frame reported the element (a Layers row selects, then asks): it starts with that report.
+  const awaitingText = useRef<string | null>(null);
   // The file this session last set on the shape. The room learns of it a sync round later, so a commit
   // that follows at once can reach the engine with a base the room has not caught up to yet.
   const lastSet = useRef<string | undefined>(undefined);
@@ -318,7 +324,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       // Held dials alone write as one step, with no version.
       if (fileRef.current !== base) {
         finish();
-        showNotice(conflictSentence(kind, "elsewhere"), "warning");
+        showNotice(conflictSentence(kind, await conflictReason(base)), "warning");
         return;
       }
       editor.markHistoryStoppingPoint("element edit");
@@ -332,7 +338,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       const answer = await send(base, edits);
       if (fileRef.current !== base) {
         dropped();
-        showNotice(conflictSentence(kind, "elsewhere"), "warning");
+        showNotice(conflictSentence(kind, await conflictReason(base)), "warning");
         return;
       }
       // A burst begun while this commit was in flight was made on the file before it: it now rests on the new one.
@@ -371,6 +377,19 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
         if (!lagging) throw error;
         await new Promise((resolve) => setTimeout(resolve, LAG_RETRY_MS));
       }
+    }
+  };
+
+  /**
+   * Why the file changed under a burst that holds no source edit: the engine names it when it refuses the base, so the
+   * burst asks with no edits and nothing is written.
+   */
+  const conflictReason = async (base: string): Promise<unknown> => {
+    try {
+      await engine.call("artifact.edit", { project, shapeId, baseFile: base, edits: [] });
+      return "elsewhere";
+    } catch (error) {
+      return (error as { details?: { reason?: unknown } }).details?.reason;
     }
   };
 
@@ -487,10 +506,23 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     return owner !== null && (owner.owner === "source" || owner.owner === "dial");
   };
 
+  const startText = (id: string) => {
+    const element = treeRef.current?.elements.find((candidate) => candidate.id === id);
+    if (modeRef.current !== "edit" || element === undefined || element.text === null) return;
+    if (reportsRef.current[id] === undefined) {
+      awaitingText.current = id;
+      return;
+    }
+    if (!textEditable(id)) return;
+    textPending.current = id;
+    post({ type: "unframed:edit:textEdit", id });
+  };
+
   const setMode = useCallback(
     (next: EditMode) => {
       if (modeRef.current === next) return;
       void commit();
+      textPending.current = null;
       modeRef.current = next;
       setModeState(next);
       if (next === "interact") setHovered(null);
@@ -505,6 +537,8 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     (ids: readonly string[]) => {
       if (sameIds(selectionRef.current, ids)) return;
       void commit();
+      textPending.current = null;
+      awaitingText.current = null;
       selectionRef.current = ids;
       setSelectionState(ids);
       post({ type: "unframed:edit:select", ids });
@@ -607,6 +641,11 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       case "unframed:edit:report": {
         const elements = Array.isArray(message.elements) ? (message.elements as EditReport[]) : [];
         for (const element of elements) if (element.id !== null) reportsRef.current = { ...reportsRef.current, [element.id]: element };
+        if (awaitingText.current !== null && reportsRef.current[awaitingText.current] !== undefined) {
+          const id = awaitingText.current;
+          awaitingText.current = null;
+          startText(id);
+        }
         if (Array.isArray(message.families)) setFamilies(message.families.filter((family): family is string => typeof family === "string"));
         setReports((previous) => {
           const next = { ...previous };
@@ -660,13 +699,15 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       }
       case "unframed:edit:textStart": {
         const id = typeof message.id === "string" ? message.id : null;
-        if (id !== null && modeRef.current === "edit" && textEditable(id)) post({ type: "unframed:edit:textEdit", id });
+        if (id !== null) startText(id);
         return;
       }
       case "unframed:edit:text": {
         const id = typeof message.id === "string" ? message.id : null;
         const text = typeof message.text === "string" ? message.text : null;
-        if (id === null || text === null) return;
+        // Text is accepted only for the element a text edit was allowed for, once, as the frame answers it.
+        if (id === null || text === null || textPending.current !== id) return;
+        textPending.current = null;
         const burstText = burstEdits(burstRef.current).find((edit) => edit.type === "text" && edit.elementId === id);
         const shown = burstText?.type === "text" ? burstText.text : (reportsRef.current[id]?.text ?? null);
         // A text a dial holds writes the dial, as a Design edit does; the source's own text stays as it is.
@@ -683,13 +724,40 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
         return;
       }
       case "unframed:edit:key": {
-        handleKey(String(message.key ?? ""), { shift: message.shift === true, meta: message.meta === true, ctrl: message.ctrl === true });
+        // In Interact only the mode keys come from the frame; the edit keys count in Edit mode (spec 18, Keys).
+        const key = String(message.key ?? "");
+        if (modeRef.current !== "edit" && key !== "v" && key !== "V" && key !== "i" && key !== "I") return;
+        const modifiers = { shift: message.shift === true, meta: message.meta === true, ctrl: message.ctrl === true };
+        if (key === "Enter" && !modifiers.shift && !modifiers.meta && !modifiers.ctrl) {
+          const [only] = selectionRef.current;
+          if (selectionRef.current.length === 1 && only !== undefined) startText(only);
+          return;
+        }
+        handleKey(key, modifiers);
         return;
       }
       default:
         return;
     }
   };
+
+  // The frame hears every lock change, including one undone or redone (spec 18, Lock and unlock).
+  const lockKey = locked.join("\n");
+  useEffect(() => {
+    post({ type: "unframed:edit:mode", mode: modeRef.current, locked: lockedRef.current });
+  }, [lockKey, post]);
+
+  // An agent rewrite keeps the selected ids the new tree still has and drops the rest (spec 18, The agent wins a race).
+  const treeBefore = useRef<SourceTree | undefined>(undefined);
+  useEffect(() => {
+    const before = treeBefore.current;
+    treeBefore.current = tree;
+    if (before === undefined || tree === undefined || before === tree) return;
+    const now = new Set(tree.elements.map((element) => element.id));
+    const gone = new Set(before.elements.map((element) => element.id));
+    const kept = selectionRef.current.filter((id) => now.has(id) || !gone.has(id));
+    if (kept.length !== selectionRef.current.length) setSelection(kept);
+  }, [tree]);
 
   // The edits a commit wrote stay drawn until the shape is back on their base (an undo) or on another file than the commit's.
   useEffect(() => {
@@ -759,6 +827,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     setSelection,
     tween,
     setTween,
+    startText,
     selectMatching,
     hovered,
     reports,
