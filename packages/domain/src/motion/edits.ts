@@ -16,7 +16,7 @@ import { motionTimeline, type MotionTimeline, type Tween, type TweenRef } from "
 import { NAMED_COLOURS } from "./colours.ts";
 
 export type MotionEdit =
-  | { readonly type: "tween-time"; readonly tween: TweenRef; readonly start?: number; readonly duration?: number }
+  | { readonly type: "tween-time"; readonly tween: TweenRef; readonly start?: number; readonly duration?: number | { readonly token: string } }
   | { readonly type: "tween-ease"; readonly tween: TweenRef; readonly ease: string | { readonly token: string } }
   | { readonly type: "tween-stagger"; readonly tween: TweenRef; readonly each: number }
   | { readonly type: "tween-value"; readonly tween: TweenRef; readonly at: number; readonly property: string; readonly value: number | string | { readonly token: string } }
@@ -98,8 +98,10 @@ const applyTweenTime = (session: Session, edit: Extract<MotionEdit, { type: "twe
   if (edit.start !== undefined && tween.start.kind !== "source") return refuse(`${name}'s start is set by the agent's code.`);
   if (edit.duration !== undefined) {
     if (tween.method === "set") return refuse("A set has no duration to change.");
-    if (tween.duration.kind !== "source") return refuse(`${name}'s duration is set by the agent's code.`);
+    if (tween.duration.kind !== "source" && tween.duration.kind !== "token") return refuse(`${name}'s duration is set by the agent's code.`);
   }
+  const token = typeof edit.duration === "object" ? edit.duration.token : null;
+  if (token !== null && options.tokenKind?.(token) !== "duration") return refuse(`${token} is not a token of a matching type.`);
 
   const span = timelineSpan(session.html);
   const text = span?.textContent ?? "";
@@ -108,9 +110,13 @@ const applyTweenTime = (session: Session, edit: Extract<MotionEdit, { type: "twe
   if (!span || !parsed || !entry || entry.id !== session.ids[index]) return refuse(`The tween on ${name} changed since this edit began.`);
 
   const position = edit.start !== undefined ? millis(Math.max(0, edit.start)) : undefined;
-  const duration = edit.duration !== undefined ? millis(Math.max(MIN_DURATION, edit.duration)) : undefined;
+  const duration = typeof edit.duration === "number" ? millis(Math.max(MIN_DURATION, edit.duration)) : undefined;
   let next: string;
-  if (entry.animation.keyframes) {
+  if (token !== null && entry.animation.keyframes) return refuse(`${name}'s duration is keyframed, so it takes a number.`);
+  if (token !== null) {
+    next = updateAnimationInScript(text, entry.id, { ...(position !== undefined ? { position } : {}), extras: { duration: tokenPlaceholder(0) } });
+    next = next.replace(`"${tokenPlaceholder(0)}"`, `unframed.token(${JSON.stringify(token)})`);
+  } else if (entry.animation.keyframes) {
     const currentPosition = typeof entry.animation.position === "number" ? entry.animation.position : 0;
     const currentDuration = entry.animation.duration ?? (tween.duration.kind === "source" && typeof tween.duration.value === "number" ? tween.duration.value : 0.5);
     const remap = entry.animation.keyframes.keyframes.map((key) => ({ from: key.percentage, to: key.percentage }));
@@ -127,6 +133,7 @@ const applyTweenTime = (session: Session, edit: Extract<MotionEdit, { type: "twe
   const lines: string[] = [];
   if (position !== undefined) lines.push(`Moved ${name} ${group} to ${position} s`);
   if (duration !== undefined) lines.push(`Set ${name} ${group} to ${duration} s long`);
+  if (token !== null) lines.push(`Set ${name} ${group} to the ${token} token`);
   session.html = splice(session.html, span, next);
   session.ids[index] = movedId;
   session.summary.push(...lines.map(sentenceCase));

@@ -471,7 +471,7 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
   const gesture = useRef<Gesture | null>(null);
   const [guide, setGuide] = useState<number | null>(null);
   const [barDragging, setBarDragging] = useState(false);
-  const pendingTiming = (index: number): { start?: number; duration?: number } | undefined =>
+  const pendingTiming = (index: number): { start?: number; duration?: number | { token: string } } | undefined =>
     session.pending.find((edit): edit is Extract<typeof edit, { type: "tween-time" }> => edit.type === "tween-time" && edit.tween.index === index);
   /** A timing value this strip can change: a literal in the file, or a parameter the schema names (its limits are where a drag stops). */
   const editable = (owner: Owner): boolean => owner.kind === "source" || (owner.kind === "dial" && dialLimitOf(schema, owner.path) !== null);
@@ -552,7 +552,8 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
     const pending = pendingTiming(ref.index);
     const fields = { start: literal.start ?? pending?.start, duration: literal.duration ?? pending?.duration };
     const edit = { type: "tween-time" as const, tween: ref, ...(fields.start === undefined ? {} : { start: fields.start }), ...(fields.duration === undefined ? {} : { duration: fields.duration }) };
-    const change = { ...(fields.start === undefined ? {} : { start: fields.start }), ...(fields.duration === undefined ? {} : { duration: fields.duration }) };
+    // The frame shows numbers only; a token duration reaches the frame at the commit.
+    const change = { ...(fields.start === undefined ? {} : { start: fields.start }), ...(typeof fields.duration === "number" ? { duration: fields.duration } : {}) };
     session.patchTween(edit, { selector: target, channels, change });
   };
 

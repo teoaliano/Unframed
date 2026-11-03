@@ -111,7 +111,8 @@ const timingOf = (tween: Tween, input: RowsInput, live: LiveTween | undefined): 
   for (const edit of input.pending) {
     if (edit.type !== "tween-time" || edit.tween.index !== tween.ref.index) continue;
     if (edit.start !== undefined) start = edit.start;
-    if (edit.duration !== undefined) duration = edit.duration;
+    // A duration token has no number here: its bar is drawn from the live report until the commit writes the token.
+    if (typeof edit.duration === "number") duration = edit.duration;
   }
   start ??= live?.start;
   duration ??= live?.duration;

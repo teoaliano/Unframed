@@ -154,3 +154,35 @@ for (var i = 0; i < 2; i++) { window.__timelines.main.to('#dot', { x: i }, 0); }
     expect(result.summary).toEqual(["Moved title visual to 1.5 s", "Set title visual to 1.25 s long"]);
   });
 });
+
+describe("tween-time: duration tokens (spec 21, The values panel, a token-owned duration)", () => {
+  const kind = (name: string) => (name === "duration/fast" ? "duration" : name === "color/accent" ? "colour" : undefined);
+  const withTokens = { tokenKind: kind };
+
+  it("writes a duration token as an expression, reads it back as a token, and keeps the start", () => {
+    const title = tweenOn(read(), "title");
+    const result = apply([{ type: "tween-time", tween: title.ref, start: 0.4, duration: { token: "duration/fast" } }], html(), withTokens);
+    if (!result.ok) throw new Error(result.refusal);
+    expect(result.html).toContain('unframed.token("duration/fast")');
+    const after = tweenOn(read(result.html), "title");
+    expect(after.duration).toEqual({ kind: "token", name: "duration/fast" });
+    expect(after.start).toEqual({ kind: "source", value: 0.4 });
+  });
+
+  it("refuses a token that is not a duration", () => {
+    const title = tweenOn(read(), "title");
+    expect(apply([{ type: "tween-time", tween: title.ref, duration: { token: "color/accent" } }], html(), withTokens)).toEqual({
+      ok: false,
+      refusal: "color/accent is not a token of a matching type.",
+    });
+  });
+
+  it("detaches a token duration as a number", () => {
+    const title = tweenOn(read(), "title");
+    const tokened = apply([{ type: "tween-time", tween: title.ref, duration: { token: "duration/fast" } }], html(), withTokens);
+    if (!tokened.ok) throw new Error(tokened.refusal);
+    const detached = apply([{ type: "tween-time", tween: tweenOn(read(tokened.html), "title").ref, duration: 0.6 }], tokened.html, withTokens);
+    if (!detached.ok) throw new Error(detached.refusal);
+    expect(tweenOn(read(detached.html), "title").duration).toEqual({ kind: "source", value: 0.6 });
+  });
+});

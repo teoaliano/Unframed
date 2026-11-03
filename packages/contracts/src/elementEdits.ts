@@ -25,7 +25,7 @@ export const SourceEdit = Schema.Union([
     property: Schema.String,
     token: Schema.String,
   }),
-  Schema.Struct({ type: Schema.Literal("tween-time"), tween: TweenRefSchema, start: Schema.optionalKey(Schema.Number), duration: Schema.optionalKey(Schema.Number) }),
+  Schema.Struct({ type: Schema.Literal("tween-time"), tween: TweenRefSchema, start: Schema.optionalKey(Schema.Number), duration: Schema.optionalKey(Schema.Union([Schema.Number, TokenRefSchema])) }),
   Schema.Struct({ type: Schema.Literal("tween-ease"), tween: TweenRefSchema, ease: Schema.Union([Schema.String, TokenRefSchema]) }),
   Schema.Struct({ type: Schema.Literal("tween-stagger"), tween: TweenRefSchema, each: Schema.Number }),
   Schema.Struct({ type: Schema.Literal("tween-value"), tween: TweenRefSchema, at: Schema.Number, property: Schema.String, value: Schema.Union([Schema.Number, Schema.String, TokenRefSchema]) }),
