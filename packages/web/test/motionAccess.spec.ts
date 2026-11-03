@@ -6,7 +6,6 @@ import { expect, test } from "./agent.ts";
 import { filledArtifact, projectPath } from "./artifacts.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
-/** One dot that moves for four seconds, so its bar is wide and its two diamonds sit at 0 s and 4 s. */
 const WIDE = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}#dot{position:absolute;left:20px;top:120px;width:80px;height:80px;background:#f00}</style></head><body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360"><div id="dot" data-uf-name="Dot" class="clip" data-start="0" data-duration="4"></div></div>
 <script src="gsap.js"></script><script>
@@ -15,7 +14,6 @@ tl.to("#dot", { x: 400, duration: 4 }, 0);
 window.__timelines = { main: tl };
 </script></body></html>`;
 
-/** One dot with a 0.2 s tween at 1 s: at the zoom the strip opens at, the bar is narrower than 12 px. */
 const SHORT = WIDE.replace('tl.to("#dot", { x: 400, duration: 4 }, 0);', 'tl.to("#dot", { x: 400, duration: 0.2 }, 1);');
 
 const SHAPE = "shape:intro";
@@ -39,7 +37,6 @@ const openMotion = async (page: Page, engine: TestEngine, html: string) => {
   await expect.poll(async () => Number(await track(page).getAttribute("data-px-per-second"))).toBeGreaterThan(0);
 };
 
-/** The summary lines of every committed edit, oldest first. */
 const summaries = async (engine: TestEngine): Promise<string[][]> => {
   const names = (await readdir(join(engine.dataDir, "output", "default"))).filter((name) => name.endsWith(".json")).sort();
   const found: string[][] = [];
@@ -50,14 +47,12 @@ const summaries = async (engine: TestEngine): Promise<string[][]> => {
   return found;
 };
 
-/** The centre of a locator's box, in page pixels. */
 const midpoint = async (locator: ReturnType<Page["locator"]>) => {
   const box = await locator.boundingBox();
   if (!box) throw new Error("no box");
   return { x: box.x + box.width / 2, y: box.y + box.height / 2, width: box.width, height: box.height };
 };
 
-/** The element under a point, as its aria-label or its test id, so a hit area can be asked which control takes a press. */
 const hitAt = (page: Page, x: number, y: number) =>
   page.evaluate(
     ([px, py]) => {
@@ -68,9 +63,7 @@ const hitAt = (page: Page, x: number, y: number) =>
   );
 
 test("the values panel keeps its Background field after a refused colour, showing the last committed colour", async ({ page, agent }) => {
-  // The shared motion helper lives in motionValues.spec.ts; this spec opens the same kind of motion itself.
   await openMotion(page, agent, WIDE.replace('tl.to("#dot", { x: 400, duration: 4 }, 0);', 'tl.to("#dot", { backgroundColor: "#00ff00", duration: 4 }, 0);'));
-  // The end keyframe holds the colour, so its diamond opens the panel with the Background field.
   await timeline(page).locator('[data-testid="timeline-diamond"][data-tween="0"][data-fraction="1"]').first().click({ position: { x: 8, y: 5 } });
   const background = panel(page).getByRole("textbox", { name: "Background", exact: true });
   await expect(background).toHaveValue("#00ff00");
@@ -117,13 +110,11 @@ test("Alt with an arrow key changes a bar's duration by one frame, committed as 
 
 test("every keyframe is named with its time, and its hit area is at least 24 by 24 px", async ({ page, agent }) => {
   await openMotion(page, agent, WIDE);
-  // At the fitted zoom the end keyframe sits on the track's last pixel, so the strip is zoomed out once to see both sides of it.
   await timeline(page).getByRole("button", { name: "Zoom out" }).click();
   const end = timeline(page).getByRole("button", { name: "Keyframe of Dot at 4.0 s", exact: true });
   await expect(end).toHaveCount(1);
   await expect(timeline(page).getByRole("button", { name: "Keyframe of Dot at 0.0 s", exact: true })).toHaveCount(1);
 
-  // A press 11 px either side of the diamond's centre lands on the diamond: its hit area is 22 px or more across.
   const at = await midpoint(end);
   expect(await hitAt(page, at.x - 11, at.y)).toBe("Keyframe of Dot at 4.0 s");
   expect(await hitAt(page, at.x + 11, at.y)).toBe("Keyframe of Dot at 4.0 s");
@@ -141,7 +132,6 @@ test("the row's expand and select controls take a press 10 px above and below th
 test("a zoomed strip keeps its zoom after the motion gets longer, so the time area stays within the strip", async ({ page, agent }) => {
   await openMotion(page, agent, WIDE);
   await timeline(page).getByRole("button", { name: "Zoom in" }).click();
-  // The person edits the bar's duration to 119 s: the same motion, a longer length. The zoom in pixels a second must follow the length.
   await bar(page).dblclick();
   const duration = panel(page).getByRole("textbox", { name: "Duration", exact: true });
   await duration.fill("119");

@@ -4,7 +4,6 @@ import { expect, test } from "./agent.ts";
 import { filledArtifact } from "./artifacts.ts";
 import { editSummaries } from "./motionHelpers.ts";
 
-/** Dot fades from its own opacity to 0.2 over 2 s from 1 s, so the Design tab's Opacity is animated by the agent's code. */
 const FADE = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}#dot{position:absolute;left:20px;top:120px;width:60px;height:60px;background:#f00}</style></head><body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360"><div id="dot" data-uf-name="Dot" class="clip" data-start="0" data-duration="4"></div></div>
 <script src="gsap.js"></script><script>
@@ -30,7 +29,6 @@ test("Show on timeline opens the strip, expands the element's row and selects th
   await expect(region(page)).toBeVisible();
   await expect(timeline(page).getByTestId("timeline-row").first()).toBeVisible({ timeout: 40_000 });
 
-  // Select Dot from its row, so the Design tab shows it, then hide the strip to see it open again.
   await timeline(page).getByRole("button", { name: "Select Dot" }).click();
   await timeline(page).getByRole("button", { name: "Hide timeline" }).click();
   await expect(timeline(page)).toHaveAttribute("data-open", "false");
@@ -40,10 +38,7 @@ test("Show on timeline opens the strip, expands the element's row and selects th
   await link.click();
 
   await expect(timeline(page)).toHaveAttribute("data-open", "true");
-  // The row is expanded: its collapse control is there, and the lanes are drawn.
   await expect(timeline(page).getByRole("button", { name: "Collapse Dot" })).toBeVisible();
-  // The opacity tween (the second one) is the selected bar.
-  // The tween's bars are selected (the element's bar and its lane), and no other tween's.
   const selected = timeline(page).locator('[data-testid="timeline-bar"][data-selected="true"]');
   await expect.poll(() => selected.count()).toBeGreaterThan(0);
   for (const bar of await selected.all()) await expect(bar).toHaveAttribute("data-tween", "1");
@@ -61,7 +56,6 @@ test("Show on timeline selects the tween as the editor's tween selection, so a p
   await expect.poll(async () => Number(await timeline(page).getByTestId("timeline-track").getAttribute("data-px-per-second"))).toBeGreaterThan(0);
   await timeline(page).getByRole("button", { name: "Select Dot" }).click();
 
-  // Drag the first tween's bar a half second: a burst is pending, and no version is written yet.
   const bar0 = timeline(page).locator('[data-testid="timeline-bar"][data-tween="0"]').first();
   const box = (await bar0.boundingBox())!;
   const pxPerSecond = Number(await timeline(page).getByTestId("timeline-track").getAttribute("data-px-per-second"));
@@ -71,7 +65,6 @@ test("Show on timeline selects the tween as the editor's tween selection, so a p
   await page.mouse.move(box.x + box.width * 0.25 + 0.5 * pxPerSecond, box.y + box.height / 2, { steps: 8 });
   await page.mouse.up();
 
-  // Show on timeline selects the second tween: a change of the tween selection commits the burst, well before its pause.
   const link = page.getByRole("button", { name: "Show on timeline" }).first();
   await expect(link).toBeVisible({ timeout: 15_000 });
   await link.click();

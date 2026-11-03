@@ -1,19 +1,11 @@
-/**
- * The timeline's rows (spec 21, Rows, lanes and diamonds): what each row, lane and bar is, built from the
- * motion's reading, the dial values the frame runs, the burst's pending timing and the live tween report.
- * Pure: the strip only draws what this returns.
- */
 import { dialAt, type DialLimit, type DialSchema, type PropertyGroup, type Tween, type Owner } from "@unframed/domain";
 import type { MotionTimelineReading, SourceEdit } from "@unframed/contracts";
 
-/** A row's height in pixels, and a lane's: the strip's row grid. */
 export const ROW_HEIGHT = 24;
 export const LANE_HEIGHT = 20;
 
-/** The groups in the order the lanes show them (spec 21, Groups). */
 export const GROUP_ORDER: readonly PropertyGroup[] = ["position", "scale", "size", "rotation", "visual", "other"];
 
-/** One tween's entry in the live report (`unframed:edit:tweens`), as the bridge posts it. */
 export interface LiveTween {
   readonly targets: readonly string[];
   readonly start: number;
@@ -25,19 +17,14 @@ export interface LiveTween {
 }
 
 export interface BarView {
-  /** The tween's source order, which names it in the burst. */
   readonly tween: number;
-  /** The element the bar is drawn on, by `data-hf-id` (or the runtime selector). */
   readonly target: string;
   readonly group: PropertyGroup | null;
   readonly start: number;
   readonly duration: number;
-  /** A repeat's copy, drawn lighter after the bar. */
   readonly copy: boolean;
-  /** The bar's target offset within a stagger, in seconds. Null when the tween does not stagger. */
   readonly stagger: number | null;
   readonly readOnly: string | null;
-  /** Keyframe diamonds on this bar, in seconds. */
   readonly diamonds: readonly number[];
 }
 
@@ -45,7 +32,6 @@ export interface RowView {
   readonly key: string;
   readonly kind: "clip" | "composition" | "element" | "lane" | "runtime";
   readonly name: string;
-  /** The element, by `data-hf-id`; null for a runtime row. */
   readonly element: string | null;
   readonly depth: number;
   readonly height: number;
@@ -54,19 +40,14 @@ export interface RowView {
   readonly locked: boolean;
   readonly hidden: boolean;
   readonly bars: readonly BarView[];
-  /** A clip's span, drawn as its bar. */
   readonly span: { readonly start: number; readonly duration: number } | null;
   readonly group: PropertyGroup | null;
 }
 
-/** What the rows need from the editor's state. */
 export interface RowsInput {
   readonly reading: MotionTimelineReading;
-  /** The layer names the source tree gives, by `data-hf-id`: a row is named as Layers names it. */
   readonly names: Readonly<Record<string, string>>;
-  /** The dial values the frame runs, by path. */
   readonly dials: Readonly<Record<string, unknown>>;
-  /** The burst's source edits: a tween's pending start or duration is drawn in place of its source. */
   readonly pending: readonly SourceEdit[];
   readonly live: readonly LiveTween[];
   readonly expanded: ReadonlySet<string>;
@@ -83,14 +64,12 @@ export const numberOf = (owner: Owner, dials: Readonly<Record<string, unknown>>)
   return undefined;
 };
 
-/** The seconds between a tween's targets: the file's literal stagger, or the burst's pending one; null when the tween does not stagger. */
 export const staggerEachOf = (tween: Tween, pending: readonly SourceEdit[]): number | null => {
   const edit = pending.find((candidate): candidate is Extract<SourceEdit, { type: "tween-stagger" }> => candidate.type === "tween-stagger" && candidate.tween.index === tween.ref.index);
   if (edit !== undefined) return edit.each;
   return tween.stagger?.kind === "source" && typeof tween.stagger.value === "number" ? tween.stagger.value : null;
 };
 
-/** Each target's offset in a stagger (spec 21, Staggers): the literal `each`, or the literal `amount` spread across the targets. */
 const offsetsOf = (tween: Tween, count: number, each: number | null, pending: readonly SourceEdit[]): number[] => {
   if (each === null || tween.staggerForm === null || tween.staggerForm === "other") return Array.from({ length: count }, () => 0);
   const pendingEdit = pending.some((edit) => edit.type === "tween-stagger" && edit.tween.index === tween.ref.index);
@@ -101,17 +80,14 @@ const offsetsOf = (tween: Tween, count: number, each: number | null, pending: re
   });
 };
 
-/** The channels a tween animates: every property its keyframes name, the same set the bridge matches by. */
 export const channelsOf = (tween: Tween): string[] => [...new Set(tween.keyframes.flatMap((step) => Object.keys(step.values)))].sort();
 
-/** The timing of one tween as drawn: its source, a dial's value, or a pending edit. Undefined when no value is known. */
 const timingOf = (tween: Tween, input: RowsInput, live: LiveTween | undefined): { start: number; duration: number } | null => {
   let start = numberOf(tween.start, input.dials);
   let duration = numberOf(tween.duration, input.dials);
   for (const edit of input.pending) {
     if (edit.type !== "tween-time" || edit.tween.index !== tween.ref.index) continue;
     if (edit.start !== undefined) start = edit.start;
-    // A duration token has no number here: its bar is drawn from the live report until the commit writes the token.
     if (typeof edit.duration === "number") duration = edit.duration;
   }
   start ??= live?.start;
@@ -119,10 +95,6 @@ const timingOf = (tween: Tween, input: RowsInput, live: LiveTween | undefined): 
   return start === undefined || duration === undefined ? null : { start, duration };
 };
 
-/**
- * A bar's diamonds, in seconds (spec 21, Diamonds): its start and its end, and each keyframe step the bar's group has. A `set` has only
- * its one diamond at the start. A step at the start or the end is not drawn twice.
- */
 const diamondsOf = (tween: Tween, start: number, duration: number, group: PropertyGroup | null): number[] => {
   if (tween.method === "set") return [start];
   const fractions = [0, 1];
@@ -133,7 +105,6 @@ const diamondsOf = (tween: Tween, start: number, duration: number, group: Proper
   return fractions.sort((a, b) => a - b).map((at) => start + at * duration);
 };
 
-/** The bars one tween draws on one target, with its repeats, for a group lane or for the element as a whole. */
 const barsOf = (tween: Tween, target: string, offset: number, timing: { start: number; duration: number }, group: PropertyGroup | null, stagger: number | null): BarView[] => {
   const start = timing.start + offset;
   const duration = timing.duration;
@@ -146,7 +117,6 @@ const barsOf = (tween: Tween, target: string, offset: number, timing: { start: n
   return [main, ...copies];
 }
 
-/** A property's group, as HyperFrames classes it (spec 21, Groups). */
 export const groupOfKey = (key: string): PropertyGroup => {
   if (["x", "y", "xPercent", "yPercent"].includes(key)) return "position";
   if (["scale", "scaleX", "scaleY"].includes(key)) return "scale";
@@ -156,10 +126,8 @@ export const groupOfKey = (key: string): PropertyGroup => {
   return "other";
 };
 
-/** The groups a tween animates, in lane order. */
 const groupsOfTween = (tween: Tween): PropertyGroup[] => GROUP_ORDER.filter((group) => tween.groups.includes(group));
 
-/** Whether an element, or one of its ancestors, is in a list. */
 const inside = (id: string, list: ReadonlySet<string> | readonly string[], elements: MotionTimelineReading["elements"]): boolean => {
   const has = (value: string): boolean => (list instanceof Set ? list.has(value) : (list as readonly string[]).includes(value));
   for (let current: string | null = id; current !== null; current = elements[current]?.parent ?? null) {
@@ -168,7 +136,6 @@ const inside = (id: string, list: ReadonlySet<string> | readonly string[], eleme
   return false;
 };
 
-/** The rows, top to bottom: the clips in track order, the Composition group, then the run-time rows. */
 export const buildRows = (input: RowsInput): RowView[] => {
   const { reading, dials, expanded, locked, hidden } = input;
   const elements = reading.elements;
@@ -182,11 +149,6 @@ export const buildRows = (input: RowsInput): RowView[] => {
     return input.live[index];
   };
 
-  /**
-   * A tween whose targets the source does not name (a helper's variable, `tl.to(target, ...)`) is placed by the live report: the
-   * next live tween, in order, that animates source elements. The reading still owns the tween, so its bar opens the values panel.
-   */
-  // A live tween on an element no resolved tween animates comes first: a loop's extra runs are on elements the reading already has.
   const animated = new Set(reading.tweens.flatMap((tween) => tween.targets));
   const takeSourceLive = (): LiveTween | undefined => {
     const sourced = (candidate: LiveTween) => candidate.targets.length > 0 && candidate.targets.every((target) => elements[target] !== undefined);
@@ -196,7 +158,6 @@ export const buildRows = (input: RowsInput): RowView[] => {
     return input.live[index];
   };
 
-  // Each element's bars, per lane and as a whole, from every tween that targets it.
   const barsByElement = new Map<string, BarView[]>();
   const lanesByElement = new Map<string, Map<PropertyGroup, BarView[]>>();
   const runtimeBars = new Map<string, BarView[]>();
@@ -261,7 +222,6 @@ export const buildRows = (input: RowsInput): RowView[] => {
   const clips = [...reading.clips].sort((a, b) => a.track - b.track || (startOf(a.start, dials) - startOf(b.start, dials)));
   const placed = new Set<string>();
   for (const clip of clips) {
-    // A clip the burst moves or stretches is drawn where the burst puts it (spec 21, Clips).
     const moved = input.pending.find((edit): edit is Extract<SourceEdit, { type: "clip-time" }> => edit.type === "clip-time" && edit.clip === clip.hfId);
     const start = moved?.start ?? numberOf(clip.start, dials);
     const duration = moved?.duration ?? numberOf(clip.duration, dials);
@@ -299,8 +259,6 @@ export const buildRows = (input: RowsInput): RowView[] => {
 
 const startOf = (owner: Owner, dials: Readonly<Record<string, unknown>>): number => numberOf(owner, dials) ?? 0;
 
-/** The limits a drag on a parameter stops at (spec 21, Dial-owned timing): a range's min, max and step, or a number's floor. Null when the schema does not name it. */
-/** The schema entry a dial path names, walking its folders, or undefined when the schema has none there. */
 const entryOf = (schema: DialSchema | undefined, path: readonly string[]): DialSchema[string] | undefined => {
   let folder: DialSchema | undefined = schema;
   for (let at = 0; at < path.length - 1; at++) {
@@ -318,7 +276,6 @@ export const dialLimitOf = (schema: DialSchema | undefined, path: readonly strin
   return null;
 };
 
-/** The options of the select parameter a path names (spec 21, The ease picker), or null when the path names no select. */
 export const selectOptionsOf = (schema: DialSchema | undefined, path: readonly string[]): readonly string[] | null => {
   const entry = entryOf(schema, path);
   return entry?.kind === "select" ? entry.options : null;

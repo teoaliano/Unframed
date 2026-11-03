@@ -7,11 +7,6 @@ import { textOf } from "./editorHarness.ts";
 import { putRecords } from "./media.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
-/**
- * One dot. Tween 0 moves it and animates its colour: a from-value at the start and a to-value at the end, the end's colour an
- * oklch(). Tween 1 sets a named colour at its end. Tween 2 repeats twice, back and forth. Tween 3 has a token duration.
- * Tween 4 is a `from`, whose end diamond has no values of its own. Tween 5 has a keyframe in its middle, at 50 %.
- */
 const VALUES = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}#dot{position:absolute;left:20px;top:120px;width:60px;height:60px;background:#f00}</style></head><body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="8" data-width="640" data-height="360"><div id="dot" data-uf-name="Dot" class="clip" data-start="0" data-duration="8"></div></div>
 <script src="gsap.js"></script><script>
@@ -25,7 +20,6 @@ tl.from("#dot", { opacity: 0.2, duration: 0.5 }, 6);
 tl.to("#dot", { x: 60, keyframes: { "50%": { x: 200 }, "100%": { x: 60 } }, duration: 1 }, 7);
 </script></body></html>`;
 
-/** A colour token on the background, and a parameter that sets the dot's x at its end. */
 const DIAL = VALUES.replace('tl.to("#dot", { backgroundColor: "rebeccapurple", duration: 0.5 }, 2);', 'unframed.dials("Move", { toX: [300, 0, 500] }, function (v) {\n  tl.to("#dot", { x: v.toX, duration: 0.5 }, 2);\n});');
 
 const KIT = {
@@ -43,11 +37,9 @@ const SHAPE = "shape:intro";
 const timeline = (page: Page) => page.getByRole("region", { name: "Timeline for Intro" });
 const bar = (page: Page, tween: number) => timeline(page).locator(`[data-testid="timeline-bar"][data-tween="${tween}"]`).first();
 const diamond = (page: Page, tween: number, fraction: number) => timeline(page).locator(`[data-testid="timeline-diamond"][data-tween="${tween}"][data-fraction="${fraction}"]`).first();
-/** Clicks a diamond at its outer tip, past the bar's end (or before its start), so the bar beneath does not take the click. */
 const clickDiamond = async (page: Page, tween: number, fraction: number) => {
   await diamond(page, tween, fraction).click({ position: { x: fraction === 1 ? 8 : 2, y: 5 } });
 };
-// The values panel is a popover, so it sits in the page, not in the strip.
 const panel = (page: Page) => page.getByRole("region", { name: /^Values for/ });
 const region = (page: Page) => page.getByRole("region", { name: "Editing Intro" });
 
@@ -73,7 +65,6 @@ const zoomIn = async (page: Page, times: number) => {
 const fileOf = async (engine: TestEngine) => (await roomShapes(engine, "default", "motion")).find((record) => record.id === SHAPE)?.props;
 const fileText = async (engine: TestEngine) => textOf(engine, (await fileOf(engine))!.file);
 
-/** One tween that moves the dot's rotation and scale and fades its background, so the panel has the names the Design tab uses. */
 const NAMES = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}#dot{position:absolute;left:20px;top:120px;width:60px;height:60px;background:#f00}</style></head><body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360"><div id="dot" data-uf-name="Dot" class="clip" data-start="0" data-duration="4"></div></div>
 <script src="gsap.js"></script><script>
@@ -91,7 +82,6 @@ test("the values panel names each property as the Design tab does, and a rotatio
   await expect(panel(page).getByRole("textbox", { name: "Background" })).toHaveValue("#00ff00");
   await expect(panel(page).getByRole("textbox", { name: "rotation", exact: true })).toHaveCount(0);
   await expect(panel(page).getByRole("textbox", { name: "backgroundColor", exact: true })).toHaveCount(0);
-  // Rotation has no unit in the file, so the panel shows the degree sign after it; the file keeps the number as written.
   await expect(panel(page).getByText("°", { exact: true })).toBeVisible();
   await expect(panel(page).getByRole("textbox", { name: "Rotation", exact: true }).locator("xpath=ancestor::span[1]")).toContainText("°");
 });
@@ -105,7 +95,6 @@ test("a diamond opens the values panel with the numbers and colours at that keyf
   await expect(panel(page).getByRole("textbox", { name: "X", exact: true })).toHaveValue("120");
   await expect(panel(page).getByRole("textbox", { name: "Colour", exact: true })).toHaveValue("oklch(70% 0.2 150)");
 
-  // A number takes its unit and a typed value writes the tween value at once, as one burst edit.
   await panel(page).getByRole("textbox", { name: "X", exact: true }).fill("150");
   await panel(page).getByRole("textbox", { name: "X", exact: true }).press("Enter");
   await expect.poll(() => editSummaries(agent).then((all) => all.at(-1)?.[0]), { timeout: 15_000 }).toBe("Set Dot x to 150");
@@ -130,7 +119,6 @@ test("the values panel is a popover beside the keyframe it opened from, not a bo
   const keyframe = await diamond(page, 1, 0).boundingBox();
   const box = await panel(page).boundingBox();
   if (!keyframe || !box) throw new Error("no keyframe or panel");
-  // Above or below the keyframe, a few pixels off, whichever side the popover finds room on.
   const gap = Math.min(Math.abs(box.y - (keyframe.y + keyframe.height)), Math.abs(box.y + box.height - keyframe.y));
   expect(gap).toBeLessThan(16);
 });
@@ -206,8 +194,6 @@ test("a token-owned duration shows a token chip, and Detach writes it as a numbe
   await openCanvas(page, agent);
   await putRecords(agent, [{ id: "document:document", typeName: "document", gridSize: 10, name: "", meta: { unframed: { kit: KIT } } }]);
   await openMotion(page, agent, VALUES);
-  // A short bar's diamonds cover its middle until the strip is zoomed in enough for their hit areas (24 px) to leave a gap between them,
-  // so the strip is zoomed in three times, then scrolled to its end, where the bar is in view with its label column at 160 px.
   await zoomIn(page, 3);
   await timeline(page).getByTestId("timeline-scroll").evaluate((element) => {
     element.scrollLeft = element.scrollWidth;
@@ -240,7 +226,6 @@ test("a repeating tween's panel says how often it repeats and whether it goes ba
 test("clearing the tween selection commits the open burst at once, as any change of the editor's selection does", async ({ page, agent }) => {
   await openMotion(page, agent, VALUES);
   const before = (await fileOf(agent))?.file;
-  // Move the repeating tween's bar (literal timing) a little to the right, and let go.
   await zoomIn(page, 1);
   const box = await bar(page, 2).boundingBox();
   if (!box) throw new Error("no bar");
@@ -250,7 +235,6 @@ test("clearing the tween selection commits the open burst at once, as any change
   await page.mouse.move(box.x + box.width / 2 + 30, y, { steps: 4 });
   await page.mouse.up();
 
-  // A click on empty track clears the tween selection. The burst commits then, well before its 1.5 s pause would.
   await timeline(page).getByTestId("timeline-rows").click({ position: { x: 4, y: 4 } });
   await expect.poll(async () => (await fileOf(agent))?.file, { timeout: 1000 }).not.toBe(before);
 });
@@ -262,7 +246,6 @@ test("at fit the last keyframe sits inside the strip and opens its panel, and at
   const area = await scroller.boundingBox();
   const last = await diamond(page, 5, 1).boundingBox();
   if (!area || !last) throw new Error("no boxes");
-  // The end of the motion is inside the visible strip, not half under its edge, and the strip does not scroll sideways.
   expect(last.x).toBeGreaterThanOrEqual(area.x);
   expect(last.x + last.width).toBeLessThanOrEqual(area.x + area.width);
   expect(await scroller.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
@@ -270,7 +253,6 @@ test("at fit the last keyframe sits inside the strip and opens its panel, and at
   await expect(panel(page)).toBeVisible();
   await panel(page).getByRole("button", { name: "Close values" }).click();
 
-  // Half the fit: the keyframes at 6.5 s and 7 s are 12 px apart, and the 6.5 s one is reached at its left tip.
   await timeline(page).getByRole("button", { name: "Zoom out" }).click();
   await clickDiamond(page, 4, 1);
   await expect(panel(page).getByText("Ends at the element's own style.")).toBeVisible();

@@ -1,14 +1,9 @@
-/**
- * The ease field of the values panel (spec 21, The ease picker): a button showing the ease, opening a popover with one row per
- * choice, each drawn with its curve. The current choice is checked. A row the parameter does not offer is disabled.
- */
 import { Button } from "~/components/ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { useState } from "react";
 import { Tip } from "../../chrome/ui.tsx";
 import { type EaseChoice, type EaseValue } from "./ease.ts";
 
-/** A curve as a small polyline, y up. Overshoot past 0 or 1 draws past the box, as the curve does. */
 const Curve = ({ samples }: { readonly samples: readonly number[] }) => {
   const points = samples.map((value, index) => `${(index / (samples.length - 1)) * 24},${16 - value * 12 - 2}`).join(" ");
   return (
@@ -21,7 +16,6 @@ const Curve = ({ samples }: { readonly samples: readonly number[] }) => {
 const GROUP_HEADING: Readonly<Record<EaseChoice["group"], string | null>> = { written: null, catalogue: null, kit: "Kit" };
 
 export interface EasePickerProps {
-  /** The ease as the button shows it. */
   readonly label: string;
   readonly choices: readonly EaseChoice[];
   readonly onChoose: (value: EaseValue) => void;
@@ -67,7 +61,6 @@ export const EasePicker = ({ label, choices, onChoose, disabled }: EasePickerPro
                 {showHeading && <p className="px-2 pt-2 text-xs text-muted-foreground">{title}</p>}
                 {choice.disabled ? (
                   <Tip label={choice.title}>
-                    {/* A disabled button takes no pointer, so the tooltip hangs on the wrapper that does. */}
                     <span className="flex">{option}</span>
                   </Tip>
                 ) : (

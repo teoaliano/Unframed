@@ -1,9 +1,3 @@
-/**
- * The values panel of a tween (spec 21, The values panel): the header, the timing fields (Start, Duration, Ease, Stagger), the
- * repeat line, and the values at the keyframe the person opened it from. Each field shows its owner: a literal is editable, a
- * parameter shows its chip and moves the parameter, a token shows its chip with Change and Detach, and anything the agent's code
- * sets is read-only with its reason. The panel only draws what it is given; the strip works out the fields.
- */
 import { SlidersHorizontal, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -15,13 +9,9 @@ import { Tip } from "../../chrome/ui.tsx";
 import { EasePicker } from "./EasePicker.tsx";
 import type { EaseChoice, EaseValue } from "./ease.ts";
 
-/** A token chip's choices: the kit's tokens of the field's type, and what Detach writes. */
 export interface PanelToken {
-  /** The token's path, which the chip shows its last two segments of. */
   readonly name: string;
-  /** The value the chip shows, in the artifact's mode. */
   readonly value: string;
-  /** The tokens of the field's type. */
   readonly options: ReadonlyArray<{ readonly path: string; readonly value: string }>;
   readonly onChoose: (path: string) => void;
   readonly onDetach: () => void;
@@ -36,41 +26,30 @@ export interface PanelField {
   readonly key: string;
   readonly label: string;
   readonly control: PanelControl;
-  /** The parameter path that sets the value, which the chip names. */
   readonly parameter?: string;
   readonly token?: PanelToken;
-  /** The sentence under the field: why it cannot be edited, or what it means. */
   readonly note?: string;
-  /** Ask the agent to make the field editable (spec 18's point and tell). */
   readonly ask?: () => void;
 }
 
 export interface ValuesPanelProps {
-  /** The element's name, and the group the bar is in (`Title · Visual`). */
   readonly title: string;
   readonly group: string | null;
-  /** The method, in muted text. */
   readonly method: string;
   readonly fields: readonly PanelField[];
   readonly ease: { readonly label: string; readonly choices: readonly EaseChoice[]; readonly disabled: boolean } | null;
   readonly onEase: (value: EaseValue) => void;
-  /** Repeats, as the panel says them, or null for a tween that does not repeat. */
   readonly repeat: string | null;
-  /** The sentence for a diamond with no value of its own (a `to`'s start, a `from`'s end), or null. */
   readonly sentence: string | null;
-  /** The reason a whole tween is read-only, or null. Shown under `Set by the agent's code.` */
   readonly readOnly: string | null;
-  /** Ask the agent to make a read-only tween editable (spec 18's point and tell), or null when there is nothing to ask. */
   readonly ask: (() => void) | null;
   readonly onClose: () => void;
-  /** The bar or keyframe the panel opened from: the popover sits beside it (spec 21, The values panel). */
   readonly anchor: () => Element | null;
   readonly className?: string;
 }
 
 const FORMAT = { useGrouping: false, maximumFractionDigits: 3 } as const;
 
-/** A token's last two path segments, which is what a chip names (spec 19). */
 const shortPath = (path: string): string => path.split("/").slice(-2).join("/");
 
 const TokenChip = ({ token }: { readonly token: PanelToken }) => {
@@ -113,16 +92,13 @@ const TokenChip = ({ token }: { readonly token: PanelToken }) => {
   );
 };
 
-/** A field's control: a number with its unit, a colour as a swatch and a text field, or read-only text. */
 const Control = ({ label, control }: { readonly label: string; readonly control: PanelControl }): ReactNode => {
   if (control.kind === "text") return <code className="max-w-40 truncate font-mono text-xs text-muted-foreground">{control.value}</code>;
   if (control.kind === "colour") return <ColourField label={label} value={control.value} editable={control.editable} onCommit={control.onCommit} />;
   return <NumberControl label={label} value={control.value} unit={control.unit} editable={control.editable} onCommit={control.onCommit} />;
 };
 
-/** A number field that applies on Enter or when it loses focus, and shows its unit after the number. */
 const NumberControl = ({ label, value, unit, editable, onCommit }: { readonly label: string; readonly value: number; readonly unit: string; readonly editable: boolean; readonly onCommit: (value: number) => void }) => {
-  // Every commit remounts the field on the value the file holds, so a cleared or refused number shows that value again.
   const [attempts, setAttempts] = useState(0);
   return (
   <span className="flex items-center gap-1">
@@ -134,7 +110,6 @@ const NumberControl = ({ label, value, unit, editable, onCommit }: { readonly la
         <NumberFieldInput
           aria-label={label}
           onKeyDown={(event) => {
-            // Enter applies the field the way leaving it does, as the editor's size field does.
             if (event.key === "Enter") event.currentTarget.blur();
           }}
         />
@@ -145,11 +120,9 @@ const NumberControl = ({ label, value, unit, editable, onCommit }: { readonly la
   );
 };
 
-/** A colour as a swatch and a text field; Enter or leaving the field applies the typed colour. */
 const ColourField = ({ label, value, editable, onCommit }: { readonly label: string; readonly value: string; readonly editable: boolean; readonly onCommit: (value: string) => void }) => {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
-  // A refused colour leaves the field on the last committed one, since the value only changes when the edit lands.
   const commit = () => {
     const typed = draft.trim();
     if (typed !== "" && typed !== value) onCommit(typed);
@@ -198,7 +171,6 @@ const FieldRow = ({ field }: { readonly field: PanelField }) => (
 );
 
 export const ValuesPanel = ({ title, group, method, fields, ease, onEase, repeat, sentence, readOnly, ask, onClose, anchor, className }: ValuesPanelProps) => (
-  // A non-modal popover: Esc and a press outside close it. It takes no focus when it opens, so the strip's keys keep working.
   <Popover open onOpenChange={(open) => !open && onClose()}>
     <PopoverPopup anchor={anchor} side="bottom" align="start" padding="none" initialFocus={false} finalFocus={false} className={`w-[280px] ${className ?? ""}`}>
       <section aria-label={`Values for ${title}`} data-testid="values-panel" className="p-3">
