@@ -3,6 +3,7 @@ export { kitRefusal, pathRefusal, modeRefusal, valueRefusal, kitCssNames } from 
 export { applyKitOps, type KitOp, type KitOpsResult } from "./ops.ts";
 export { cssName, resolve, kitCss, scriptValue } from "./runtime.ts";
 export { EASES, EASE_NAMES, EASE_CSS, easeLabel, isEaseName, cubicBezierOf, type Ease } from "./easings.ts";
+export { parseBezier } from "./values.ts";
 export { installTokens, tokensScript, kitStamp, type TokensWindow } from "./output.ts";
 export { mergeKit, replaceKit, type KitSide, type MergeCounts, type MergeChoices, type MergeConflict, type MergeResult } from "./merge.ts";
 export { fromDtcg, fromCss, toDtcg, toCss, toTailwind, type ImportFile, type ImportFragment, type ImportResult } from "./formats.ts";

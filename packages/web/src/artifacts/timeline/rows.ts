@@ -267,15 +267,26 @@ export const buildRows = (input: RowsInput): RowView[] => {
 const startOf = (owner: Owner, dials: Readonly<Record<string, unknown>>): number => numberOf(owner, dials) ?? 0;
 
 /** The limits a drag on a parameter stops at (spec 21, Dial-owned timing): a range's min, max and step, or a number's floor. Null when the schema does not name it. */
-export const dialLimitOf = (schema: DialSchema | undefined, path: readonly string[]): DialLimit | null => {
+/** The schema entry a dial path names, walking its folders, or undefined when the schema has none there. */
+const entryOf = (schema: DialSchema | undefined, path: readonly string[]): DialSchema[string] | undefined => {
   let folder: DialSchema | undefined = schema;
   for (let at = 0; at < path.length - 1; at++) {
     const entry = folder?.[path[at]!];
-    if (entry?.kind !== "folder") return null;
+    if (entry?.kind !== "folder") return undefined;
     folder = entry.of;
   }
-  const entry = folder?.[path[path.length - 1] ?? ""];
+  return folder?.[path[path.length - 1] ?? ""];
+};
+
+export const dialLimitOf = (schema: DialSchema | undefined, path: readonly string[]): DialLimit | null => {
+  const entry = entryOf(schema, path);
   if (entry?.kind === "range") return { kind: "range", min: entry.min, max: entry.max, ...(entry.step === undefined ? {} : { step: entry.step }) };
   if (entry?.kind === "number") return { kind: "number", value: entry.value };
   return null;
+};
+
+/** The options of the select parameter a path names (spec 21, The ease picker), or null when the path names no select. */
+export const selectOptionsOf = (schema: DialSchema | undefined, path: readonly string[]): readonly string[] | null => {
+  const entry = entryOf(schema, path);
+  return entry?.kind === "select" ? entry.options : null;
 };

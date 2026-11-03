@@ -438,6 +438,8 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
           locked={facts.locked}
           column={columnHeight}
           transport={transport}
+          kit={kit}
+          mode={facts.mode}
           className="col-start-2 row-start-2 max-[1279px]:col-span-2"
         />
       )}

@@ -7,7 +7,8 @@
  */
 import { ChevronDown, ChevronLeft, ChevronRight, Lock, Maximize2, PanelBottom, Pause, Play, Repeat, Volume2, VolumeX, ZoomIn, ZoomOut } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
-import { clampDialValue, fitZoom, rulerStep, snapMove, snapTime, zoomAt, zoomButton, type DialSchema, type Owner, type SnapTarget, type Tween, type TweenRef } from "@unframed/domain";
+import { clampDialValue, dialAt, fitZoom, rulerStep, snapMove, snapTime, zoomAt, zoomButton, type DialSchema, type Kit, type Owner, type SnapTarget, type Tween, type TweenRef } from "@unframed/domain";
+import type { SourceEdit } from "@unframed/contracts";
 import type { MotionTimelineReading } from "@unframed/contracts";
 import { Button } from "~/components/ui/button";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "~/components/ui/menu";
@@ -18,7 +19,8 @@ import type { EngineConnection } from "../../rpc/engine.ts";
 import { messageOf } from "../../agent/store.ts";
 import type { EditSession } from "../editor/editSession.ts";
 import { TIMELINE_MIN_HEIGHT, clampTimelineHeight, useTimelinePrefs } from "./timelinePrefs.ts";
-import { buildRows, channelsOf, dialLimitOf, staggerEachOf, type BarView, type RowView } from "./rows.ts";
+import { buildRows, channelsOf, dialLimitOf, selectOptionsOf, staggerEachOf, type BarView, type RowView } from "./rows.ts";
+import { DEFAULT_EASE, easeChoices, kitEasings, type EaseValue } from "./ease.ts";
 import { TimingPanel } from "./TimingPanel.tsx";
 import { MotionTransport, SPEEDS, readoutParts } from "./transport.ts";
 
@@ -81,6 +83,9 @@ export interface MotionTimelineProps {
   readonly column: number;
   /** The transport the editor made for this motion's player. */
   readonly transport: MotionTransport;
+  /** The project kit and the artifact's mode, which the ease picker offers its easing tokens from (spec 19). */
+  readonly kit: Kit | null;
+  readonly mode: string | undefined;
   readonly className?: string;
 }
 
@@ -263,7 +268,7 @@ const RowLine = ({
   );
 };
 
-export const MotionTimeline = ({ title, engine, project, file, session, dials, schema, locked, column, transport, className }: MotionTimelineProps) => {
+export const MotionTimeline = ({ title, engine, project, file, session, dials, schema, locked, column, transport, kit, mode, className }: MotionTimelineProps) => {
   const [prefs, save] = useTimelinePrefs(engine);
   const { open } = prefs;
   const transportState = useSyncExternalStore(transport.subscribe, transport.getSnapshot);
@@ -551,6 +556,44 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
     session.patchTween(edit, { selector: target, channels, change });
   };
 
+  /**
+   * A tween's ease as the person chose it (spec 21, The ease picker): a literal or token ease is a tween edit in the burst, and an
+   * ease a parameter sets moves the parameter.
+   */
+  const applyEase = (tween: Tween, target: string, value: EaseValue): void => {
+    if (tween.ease?.kind === "dial") {
+      if (typeof value === "string") session.patchDial(tween.ease.path.join("."), value);
+      return;
+    }
+    const channels = channelsOf(tween);
+    session.patchTween({ type: "tween-ease", tween: tween.ref, ease: value }, { selector: target, channels, change: typeof value === "string" ? { ease: value } : {} });
+  };
+  /** The ease field of a tween's values panel: what it holds, and the choices the picker offers. */
+  const easeFieldOf = (tween: Tween, target: string) => {
+    if (tween.method === "set") return null;
+    const pending = session.pending.find((edit): edit is Extract<SourceEdit, { type: "tween-ease" }> => edit.type === "tween-ease" && edit.tween.index === tween.ref.index);
+    const owner = tween.ease;
+    let written: EaseValue | null = null;
+    let options: readonly string[] | null = null;
+    let editable = true;
+    if (pending !== undefined) written = pending.ease;
+    else if (owner === null) written = null;
+    else if (owner.kind === "source") written = String(owner.value);
+    else if (owner.kind === "token") written = { token: owner.name };
+    else if (owner.kind === "dial") {
+      options = selectOptionsOf(schema, owner.path);
+      editable = options !== null;
+      written = String(dialAt(dials, owner.path.join(".")) ?? DEFAULT_EASE);
+    } else {
+      written = owner.text;
+      editable = false;
+    }
+    const label = written === null ? DEFAULT_EASE : typeof written === "string" ? written : written.token;
+    const parameter = owner?.kind === "dial" ? owner.path.join(" › ") : undefined;
+    const choices = easeChoices({ written, tokens: options === null ? kitEasings(kit, mode) : [], options, ...(parameter === undefined ? {} : { parameter }) });
+    return { label, choices, disabled: !editable || tween.readOnly !== null, value: (choice: EaseValue) => applyEase(tween, target, choice) };
+  };
+
   /** A stagger's spacing, as one literal number (spec 21, Staggers). */
   const applyStagger = (ref: TweenRef, target: string, channels: string[], each: number): void => {
     session.patchTween({ type: "tween-stagger", tween: ref, each }, { selector: target, channels, change: { stagger: each } });
@@ -560,6 +603,7 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
   const timingBar = timing === null ? undefined : rows.flatMap((row) => row.bars).find((bar) => bar.tween === timing.tween && bar.target === timing.target);
   const timingTween = timing === null ? undefined : tweens.get(timing.tween);
   const timingEach = timingTween === undefined ? null : staggerEachOf(timingTween, session.pending);
+  const easeField = timingTween === undefined || timing === null ? null : easeFieldOf(timingTween, timing.target);
 
   const openTiming = (bar: BarView) => {
     if (bar.tween < 0) return;
@@ -785,6 +829,8 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
               onStart={(seconds) => applyTiming(timingTween.ref, timing.target, channelsOf(timingTween), { start: seconds })}
               onDuration={(seconds) => applyTiming(timingTween.ref, timing.target, channelsOf(timingTween), { duration: seconds })}
               onStagger={(each) => applyStagger(timingTween.ref, timing.target, channelsOf(timingTween), each)}
+              ease={easeField === null ? null : { label: easeField.label, choices: easeField.choices, disabled: easeField.disabled }}
+              onEase={(value) => easeField?.value(value)}
               onClose={() => setTiming(null)}
             />
           )}
