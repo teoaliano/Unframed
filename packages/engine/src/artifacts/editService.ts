@@ -132,12 +132,13 @@ export const artifactEditService = (deps: EditServiceDeps) => {
     const dir = await folderOf(deps, project);
     const records = await deps.read(project);
     const { kind, props } = artifactShape(records, shapeId);
-    if (edits.length === 0) throw unframedError("bad_request", "There is nothing to save.");
+    // A file that moved on is named first, so a burst with no edit can ask why it lost (spec 18, The agent wins a race).
     if (props.file !== baseFile) {
       const origin = fileOrigins.get(keyOf(project, shapeId));
       const reason = origin?.kind === "server" && origin.id.startsWith("chat:") ? "agent" : "elsewhere";
       throw unframedError("conflict", `This ${kind} changed while you were editing it.`, { reason });
     }
+    if (edits.length === 0) throw unframedError("bad_request", "There is nothing to save.");
     const html = await readFile(join(dir, baseFile), "utf8").catch(() => {
       throw unframedError("not_found", `No file ${baseFile} in this project.`);
     });

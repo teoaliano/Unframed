@@ -206,7 +206,7 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
           // A runtime element: greyed, labelled by its tag, read-only.
           return (
             <li key={`runtime-${row.key}`} data-layer-runtime="" style={{ paddingInlineStart: `${row.depth * INDENT_PX}px` }}>
-              <div className="flex min-w-0 items-center gap-1.5 px-1 py-0.5 text-sm text-muted-foreground opacity-60">
+              <div className="flex min-w-0 items-center gap-1.5 px-1 py-0.5 text-sm text-muted-foreground">
                 <span className="size-3.5 shrink-0" aria-hidden />
                 <span className="truncate">{row.tag}</span>
                 <span className="shrink-0 text-xs">Set by the agent's code</span>
@@ -224,9 +224,9 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
         const isLocked = locked.includes(id);
         const open = !collapsed.has(id);
         return (
-          <li key={id} data-layer-row={id} style={{ paddingInlineStart: `${row.depth * INDENT_PX}px` }} className="group">
+          <li key={id} data-layer-row={id} data-selected={selected ? "true" : undefined} style={{ paddingInlineStart: `${row.depth * INDENT_PX}px` }} className="group">
             <div
-              className="flex min-w-0 items-center gap-1"
+              className={cn("flex min-w-0 items-center gap-1 rounded-sm", selected && "bg-accent")}
               onMouseEnter={() => session.hoverLayer(id)}
               onContextMenu={(event) => {
                 event.preventDefault();
@@ -247,6 +247,7 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
                   autoFocus
                   className="min-w-0 flex-1"
                   value={draft}
+                  onFocus={(event) => event.currentTarget.select()}
                   onChange={(event) => setDraft(event.currentTarget.value)}
                   onBlur={() => finishRename(element, !cancelled.current)}
                   onKeyDown={(event) => {
@@ -266,6 +267,13 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
                   onDoubleClick={() => startRename(element)}
                   onKeyDown={(event) => {
                     if (event.key !== "Enter" || event.target !== event.currentTarget) return;
+                    // A text element's Enter starts its in-place text edit (spec 18, Keys); any other row renames.
+                    if (element.text !== null) {
+                      event.preventDefault();
+                      session.setSelection([id]);
+                      session.startText(id);
+                      return;
+                    }
                     startRename(element);
                   }}
                 >
@@ -280,13 +288,13 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label={hidden ? `Show ${label}` : `Hide ${label}`}
+                  aria-label={`Hidden ${label}`}
                   aria-pressed={hidden}
                   onClick={() => session.patch({ type: "hide", elementId: id, hidden: !hidden })}
                 >
                   {hidden ? <EyeOff aria-hidden /> : <Eye aria-hidden />}
                 </Button>
-                <Button variant="ghost" size="icon-sm" aria-label={isLocked ? `Unlock ${label}` : `Lock ${label}`} aria-pressed={isLocked} onClick={() => onLock(id, !isLocked)}>
+                <Button variant="ghost" size="icon-sm" aria-label={`Locked ${label}`} aria-pressed={isLocked} onClick={() => onLock(id, !isLocked)}>
                   {isLocked ? <Lock aria-hidden /> : row.inLocked ? <Lock aria-hidden className="opacity-40" /> : <LockOpen aria-hidden />}
                 </Button>
               </span>
