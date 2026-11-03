@@ -44,7 +44,7 @@ Spec 12's run on `build`, with the dev server stopped: `pnpm typecheck` exit 0 (
 | 18 | element editing | | built, PR open | see the spec 18 PR | 40/41 tasks. Task 2 leaves out spec 16's node page writer, which spec 16 adds when it is built. Built by parallel Haiku agents, merged on `build/18-element-editing` |
 | 19 | kits and tokens | | built, PR open | see the spec 19 PR | 42/43 tasks. Task 43 is the person's step (rendering outside Unframed). Task 10 does not cover spec 16's node page writer |
 | 20 | components | | built, PR open | see the spec 20 PR | 46 of 47 tasks. Task 44 waits on spec 16 (the Make component, wire and node work that needs its node page writer). Task 16 leaves out spec 16's node page writer, which spec 16 adds when it is built. Written with 18 |
-| 21 | motion timeline | | partly built | 0a64cf0 (#165) | Task 1 (HyperFrames 0.8.206, renders without static-frame dedup) and task 2 (the render comparison, in #165) merged. The rest waits for specs 18 and 19 |
+| 21 | motion timeline | | built, PR open | see the spec 21 PR | Every task is built except task 4, the probe report (`docs/research/motion-editability.md`), which is the person's step and is not done. Task 2, the render comparison, was run on PR #165. Task 40 is the budget in `motionPerformance.spec.ts`, which `pnpm test:perf` runs; the strip mounts only the rows in view. This PR also closes the build's gaps (a set's diamond moves, hidden rows are greyed, the label column collapses under 900 px, quick frame steps all count) and the review's polish (Design tab names for values, a dashed snap guide, overlapping bars in lanes, the Design tab header wraps) |
 
 ## Performance budgets
 
