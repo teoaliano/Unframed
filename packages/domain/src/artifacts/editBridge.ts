@@ -34,6 +34,8 @@ export interface EditElement {
   /** The element's open shadow root, where a component instance keeps its markup (spec 20). */
   readonly shadowRoot?: { querySelector(selector: string): EditElement | null } | null;
   getRootNode?(): unknown;
+  matches?(selector: string): boolean;
+  readonly id?: string;
 }
 
 export interface EditEvent {
@@ -297,6 +299,62 @@ export function installEditBridge(win: EditWindow): void {
     };
   };
 
+  // A board copy's rules (spec 20): each rule of the sheet's component style that reaches the copy in its cell, with its declarations.
+  // `unknown` marks a rule with `:has()`, which the bridge cannot test. The block is the index of the component style among the source's <style> elements, as spec 19 counts them.
+  const RULE_HOST = /:host(?:\(((?:[^()]|\([^()]*\))*)\))?/g;
+  const RULE_ATTRIBUTE = /\[\s*([A-Za-z][\w-]*)\s*(?:=\s*(?:"([^"]*)"|'([^']*)'|([^\]\s]+)))?\s*\]/g;
+  const reachesCopy = (host: EditElement, el: EditElement, selector: string): boolean | "unknown" => {
+    if (/:has\(/.test(selector)) return "unknown";
+    for (const part of selector.matchAll(RULE_HOST)) {
+      for (const attribute of (part[1] ?? "").matchAll(RULE_ATTRIBUTE)) {
+        const value = attribute[2] ?? attribute[3] ?? attribute[4] ?? null;
+        const actual = host.getAttribute(attribute[1]!);
+        if (value === null ? actual === null : actual !== value) return false;
+      }
+    }
+    const rest = selector.replace(RULE_HOST, " ").trim();
+    if (rest === "" || el.matches === undefined) return false;
+    try {
+      return el.matches(rest);
+    } catch {
+      return false;
+    }
+  };
+  const declarationsOf = (body: string) => {
+    const found: Array<{ property: string; value: string; important: boolean }> = [];
+    for (const part of body.split(";")) {
+      const colon = part.indexOf(":");
+      if (colon < 0) continue;
+      const property = part.slice(0, colon).trim().toLowerCase();
+      const raw = part.slice(colon + 1).trim();
+      const important = /!\s*important$/i.test(raw);
+      const value = raw.replace(/!\s*important$/i, "").trim();
+      if (property !== "" && value !== "") found.push({ property, value, important });
+    }
+    return found;
+  };
+  const sheetRulesOf = (el: EditElement) => {
+    const host = cellOf(el);
+    if (host === null || typeof doc.querySelectorAll !== "function") return undefined;
+    // The kit's custom properties sit in a <style id="unframed-tokens"> the tokens script adds at run time; the source does not hold it.
+    const styles = Array.from(doc.querySelectorAll("style")).filter((style) => style.id !== "unframed-tokens");
+    const block = styles.findIndex((style) => style.getAttribute("data-uf-component-style") !== null);
+    if (block < 0) return [];
+    const css = (styles[block]!.textContent ?? "").replace(/\/\*[\s\S]*?\*\//g, "");
+    const seen = new Map<string, number>();
+    const found: Array<{ ref: { block: number; selector: string; occurrence: number }; declarations: Array<{ property: string; value: string; important: boolean }>; unknown: boolean }> = [];
+    for (const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const selector = match[1]!.trim();
+      if (selector === "" || selector.startsWith("@")) continue;
+      const occurrence = seen.get(selector) ?? 0;
+      seen.set(selector, occurrence + 1);
+      const reaches = reachesCopy(host, el, selector);
+      if (reaches === false) continue;
+      found.push({ ref: { block, selector, occurrence }, declarations: declarationsOf(match[2]!), unknown: reaches === "unknown" });
+    }
+    return found;
+  };
+
   const reportOf = (el: EditElement) => {
     const style = win.getComputedStyle(el);
     const inline: Record<string, string | null> = {};
@@ -319,6 +377,7 @@ export function installEditBridge(win: EditWindow): void {
       animated: animatedOf(el),
       variant: variantOf(el),
       component: componentOf(el),
+      sheetRules: sheetRulesOf(el),
     };
   };
 

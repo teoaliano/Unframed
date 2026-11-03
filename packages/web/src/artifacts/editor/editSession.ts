@@ -28,6 +28,7 @@ import { messageOf } from "../../agent/store.ts";
 import { expandShorthand } from "./expandShorthand.ts";
 import { showError, showNotice } from "../../toasts.tsx";
 import type { EditMessage } from "../ArtifactFrame.tsx";
+import type { SheetRuleReport } from "./sheetOwner.ts";
 
 export type EditMode = "edit" | "interact";
 
@@ -53,6 +54,8 @@ export interface EditReport {
     readonly declaration: ComponentDeclaration;
     readonly attributes: Readonly<Record<string, string | null>>;
   };
+  /** A board copy's rules that reach it, from its sheet's component style (spec 20); undefined for any other element. */
+  readonly sheetRules?: ReadonlyArray<SheetRuleReport>;
 }
 
 export interface SourceTree {

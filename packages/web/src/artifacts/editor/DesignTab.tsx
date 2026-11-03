@@ -8,6 +8,7 @@ import type { OffTokenFound, SourceEdit } from "@unframed/contracts";
 import { cssName, dialAt, DESIGN_FIELDS, fieldOwner, kitCssNames, resolve, styleValueRefusal, TEXT_STYLE_SUFFIX, tokensForField, type ArtifactKind, type ChipElement, type ComponentDeclaration, type FieldOwner, type Kit, type TextStyleField, type Token } from "@unframed/domain";
 import { AlignCenter, AlignJustify, AlignLeft, AlignRight, Component, Diamond, Link, MessageSquarePlus, SlidersHorizontal, Unlink } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { Badge } from "~/components/ui/badge";
 import { Autocomplete, AutocompleteInput, AutocompleteItem, AutocompleteList, AutocompletePopup } from "~/components/ui/autocomplete";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -26,6 +27,7 @@ import type { EditReport, EditSession } from "./editSession.ts";
 import { chipDataFor } from "./chipData.ts";
 import { expandShorthand } from "./expandShorthand.ts";
 import { fieldNameOf } from "./tellAgent.ts";
+import { sheetFieldOf, type SheetField } from "./sheetOwner.ts";
 
 const WEIGHTS = ["100", "200", "300", "400", "500", "600", "700", "800", "900"];
 const ALIGNS = [
@@ -127,6 +129,8 @@ interface View {
   readonly editable: boolean;
   /** Asks the agent to make the field editable, with the read-only elements' chips. */
   readonly ask: () => void;
+  /** A board copy's field in its component sheet (spec 20): the variants it covers, and the rule that sets it. */
+  readonly sheet?: SheetField | null;
 }
 
 /** The parameter a view's field is driven by, when it is editable as a dial. */
@@ -146,12 +150,12 @@ const noteText = (text: string) => <p className="m-0 text-xs text-muted-foregrou
  * The line a read-only owner shows under its section, or null when the value is the source's own or locked (the tab says that once).
  * A dial's value is editable with one element selected, so it shows no line then; with several it names its parameter.
  */
-const ownerLine = (owner: FieldOwner, single: boolean, ask: () => void): ReactNode => {
+const ownerLine = (owner: FieldOwner, single: boolean, ask: () => void, sentence = "Set by the agent's code."): ReactNode => {
   if (owner.owner === "source" || owner.owner === "locked") return null;
   if (owner.owner === "script") {
     return (
       <>
-        {noteText("Set by the agent's code.")}
+        {noteText(sentence)}
         <Button variant="ghost" size="xs" className="justify-self-start" onClick={ask}>
           Ask the agent to make this editable
         </Button>
@@ -711,8 +715,21 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   const name = single ? (elements.find((candidate) => candidate.id === first!.id)?.name ?? first!.report.tag) : `${subjects.length} elements`;
 
   /** Who holds a style value of one element. An edit still in the burst is the person's own, so the owner stays the source until it is written. */
+  /** A board copy's field in its component sheet (spec 20): the variants it covers, and the rule that sets it. Null for a page's element. */
+  const sheetOf = (subject: Subject, property: string): SheetField | null =>
+    sheetFieldOf(subject.report.sheetRules, subject.report.inline, property, expandShorthand, kit === null ? [] : kitCssNames(kit));
+
   const ownerOf = (subject: Subject, property: string): FieldOwner => {
     if (pending.some((edit) => (edit.type === "style" || edit.type === "token") && edit.elementId === subject.id && edit.property === property)) return { owner: "source" };
+    const owner = fieldOwnerOf(subject, property);
+    if (owner.owner !== "source") return owner;
+    const sheet = sheetOf(subject, property);
+    if (sheet?.kind === "script") return { owner: "script" };
+    if (sheet?.kind === "token") return { owner: "token", name: sheet.name };
+    return owner;
+  };
+
+  const fieldOwnerOf = (subject: Subject, property: string): FieldOwner => {
     return fieldOwner({
       field: { kind: "style", property },
       source: subject.element === undefined ? null : { inline: subject.element.style, text: subject.element.text, src: subject.element.src ?? null },
@@ -739,7 +756,8 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     const owner = owners.find((candidate) => candidate.owner !== "source") ?? { owner: "source" as const };
     // A dial's value moves its parameter, so it is editable with one element only.
     const ask = () => onAsk(fieldNameOf(property), subjects.filter((_, index) => owners[index]!.owner !== "source").map(chipDataOf));
-    return { value: mixed ? "" : (values[0] ?? ""), mixed, owner, editable: owner.owner === "source" || (owner.owner === "dial" && single), ask };
+    const sheet = single ? sheetOf(first!, property) : null;
+    return { value: mixed ? "" : (values[0] ?? ""), mixed, owner, editable: owner.owner === "source" || (owner.owner === "dial" && single), ask, sheet };
   };
 
   /** Writes a value to a property of every selected element, refusing the whole write when one value cannot be written. A dial-owned value moves its dial. */
@@ -754,7 +772,11 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     }
     for (const { subject, value } of writes) {
       const owner = ownerOf(subject, property);
-      if (owner.owner === "dial") session.patchDial(owner.path, dialValueFor(dialAt(dials ?? {}, owner.path), value));
+      const sheet = sheetOf(subject, property);
+      // A value a component's rule sets is that rule's declaration: the edit changes the variants the rule covers (spec 20).
+      if (owner.owner === "source" && sheet?.kind === "variants" && sheet.rule !== undefined) {
+        session.patch({ type: "componentRule", rule: sheet.rule, property, value });
+      } else if (owner.owner === "dial") session.patchDial(owner.path, dialValueFor(dialAt(dials ?? {}, owner.path), value));
       else session.patch({ type: "style", elementId: subject.id, property, value });
     }
   };
@@ -764,7 +786,14 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   const tokenEdits =
     (properties: readonly string[]) =>
     (token: Token): SourceEdit[] =>
-      subjects.flatMap((subject) => properties.map((property): SourceEdit => ({ type: "token", elementId: subject.id, property, token: token.path })));
+      subjects.flatMap((subject) =>
+        properties.map((property): SourceEdit => {
+          const sheet = sheetOf(subject, property);
+          return sheet?.kind === "token" || (sheet?.kind === "variants" && sheet.rule !== undefined)
+            ? { type: "token", rule: sheet.rule!, property, token: token.path }
+            : { type: "token", elementId: subject.id, property, token: token.path };
+        }),
+      );
   const tokenSlot = (field: string, editable: boolean, properties: readonly string[] = [field]) =>
     TOKEN_FIELDS.has(field) ? (
       <TokenPicker field={field} kit={kit} mode={currentMode} editable={editable} edits={tokenEdits(properties)} session={session} onOpenKit={onOpenKit} />
@@ -773,7 +802,11 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   const detachWith = (token: Token, properties: readonly string[]) => {
     if (kit === null) return;
     for (const subject of subjects) {
-      for (const literal of literalsOf(token, kit, currentMode, properties)) session.patch({ type: "style", elementId: subject.id, property: literal.property, value: literal.value });
+      for (const literal of literalsOf(token, kit, currentMode, properties)) {
+        const sheet = sheetOf(subject, literal.property);
+        if (sheet?.kind === "token") session.patch({ type: "componentRule", rule: sheet.rule, property: literal.property, value: literal.value });
+        else session.patch({ type: "style", elementId: subject.id, property: literal.property, value: literal.value });
+      }
     }
   };
   /** The chip of a field that holds a token (spec 19, The token chip), or null when the field holds none the kit has. */
@@ -796,11 +829,18 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     );
   };
 
+  /** A board copy's chip (spec 20) beside the token slot: a rule-set field shows its chip alone, since its edit is the rule's. */
+  const withSheet = (view: View, slot: ReactNode): ReactNode => {
+    if (view.sheet?.kind !== "variants") return slot;
+    const chip = <Badge variant="outline" size="sm">{view.sheet.chip}</Badge>;
+    return view.sheet.rule === undefined ? (<>{chip}{slot}</>) : chip;
+  };
+
   const numberField = (label: string, property: string, options: { readonly format?: (value: string) => string; readonly write?: (typed: number, subject: Subject) => string } = {}) => {
     const view = viewOf(property);
     const chip = chipFor(property, view);
     return (
-      <Row label={label} mark={dialPathOf(view)} token={chip === null ? tokenSlot(property, view.editable) : undefined}>
+      <Row label={label} mark={dialPathOf(view)} token={chip === null ? withSheet(view, tokenSlot(property, view.editable)) : undefined}>
         {chip ?? <NumberControl
           label={label}
           value={view.mixed ? "" : (options.format ?? numberOf)(view.value)}
@@ -825,7 +865,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     const view = viewOf(property, (subject) => hexOf(subject.report.computed[property]));
     const chip = chipFor(property, view);
     return (
-      <Row label={label} mark={dialPathOf(view)} token={chip === null ? tokenSlot(property, view.editable) : undefined}>
+      <Row label={label} mark={dialPathOf(view)} token={chip === null ? withSheet(view, tokenSlot(property, view.editable)) : undefined}>
         {chip ?? <ColourControl label={label} hex={view.value} mixed={view.mixed} disabled={!view.editable} onCommit={(next) => write(property, () => next)} />}
       </Row>
     );
@@ -833,7 +873,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
 
   const noteOf = (...views: View[]): ReactNode => {
     for (const view of views) {
-      const line = ownerLine(view.owner, single, view.ask);
+      const line = ownerLine(view.owner, single, view.ask, view.sheet?.kind === "script" ? "Set by the component's style." : undefined);
       if (line !== null) return line;
     }
     return null;
@@ -900,7 +940,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   const sidesToken = (prefix: "padding" | "margin") => {
     const views = sideViews(prefix);
     const editable = SIDES.every((side) => views[side].editable);
-    return tokenSlot(prefix, editable, SIDES.map((side) => `${prefix}-${side}`));
+    return withSheet(views.top, tokenSlot(prefix, editable, SIDES.map((side) => `${prefix}-${side}`)));
   };
 
   // Off-token values: a row names its element (the Layers tab's name) or its rule; a row selects the place, and Use token writes a token edit for it.
