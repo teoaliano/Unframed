@@ -33,8 +33,8 @@ export interface PresetContent {
   readonly [key: string]: unknown;
 }
 
-export type PresetKind = "recipe" | "group";
-export type PresetSource = "user" | "system";
+type PresetKind = "recipe" | "group";
+type PresetSource = "user" | "system";
 
 export interface Preset {
   readonly format: 2;
@@ -131,7 +131,7 @@ const freshShapeId = (shapes: ReadonlyArray<ContentShape>): string => {
   return id;
 };
 
-export type PresetFromSelection =
+type PresetFromSelection =
   | { readonly ok: true; readonly content: PresetContent; readonly kind: PresetKind; readonly medium?: RecipeMedium; readonly members: number }
   | { readonly ok: false; readonly error: string };
 
@@ -194,7 +194,7 @@ export const presetFromSelection = (
   return { ok: true, content: made, ...facts, members: shapes.filter((shape) => shape.parentId === groupId).length };
 };
 
-export type DescribedPreset = { readonly ok: true; readonly kind: PresetKind; readonly medium?: RecipeMedium } | { readonly ok: false };
+type DescribedPreset = { readonly ok: true; readonly kind: PresetKind; readonly medium?: RecipeMedium } | { readonly ok: false };
 
 export const describePresetContent = (content: unknown): DescribedPreset => {
   const value = record(content);
@@ -207,7 +207,7 @@ export const describePresetContent = (content: unknown): DescribedPreset => {
 };
 
 
-export interface Instantiated {
+interface Instantiated {
   readonly content: PresetContent;
   readonly rootId: string;
 }
@@ -241,7 +241,7 @@ export const placeAt = (bounds: Box, centre: { readonly x: number; readonly y: n
   y: centre.y - bounds.h / 2,
 });
 
-export type PresetFile =
+type PresetFile =
   | {
       readonly project: string;
       readonly file: string;
@@ -268,7 +268,7 @@ export const presetFiles = (content: PresetContent): PresetFile[] => {
   return [...seen.values()];
 };
 
-export type CopiedFile = { readonly file: string } | { readonly missing: true };
+type CopiedFile = { readonly file: string } | { readonly missing: true };
 
 export const resolvePresetFiles = (
   content: PresetContent,
@@ -299,7 +299,7 @@ export const resolvePresetFiles = (
 };
 
 
-export type LibraryKind = PresetKind | "kit";
+type LibraryKind = PresetKind | "kit";
 
 export type PresetSummary = Pick<Preset, "id" | "source" | "name" | "summary"> & {
   readonly kind: LibraryKind;
@@ -320,7 +320,7 @@ export interface LibraryControls {
 
 export const LIBRARY_PAGE_SIZE = 10;
 
-export interface LibraryView<P extends PresetSummary> {
+interface LibraryView<P extends PresetSummary> {
   readonly items: ReadonlyArray<P>;
   readonly page: number;
   readonly pages: number;

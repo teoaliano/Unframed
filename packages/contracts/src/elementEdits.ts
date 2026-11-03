@@ -58,18 +58,6 @@ export const SourceTreeElement = Schema.Struct({
 });
 export type SourceTreeElement = typeof SourceTreeElement.Type;
 
-export const ArtifactEditSidecar = Schema.Struct({
-  source: Schema.Literal("edit"),
-  kind: Schema.Literals(["page", "motion"]),
-  of: Schema.String,
-  shapeId: Schema.String,
-  edits: Schema.Array(Schema.String),
-  title: Schema.String,
-  bytes: Schema.Number,
-  at: Schema.String,
-});
-export type ArtifactEditSidecar = typeof ArtifactEditSidecar.Type;
-
 export const ArtifactImage = Schema.Struct({ file: Schema.String, fileName: Schema.String, at: Schema.Number });
 export type ArtifactImage = typeof ArtifactImage.Type;
 

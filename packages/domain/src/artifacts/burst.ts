@@ -1,7 +1,7 @@
 import type { SourceEdit } from "@unframed/contracts";
 
 
-export type BurstEdit = SourceEdit | { readonly type: "dial"; readonly path: string; readonly value: unknown };
+type BurstEdit = SourceEdit | { readonly type: "dial"; readonly path: string; readonly value: unknown };
 
 export interface Burst {
   readonly edits: ReadonlyMap<string, SourceEdit>;

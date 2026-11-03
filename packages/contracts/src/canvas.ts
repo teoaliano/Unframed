@@ -20,7 +20,7 @@ export const PRESET_FILE = "preset-file:";
 export const isBareFileName = (name: string): boolean =>
   name !== "" && name !== "." && !name.includes("/") && !name.includes("\\") && !name.includes("..");
 
-export type AssetMarker =
+type AssetMarker =
   | { readonly kind: "project-file"; readonly file: string }
   | { readonly kind: "link"; readonly url: string }
   | { readonly kind: "preset-file"; readonly project: string; readonly file: string };
@@ -60,11 +60,6 @@ const unframedMeta = { unframed: T.jsonValue.optional() };
 export interface PromptMeta {
   readonly ref: string;
   readonly sized?: boolean;
-  readonly unframed?: unknown;
-}
-
-export interface RefMeta {
-  readonly ref: string;
   readonly unframed?: unknown;
 }
 
@@ -108,12 +103,12 @@ const artifactMigrations = (kind: ArtifactType) => {
 };
 
 export const ARTIFACT_TYPES = ["page", "motion"] as const;
-export type ArtifactType = (typeof ARTIFACT_TYPES)[number];
+type ArtifactType = (typeof ARTIFACT_TYPES)[number];
 
-export const COMPONENT_TAG = /^uf-[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+const COMPONENT_TAG = /^uf-[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 export const COMPONENT_TAG_MAX = 50;
 
-export interface ComponentShapeProps {
+interface ComponentShapeProps {
   w: number;
   h: number;
   file: string;
@@ -136,7 +131,7 @@ declare module "@tldraw/tlschema" {
   }
 }
 
-export type UnframedKind = "prompt" | "image" | "video" | "group" | "page" | "motion" | "component";
+type UnframedKind = "prompt" | "image" | "video" | "group" | "page" | "motion" | "component";
 
 export const kindOfShapeType = (type: string): UnframedKind | "mark" => {
   switch (type) {

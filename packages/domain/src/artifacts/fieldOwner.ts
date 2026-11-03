@@ -1,13 +1,13 @@
 
-export type OwnerField = { readonly kind: "style"; readonly property: string } | { readonly kind: "text" } | { readonly kind: "src" };
+type OwnerField = { readonly kind: "style"; readonly property: string } | { readonly kind: "text" } | { readonly kind: "src" };
 
-export interface OwnerSource {
+interface OwnerSource {
   readonly inline: Readonly<Record<string, string>>;
   readonly text: string | null;
   readonly src: string | null;
 }
 
-export interface OwnerLive {
+interface OwnerLive {
   readonly inline: Readonly<Record<string, string | null>>;
   readonly text: string | null;
   readonly src: string | null;

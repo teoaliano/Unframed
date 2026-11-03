@@ -1,7 +1,7 @@
 import type { ShapeKind } from "./canvasShapes.ts";
 import type { RunsValue } from "./runsValue.ts";
 
-export interface ResultFacts {
+interface ResultFacts {
   readonly batchId: string;
   readonly cost: number | null;
   readonly batchExtraCost?: number | undefined;
@@ -17,7 +17,7 @@ export interface ToolbarShape {
   readonly recipe?: { readonly runs: RunsValue } | undefined;
 }
 
-export interface ToolbarInput {
+interface ToolbarInput {
   readonly selected: ReadonlyArray<ToolbarShape>;
   readonly usable: boolean;
   readonly results: ReadonlyArray<ToolbarShape>;

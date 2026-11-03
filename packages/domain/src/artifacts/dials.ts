@@ -1,5 +1,5 @@
 
-export type DialEntry =
+type DialEntry =
   | { readonly kind: "number"; readonly value: number }
   | { readonly kind: "boolean"; readonly value: boolean }
   | { readonly kind: "color"; readonly value: string }
@@ -10,13 +10,13 @@ export type DialEntry =
 
 export type DialSchema = { readonly [key: string]: DialEntry };
 
-export type DialValues = { [key: string]: unknown };
+type DialValues = { [key: string]: unknown };
 
 export type Normalised =
   | { readonly ok: true; readonly schema: DialSchema; readonly dialkit: Record<string, unknown> }
   | { readonly ok: false; readonly error: string };
 
-export interface DialRules {
+interface DialRules {
   readonly normalise: (config: unknown) => Normalised;
   readonly defaults: (schema: DialSchema) => DialValues;
   readonly merge: (schema: DialSchema, saved: unknown) => DialValues;
@@ -133,7 +133,7 @@ export interface DialsAnnouncement {
   readonly values: DialValues;
 }
 
-export interface BridgeWheel {
+interface BridgeWheel {
   readonly ctrlKey: boolean;
   readonly metaKey: boolean;
   readonly shiftKey: boolean;
@@ -147,13 +147,13 @@ export interface BridgeWheel {
   preventDefault(): void;
 }
 
-export interface BridgeMenuEvent {
+interface BridgeMenuEvent {
   readonly clientX: number;
   readonly clientY: number;
   preventDefault(): void;
 }
 
-export interface BridgeWindow {
+interface BridgeWindow {
   parent: { postMessage(message: unknown, targetOrigin: string): void };
   location: { readonly origin: string };
   addEventListener(type: "message", listener: (event: { source: unknown; origin: string; data: unknown }) => void): void;
@@ -168,7 +168,7 @@ export interface BridgeWindow {
   unframedDialsApplied?: () => void;
 }
 
-export function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
+function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
   const LOOPBACK = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
   const framed = (win.parent as unknown) !== win;
   type State = { name: string; config: unknown; schema: DialSchema; values: DialValues; apply: (values: DialValues) => void };

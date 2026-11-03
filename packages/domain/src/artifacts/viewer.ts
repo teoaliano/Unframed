@@ -5,14 +5,14 @@ export interface ViewerWindow {
   requestAnimationFrame?(callback: (now: number) => void): unknown;
 }
 
-export interface ViewerRect {
+interface ViewerRect {
   readonly left: number;
   readonly top: number;
   readonly width: number;
   readonly height: number;
 }
 
-export interface ViewerPlayer {
+interface ViewerPlayer {
   setAttribute(name: string, value: string): void;
   play?(): void;
   pause?(): void;

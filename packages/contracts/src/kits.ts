@@ -5,11 +5,11 @@ import { UnframedError } from "./errors.ts";
 export const TOKEN_TYPES = ["color", "dimension", "fontFamily", "fontWeight", "textStyle", "shadow", "duration", "easing"] as const;
 export type TokenType = (typeof TOKEN_TYPES)[number];
 
-export const KIT_EXPORT_FORMATS = ["dtcg", "css", "tailwind"] as const;
+const KIT_EXPORT_FORMATS = ["dtcg", "css", "tailwind"] as const;
 export const KitExportFormat = Schema.Literals(KIT_EXPORT_FORMATS);
 export type KitExportFormat = typeof KitExportFormat.Type;
 
-export const KitDefinitionToken = Schema.Struct({
+const KitDefinitionToken = Schema.Struct({
   path: Schema.String,
   type: Schema.Literals(TOKEN_TYPES),
   value: Schema.optionalKey(Schema.Unknown),

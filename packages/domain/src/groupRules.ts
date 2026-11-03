@@ -19,10 +19,10 @@ export const uniqueName = (wanted: string, taken: Iterable<string>): string => {
   return `${wanted}-${n}`;
 };
 
-export const rewriteToken = (text: string, from: string, to: string): string =>
+const rewriteToken = (text: string, from: string, to: string): string =>
   text.replace(REF_TOKEN, (token, id: string) => (id === from ? `@${to}` : token));
 
-export interface PromptRewrite {
+interface PromptRewrite {
   readonly id: string;
   readonly text: string;
 }

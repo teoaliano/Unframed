@@ -1,11 +1,11 @@
 
-export type DesignSection = "Text" | "Fill" | "Shape" | "Spacing" | "Layout" | "Visibility" | "Image";
+type DesignSection = "Text" | "Fill" | "Shape" | "Spacing" | "Layout" | "Visibility" | "Image";
 
 export type DesignValueKind = "length" | "number" | "opacity" | "weight" | "color" | "keyword" | "family" | "shadow";
 
-export type DesignUnit = "px" | "unitless" | "percent" | "none";
+type DesignUnit = "px" | "unitless" | "percent" | "none";
 
-export interface DesignField {
+interface DesignField {
   readonly section: DesignSection;
   readonly label: string;
   readonly property: string;

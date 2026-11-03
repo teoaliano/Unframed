@@ -8,8 +8,8 @@ export const MotionUpload = Rpc.make("motion.upload", {
   error: UnframedError,
 });
 
-export const RenderState = Schema.Literals(["queued", "rendering", "done", "failed"]);
-export type RenderState = typeof RenderState.Type;
+const RenderState = Schema.Literals(["queued", "rendering", "done", "failed"]);
+type RenderState = typeof RenderState.Type;
 
 export const MotionRenderStart = Rpc.make("motion.renderStart", {
   payload: Schema.Struct({

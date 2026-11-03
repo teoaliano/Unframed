@@ -94,7 +94,7 @@ interface LiveText {
   hidden: boolean;
 }
 
-export interface LiveDocument {
+interface LiveDocument {
   title: string;
   readonly head: { appendChild(node: unknown): unknown };
   readonly body: { appendChild(node: unknown): unknown };
@@ -103,7 +103,7 @@ export interface LiveDocument {
   createElement(tag: "script"): LiveScript;
 }
 
-export interface LiveWindow {
+interface LiveWindow {
   readonly location: { readonly origin: string; readonly search: string };
   addEventListener(type: "message", listener: (event: { source: unknown; origin: string; data: unknown }) => void): void;
   setInterval(handler: () => void, ms: number): unknown;
@@ -111,7 +111,7 @@ export interface LiveWindow {
   unframedLiveRunning?: () => void;
 }
 
-export function liveViewer(win: LiveWindow, doc: LiveDocument): void {
+function liveViewer(win: LiveWindow, doc: LiveDocument): void {
   const KEY = /^[A-Za-z0-9_-]{1,150}$/;
   const FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.html?$/;
   const UNKNOWN_AFTER = 3;

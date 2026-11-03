@@ -8,7 +8,7 @@ const EXCLUDED = new Set(["script", "style", "template", "meta", "link", "noscri
 
 const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]);
 
-export const isVoid = (el: Element): boolean => VOID.has(el.tagName.toLowerCase());
+const isVoid = (el: Element): boolean => VOID.has(el.tagName.toLowerCase());
 
 export const parseSource = (html: string): Document => parse(html, { sourceCodeLocationInfo: true });
 
@@ -60,7 +60,7 @@ export const flatten = (nodes: readonly ScopeNode[]): ScopeNode[] => nodes.flatM
 export const findById = (doc: Document, id: string): ScopeNode | undefined =>
   flatten(scopeRoots(doc)).find((node) => attr(node.el, "data-hf-id") === id);
 
-export const splitDeclarations = (value: string): string[] => {
+const splitDeclarations = (value: string): string[] => {
   const pieces: string[] = [];
   let depth = 0;
   let quote: string | null = null;

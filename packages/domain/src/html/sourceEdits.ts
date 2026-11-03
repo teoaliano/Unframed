@@ -28,7 +28,7 @@ export type InstanceDeclarations = ReadonlyMap<string, { readonly title: string;
 
 const TEXT_PROPERTY_MAX = 500;
 
-export type SourceEditResult =
+type SourceEditResult =
   | { readonly ok: true; readonly html: string; readonly summary: string[] }
   | { readonly ok: false; readonly refusal: string };
 

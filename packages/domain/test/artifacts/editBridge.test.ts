@@ -211,7 +211,7 @@ describe("the built edit bridge", () => {
   });
 
   it("applies a style patch at once, keeps the first value, and puts every original back on reset", () => {
-    const { document, element, send, messages, win } = stubEditWindow();
+    const { element, send, messages } = stubEditWindow();
     const el = element("hf-aaaa");
     el.style.setProperty("color", "red");
     const patch = (value: string | null) => send({ type: "unframed:edit:patch", patches: [{ type: "style", elementId: "hf-aaaa", property: "color", value }] });
@@ -546,8 +546,6 @@ describe("the tween patcher, against real GSAP (spec 21, task 20)", () => {
     return { tl, ...stub };
   };
   const at = (el: object) => ({ get x() { return Number((el as { x?: unknown }).x); }, get opacity() { return Number((el as { opacity?: unknown }).opacity); } });
-  const tweenOn = (tl: ReturnType<typeof gsap.timeline>, property: string) =>
-    tl.getChildren(false, true, false).find((tween) => property in (tween as { vars: object }).vars) as any;
   const patch = (selector: string, channels: string[], change: Record<string, unknown>) => ({ kind: "tween", selector, channels, change });
 
   it("sets a value on the one tween its channels name, and invalidates that tween alone", () => {

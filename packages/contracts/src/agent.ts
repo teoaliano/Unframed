@@ -29,12 +29,12 @@ export const ModelSelection = Schema.Struct({
 });
 export type ModelSelection = typeof ModelSelection.Type;
 
-export const ChatModelSelection = Schema.Struct({
+const ChatModelSelection = Schema.Struct({
   provider: ChatProvider,
   model: Schema.String,
   traits: Traits,
 });
-export type ChatModelSelection = typeof ChatModelSelection.Type;
+type ChatModelSelection = typeof ChatModelSelection.Type;
 
 
 export const ProviderStatusKind = Schema.Literals(["not_installed", "wont_run", "auth_unknown", "signed_out", "ready"]);
@@ -51,7 +51,7 @@ export const ProviderModel = Schema.Struct({
 });
 export type ProviderModel = typeof ProviderModel.Type;
 
-export const ProviderCommand = Schema.Struct({
+const ProviderCommand = Schema.Struct({
   name: Schema.String,
   description: Schema.String,
 });

@@ -17,7 +17,7 @@ export type SourceTreeElement = {
 
 const LABEL_TEXT_MAX = 32;
 
-export const derivedLabel = (el: Element, text: string | null): string => {
+const derivedLabel = (el: Element, text: string | null): string => {
   const collapsed = text === null ? "" : collapse(text);
   if (collapsed !== "") return collapsed.length > LABEL_TEXT_MAX ? `${collapsed.slice(0, LABEL_TEXT_MAX)}…` : collapsed;
   const alt = attr(el, "alt")?.trim() ?? "";

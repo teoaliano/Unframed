@@ -1,14 +1,14 @@
 
 export type EditBox = { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
 
-export interface EditStyle {
+interface EditStyle {
   getPropertyValue(name: string): string;
   getPropertyPriority(name: string): string;
   setProperty(name: string, value: string, priority?: string): void;
   removeProperty(name: string): string;
 }
 
-export interface EditElement {
+interface EditElement {
   readonly tagName: string;
   readonly nodeType: number;
   readonly parentElement: EditElement | null;
@@ -30,7 +30,7 @@ export interface EditElement {
   readonly id?: string;
 }
 
-export interface EditEvent {
+interface EditEvent {
   readonly type: string;
   readonly target: EditElement | null;
   composedPath?(): ReadonlyArray<unknown>;
@@ -41,7 +41,7 @@ export interface EditEvent {
   preventDefault(): void;
 }
 
-export interface EditDocument {
+interface EditDocument {
   readonly body: EditElement;
   readonly visibilityState: string;
   readonly readyState: string;
@@ -54,7 +54,7 @@ export interface EditDocument {
   createRange?(): { selectNodeContents(node: EditElement): void; collapse?(toEnd: boolean): void };
 }
 
-export interface EditWindow {
+interface EditWindow {
   readonly parent: { postMessage(message: unknown, targetOrigin: string): void };
   readonly location: { readonly origin: string };
   readonly document: EditDocument;

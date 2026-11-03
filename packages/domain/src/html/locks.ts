@@ -67,7 +67,7 @@ export const ruleLockHit = (html: string, selector: string, locked: readonly str
   return null;
 };
 
-export interface LockCheck {
+interface LockCheck {
   readonly current: string;
   readonly next: string;
   readonly locked: readonly string[];

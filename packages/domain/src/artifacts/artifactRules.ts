@@ -80,7 +80,7 @@ export const artifactTitle = (props: { readonly title?: unknown; readonly fileNa
   return fileName.replace(/\.html?$/i, "");
 };
 
-export interface PlacementBox {
+interface PlacementBox {
   readonly x: number;
   readonly y: number;
   readonly w: number;
@@ -170,7 +170,7 @@ export const snapshotFits = (snapshot: { readonly w: number; readonly h: number 
 
 export const snapshotSeekSeconds = (duration: number): number => (Number.isFinite(duration) && duration > 0 && duration < 1 ? duration / 2 : 1);
 
-export type SnapshotKit = { readonly mode: string | null; readonly kit: string | null };
+type SnapshotKit = { readonly mode: string | null; readonly kit: string | null };
 
 export const snapshotFileName = (file: string, size: { readonly w: number; readonly h: number }, kit: SnapshotKit): string =>
   `${file}-${Math.round(size.w)}x${Math.round(size.h)}-${kit.mode ?? "none"}-${kit.kit ?? "none"}.png`;
