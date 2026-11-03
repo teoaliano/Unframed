@@ -107,6 +107,9 @@ export interface EditSession {
   readonly showDials: (values: Readonly<Record<string, unknown>>) => void;
   readonly selection: readonly string[];
   readonly setSelection: (ids: readonly string[]) => void;
+  /** The motion tween the timeline has selected, by its source order, or null. Part of the selection: a change commits the burst (spec 21, Rows). */
+  readonly tween: number | null;
+  readonly setTween: (index: number | null) => void;
   /** Selects the elements a style rule's selector matches in the frame (spec 19, Off-token values). */
   readonly selectMatching: (selector: string) => void;
   readonly hovered: EditReport | null;
@@ -169,6 +172,8 @@ const conflictSentence = (kind: ArtifactKind, reason: unknown): string =>
 export const useEditSession = ({ editor, engine, project, shapeId, kind, file, locked, kit }: EditSessionInput): EditSession => {
   const [mode, setModeState] = useState<EditMode>("edit");
   const [selection, setSelectionState] = useState<readonly string[]>([]);
+  const [tween, setTweenState] = useState<number | null>(null);
+  const tweenRef = useRef<number | null>(null);
   const [hovered, setHovered] = useState<EditReport | null>(null);
   const [reports, setReports] = useState<Readonly<Record<string, EditReport>>>({});
   const [families, setFamilies] = useState<readonly string[]>([]);
@@ -463,6 +468,16 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     [commit, post],
   );
 
+  const setTween = useCallback(
+    (index: number | null) => {
+      if (tweenRef.current === index) return;
+      void commit();
+      tweenRef.current = index;
+      setTweenState(index);
+    },
+    [commit],
+  );
+
   const shownFile = (): string | undefined => (editor.getShape(shapeId as TLShapeId)?.props as { file?: string } | undefined)?.file;
 
   const undo = () => {
@@ -672,6 +687,8 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     showDials,
     selection,
     setSelection,
+    tween,
+    setTween,
     selectMatching,
     hovered,
     reports,

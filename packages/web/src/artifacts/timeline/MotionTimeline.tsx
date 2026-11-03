@@ -226,40 +226,7 @@ const RowLine = ({
             style={{ left: row.span.start * pxPerSecond, width: Math.max(row.span.duration * pxPerSecond, 2) }}
           />
         )}
-        {row.bars.map((bar, index) => {
-          const thin = row.kind === "element" && !row.expanded;
-          const chosen = bar.tween >= 0 && bar.tween === selectedTween;
-          return (
-            <div
-              key={`${bar.tween}:${bar.target}:${bar.group ?? ""}:${index}`}
-              data-testid="timeline-bar"
-              data-tween={bar.tween}
-              data-target={bar.target}
-              data-start={bar.start}
-              data-duration={bar.duration}
-              data-copy={bar.copy ? "true" : undefined}
-              data-stagger={bar.stagger ?? undefined}
-              data-selected={chosen ? "true" : undefined}
-              title={bar.readOnly ?? undefined}
-              onPointerDown={(event) => {
-                event.stopPropagation();
-                onBarDown(bar, event);
-              }}
-              onPointerMove={onBarMove}
-              onPointerUp={onBarUp}
-              onPointerCancel={onBarUp}
-              onDoubleClick={() => onOpenValues(bar, null)}
-              className={cn(
-                "absolute top-1/2 -translate-y-1/2 rounded-sm",
-                cursorOf(bar),
-                thin ? "h-1.5" : "h-3",
-                bar.copy ? "bg-primary/25" : bar.readOnly !== null ? "bg-muted-foreground/50" : "bg-primary/70",
-                chosen && "ring-1 ring-foreground",
-              )}
-              style={{ left: bar.start * pxPerSecond, width: Math.max(bar.duration * pxPerSecond, 2) }}
-            />
-          );
-        })}
+        {/* The keyframes sit under the bars, so a bar's stretch edge takes the pointer where a diamond sits on it. */}
         {row.bars.flatMap((bar, index) =>
           bar.copy
             ? []
@@ -292,6 +259,42 @@ const RowLine = ({
                 );
               }),
         )}
+        {row.bars.map((bar, index) => {
+          const thin = row.kind === "element" && !row.expanded;
+          const chosen = bar.tween >= 0 && bar.tween === selectedTween;
+          return (
+            <div
+              key={`${bar.tween}:${bar.target}:${bar.group ?? ""}:${index}`}
+              data-testid="timeline-bar"
+              data-tween={bar.tween}
+              data-target={bar.target}
+              data-start={bar.start}
+              data-duration={bar.duration}
+              data-copy={bar.copy ? "true" : undefined}
+              data-stagger={bar.stagger ?? undefined}
+              data-selected={chosen ? "true" : undefined}
+              title={bar.readOnly ?? undefined}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                onBarDown(bar, event);
+              }}
+              onPointerMove={onBarMove}
+              onPointerUp={onBarUp}
+              onPointerCancel={onBarUp}
+              // The click that ends a drag is the bar's, not an empty track's: it must not clear the selection.
+              onClick={(event) => event.stopPropagation()}
+              onDoubleClick={() => onOpenValues(bar, null)}
+              className={cn(
+                "absolute top-1/2 -translate-y-1/2 rounded-sm",
+                cursorOf(bar),
+                thin ? "h-1.5" : "h-3",
+                bar.copy ? "bg-primary/25" : bar.readOnly !== null ? "bg-muted-foreground/50" : "bg-primary/70",
+                chosen && "ring-1 ring-foreground",
+              )}
+              style={{ left: bar.start * pxPerSecond, width: Math.max(bar.duration * pxPerSecond, 2) }}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -317,9 +320,10 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
   }, [engine, project, file]);
   const current = reading?.file === file ? reading : undefined;
 
-  // The rows: which elements are open, and the tween the last bar click chose.
+  // The rows: which elements are open. The tween the last bar click chose is the editor's selection (session.tween).
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
-  const [selectedTween, setSelectedTween] = useState<number | null>(null);
+  const selectedTween = session.tween;
+  const setSelectedTween = session.setTween;
   // The timing panel: the bar it opened from, by its tween and target (spec 21, The values panel).
   const [timing, setTiming] = useState<{ readonly tween: number; readonly target: string; readonly at: number | null } | null>(null);
   const tweens = useMemo(() => new Map<number, Tween>((current?.value?.tweens ?? []).map((tween) => [tween.ref.index, tween])), [current?.value]);

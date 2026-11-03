@@ -40,6 +40,10 @@ const SHAPE = "shape:intro";
 const timeline = (page: Page) => page.getByRole("region", { name: "Timeline for Intro" });
 const bar = (page: Page, tween: number) => timeline(page).locator(`[data-testid="timeline-bar"][data-tween="${tween}"]`).first();
 const diamond = (page: Page, tween: number, fraction: number) => timeline(page).locator(`[data-testid="timeline-diamond"][data-tween="${tween}"][data-fraction="${fraction}"]`).first();
+/** Clicks a diamond at its outer tip, past the bar's end (or before its start), so the bar beneath does not take the click. */
+const clickDiamond = async (page: Page, tween: number, fraction: number) => {
+  await diamond(page, tween, fraction).click({ position: { x: fraction === 1 ? 8 : 2, y: 5 } });
+};
 const panel = (page: Page) => timeline(page).getByRole("region", { name: /^Values for/ });
 const region = (page: Page) => page.getByRole("region", { name: "Editing Intro" });
 
@@ -67,7 +71,7 @@ const fileText = async (engine: TestEngine) => textOf(engine, (await fileOf(engi
 
 test("a diamond opens the values panel with the numbers and colours at that keyframe, with units and an oklch and a named colour", async ({ page, agent }) => {
   await openMotion(page, agent, VALUES);
-  await diamond(page, 0, 1).click();
+  await clickDiamond(page, 0, 1);
 
   await expect(panel(page)).toContainText("Dot");
   await expect(panel(page)).toContainText("Position");
@@ -82,7 +86,7 @@ test("a diamond opens the values panel with the numbers and colours at that keyf
 
 test("a named colour at a diamond shows its name and takes a hex value", async ({ page, agent }) => {
   await openMotion(page, agent, VALUES);
-  await diamond(page, 1, 1).click();
+  await clickDiamond(page, 1, 1);
   await expect(panel(page).getByRole("textbox", { name: "backgroundColor" })).toHaveValue("rebeccapurple");
   await panel(page).getByRole("textbox", { name: "backgroundColor" }).fill("#112233");
   await panel(page).getByRole("textbox", { name: "backgroundColor" }).press("Enter");
@@ -94,7 +98,7 @@ test("a colour token at a diamond shows a chip, another token replaces it, and D
   await putRecords(agent, [{ id: "document:document", typeName: "document", gridSize: 10, name: "", meta: { unframed: { kit: KIT } } }]);
   const TOKENED = VALUES.replace('"rebeccapurple"', 'unframed.token("color/brand/sky")');
   await openMotion(page, agent, TOKENED);
-  await diamond(page, 1, 1).click();
+  await clickDiamond(page, 1, 1);
 
   const chip = panel(page).getByRole("button", { name: /brand\/sky/ });
   await expect(chip).toContainText("#1a73e8");
@@ -123,7 +127,7 @@ test("a token-owned duration shows a token chip, and Detach writes it as a numbe
 
 test("a value a parameter sets shows its parameter, and typing in it moves the parameter", async ({ page, agent }) => {
   await openMotion(page, agent, DIAL);
-  await diamond(page, 1, 1).click();
+  await clickDiamond(page, 1, 1);
 
   await expect(panel(page).getByRole("img", { name: "Parameter toX" })).toBeVisible();
   await panel(page).getByRole("textbox", { name: "x" }).fill("200");
@@ -136,4 +140,22 @@ test("a repeating tween's panel says how often it repeats and whether it goes ba
   await zoomIn(page, 2);
   await bar(page, 2).dblclick();
   await expect(panel(page).getByText("Repeats 2 times, back and forth")).toBeVisible();
+});
+
+test("clearing the tween selection commits the open burst at once, as any change of the editor's selection does", async ({ page, agent }) => {
+  await openMotion(page, agent, VALUES);
+  const before = (await fileOf(agent))?.file;
+  // Move the repeating tween's bar (literal timing) a little to the right, and let go.
+  await zoomIn(page, 1);
+  const box = await bar(page, 2).boundingBox();
+  if (!box) throw new Error("no bar");
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width / 2, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 30, y, { steps: 4 });
+  await page.mouse.up();
+
+  // A click on empty track clears the tween selection. The burst commits then, well before its 1.5 s pause would.
+  await timeline(page).getByTestId("timeline-rows").click({ position: { x: 4, y: 4 } });
+  await expect.poll(async () => (await fileOf(agent))?.file, { timeout: 1000 }).not.toBe(before);
 });
