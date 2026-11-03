@@ -647,8 +647,10 @@ export interface DesignTabProps {
   readonly onAskComponent?: () => void;
   /** The component's title, named in the variant line of a picked board copy (spec 20). */
   readonly componentTitle?: string | undefined;
-  /** The component shape a tag names, or undefined when no shape holds it (spec 20). */
-  readonly componentOf?: ((tag: string) => { readonly shapeId: string; readonly title: string } | undefined) | undefined;
+  /** The component shape a tag names, or undefined when no shape holds it (spec 20). Its file is its current sheet. */
+  readonly componentOf?: ((tag: string) => { readonly shapeId: string; readonly title: string; readonly file?: string | undefined } | undefined) | undefined;
+  /** Accepts the component's update for this artifact (spec 20, the Instance section's Update). */
+  readonly onUpdateComponent?: ((tag: string) => void) | undefined;
   /** Opens the editor on a component shape, after the pending burst is written (spec 20, Go to main component). */
   readonly onGoToMain?: ((shapeId: string) => void) | undefined;
   /** Make component: sends the selected element to the artifact's chat with the fixed instruction (spec 20). */
@@ -669,7 +671,7 @@ const normaliserFor = (property: string) => (value: string) => {
   return probe.style.getPropertyValue(property);
 };
 
-export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, onOpenKit, onTell, onAsk, component, onAskComponent, componentTitle, componentOf, onGoToMain, onMake }: DesignTabProps) => {
+export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, onOpenKit, onTell, onAsk, component, onAskComponent, componentTitle, componentOf, onGoToMain, onMake, onUpdateComponent }: DesignTabProps) => {
   // The token chip whose popover is open. A preview of a token changes the frame, so the field's owner can change while the popover is up.
   const [openChip, setOpenChip] = useState<{ readonly field: string; readonly named: { readonly token: Token; readonly suffix?: string } } | null>(null);
   const { selection, reports, tree, preparing, prepareError, pending, families, overridden } = session;
@@ -1022,6 +1024,11 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
       {instance !== null && (
         <InstanceSection
           title={componentOf?.(instance.tag)?.title || instance.tag}
+          older={(() => {
+            // The pinned sheet is not the component shape's current one: the Update line (spec 20, the Instance section).
+            const main = componentOf?.(instance.tag);
+            return main?.file !== undefined && main.file !== instance.sheet && onUpdateComponent !== undefined ? () => onUpdateComponent(instance.tag) : null;
+          })()}
           goToMain={(() => {
             const main = componentOf?.(instance.tag);
             return main === undefined || onGoToMain === undefined ? null : () => onGoToMain(main.shapeId);

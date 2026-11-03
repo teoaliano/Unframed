@@ -2,14 +2,16 @@ import type { ArtifactShapeProps } from "@unframed/contracts";
 import { artifactTitle, readRef, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
 import { AppWindow, Clapperboard, Component } from "lucide-react";
 import { useCallback, useEffect } from "react";
-import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
+import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape, type TLShapeId } from "tldraw";
 import { ArtifactFrame, type ArtifactFrameProps, type EditMessage } from "../../artifacts/ArtifactFrame.tsx";
 import { DropOutline, onFrameEdit } from "../../artifacts/imageDrop.tsx";
 import { ProblemLine, RenderRow } from "../../artifacts/RenderRow.tsx";
+import { Button } from "~/components/ui/button";
 import { snapshotsOf, snapshotUrl, stillOf } from "../../artifacts/snapshots.ts";
 import { kitOf } from "../../artifacts/kit.ts";
-import { forgetEdit, forgetFrame, hearFrame, isInteractive, isLive, previewPort, reachEdit, reachFrame } from "../../artifacts/state.ts";
+import { artifactsOf, forgetEdit, forgetFrame, hearFrame, isInteractive, isLive, previewPort, reachEdit, reachFrame } from "../../artifacts/state.ts";
 import { currentSlots } from "../../chrome/slots.ts";
+import { updateTagsOf } from "../../artifacts/updates.ts";
 import { useCanvasProject } from "../../context.ts";
 import { artifactCardClass } from "./looks.ts";
 import { nameOf, waitingLabel } from "./labels.ts";
@@ -93,6 +95,28 @@ const CanvasFrame = ({ shapeId, ...props }: Omit<ArtifactFrameProps, "onAnnounce
   return <ArtifactFrame {...props} onAnnounce={onAnnounce} onReady={onReady} onEdit={onEdit} onEditReady={onEditReady} />;
 };
 
+/** The Updates badge on a page or motion whose component pins are older (spec 20): a click opens its editor with the updates popover. */
+const UpdatesBadge = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
+  const editor = useEditor();
+  return (
+    <Button
+      variant="outline"
+      size="xs"
+      data-testid="component-updates-badge"
+      aria-label="Component updates available"
+      title="Component updates available"
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={() => {
+        artifactsOf(editor).updatesOpen.set(shapeId);
+        currentSlots().openArtifact?.(editor, shapeId);
+      }}
+    >
+      <Component aria-hidden />
+      Updates
+    </Button>
+  );
+};
+
 /** A filled artifact: no card, the title above its corner, and its frame while live, else its still. */
 const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readonly kind: ArtifactKind }) => {
   noteRender(shape.id);
@@ -105,10 +129,12 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
   const kit = useValue("project kit", () => kitOf(editor), [editor]);
   const title = artifactTitle(props);
   const name = nameOf(shape);
+  // The components this artifact pins that have a newer sheet on the canvas (spec 20, Component updates).
+  const updates = useValue("component updates", () => updateTagsOf(editor, project, props.file).join(","), [editor, project, props.file]);
   return (
     <>
       <HTMLContainer id={shape.id} data-testid="artifact-card" data-artifact-kind={kind} data-live={live ? "true" : undefined} style={{ width: props.w, height: props.h }}>
-        <ShapeLabel shapeId={shape.id} kind={kind} name={readRef(shape)} width={props.w} text={name !== undefined ? `@${name}` : title} />
+        <ShapeLabel shapeId={shape.id} kind={kind} name={readRef(shape)} width={props.w} text={name !== undefined ? `@${name}` : title} end={kind !== "component" && updates !== "" ? <UpdatesBadge shapeId={shape.id} /> : undefined} />
         {live && port !== undefined ? (
           <CanvasFrame key={props.file} shapeId={shape.id} project={project} kind={kind} file={props.file} previewPort={port} dials={props.dials} kit={kit} mode={props.mode} interactive={interactive} lazy />
         ) : (

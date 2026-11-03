@@ -66,6 +66,8 @@ export interface InstanceSectionProps {
   readonly onSet: (name: string, value: string | null) => void;
   /** Asks the agent to make a fixed attribute editable. */
   readonly onAsk: (name: string) => void;
+  /** Set when the pinned version is older than the component's: accepts the update for this artifact (spec 20). */
+  readonly older?: (() => void) | null;
 }
 
 const Row = ({ label, children }: { readonly label: string; readonly children: ReactNode }) => (
@@ -95,7 +97,7 @@ const TextField = ({ label, value, disabled, onChange }: { readonly label: strin
   );
 };
 
-export const InstanceSection = ({ title, goToMain, fields, project, onSet, onAsk }: InstanceSectionProps) => (
+export const InstanceSection = ({ title, goToMain, fields, project, onSet, onAsk, older }: InstanceSectionProps) => (
   <section aria-label="Instance" data-testid="instance-section" className="flex flex-col gap-2 border-b pb-3">
     <div className="flex min-w-0 items-center gap-2">
       <Component aria-hidden className="size-4 shrink-0 text-muted-foreground" />
@@ -115,6 +117,14 @@ export const InstanceSection = ({ title, goToMain, fields, project, onSet, onAsk
         )}
       </span>
     </div>
+    {older && (
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="text-xs text-muted-foreground">{`This instance uses an older version of ${title}.`}</span>
+        <Button variant="outline" size="xs" onClick={older}>
+          Update
+        </Button>
+      </div>
+    )}
     {fields.map((field) => (
       <div key={field.name} className="flex flex-col gap-1">
         <Row label={field.name}>
