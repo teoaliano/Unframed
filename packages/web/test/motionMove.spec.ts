@@ -19,6 +19,11 @@ const SHAPE = "shape:intro";
 const timeline = (page: Page) => page.getByRole("region", { name: "Timeline for Intro" });
 const bar = (page: Page) => timeline(page).locator('[data-testid="timeline-row"][data-row-kind="element"][data-row-name="Dot"] [data-testid="timeline-bar"]');
 const region = (page: Page) => page.getByRole("region", { name: "Editing Intro" });
+/** The strip's zoom in pixels a second, which is set once the strip has measured its width. */
+const zoomOf = async (page: Page): Promise<number> => {
+  await expect.poll(async () => Number(await timeline(page).getByTestId("timeline-track").getAttribute("data-px-per-second"))).toBeGreaterThan(0);
+  return Number(await timeline(page).getByTestId("timeline-track").getAttribute("data-px-per-second"));
+};
 
 test.setTimeout(150_000);
 
@@ -69,7 +74,7 @@ test("dragging a literal tween's bar moves the frame while the drag goes on, and
   const box = await bar(page).boundingBox();
   if (!box) throw new Error("no bar");
   const y = box.y + box.height / 2;
-  const pxPerSecond = Number(await timeline(page).getByTestId("timeline-track").getAttribute("data-px-per-second"));
+  const pxPerSecond = await zoomOf(page);
   // Press a quarter in, then drag right by 0.5 s: the bar's start moves from 0 to 0.5 s.
   await page.mouse.move(box.x + box.width * 0.25, y);
   await page.mouse.down();
@@ -103,7 +108,7 @@ test("Undo takes back the whole move, and the file the shape names goes back to 
   const box = await bar(page).boundingBox();
   if (!box) throw new Error("no bar");
   const y = box.y + box.height / 2;
-  const pxPerSecond = Number(await timeline(page).getByTestId("timeline-track").getAttribute("data-px-per-second"));
+  const pxPerSecond = await zoomOf(page);
   await page.mouse.move(box.x + box.width * 0.25, y);
   await page.mouse.down();
   await page.mouse.move(box.x + box.width * 0.25 + 0.5 * pxPerSecond, y, { steps: 8 });

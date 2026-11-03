@@ -46,6 +46,13 @@ export interface EditReport {
   readonly overridden?: boolean;
 }
 
+/** A tween's live change for the frame (spec 21, Live preview): its target, its channels, and the values it changes. */
+export interface TweenPatch {
+  readonly selector: string;
+  readonly channels: readonly string[];
+  readonly change: { readonly start?: number; readonly duration?: number; readonly ease?: string; readonly stagger?: number };
+}
+
 export interface SourceTree {
   readonly ready: boolean;
   readonly elements: readonly SourceTreeElement[];
@@ -126,6 +133,11 @@ export interface EditSession {
   /** Elements a stylesheet `!important` rule wins over, as the bridge last reported them. */
   readonly overridden: Readonly<Record<string, boolean>>;
   readonly patch: (edit: SourceEdit) => void;
+  /**
+   * A motion tween's timing edit: collected into the burst as the edit, and shown in the frame at once as a tween patch.
+   * Nothing is written until the burst commits (spec 21, Bursts).
+   */
+  readonly patchTween: (edit: SourceEdit, frame: TweenPatch) => void;
   /**
    * Shows edits in the frame without adding them to the burst (a token's hover preview). The burst's
    * own edits are shown again over the reset frame; null shows only the burst.
@@ -364,6 +376,14 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   );
 
   const patch = useCallback((edit: SourceEdit) => collect(edit, true), [collect]);
+
+  const patchTween = useCallback(
+    (edit: SourceEdit, frame: TweenPatch) => {
+      collect(edit, false);
+      post({ type: "unframed:edit:patch", patches: [{ kind: "tween", ...frame }] });
+    },
+    [collect, post],
+  );
 
   const previewEdits = useCallback(
     (edits: readonly SourceEdit[] | null) => {
@@ -665,6 +685,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     releaseDials,
     overridden,
     patch,
+    patchTween,
     previewEdits,
     commit,
     discard,

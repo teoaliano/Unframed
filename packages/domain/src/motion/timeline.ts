@@ -275,7 +275,8 @@ const compositionOf = (document: Doc, options: MotionTimelineOptions) => {
     const parent = chain.find((ancestor) => ancestor.hasAttribute("data-hf-id"));
     const clip = [element as El, ...chain].find((candidate) => isClip.has(candidate));
     elements[idOf(element as El)] = {
-      name: (element as El).id || idOf(element as El),
+      // The layer name (spec 18): `data-uf-name` when the person set one, else the element's id.
+      name: ((element as El).getAttribute("data-uf-name") ?? "").trim() || (element as El).id || idOf(element as El),
       parent: parent ? idOf(parent) : null,
       clip: clip ? idOf(clip) : null,
     };
