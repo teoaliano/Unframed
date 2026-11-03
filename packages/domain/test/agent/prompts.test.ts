@@ -36,6 +36,7 @@ describe("the agent's model-facing text is the assets' text", () => {
   it("holds the system prompt and the canvas tool descriptions", () => {
     expect(AGENT_SYSTEM_PROMPT).toBe(blocks("agent-system.md")[0]);
     expect([CANVAS_READ_DESCRIPTION, CANVAS_WRITE_DESCRIPTION]).toEqual(blocks("tool-descriptions.md"));
+    expect(AGENT_SYSTEM_PROMPT).toContain("reuse them instead of copying their markup, and when the person asks for something repeated, propose a component.");
   });
 
   it("holds the failure sentences, their fallbacks and the quit-mid-turn sentence", () => {

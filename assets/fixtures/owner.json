@@ -1,0 +1,19 @@
+{
+  "when": "^owner",
+  "turns": [
+    {
+      "title": "Owner page",
+      "text": "Made the owner page: its note takes a colour from a parameter, its heading's size is twice another parameter, and a line is added when it runs.",
+      "tools": [
+        {
+          "name": "page_write",
+          "input": {
+            "shapeId": "pg1",
+            "title": "Owner",
+            "html": "<html><head><style>body{font:16px system-ui;margin:24px}#title{font-size:24px}</style></head><body>\n<h1 id=\"title\">Owner</h1>\n<p id=\"note\">Note</p>\n<script>\nunframed.dials('Look', { accent: '#a78bfa', size: [16, 12, 32] }, function (v) {\n  var el = document.getElementById('note');\n  el.style.color = v.accent;\n  document.getElementById('title').style.fontSize = (v.size * 2) + 'px';\n  if (!document.getElementById('made')) {\n    var made = document.createElement('p');\n    made.id = 'made';\n    made.textContent = 'Made at run time';\n    document.body.appendChild(made);\n  }\n});\n</script></body></html>"
+          }
+        }
+      ]
+    }
+  ]
+}
