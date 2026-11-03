@@ -67,9 +67,9 @@ export const PreviewSizeControl = ({ size, onChange, scale }: { readonly size: E
       <PopoverTrigger render={<Button variant="outline" size="sm" className="min-w-0 shrink-0" />} aria-label="Preview size" data-testid="preview-size">
         <Icon aria-hidden />
         {/* A narrow header keeps the icon; the label and scale leave the screen, not the accessible tree. */}
-        <span className="@max-[520px]/editor-header:sr-only">{labelOf(size)}</span>
+        <span className="@max-[760px]/editor-header:sr-only">{labelOf(size)}</span>
         {scale < 1 && (
-          <span data-testid="artifact-preview-scale" className="text-muted-foreground tabular-nums @max-[520px]/editor-header:sr-only">
+          <span data-testid="artifact-preview-scale" className="text-muted-foreground tabular-nums @max-[760px]/editor-header:sr-only">
             {`${Math.round(scale * 100)}%`}
           </span>
         )}

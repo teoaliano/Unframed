@@ -770,7 +770,7 @@ export const ArtifactEditor = ({
             {component && uses > 0 && (
               <span
                 data-testid="artifact-editor-uses"
-                className="min-w-0 shrink-[10000] truncate text-sm text-muted-foreground @max-[520px]/editor-header:hidden"
+                className="shrink-0 text-sm text-muted-foreground @max-[520px]/editor-header:hidden"
               >
                 {uses === 1
                   ? "Used in 1 artifact"
@@ -794,7 +794,7 @@ export const ArtifactEditor = ({
               <Tip label="Edit (V)">
                 <Toggle value="edit" aria-label="Edit">
                   <MousePointer2 aria-hidden />
-                  <span className="@max-[520px]/editor-header:sr-only">
+                  <span className="@max-[760px]/editor-header:sr-only">
                     Edit
                   </span>
                 </Toggle>
@@ -802,7 +802,7 @@ export const ArtifactEditor = ({
               <Tip label="Interact (I)">
                 <Toggle value="interact" aria-label="Interact">
                   <Hand aria-hidden />
-                  <span className="@max-[520px]/editor-header:sr-only">
+                  <span className="@max-[760px]/editor-header:sr-only">
                     Interact
                   </span>
                 </Toggle>

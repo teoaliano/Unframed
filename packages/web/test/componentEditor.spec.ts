@@ -105,3 +105,39 @@ test("at 1440 px the editor's title shows in full beside the Kit mode picker and
   // A cut title is one whose content is wider than its box: the ellipsis hides the end of it.
   expect(await title.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
 });
+
+test("at 1280 by 720 the header keeps the title, the use count, the Mode toggle and Kit mode whole and apart, whatever the font", async ({ page, agent }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await openCanvas(page, agent);
+  await writeKit(agent);
+  await writeSheet(agent, PRICE_CARD);
+  await putRecords(agent, [componentShape({ id: "shape:card", ref: "150", at: { x: 420, y: 60 }, tag: "uf-price-card", title: "Price card" })]);
+  await filledArtifact(agent, { id: "shape:landing", kind: "page", ref: "151", at: { x: -520, y: -40 }, size: { w: 400, h: 260 }, title: "Landing", html: CARD_PAGE });
+  await expect(shapeOnScreen(page, "shape:card")).toBeVisible();
+  await openComponentEditor(page);
+
+  // The kind word goes first: at this header width (about 550 px) it is hidden, and the use count stays.
+  await expect(region(page).getByTestId("artifact-editor-kind")).toBeHidden();
+  const parts = {
+    title: region(page).getByTestId("artifact-editor-title"),
+    uses: region(page).getByText("Used in 1 artifact", { exact: true }),
+    mode: modeGroup(page),
+    kit: region(page).getByRole("combobox", { name: "Kit mode" }),
+  };
+  const boxes: Record<string, { x: number; y: number; width: number; height: number }> = {};
+  for (const [name, locator] of Object.entries(parts)) {
+    await expect(locator).toBeVisible();
+    const box = await locator.boundingBox();
+    if (!box) throw new Error(`no box for ${name}`);
+    expect(box.width, `${name} has width`).toBeGreaterThan(20);
+    boxes[name] = box;
+  }
+  const names = Object.keys(boxes);
+  for (let i = 0; i < names.length; i++)
+    for (let j = i + 1; j < names.length; j++) {
+      const a = boxes[names[i]!]!;
+      const b = boxes[names[j]!]!;
+      const apart = a.x + a.width <= b.x + 0.5 || b.x + b.width <= a.x + 0.5 || a.y + a.height <= b.y + 0.5 || b.y + b.height <= a.y + 0.5;
+      expect(apart, `${names[i]} and ${names[j]} overlap`).toBe(true);
+    }
+});
