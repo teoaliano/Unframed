@@ -248,6 +248,8 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   const helloTimer = useRef<number | undefined>(undefined);
   // The element whose in-place text edit the editor allowed and the frame may answer with text (spec 18, Text in place).
   const textPending = useRef<string | null>(null);
+  // A text start asked for before the frame reported the element (a Layers row selects, then asks): it starts with that report.
+  const awaitingText = useRef<string | null>(null);
   // The file this session last set on the shape. The room learns of it a sync round later, so a commit
   // that follows at once can reach the engine with a base the room has not caught up to yet.
   const lastSet = useRef<string | undefined>(undefined);
@@ -501,7 +503,12 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
 
   const startText = (id: string) => {
     const element = treeRef.current?.elements.find((candidate) => candidate.id === id);
-    if (modeRef.current !== "edit" || element === undefined || element.text === null || !textEditable(id)) return;
+    if (modeRef.current !== "edit" || element === undefined || element.text === null) return;
+    if (reportsRef.current[id] === undefined) {
+      awaitingText.current = id;
+      return;
+    }
+    if (!textEditable(id)) return;
     textPending.current = id;
     post({ type: "unframed:edit:textEdit", id });
   };
@@ -526,6 +533,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       if (sameIds(selectionRef.current, ids)) return;
       void commit();
       textPending.current = null;
+      awaitingText.current = null;
       selectionRef.current = ids;
       setSelectionState(ids);
       post({ type: "unframed:edit:select", ids });
@@ -628,6 +636,11 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       case "unframed:edit:report": {
         const elements = Array.isArray(message.elements) ? (message.elements as EditReport[]) : [];
         for (const element of elements) if (element.id !== null) reportsRef.current = { ...reportsRef.current, [element.id]: element };
+        if (awaitingText.current !== null && reportsRef.current[awaitingText.current] !== undefined) {
+          const id = awaitingText.current;
+          awaitingText.current = null;
+          startText(id);
+        }
         if (Array.isArray(message.families)) setFamilies(message.families.filter((family): family is string => typeof family === "string"));
         setReports((previous) => {
           const next = { ...previous };
