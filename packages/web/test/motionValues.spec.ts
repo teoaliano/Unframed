@@ -213,7 +213,7 @@ test("a token-owned duration shows a token chip, and Detach writes it as a numbe
   await expect(panel(page).getByRole("button", { name: /duration\/fast/ })).toContainText("0.25");
   await panel(page).getByRole("button", { name: /duration\/fast/ }).click();
   await page.getByRole("button", { name: "Detach", exact: true }).click();
-  await expect.poll(() => editSummaries(agent).then((all) => all.at(-1)?.[0]), { timeout: 15_000 }).toBe("Set Dot scale to 0.25 s long");
+  await expect.poll(() => editSummaries(agent).then((all) => all.at(-1)?.[0]), { timeout: 15_000 }).toBe("Set Dot duration to 0.25 s");
 });
 
 test("a value a parameter sets shows its parameter, and typing in it moves the parameter", async ({ page, agent }) => {

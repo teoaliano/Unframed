@@ -126,6 +126,8 @@ window.__timelines = { main: tl };
 
 test("a bar that a later bar on its row overlaps in time keeps its own lane, so a press on it reaches it", async ({ page, agent }) => {
   await openRows(page, agent, {}, OVERLAP, "Dot 2");
+  // Zoomed in, so the stagger's keyframe hit areas sit clear of the point probed on the fade.
+  for (let step = 0; step < 2; step++) await timeline(page).getByRole("button", { name: "Zoom in" }).click();
   const fade = row(page, "Dot 2").locator('[data-testid="timeline-bar"][data-tween="0"]');
   await expect(fade).toHaveCount(1);
   const box = await fade.boundingBox();

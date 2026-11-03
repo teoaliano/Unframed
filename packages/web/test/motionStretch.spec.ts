@@ -70,7 +70,7 @@ test("dragging the right edge of a literal tween's bar stretches it with its sta
   await page.mouse.up();
 
   await expect.poll(async () => (await roomShapes(agent, "default", "motion")).find((record) => record.id === SHAPE)?.props?.file, { timeout: 15_000 }).not.toBe(before);
-  await expect.poll(() => editSummaries(agent).then((all) => all.at(-1))).toEqual(["Set Dot position to 3 s long"]);
+  await expect.poll(() => editSummaries(agent).then((all) => all.at(-1))).toEqual(["Set Dot duration to 3 s"]);
 });
 
 test("dragging the left edge stretches from the start, so the end stays where it was and both values are written", async ({ page, agent }) => {
@@ -84,7 +84,7 @@ test("dragging the left edge stretches from the start, so the end stays where it
 
   await expect.poll(async () => Number(await bar(page).getAttribute("data-start"))).toBeCloseTo(1, 1);
   await expect.poll(async () => Number(await bar(page).getAttribute("data-duration"))).toBeCloseTo(3, 1);
-  await expect.poll(() => editSummaries(agent).then((all) => all.at(-1)), { timeout: 15_000 }).toEqual(["Moved Dot position to 1 s", "Set Dot position to 3 s long"]);
+  await expect.poll(() => editSummaries(agent).then((all) => all.at(-1)), { timeout: 15_000 }).toEqual(["Moved Dot position to 1 s", "Set Dot duration to 3 s"]);
 });
 
 test("pressing a bar's end diamond with no movement opens the values panel and writes nothing", async ({ page, agent }) => {
