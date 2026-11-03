@@ -295,7 +295,7 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, kit, mo
       kitFirst.current = false;
       return;
     }
-    if (kit) postAll({ type: "unframed:tokens:set", kit: { format: kit.format, name: kit.name, modes: kit.modes, tokens: kit.tokens } });
+    postAll({ type: "unframed:tokens:set", kit: kit ? { format: kit.format, name: kit.name, modes: kit.modes, tokens: kit.tokens } : null });
   }, [kitText]);
 
   // A frame's load: say hello and send the saved dials. A loading frame is swapped in once its bridge says ready.

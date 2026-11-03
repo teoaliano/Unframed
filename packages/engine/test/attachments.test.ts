@@ -48,6 +48,21 @@ describe("attachment upload", () => {
     expect(answer.json()).toEqual({ error: "That upload link has expired. Attach the file again." });
   });
 
+  it("serves a stored image back by its id, typed from its bytes, and nothing else", async () => {
+    const agent = await startAgentEngine();
+    const bytes = pngBytes(8, 8);
+    const image = (await upload(agent, "hero.png", "image/png", bytes)).answer.json().attachment;
+    const served = await agent.engine.request(`/api/attachments/${image.id}`);
+    expect(served.status).toBe(200);
+    expect(served.headers["content-type"]).toBe("image/png");
+    expect(served.headers["x-content-type-options"]).toBe("nosniff");
+    expect(served.body).toEqual(bytes);
+    const text = (await upload(agent, "page.html", "text/html", Buffer.from("<script>alert(1)</script>"))).answer.json().attachment;
+    expect((await agent.engine.request(`/api/attachments/${text.id}`)).status).toBe(404);
+    expect((await agent.engine.request("/api/attachments/0123456789abcdef0123456789abcdef.png")).status).toBe(404);
+    expect((await agent.engine.request("/api/attachments/..%2F.env")).status).toBe(404);
+  });
+
   it("refuses an upload URL for a file over the limits, with the size and the limit", async () => {
     const agent = await startAgentEngine();
     await expect(agent.rpc.call("attachments.createUploadUrl", { name: "big.png", mimeType: "image/png", sizeBytes: 11 * 1024 * 1024 })).rejects.toMatchObject({

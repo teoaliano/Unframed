@@ -12,6 +12,7 @@ export type KitOp =
   | { op: "rename"; name: string }
   | { op: "remove" }
   | { op: "setToken"; path: string; type: TokenType; value?: TokenValue; values?: Record<string, TokenValue>; description?: string }
+  | { op: "addToken"; path: string; type: TokenType; value: TokenValue }
   | { op: "renameToken"; path: string; to: string }
   | { op: "deleteToken"; path: string }
   | { op: "forgetFormerName"; path: string; cssName: string }
@@ -67,6 +68,10 @@ const applyOne = (current: Kit | null, op: KitOp): Kit | null => {
       if (existing === undefined) return { ...kit, tokens: [...kit.tokens, token] };
       return { ...kit, tokens: kit.tokens.map((candidate) => (candidate.path === op.path ? token : candidate)) };
     }
+
+    case "addToken":
+      if (kit.tokens.some((token) => token.path === op.path)) refuse(`There is already a token ${op.path}.`);
+      return { ...kit, tokens: [...kit.tokens, { path: op.path, type: op.type, value: op.value }] };
 
     case "renameToken": {
       const token = findToken(kit, op.path);

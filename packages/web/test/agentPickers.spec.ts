@@ -7,6 +7,7 @@ import { openCanvas } from "./canvas.ts";
 import { agentChromeButton, chosenControl, createChat, enablePlanMode, engineChat, expect, onlyChat, openRail, promptBox, say, sendThrough, startAgentEngine, startProvidersEngine, tabs } from "./agent.ts";
 import { test as base } from "./fixtures.ts";
 import { expectToken } from "./kit.ts";
+import { platformOf } from "./platform.ts";
 
 /** An engine whose providers are signed-in fakes, torn down with its folder. */
 const test = base.extend<{ providers: TestEngine }>({
@@ -159,6 +160,54 @@ test("the model picker: provider tabs with logos, search, the Legacy section, an
   await popup.getByRole("option", { name: /Sonnet 5/ }).click();
   await expect(trigger).toHaveText("Sonnet 5");
   await expect.poll(async () => (await engineChat(providers, chatId)).modelSelection).toEqual({ provider: "claude", model: "claude-sonnet-5", traits: {} });
+});
+
+test("picker keys, as t3code binds them: Cmd+Shift+M toggles the model picker, Cmd+1 to Cmd+9 pick, Cmd+Shift+Arrow switches provider, ArrowLeft goes to the tabs; Cmd+Shift+E opens the traits", async ({ page, providers }) => {
+  const panel = await railReady(page, providers);
+  const box = promptBox(panel);
+  const trigger = panel.getByTestId("model-picker");
+  const popup = models(page);
+  const rows = popup.getByRole("listbox").getByTestId("model-name");
+  const { mac } = await platformOf(page);
+  await box.click();
+  await page.keyboard.press("ControlOrMeta+Shift+M");
+  await expect(popup).toBeVisible();
+  // The first nine rows show their chord.
+  await expect(popup.getByRole("option").locator("kbd")).toHaveText(["1", "2", "3", "4"].map((n) => (mac ? `⌘${n}` : `Ctrl+${n}`)));
+  await page.keyboard.press("ControlOrMeta+Shift+M");
+  await expect(popup).toHaveCount(0);
+
+  await box.click();
+  await page.keyboard.press("ControlOrMeta+Shift+M");
+  await page.keyboard.press("ControlOrMeta+2");
+  await expect(popup).toHaveCount(0);
+  await expect(trigger).toHaveText("Sonnet 5");
+
+  await box.click();
+  await page.keyboard.press("ControlOrMeta+Shift+M");
+  const search = popup.getByRole("textbox", { name: "Search models" });
+  await search.fill("son");
+  await page.keyboard.press("ControlOrMeta+Shift+ArrowDown");
+  await expect(popup.getByRole("tab", { name: "Codex" })).toHaveAttribute("aria-selected", "true");
+  await expect(search).toHaveValue("");
+  await expect(rows).toHaveText(["GPT-6", "GPT-5.5 Codex"]);
+  await page.keyboard.press("ControlOrMeta+Shift+ArrowDown");
+  await expect(popup.getByRole("tab", { name: "Claude" })).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("ControlOrMeta+Shift+ArrowUp");
+  await expect(popup.getByRole("tab", { name: "Codex" })).toHaveAttribute("aria-selected", "true");
+
+  // ArrowLeft in an empty search goes to the provider tabs; ArrowRight comes back.
+  await search.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(popup.getByRole("tab", { name: "Codex" })).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect(search).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(popup).toHaveCount(0);
+
+  await box.click();
+  await page.keyboard.press("ControlOrMeta+Shift+E");
+  await expect(page.getByRole("dialog", { name: "Traits" })).toBeVisible();
 });
 
 test("the model and traits are locked while a turn runs", async ({ page }) => {
@@ -315,6 +364,66 @@ test("the context window meter fills to the scripted usage, turns red above 90 %
     await popup.getByRole("button", { name: "Compact context" }).click();
     await expect(panel.locator("[data-role='user'] [data-testid='message-text']").last()).toHaveText("/compact");
     await expect(panel.locator("[data-role='assistant']").last()).toContainText("Compacted.");
+  } finally {
+    await agent.dispose();
+    await rm(scripts, { recursive: true, force: true });
+  }
+});
+
+test("a Claude chat past 200k tokens whose prompt cache has expired offers Compact beside Send; sending compacts first, Full sends as is", async ({ page }) => {
+  const scripts = await mkdtemp(join(tmpdir(), "unframed-scripts-"));
+  await writeFile(
+    join(scripts, "stale.json"),
+    JSON.stringify({
+      when: "^read everything",
+      turns: [
+        { text: "Read it all.", usage: { usedTokens: 214_000, maxTokens: 1_000_000 } },
+        { text: "Kept everything.", usage: { usedTokens: 230_000, maxTokens: 1_000_000 } },
+        { text: "Compacted.", usage: { usedTokens: 20_000, maxTokens: 1_000_000 } },
+        { text: "Answered after compacting.", usage: { usedTokens: 24_000, maxTokens: 1_000_000 } },
+      ],
+    }),
+  );
+  const agent = await startAgentEngine({ script: scripts });
+  try {
+    await openCanvas(page, agent);
+    const panel = await openRail(page);
+    const box = promptBox(panel);
+    const chip = panel.getByRole("button", { name: /^Compact .* tokens of history before sending$/ });
+    await say(panel, "read everything please");
+    await expect(panel.locator("[data-role='assistant']")).toContainText("Read it all.");
+    await box.pressSequentially("x");
+    await expect(chip).toHaveCount(0);
+
+    // Seventy minutes on, the cache has gone: the chip says what compacting saves.
+    await page.clock.setFixedTime(Date.now() + 71 * 60_000);
+    await box.pressSequentially("y");
+    await expect(chip).toHaveText("Compact214k");
+    await expect(chip).toHaveAttribute("aria-pressed", "true");
+    await expect(panel.getByRole("button", { name: "Compact and send" })).toBeVisible();
+    await chip.hover();
+    await expect(page.getByText("Next send compacts 214k tokens first.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Click to keep full history", { exact: true })).toBeVisible();
+
+    // Full sends the message as it is, and the chip goes once the turn reports its usage.
+    await chip.click();
+    await expect(chip).toHaveText("Full214k");
+    await expect(chip).toHaveAttribute("aria-pressed", "false");
+    await box.press("Enter");
+    await expect(panel.locator("[data-role='assistant']").last()).toContainText("Kept everything.");
+    await page.clock.setFixedTime(Date.now());
+    await box.pressSequentially("and now?");
+    await expect(chip).toHaveCount(0);
+
+    // Later again, Compact sends /compact first and the message once it is done.
+    await page.clock.setFixedTime(Date.now() + 71 * 60_000);
+    await box.pressSequentially("!");
+    await box.press("Backspace");
+    await expect(chip).toHaveText("Compact230k");
+    await box.press("Enter");
+    await expect(panel.locator("[data-role='assistant']").last()).toContainText("Answered after compacting.");
+    await expect(panel.locator("[data-role='user'] [data-testid='message-text']")).toHaveText(["read everything please", "xy", "/compact", "and now?"]);
+    await expect(chip).toHaveCount(0);
   } finally {
     await agent.dispose();
     await rm(scripts, { recursive: true, force: true });

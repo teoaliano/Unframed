@@ -168,10 +168,10 @@ Exactly one of `value` and `values` is set. A per-mode token may leave out modes
 | --- | --- | --- |
 | `color` | hex (`#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`), `rgb()`, `hsl()`, `oklch()`, a CSS named colour | the CSS text |
 | `dimension` | a number with `px`, `rem`, `em` or `%`, or `0` | the CSS text (`"16px"`), which GSAP takes |
-| `fontFamily` | a non-empty CSS font family list | the CSS text |
+| `fontFamily` | a CSS font family list: names separated by commas, with no `; { } < > \ @`, comment marks, `url(`, line breaks or unbalanced quotes | the CSS text |
 | `fontWeight` | 1 to 1000, or `normal`, `bold`, `lighter`, `bolder` | a number, or the keyword |
 | `textStyle` | the five fields above, each valid for its kind (`lineHeight` may be a plain number) | an object with the five fields resolved |
-| `shadow` | CSS `box-shadow` layers (offsets, blur, spread, colour, `inset`) | the CSS text |
+| `shadow` | CSS `box-shadow` layers (offsets, blur, spread, colour, `inset`), with no comment marks or unbalanced quotes | the CSS text |
 | `duration` | a number with `ms` or `s` | seconds as a number, for GSAP |
 | `easing` | a name from the ease catalogue (below), or `cubic-bezier(x1, y1, x2, y2)` | the GSAP name as a string, or for a cubic bezier a function of progress, which GSAP accepts as an ease |
 
@@ -184,11 +184,14 @@ Exactly one of `value` and `values` is set. A per-mode token may leave out modes
 **Refusal sentences** (from `kitRefusal` and `applyKitOps`, shown under the field in the dialog and returned to the agent):
 
 - `A token name is words joined by slashes, like color/brand/primary.` (the words are lower-case kebab words, as Paths above says)
-- `There is already a token {path}.`
+- `A token name is at most 120 characters.`, `A token name has at most 6 parts, like color/brand/primary.` and `A part of a token name is at most 40 characters.` (one sentence per rule: a length or a count names the rule it breaks)
+- `There is already a token {path}.` (refused by `addToken` and `renameToken` alike; `setToken` replaces a token's value and does not check the path)
 - `{a} and {b} both make {cssName}. Rename one.`
 - `{value} is not a colour. Use a hex value like #1a73e8, or rgb(), hsl() or oklch().`
 - `{value} is not a size. Use a number with px, rem, em or %.`
 - `A font family cannot be empty.`
+- `{value} is not a font family. Use a list of family names, like Inter, sans-serif.` (a value that would write CSS outside its declaration)
+- `A former name is a CSS name in lower case, like --color-brand-primary.`
 - `A font weight is a number from 1 to 1000, or normal, bold, lighter or bolder.`
 - `{value} is not a shadow. Use CSS box-shadow, like 0 2px 8px rgba(0, 0, 0, 0.2).`
 - `{value} is not a duration. Use ms or s, like 200ms.`
@@ -219,6 +222,7 @@ Mode names: `none` is reserved. A snapshot's file name uses `none` for "no mode"
 Every change to a kit is a list of ops through `applyKitOps`, so the dialog, import, merge and `kit_write` share one set of rules:
 
 - `create { name, modes? }` (refused when a kit exists: `This project already has a kit.`); `rename { name }`; `remove` (the person's Delete kit only, below).
+- `addToken { path, type, value }` adds a token that has no path yet, refused with `There is already a token {path}.` otherwise. The Add token row uses it.
 - `setToken { path, type, value? | values?, description? }` adds or replaces a token. Changing a used token's type is allowed; its artifacts simply see the new value.
 - `renameToken { path, to }`: the token moves, and the old CSS name is added to `formerNames` unless the new one equals it. The tokens script defines every former name as `var(--<new>)`, so an artifact that uses the old name keeps working. The dialog shows `Also answers to {formerName}` under the row; `forgetFormerName { path, cssName }` removes one.
 - `deleteToken { path }`. Refused while another token's alias still refers to it, with `{alias} refers to {path}, which is not in the kit.`
@@ -241,7 +245,7 @@ A helper file like `unframed-dials.js`, not an artifact file: the engine rewrite
 3. Defines `window.unframed.token(path)` beside what the bridge defines, without replacing it (the bridge already merges into an existing `window.unframed`). It returns the current mode's value with aliases followed, in the form the table above gives, or `undefined` with `console.error("[unframed] no token " + path)`. It accepts a CSS name too (`"--color-brand-primary"`), so code written either way works.
 4. Listens for messages with the dials bridge's checks (`event.source` is `window.parent`, origin its own or loopback):
    - `unframed:tokens:mode { mode }`: sets `data-theme` to the mode (the default mode when it names none of the kit's), then dispatches the window event `unframed:tokens`.
-   - `unframed:tokens:set { kit }`: replaces its kit and its `<style>` text in place, then dispatches `unframed:tokens`. This is how a token change reaches a live frame at once, without a reload and before the engine has rewritten the file.
+   - `unframed:tokens:set { kit }`: replaces its kit and its `<style>` text in place, then dispatches `unframed:tokens`. This is how a token change reaches a live frame at once, without a reload and before the engine has rewritten the file. With `kit: null` (the kit was removed) it empties the `<style>` text, so a live frame drops its tokens at once.
 5. With no kit (the project has none, or it was removed), it defines `unframed.token` (always `undefined`, with the console error) and inserts no style, so a file that loads it never fails.
 
 **Motions and other scripts.** A motion reads tokens when it builds its timeline. The dials bridge, on the `unframed:tokens` event, calls its last declaration's apply again with the current values (spec 09 already teaches the agent to build the timeline in apply and keep the playhead), so a mode or token change shows in a motion without a reload. A page's CSS follows by itself. Scripts that are not dial-driven may listen to `unframed:tokens` themselves; the kit paragraph (assets) says so.
@@ -283,18 +287,18 @@ The preview origin serves it as any `.js` file. A project with no kit still gets
 
 **No kit.** The body reads `This project has no kit yet. A kit holds the colours, sizes, fonts and motion values its pages and motions share.` with three buttons: `New kit` (Button `default`; creates a kit named `Kit` with one mode, `default`, and opens it), `From library` (Button `outline`; opens the Library dialog filtered to Kits), and `Import` (Button `outline`; the import flow below).
 
-**Header**, under the title: the kit's name as an inline field (accessible label `Kit name`); the source line in muted text when the kit is linked: `From “{name}” in your library.`, followed by the ghost Button `Update from kit` when the library kit's revision is newer than `from.revision`, or `The library kit “{name}” is gone. This project keeps its copy.` when its preset is no longer in the library; a search field (`Search tokens…`, hidden label `Search tokens`, matching a path or a CSS name as a substring); and a `More` ghost icon menu with `Save to library`, `Update in library` (only when linked to a user preset), `Import…`, `Export` (a submenu: `DTCG JSON`, `CSS variables`, `Tailwind @theme`) and `Delete kit`.
+**Header**, under the title: the kit's name as an inline field (accessible label `Kit name`); the source line in muted text when the kit is linked: `From “{name}” in your library.`, followed by the ghost Button `Update from kit` when the library kit's revision is newer than `from.revision`, or `The library kit “{name}” is gone. This project keeps its copy.` when its preset is no longer in the library (the name is the one the dialog last read, or `The library kit is gone. This project keeps its copy.` when it never read it); a search field (`Search tokens…`, hidden label `Search tokens`, matching a path or a CSS name as a substring); and a `More` ghost icon menu with `Save to library`, `Update in library` (only when linked to a user preset), `Import…`, `Export` (a submenu: `DTCG JSON`, `CSS variables`, `Tailwind @theme`) and `Delete kit`.
 
 **Guidance.** Between the header and the table, a bordered section headed `Guidance`. With guidance it shows the markdown rendered by the chat's markdown renderer (spec 08), in a box at most 224 px high that scrolls, and a ghost Button `Edit`; without it, the muted line `No guidance yet. Write how to use this brand: its voice, its layout, and what to do and to avoid. The agent follows it when it makes pages and motions.` and a ghost Button `Add guidance`. Edit swaps the text for a UI kit Textarea (accessible label `Guidance markdown`) holding the markdown, with `Cancel` (Button `outline`) and `Save`. Save writes `setGuidance` as one undo step (nothing when the text did not change); Cancel and Esc in the field leave it unchanged; Cmd or Ctrl and Enter saves. The guidance changes no CSS, so it leaves the tokens script, the kit stamp and the snapshots alone.
 
 **Body.** On the left, a list of groups: `All`, then each first path segment with its count (`color 24`). On the right, a table:
 
-- Columns: `Token` (the path, with the CSS name under it in muted monospace text), `Type`, one column per mode headed by its name (the default marked `default`), and `Used by`.
-- A header menu on each mode column: `Rename mode`, `Make default`, `Duplicate mode`, `Delete mode`. After the last column, a ghost Button `Add mode`.
+- Columns: `Token` (the path, with the CSS name under it in muted monospace text), `Type`, one column per mode headed by its name (the default marked `default`, unless the mode is itself named `default`, when the name shows once), `Used by` (on one line), and a narrow fixed column of row menus. The header row and the search field stay in view while the rows scroll.
+- A header menu on each mode column: `Rename mode`, `Make default`, `Duplicate mode`, and `Delete mode` (not offered when the kit has one mode). After the last column, a ghost Button `Add mode`.
 - A row whose token has one value for every mode shows one cell across the mode columns. The row menu (`…`) offers `A value per mode` or `One value for all modes` (which keeps the default mode's value), `Rename`, `Description`, `Forget old names` when it has former names, and `Delete`.
 - Cells: a colour cell is a swatch and its CSS text; clicking opens a popover with the browser's colour input, a text field for the CSS text, and an opacity number. A dimension cell is a number field and a unit select (`px`, `rem`, `em`, `%`). A duration cell is a number field and `ms` or `s`. A font weight cell is a select of 100 to 900 and the keywords. An easing cell is a select of the ease catalogue, each entry with its ease curve, and a `Cubic bezier` entry with four number fields. A font family, shadow or text style cell is a text field (a text style opens a popover with its five fields). Every cell also takes an alias: a `Use a token` item at the top of its popover lists tokens of the same type; an alias cell shows the target's chip.
 - `Used by` shows the number of artifact shapes whose current file refers to the token (by its CSS name, a former name, or `unframed.token` with its path), from `kit.usage`, read when the dialog opens and after each kit change. A token no artifact uses shows an empty `Used by` cell. Hovering shows the titles, at most 10, then `and {n} more`.
-- A Button `Add token` at the foot of the table adds a row in edit, with a path field (prefilled with the selected group) and a type select. Enter commits.
+- A Button `Add token` at the foot of the table adds a row in edit, with a path field (prefilled with the selected group) and a type select. Enter commits. A refusal stays under the row until Escape closes the row or another edit starts.
 - Past 200 rows the table renders only the rows in view.
 
 **Committing.** A field commits on Enter or blur; a select, toggle or popover choice commits at once; Esc in a field abandons it. Each commit is one `applyKitOps` call written to the room as one tldraw history step; a refusal shows its sentence under the field in the error text (`role="alert"`) and writes nothing. A drag in the colour input commits when it ends.
@@ -381,7 +385,7 @@ Spec 18's Design tab leaves a token slot on each field. This spec fills it.
 
 Dimension tokens are ordered by path keyword: for spacing fields, tokens whose path has `space`, `spacing` or `gap` come first; for radius, `radius`, `radii` or `rounded`; for text sizes, `font`, `text` or `size`; the rest follow, each group in kit order. The Text section's header gains a `Text style` picker offering `textStyle` tokens.
 
-**The token button.** A small ghost icon Button (the Diamond icon, label `Use a token`) at the end of each field with a slot. It opens a popover: a search field, the offered tokens with their value in the artifact's current mode (a swatch for colours), `Edit kit` at the foot. With no kit it reads `No kit yet.` and `Edit kit` opens the empty Kit dialog. Hovering a token previews it in the frame through spec 18's preview patch; choosing it adds a `token` edit with the element's id to spec 18's burst.
+**The token button.** A small ghost icon Button (the Diamond icon, label `Use a token for {field label}`, such as `Use a token for Font`) at the end of each field with a slot. Escape, or a choice, returns focus to the button, or to the chip that replaces it. It opens a popover: a search field, the offered tokens with their value in the artifact's current mode (a swatch for colours), `Edit kit` at the foot. With no kit it reads `No kit yet.` and `Edit kit` opens the empty Kit dialog. Hovering a token previews it in the frame through spec 18's preview patch; choosing it adds a `token` edit with the element's id to spec 18's burst.
 
 **The token chip.** When spec 18's `fieldOwner`, run in the web, answers `token` for a field (below), the field shows a chip instead of its input: the token's path (its last two segments, the whole path in the tooltip), a swatch for a colour, and the current mode's value in muted text. Clicking the chip opens the same popover with `Detach` at its top: Detach writes the resolved value as a literal (spec 18's `style` edit), and choosing another token writes a `token` edit. A text style chip appears on the Text section header when all five text fields are owned by the same text style's sub-names.
 

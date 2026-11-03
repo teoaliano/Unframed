@@ -1,0 +1,26 @@
+{
+  "when": "long job",
+  "turns": [
+    {
+      "title": "Long job",
+      "question": {
+        "questions": [
+          {
+            "id": "Which part first?",
+            "header": "Order",
+            "question": "Which part first?",
+            "options": [
+              { "label": "Header", "description": "" },
+              { "label": "Footer", "description": "" }
+            ],
+            "multiSelect": false
+          }
+        ]
+      },
+      "text": "Started on the long job."
+    },
+    {
+      "text": "Picked up where I stopped."
+    }
+  ]
+}

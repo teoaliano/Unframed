@@ -82,7 +82,7 @@ Root scripts:
 
 | Script | Does |
 | --- | --- |
-| `pnpm dev` | runs the engine from source with restart on change (default port 8787) and the Vite dev server (default port 5173) together |
+| `pnpm dev` | runs the engine from source with restart on change (default port 8787) and the Vite dev server (default port 5173) together; when either stops, both stop, and both stop when the script gets SIGHUP, loses its parent or is killed outright |
 | `pnpm dev:share` | `pnpm dev`, plus the Vite port served on this machine's tailnet with `tailscale serve` (see Dev share relay); removes the mapping on exit |
 | `pnpm engine` | engine only |
 | `pnpm web` | Vite dev server only |
@@ -155,6 +155,7 @@ This is the one table of every test-only variable in the build. A spec that uses
 | `UNFRAMED_TEST_OUTSIDE_TURN_IDLE_MS` | 14 | the idle time after which an outside turn settles, in milliseconds, in place of 2 min (spec 14) |
 | `UNFRAMED_TEST_UPLOAD_URL_TTL_MS` | 07 | an attachment upload URL's lifetime in milliseconds, in place of 10 min |
 | `UNFRAMED_TEST_RENDERER` | 09 | replaces the motion renderer and the Chrome search: `ok`, `fail` or `no-chrome`, each behaving as spec 09 states |
+| `UNFRAMED_TEST_UNCAUGHT` | 01, 09 | `1` makes SIGUSR2 throw an uncaught exception, so a test can watch the crash path run the shutdown hooks, close the headless Chrome and exit with code 1 |
 
 Anything that redirects network traffic follows the loopback-only rule of the origin override.
 
@@ -187,7 +188,9 @@ Listen failure (port in use, permission): print the error and exit with code 1, 
 
 Shutdown: on SIGTERM or SIGINT the engine stops accepting connections, closes every WebSocket with close code 1001, runs every registered shutdown hook (later specs register: flush sync rooms and databases, close the share tunnel, stop the render sweep, end agent sessions), and exits with code 0. The whole sequence must finish within 2 seconds, because the shell waits 2 seconds before giving up. A hook that has not finished by 1.5 seconds is abandoned and the engine exits anyway. Timers the engine starts (sweeps, TTL checks) never keep the process alive on their own.
 
-Crash safety: an unhandled promise rejection is logged as `  unhandled rejection: <stack>` and does not exit the process. An uncaught exception is logged and exits with code 1. No request handler may let either happen: every operation that can fail is inside Effect's typed error channel and answered (see error model).
+Parent death: the engine stops the same way, exiting with code 0, when the process that started it goes away, since nothing could stop it any more: with an IPC channel, when the channel closes; without one, when its parent pid changes or stops existing (checked every second; an engine whose parent is already pid 1 is not watched this way). It logs `  the process that started the engine is gone; stopping`. This is what keeps a crashed shell, a killed test runner or a killed `pnpm dev` from leaving engines behind.
+
+Crash safety: an unhandled promise rejection is logged as `  unhandled rejection: <stack>` and does not exit the process. An uncaught exception is logged, runs the shutdown sequence above within the same 2 seconds, and exits with code 1. No request handler may let either happen: every operation that can fail is inside Effect's typed error channel and answered (see error model).
 
 ### Loopback guards
 
@@ -333,7 +336,9 @@ Keys in use, each owned by the spec named:
 | `library.view` | 06 | `"card"` or `"list"` |
 | `agent.followUp` | 08 (control in spec 10's dialog) | `"queue"` or `"steer"` |
 | `agent.planMode` | 08 (control in spec 10's dialog) | `true` turns plan mode on; off when unset |
+| `agent.sendShortcut` | 08 (control in spec 10's dialog) | `"enter"`, `"mod-enter-multiline"` or `"mod-enter"`; Enter when unset |
 | `agent.stash.<project>` | 08 | that project's stashed prompts |
+| `agent.drafts.<project>` | 08 | that project's unsent composer drafts, by chat |
 | `agent.diffLayout` | 08 | `"stacked"` or `"split"` |
 
 A later spec that remembers something adds its key to this table.
@@ -429,7 +434,7 @@ The bundle's Node floor is the Node inside the Electron release the shell ships.
 A good test drives the system through one of the three seams in 00-index and asserts on what comes out: RPC answers, HTTP responses, IPC messages, stdout, files on disk, and what a person sees. It never imports engine internals or reads engine state directly.
 
 - **Domain seam** for the pure rules with many cases: the slug rule, reading `PORT` and `UNFRAMED_PREVIEW_PORT`, the loopback guard decision, `.env` upsert, the validators and clearable-field normalising, the reveal and folder-picker command plans.
-- **Engine seam** for everything the process does. This spec builds the harness every later spec reuses: fork the engine (from source in `pnpm test`, from the built bundle in the bundle smoke test) with a fresh temp data folder, `PORT=0`, `UNFRAMED_PREVIEW_PORT=0`, an IPC channel, `UNFRAMED_TEST_OPENROUTER_ORIGIN` pointed at an in-test stub HTTP server, and `UNFRAMED_TEST_NATIVE_LOG` pointed at a temp file; wait for the ready message; expose an RPC client, an HTTP client, the captured stdout and IPC messages, and the data folder; kill and clean up. Tests that need a variant (no IPC channel, hosted marker, a pre-written `.env`) take options.
+- **Engine seam** for everything the process does. This spec builds the harness every later spec reuses: fork the engine (from source in `pnpm test`, from the built bundle in the bundle smoke test) with a fresh temp data folder, `PORT=0`, `UNFRAMED_PREVIEW_PORT=0`, an IPC channel, `UNFRAMED_TEST_OPENROUTER_ORIGIN` pointed at an in-test stub HTTP server, and `UNFRAMED_TEST_NATIVE_LOG` pointed at a temp file; wait for the ready message; expose an RPC client, an HTTP client, the captured stdout and IPC messages, and the data folder; kill and clean up. Each engine leads a process group of its own, and disposing it kills the group, so whatever the engine spawned goes with it. An engine whose start times out is disposed before the error reaches the test, and a test runner that exits with engines still running kills them on its way out. Tests that need a variant (no IPC channel, hosted marker, a pre-written `.env`) take options.
 - **Browser seam** for the web frame: Playwright against the built web served by an engine at the engine seam with `UNFRAMED_CLIENT_DIST` set.
 - Nothing that spends money runs in any seam. There is no prior art in this repo (it starts empty); follow t3code's server tests for driving Effect RPC over a real socket.
 

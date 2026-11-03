@@ -41,6 +41,8 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
   const [importing, setImporting] = useState(false);
   // The library kit this project came from: undefined while it is read, null when it is gone.
   const [linkedPreset, setLinkedPreset] = useState<KitPreset | null>();
+  // The name of the library kit the project came from, kept once it was read, so its deletion can still name it.
+  const [presetName, setPresetName] = useState<string>();
   // The engine refused Update in library because the library kit is newer; the dialog offers Update from kit.
   const [newer, setNewer] = useState<string>();
   const fromId = kit?.from?.presetId;
@@ -73,7 +75,11 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
     if (fromId === undefined) return;
     let live = true;
     libraryKitById(engine, fromId)
-      .then((found) => live && setLinkedPreset(found ?? null))
+      .then((found) => {
+        if (!live) return;
+        setLinkedPreset(found ?? null);
+        if (found !== undefined) setPresetName(found.name);
+      })
       .catch(() => live && setLinkedPreset(undefined));
     return () => {
       live = false;
@@ -99,7 +105,7 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
   const sourceLine = () => {
     if (kit === null || kit.from === undefined || linkedPreset === undefined) return null;
     if (linkedPreset === null)
-      return <p className="m-0 text-sm text-muted-foreground">{`The library kit “${kit.name}” is gone. This project keeps its copy.`}</p>;
+      return <p className="m-0 text-sm text-muted-foreground">{presetName === undefined ? "The library kit is gone. This project keeps its copy." : `The library kit “${presetName}” is gone. This project keeps its copy.`}</p>;
     const offer = linkedPreset.revision > kit.from.revision && hasDifferences(mergeWith(kit, linkedPreset), kit);
     return (
       <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -209,7 +215,8 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
       )}
 
       <AlertDialog open={ask !== undefined} onOpenChange={(open) => !open && setAsk(undefined)}>
-        <AlertDialogPopup className="max-w-[400px]">
+        {/* A deleted token or mode takes its row with it: focus goes to the table's search field, inside this dialog. */}
+        <AlertDialogPopup className="max-w-[400px]" finalFocus={() => document.querySelector<HTMLElement>('[data-testid="kit"] input[type="search"]') ?? true}>
           <AlertDialogHeader>
             {ask?.kind === "token" && (
               <>

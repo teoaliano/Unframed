@@ -61,6 +61,9 @@
   --animate-skeleton: skeleton 2.4s infinite;
   --animate-status-pulse: status-pulse 2s infinite;
   --animate-status-ping: status-ping 2s infinite;
+  --animate-stash-pulse-row: stash-pulse-row 1400ms;
+  --animate-stash-pulse-row-alt: stash-pulse-row-alt 1400ms;
+  --animate-stash-pulse-count: stash-pulse-count 1400ms step-start;
   --color-warning-foreground: var(--warning-foreground);
   --color-warning: var(--warning);
   --color-warning-surface: var(--warning-surface);
@@ -127,6 +130,24 @@
     }
     100% {
       opacity: 1;
+    }
+  }
+  @keyframes stash-pulse-row {
+    from,
+    85.7% {
+      color: var(--color-foreground);
+    }
+  }
+  @keyframes stash-pulse-row-alt {
+    from,
+    85.7% {
+      color: var(--color-foreground);
+    }
+  }
+  @keyframes stash-pulse-count {
+    from,
+    85.7% {
+      color: var(--color-primary);
     }
   }
   @keyframes status-pulse {
@@ -491,6 +512,11 @@
   @variant dark {
     --canvas-dot: color-mix(in srgb, var(--foreground) 22%, var(--background));
   }
+}
+
+/* Unframed: with the chat rail docked open, bottom-left toasts start past it, so they never cover the composer (spec 08). */
+body:has(aside[aria-label="Agent"][data-state="open"]:not([data-embedded])) [data-slot="toast-viewport"][data-position*="left"] {
+  left: calc(380px + var(--toast-inset));
 }
 
 @theme inline {

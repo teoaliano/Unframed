@@ -40,17 +40,22 @@ Scripted-agent scripts in spec 07's format. Specs 07 and 08 use them all; `fixtu
 - `fixtures/README.md`: the seeded shape ids and the rules every fixture follows. Specs 07 and 08.
 - `fixtures/attachment.json`: a message with an attached image; checks the attachment line in the preamble. Spec 07.
 - `fixtures/bad-shape.json`: `motion_write` on a shape that no longer exists, refused. Spec 07.
+- `fixtures/approval-options.json`: a delete outside the project whose ask offers no standing grant and gives a reason, then a command whose ask offers its own answers, one with a warning. Specs 07 and 08.
 - `fixtures/bulk-edit.json`: one `canvas_write` that retitles two motions, then a second turn that expects the change note. Spec 07.
 - `fixtures/canvas-question.json`: a question about the board, answered after `canvas_read`. Specs 07 and 08.
 - `fixtures/dials.json`: `motion_write` that exposes three parameters. Specs 07 and 09.
 - `fixtures/failure.json`: a 529 retry, then a failed turn with `error_max_turns`. Specs 07 and 08.
 - `fixtures/implement-plan.json`: the first message of a chat started by "Implement in a new chat"; writes the page. Spec 08.
+- `fixtures/locked.json`: a `page_write` that changes a locked element, then one that keeps it; `canvas_read` reports the locks. Spec 18.
 - `fixtures/markdown.json`: a reply with headings, a table, lists, a task list, a quote, a code block and a link. Spec 08.
 - `fixtures/padded.json`: a command whose dangerous tail hides behind padding. Specs 07 and 08.
+- `fixtures/owner.json`: a `page_write` on the page `pg1`, whose script sets one style from a parameter, one by arithmetic on it, and creates one element at run time. Spec 18, the owner tests.
 - `fixtures/permission.json`: `rm -rf build`, then `rm -rf dist`, for the runtime modes and approvals. Specs 07 and 08.
+- `fixtures/pointed.json`: a turn whose preamble must match an elements part (the element the person pointed at). Spec 18.
 - `fixtures/plan.json`: plan mode: `canvas_read` runs, `canvas_write` is refused, a plan is captured; turn 2 builds the page after Implement. Specs 07 and 08.
 - `fixtures/question.json`: the agent asks the person two questions (single and multi-select) and waits. Specs 07 and 08.
 - `fixtures/rate-limit.json`: a usage-limit warning, then a rejected turn, then `allowed` clearing the notice. Specs 07 and 08.
+- `fixtures/resume.json`: a turn that asks a question (so it can be stopped while it waits), then a second turn that answers Resume thread. Spec 08.
 - `fixtures/race.json`: a `page_write` on the landing page, sent while the editor holds a pending burst. Spec 18.
 - `fixtures/motion-race.json`: a `motion_write` on the motion `intro`, sent while the timeline holds a pending burst. Spec 21, task 37.
 - `fixtures/revise.json`: `motion_read` then `motion_write` on an existing motion. Specs 07 and 09.
@@ -76,13 +81,18 @@ Model-facing text. Each file says where it is used and what its placeholders are
 - `prompts/artifact-read-tools.md`: the `page_read` and `motion_read` descriptions. Specs 07 and 09.
 - `prompts/change-note.md`: the preamble sentence that says the canvas changed since the chat's last turn. Spec 07.
 - `prompts/chat-title.md`: the system prompt and prompt that name a chat after its first turn. Spec 07.
+- `prompts/component-read-tool.md`: the `component_read` description and its argument. Spec 20.
+- `prompts/component-write-tool.md`: the `component_write` description and its arguments. Spec 20.
 - `prompts/declined.md`: what the agent is told when the person declines a request. Spec 07.
 - `prompts/dials-contract.md`: the parameters paragraph appended to both artifact write descriptions. Specs 07 and 09.
 - `prompts/dials-timeline.md`: the timeline paragraph appended to the `motion_write` description. Specs 07 and 09.
 - `prompts/kit-tools.md`: the `kit_read` and `kit_write` descriptions and the `ops` argument, with the guidance framed as data. Spec 19.
+- `prompts/element-context.md`: the preamble's elements part: the chips the person pointed at, one line per artifact and per chip. Spec 18.
 - `prompts/failures.md`: the failure sentences by subtype, the two fallbacks and the quit-mid-turn sentence. Spec 07.
 - `prompts/free-repair.md`: the Free mode repair call's system prompt parts and user turn prefix. Spec 05.
 - `prompts/implement-plan.md`: the prefix sent before a plan when the person implements it (from t3code, MIT). Spec 08.
+- `prompts/make-component-instruction.md`: the Make component instruction the editor sends with an element's chip. Spec 20.
+- `prompts/make-editable-instruction.md`: the draft "Ask the agent to make this editable" puts in the composer, naming the field. Spec 18.
 - `prompts/motion-write-tool.md`: the `motion_write` description and its arguments. Specs 07 and 09.
 - `prompts/page-write-tool.md`: the `page_write` description and its arguments. Specs 07 and 09.
 - `prompts/plan-captured.md`: the deny message for Claude's `ExitPlanMode` once its plan is captured (from t3code, MIT). Spec 07.

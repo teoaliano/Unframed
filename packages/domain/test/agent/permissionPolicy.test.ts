@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   answerPermission,
+  approvalPresentation,
+  DEFAULT_APPROVAL_OPTIONS,
   claudePermissionMode,
   claudeTurnPermissionMode,
   codexPlanCollaboration,
@@ -109,5 +111,40 @@ describe("mode mappings", () => {
   it("gives Codex plan's collaboration mode with the plan-mode instructions, effort medium by default", () => {
     expect(codexPlanCollaboration("gpt-6")).toEqual({ mode: "plan", settings: { model: "gpt-6", reasoning_effort: "medium", developer_instructions: CODEX_PLAN_MODE_INSTRUCTIONS } });
     expect(codexPlanCollaboration("gpt-6", "high").settings.reasoning_effort).toBe("high");
+  });
+});
+
+describe("what an approval offers", () => {
+  it("is the fixed four, t3code's, when the provider says nothing", () => {
+    expect(DEFAULT_APPROVAL_OPTIONS).toEqual([
+      { decision: "cancel", label: "Cancel" },
+      { decision: "decline", label: "Decline" },
+      { decision: "acceptForSession", label: "Always allow this session" },
+      { decision: "accept", label: "Approve" },
+    ]);
+    expect(approvalPresentation({}, "rm -rf build")).toEqual({});
+  });
+
+  it("drops the standing grant when Claude says one would grant more than this ask", () => {
+    expect(approvalPresentation({ suppressAlwaysAllowRule: true }, "rm -rf build")).toEqual({
+      options: [
+        { decision: "decline", label: "Decline" },
+        { decision: "accept", label: "Approve" },
+      ],
+    });
+  });
+
+  it("keeps Claude's reason, without terminal escapes, unless it only repeats the target", () => {
+    expect(approvalPresentation({ decisionReason: "\u001b[1mrm\u001b[0m deletes outside the project " }, "rm -rf ../x")).toEqual({ reason: "rm deletes outside the project" });
+    expect(approvalPresentation({ decisionReason: "rm -rf build" }, "rm -rf build")).toEqual({});
+    expect(approvalPresentation({ decisionReason: "   " }, "rm -rf build")).toEqual({});
+  });
+
+  it("takes the options a provider offers as they are, warnings kept", () => {
+    const options = [
+      { decision: "decline", label: "Decline" },
+      { decision: "accept", label: "Run it", warning: "This deletes files outside the project." },
+    ] as const;
+    expect(approvalPresentation({ options }, "x")).toEqual({ options });
   });
 });

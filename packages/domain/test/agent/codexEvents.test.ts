@@ -94,6 +94,11 @@ describe("Codex server requests", () => {
       detail: "rm -rf build",
     });
     expect(readCodexRequest("item/fileChange/requestApproval", { itemId: "f1", reason: "write a.html" })).toMatchObject({ kind: "approval", requestType: "file_change_approval" });
+    expect(readCodexRequest("item/commandExecution/requestApproval", { command: "rm -rf build", reason: "May I clear the build folder?" })).toMatchObject({
+      detail: "rm -rf build",
+      reason: "May I clear the build folder?",
+    });
+    expect(readCodexRequest("item/commandExecution/requestApproval", { reason: "May I run it?" })).not.toHaveProperty("reason");
     expect(
       readCodexRequest("item/tool/requestUserInput", {
         questions: [{ id: "look", header: "Look", question: "Which look?", options: [{ label: "Warm", description: "Cream" }], isOther: true }],

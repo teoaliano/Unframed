@@ -226,6 +226,7 @@ export const agentsLayer = Layer.effect(
           endSession: (sessionId) => runtime.endOutsideSession(sessionId),
         }),
         runtime.attachments.route(),
+        runtime.attachments.serveRoute(),
       ],
     });
   }),

@@ -30,7 +30,7 @@ const seedKit = async (page: Page, engine: Parameters<typeof openCanvas>[1], kit
 };
 
 /** A section's token button: the Text section's first one is its Text style picker, in the legend. */
-const tokenButton = (page: Page, group: string) => parameters(page).getByRole("group", { name: group, exact: true }).getByRole("button", { name: "Use a token", exact: true }).first();
+const tokenButton = (page: Page, group: string) => parameters(page).getByRole("group", { name: group, exact: true }).getByRole("button", { name: /^Use a token/ }).first();
 
 test("the Fill token button lists the colour tokens with their value, previews on hover, and a choice writes a token edit", async ({ page, agent }) => {
   await seedKit(page, agent, BRAND);
@@ -90,4 +90,24 @@ test("the Text style picker writes the five text longhands of a text style, and 
 
   await parameters(page).getByRole("button", { name: "Kit: Brand", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Kit" })).toBeVisible();
+});
+
+test("each token button has its field's name, and Escape or a choice hands focus back to it or to the chip that replaces it", async ({ page, agent }) => {
+  await seedKit(page, agent, BRAND);
+  await onBoard(page, agent, PAGE);
+  await openEditor(page);
+  await selectByText(page, "Welcome");
+  await preparedFile(agent);
+
+  const button = tokenButton(page, "Fill");
+  await expect(button).toHaveAccessibleName(/^Use a token for /);
+  await button.click();
+  await expect(page.getByRole("button", { name: /color\/brand\/primary/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(button).toBeFocused();
+
+  await button.click();
+  await page.getByRole("button", { name: /color\/brand\/primary/ }).click();
+  // The trigger or the chip that replaces it both carry the picker's trigger attribute.
+  await expect.poll(() => page.evaluate(() => document.activeElement?.hasAttribute("data-token-trigger") ?? false)).toBe(true);
 });

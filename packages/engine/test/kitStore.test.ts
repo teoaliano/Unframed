@@ -1,4 +1,4 @@
-import { readFile, stat, utimes, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, stat, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { scriptFolder, startAgentEngine } from "./agent.ts";
@@ -108,6 +108,23 @@ describe("the tokens script in a project folder (spec 19, task 10)", () => {
       `<script src="unframed-tokens.js"></script>\n<script src="unframed-dials.js"></script>\n<p data-hf-id="hf-8uol">x</p>`,
     );
   });
+});
+
+describe("the tokens script and a folder renamed while it is written", () => {
+  it("leaves no temp file behind, in the renamed folder or beside it", async () => {
+    const { ensureTokens } = await import("../src/kits/tokensFile.ts");
+    const root = await makeTempDir();
+    for (let round = 0; round < 40; round++) {
+      const folder = join(root, `project-${round}`);
+      await mkdir(folder);
+      const write = ensureTokens(folder, kit() as Parameters<typeof ensureTokens>[1]);
+      await new Promise((resolve) => setTimeout(resolve, round % 6));
+      await rename(folder, join(root, `renamed-${round}`)).catch(() => undefined);
+      await write.catch(() => undefined);
+    }
+    const names = await readdir(root, { recursive: true });
+    expect(names.filter((name) => name.endsWith(".tmp"))).toEqual([]);
+  }, 120_000);
 });
 
 describe("the tokens script and a project folder that is gone", () => {

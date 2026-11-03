@@ -485,3 +485,99 @@ test("past 200 rows the table draws only the rows in view, and scrolling reaches
   });
   await expect(row(dialog, "dimension/space/t259")).toBeVisible();
 });
+
+/** Adds a token of a type from the Add token row. The row's path field keeps the text on a refusal. */
+const addToken = async (page: Page, dialog: Locator, path: string, type: string) => {
+  await dialog.getByRole("button", { name: "Add token" }).click();
+  await dialog.getByRole("textbox", { name: "Token path" }).fill(path);
+  await dialog.getByRole("combobox", { name: "Token type" }).click();
+  await page.getByRole("option", { name: type, exact: true }).click();
+  await dialog.getByRole("textbox", { name: "Token path" }).press("Enter");
+};
+
+test("Add token with a path a token already has is refused in the same words as a rename, and the token keeps its value", async ({ page, engine }) => {
+  const project = await openCanvas(page, engine);
+  await seedKit(engine);
+  await page.getByRole("button", { name: "Kit", exact: true }).click();
+  const dialog = kitDialog(page);
+
+  await addToken(page, dialog, "dimension/space/md", "color");
+  await expect(dialog.getByRole("alert")).toHaveText("There is already a token dimension/space/md.");
+  await expect.poll(() => tokenOf(engine, project, "dimension/space/md")).toMatchObject({ type: "dimension", value: "16px" });
+});
+
+test("Add token takes a text style, which starts with a valid line height", async ({ page, engine }) => {
+  const project = await openCanvas(page, engine);
+  await seedKit(engine);
+  await page.getByRole("button", { name: "Kit", exact: true }).click();
+  const dialog = kitDialog(page);
+
+  await addToken(page, dialog, "text/lead", "textStyle");
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
+  await expect(row(dialog, "text/lead")).toBeVisible();
+  await expect.poll(() => tokenOf(engine, project, "text/lead")).toMatchObject({ type: "textStyle", value: { lineHeight: 1.5 } });
+});
+
+test("a font family that would write CSS is refused under its cell, and the token keeps its value", async ({ page, engine }) => {
+  const project = await openCanvas(page, engine);
+  await seedKit(engine);
+  await page.getByRole("button", { name: "Kit", exact: true }).click();
+  const dialog = kitDialog(page);
+
+  await addToken(page, dialog, "font/body", "fontFamily");
+  const cell = row(dialog, "font/body").getByRole("textbox", { name: "font/body" });
+  await cell.fill("Inter; } body { display:none } .x {");
+  await cell.press("Enter");
+  await expect(row(dialog, "font/body").getByRole("alert")).toHaveText("Inter; } body { display:none } .x { is not a font family. Use a list of family names, like Inter, sans-serif.");
+  await expect.poll(() => tokenOf(engine, project, "font/body")).toMatchObject({ value: "sans-serif" });
+});
+
+test("a refusal goes when Escape closes the Add token row, and does not follow to the next edit", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await seedKit(engine);
+  await page.getByRole("button", { name: "Kit", exact: true }).click();
+  const dialog = kitDialog(page);
+
+  await dialog.getByRole("button", { name: "Add token" }).click();
+  await dialog.getByRole("textbox", { name: "Token path" }).fill("Bad Name");
+  await dialog.getByRole("textbox", { name: "Token path" }).press("Enter");
+  await expect(dialog.getByRole("alert")).toHaveText("A token name is words joined by slashes, like color/brand/primary.");
+  await dialog.getByRole("textbox", { name: "Token path" }).press("Escape");
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Add token" })).toBeVisible();
+});
+
+test("a kit with one mode offers no Delete mode", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await page.getByRole("button", { name: "Kit", exact: true }).click();
+  const dialog = kitDialog(page);
+  await dialog.getByRole("button", { name: "New kit" }).click();
+
+  await dialog.getByRole("button", { name: "Mode options default" }).click();
+  await expect(page.getByRole("menuitem", { name: "Rename mode" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Delete mode" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+});
+
+test("the table's header row stays on screen while the rows scroll", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await seedKit(engine);
+  await page.getByRole("button", { name: "Kit", exact: true }).click();
+  const dialog = kitDialog(page);
+
+  await expect(dialog.locator("thead")).toHaveCSS("position", "sticky");
+});
+
+test("after Delete token, focus goes to the table's search field inside the dialog", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await seedKit(engine);
+  await page.getByRole("button", { name: "Kit", exact: true }).click();
+  const dialog = kitDialog(page);
+
+  await row(dialog, "dimension/space/md").getByRole("button", { name: "Token options dimension/space/md" }).click();
+  await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Delete token" }).click();
+
+  await expect(row(dialog, "dimension/space/md")).toHaveCount(0);
+  await expect(dialog.getByRole("searchbox", { name: "Search tokens" })).toBeFocused();
+});

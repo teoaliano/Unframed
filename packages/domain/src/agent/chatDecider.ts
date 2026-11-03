@@ -17,6 +17,7 @@ import type {
 } from "./chatModel.ts";
 import { DEFAULT_RUNTIME_MODE } from "./chatModel.ts";
 import { requestActivity } from "./chatProjector.ts";
+import { offersDecision } from "./permissionPolicy.ts";
 
 export const TITLE_MAX = 60;
 
@@ -241,6 +242,7 @@ export const decide = (command: ChatCommand, model: ProjectChats, now: string): 
     case "thread.approval.respond": {
       const request = requestActivity(chat, "approval", command.requestId);
       if (request?.kind !== "approval.requested") return reject("not_found", "That request is no longer waiting for an answer.");
+      if (!offersDecision((request.payload as { options?: unknown }).options, command.decision)) return reject("bad_request", "That answer is not offered for this request.");
       return accept(
         event("thread.approval-response-requested", id, { requestId: command.requestId, decision: command.decision }, { requestId: command.requestId }),
       );
@@ -251,9 +253,24 @@ export const decide = (command: ChatCommand, model: ProjectChats, now: string): 
       if (request === undefined || isCancelled(request)) return reject("not_found", "This question is no longer pending.");
       if (request.kind === "user-input.resolved") return reject("conflict", "This question has already been answered.");
       const questions = ((request.payload as { questions?: Array<{ id?: unknown }> }).questions ?? []).map((question) => String(question.id));
-      if (questions.some((question) => !answered(command.answers[question]))) return reject("bad_request", "Answer each question before sending.");
+      const files = command.attachmentsByQuestionId ?? {};
+      if (Object.keys(files).some((question) => !questions.includes(question))) return reject("bad_request", "That question is not part of this request.");
+      for (const attached of Object.values(files)) {
+        const unread = attached.find((attachment) => !isResolvedAttachment(attachment));
+        if (unread) return reject("bad_request", `'${unread.name}' is empty or could not be read.`);
+        const overLimit = attachmentLimitError(attached as ReadonlyArray<MessageAttachment>);
+        if (overLimit) return reject("bad_request", overLimit);
+      }
+      if (questions.some((question) => !answered(command.answers[question]) && (files[question]?.length ?? 0) === 0)) {
+        return reject("bad_request", "Answer each question before sending.");
+      }
       return accept(
-        event("thread.user-input-response-requested", id, { requestId: command.requestId, answers: command.answers }, { requestId: command.requestId }),
+        event(
+          "thread.user-input-response-requested",
+          id,
+          { requestId: command.requestId, answers: command.answers, ...(Object.keys(files).length === 0 ? {} : { attachmentsByQuestionId: files }) },
+          { requestId: command.requestId },
+        ),
       );
     }
 

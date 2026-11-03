@@ -151,6 +151,25 @@ export const attachmentLines = (attachments: ReadonlyArray<PreambleAttachment>):
     ? undefined
     : attachments.map((attachment) => `Attached ${attachment.kind === "image" ? "image" : "file"} "${attachment.name}": ${attachment.path}`).join("\n");
 
+/**
+ * A question's answers with the files attached to each (t3code's `appendUserInputAttachmentPaths`):
+ * no provider takes a file in an answer, so each answer gets the files' paths as attachment
+ * lines, after its text, or as one more entry of a multiple choice.
+ */
+export const answersWithFiles = (
+  answers: Readonly<Record<string, unknown>>,
+  files: Readonly<Record<string, ReadonlyArray<PreambleAttachment>>>,
+): Record<string, unknown> => {
+  const out: Record<string, unknown> = { ...answers };
+  for (const [questionId, attached] of Object.entries(files)) {
+    const lines = attachmentLines(attached);
+    if (lines === undefined) continue;
+    const answer = out[questionId];
+    out[questionId] = Array.isArray(answer) ? [...answer, lines] : typeof answer === "string" && answer.trim() !== "" ? `${answer}\n\n${lines}` : lines;
+  }
+  return out;
+};
+
 /** The preamble: the selection, the pointed-at elements (spec 18), the change note and the attachments, each its own paragraph. */
 export const buildPreamble = (parts: {
   readonly selected: ReadonlyArray<SelectedShape>;
