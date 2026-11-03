@@ -243,8 +243,6 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   const undoable = useRef(0);
   const redoable = useRef(0);
   const preparedFor = useRef<string | undefined>(undefined);
-  /** The prepare in flight: only the newest one ends the preparing state, even after its file was replaced. */
-  const prepareRun = useRef(0);
   const helloTimer = useRef<number | undefined>(undefined);
   // The file this session last set on the shape. The room learns of it a sync round later, so a commit
   // that follows at once can reach the engine with a base the room has not caught up to yet.
@@ -520,20 +518,6 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   );
 
   const shownFile = (): string | undefined => (editor.getShape(shapeId as TLShapeId)?.props as { file?: string } | undefined)?.file;
-  /** Resolves once this tab's store shows the shape on a file other than `file` (or after 10 s, the sync having failed). */
-  const shapeLeaves = (file: string): Promise<void> =>
-    new Promise((resolve) => {
-      if (shownFile() !== file) return resolve();
-      const finish = () => {
-        stop();
-        window.clearTimeout(timer);
-        resolve();
-      };
-      const stop = editor.store.listen(() => {
-        if (shownFile() !== file) finish();
-      });
-      const timer = window.setTimeout(finish, 10_000);
-    });
 
   const undo = () => {
     if (baseRef.current !== undefined) {
@@ -726,7 +710,6 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
         setTree({ ready: answer.ready, elements: answer.elements, offTokens: answer.offTokens });
         if (answer.ready || preparedFor.current === file) return;
         preparedFor.current = file;
-        const run = ++prepareRun.current;
         setPreparing(true);
         try {
           const prepared = await engine.call("artifact.prepareEdit", { project, shapeId });
@@ -734,16 +717,12 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
           // swap stays out of the person's undo history and never lands over a newer version the agent wrote.
           if (!live) return;
           lastSet.current = prepared.file;
-          // Still preparing until this tab's store has the engine's swap: an edit or lock made on the old file before
-          // it arrives would carry the old file into its undo step.
-          if (prepared.file !== file) await shapeLeaves(file);
         } catch (error) {
           if (!live) return;
           setPrepareError(messageOf(error));
           setMode("interact");
         } finally {
-          // Not `live`: the swap this waited for replaces the file, which ends this effect before it gets here.
-          if (prepareRun.current === run) setPreparing(false);
+          if (live) setPreparing(false);
         }
       })
       .catch((error: unknown) => {

@@ -292,13 +292,8 @@ test("an artifact with no file says so and offers no new tab; Open in a new tab 
   // The app is on localhost, so the artifact is on the other loopback name.
   expect(tab.url()).toBe(`http://127.0.0.1:${agent.previewPort}/p/default/unframed-live.html?s=landing`);
   await expect(tab.frameLocator("iframe").getByRole("heading", { name: "Welcome" })).toBeVisible({ timeout: 10_000 });
-  // The live viewer follows the newest file, which the editor's prepare may have moved to after the wait above.
-  await expect
-    .poll(async () => {
-      const newest = (await roomRecords(agent, "default")).find((record) => record.id === "shape:landing")!.props.file as string;
-      return (await tab.locator("iframe").getAttribute("src")) === newest;
-    }, { timeout: 15_000 })
-    .toBe(true);
+  // The live viewer follows the newest file, which the editor's prepare may have just moved to.
+  await expect(tab.locator("iframe")).toHaveAttribute("src", file, { timeout: 15_000 });
   await expect(tab).toHaveTitle("Landing");
   await tab.close();
 });
