@@ -16,7 +16,21 @@ export interface OwnerContext {
   readonly dial: DialScope | null;
 }
 
-export type ScriptNode = { readonly type: string; readonly start: number; readonly end: number; readonly [key: string]: any };
+export type AnyNode = { readonly type: string; readonly [key: string]: any };
+export type ScriptNode = AnyNode & { readonly start: number; readonly end: number };
+
+export const LOOP_NODES = new Set(["ForStatement", "ForInStatement", "ForOfStatement", "WhileStatement", "DoWhileStatement"]);
+export const LOOP_METHODS = new Set(["forEach", "map", "filter", "reduce", "some", "every"]);
+export const FUNCTION_NODES = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
+
+export const propertiesOf = (node: AnyNode | undefined | null): ScriptNode[] => (node?.type === "ObjectExpression" ? node.properties.filter((p: ScriptNode) => p.type === "Property") : []);
+
+export const keyName = (property: AnyNode): string | null => {
+  if (property.computed) return null;
+  if (property.key.type === "Identifier") return property.key.name;
+  if (property.key.type === "Literal") return String(property.key.value);
+  return null;
+};
 
 const SCRIPT_CUT = 120;
 const RELATIVE = /^\s*(\+=|-=|\*=|\/=|<|>)/;
@@ -105,7 +119,6 @@ const isDialsCall = (node: ScriptNode): boolean =>
   node.callee.object.name === "unframed" &&
   node.callee.property.name === "dials";
 
-const FUNCTIONS = new Set(["FunctionExpression", "ArrowFunctionExpression", "FunctionDeclaration"]);
 
 const each = (node: unknown, visit: (node: ScriptNode) => void): void => {
   if (!node || typeof node !== "object") return;
@@ -140,11 +153,11 @@ export function dialsCallback(ast: ScriptNode): DialsCallback | null {
   if (!call) return null;
   const apply: ScriptNode | undefined = (call as ScriptNode).arguments[2];
   let fn: ScriptNode | null = null;
-  if (apply && FUNCTIONS.has(apply.type)) fn = apply;
+  if (apply && FUNCTION_NODES.has(apply.type)) fn = apply;
   if (apply?.type === "Identifier") {
     each(ast, (node) => {
       if (node.type === "FunctionDeclaration" && node.id?.name === apply.name) fn = node;
-      if (node.type === "VariableDeclarator" && node.id?.name === apply.name && node.init && FUNCTIONS.has(node.init.type)) fn = node.init;
+      if (node.type === "VariableDeclarator" && node.id?.name === apply.name && node.init && FUNCTION_NODES.has(node.init.type)) fn = node.init;
     });
   }
   if (!fn) return null;

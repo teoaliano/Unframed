@@ -3,10 +3,11 @@ import { retimeClipTweensInScript, type ClipTweenRetime } from "@hyperframes/par
 import { stampElementIds } from "../html/elementIds.ts";
 import { linkedomDocument } from "./dom.ts";
 import { carryOf } from "./carry.ts";
+import { millis } from "./timelineMaths.ts";
 import { resizeKeyframedTweenInScript, updateAnimationInScript } from "@hyperframes/parsers/gsap-writer-acorn";
 import { EASE_NAMES } from "../kits/easings.ts";
-import type { ScriptNode } from "./owners.ts";
-import { motionTimeline, type MotionTimeline, type Tween, type TweenRef } from "./timeline.ts";
+import { keyName, propertiesOf, type ScriptNode } from "./owners.ts";
+import { motionTimeline, type MotionTimeline, type TweenRef } from "./timeline.ts";
 import { NAMED_COLOURS } from "./colours.ts";
 
 export type MotionEdit =
@@ -30,8 +31,6 @@ type MotionEditResult = { readonly ok: true; readonly html: string; readonly sum
 
 const MIN_DURATION = 0.033;
 const SCRIPT = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;
-
-const millis = (seconds: number): number => Math.round(seconds * 1000) / 1000;
 
 interface ScriptSpan { readonly textContent: string; readonly start: number; readonly end: number }
 
@@ -144,7 +143,7 @@ const atLeastFrame = (seconds: number): number => millis(Math.max(MIN_DURATION, 
 const applyTweenValue = (session: Session, edit: Extract<MotionEdit, { type: "tween-value" }>, base: MotionTimeline, options: MotionEditOptions): MotionEditResult | null => {
   const found = locate(session, edit, base);
   if ("refusal" in found) return found.refusal;
-  const { tween, name, span, text, entry, index } = found;
+  const { tween, name, span, text, index } = found;
   const diamond = tween.keyframes.find((k) => k.at === edit.at);
   if (!diamond) return refuse(`${name} has no ${edit.at === 0 ? "start" : "end"} value to set.`);
   const owner = diamond.values[edit.property];
@@ -159,7 +158,7 @@ const applyTweenValue = (session: Session, edit: Extract<MotionEdit, { type: "tw
   const parsed = parseGsapScriptAcornForWrite(text)!;
   const call = parsed.located[index]!;
   const node = diamondNode(call.call, call.animation, edit.at);
-  const property = propertiesOf(node).find((candidate) => keyOfNode(candidate) === edit.property);
+  const property = propertiesOf(node).find((candidate) => keyName(candidate) === edit.property);
   if (!property) return refuse(`${name} has no ${edit.property} at this diamond.`);
   const code = typeof resolved.text === "object" ? `unframed.token(${JSON.stringify(resolved.text.token)})` : typeof resolved.text === "number" ? String(resolved.text) : JSON.stringify(resolved.text);
   const next = text.slice(0, property.value.start) + code + text.slice(property.value.end);
@@ -254,18 +253,11 @@ const valueFor = (edit: Extract<MotionEdit, { type: "tween-value" }>, current: n
   return { refusal: `${value} is not a colour or a number.` };
 };
 
-const keyOfNode = (property: ScriptNode): string | null => {
-  if (property.computed) return null;
-  if (property.key.type === "Identifier") return property.key.name;
-  if (property.key.type === "Literal") return String(property.key.value);
-  return null;
-};
-
 const diamondNode = (call: TweenCallInfo, animation: { keyframes?: unknown }, at: number): ScriptNode | undefined => {
   if (animation.keyframes) {
-    const keyframes = propertiesOf(call.varsArg as ScriptNode).find((p) => keyOfNode(p) === "keyframes")?.value as ScriptNode | undefined;
+    const keyframes = propertiesOf(call.varsArg as ScriptNode).find((p) => keyName(p) === "keyframes")?.value as ScriptNode | undefined;
     const step = propertiesOf(keyframes).find((p) => {
-      const pct = /^(\d+(?:\.\d+)?)%$/.exec(keyOfNode(p) ?? "");
+      const pct = /^(\d+(?:\.\d+)?)%$/.exec(keyName(p) ?? "");
       return pct !== null && Number(pct[1]) / 100 === at;
     });
     return step?.value as ScriptNode | undefined;
@@ -274,7 +266,6 @@ const diamondNode = (call: TweenCallInfo, animation: { keyframes?: unknown }, at
   return call.varsArg as ScriptNode | undefined;
 };
 
-const propertiesOf = (node: ScriptNode | undefined): ScriptNode[] => (node?.type === "ObjectExpression" ? node.properties.filter((p: ScriptNode) => p.type === "Property") : []);
 
 const tokenPlaceholder = (index: number) => `__unframed_token_${index}__`;
 

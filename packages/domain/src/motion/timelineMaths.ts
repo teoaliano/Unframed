@@ -16,7 +16,7 @@ export interface SnapTarget {
 
 export const frameOf = (seconds: number): number => Math.floor(seconds * FRAME_RATE + 1e-9);
 
-const millis = (seconds: number): number => Math.round(seconds * 1000) / 1000;
+export const millis = (seconds: number): number => Math.round(seconds * 1000) / 1000;
 
 export const readout = (seconds: number): string => {
   const centiseconds = Math.floor(seconds * 100 + 1e-6);

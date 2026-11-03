@@ -488,7 +488,7 @@ const assetRecord = (id: string, type: "image" | "video", src: string, facts: Fi
 
 const HTTPS = /^https:\/\/.+/;
 
-const mediaAsset = (op: string, batch: Batch, ctx: BatchContext, kind: "image" | "video", props: Record<string, unknown>): CanvasRecord | undefined => {
+const mediaAsset = (op: string, ctx: BatchContext, kind: "image" | "video", props: Record<string, unknown>): CanvasRecord | undefined => {
   if (typeof props.file === "string") {
     const facts = ctx.file(props.file)!;
     return assetRecord(ctx.newAssetId(), kind, `${PROJECT_FILE}${props.file}`, facts, facts.fileName);
@@ -547,7 +547,7 @@ const create = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
     }
     case "image":
     case "video": {
-      const asset = mediaAsset("create", batch, ctx, kind, props);
+      const asset = mediaAsset("create", ctx, kind, props);
       const facts = typeof props.file === "string" ? ctx.file(props.file) : undefined;
       const naturalW = facts?.w && facts.w > 0 ? facts.w : undefined;
       const naturalH = facts?.h && facts.h > 0 ? facts.h : undefined;
@@ -629,7 +629,7 @@ const update = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
     return applyPatch(batch, renamed, { ...obj(renamed.props) }, rest);
   }
   if (kind === "image" || kind === "video") {
-    const asset = mediaAsset("update", batch, ctx, kind, patch);
+    const asset = mediaAsset("update", ctx, kind, patch);
     const { file: _file, url: _url, ...rest } = patch;
     if (asset) {
       batch.put(asset);

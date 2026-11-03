@@ -1,6 +1,7 @@
 import { isTweenConfigKey } from "@hyperframes/parsers/gsap-constants";
 import { findTimelineScript, parseGsapScriptAcornForWrite, type TweenCallInfo } from "@hyperframes/parsers/gsap-parser-acorn";
-import { dialsCallback, ownerContextFor, ownerOf, type OwnerContext, type ScriptNode } from "./owners.ts";
+import { dialsCallback, ownerContextFor, ownerOf, FUNCTION_NODES, LOOP_METHODS, LOOP_NODES, keyName, propertiesOf, type OwnerContext, type ScriptNode } from "./owners.ts";
+import { inlineScripts } from "./dom.ts";
 
 type OwnerKind = "source" | "dial" | "token" | "script";
 type OwnerCounts = Record<OwnerKind, number>;
@@ -16,29 +17,11 @@ export interface ProbeCounts {
 
 type AstNode = { type: string; [key: string]: any };
 
-const LOOP_NODES = new Set(["ForStatement", "ForInStatement", "ForOfStatement", "WhileStatement", "DoWhileStatement"]);
-const LOOP_METHODS = new Set(["forEach", "map", "filter", "reduce", "some", "every"]);
-const FUNCTION_NODES = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
 
 const count = (): OwnerCounts => ({ source: 0, dial: 0, token: 0, script: 0 });
 
-const inlineScripts = (html: string): { textContent: string }[] =>
-  [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)]
-    .filter((match) => !/\bsrc\s*=/i.test(match[1]!))
-    .map((match) => ({ textContent: match[2]! }));
-
 const ownerKindOf = (node: AstNode | undefined, context: OwnerContext): OwnerKind =>
   node ? ownerOf(node as ScriptNode, context).kind : "script";
-
-const propertyEntries = (object: AstNode | undefined): AstNode[] =>
-  object?.type === "ObjectExpression" ? object.properties.filter((p: AstNode) => p.type === "Property") : [];
-
-const keyName = (property: AstNode): string | null => {
-  if (property.computed) return null;
-  if (property.key.type === "Identifier") return property.key.name;
-  if (property.key.type === "Literal") return String(property.key.value);
-  return null;
-};
 
 const readOnlyReason = (call: TweenCallInfo, keyframesComputed: boolean, dialsFn: AstNode | null): string | null => {
   const ancestors = call.ancestors as AstNode[];
@@ -60,14 +43,14 @@ export function probeMotion(html: string): ProbeCounts {
 
   for (const { call } of parsed.located) {
     const vars = call.varsArg as AstNode | undefined;
-    const props = propertyEntries(vars);
+    const props = propertiesOf(vars);
     const keyframesNode = props.find((p) => keyName(p) === "keyframes")?.value as AstNode | undefined;
     counts.tweens += 1;
 
     const keyframeValues: AstNode[] = [];
     let keyframesComputed = false;
     if (keyframesNode?.type === "ObjectExpression") {
-      for (const step of propertyEntries(keyframesNode)) if (step.value.type === "ObjectExpression") keyframeValues.push(...propertyEntries(step.value));
+      for (const step of propertiesOf(keyframesNode)) if (step.value.type === "ObjectExpression") keyframeValues.push(...propertiesOf(step.value));
     } else if (keyframesNode) {
       keyframesComputed = true;
     }
@@ -91,7 +74,7 @@ export function probeMotion(html: string): ProbeCounts {
     }
 
     const valueProps = [
-      ...(call.method === "fromTo" && call.fromArg ? propertyEntries(call.fromArg as AstNode) : []),
+      ...(call.method === "fromTo" && call.fromArg ? propertiesOf(call.fromArg as AstNode) : []),
       ...(call.method === "from" ? props : []),
       ...(call.method === "to" || call.method === "fromTo" || call.method === "set" ? props : []),
     ].filter((p) => !isTweenConfigKey(keyName(p) ?? "") && keyName(p) !== "keyframes" && keyName(p) !== "motionPath");

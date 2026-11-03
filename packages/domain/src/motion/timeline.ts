@@ -3,22 +3,15 @@ import { ensureHfIds } from "@hyperframes/parsers/hf-ids";
 import { findTimelineScript, parseGsapScriptAcornForWrite, type TweenCallInfo } from "@hyperframes/parsers/gsap-parser-acorn";
 import { parseHTML } from "linkedom";
 import { carryOf, type Carry } from "./carry.ts";
-import { groupOfKey, type Clip, type ElementInfo, type KeyframeValues, type MotionTimeline, type MotionTimelineOptions, type PropertyGroup, type RuntimeClips, type StaggerForm, type Tween, type TweenMethod, type TweenRef } from "./types.ts";
+import { groupOfKey, type Clip, type ElementInfo, type KeyframeValues, type MotionTimeline, type MotionTimelineOptions, type PropertyGroup, type StaggerForm, type Tween } from "./types.ts";
 
 export * from "./types.ts";
-import { dialsCallback, ownerOf, constantNumber, type Owner, type OwnerContext, type ScriptNode } from "./owners.ts";
+import { dialsCallback, ownerOf, constantNumber, FUNCTION_NODES, LOOP_METHODS, LOOP_NODES, propertiesOf, type Owner, type OwnerContext, type ScriptNode } from "./owners.ts";
+import { inlineScripts } from "./dom.ts";
 
 const GROUP_ORDER: readonly PropertyGroup[] = ["position", "scale", "size", "rotation", "visual", "other"];
 const SOURCE_CUT = 300;
-const LOOP_METHODS = new Set(["forEach", "map", "filter", "reduce", "some", "every"]);
-const LOOP_NODES = new Set(["ForStatement", "ForInStatement", "ForOfStatement", "WhileStatement", "DoWhileStatement"]);
-const FUNCTION_NODES = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
 const NOT_VALUES = new Set(["keyframes", "motionPath", "ease", "duration", "delay"]);
-
-const inlineScripts = (html: string): { textContent: string }[] =>
-  [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)]
-    .filter((match) => !/\bsrc\s*=/i.test(match[1]!))
-    .map((match) => ({ textContent: match[2]! }));
 
 const isValueKey = (key: string | null): key is string => key !== null && !isTweenConfigKey(key) && !NOT_VALUES.has(key);
 
@@ -28,9 +21,6 @@ const keyOf = (property: ScriptNode): string | null => {
   if (property.key.type === "Literal") return String(property.key.value);
   return null;
 };
-
-const propertiesOf = (node: ScriptNode | undefined | null): ScriptNode[] =>
-  node?.type === "ObjectExpression" ? node.properties.filter((p: ScriptNode) => p.type === "Property") : [];
 
 const valuesOf = (node: ScriptNode | undefined | null, context: OwnerContext): Record<string, Owner> => {
   const values: Record<string, Owner> = {};
