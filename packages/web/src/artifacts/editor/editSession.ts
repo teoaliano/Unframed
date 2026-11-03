@@ -57,6 +57,8 @@ export interface EditReport {
   };
   /** A board copy's rules that reach it, from its sheet's component style (spec 20); undefined for any other element. */
   readonly sheetRules?: ReadonlyArray<SheetRuleReport>;
+  /** The variant rules of the sheet that do not reach this copy, which may still set a field in other cells (spec 20). */
+  readonly sheetOverrides?: ReadonlyArray<SheetRuleReport>;
 }
 
 /** A tween's live change for the frame (spec 21, Live preview): its target, its channels, and the values it changes. */

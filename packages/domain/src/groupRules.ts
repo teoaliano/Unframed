@@ -59,7 +59,7 @@ export interface Rename {
   readonly from: string;
   readonly to: string;
   readonly rewrites: ReadonlyArray<PromptRewrite>;
-  /** A page's or motion's new title: its name, so every place that lists it shows what the person typed. */
+  /** A page's, motion's or component's new title: its name, so every place that lists it shows what the person typed (spec 20). */
   readonly title?: string;
 }
 
@@ -83,7 +83,7 @@ export const planRename = (shapes: ReadonlyArray<CanvasShape>, id: string, typed
     from: shape.ref,
     to,
     rewrites: renamePlan(shapes, shape.ref, to),
-    ...(shape.kind === "page" || shape.kind === "motion" ? { title: to } : {}),
+    ...(shape.kind === "page" || shape.kind === "motion" || shape.kind === "component" ? { title: to } : {}),
   };
 };
 

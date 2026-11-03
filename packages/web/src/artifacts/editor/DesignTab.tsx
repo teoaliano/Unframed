@@ -734,7 +734,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   /** Who holds a style value of one element. An edit still in the burst is the person's own, so the owner stays the source until it is written. */
   /** A board copy's field in its component sheet (spec 20): the variants it covers, and the rule that sets it. Null for a page's element. */
   const sheetOf = (subject: Subject, property: string): SheetField | null =>
-    sheetFieldOf(subject.report.sheetRules, subject.report.inline, property, expandShorthand, kit === null ? [] : kitCssNames(kit));
+    sheetFieldOf(subject.report.sheetRules, subject.report.inline, property, expandShorthand, kit === null ? [] : kitCssNames(kit), subject.report.sheetOverrides);
 
   const ownerOf = (subject: Subject, property: string): FieldOwner => {
     if (pending.some((edit) => (edit.type === "style" || edit.type === "token") && edit.elementId === subject.id && edit.property === property)) return { owner: "source" };

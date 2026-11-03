@@ -5,6 +5,7 @@
 import type { ComponentDeclaration } from "@unframed/domain";
 import { Component } from "lucide-react";
 import type { ReactNode } from "react";
+import { Tip } from "../../chrome/ui.tsx";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 
@@ -36,11 +37,13 @@ export const ComponentSection = ({ declaration, onAsk }: ComponentSectionProps) 
           <span key={name} className="flex flex-wrap items-center gap-1">
             <span className="text-sm">{name}</span>
             {values.map((value, index) => (
-              <span key={value} className="flex items-center gap-1">
-                <Badge variant="outline" size="sm">
-                  {value}
-                </Badge>
-                {index === 0 && <span className="text-xs text-muted-foreground">default</span>}
+              <span key={value} className="flex min-w-0 max-w-full items-center gap-1">
+                <Tip label={value}>
+                  <Badge variant="outline" size="sm" className="max-w-full">
+                    <span className="truncate">{value}</span>
+                  </Badge>
+                </Tip>
+                {index === 0 && <span className="shrink-0 text-xs text-muted-foreground">default</span>}
               </span>
             ))}
           </span>

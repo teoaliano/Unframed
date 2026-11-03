@@ -55,6 +55,10 @@ describe("the canvas schema in the room", () => {
   it("keeps a component shape whose tag follows the tag rule, and refuses one that breaks it", async () => {
     expect(await pushOne(engine, componentShape("c-ok", "uf-price-card", { file: "1-price-card.html", title: "Price card" }))).toBe("committed");
     expect(await stored(engine, "shape:c-ok")).toMatchObject({ type: "component", props: { tag: "uf-price-card" } });
+    for (const file of ['x.html" onload="alert(1)" x="', "../secret.html", "1-price-card.js", ""]) {
+      const expected = file === "" ? "committed" : { closed: "INVALID_RECORD" };
+      expect(await pushOne(engine, componentShape(`c-file-${file.length}`, "uf-file-check", { file, title: "File" }))).toEqual(expected);
+    }
     for (const tag of ["button", "uf-Button", "uf-", "uf-a--b", `uf-${"a".repeat(50)}`]) {
       const record = componentShape(`c-${tag.length}`, tag);
       expect(await pushOne(engine, record)).toEqual({ closed: "INVALID_RECORD" });

@@ -339,29 +339,37 @@ export function installEditBridge(win: EditWindow): void {
     }
     return found;
   };
+  // The rules of the component style that reach the copy (`rules`), and the rules with a variant condition that do not
+  // (`overrides`): a variant rule that sets a property in other cells can take over the field there (spec 20's owner rule).
   const sheetRulesOf = (el: EditElement) => {
     const host = cellOf(el);
     if (host === null || typeof doc.querySelectorAll !== "function") return undefined;
     // The kit's custom properties sit in a <style id="unframed-tokens"> the tokens script adds at run time; the source does not hold it.
     const styles = Array.from(doc.querySelectorAll("style")).filter((style) => style.id !== "unframed-tokens");
     const block = styles.findIndex((style) => style.getAttribute("data-uf-component-style") !== null);
-    if (block < 0) return [];
+    if (block < 0) return { rules: [], overrides: [] };
     const css = (styles[block]!.textContent ?? "").replace(/\/\*[\s\S]*?\*\//g, "");
     const seen = new Map<string, number>();
-    const found: Array<{ ref: { block: number; selector: string; occurrence: number }; declarations: Array<{ property: string; value: string; important: boolean }>; unknown: boolean }> = [];
+    type Found = { ref: { block: number; selector: string; occurrence: number }; declarations: Array<{ property: string; value: string; important: boolean }>; unknown: boolean };
+    const found: Found[] = [];
+    const overrides: Found[] = [];
     for (const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
       const selector = match[1]!.trim();
       if (selector === "" || selector.startsWith("@")) continue;
       const occurrence = seen.get(selector) ?? 0;
       seen.set(selector, occurrence + 1);
       const reaches = reachesCopy(host, el, selector);
-      if (reaches === false) continue;
+      if (reaches === false) {
+        if (/:host\(/.test(selector)) overrides.push({ ref: { block, selector, occurrence }, declarations: declarationsOf(match[2]!), unknown: false });
+        continue;
+      }
       found.push({ ref: { block, selector, occurrence }, declarations: declarationsOf(match[2]!), unknown: reaches === "unknown" });
     }
-    return found;
+    return { rules: found, overrides };
   };
 
   const reportOf = (el: EditElement) => {
+    const sheet = sheetRulesOf(el);
     const style = win.getComputedStyle(el);
     const inline: Record<string, string | null> = {};
     const computed: Record<string, string> = {};
@@ -383,7 +391,8 @@ export function installEditBridge(win: EditWindow): void {
       animated: animatedOf(el),
       variant: variantOf(el),
       component: componentOf(el),
-      sheetRules: sheetRulesOf(el),
+      sheetRules: sheet?.rules,
+      sheetOverrides: sheet?.overrides,
     };
   };
 

@@ -43,12 +43,24 @@ const installComponentHelper = (
   cap: number,
 ) => {
   const doc = win.document;
+  const note = (text: string) => {
+    const line = doc.createElement("p");
+    line.textContent = text;
+    line.style.cssText = "font:13px system-ui, sans-serif;color:#6b6b6b;margin:0;padding:24px;background:#ffffff;";
+    doc.body.appendChild(line);
+  };
   const build = () => {
     const declScript = doc.querySelector('script[type="application/json"][data-uf-component]');
     const styleEl = doc.querySelector('style[data-uf-component-style]');
     const templateEl = doc.querySelector("[data-uf-template]");
     if (!declScript || !styleEl || !templateEl) return;
-    const decl = JSON.parse(declScript.textContent || "{}") as { tag: string; variants: Record<string, string[]> };
+    let decl: { tag: string; variants: Record<string, string[]> };
+    try {
+      decl = JSON.parse(declScript.textContent || "{}") as { tag: string; variants: Record<string, string[]> };
+    } catch {
+      note("This component's declaration is not valid JSON, so it cannot be shown.");
+      return;
+    }
     const file = win.location.pathname.split("/").pop() || "";
     if (!win.customElements.get(decl.tag)) define(decl, styleEl.textContent || "", templateEl.innerHTML, file);
     const example = doc.querySelector("[data-uf-example]");
@@ -64,7 +76,8 @@ const installComponentHelper = (
       if (example) host.innerHTML = example.innerHTML;
       const label = doc.createElement("div");
       label.textContent = cell.label;
-      label.style.cssText = "font:12px system-ui, sans-serif;color:#6b6b6b;";
+      label.style.cssText = "font:12px system-ui, sans-serif;color:#6b6b6b;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+      label.setAttribute("title", cell.label);
       item.appendChild(host);
       item.appendChild(label);
       grid.appendChild(item);

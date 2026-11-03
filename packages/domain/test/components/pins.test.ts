@@ -91,3 +91,23 @@ describe("injectPins and setPin", () => {
     expect(readPins(setPin(html, "uf-card", "3-card.html")).map((pin) => pin.tag)).toEqual(["uf-card", "uf-button"]);
   });
 });
+
+describe("sheet names in pins (spec 20)", () => {
+  const hostile = 'x.html" onload="alert(1)" x="';
+  const page = `<!doctype html><html><head></head><body><uf-button></uf-button></body></html>`;
+
+  it("setPin refuses a sheet name that is not a bare file name, and writes nothing", () => {
+    expect(() => setPin(page, "uf-button", hostile)).toThrow(/not a sheet file name/);
+    expect(() => setPin(page, "uf-button", "../x.html")).toThrow();
+  });
+
+  it("injectPins never writes a current sheet name that is not a bare file name", () => {
+    const registry = {
+      current: new Map([["uf-button", hostile]]),
+      sheets: new Map([[hostile, "uf-button"]]),
+    };
+    const result = injectPins(page, registry);
+    expect(result.html).not.toContain("onload");
+    expect(result.unknownTags).toEqual(["uf-button"]);
+  });
+});

@@ -47,7 +47,11 @@ describe("the preview origin", () => {
       await expectNotFound(engine, path);
     }
     for (const method of ["POST", "PUT", "DELETE", "OPTIONS"]) await expectNotFound(engine, "/p/board/landing.html", method);
-    await expectNotFound(engine, "/p/board/missing.html");
+    const missing = await preview(engine, "/p/board/missing.html");
+    expect(missing.status).toBe(404);
+    expect(missing.headers["content-type"]).toBe("text/html; charset=utf-8");
+    expect(missing.text).toContain("This file is no longer in the project.");
+    expect(missing.text).not.toContain("<script");
     await expectNotFound(engine, "/p/nothere/landing.html");
   });
 
