@@ -6,26 +6,37 @@
  * `pnpm dev:share` (`--share`) also serves the Vite port on this machine's tailnet with
  * `tailscale serve`, so the app opens on another of your devices, and removes the mapping
  * on exit. The engine stays loopback only: the dev proxy relays the tailnet origin (spec 01).
+ *
+ * Neither child outlives this script: a closed terminal (SIGHUP) or a dead parent stops both
+ * like Ctrl-C does, and a reaper stops them when this script is killed outright.
  */
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { join } from "node:path";
+import { spawnReaper, watchParent, type Reaper } from "../packages/engine/src/lifeline.ts";
 import { repoRoot, viteBin, webRoot } from "./buildWeb.ts";
 
 const children: ChildProcess[] = [];
 let exitCode: number | undefined;
 let unshare: (() => void) | undefined;
+const reapers: Reaper[] = [];
+const running = (child: ChildProcess) => child.exitCode === null && child.signalCode === null;
 
 const stop = (code: number) => {
   if (exitCode !== undefined) return;
   exitCode = code;
   unshare?.();
-  for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+  for (const child of children) if (running(child)) child.kill("SIGTERM");
   setTimeout(() => process.exit(code), 2500).unref();
 };
 
 const start = (args: string[], cwd: string, env: NodeJS.ProcessEnv) => {
   const child = spawn(process.execPath, args, { cwd, env, stdio: "inherit" });
   children.push(child);
+  if (child.pid !== undefined) {
+    // The engine gets the same two seconds to flush that Ctrl-C gives it.
+    const reaper = spawnReaper({ kill: [child.pid], graceMs: 2000 });
+    if (reaper) reapers.push(reaper);
+  }
   child.on("exit", (code) => {
     stop(code ?? 1);
     if (children.every((each) => each.exitCode !== null || each.signalCode !== null)) process.exit(exitCode);
@@ -79,3 +90,9 @@ start([viteBin], webRoot, webEnv);
 
 process.on("SIGINT", () => stop(0));
 process.on("SIGTERM", () => stop(0));
+process.on("SIGHUP", () => stop(0));
+watchParent(() => stop(0));
+process.on("exit", () => {
+  for (const child of children) if (running(child)) child.kill("SIGKILL");
+  for (const reaper of reapers) reaper.dismiss();
+});
