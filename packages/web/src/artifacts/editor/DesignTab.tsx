@@ -1011,8 +1011,8 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
       {variant !== null && componentTitle !== undefined && (
         <p className="m-0 min-w-0 shrink-0 truncate text-xs text-muted-foreground" data-testid="variant-line">{`Editing ${[componentTitle, ...variant].join(" · ")}`}</p>
       )}
-      <div className="flex min-w-0 items-baseline gap-2">
-        <span className="truncate text-sm font-semibold">{name}</span>
+      <div className="flex min-w-0 flex-wrap items-baseline gap-2">
+        <span className="min-w-0 truncate text-sm font-semibold">{name}</span>
         {single && <span className="shrink-0 text-xs text-muted-foreground">{first!.report.tag}</span>}
         <Button variant="outline" size="sm" className="ml-auto shrink-0" onClick={() => onTell(subjects.map(chipDataOf))}>
           <MessageSquarePlus aria-hidden />
