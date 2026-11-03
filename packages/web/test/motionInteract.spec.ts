@@ -21,7 +21,8 @@ const SHAPE = "shape:intro";
 const timeline = (page: Page) => page.getByRole("region", { name: "Timeline for Intro" });
 const bar = (page: Page) => timeline(page).locator('[data-testid="timeline-row"][data-row-kind="element"][data-row-name="Dot"] [data-testid="timeline-bar"]');
 const region = (page: Page) => page.getByRole("region", { name: "Editing Intro" });
-const panel = (page: Page) => timeline(page).getByRole("region", { name: /^Values for/ });
+// The values panel is a popover in the page, not in the strip (spec 21, The values panel).
+const panel = (page: Page) => page.getByRole("region", { name: /^Values for/ });
 const outline = (page: Page, kind: "hover" | "selected") => page.locator(`[data-edit-outline="${kind}"]`);
 const modeButton = (page: Page, name: "Edit" | "Interact") => region(page).getByRole("group", { name: "Mode" }).getByRole("button", { name, exact: true });
 const viewer = (page: Page) => region(page).frameLocator("iframe[data-artifact-frame]");
