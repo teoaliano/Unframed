@@ -148,7 +148,7 @@ test("an artifact that is not live shows its snapshot once the engine has made o
     // before the shape first paints, so either one is a correct first state.
     await expect(shape.getByText("Select to preview").or(still)).toBeVisible({ timeout: 10_000 });
     await expect(still).toHaveCount(1, { timeout: 10_000 });
-    expect(await still.getAttribute("src")).toMatch(/^\/api\/file\/default\/[^?]+\?snapshot=300x200&v=\d+$/);
+    expect(await still.getAttribute("src")).toMatch(/^\/api\/file\/default\/[^?]+\?snapshot=300x200&mode=none&kit=none&v=\d+$/);
     await expect.poll(() => still.evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
     await expect(shape.locator("iframe")).toHaveCount(0);
 

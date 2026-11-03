@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { BRIDGE_TAG, editBridgeSource } from "@unframed/domain";
+import { BRIDGE_TAG, editBridgeSource, TOKENS_TAG } from "@unframed/domain";
 import { stampElementIds } from "@unframed/domain/html";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { pageShape } from "./canvasRecords.ts";
@@ -42,7 +42,7 @@ describe("artifact.sourceTree and artifact.prepareEdit (spec 18)", () => {
 
   it("answers ready false for a file without the bridge or without ids", async () => {
     const answer = await rpc.call("artifact.sourceTree", { project: "board", file: "1-plain.html" });
-    expect(answer).toEqual({ ready: false, elements: [] });
+    expect(answer).toEqual({ ready: false, elements: [], offTokens: [] });
   });
 
   it("refuses a file the project does not hold", async () => {
@@ -59,7 +59,7 @@ describe("artifact.sourceTree and artifact.prepareEdit (spec 18)", () => {
     const records = (await rpc.call("testCanvas.read", { project: "board" })).records as Array<{ id: string; props: { file?: string } }>;
     expect(records.find((record) => record.id === "shape:plain")?.props.file).toBe(answer.file);
     const written = await readFile(join(folder, answer.file), "utf8");
-    expect(written).toBe(stampElementIds(`${BRIDGE_TAG}\n${UNSTAMPED}`));
+    expect(written).toBe(stampElementIds(`${TOKENS_TAG}\n${BRIDGE_TAG}\n${UNSTAMPED}`));
     expect(await readFile(join(folder, "1-plain.html"), "utf8")).toBe(UNSTAMPED);
     const sidecar = JSON.parse(await readFile(join(folder, answer.file.replace(/\.html$/, ".json")), "utf8"));
     expect(sidecar).toEqual({
@@ -113,7 +113,7 @@ describe("artifact.sourceTree and artifact.prepareEdit (spec 18)", () => {
       });
       expect(answer).toEqual({ file: expect.stringMatching(/^\d+-ready\.html$/), summary: ["Text · Hello & more"] });
       const written = await readFile(join(folder, answer.file), "utf8");
-      expect(written).toBe(stampElementIds(`${BRIDGE_TAG}\n<h1 data-hf-id="hf-aaaa">Hello &amp; more</h1>`));
+      expect(written).toBe(stampElementIds(`${TOKENS_TAG}\n${BRIDGE_TAG}\n<h1 data-hf-id="hf-aaaa">Hello &amp; more</h1>`));
       expect(await readFile(join(folder, "1-ready.html"), "utf8")).toBe(READY);
       expect(await sidecarOf(answer.file)).toMatchObject({ source: "edit", kind: "page", of: "1-ready.html", shapeId: "shape:e1", edits: ["Text · Hello & more"], title: "Ready" });
       const read = (await rpc.call("testCanvas.read", { project: "board" })) as unknown as { records: Array<{ id: string; props?: { file?: string } }> };

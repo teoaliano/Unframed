@@ -17,6 +17,9 @@ import { useChatClient } from "../../agent/store.ts";
 import { Tip } from "../../chrome/ui.tsx";
 import { useCanvasProject, useEngine } from "../../context.ts";
 import { ArtifactFrame, outsideUrlOf, type EditMessage } from "../ArtifactFrame.tsx";
+import { kitOf } from "../kit.ts";
+import { kitUi } from "../../kits/state.ts";
+import { KitModePicker } from "../KitMode.tsx";
 import { previewPort } from "../state.ts";
 import { RenderButton } from "../render.tsx";
 import { EditOverlay } from "./EditOverlay.tsx";
@@ -69,6 +72,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
   const editor = useEditor();
   const project = useCanvasProject();
   const engine = useEngine();
+  const kit = useValue("project kit", () => kitOf(editor), [editor]);
   const chatClient = useChatClient(engine, project);
   const facts = useValue(
     "edited artifact",
@@ -76,7 +80,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
       const shape = editor.getShape(shapeId);
       if (!shape || !isArtifactKind(shape.type)) return undefined;
       const props = shape.props as ArtifactShapeProps;
-      return { kind: shape.type as ArtifactKind, file: props.file, title: props.title, fileName: props.fileName, dials: props.dials, locked: props.lockedElements ?? [] };
+      return { kind: shape.type as ArtifactKind, file: props.file, title: props.title, fileName: props.fileName, dials: props.dials, mode: props.mode, locked: props.lockedElements ?? [] };
     },
     [editor, shapeId],
   );
@@ -91,6 +95,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
     kind: facts?.kind ?? "page",
     file: facts?.file ?? "",
     locked: facts?.locked ?? [],
+    kit,
   });
   const sessionRef = useRef(session);
   sessionRef.current = session;
@@ -252,6 +257,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
               </Toggle>
             </ToggleGroup>
           )}
+          {facts.file !== "" && kit && <KitModePicker shapeId={shapeId} variant="header" />}
           {facts.file !== "" && <PreviewSizeControl size={size} onChange={setSize} scale={scale} />}
           {facts.kind === "motion" && facts.file !== "" && <RenderButton shapeId={shapeId} />}
           {facts.file !== "" && port !== undefined && (
@@ -293,6 +299,8 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
                   file={facts.file}
                   previewPort={port}
                   dials={dials}
+                  kit={kit}
+                  mode={facts.mode}
                   interactive
                   lazy={false}
                   onAnnounce={setAnnouncement}
@@ -331,6 +339,9 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
             project={project}
             dials={current ?? {}}
             locked={facts.locked}
+            kit={kit}
+            mode={facts.mode}
+            onOpenKit={() => kitUi(editor).update((state) => ({ ...state, open: true }))}
             onTell={(elements) => tellAgent(chatClient, shapeId, elements)}
             onAsk={(field, elements) => tellAgent(chatClient, shapeId, elements, makeEditableInstruction(field))}
           />

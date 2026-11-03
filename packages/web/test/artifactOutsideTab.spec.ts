@@ -33,9 +33,11 @@ test("a page opened in a new tab follows the shape: a new version swaps in witho
   await writeProjectFile(agent, "2-tuned.html", dialsPage({ size: [10, 0, 100] }).replace('<pre id="values">', '<h1>Version two</h1><pre id="values">'));
   const record = await recordOf(agent, "shape:tuned");
   await putRecords(agent, [{ ...record, props: { ...record.props, file: "2-tuned.html" } }]);
-  await expect(showing(tab).getByRole("heading", { name: "Version two" })).toBeVisible({ timeout: 5_000 });
-  await expect.poll(() => shown(showing(tab))).toEqual({ size: 20 });
-  await expect(tab.locator("iframe")).toHaveCount(1);
+  // The editor is still open on the canvas, so it prepares the agent's unstamped file (spec 18) and the shape moves on to the stamped copy:
+  // the tab may swap twice, and both versions carry the heading.
+  await expect(showing(tab).getByRole("heading", { name: "Version two" })).toBeVisible({ timeout: 15_000 });
+  await expect.poll(() => shown(showing(tab)), { timeout: 10_000 }).toEqual({ size: 20 });
+  await expect(tab.locator("iframe")).toHaveCount(1, { timeout: 10_000 });
   expect(await tab.evaluate(() => (window as unknown as { kept?: boolean }).kept)).toBe(true);
 
   // A dial change on the shape, as the editor's write makes it.

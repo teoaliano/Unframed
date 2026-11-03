@@ -1,4 +1,4 @@
-import { artifactUrl, defaultDialValues, liveViewerUrl, normaliseDials, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
+import { artifactUrl, defaultDialValues, liveViewerUrl, normaliseDials, type ArtifactKind, type DialsAnnouncement, type Kit } from "@unframed/domain";
 import { useEffect, useRef, useState } from "react";
 
 export interface ArtifactFrameProps {
@@ -8,6 +8,10 @@ export interface ArtifactFrameProps {
   readonly previewPort: number;
   /** The shape's saved parameter values, sent to the frame whenever it announces and whenever they change. */
   readonly dials: Readonly<Record<string, unknown>> | undefined;
+  /** The project kit (spec 19). A change is sent to the frame as `unframed:tokens:set`, with no reload. */
+  readonly kit?: Kit | null | undefined;
+  /** The kit mode the artifact shows (spec 19). Absent means the kit's default mode. */
+  readonly mode?: string | undefined;
   readonly interactive: boolean;
   /** The canvas loads its frames lazily; the editor's frame is live from the start. */
   readonly lazy: boolean;
@@ -139,7 +143,7 @@ const openShapeMenu = (frame: HTMLIFrameElement, menu: FrameMenu) => {
  * its hello first. The shown frame is the only one whose edit messages count, so a loading
  * document's boxes never reach the editor. Other frames show `file` and remount when it changes.
  */
-export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interactive, lazy, onAnnounce, onReady, editable = false, onEdit, onEditReady, onSwapped }: ArtifactFrameProps) => {
+export const ArtifactFrame = ({ project, kind, file, previewPort, dials, kit, mode, interactive, lazy, onAnnounce, onReady, editable = false, onEdit, onEditReady, onSwapped }: ArtifactFrameProps) => {
   const url = urlOf(project, kind, file, previewPort);
   const [shownUrl, setShownUrl] = useState(url);
   const displayed = editable ? shownUrl : url;
@@ -173,11 +177,15 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interac
     }
   };
   const shown = () => frames.current.get(displayedRef.current);
+  // Tokens messages go to the loading frame too, so a swap never changes the mode or the kit.
+  const postAll = (message: unknown) => frames.current.forEach((frame) => post(frame, message));
   // On the canvas the frame also asks for right-clicks, so a selected frame still opens its shape's menu.
   const hello = (frame: HTMLIFrameElement) => {
     post(frame, { type: "unframed:dials:hello", ...(canvasUnder(frame) ? { menus: true } : {}) });
     // The edit bridge loads on this hello (spec 18). Canvas frames never say it, so they carry no edit code.
     if (editing.current) post(frame, { type: "unframed:edit:hello" });
+    // The kit's mode reaches every frame at its hello, a loading one included, so a swapped-in frame shows the same mode.
+    post(frame, { type: "unframed:tokens:mode", mode: mode ?? null });
   };
   const set = (values: unknown) => post(shown(), { type: "unframed:dials:set", values });
 
@@ -242,6 +250,27 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interac
     const declared = heard.current === undefined ? undefined : normaliseDials(heard.current.config);
     if (declared?.ok) set(defaultDialValues(declared.schema));
   }, [serialised]);
+
+  // A mode change is sent at once; the frame's tokens script re-applies its tokens for that mode.
+  const modeFirst = useRef(true);
+  useEffect(() => {
+    if (modeFirst.current) {
+      modeFirst.current = false;
+      return;
+    }
+    postAll({ type: "unframed:tokens:mode", mode: mode ?? null });
+  }, [mode]);
+
+  // A kit change reaches the frame at once: the tokens script replaces its style and re-applies its mode.
+  const kitText = JSON.stringify(kit ?? null);
+  const kitFirst = useRef(true);
+  useEffect(() => {
+    if (kitFirst.current) {
+      kitFirst.current = false;
+      return;
+    }
+    if (kit) postAll({ type: "unframed:tokens:set", kit: { format: kit.format, name: kit.name, modes: kit.modes, tokens: kit.tokens } });
+  }, [kitText]);
 
   // A frame's load: say hello and send the saved dials. A loading frame is swapped in once its bridge says ready.
   const loaded = (src: string) => {

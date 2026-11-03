@@ -3,13 +3,14 @@
  * library" handler the context menu calls, and the two dialogs they open.
  */
 import { UnframedError } from "@unframed/contracts";
-import type { Preset } from "@unframed/domain";
-import { useEffect } from "react";
+import type { KitPreset, LibraryEntry } from "@unframed/domain";
+import { useEffect, useState } from "react";
 import { TldrawUiButtonIcon, TldrawUiToolbarButton, useEditor, useValue } from "tldraw";
 import { registerSlot } from "../chrome/slots.ts";
 import { useCanvasProject, useEngine, useSettings } from "../context.ts";
 import { showError } from "../toasts.tsx";
 import { AddToLibraryDialog } from "./AddToLibraryDialog.tsx";
+import { applyLibraryKit, ReplaceKitDialog } from "../kits/KitApply.tsx";
 import { insertPreset } from "./insertPreset.ts";
 import { LibraryDialog } from "./LibraryDialog.tsx";
 import { captureSelection, libraryUi } from "./state.ts";
@@ -22,7 +23,7 @@ export const LIBRARY_TOOLTIP = "Ready-made flows and styles";
 const LibraryButton = () => {
   const editor = useEditor();
   return (
-    <TldrawUiToolbarButton type="tool" title="Library" tooltip={LIBRARY_TOOLTIP} onClick={() => libraryUi(editor).update((state) => ({ ...state, open: true }))}>
+    <TldrawUiToolbarButton type="tool" title="Library" tooltip={LIBRARY_TOOLTIP} onClick={() => libraryUi(editor).update((state) => ({ ...state, open: true, type: undefined }))}>
       <TldrawUiButtonIcon icon="library" />
     </TldrawUiToolbarButton>
   );
@@ -34,6 +35,8 @@ export const LibraryHost = () => {
   const project = useCanvasProject();
   const settings = useSettings();
   const ui = useValue("library", () => libraryUi(editor).get(), [editor]);
+  // A kit that would replace the project's own kit waits here for its confirmation.
+  const [replacing, setReplacing] = useState<KitPreset>();
 
   useEffect(() => {
     const stopButton = registerSlot("libraryButton", LibraryButton);
@@ -47,14 +50,19 @@ export const LibraryHost = () => {
     };
   }, [project]);
 
-  const add = (preset: Preset) => {
+  const add = (entry: LibraryEntry) => {
     libraryUi(editor).update((state) => ({ ...state, open: false }));
-    insertPreset({ editor, engine, project, preset, textModel: settings?.textModel }).catch((error: unknown) => showError(messageOf(error)));
+    if (entry.kind === "kit") {
+      applyLibraryKit(editor, entry, () => setReplacing(entry));
+      return;
+    }
+    insertPreset({ editor, engine, project, preset: entry, textModel: settings?.textModel }).catch((error: unknown) => showError(messageOf(error)));
   };
 
   return (
     <>
-      {ui.open && <LibraryDialog onClose={() => libraryUi(editor).update((state) => ({ ...state, open: false }))} onAdd={add} />}
+      {ui.open && <LibraryDialog onClose={() => libraryUi(editor).update((state) => ({ ...state, open: false }))} onAdd={add} initialType={ui.type ?? "all"} />}
+      {replacing !== undefined && <ReplaceKitDialog editor={editor} preset={replacing} onClose={() => setReplacing(undefined)} />}
       {ui.saving && <AddToLibraryDialog captured={ui.saving} onClose={() => libraryUi(editor).update((state) => ({ ...state, saving: undefined }))} />}
     </>
   );

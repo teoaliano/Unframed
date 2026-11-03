@@ -8,7 +8,7 @@
  */
 import { mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { canvasSchema, Preset, UnframedError, unframedError } from "@unframed/contracts";
+import { canvasSchema, Preset, UnframedError, unframedError, type KitDefinition } from "@unframed/contracts";
 import {
   convertPreset,
   describePresetContent,
@@ -29,6 +29,7 @@ import { SettingsStore } from "../settingsStore.ts";
 
 export const PRESETS_INVALID_MESSAGE = "presets.json is not valid JSON.";
 export const PRESET_UNKNOWN_MESSAGE = "That preset is not in your library.";
+export const KIT_NEWER_MESSAGE = "The library kit changed since this project took it. Update from kit first, so you do not overwrite those changes.";
 
 export const presetsPath = (outputDir: string): string => join(outputDir, "presets.json");
 
@@ -46,6 +47,13 @@ export class PresetStore extends Context.Service<
     readonly list: Effect.Effect<{ presets: Preset[] }, UnframedError>;
     readonly save: (input: SaveInput) => Effect.Effect<{ preset: Preset }, UnframedError>;
     readonly remove: (id: string) => Effect.Effect<{ ok: true }, UnframedError>;
+    /** Saves a kit as a new kit preset at revision 1 (spec 19). The kit has no `from` link. */
+    readonly saveKit: (input: { readonly name: string; readonly summary: string; readonly kit: KitDefinition }) => Effect.Effect<{ preset: Preset }, UnframedError>;
+    /**
+     * Replaces a kit preset's kit and adds one to its revision. Refused with a conflict when the
+     * preset is newer than `knownRevision`, the revision the caller's project last took.
+     */
+    readonly updateKit: (input: { readonly id: string; readonly kit: KitDefinition; readonly knownRevision: number }) => Effect.Effect<{ preset: Preset }, UnframedError>;
     /** Runs `work` on the same queue as every read and write of `presets.json` (the media copier's calls). */
     readonly serialised: <A>(work: Effect.Effect<A, UnframedError>) => Effect.Effect<A, UnframedError>;
   }
@@ -172,6 +180,43 @@ export const presetStoreLayer = Layer.effect(
         }),
       );
 
+    const saveKit = (input: { readonly name: string; readonly summary: string; readonly kit: KitDefinition }) =>
+      Effect.gen(function* () {
+        const name = input.name.trim();
+        if (name === "") return yield* unframedError("bad_request", PRESET_EMPTY_NAME_MESSAGE);
+        return yield* queued(async (path) => {
+          const entries = await readEntries(path);
+          const preset = {
+            format: 2,
+            id: mintId(entries),
+            source: "user",
+            savedAt: new Date().toISOString(),
+            name,
+            summary: input.summary.trim(),
+            kind: "kit",
+            kit: input.kit,
+            revision: 1,
+          };
+          if (!listed(preset)) throw unframedError("bad_request", "This kit is not valid.");
+          await writeEntries(path, [{ value: preset, raw: JSON.stringify(preset, null, 2) }, ...entries]);
+          return { preset };
+        });
+      });
+
+    const updateKit = (input: { readonly id: string; readonly kit: KitDefinition; readonly knownRevision: number }) =>
+      queued(async (path) => {
+        const entries = await readEntries(path);
+        const index = entries.findIndex((entry) => idOf(entry.value) === input.id && listed(entry.value) && (entry.value as { kind?: unknown }).kind === "kit");
+        if (index < 0) throw unframedError("not_found", PRESET_UNKNOWN_MESSAGE);
+        const current = entries[index]!.value as Preset & { revision: number };
+        if (current.revision > input.knownRevision) throw unframedError("conflict", KIT_NEWER_MESSAGE, { reason: "newer_revision" });
+        const updated = { ...current, kit: input.kit, revision: current.revision + 1, savedAt: new Date().toISOString() };
+        if (!listed(updated)) throw unframedError("bad_request", "This kit is not valid.");
+        const next = entries.map((entry, at) => (at === index ? { value: updated, raw: JSON.stringify(updated, null, 2) } : entry));
+        await writeEntries(path, next);
+        return { preset: updated };
+      });
+
     const serialised = <A>(work: Effect.Effect<A, UnframedError>) =>
       Effect.flatMap(settings.outputDir, (outputDir) =>
         Effect.flatMap(
@@ -180,6 +225,6 @@ export const presetStoreLayer = Layer.effect(
         ),
       );
 
-    return PresetStore.of({ list, save, remove, serialised });
+    return PresetStore.of({ list, save, remove, saveKit, updateKit, serialised });
   }),
 );

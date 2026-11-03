@@ -88,22 +88,30 @@ const count = (template: string, placeholder: string, n: number) =>
  * shape changed by one origin; `system` rows and this chat's own `chat:` rows are left out;
  * a revert counts as the person's. Answers `undefined` when nothing changed.
  */
+const KIT_RECORD_ID = "document:document";
+
 export const changeNote = (rows: ReadonlyArray<ChangeRow>, chatId: string): string | undefined => {
   const person = new Set<string>();
   const other = new Set<string>();
   const reverted = new Set<number>();
+  // The kit is one record, so a kit commit counts once, as the kit, whatever it changed.
+  let personKit = false;
   for (const row of rows) {
     const author = classifyOrigin(row.origin);
     if (author.kind === "system" || (author.kind === "chat" && author.chatId === chatId)) continue;
+    const kitChanged = [...row.put, ...row.removed].includes(KIT_RECORD_ID);
+    if (kitChanged && author.kind !== "chat") personKit = true;
     const ids = [...row.put, ...row.removed].filter((id) => id.startsWith("shape:"));
-    if (ids.length === 0) continue;
+    if (ids.length === 0 && !kitChanged) continue;
     const key = `${row.origin.kind}:${row.origin.id}`;
     const target = author.kind === "chat" ? other : person;
     for (const id of ids) target.add(`${key}\u0000${id}`);
     if (author.kind === "revert" && author.chatId === chatId) reverted.add(author.turn);
   }
   const parts: string[] = [];
-  if (person.size > 0) parts.push(count(CHANGE_NOTE_PERSON, "<person>", person.size));
+  if (person.size > 0 && personKit) parts.push(`${count(CHANGE_NOTE_PERSON, "<person>", person.size)} and the kit`);
+  else if (person.size > 0) parts.push(count(CHANGE_NOTE_PERSON, "<person>", person.size));
+  else if (personKit) parts.push("the kit changed by the person");
   if (other.size > 0) parts.push(count(CHANGE_NOTE_OTHER, "<other>", other.size));
   if (parts.length === 0) return undefined;
   const clause = reverted.size === 0 ? "" : reverted.size === 1 ? CHANGE_NOTE_ONE_REVERT : CHANGE_NOTE_REVERTS.replace("<reverted>", String(reverted.size));

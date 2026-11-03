@@ -44,4 +44,4 @@ export const stillOf = (project: string, shapeId: string, current: string | unde
 
 /** A snapshot's picture, served from the project's cache folder by the app's file route. */
 export const snapshotUrl = (project: string, snapshot: ArtifactSnapshot): string =>
-  `/api/file/${encodeURIComponent(project)}/${encodeURIComponent(snapshot.file)}?snapshot=${Math.round(snapshot.w)}x${Math.round(snapshot.h)}&v=${snapshot.at}`;
+  `/api/file/${encodeURIComponent(project)}/${encodeURIComponent(snapshot.file)}?snapshot=${Math.round(snapshot.w)}x${Math.round(snapshot.h)}&mode=${encodeURIComponent(snapshot.mode ?? "none")}&kit=${snapshot.kit ?? "none"}&v=${snapshot.at}`;

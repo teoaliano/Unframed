@@ -9,6 +9,7 @@ import { useEditor, useValue, type Editor, type TLCamera, type TLShapeId } from 
 import { registerSlot } from "../chrome/slots.ts";
 import { useCanvasProject, useEngine, useSettings } from "../context.ts";
 import { closeComposer } from "../generate/state.ts";
+import { KitModePicker } from "./KitMode.tsx";
 import { ParametersButton } from "./ParametersButton.tsx";
 import { RenderButton } from "./render.tsx";
 import { artifactsOf, installFrameHold, installTuningWatch, previewPort } from "./state.ts";
@@ -66,6 +67,7 @@ export const ArtifactsHost = () => {
       registerSlot("openArtifact", openArtifactEditor),
       registerSlot("renderButton", RenderButton),
       registerSlot("parametersButton", ParametersButton),
+      registerSlot("kitModeButton", ({ shapeId }: { readonly shapeId: TLShapeId }) => <KitModePicker shapeId={shapeId} variant="toolbar" />),
       installTuningWatch(editor),
     ];
     return () => {
