@@ -9,6 +9,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, Lock, Maximize2, PanelBottom, P
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from "react";
 import { clampDialValue, dialAt, fitZoom, rulerStep, snapMove, snapTime, zoomAt, zoomButton, type DialSchema, type Kit, type Owner, type SnapTarget, type Tween, type TweenRef } from "@unframed/domain";
 import type { SourceEdit } from "@unframed/contracts";
+import type { ChipElement } from "@unframed/domain";
 import type { MotionTimelineReading } from "@unframed/contracts";
 import { Button } from "~/components/ui/button";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "~/components/ui/menu";
@@ -22,7 +23,7 @@ import { TIMELINE_MIN_HEIGHT, clampTimelineHeight, useTimelinePrefs } from "./ti
 import { buildRows, channelsOf, dialLimitOf, groupOfKey, selectOptionsOf, staggerEachOf, type BarView, type RowView } from "./rows.ts";
 import { DEFAULT_EASE, easeChoices, kitEasings, type EaseValue } from "./ease.ts";
 import { resolve, scriptValue } from "@unframed/domain";
-import { ValuesPanel, type PanelField, type ValuesPanelProps } from "./ValuesPanel.tsx";
+import { ValuesPanel, type PanelControl, type PanelField, type ValuesPanelProps } from "./ValuesPanel.tsx";
 import { MotionTransport, SPEEDS, readoutParts } from "./transport.ts";
 
 /** The transport row alone, which is what Hide leaves showing. */
@@ -90,6 +91,8 @@ export interface MotionTimelineProps {
   readonly column: number;
   /** The transport the editor made for this motion's player. */
   readonly transport: MotionTransport;
+  /** Ask the agent to make a value editable: the element's chip, with the tween's call as its excerpt, goes into the composer (spec 18). */
+  readonly onAsk: (field: string, elements: ChipElement[]) => void;
   /** The project kit and the artifact's mode, which the ease picker offers its easing tokens from (spec 19). */
   readonly kit: Kit | null;
   readonly mode: string | undefined;
@@ -294,7 +297,7 @@ const RowLine = ({
   );
 };
 
-export const MotionTimeline = ({ title, engine, project, file, session, dials, schema, locked, column, transport, kit, mode, className }: MotionTimelineProps) => {
+export const MotionTimeline = ({ title, engine, project, file, session, dials, schema, locked, column, transport, onAsk, kit, mode, className }: MotionTimelineProps) => {
   const [prefs, save] = useTimelinePrefs(engine);
   const { open } = prefs;
   const transportState = useSyncExternalStore(transport.subscribe, transport.getSnapshot);
@@ -641,6 +644,18 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
   };
   const tokensOf = (types: readonly string[]) => (kit?.tokens ?? []).filter((token) => types.includes(token.type)).map((token) => ({ path: token.path, value: tokenText(token.path) }));
 
+  /** The chip an ask makes: the element the tween animates, with the tween's call as its excerpt (spec 21, Rules this spec bends, 9). */
+  const askAgent = (field: string, tween: Tween, target: string) => {
+    const chip: ChipElement = { elementId: target, liveSelector: "", tag: "div", label: names[target] ?? target, startTag: "", text: "", hasChildren: false, excerpt: tween.source };
+    onAsk(field, [chip]);
+  };
+
+  /** A field of a read-only tween: its value as text, with no chip, note or ask of its own. */
+  const readOnlyField = (field: PanelField): PanelField => {
+    const control: PanelControl = field.control.kind === "text" ? field.control : field.control.kind === "number" ? { ...field.control, editable: false } : { ...field.control, editable: false };
+    return { key: field.key, label: field.label, control };
+  };
+
   /** The values panel of the tween it opened from: its timing, its stagger, and the values at the keyframe it opened at (spec 21, The values panel). */
   const panelOf = (): PanelProps | null => {
     if (timing === null || timingTween === undefined || timingBar === undefined) return null;
@@ -674,7 +689,7 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
           },
         };
       }
-      return { key, label, control: { kind: "text", value: owner.kind === "script" ? owner.text : "" }, note: "Set by the agent's code." };
+      return { key, label, control: { kind: "text", value: owner.kind === "script" ? owner.text : "" }, note: "Set by the agent's code.", ask: () => askAgent(label.toLowerCase(), tween, target) };
     };
     const fields: PanelField[] = [
       timeField("start", "Start", tween.start, timingBar.start - (timingBar.stagger ?? 0), (seconds) => applyTiming(ref, target, channelsNow, { start: seconds })),
@@ -723,7 +738,7 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
             },
           });
         } else {
-          fields.push({ key: property, label: property, control: { kind: "text", value: owner.text }, note: "Set by the agent's code." });
+          fields.push({ key: property, label: property, control: { kind: "text", value: owner.text }, note: "Set by the agent's code.", ask: () => askAgent(property, tween, target) });
         }
       }
     }
@@ -737,16 +752,19 @@ export const MotionTimeline = ({ title, engine, project, file, session, dials, s
     const group = groupName === null ? null : groupName.charAt(0).toUpperCase() + groupName.slice(1);
     const anchor = LABEL_WIDTH + timingBar.start * pxPerSecond - (scroller.current?.scrollLeft ?? 0);
     const left = Math.max(8, Math.min(anchor, Math.max(8, width - 288)));
+    // A read-only tween shows its computed layout as text: nothing in it takes a value, and the sentence above says why once.
+    const shown = tween.readOnly === null ? fields : fields.map((field): PanelField => readOnlyField(field));
     return {
       title: names[target] ?? target,
       group,
       method: tween.method,
-      fields,
+      fields: shown,
       ease: easeField === null ? null : { label: easeField.label, choices: easeField.choices, disabled: easeField.disabled },
       onEase: (value) => easeField?.value(value),
       repeat,
       sentence,
       readOnly: tween.readOnly,
+      ask: tween.readOnly === null ? null : () => askAgent("animation", tween, target),
       left,
     };
   };

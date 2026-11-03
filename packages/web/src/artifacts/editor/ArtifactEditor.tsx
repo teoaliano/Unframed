@@ -438,6 +438,7 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
           locked={facts.locked}
           column={columnHeight}
           transport={transport}
+          onAsk={(field, elements) => tellAgent(chatClient, shapeId, elements, makeEditableInstruction(field))}
           kit={kit}
           mode={facts.mode}
           className="col-start-2 row-start-2 max-[1279px]:col-span-2"

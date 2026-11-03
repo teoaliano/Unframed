@@ -169,12 +169,29 @@ export const buildRows = (input: RowsInput): RowView[] => {
     return input.live[index];
   };
 
+  /**
+   * A tween whose targets the source does not name (a helper's variable, `tl.to(target, ...)`) is placed by the live report: the
+   * next live tween, in order, that animates source elements. The reading still owns the tween, so its bar opens the values panel.
+   */
+  // A live tween on an element no resolved tween animates comes first: a loop's extra runs are on elements the reading already has.
+  const animated = new Set(reading.tweens.flatMap((tween) => tween.targets));
+  const takeSourceLive = (): LiveTween | undefined => {
+    const sourced = (candidate: LiveTween) => candidate.targets.length > 0 && candidate.targets.every((target) => elements[target] !== undefined);
+    const index = [input.live.findIndex((candidate, at) => !liveUsed.has(at) && sourced(candidate) && !candidate.targets.some((target) => animated.has(target))), input.live.findIndex((candidate, at) => !liveUsed.has(at) && sourced(candidate))].find((at) => at !== -1) ?? -1;
+    if (index === -1) return undefined;
+    liveUsed.add(index);
+    return input.live[index];
+  };
+
   // Each element's bars, per lane and as a whole, from every tween that targets it.
   const barsByElement = new Map<string, BarView[]>();
   const lanesByElement = new Map<string, Map<PropertyGroup, BarView[]>>();
   const runtimeBars = new Map<string, BarView[]>();
-  for (const tween of reading.tweens) {
-    const timing = timingOf(tween, input, liveFor(tween));
+  for (const source of reading.tweens) {
+    const unnamed = source.targets.length === 0;
+    const live = unnamed ? takeSourceLive() : liveFor(source);
+    const tween = unnamed && live !== undefined ? { ...source, targets: [...live.targets] } : source;
+    const timing = timingOf(tween, input, live);
     if (timing === null) continue;
     const offsets = offsetsOf(tween, tween.targets.length, staggerEachOf(tween, input.pending), input.pending);
     tween.targets.forEach((target, index) => {

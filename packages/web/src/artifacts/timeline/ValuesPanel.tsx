@@ -58,8 +58,10 @@ export interface ValuesPanelProps {
   readonly repeat: string | null;
   /** The sentence for a diamond with no value of its own (a `to`'s start, a `from`'s end), or null. */
   readonly sentence: string | null;
-  /** The reason a whole tween is read-only, or null. */
+  /** The reason a whole tween is read-only, or null. Shown under `Set by the agent's code.` */
   readonly readOnly: string | null;
+  /** Ask the agent to make a read-only tween editable (spec 18's point and tell), or null when there is nothing to ask. */
+  readonly ask: (() => void) | null;
   readonly onClose: () => void;
   /** Where the panel sits, from the strip's left edge in pixels. */
   readonly left: number;
@@ -188,7 +190,7 @@ const FieldRow = ({ field }: { readonly field: PanelField }) => (
   </div>
 );
 
-export const ValuesPanel = ({ title, group, method, fields, ease, onEase, repeat, sentence, readOnly, onClose, left, className }: ValuesPanelProps) => (
+export const ValuesPanel = ({ title, group, method, fields, ease, onEase, repeat, sentence, readOnly, ask, onClose, left, className }: ValuesPanelProps) => (
   <section
     aria-label={`Values for ${title}`}
     data-testid="values-panel"
@@ -205,7 +207,17 @@ export const ValuesPanel = ({ title, group, method, fields, ease, onEase, repeat
       </Button>
     </header>
     <div className="flex flex-col gap-2">
-      {readOnly !== null && <p className="m-0 text-xs text-muted-foreground">{readOnly}</p>}
+      {readOnly !== null && (
+        <div className="flex flex-col gap-1">
+          <p className="m-0 text-xs text-muted-foreground">Set by the agent&apos;s code.</p>
+          <p className="m-0 text-xs text-muted-foreground">{readOnly}</p>
+          {ask !== null && (
+            <Button variant="ghost" size="xs" className="justify-self-start" onClick={ask}>
+              Ask the agent to make this editable
+            </Button>
+          )}
+        </div>
+      )}
       {fields.map((field) => (
         <FieldRow key={field.key} field={field} />
       ))}
