@@ -2,9 +2,11 @@ import { UnframedError } from "@unframed/contracts";
 import { PRESET_EMPTY_NAME_MESSAGE, type Kit, type KitPreset, type LibraryEntry, type Token } from "@unframed/domain";
 import type { EngineConnection } from "../rpc/engine.ts";
 import { useState } from "react";
+import { Alert } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
 import { SAVE_FAILED_MESSAGE } from "../library/AddToLibraryDialog.tsx";
 import { useCanvasProject, useEngine } from "../context.ts";
 import { showError, showNotice } from "../toasts.tsx";
@@ -52,19 +54,21 @@ export const SaveKitDialog = ({ kit, onClose, onSaved }: { readonly kit: Kit; re
           <DialogDescription>{kitSaveSubtitle(kit)}</DialogDescription>
         </DialogHeader>
         <DialogPanel>
-          <label className="grid gap-1.5">
+          <Label>
+            <span className="grid w-full gap-1.5">
             <span className="text-xs font-medium text-foreground">Name</span>
             <Input value={name} aria-invalid={problem !== undefined || undefined} onChange={(event) => setName(event.target.value)} />
-          </label>
+            </span>
+          </Label>
           {problem !== undefined && (
-            <p role="alert" className="m-0 text-sm text-destructive-foreground">
-              {problem}
-            </p>
+            <Alert variant="error">{problem}</Alert>
           )}
-          <label className="grid gap-1.5">
+          <Label>
+            <span className="grid w-full gap-1.5">
             <span className="text-xs font-medium text-foreground">Description</span>
             <Input placeholder="What it does, in a line" value={summary} onChange={(event) => setSummary(event.target.value)} />
-          </label>
+            </span>
+          </Label>
         </DialogPanel>
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>

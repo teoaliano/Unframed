@@ -2,6 +2,8 @@ import { applyKitOps, type KitOp, type KitPreset } from "@unframed/domain";
 import { useEffect, useRef, useState } from "react";
 import { useEditor, useValue, type TLShapeId } from "tldraw";
 import { EllipsisIcon } from "lucide-react";
+import { Alert, AlertAction, AlertDescription } from "~/components/ui/alert";
+import { Empty, EmptyContent, EmptyDescription } from "~/components/ui/empty";
 import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPopup, AlertDialogTitle } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
@@ -137,9 +139,9 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
           </DialogHeader>
           <DialogPanel>
             {kit === null ? (
-              <div className="grid gap-4">
-                <p className="text-sm text-muted-foreground">{NO_KIT_MESSAGE}</p>
-                <div className="flex flex-wrap gap-2">
+              <Empty>
+                <EmptyDescription>{NO_KIT_MESSAGE}</EmptyDescription>
+                <EmptyContent className="flex-row flex-wrap justify-center">
                   <Button onClick={() => apply([{ op: "create", name: DEFAULT_KIT_NAME, modes: ["default"] }])}>New kit</Button>
                   <Button variant="outline" onClick={onFromLibrary}>
                     From library
@@ -147,18 +149,20 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
                   <Button variant="outline" onClick={() => setImporting(true)}>
                     Import
                   </Button>
-                </div>
-              </div>
+                </EmptyContent>
+              </Empty>
             ) : (
               <div className="grid gap-4">
                 {sourceLine()}
                 {newer !== undefined && (
-                  <p role="alert" className="m-0 flex flex-wrap items-center gap-2 text-sm text-destructive">
-                    {newer}
-                    <Button variant="outline" size="sm" onClick={() => void updateFromKit()}>
-                      Update from kit
-                    </Button>
-                  </p>
+                  <Alert variant="error">
+                    <AlertDescription>{newer}</AlertDescription>
+                    <AlertAction>
+                      <Button variant="outline" size="sm" onClick={() => void updateFromKit()}>
+                        Update from kit
+                      </Button>
+                    </AlertAction>
+                  </Alert>
                 )}
                 <div className="flex items-center gap-2">
                   <Input
@@ -181,11 +185,7 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
                 <KitTable kit={kit} usage={usage} apply={apply} titleOf={titleOf} onAskDeleteToken={(path) => setAsk({ kind: "token", path })} onAskDeleteMode={(mode) => setAsk({ kind: "mode", mode })} />
               </div>
             )}
-            {problem !== undefined && (
-              <p role="alert" className="text-sm text-destructive">
-                {problem}
-              </p>
-            )}
+            {problem !== undefined && <Alert variant="error">{problem}</Alert>}
           </DialogPanel>
         </DialogPopup>
       </Dialog>

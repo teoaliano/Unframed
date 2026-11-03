@@ -16,7 +16,9 @@ import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogHeader, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "~/components/ui/input-group";
+import { Empty, EmptyDescription } from "~/components/ui/empty";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
+import { Separator } from "~/components/ui/separator";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { Tip } from "../chrome/ui.tsx";
 import { useEngine } from "../context.ts";
@@ -139,9 +141,9 @@ const Row = ({ preset, onAdd, onDelete }: ItemProps) => (
         <Chips preset={preset} />
       </span>
       {preset.summary !== "" && (
-        <span className="line-clamp-3 text-xs text-muted-foreground" title={preset.summary}>
-          {preset.summary}
-        </span>
+        <Tip label={preset.summary}>
+          <span className="line-clamp-3 text-xs text-muted-foreground">{preset.summary}</span>
+        </Tip>
       )}
       <KitLine preset={preset} />
       <LegacyLine preset={preset} />
@@ -285,6 +287,7 @@ export const LibraryDialog = ({ onClose, onAdd, initialType = "all" }: { readonl
                   { value: "kit", label: "Kits" },
                 ]}
               />
+              <Separator orientation="vertical" className="h-5" />
               <Toggles<LibraryControls["source"]>
                 label="Source"
                 value={controls.source}
@@ -299,7 +302,9 @@ export const LibraryDialog = ({ onClose, onAdd, initialType = "all" }: { readonl
             {readFailure !== undefined && <Alert variant="error">Your presets could not be read: {readFailure}</Alert>}
             <div className="min-h-0 flex-1 overflow-y-auto" data-scrolls="true">
               {!loaded ? null : shown.items.length === 0 ? (
-                <p className="m-0 py-8 text-center text-sm text-muted-foreground">{EMPTY_LIBRARY_MESSAGE}</p>
+                <Empty>
+                  <EmptyDescription>{EMPTY_LIBRARY_MESSAGE}</EmptyDescription>
+                </Empty>
               ) : (
                 <ul className={view === "card" ? "m-0 grid list-none grid-cols-2 gap-2.5 p-0" : "m-0 list-none p-0"} aria-label="Presets">
                   {shown.items.map((preset) => (

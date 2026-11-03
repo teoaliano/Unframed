@@ -1,8 +1,10 @@
 import { applyKitOps, cssName, TOKEN_TYPES, type Kit, type KitOp, type Token, type TokenType, type TokenValue } from "@unframed/domain";
 import { useRef, useState } from "react";
+import { Alert } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Menu, MenuItem, MenuPopup } from "~/components/ui/menu";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Tip } from "../chrome/ui.tsx";
 import { keepEscapeInField, ValueCell } from "./KitCells.tsx";
@@ -138,14 +140,14 @@ export const KitTable = (props: KitTableProps) => {
       </nav>
       <div className="grid min-w-0 gap-3">
         <Input type="search" placeholder="Search tokens…" aria-label="Search tokens" value={query} onChange={(event) => setQuery(event.currentTarget.value)} />
-        <div className="max-h-[480px] overflow-auto" onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}>
-          <table className="w-full min-w-[560px] border-separate border-spacing-0 text-left text-sm">
-            <thead className="sticky top-0 z-[1] bg-popover">
-              <tr className="text-xs text-muted-foreground">
-                <th scope="col" className="px-2 py-1.5 font-medium">Token</th>
-                <th scope="col" className="px-2 py-1.5 font-medium">Type</th>
+        <div className="[&_[data-slot=table-container]]:max-h-[480px] [&_[data-slot=table-container]]:overflow-auto [&_[data-slot=table-header]]:bg-popover" onScrollCapture={(event) => setScrollTop((event.target as HTMLElement).scrollTop)}>
+          <Table className="min-w-[560px]">
+            <TableHeader className="sticky top-0 z-[1]">
+              <TableRow>
+                <TableHead scope="col">Token</TableHead>
+                <TableHead scope="col">Type</TableHead>
                 {kit.modes.map((mode, index) => (
-                  <th scope="col" key={mode} className="px-2 py-1.5 font-medium">
+                  <TableHead scope="col" key={mode}>
                     {renamingMode === mode ? (
                       <NameField label={`Mode name ${mode}`} initial={mode} onCancel={() => setRenamingMode(undefined)} onCommit={(name) => finish(commit([{ op: "renameMode", name: mode, to: name }]), () => setRenamingMode(undefined))} />
                     ) : (
@@ -164,9 +166,9 @@ export const KitTable = (props: KitTableProps) => {
                         />
                       </span>
                     )}
-                  </th>
+                  </TableHead>
                 ))}
-                <th scope="col" className="px-2 py-1.5 font-medium">
+                <TableHead scope="col">
                   {addingMode ? (
                     <NameField label="Mode name" initial="" onCancel={() => setAddingMode(false)} onCommit={(name) => finish(commit([{ op: "addMode", name }]), () => setAddingMode(false))} />
                   ) : (
@@ -174,34 +176,38 @@ export const KitTable = (props: KitTableProps) => {
                       Add mode
                     </Button>
                   )}
-                </th>
-                <th scope="col" className="whitespace-nowrap px-2 py-1.5 font-medium">Used by</th>
-                <th scope="col" className="w-9 px-1 py-1.5 font-medium">
+                </TableHead>
+                <TableHead scope="col">Used by</TableHead>
+                <TableHead scope="col" className="w-9">
                   <span className="sr-only">Token options</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {windowed.before > 0 && (
-                <tr aria-hidden style={{ height: windowed.before }}>
-                  <td colSpan={kit.modes.length + 5} />
-                </tr>
+                <TableRow aria-hidden style={{ height: windowed.before }}>
+                  <TableCell colSpan={kit.modes.length + 5} style={{ padding: 0 }} />
+                </TableRow>
               )}
               {windowed.rows.map((token) => {
                 const oneValue = token.value !== undefined;
                 const former = token.formerNames ?? [];
                 const users = usage.tokens[token.path] ?? [];
                 return (
-                  <tr key={token.path} data-token={token.path} className="border-t align-top">
-                    <td className="min-w-[15rem] px-2 py-2">
+                  <TableRow key={token.path} data-token={token.path}>
+                    <TableCell className="min-w-[15rem]">
                       <div className="flex items-start gap-1">
                         <span className="grid min-w-0">
                           {renaming === token.path ? (
                             <NameField label={`Rename ${token.path}`} initial={token.path} onCancel={() => setRenaming(undefined)} onCommit={(to) => finish(commit([{ op: "renameToken", path: token.path, to }]), () => setRenaming(undefined))} />
                           ) : (
-                            <span className="truncate" title={token.path}>{token.path}</span>
+                            <Tip label={token.path}>
+                              <span className="truncate">{token.path}</span>
+                            </Tip>
                           )}
-                          <span className="truncate font-mono text-xs text-muted-foreground" title={cssName(token.path)}>{cssName(token.path)}</span>
+                          <Tip label={cssName(token.path)}>
+                            <span className="truncate font-mono text-xs text-muted-foreground">{cssName(token.path)}</span>
+                          </Tip>
                           {former.length > 0 && (
                             <span className="text-xs text-muted-foreground">
                               Also answers to {former.join(", ")}{" "}
@@ -222,28 +228,28 @@ export const KitTable = (props: KitTableProps) => {
                           onCommit={(text) => finish(setDescription(token, text), () => setDescribing(undefined))}
                         />
                       )}
-                    </td>
-                    <td className="px-2 py-2 text-muted-foreground">{token.type}</td>
+                    </TableCell>
+                    <TableCell>{token.type}</TableCell>
                     {oneValue ? (
-                      <td className="px-2 py-2" colSpan={kit.modes.length} data-mode="all">
+                      <TableCell colSpan={kit.modes.length} data-mode="all">
                         <ValueCell token={token} tokens={kit.tokens} label={token.path} value={token.value} onCommit={(next) => setValue(token, kit.modes[0]!, next)} />
-                      </td>
+                      </TableCell>
                     ) : (
                       kit.modes.map((mode) => (
-                        <td key={mode} className="px-2 py-2" data-mode={mode}>
+                        <TableCell key={mode} data-mode={mode}>
                           <ValueCell token={token} tokens={kit.tokens} label={`${token.path} ${mode}`} value={valueIn(token, mode, kit)} onCommit={(next) => setValue(token, mode, next)} />
-                        </td>
+                        </TableCell>
                       ))
                     )}
-                    <td className="px-2 py-2" />
-                    <td className="whitespace-nowrap px-2 py-2 tabular-nums text-muted-foreground">
+                    <TableCell />
+                    <TableCell>
                       {users.length > 0 && (
                         <Tip label={<span className="whitespace-pre-line">{usedByLabel(users, titleOf)}</span>}>
                           <span>{users.length}</span>
                         </Tip>
                       )}
-                    </td>
-                    <td className="w-9 px-1 py-2">
+                    </TableCell>
+                    <TableCell className="w-9">
                       <OptionsMenu
                         label={`Token options ${token.path}`}
                         align="end"
@@ -255,24 +261,20 @@ export const KitTable = (props: KitTableProps) => {
                           ["Delete", () => onAskDeleteToken(token.path)],
                         ]}
                       />
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
               {windowed.after > 0 && (
-                <tr aria-hidden style={{ height: windowed.after }}>
-                  <td colSpan={kit.modes.length + 5} />
-                </tr>
+                <TableRow aria-hidden style={{ height: windowed.after }}>
+                  <TableCell colSpan={kit.modes.length + 5} style={{ padding: 0 }} />
+                </TableRow>
               )}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
         {adding ? <AddToken initialPath={group === "All" ? "" : `${group}/`} onAdd={addToken} onCancel={cancelAdd} /> : <Button variant="outline" className="justify-self-start" onClick={() => startEdit(() => setAdding(true))}>Add token</Button>}
-        {problem !== undefined && (
-          <p role="alert" className="text-sm text-destructive">
-            {problem}
-          </p>
-        )}
+        {problem !== undefined && <Alert variant="error">{problem}</Alert>}
       </div>
     </div>
   );

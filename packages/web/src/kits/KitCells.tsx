@@ -3,6 +3,7 @@ import { EllipsisIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 
@@ -198,7 +199,7 @@ const ColourFields = ({ label, text, invalid, onCommit }: { readonly label: stri
   const alpha = parsed?.alpha ?? 100;
   return (
     <div className="grid gap-2">
-      <label className="flex items-center gap-2 text-xs">
+      <Label>
         Colour
         <Input
           size="sm"
@@ -212,8 +213,8 @@ const ColourFields = ({ label, text, invalid, onCommit }: { readonly label: stri
             setDragging(undefined);
           }}
         />
-      </label>
-      <label className="flex items-center gap-2 text-xs">
+      </Label>
+      <Label>
         Opacity
         <Input
           size="sm"
@@ -234,7 +235,7 @@ const ColourFields = ({ label, text, invalid, onCommit }: { readonly label: stri
           }}
         />
         %
-      </label>
+      </Label>
       <TextCell label={`${label} CSS text`} value={text} invalid={invalid} font="mono" onCommit={onCommit} />
     </div>
   );
@@ -245,15 +246,17 @@ const STYLE_FIELDS: ReadonlyArray<keyof TextStyle> = ["fontFamily", "fontSize", 
 const TextStyleFields = ({ label, style, invalid, onCommit }: { readonly label: string; readonly style: TextStyle; readonly invalid: boolean; readonly onCommit: (next: TextStyle) => void }) => (
   <div className="grid gap-2">
     {STYLE_FIELDS.map((field) => (
-      <label key={field} className="grid gap-1 text-xs">
-        {field}
-        <TextCell
-          label={`${label} text style ${field}`}
-          value={String(style[field])}
-          invalid={invalid}
-          onCommit={(text) => onCommit({ ...style, [field]: (field === "fontWeight" && /^\d+$/.test(text)) || (field === "lineHeight" && /^\d*\.?\d+$/.test(text)) ? Number(text) : text })}
-        />
-      </label>
+      <Label key={field}>
+        <span className="grid w-full gap-1">
+          {field}
+          <TextCell
+            label={`${label} text style ${field}`}
+            value={String(style[field])}
+            invalid={invalid}
+            onCommit={(text) => onCommit({ ...style, [field]: (field === "fontWeight" && /^\d+$/.test(text)) || (field === "lineHeight" && /^\d*\.?\d+$/.test(text)) ? Number(text) : text })}
+          />
+        </span>
+      </Label>
     ))}
   </div>
 );

@@ -1,8 +1,10 @@
 import { applyKitOps, fromCss, fromDtcg, type ImportFile, type ImportFragment, type Kit, type KitOp, type TokenValue } from "@unframed/domain";
 import { useEditor } from "tldraw";
 import { useMemo, useState, type DragEvent } from "react";
+import { Alert } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
 import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { commitKit } from "./kitRoom.ts";
@@ -94,28 +96,28 @@ export const ImportKitDialog = ({ kit, onClose }: { readonly kit: Kit | null; re
             onDragLeave={() => setOver(false)}
             onDrop={onDrop}
           >
-            <label className="grid justify-items-center gap-1">
+            <Label>
+              <span className="grid w-full justify-items-center gap-1 text-sm font-normal text-muted-foreground">
               <span>Drop .json or .css files, or</span>
               <Input type="file" multiple accept=".json,.css" aria-label="Choose files" onChange={(event) => void take([...(event.currentTarget.files ?? [])])} />
-            </label>
+              </span>
+            </Label>
           </div>
-          <label className="grid gap-1.5">
+          <Label>
+            <span className="grid w-full gap-1.5">
             <span className="text-xs font-medium text-foreground">Paste</span>
             <Textarea aria-label="Paste" value={paste} onChange={(event) => setPaste(event.currentTarget.value)} />
-          </label>
+            </span>
+          </Label>
           {refusal !== undefined ? (
-            <p role="alert" className="m-0 text-sm text-destructive-foreground">
-              {refusal}
-            </p>
+            <Alert variant="error">{refusal}</Alert>
           ) : read?.ok ? (
             <p role="status" className="m-0 text-sm">
               {importSummary(kit, read.fragment)}
             </p>
           ) : null}
           {problem !== undefined && (
-            <p role="alert" className="m-0 text-sm text-destructive-foreground">
-              {problem}
-            </p>
+            <Alert variant="error">{problem}</Alert>
           )}
         </DialogPanel>
         <DialogFooter>
