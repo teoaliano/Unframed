@@ -10,6 +10,7 @@ import type { TestEngine } from "../../engine/test/engineProcess.ts";
 /**
  * One dot. Tween 0 moves it and animates its colour: a from-value at the start and a to-value at the end, the end's colour an
  * oklch(). Tween 1 sets a named colour at its end. Tween 2 repeats twice, back and forth. Tween 3 has a token duration.
+ * Tween 4 is a `from`, whose end diamond has no values of its own.
  */
 const VALUES = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}#dot{position:absolute;left:20px;top:120px;width:60px;height:60px;background:#f00}</style></head><body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="8" data-width="640" data-height="360"><div id="dot" data-uf-name="Dot" class="clip" data-start="0" data-duration="8"></div></div>
@@ -20,6 +21,7 @@ tl.fromTo("#dot", { x: 0, color: "#ffffff" }, { x: 120, color: "oklch(70% 0.2 15
 tl.to("#dot", { backgroundColor: "rebeccapurple", duration: 0.5 }, 2);
 tl.to("#dot", { opacity: 0.5, duration: 0.5, repeat: 2, yoyo: true }, 3);
 tl.to("#dot", { scale: 2, duration: unframed.token("duration/fast") }, 5);
+tl.from("#dot", { opacity: 0.2, duration: 0.5 }, 6);
 </script></body></html>`;
 
 /** A colour token on the background, and a parameter that sets the dot's x at its end. */
@@ -82,6 +84,18 @@ test("a diamond opens the values panel with the numbers and colours at that keyf
   await panel(page).getByRole("textbox", { name: "x" }).fill("150");
   await panel(page).getByRole("textbox", { name: "x" }).press("Enter");
   await expect.poll(() => editSummaries(agent).then((all) => all.at(-1)?.[0]), { timeout: 15_000 }).toBe("Set Dot x to 150");
+});
+
+test("a to tween's start diamond and a from tween's end diamond open the values panel with their sentences", async ({ page, agent }) => {
+  await openMotion(page, agent, VALUES);
+  await clickDiamond(page, 1, 0);
+  await expect(panel(page).getByText("Starts from the element's current look.")).toBeVisible();
+  await expect(panel(page).getByRole("textbox", { name: "backgroundColor" })).toHaveCount(0);
+  await panel(page).getByRole("button", { name: "Close values" }).click();
+
+  await clickDiamond(page, 4, 1);
+  await expect(panel(page).getByText("Ends at the element's own style.")).toBeVisible();
+  await expect(panel(page).getByText("Starts from the element's current look.")).toHaveCount(0);
 });
 
 test("a named colour at a diamond shows its name and takes a hex value", async ({ page, agent }) => {
