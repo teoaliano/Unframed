@@ -201,6 +201,18 @@ describe("the tokens script's messages", () => {
   });
 });
 
+describe("a kit removed while the frame is open", () => {
+  it("clears the style text it installed, and unframed.token answers undefined", () => {
+    const { win, document, send } = stubWindow();
+    const style = document.head!.children[0];
+    expect(style.textContent).toBe(kitCss(kit));
+    send({ type: "unframed:tokens:set", kit: null });
+    expect(document.head!.children[0]).toBe(style);
+    expect(style.textContent).toBe("");
+    expect(win.unframed.token("color/brand/primary")).toBeUndefined();
+  });
+});
+
 describe("the stamp", () => {
   it("is 8 hexadecimal characters, the same for the same kit, and changes with the kit", () => {
     expect(kitStamp(kit)).toMatch(/^[0-9a-f]{8}$/);

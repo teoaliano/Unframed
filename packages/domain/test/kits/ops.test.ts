@@ -173,3 +173,22 @@ describe("all or nothing", () => {
     );
   });
 });
+
+describe("addToken", () => {
+  it("adds a token that has no path yet", () => {
+    const next = ok(kit(), [{ op: "addToken", path: "color/accent", type: "color", value: "#000000" }]);
+    expect(next?.tokens.map((token) => token.path)).toEqual(["color/brand/primary", "space/gap", "color/accent"]);
+  });
+
+  it("refuses a path that a token already has, with the sentence Rename uses, and writes nothing", () => {
+    expect(refused(kit(), [{ op: "addToken", path: "color/brand/primary", type: "dimension", value: "0px" }])).toEqual({
+      op: 1,
+      refusal: "There is already a token color/brand/primary.",
+    });
+  });
+
+  it("still lets setToken write a value over an existing token", () => {
+    const next = ok(kit(), [{ op: "setToken", path: "space/gap", type: "dimension", value: "12px" }]);
+    expect(next?.tokens.find((token) => token.path === "space/gap")?.value).toBe("12px");
+  });
+});
