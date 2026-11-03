@@ -587,8 +587,18 @@ export function installEditBridge(win: EditWindow): void {
     selectText(el, true);
   };
 
+  // A field the page owns keeps its keys, in either mode.
+  const typingIn = (event: EditEvent): boolean => {
+    const target = event.target as { tagName?: string; isContentEditable?: boolean } | null;
+    return target?.isContentEditable === true || target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT";
+  };
+
   const onKey = (event: EditEvent) => {
-    if (!listening) return;
+    if (!listening) {
+      // Interact leaves the page's keys alone, but the mode keys and Escape still reach the editor (spec 18, Mode).
+      if (KEYS_FORWARDED.includes(event.key) && !typingIn(event)) post({ type: "unframed:edit:key", key: event.key, shift: event.shiftKey === true, meta: event.metaKey === true, ctrl: event.ctrlKey === true });
+      return;
+    }
     if (editing === null && pendingText !== null) {
       event.preventDefault();
       pendingText.keys.push({ key: event.key, shiftKey: event.shiftKey === true, metaKey: event.metaKey === true, ctrlKey: event.ctrlKey === true });
@@ -627,7 +637,6 @@ export function installEditBridge(win: EditWindow): void {
     ["submit", block],
     ["click", onClick],
     ["dblclick", onDoubleClick],
-    ["keydown", onKey],
   ];
 
   const listen = (on: boolean) => {
@@ -1161,6 +1170,7 @@ export function installEditBridge(win: EditWindow): void {
     }
   });
 
+  doc.addEventListener("keydown", onKey, true);
   post({ type: "unframed:edit:ready" });
 }
 

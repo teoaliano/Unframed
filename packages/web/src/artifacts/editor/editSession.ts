@@ -722,9 +722,9 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
         return;
       }
       case "unframed:edit:key": {
-        // The frame's keys count only in Edit mode (spec 18, Keys).
-        if (modeRef.current !== "edit") return;
+        // In Interact only the mode keys come from the frame; the edit keys count in Edit mode (spec 18, Keys).
         const key = String(message.key ?? "");
+        if (modeRef.current !== "edit" && key !== "v" && key !== "V" && key !== "i" && key !== "I") return;
         const modifiers = { shift: message.shift === true, meta: message.meta === true, ctrl: message.ctrl === true };
         if (key === "Enter" && !modifiers.shift && !modifiers.meta && !modifiers.ctrl) {
           const [only] = selectionRef.current;

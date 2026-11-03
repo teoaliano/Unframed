@@ -57,7 +57,7 @@ test("a text message from the frame with no text edit pending writes nothing", a
   await expect(frameOf(page).getByText("Lead text")).toBeVisible();
 });
 
-test("a key message from the frame is ignored outside Edit mode", async ({ page, agent }) => {
+test("an edit key message from the frame is ignored outside Edit mode", async ({ page, agent }) => {
   await onBoard(page, agent);
   await openEditor(page);
   await column(page, "parameters").getByRole("tab", { name: "Layers" }).click();
@@ -67,7 +67,7 @@ test("a key message from the frame is ignored outside Edit mode", async ({ page,
 
   await modeButton(page, "Interact").click();
   const frame = await frameWindow(page);
-  await frame.evaluate(() => window.parent.postMessage({ type: "unframed:edit:key", key: "Escape", shift: false, meta: false, ctrl: false }, "*"));
+  await frame.evaluate(() => window.parent.postMessage({ type: "unframed:edit:key", key: "Enter", shift: false, meta: false, ctrl: false }, "*"));
   await page.waitForTimeout(300);
   await expect(rowOf(page, "Lead text").locator("[data-layer]")).toHaveAttribute("aria-pressed", "true");
 });

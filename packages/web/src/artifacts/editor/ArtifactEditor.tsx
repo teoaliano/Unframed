@@ -280,6 +280,11 @@ export const ArtifactEditor = ({ shapeId, onClose, onOpen }: ArtifactEditorProps
         const modifiers = { shift: message.shift === true, meta: message.meta === true, ctrl: message.ctrl === true };
         if (transport.handleKey(String(message.key ?? ""), modifiers, "frame")) return;
       }
+      // Esc from the frame does what Esc does in the editor: it clears a selection, else closes (spec 18, Keys).
+      if (message.type === "unframed:edit:key" && message.key === "Escape") {
+        if (!sessionRef.current.handleKey("Escape", { shift: false, meta: false, ctrl: false })) closeRef.current();
+        return;
+      }
       sessionRef.current.onFrameMessage(message);
     },
     [transport],

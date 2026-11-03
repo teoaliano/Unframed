@@ -55,8 +55,8 @@ test("Make component is disabled on a locked element, with its tooltip", async (
   await onBoard(page, agent, PAGE);
   await openEditor(page);
   await parameters(page).getByRole("tab", { name: "Layers" }).click();
-  await expect(parameters(page).getByRole("button", { name: "Lock Lead text" })).toBeVisible({ timeout: 20_000 });
-  await parameters(page).getByRole("button", { name: "Lock Lead text" }).click();
+  await expect(parameters(page).getByRole("button", { name: "Locked Lead text" })).toBeVisible({ timeout: 20_000 });
+  await parameters(page).getByRole("button", { name: "Locked Lead text" }).click();
   // Selected from Layers, where a locked element is still picked.
   await parameters(page).locator("[data-layer-row]").filter({ hasText: "Lead text" }).first().click();
   await parameters(page).getByRole("tab", { name: "Design" }).click();
