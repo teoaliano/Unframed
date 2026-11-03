@@ -44,7 +44,8 @@ export const importSummary = (kit: Kit | null, fragment: ImportFragment): string
   const changes = fragment.tokens.filter((token) => existing.has(token.path)).length;
   const adds = fragment.tokens.length - changes;
   const newModes = modesOf(kit, fragment).filter((mode) => !(kit?.modes ?? []).includes(mode));
-  const modes = newModes.length > 0 ? `adds the modes ${newModes.join(", ")}. ` : "";
+  // One new mode named `default` is the kit's own default mode, not a mode someone named.
+  const modes = newModes.length === 1 && newModes[0] === "default" ? "adds the default mode. " : newModes.length > 0 ? `adds the modes ${newModes.join(", ")}. ` : "";
   const guidance = fragment.guidance === undefined ? "" : kit?.guidance === undefined ? "Sets the guidance. " : "Replaces the guidance. ";
   const names = fragment.skippedNames !== undefined && fragment.skippedNames.length > 0 ? `: ${skippedList(fragment.skippedNames)}` : "";
   return `Adds ${adds} tokens, changes ${changes}, ${modes}${guidance}Skips ${fragment.skipped} it could not read${names}.`;

@@ -52,7 +52,7 @@ test("Import takes a DESIGN.md: the summary names what it skips, then Import wri
   const importing = page.getByRole("dialog", { name: "Import" });
   await dropFiles(page, await centre(importing.getByTestId("import-drop")), [{ name: "DESIGN.md", mime: "text/markdown", bytes: Buffer.from(DESIGN_MD) }]);
 
-  await expect(importing).toContainText("Adds 4 tokens, changes 0, adds the modes default. Sets the guidance. Skips 1 it could not read: components.button.");
+  await expect(importing).toContainText("Adds 4 tokens, changes 0, adds the default mode. Sets the guidance. Skips 1 it could not read: components.button.");
   expect(await kitOf(engine, project)).toBeUndefined();
   await importing.getByRole("button", { name: "Import" }).click();
 
