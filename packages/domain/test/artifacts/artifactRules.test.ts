@@ -10,6 +10,7 @@ import {
   injectTags,
   liveArtifacts,
   parseSnapshotFileName,
+  TOKENS_TAG,
   placeBesideSelection,
   previewHostFor,
   RUNTIME_TAG,
@@ -42,25 +43,25 @@ describe("artifact file names", () => {
 describe("tag injection", () => {
   it("puts the tags right before the first </head>, followed by a newline, whitespace before > allowed", () => {
     expect(injectTags("<html><head><title>x</title></head><body></body></html>", "page")).toBe(
-      `<html><head><title>x</title>${BRIDGE_TAG}\n</head><body></body></html>`,
+      `<html><head>${TOKENS_TAG}\n<title>x</title>${BRIDGE_TAG}\n</head><body></body></html>`,
     );
-    expect(injectTags("<HEAD></HEAD ><head></head>", "page")).toBe(`<HEAD>${BRIDGE_TAG}\n</HEAD ><head></head>`);
+    expect(injectTags("<HEAD></HEAD ><head></head>", "page")).toBe(`<HEAD>${TOKENS_TAG}\n${BRIDGE_TAG}\n</HEAD ><head></head>`);
   });
 
   it("puts them just after the opening <body ...> without a </head>, preceded by a newline", () => {
-    expect(injectTags('<body class="x"><p>hi</p></body>', "page")).toBe(`<body class="x">\n${BRIDGE_TAG}<p>hi</p></body>`);
-    expect(injectTags("<BODY><p>hi</p>", "page")).toBe(`<BODY>\n${BRIDGE_TAG}<p>hi</p>`);
-    expect(injectTags("<bodyguard></bodyguard>", "page")).toBe(`${BRIDGE_TAG}\n<bodyguard></bodyguard>`);
+    expect(injectTags('<body class="x"><p>hi</p></body>', "page")).toBe(`<body class="x">\n${TOKENS_TAG}\n${BRIDGE_TAG}<p>hi</p></body>`);
+    expect(injectTags("<BODY><p>hi</p>", "page")).toBe(`<BODY>\n${TOKENS_TAG}\n${BRIDGE_TAG}<p>hi</p>`);
+    expect(injectTags("<bodyguard></bodyguard>", "page")).toBe(`${TOKENS_TAG}\n${BRIDGE_TAG}\n<bodyguard></bodyguard>`);
   });
 
   it("puts them at the very top with neither, followed by a newline", () => {
-    expect(injectTags("<div>hi</div>", "page")).toBe(`${BRIDGE_TAG}\n<div>hi</div>`);
+    expect(injectTags("<div>hi</div>", "page")).toBe(`${TOKENS_TAG}\n${BRIDGE_TAG}\n<div>hi</div>`);
   });
 
   it("gives a motion the runtime tag first, then the bridge, in each position", () => {
-    expect(injectTags("<head></head>", "motion")).toBe(`<head>${RUNTIME_TAG}\n${BRIDGE_TAG}\n</head>`);
-    expect(injectTags("<body>x", "motion")).toBe(`<body>\n${RUNTIME_TAG}\n${BRIDGE_TAG}x`);
-    expect(injectTags("<div id=root></div>", "motion")).toBe(`${RUNTIME_TAG}\n${BRIDGE_TAG}\n<div id=root></div>`);
+    expect(injectTags("<head></head>", "motion")).toBe(`<head>${TOKENS_TAG}\n${RUNTIME_TAG}\n${BRIDGE_TAG}\n</head>`);
+    expect(injectTags("<body>x", "motion")).toBe(`<body>\n${TOKENS_TAG}\n${RUNTIME_TAG}\n${BRIDGE_TAG}x`);
+    expect(injectTags("<div id=root></div>", "motion")).toBe(`${TOKENS_TAG}\n${RUNTIME_TAG}\n${BRIDGE_TAG}\n<div id=root></div>`);
   });
 
   it.each([
@@ -69,13 +70,13 @@ describe("tag injection", () => {
     ["the package's runtime build", '<script src="hyperframe.runtime.iife.js"></script>'],
   ])("skips the runtime when the document already has %s", (_case, tag) => {
     const html = `<head>${tag}</head>`;
-    expect(injectTags(html, "motion")).toBe(`<head>${tag}${BRIDGE_TAG}\n</head>`);
+    expect(injectTags(html, "motion")).toBe(`<head>${TOKENS_TAG}\n${tag}${BRIDGE_TAG}\n</head>`);
   });
 
   it("skips the bridge when the document already mentions unframed-dials.js", () => {
     const html = '<head><script src="./unframed-dials.js"></script></head>';
-    expect(injectTags(html, "page")).toBe(html);
-    expect(injectTags(html, "motion")).toBe(`<head><script src="./unframed-dials.js"></script>${RUNTIME_TAG}\n</head>`);
+    expect(injectTags(html, "page")).toBe(`<head>${TOKENS_TAG}\n<script src="./unframed-dials.js"></script></head>`);
+    expect(injectTags(html, "motion")).toBe(`<head>${TOKENS_TAG}\n<script src="./unframed-dials.js"></script>${RUNTIME_TAG}\n</head>`);
   });
 
   it("is idempotent: a file read back and written again gains nothing", () => {
@@ -195,9 +196,12 @@ describe("which artifacts run", () => {
 });
 
 describe("snapshot names and fit", () => {
-  it("names a snapshot after the artifact file and its size, and reads the name back", () => {
-    expect(snapshotFileName("1-a.html", { w: 480.4, h: 320 })).toBe("1-a.html-480x320.png");
-    expect(parseSnapshotFileName("1-a.html-480x320.png")).toEqual({ file: "1-a.html", w: 480, h: 320 });
+  it("names a snapshot after the artifact file, its size, kit mode and kit stamp, and reads the name back", () => {
+    expect(snapshotFileName("1-a.html", { w: 480.4, h: 320 }, { mode: "dark", kit: "1a2b3c4d" })).toBe("1-a.html-480x320-dark-1a2b3c4d.png");
+    expect(snapshotFileName("1-a.html", { w: 480, h: 320 }, { mode: null, kit: null })).toBe("1-a.html-480x320-none-none.png");
+    expect(parseSnapshotFileName("1-a.html-480x320-dark-1a2b3c4d.png")).toEqual({ file: "1-a.html", w: 480, h: 320, mode: "dark", kit: "1a2b3c4d" });
+    expect(parseSnapshotFileName("1-a.html-480x320-none-none.png")).toEqual({ file: "1-a.html", w: 480, h: 320, mode: null, kit: null });
+    expect(parseSnapshotFileName("1-a.html-480x320.png")).toBeUndefined();
     expect(parseSnapshotFileName("photo.png-512.webp")).toBeUndefined();
   });
 
@@ -214,5 +218,38 @@ describe("snapshot names and fit", () => {
     expect(snapshotFits({ w: 480, h: 320 }, { w: 528, h: 290 })).toBe(true);
     expect(snapshotFits({ w: 480, h: 320 }, { w: 529, h: 320 })).toBe(false);
     expect(snapshotFits({ w: 480, h: 320 }, { w: 480, h: 287 })).toBe(false);
+  });
+});
+
+describe("the tokens tag (spec 19)", () => {
+  const TOKENS = '<script src="unframed-tokens.js"></script>';
+
+  it("goes right after the opening head tag, then a newline, before the other tags", () => {
+    expect(injectTags("<html><head><title>x</title></head><body></body></html>", "page")).toBe(
+      `<html><head>${TOKENS}\n<title>x</title>${BRIDGE_TAG}\n</head><body></body></html>`,
+    );
+    expect(injectTags("<head></head>", "motion")).toBe(`<head>${TOKENS}\n${RUNTIME_TAG}\n${BRIDGE_TAG}\n</head>`);
+  });
+
+  it("goes after the opening body tag with no head, then the other tags", () => {
+    expect(injectTags('<body class="x"><p>hi</p></body>', "page")).toBe(`<body class="x">\n${TOKENS}\n${BRIDGE_TAG}<p>hi</p></body>`);
+  });
+
+  it("goes at the very top with neither head nor body", () => {
+    expect(injectTags("<div>hi</div>", "page")).toBe(`${TOKENS}\n${BRIDGE_TAG}\n<div>hi</div>`);
+  });
+
+  it("is not confused by a header element", () => {
+    expect(injectTags("<header>x</header>", "page")).toBe(`${TOKENS}\n${BRIDGE_TAG}\n<header>x</header>`);
+  });
+
+  it("is skipped when the document already mentions unframed-tokens.js, and the rest is unchanged", () => {
+    const html = '<head><script src="./unframed-tokens.js"></script><script src="./unframed-dials.js"></script></head>';
+    expect(injectTags(html, "page")).toBe(html);
+  });
+
+  it("is added on its own to a document that has the other tags", () => {
+    const html = '<head><script src="./unframed-dials.js"></script></head>';
+    expect(injectTags(html, "page")).toBe(`<head>${TOKENS}\n<script src="./unframed-dials.js"></script></head>`);
   });
 });

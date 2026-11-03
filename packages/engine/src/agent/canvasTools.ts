@@ -23,6 +23,7 @@ import { readResultSidecar } from "../runs/sidecars.ts";
 import { shapeBoxes } from "../runs/shapeBounds.ts";
 import type { McpBinding, McpTool, ToolAnswer } from "./mcp.ts";
 import type { TurnChanges } from "./turnChanges.ts";
+import { kitOf } from "../kits/tokensFile.ts";
 
 const PAGE_ID = "page:page";
 
@@ -142,7 +143,9 @@ export class CanvasTools {
       recipes,
       selection,
     });
-    return { value: live?.note === undefined ? view : { ...view, selectionNote: live.note } };
+    const kit = kitOf(records);
+    const withKit = { ...view, kit: kit === null ? null : { name: kit.name, tokens: kit.tokens.length, modes: kit.modes } };
+    return { value: live?.note === undefined ? withKit : { ...withKit, selectionNote: live.note } };
   }
 
   async write(binding: McpBinding, args: Record<string, unknown>): Promise<ToolAnswer> {
@@ -160,6 +163,7 @@ export class CanvasTools {
       indexAbove: (below) => getIndexAbove((below ?? null) as IndexKey | null),
       pageId: records.find((record) => record.typeName === "page")?.id ?? PAGE_ID,
       boxes: shapeBoxes(records),
+      modes: kitOf(records)?.modes ?? [],
     });
     if (!prepared.ok) return error(prepared.error);
     const before = new Map<string, TLRecord | undefined>();

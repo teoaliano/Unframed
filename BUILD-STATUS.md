@@ -42,7 +42,7 @@ Spec 12's run on `build`, with the dev server stopped: `pnpm typecheck` exit 0 (
 | 14 | external agents | 12 | not built | | 0/27 tasks. Written for issue #93 at the person's request, with every open question decided |
 | 15 | audio | 13 | not built | | 0/43 tasks. Written for issue #63 at the person's request; its questions are answered in the spec, and two facts await a paid call (Further Notes) |
 | 18 | element editing | | built, PR open | see the spec 18 PR | 40/41 tasks. Task 2 leaves out spec 16's node page writer, which spec 16 adds when it is built. Built by parallel Haiku agents, merged on `build/18-element-editing` |
-| 19 | kits and tokens | | not built | | 0/43 tasks (one is the person's step). Written with 18 |
+| 19 | kits and tokens | | built, PR open | see the spec 19 PR | 42/43 tasks. Task 43 is the person's step (rendering outside Unframed). Task 10 does not cover spec 16's node page writer |
 | 20 | components | | not built | | 0/47 tasks. Written with 18 |
 | 21 | motion timeline | | partly built | 0a64cf0 (#165) | Task 1 (HyperFrames 0.8.206, renders without static-frame dedup) and task 2 (the render comparison, in #165) merged. The rest waits for specs 18 and 19 |
 
@@ -112,6 +112,10 @@ Open for the person:
 - Spec 18 and spec 16: spec 16 is not built, so its node page writer does not stamp element ids or inject the bridge tag yet (spec 18, Element ids). Spec 16's build adds it.
 - Spec 18: an element chip's excerpt rebuilds the start tag from the tag, `data-hf-id`, `data-uf-name`, `src` and inline style, because the web holds no source bytes; it can differ from the file.
 - Spec 18: the Image section shows for one selected element only.
+- Spec 19: token chips are missing for border colour, padding and margin sides, and shadow; those fields show the computed value.
+- Spec 19: a text style's off-token Use token writes all five longhands.
+- Spec 19: the Used by count path has no browser test.
+- CI: the `test` job runs the engine, domain and whole browser suite on one runner; with specs 18 and 19 it passed 30 minutes, so its limit is 45. Sharding the browser suite across runners would bring it back down.
 - Spec 01: the Electron 44 boot and the `dist` branch publish run only in the tag workflow. `scripts/electronSmoke.ts` ran with plain Node as the binary; `scripts/publishDist.sh` never ran.
 - Spec 04, task 21: the test moves the image through the room, not with a mouse drag, because dragging a selected shape moves the whole selection.
 - Spec 05: logic duplicated between `textRuns.ts` and spec 03's `runs.ts` (run-id minting, the `of` lookup, top-index lookup), and between the image and text catalogue functions.

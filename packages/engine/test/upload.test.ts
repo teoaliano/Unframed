@@ -120,11 +120,11 @@ describe("the upload route", () => {
   it("gives an uploaded page the bridge tag and element ids, and writes a tagged, stamped one as given", async () => {
     const answer = (await upload("Pitch.html", "<body><h1>Hi</h1></body>", "text/html")).json();
     const written = await readFile(join(folder, answer.file), "utf8");
-    expect(written).toMatch(/^<body>\n<script src="unframed-dials\.js"><\/script><h1 data-hf-id="hf-[0-9a-z]{4}">Hi<\/h1><\/body>$/);
+    expect(written).toMatch(/^<body>\n<script src="unframed-tokens\.js"><\/script>\n<script src="unframed-dials\.js"><\/script><h1 data-hf-id="hf-[0-9a-z]{4}">Hi<\/h1><\/body>$/);
     expect(answer.bytes).toBe(Buffer.byteLength(written));
     expect(await readFile(join(folder, "unframed-dials.js"), "utf8")).toContain("unframed-dials.js");
 
-    const ready = '<script src="unframed-dials.js"></script>\n<h1 data-hf-id="hf-aaaa">Ready</h1>';
+    const ready = '<script src="unframed-tokens.js"></script>\n<script src="unframed-dials.js"></script>\n<h1 data-hf-id="hf-aaaa">Ready</h1>';
     const kept = (await upload("ready.html", ready, "text/html")).json();
     expect(await readFile(join(folder, kept.file), "utf8")).toBe(ready);
   });

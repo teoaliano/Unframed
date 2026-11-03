@@ -1,6 +1,6 @@
 /**
  * The motion viewer (spec 09), `hyperframes-viewer.html`: a page on the preview origin that
- * plays one composition in HyperFrames' player and relays dial messages between the canvas
+ * plays one composition in HyperFrames' player and relays dial and kit (spec 19) messages between the canvas
  * above it and the composition inside it. Opened outside Unframed it relays nothing.
  */
 
@@ -95,6 +95,10 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
       canvas = { window: event.source as Target, origin: event.origin };
       if (announcement !== undefined) canvas.window.postMessage(announcement, canvas.origin);
     } else if (data.type === "unframed:dials:set") {
+      const target = composition ?? (player.iframeElement?.contentWindow as Target | undefined);
+      target?.postMessage(data, own);
+    } else if ((data.type === "unframed:tokens:mode" || data.type === "unframed:tokens:set") && event.source === canvas?.window) {
+      // Only the canvas that said hello drives the tokens: the kit and the mode come from the app.
       const target = composition ?? (player.iframeElement?.contentWindow as Target | undefined);
       target?.postMessage(data, own);
     } else if (type.startsWith("unframed:edit:")) {

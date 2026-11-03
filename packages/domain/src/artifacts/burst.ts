@@ -3,7 +3,8 @@ import type { SourceEdit } from "@unframed/contracts";
 /**
  * Edit bursts (spec 18): the edits the editor collects before it writes them as one version. An
  * edit is keyed by its target and field, so a later edit of the same field replaces the earlier
- * one; dial values are held by path and written with the burst's file in one step.
+ * one; a style rule (spec 19's StyleRuleRef) is a target too. Dial values are held by path and
+ * written with the burst's file in one step.
  */
 
 export type BurstEdit = SourceEdit | { readonly type: "dial"; readonly path: string; readonly value: unknown };
@@ -17,9 +18,12 @@ export const emptyBurst = (): Burst => ({ edits: new Map(), dials: new Map() });
 
 /** The target and field an edit replaces: a later edit with the same key takes its place. */
 const burstKey = (edit: SourceEdit): string => {
+  if (edit.type === "token" && edit.rule !== undefined) {
+    return JSON.stringify(["rule", edit.rule.block, edit.rule.selector, edit.rule.occurrence, `style:${edit.property}`]);
+  }
   const field =
     edit.type === "text" ? "text"
-    : edit.type === "style" ? `style:${edit.property}`
+    : edit.type === "style" || edit.type === "token" ? `style:${edit.property}`
     : edit.type === "attribute" ? `attribute:${edit.name}`
     : edit.type === "hide" ? "hidden"
     : `image:${edit.target}`;
