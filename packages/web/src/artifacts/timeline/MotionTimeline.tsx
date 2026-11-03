@@ -57,8 +57,6 @@ type PanelProps = Omit<ValuesPanelProps, "onClose" | "className">;
 const MIN_DURATION = 0.033;
 /** One frame at 30 fps: what an arrow key moves a bar by (Shift moves ten). */
 const FRAME_SECONDS = 1 / 30;
-/** Pads a small control's hit area to 24 px square without changing what it draws (spec 21, Rows, lanes and diamonds). */
-const HIT_AREA = "p-1.5 -m-1.5";
 
 /** Seconds to the millisecond, as the writer keeps them. */
 const round = (seconds: number): number => Math.round(seconds * 1000) / 1000;
@@ -293,14 +291,14 @@ const RowLine = ({
           <div className="flex items-center">
             {row.expandable && (
               <Tip label={name}>
-                <Button variant="ghost" size="icon-micro" className={HIT_AREA + " size-6"} aria-label={`${row.expanded ? "Collapse" : "Expand"} ${name}`} onClick={onToggle}>
+                <Button variant="ghost" size="icon-micro" className="-my-1.5 h-6 w-3" aria-label={`${row.expanded ? "Collapse" : "Expand"} ${name}`} onClick={onToggle}>
                   {row.expanded ? <ChevronDown aria-hidden className="size-2.5" /> : <ChevronRight aria-hidden className="size-2.5" />}
                 </Button>
               </Tip>
             )}
             {row.kind === "element" && row.element !== null ? (
               <Tip label={name}>
-                <Button variant="ghost" size="icon-micro" className={HIT_AREA + " size-6"} aria-label={`Select ${name}`} onClick={() => onSelectElement(row.element!)}>
+                <Button variant="ghost" size="icon-micro" className="-my-1.5 h-6 w-3" aria-label={`Select ${name}`} onClick={() => onSelectElement(row.element!)}>
                   <Square aria-hidden className="size-2.5" />
                 </Button>
               </Tip>
@@ -314,16 +312,16 @@ const RowLine = ({
           </div>
         </div>
       ) : (
-      <div className="sticky left-0 z-10 flex w-40 flex-none items-center gap-1 overflow-hidden border-b border-r bg-card pr-1 text-xs" style={{ paddingLeft: 4 + row.depth * 12 }}>
+      <div className="sticky left-0 z-10 flex w-40 flex-none items-center gap-1 border-b border-r bg-card pr-1 text-xs" style={{ paddingLeft: 4 + row.depth * 12 }}>
         {row.expandable ? (
-          <Button variant="ghost" size="icon-tiny" className={HIT_AREA + " size-6"} aria-label={`${row.expanded ? "Collapse" : "Expand"} ${name}`} onClick={onToggle}>
+          <Button variant="ghost" size="icon-tiny" className="size-6 p-1.5" aria-label={`${row.expanded ? "Collapse" : "Expand"} ${name}`} onClick={onToggle}>
             {row.expanded ? <ChevronDown aria-hidden /> : <ChevronRight aria-hidden />}
           </Button>
         ) : (
           <span className="size-4 flex-none" />
         )}
         {row.kind === "element" && row.element !== null ? (
-          <Button variant="ghost" size="xs" className={HIT_AREA + " h-6"} aria-label={`Select ${name}`} onClick={() => onSelectElement(row.element!)}>
+          <Button variant="ghost" size="xs" className="-my-1.5 py-1.5" aria-label={`Select ${name}`} onClick={() => onSelectElement(row.element!)}>
             <span className="truncate">{name}</span>
           </Button>
         ) : (
