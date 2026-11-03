@@ -7,7 +7,7 @@ import { kitOf } from "./tokensFile.ts";
 import { changedKitParts } from "./kitTurn.ts";
 import type { TurnChanges } from "../agent/turnChanges.ts";
 
-export interface KitToolContext {
+interface KitToolContext {
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;
   readonly apply: (project: string, change: CanvasChange, origin: ChangeOrigin) => Promise<Applied>;
   readonly chatTurn: (project: string, chatId: string) => { turnCount: number | undefined; turnId: string | undefined; interactionMode: InteractionMode };
@@ -17,7 +17,7 @@ export interface KitToolContext {
 
 const DOCUMENT_ID = "document:document";
 
-export const kitReadAnswer = (kit: Kit | null) => {
+const kitReadAnswer = (kit: Kit | null) => {
   if (kit === null) return { kit: null };
   const defaultMode = kit.modes[0]!;
   return {
@@ -140,10 +140,10 @@ export class KitTools {
   }
 }
 
-export const KIT_READ_DESCRIPTION =
+const KIT_READ_DESCRIPTION =
   "Read the project's kit: its tokens with their CSS names (use var(<css>) in CSS and unframed.token(\"<path>\") in script), the modes and the default mode. Answers { kit: null } when the project has no kit.";
 
-export const KIT_WRITE_DESCRIPTION =
+const KIT_WRITE_DESCRIPTION =
   "Change the project's kit with one batch of ops, applied all or nothing, as one step of this turn that the person can revert. Ops: create {name, modes?}; rename {name}; setToken {path, type, value? | values?, description?}; renameToken {path, to}; deleteToken {path}; forgetFormerName {path, cssName}; addMode {name, copyFrom?}; renameMode {name, to}; deleteMode {name}; setDefaultMode {name}; reorder {paths}. Never redefine a kit CSS name in an artifact, and never set data-theme yourself.";
 
-export const KIT_OPS_DESCRIPTION = "The kit operations, in order. See kit_write's description for each op.";
+const KIT_OPS_DESCRIPTION = "The kit operations, in order. See kit_write's description for each op.";

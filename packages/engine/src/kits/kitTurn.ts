@@ -4,7 +4,7 @@ import type { TLRecord } from "@tldraw/tlschema";
 import type { ChangeLogRow } from "../canvas/rooms.ts";
 import { changedBy, type TurnChangeRow } from "../agent/turnChanges.ts";
 
-export const KIT_KEY_PREFIX = "kit:";
+const KIT_KEY_PREFIX = "kit:";
 
 interface KitPart {
   readonly typeName: "kit";
@@ -12,7 +12,7 @@ interface KitPart {
   readonly value: unknown;
 }
 
-export const kitEntries = (kit: Kit | null): Map<string, TLRecord | undefined> => {
+const kitEntries = (kit: Kit | null): Map<string, TLRecord | undefined> => {
   const parts = new Map<string, TLRecord | undefined>();
   if (kit === null) return parts;
   const part = (key: string, value: unknown) => parts.set(key, { typeName: "kit", id: key, value } as unknown as TLRecord);

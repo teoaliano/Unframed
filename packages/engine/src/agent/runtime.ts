@@ -57,7 +57,7 @@ import { generateArguments, generateTool } from "./generateTool.ts";
 import type { ConnectionBook } from "../agentConnections/book.ts";
 import type { ImagePricingAnswer, ImageRunRequest, ModelEntry, RunEvent, TextRunRequest, VideoStartRequest } from "@unframed/contracts";
 
-export interface GenerationRuns {
+interface GenerationRuns {
   readonly runImage: (request: ImageRunRequest) => Promise<{ runId: string; batchId: string; placeholders: string[] }>;
   readonly runText: (request: TextRunRequest) => Promise<{ runId: string; batchId: string; placeholders: string[] }>;
   readonly pricing: (model: string) => Promise<ImagePricingAnswer>;
@@ -81,7 +81,7 @@ import { planKitRevert } from "../kits/kitTurn.ts";
 import { kitOf } from "../kits/tokensFile.ts";
 import { artifactDiff } from "./turnDiff.ts";
 
-export interface AgentRuntimeDeps {
+interface AgentRuntimeDeps {
   readonly dataDir: string;
   readonly selection: LiveSelection;
   readonly generationRuns: GenerationRuns;

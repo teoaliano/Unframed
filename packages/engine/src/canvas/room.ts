@@ -113,7 +113,7 @@ export const writeFirstCanvas = (db: DatabaseSync, records: ReadonlyArray<TLReco
 const frameText = (data: RawData): string =>
   Buffer.isBuffer(data) ? data.toString("utf8") : Array.isArray(data) ? Buffer.concat(data).toString("utf8") : Buffer.from(data).toString("utf8");
 
-export interface RoomHooks {
+interface RoomHooks {
   readonly onCommit: (room: CanvasRoom, change: CommittedChange) => void;
   readonly onIdle: (room: CanvasRoom) => void;
   readonly idleMs: number;

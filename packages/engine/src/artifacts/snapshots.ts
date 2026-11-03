@@ -13,7 +13,7 @@ export const SNAPSHOT_FOLDER = join(".cache", "snapshots");
 const DEBOUNCE_MS = 1000;
 const SETTLE_MS = 500;
 
-export interface SnapshotJob {
+interface SnapshotJob {
   readonly project: string;
   readonly kind: ArtifactKind;
   readonly file: string;
@@ -29,7 +29,7 @@ export type SnapshotRenderer = (job: SnapshotJob) => Promise<Buffer | undefined>
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export const stubSnapshot = (text: Readonly<Record<string, unknown>>): Buffer => {
+const stubSnapshot = (text: Readonly<Record<string, unknown>>): Buffer => {
   const chunk = (type: string, data: Buffer) => {
     const length = Buffer.alloc(4);
     length.writeUInt32BE(data.length);
@@ -98,7 +98,7 @@ type ArtifactRecord = TLRecord & { type: ArtifactKind; props: { w: number; h: nu
 const isArtifact = (record: TLRecord | undefined): record is ArtifactRecord =>
   record?.typeName === "shape" && isArtifactKind(record.type) && typeof (record.props as { file?: unknown }).file === "string";
 
-export interface SnapshotDeps {
+interface SnapshotDeps {
   readonly renderer: SnapshotRenderer | undefined;
   readonly folder: (project: string) => Promise<string | undefined>;
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;

@@ -152,7 +152,7 @@ const listenOn = (server: http.Server, host: string, port: number): Promise<numb
 
 const NO_IPV6 = new Set(["EADDRNOTAVAIL", "EAFNOSUPPORT", "EINVAL"]);
 
-export interface PreviewOrigin {
+interface PreviewOrigin {
   readonly port: number;
   readonly taken: number | undefined;
   readonly stopListening: () => void;

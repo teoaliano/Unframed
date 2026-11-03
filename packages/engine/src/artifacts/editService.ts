@@ -19,7 +19,7 @@ const RUNTIME_PRESENT = /data-hyperframes-preview-runtime|hyperframes-runtime\.j
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"]);
 const PREPARE_EDIT = "Element ids added";
 
-export interface EditServiceDeps {
+interface EditServiceDeps {
   readonly folder: (project: string) => Promise<string | undefined>;
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;
   readonly swapFile: (project: string, shapeId: string, from: string, to: string) => Promise<string>;

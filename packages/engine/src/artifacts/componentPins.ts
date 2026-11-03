@@ -8,7 +8,7 @@ export interface PinsItem {
   readonly pins: ReadonlyArray<Pin>;
 }
 
-export interface ComponentPinsDeps {
+interface ComponentPinsDeps {
   readonly folder: (project: string) => Promise<string | undefined>;
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;
   readonly publish: (project: string, item: PinsItem) => void;

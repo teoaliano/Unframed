@@ -18,13 +18,13 @@ import { copyPendingJobsTo, dropPendingJobsIn, readPendingJobs, reassignPendingJ
 import { Runs } from "./runs/runs.ts";
 import { RenderJobs } from "./video/renderJobs.ts";
 
-export const KEY_REMOVED_ERROR =
+const KEY_REMOVED_ERROR =
   "Stopped tracking this render: the OpenRouter key was removed, so its progress can no longer be checked. It may still finish upstream, but nothing here will save the result.";
 
-export const PROJECT_DELETED_ERROR =
+const PROJECT_DELETED_ERROR =
   "Stopped tracking this render: the project it belonged to was deleted. It may still finish upstream, but nothing here will save the result.";
 
-export const MOVED_WHILE_REMOVED_ERROR = "The OpenRouter key was removed while this render was being moved to a new folder.";
+const MOVED_WHILE_REMOVED_ERROR = "The OpenRouter key was removed while this render was being moved to a new folder.";
 
 const sameDirectory = async (a: string, b: string): Promise<boolean> => {
   try {
@@ -43,7 +43,7 @@ interface FolderMove {
   readonly written: string;
 }
 
-export interface RemovedKey {
+interface RemovedKey {
   readonly settings: Settings;
   readonly endedRenders: number;
   readonly renderCleanupError?: string;

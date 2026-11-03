@@ -81,7 +81,7 @@ export const ensureLiveViewer = (folder: string): Promise<void> => ensure(folder
 
 export const ensureLibrary = (folder: string): Promise<void> => ensure(folder, LIBRARY);
 
-export interface AgentSidecar {
+interface AgentSidecar {
   readonly source: "agent";
   readonly kind: ArtifactKind;
   readonly chatId: string;
@@ -152,7 +152,7 @@ export const writeAgentArtifact = async (
   return { file, bytes: bytes.length };
 };
 
-export interface ComponentSidecar {
+interface ComponentSidecar {
   readonly source: "agent";
   readonly kind: "component";
   readonly tag: string;
@@ -258,7 +258,7 @@ export const writeUploadedArtifact = async (folder: string, input: { readonly ht
   return { file, bytes: bytes.length };
 };
 
-export interface EditSidecar {
+interface EditSidecar {
   readonly source: "edit";
   readonly kind: ArtifactKind;
   readonly of: string;
@@ -297,7 +297,7 @@ export const writeEditArtifact = async (
 
 export const readArtifact = (folder: string, file: string): Promise<string> => readFile(join(folder, basename(file)), "utf8");
 
-export interface RenderSidecar {
+interface RenderSidecar {
   readonly source: "render";
   readonly of: string;
   readonly title: string;

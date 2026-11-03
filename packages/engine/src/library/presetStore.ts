@@ -19,13 +19,13 @@ import { writeFileAtomic } from "../atomicFile.ts";
 import { errorText } from "../log.ts";
 import { SettingsStore } from "../settingsStore.ts";
 
-export const PRESETS_INVALID_MESSAGE = "presets.json is not valid JSON.";
-export const PRESET_UNKNOWN_MESSAGE = "That preset is not in your library.";
-export const KIT_NEWER_MESSAGE = "The library kit changed since this project took it. Update from kit first, so you do not overwrite those changes.";
+const PRESETS_INVALID_MESSAGE = "presets.json is not valid JSON.";
+const PRESET_UNKNOWN_MESSAGE = "That preset is not in your library.";
+const KIT_NEWER_MESSAGE = "The library kit changed since this project took it. Update from kit first, so you do not overwrite those changes.";
 
 export const presetsPath = (outputDir: string): string => join(outputDir, "presets.json");
 
-export interface SaveInput {
+interface SaveInput {
   readonly name: string;
   readonly summary: string;
   readonly needs?: string | undefined;

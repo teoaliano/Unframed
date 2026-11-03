@@ -26,7 +26,7 @@ const stable = (value: unknown): string =>
       : item,
   );
 
-export const sameRecord = (a: TLRecord | null | undefined, b: TLRecord | null | undefined): boolean => stable(a ?? null) === stable(b ?? null);
+const sameRecord = (a: TLRecord | null | undefined, b: TLRecord | null | undefined): boolean => stable(a ?? null) === stable(b ?? null);
 
 export class TurnChanges {
   private readonly db: DatabaseSync;
@@ -92,7 +92,7 @@ export class TurnChanges {
   }
 }
 
-export interface RevertPlan {
+interface RevertPlan {
   readonly change: CanvasChange;
   readonly restored: string[];
   readonly skipped: Array<{ id: string; by: SkippedBy }>;

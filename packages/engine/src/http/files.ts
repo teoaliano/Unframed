@@ -36,7 +36,7 @@ const CONTENT_TYPES: Record<string, string> = {
   ".mjs": "text/plain; charset=utf-8",
 };
 
-export const contentTypeFor = (name: string): string =>
+const contentTypeFor = (name: string): string =>
   CONTENT_TYPES[extname(name).toLowerCase()] ?? "application/octet-stream";
 
 export const projectFileRoute =

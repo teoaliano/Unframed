@@ -27,7 +27,7 @@ import { byteSize, isHtmlFileName, kindOfArtifactHtml, prepareArtifactHtml } fro
 import { ensureBridge, ensureLibrary } from "../artifacts/artifactStore.ts";
 import { pinComponents } from "../artifacts/componentRegistry.ts";
 
-export interface SavedFile {
+interface SavedFile {
   readonly file: string;
   readonly fileName: string;
   readonly bytes: number;
@@ -46,7 +46,7 @@ export class SaveRefused extends Error {
   }
 }
 
-export const EMPTY_BODY_MESSAGE = "No file bytes in the request body.";
+const EMPTY_BODY_MESSAGE = "No file bytes in the request body.";
 
 export class MediaStore extends Context.Service<
   MediaStore,

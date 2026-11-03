@@ -16,7 +16,7 @@ import { ensureTokens, kitOf } from "../kits/tokensFile.ts";
 
 const COMPOSITION_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.html?$/;
 
-export interface ProducerRun {
+interface ProducerRun {
   readonly folder: string;
   readonly entry: string;
   readonly outputPath: string;
@@ -32,7 +32,7 @@ const renderVariables = (dials: Record<string, unknown> | null, mode: string | u
   return Object.keys(variables).length === 0 ? null : variables;
 };
 
-export interface RenderBackend {
+interface RenderBackend {
   readonly findChrome: () => Promise<string | undefined>;
   readonly produce: (run: ProducerRun) => Promise<void>;
 }
@@ -101,7 +101,7 @@ export class RenderRefused extends Error {
   }
 }
 
-export interface RendererDeps {
+interface RendererDeps {
   readonly backend: RenderBackend;
   readonly folder: (project: string) => Promise<string | undefined>;
   readonly slug: (project: string) => string;

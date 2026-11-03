@@ -31,7 +31,7 @@ import { kitOf } from "../kits/tokensFile.ts";
 
 const PAGE_ID = "page:page";
 
-export interface CanvasToolDeps {
+interface CanvasToolDeps {
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;
   readonly apply: (project: string, change: CanvasChange, origin: ChangeOrigin) => Promise<Applied>;
   readonly folder: (project: string) => Promise<string>;
@@ -44,7 +44,7 @@ export interface CanvasToolDeps {
 
 const error = (message: string): ToolAnswer => ({ value: { error: message }, isError: true });
 
-export const fileFacts = async (folder: string, name: string): Promise<FileFacts | undefined> => {
+const fileFacts = async (folder: string, name: string): Promise<FileFacts | undefined> => {
   if (!isBareFileName(name) || name.endsWith(".json") || name.startsWith("unframed.sqlite")) return undefined;
   const path = join(folder, name);
   const info = await stat(path).catch(() => undefined);
