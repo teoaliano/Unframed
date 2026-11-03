@@ -4,12 +4,12 @@
  * given an owner by `ownerOf`; anything the timeline cannot edit carries a sentence saying why.
  * This module answers questions only. Edits are `applyMotionEdits` (task 10 onward).
  */
-import { classifyPropertyGroup, isTweenConfigKey } from "@hyperframes/parsers/gsap-constants";
+import { isTweenConfigKey } from "@hyperframes/parsers/gsap-constants";
 import { ensureHfIds } from "@hyperframes/parsers/hf-ids";
 import { findTimelineScript, parseGsapScriptAcornForWrite, type TweenCallInfo } from "@hyperframes/parsers/gsap-parser-acorn";
 import { parseHTML } from "linkedom";
 import { carryOf, type Carry } from "./carry.ts";
-import type { Clip, ElementInfo, KeyframeValues, MotionTimeline, MotionTimelineOptions, PropertyGroup, RuntimeClips, StaggerForm, Tween, TweenMethod, TweenRef } from "./types.ts";
+import { groupOfKey, type Clip, type ElementInfo, type KeyframeValues, type MotionTimeline, type MotionTimelineOptions, type PropertyGroup, type RuntimeClips, type StaggerForm, type Tween, type TweenMethod, type TweenRef } from "./types.ts";
 
 export * from "./types.ts";
 import { dialsCallback, ownerOf, constantNumber, type Owner, type OwnerContext, type ScriptNode } from "./owners.ts";
@@ -153,7 +153,7 @@ export function staggerOffsets(tween: Tween, targetCount = tween.targets.length)
 
 const groupsOf = (keyframes: readonly KeyframeValues[]): PropertyGroup[] => {
   const seen = new Set<PropertyGroup>();
-  for (const step of keyframes) for (const key of Object.keys(step.values)) seen.add(classifyPropertyGroup(key));
+  for (const step of keyframes) for (const key of Object.keys(step.values)) seen.add(groupOfKey(key));
   return GROUP_ORDER.filter((group) => seen.has(group));
 };
 

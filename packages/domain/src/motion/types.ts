@@ -5,8 +5,17 @@
 import type { Carry } from "./carry.ts";
 import type { Owner } from "./owners.ts";
 
-/** HyperFrames' six property groups (its `classifyPropertyGroup`). */
 export type PropertyGroup = "position" | "scale" | "size" | "rotation" | "visual" | "other";
+
+const GROUP_KEYS: Readonly<Record<Exclude<PropertyGroup, "other">, readonly string[]>> = {
+  position: ["x", "y", "xPercent", "yPercent"],
+  scale: ["scale", "scaleX", "scaleY"],
+  size: ["width", "height"],
+  rotation: ["rotation", "skewX", "skewY"],
+  visual: ["opacity", "autoAlpha", "color", "backgroundColor", "borderColor"],
+};
+
+export const groupOfKey = (key: string): PropertyGroup => (Object.keys(GROUP_KEYS) as Exclude<PropertyGroup, "other">[]).find((group) => GROUP_KEYS[group].includes(key)) ?? "other";
 export type TweenMethod = "to" | "from" | "fromTo" | "set";
 /** `number` and `each` space the targets evenly, `amount` spreads a total; `other` is read-only. */
 export type StaggerForm = "number" | "each" | "amount" | "other";
