@@ -100,7 +100,11 @@ export const artifactsLayer = Layer.effect(
     });
     yield* rooms.afterCommit((project, change) => snapshots.committed(project, [...change.records.values()]));
 
-    const edits = artifactEditService({ folder: (project) => media.folder(project), read: (project) => run(rooms.read(project)) });
+    const edits = artifactEditService({
+      folder: (project) => media.folder(project),
+      read: (project) => run(rooms.read(project)),
+      apply: (project, change, origin) => run(rooms.apply(project, change, origin)),
+    });
     yield* rooms.afterCommit((project, change) => edits.committed(project, change));
     const fromEdits = <A>(attempt: () => Promise<A>): Effect.Effect<A, UnframedError> =>
       Effect.tryPromise({

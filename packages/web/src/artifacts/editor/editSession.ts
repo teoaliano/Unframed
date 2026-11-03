@@ -574,12 +574,10 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
         setPreparing(true);
         try {
           const prepared = await engine.call("artifact.prepareEdit", { project, shapeId });
+          // The engine points the shape at the prepared file itself, and only when it still shows this one, so the
+          // swap stays out of the person's undo history and never lands over a newer version the agent wrote.
           if (!live) return;
-          if (prepared.file !== fileRef.current) {
-            // The swap is not a person's change, so it stays out of their undo history.
-            editor.run(() => editor.updateShape({ id: shapeId as TLShapeId, type: kind, props: { file: prepared.file } } as never), { history: "ignore" });
-            lastSet.current = prepared.file;
-          }
+          lastSet.current = prepared.file;
         } catch (error) {
           if (!live) return;
           setPrepareError(messageOf(error));
