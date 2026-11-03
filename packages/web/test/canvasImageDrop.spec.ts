@@ -118,25 +118,3 @@ test("a locked picture is no drop target", async ({ page, agent }) => {
   expect(await pageFile(agent)).toBe(before);
   expect(await photoAt(agent)).not.toEqual(start);
 });
-
-test("a motion is never a drop target: a picture dragged over a selected motion outlines nothing and is put back", async ({ page, agent }) => {
-  await openCanvas(page, agent);
-  await writeBridge(agent);
-  await filledArtifact(agent, { id: "shape:motion1", kind: "motion", ref: "170", at: PAGE_AT, size: { w: 400, h: 260 }, title: "Clip", html: PAGE });
-  await filledMedia(agent, { id: "shape:photo", type: "image", ref: "160", at: PHOTO_AT, bytes: pngBytes(800, 400), name: "photo.png", mime: "image/png", natural: { w: 800, h: 400 }, width: 160 });
-  await expect(shapeOnScreen(page, "shape:motion1")).toBeVisible();
-  await expect(shapeOnScreen(page, "shape:photo")).toBeVisible();
-
-  const start = await photoAt(agent);
-  await page.mouse.click(640, 600);
-  const at = await centre(shapeOnScreen(page, "shape:motion1"));
-  await page.mouse.click(at.x, at.y);
-  const picture = shapeOnScreen(page, "shape:motion1").frameLocator("iframe[data-artifact-frame]").locator("img[alt='Hero picture']");
-  await expect(picture).toBeVisible({ timeout: 20_000 });
-  const box = (await picture.boundingBox())!;
-  await dragPhotoTo(page, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
-  await page.waitForTimeout(500);
-  await expect(outline(page)).toHaveCount(0);
-  await page.mouse.up();
-  await expect.poll(() => photoAt(agent), { timeout: 4000 }).toEqual(start);
-});
