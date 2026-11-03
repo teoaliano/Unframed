@@ -37,9 +37,9 @@ const viewer = (page: Page) => region(page).frameLocator("iframe[data-artifact-f
 test.setTimeout(150_000);
 
 /** Puts the motion on the board (with extra shape props when given) and opens its editor on it. */
-const openRows = async (page: Page, engine: TestEngine, props: Record<string, unknown> = {}) => {
+const openRows = async (page: Page, engine: TestEngine, props: Record<string, unknown> = {}, html = ROWS) => {
   await openCanvas(page, engine);
-  const { file } = await filledArtifact(engine, { id: SHAPE, kind: "motion", ref: "150", at: { x: -520, y: -40 }, size: { w: 480, h: 270 }, title: "Intro", html: ROWS });
+  const { file } = await filledArtifact(engine, { id: SHAPE, kind: "motion", ref: "150", at: { x: -520, y: -40 }, size: { w: 480, h: 270 }, title: "Intro", html });
   if (Object.keys(props).length > 0) {
     const record = artifactShape({ id: SHAPE, kind: "motion", ref: "150", at: { x: -520, y: -40 }, file, size: { w: 480, h: 270 }, title: "Intro" });
     await putRecords(engine, [{ ...record, props: { ...record.props, ...props } }]);
@@ -98,6 +98,16 @@ test("a locked element's row shows its lock and its bars do not take a drag", as
   await expect(dot2.getByTestId("timeline-lock")).toHaveCount(1);
   await expect(dot2.getByTestId("timeline-lock")).toHaveAttribute("aria-label", "Locked. Unlock it in Layers to edit it.");
   await expect(row(page, "Dot 1").getByTestId("timeline-lock")).toHaveCount(0);
+});
+
+test("a hidden element's row is greyed, and its bars still take a drag", async ({ page, agent }) => {
+  await openRows(page, agent, {}, ROWS.replace('data-uf-name="Dot 2"', 'data-uf-name="Dot 2" data-uf-hidden'));
+  const dot2 = row(page, "Dot 2");
+  await expect(dot2).toHaveAttribute("data-hidden", "true");
+  await expect(dot2).toHaveClass(/opacity-50/);
+  // The visible row next to it is not greyed.
+  await expect(row(page, "Dot 1")).not.toHaveAttribute("data-hidden", "true");
+  await expect(row(page, "Dot 1")).not.toHaveClass(/opacity-50/);
 });
 
 test("a row selects its element in the frame, and an element picked in the frame selects its row", async ({ page, agent }) => {

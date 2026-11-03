@@ -240,8 +240,9 @@ const RowLine = ({
       data-row-name={name}
       data-row-key={row.element ?? row.key}
       data-selected={selected ? "true" : undefined}
+      data-hidden={row.hidden ? "true" : undefined}
       title={runtime ? "Made by the agent's code while the motion runs." : undefined}
-      className={cn("flex flex-none", selected && "bg-accent/40", runtime && "text-muted-foreground")}
+      className={cn("flex flex-none", selected && "bg-accent/40", runtime && "text-muted-foreground", row.hidden && "opacity-50")}
       style={{ height: row.height }}
     >
       <div className="sticky left-0 z-10 flex w-40 flex-none items-center gap-1 border-b border-r bg-card pr-1 text-xs" style={{ paddingLeft: 4 + row.depth * 12 }}>
