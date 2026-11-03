@@ -35,7 +35,7 @@ This codebase replaced an older Unframed (a React Flow canvas with output nodes)
 
 ## Writing
 
-Code comments earn their length only when deleting them would let someone make a wrong change. The git log holds history. Docs and comments: plain words, active voice, no em dashes.
+Code has no comments, except licence and attribution notices, tool directives (such as `@ts-expect-error` or `eslint-disable`), and at most one short line guarding the desktop-shell hosting contract (spec 01). The git log holds history. Docs: plain words, active voice, no em dashes.
 
 ## Maintainers
 
