@@ -86,9 +86,10 @@ export class KitTools {
     const meta = document.meta as Record<string, unknown>;
     const unframed = (meta.unframed ?? {}) as Record<string, unknown>;
     const next = { ...document, meta: { ...meta, unframed: { ...unframed, kit: result.kit } } } as unknown as TLRecord;
+    const puts = [next, ...modeMoves(records, ops)];
     let applied: Applied;
     try {
-      applied = await context.apply(binding.project, { put: [next, ...modeMoves(records, ops)], remove: [] }, { kind: "server", id: `chat:${binding.chatId}` });
+      applied = await context.apply(binding.project, { put: puts, remove: [] }, { kind: "server", id: `chat:${binding.chatId}` });
     } catch (failure) {
       return refusal(failure instanceof Error && failure.message.trim() !== "" ? failure.message : "the kit could not be written");
     }
@@ -96,7 +97,7 @@ export class KitTools {
       const parts = changedKitParts(before, result.kit);
       const shapesBefore = new Map<string, TLRecord | undefined>();
       const shapesAfter = new Map<string, TLRecord | undefined>();
-      for (const put of [next, ...modeMoves(records, ops)]) {
+      for (const put of puts) {
         if (put.typeName !== "shape") continue;
         shapesBefore.set(put.id as string, records.find((record) => record.id === put.id));
         shapesAfter.set(put.id as string, put);
@@ -109,12 +110,11 @@ export class KitTools {
         applied.clock,
       );
     }
-    const created = before === null;
     context.activity(binding.project, binding.chatId, {
       id: `kit:${randomUUID()}`,
       tone: "tool",
       kind: "kit.written",
-      summary: created ? "Created the kit" : "Updated the kit",
+      summary: before === null ? "Created the kit" : "Updated the kit",
       payload: { kit: { name: result.kit.name, tokens: result.kit.tokens.length, modes: result.kit.modes } },
       turnId: turn.turnId ?? null,
       createdAt: new Date().toISOString(),
@@ -133,7 +133,7 @@ export class KitTools {
       {
         name: "kit_write",
         description: KIT_WRITE_DESCRIPTION,
-        inputSchema: { type: "object", properties: { ops: { type: "array", items: { type: "object" }, description: KIT_OPS_DESCRIPTION } }, required: ["ops"] },
+        inputSchema: { type: "object", properties: { ops: { type: "array", items: { type: "object" }, description: "The kit operations, in order. See kit_write's description for each op." } }, required: ["ops"] },
         call: (binding, args) => this.write(binding, args),
       },
     ];
@@ -145,5 +145,3 @@ const KIT_READ_DESCRIPTION =
 
 const KIT_WRITE_DESCRIPTION =
   "Change the project's kit with one batch of ops, applied all or nothing, as one step of this turn that the person can revert. Ops: create {name, modes?}; rename {name}; setToken {path, type, value? | values?, description?}; renameToken {path, to}; deleteToken {path}; forgetFormerName {path, cssName}; addMode {name, copyFrom?}; renameMode {name, to}; deleteMode {name}; setDefaultMode {name}; reorder {paths}. Never redefine a kit CSS name in an artifact, and never set data-theme yourself.";
-
-const KIT_OPS_DESCRIPTION = "The kit operations, in order. See kit_write's description for each op.";
