@@ -15,6 +15,7 @@ import { libraryKitById, linkFor, SaveKitDialog, updateInLibrary } from "./KitLi
 import { hasDifferences, mergeWith } from "./KitApply.tsx";
 import { kitUi } from "./state.ts";
 import { ImportKitDialog } from "./KitImport.tsx";
+import { KitGuidance } from "./KitGuidance.tsx";
 import { showError, showReveal } from "../toasts.tsx";
 
 export const NO_KIT_MESSAGE = "This project has no kit yet. A kit holds the colours, sizes, fonts and motion values its pages and motions share.";
@@ -177,7 +178,7 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
                     onBlur={(event) => event.currentTarget.value !== kit.name && apply([{ op: "rename", name: event.currentTarget.value }])}
                   />
                   <KitMenu
-                    linked={kit.from !== undefined && linkedPreset !== null}
+                    linked={kit.from !== undefined && linkedPreset !== null && linkedPreset?.source !== "system"}
                     onSave={() => setSaving(true)}
                     onUpdate={() => void update()}
                     onImport={() => setImporting(true)}
@@ -185,6 +186,7 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
                     onDelete={() => setAsk({ kind: "kit" })}
                   />
                 </div>
+                <KitGuidance guidance={kit.guidance} apply={apply} />
                 <KitTable kit={kit} usage={usage} apply={apply} titleOf={titleOf} onAskDeleteToken={(path) => setAsk({ kind: "token", path })} onAskDeleteMode={(mode) => setAsk({ kind: "mode", mode })} />
               </div>
             )}

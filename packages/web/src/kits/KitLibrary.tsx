@@ -12,6 +12,7 @@ import { Input } from "~/components/ui/input";
 import { SAVE_FAILED_MESSAGE } from "../library/AddToLibraryDialog.tsx";
 import { useCanvasProject, useEngine } from "../context.ts";
 import { showError, showNotice } from "../toasts.tsx";
+import { systemKitPresets } from "../library/systemKits.ts";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
@@ -19,11 +20,11 @@ const messageOf = (error: unknown) => (error instanceof UnframedError || error i
 export const kitSaveSubtitle = (kit: Pick<Kit, "tokens" | "modes">): string =>
   `${kit.tokens.length} ${kit.tokens.length === 1 ? "token" : "tokens"} and ${kit.modes.length} ${kit.modes.length === 1 ? "mode" : "modes"}, saved as you have them now.`;
 
-/** The link a project keeps to the library kit it has as it is now: its revision and its tokens and modes. */
-export const linkFor = (presetId: string, revision: number, kit: { readonly modes: ReadonlyArray<string>; readonly tokens: ReadonlyArray<Token> }) => ({
+/** The link a project keeps to the library kit it has as it is now: its revision, its tokens and modes, and its guidance. */
+export const linkFor = (presetId: string, revision: number, kit: { readonly modes: ReadonlyArray<string>; readonly tokens: ReadonlyArray<Token>; readonly guidance?: string | undefined }) => ({
   presetId,
   revision,
-  base: { modes: [...kit.modes], tokens: structuredClone([...kit.tokens]) },
+  base: { modes: [...kit.modes], tokens: structuredClone([...kit.tokens]), ...(kit.guidance === undefined ? {} : { guidance: kit.guidance }) },
 });
 
 /** The Add to library form for a kit: a name and a description, as the library's own form. */
@@ -102,8 +103,10 @@ export const updateInLibrary = async (engine: ReturnType<typeof useEngine>, proj
   }
 };
 
-/** The library's kit entry with this id, or undefined when it is not in the library. */
+/** The library's kit entry with this id, a shipped kit included, or undefined when it is not in the library. */
 export const libraryKitById = async (engine: EngineConnection, id: string): Promise<KitPreset | undefined> => {
+  const shipped = (await systemKitPresets().catch(() => [])).find((kit) => kit.id === id);
+  if (shipped !== undefined) return shipped;
   const { presets } = await engine.call("library.list");
   const found = (presets as unknown as LibraryEntry[]).find((entry) => entry.id === id);
   return found?.kind === "kit" ? found : undefined;
