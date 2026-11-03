@@ -84,7 +84,7 @@ test("in Interact mode the values panel edits a tween's duration as it does in E
   await duration.fill("2");
   await duration.press("Enter");
   await expect.poll(async () => (await summaries(agent)).length, { timeout: 15_000 }).toBe(before + 1);
-  expect((await summaries(agent)).at(-1)).toEqual(["Set Dot position to 2 s long"]);
+  expect((await summaries(agent)).at(-1)).toEqual(["Set Dot duration to 2 s"]);
 });
 
 test("in Interact mode a click in the frame reaches the motion and does not pick the element", async ({ page, agent }) => {

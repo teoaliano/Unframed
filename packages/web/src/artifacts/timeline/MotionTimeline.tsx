@@ -6,7 +6,7 @@
  * after that column, so the ruler and the playhead share one coordinate system with the bars.
  */
 import { ChevronDown, ChevronLeft, ChevronRight, Code, Film, Layers, Lock, Maximize2, Minus, PanelBottom, Pause, Play, Repeat, Square, Volume2, VolumeX, ZoomIn, ZoomOut } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { clampDialValue, dialAt, fitZoom, rulerStep, snapMove, snapTime, zoomAt, zoomButton, type DialSchema, type Kit, type Owner, type SnapTarget, type Tween, type TweenRef } from "@unframed/domain";
 import type { SourceEdit } from "@unframed/contracts";
 import type { ChipElement } from "@unframed/domain";
@@ -55,6 +55,8 @@ type PanelProps = Omit<ValuesPanelProps, "onClose" | "className">;
 
 /** A tween's duration is at least one frame at 30 fps (spec 21, Motion edits). */
 const MIN_DURATION = 0.033;
+/** One frame at 30 fps: what an arrow key moves a bar by (Shift moves ten). */
+const FRAME_SECONDS = 1 / 30;
 
 /** Seconds to the millisecond, as the writer keeps them. */
 const round = (seconds: number): number => Math.round(seconds * 1000) / 1000;
@@ -227,6 +229,9 @@ const RowLine = ({
   onSelectElement,
   cursorOf,
   onBarDown,
+  onBarKey,
+  barLabel,
+  keyframeLabel,
   onBarMove,
   onBarUp,
   onDiamondDown,
@@ -248,6 +253,10 @@ const RowLine = ({
   readonly onSelectElement: (id: string) => void;
   readonly cursorOf: (bar: BarView) => string;
   readonly onBarDown: (bar: BarView, event: ReactPointerEvent<HTMLDivElement>) => void;
+  readonly onBarKey: (bar: BarView, event: ReactKeyboardEvent<HTMLElement>) => void;
+  /** A bar's accessible name, and a keyframe's, named for their element, group and time. */
+  readonly barLabel: (bar: BarView) => string;
+  readonly keyframeLabel: (bar: BarView, at: number) => string;
   readonly onBarMove: (event: ReactPointerEvent<HTMLElement>) => void;
   readonly onBarUp: (event: ReactPointerEvent<HTMLElement>) => void;
   /** A press on a keyframe: the bar's gesture at the point pressed, or none, and a click, which opens the values panel. */
@@ -276,20 +285,20 @@ const RowLine = ({
       style={{ height: row.height }}
     >
       {compact ? (
-        <div className="sticky left-0 z-10 flex flex-none items-center justify-center border-b border-r bg-card text-xs" style={{ width: COMPACT_LABEL }}>
+        <div className="sticky left-0 z-10 flex flex-none items-center justify-center overflow-hidden border-b border-r bg-card text-xs" style={{ width: COMPACT_LABEL }}>
           {row.locked && <Lock aria-hidden data-testid="timeline-lock" aria-label="Locked. Unlock it in Layers to edit it." className="absolute bottom-0 right-0 size-2.5 text-muted-foreground" />}
           {/* An element row has two 12 px controls side by side: its disclosure chevron, when it has lanes, and its select. */}
           <div className="flex items-center">
             {row.expandable && (
               <Tip label={name}>
-                <Button variant="ghost" size="icon-micro" className="size-3" aria-label={`${row.expanded ? "Collapse" : "Expand"} ${name}`} onClick={onToggle}>
+                <Button variant="ghost" size="icon-micro" className="-my-1.5 h-6 w-3" aria-label={`${row.expanded ? "Collapse" : "Expand"} ${name}`} onClick={onToggle}>
                   {row.expanded ? <ChevronDown aria-hidden className="size-2.5" /> : <ChevronRight aria-hidden className="size-2.5" />}
                 </Button>
               </Tip>
             )}
             {row.kind === "element" && row.element !== null ? (
               <Tip label={name}>
-                <Button variant="ghost" size="icon-micro" className="size-3" aria-label={`Select ${name}`} onClick={() => onSelectElement(row.element!)}>
+                <Button variant="ghost" size="icon-micro" className="-my-1.5 h-6 w-3" aria-label={`Select ${name}`} onClick={() => onSelectElement(row.element!)}>
                   <Square aria-hidden className="size-2.5" />
                 </Button>
               </Tip>
@@ -305,14 +314,14 @@ const RowLine = ({
       ) : (
       <div className="sticky left-0 z-10 flex w-40 flex-none items-center gap-1 border-b border-r bg-card pr-1 text-xs" style={{ paddingLeft: 4 + row.depth * 12 }}>
         {row.expandable ? (
-          <Button variant="ghost" size="icon-tiny" aria-label={`${row.expanded ? "Collapse" : "Expand"} ${name}`} onClick={onToggle}>
+          <Button variant="ghost" size="icon-tiny" className="size-6" aria-label={`${row.expanded ? "Collapse" : "Expand"} ${name}`} onClick={onToggle}>
             {row.expanded ? <ChevronDown aria-hidden /> : <ChevronRight aria-hidden />}
           </Button>
         ) : (
           <span className="size-4 flex-none" />
         )}
         {row.kind === "element" && row.element !== null ? (
-          <Button variant="ghost" size="xs" aria-label={`Select ${name}`} onClick={() => onSelectElement(row.element!)}>
+          <Button variant="ghost" size="xs" className="h-6" aria-label={`Select ${name}`} onClick={() => onSelectElement(row.element!)}>
             <span className="truncate">{name}</span>
           </Button>
         ) : (
@@ -355,7 +364,11 @@ const RowLine = ({
               data-copy={bar.copy ? "true" : undefined}
               data-stagger={bar.stagger ?? undefined}
               data-selected={chosen ? "true" : undefined}
+              role="button"
+              tabIndex={0}
+              aria-label={barLabel(bar)}
               title={bar.readOnly ?? undefined}
+              onKeyDown={(event) => onBarKey(bar, event)}
               onPointerDown={(event) => {
                 event.stopPropagation();
                 onBarDown(bar, event);
@@ -369,6 +382,7 @@ const RowLine = ({
               className={cn(
                 "absolute -translate-y-1/2 rounded-sm",
                 cursorOf(bar),
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 thin ? "h-1.5" : "h-3",
                 bar.copy ? "bg-primary/25" : bar.readOnly !== null ? "bg-muted-foreground/50" : "bg-primary/70",
                 chosen && "ring-1 ring-foreground",
@@ -390,12 +404,12 @@ const RowLine = ({
                     key={`${index}:${step}`}
                     role="button"
                     tabIndex={0}
-                    aria-label={`Keyframe of ${row.name}`}
+                    aria-label={keyframeLabel(bar, at)}
                     data-testid="timeline-diamond"
                     data-tween={bar.tween}
                     data-target={bar.target}
                     data-fraction={fraction}
-                    className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rotate-45 bg-foreground"
+                    className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rotate-45 bg-foreground before:absolute before:-inset-[7px] before:-rotate-45 before:content-[''] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     style={{ left: at * pxPerSecond }}
                     onPointerDown={(event) => {
                       event.stopPropagation();
@@ -572,7 +586,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
   }, [view, rows, rowTops]);
   const bottomSpace = rowTops.total - (visible.last > visible.first ? rowTops.tops[visible.last - 1]! + rows[visible.last - 1]!.height : rowTops.tops[visible.first] ?? 0);
 
-  // The zoom: null is fit (the whole length in the strip's width, which opens the strip), else pixels a second.
+  // The zoom: null is fit (the whole length in the strip's width). Otherwise it is a share of fit, so an edit that changes the length keeps the proportion (spec 21, Zoom).
   const scroller = useRef<HTMLDivElement>(null);
   const rulerTime = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -584,7 +598,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
   const [zoom, setZoom] = useState<number | null>(null);
   // Fit shows the whole length in the time area, which is the strip's width less the label column.
   const fit = width > labelWidth && length > 0 ? fitZoom(width - labelWidth, length) : 0;
-  const pxPerSecond = zoom ?? fit;
+  const pxPerSecond = zoom === null ? fit : zoom * fit;
   // The clock reads the zoom from here, outside React, and the zoom handlers read the fit the same way.
   const pxRef = useRef(pxPerSecond);
   pxRef.current = pxPerSecond;
@@ -634,7 +648,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
       const rect = element.getBoundingClientRect();
       // The time starts after the label column, so the anchor is measured from there.
       const next = zoomAt({ pxPerSecond: pxRef.current, scrollLeft: element.scrollLeft - labelRef.current }, { deltaY: event.deltaY, cursorX: event.clientX - rect.left, fit: fitRef.current });
-      setZoom(next.pxPerSecond);
+      setZoom(next.pxPerSecond / fitRef.current);
       pendingScroll.current = next.scrollLeft + labelRef.current;
     };
     element.addEventListener("wheel", onWheel, { passive: false });
@@ -645,7 +659,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
     const element = scroller.current;
     if (!element || fitRef.current <= 0) return;
     const next = zoomButton({ pxPerSecond: pxRef.current, scrollLeft: element.scrollLeft - labelRef.current, viewport: element.clientWidth, playhead: transport.current(), fit: fitRef.current }, direction);
-    setZoom(next.pxPerSecond);
+    setZoom(next.pxPerSecond / fitRef.current);
     pendingScroll.current = next.scrollLeft + labelRef.current;
   };
   const fitToLength = () => {
@@ -760,8 +774,10 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
     if (row.element !== null && !session.selection.includes(row.element)) session.setSelection([row.element]);
     const rights = allowed(bar, row);
     // The edge within 6 px is the stretch; a narrow bar's nearer edge wins. A set has no edges, so its press always moves it.
-    const nearStart = local <= EDGE_PIXELS && rights.start;
-    const nearEnd = width - local <= EDGE_PIXELS && rights.end;
+    // A bar narrower than 18 px gives each edge a third of its width, so its middle still moves it (spec 21, Rows, lanes and diamonds).
+    const edge = Math.min(EDGE_PIXELS, width / 3);
+    const nearStart = local <= edge && rights.start;
+    const nearEnd = width - local <= edge && rights.end;
     const mode: GestureMode | null = nearStart && nearEnd ? (local <= width / 2 ? "start" : "end") : nearStart ? "start" : nearEnd ? "end" : rights.move ? "move" : null;
     if (mode === null) return;
     const tween = tweens.get(bar.tween)!;
@@ -1164,6 +1180,38 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
   const panel = panelOf();
 
   /** Opens the values panel from a bar (its timing) or from a diamond (the values at that keyframe too). */
+  /** A bar's accessible name: its element, its group, and its span (spec 21, Rows, lanes and diamonds). */
+  const barLabel = (bar: BarView): string => {
+    const element = names[bar.target] ?? bar.target;
+    const group = bar.group ?? tweens.get(bar.tween)?.groups[0];
+    return `${group ? `${element} ${group}` : element} tween, ${round(bar.start)} s to ${round(bar.start + bar.duration)} s`;
+  };
+  const keyframeLabel = (bar: BarView, at: number): string => `Keyframe of ${names[bar.target] ?? bar.target} at ${at.toFixed(1)} s`;
+  /** The keyboard alternative to a drag (spec 21, Keys): an arrow moves a focused bar a frame, Shift ten, and Alt with an arrow changes its duration. */
+  const onBarKey = (bar: BarView, row: RowView, event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      event.stopPropagation();
+      openValues(bar, null);
+      return;
+    }
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    event.stopPropagation();
+    const tween = tweens.get(bar.tween);
+    if (tween === undefined) return;
+    const rights = allowed(bar, row);
+    const step = (event.shiftKey ? 10 : 1) * (event.key === "ArrowLeft" ? -1 : 1) * FRAME_SECONDS;
+    const changed: { start?: number; duration?: number } = {};
+    if (event.altKey) {
+      if (!rights.end) return;
+      changed.duration = Math.max(MIN_DURATION, round(bar.duration + step));
+    } else {
+      if (!rights.move) return;
+      changed.start = Math.max(0, round(bar.start - (bar.stagger ?? 0) + step));
+    }
+    applyTiming(tween.ref, bar.target, channelsOf(tween), changed);
+  };
   const openValues = (bar: BarView, fraction: number | null) => {
     if (bar.tween < 0) return;
     setSelectedTween(bar.tween);
@@ -1292,7 +1340,8 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
           tabIndex={-1}
           className="relative flex min-h-0 flex-1 flex-col outline-none"
           onKeyDown={(event) => {
-            if (event.key !== "Enter" || selectedTween === null) return;
+            // The values panel sits inside this area in the React tree, so its own Enter would bubble here and reopen the panel at the bar.
+            if (event.key !== "Enter" || selectedTween === null || (event.target as HTMLElement).closest('[data-testid="values-panel"]')) return;
             const bar = rows.flatMap((row) => row.bars).find((candidate) => candidate.tween === selectedTween);
             if (bar === undefined) return;
             event.preventDefault();
@@ -1376,6 +1425,9 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
                     }}
                     cursorOf={(bar) => cursorOf(bar, row)}
                     onBarDown={(bar, event) => onBarDown(bar, row, event)}
+                    onBarKey={(bar, event) => onBarKey(bar, row, event)}
+                    barLabel={barLabel}
+                    keyframeLabel={keyframeLabel}
                     onBarMove={onBarMove}
                     onBarUp={onBarUp}
                     onDiamondDown={(bar, event) => onDiamondDown(bar, row, event)}

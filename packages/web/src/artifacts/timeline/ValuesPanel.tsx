@@ -144,9 +144,11 @@ const NumberControl = ({ label, value, unit, editable, onCommit }: { readonly la
 const ColourField = ({ label, value, editable, onCommit }: { readonly label: string; readonly value: string; readonly editable: boolean; readonly onCommit: (value: string) => void }) => {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
+  // A refused colour leaves the field on the last committed one, since the value only changes when the edit lands.
   const commit = () => {
     const typed = draft.trim();
     if (typed !== "" && typed !== value) onCommit(typed);
+    setDraft(value);
   };
   return (
     <span className="flex min-w-0 items-center gap-1.5">
