@@ -5,7 +5,7 @@
  */
 import { isEaseName } from "./easings.ts";
 import { kitRuntime } from "./runtime.ts";
-import { isShadow, parseBezier, parseColour, parseLength, parseTime, parseWeight } from "./values.ts";
+import { isFontFamily, isShadow, parseBezier, parseColour, parseLength, parseTime, parseWeight } from "./values.ts";
 import { KIT_LIMITS, TEXT_STYLE_FIELD_TYPE, TEXT_STYLE_FIELDS, TEXT_STYLE_SUFFIX, TOKEN_TYPES, type Kit, type Token, type TokenType, type TokenValue } from "./types.ts";
 
 export { cssName, resolve } from "./runtime.ts";
@@ -15,12 +15,16 @@ const SEGMENT = /^[a-z0-9][a-z0-9-]{0,39}$/;
 const MODE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
 export const NAME_SENTENCE = "A token name is words joined by slashes, like color/brand/primary.";
+const FORMER_NAME = /^--[a-z0-9-]+$/;
+const FORMER_NAME_SENTENCE = "A former name is a CSS name in lower case, like --color-brand-primary.";
 
-/** The refusal for a token path, or null when it is a path. */
+/** The refusal for a token path, naming the rule it breaks, or null when it is a path. */
 export const pathRefusal = (path: string): string | null => {
+  if (path.length > KIT_LIMITS.path) return `A token name is at most ${KIT_LIMITS.path} characters.`;
   const segments = path.split("/");
-  const valid = path.length <= KIT_LIMITS.path && segments.length >= 1 && segments.length <= KIT_LIMITS.segments && segments.every((segment) => SEGMENT.test(segment));
-  return valid ? null : NAME_SENTENCE;
+  if (segments.length > KIT_LIMITS.segments) return `A token name has at most ${KIT_LIMITS.segments} parts, like color/brand/primary.`;
+  if (segments.some((segment) => segment.length > 40)) return "A part of a token name is at most 40 characters.";
+  return segments.every((segment) => SEGMENT.test(segment)) ? null : NAME_SENTENCE;
 };
 
 /** `none` names "no mode" in a snapshot's file name (spec 19), so no kit mode may take it. */
@@ -40,7 +44,8 @@ const literalRefusal = (type: TokenType, value: unknown): string | null => {
     case "dimension":
       return typeof value === "string" && parseLength(value) !== null ? null : DIMENSION_SENTENCE(value);
     case "fontFamily":
-      return typeof value === "string" && value.trim() !== "" ? null : "A font family cannot be empty.";
+      if (typeof value === "string" && value.trim() === "") return "A font family cannot be empty.";
+      return typeof value === "string" && isFontFamily(value) ? null : `${String(value)} is not a font family. Use a list of family names, like Inter, sans-serif.`;
     case "fontWeight":
       return parseWeight(value) ? null : WEIGHT_SENTENCE;
     case "shadow":
@@ -136,6 +141,7 @@ export const kitRefusal = (kit: Kit): string | null => {
     if (refusal) return refusal;
     if (paths.has(token.path)) return `There is already a token ${token.path}.`;
     paths.add(token.path);
+    if ((token.formerNames ?? []).some((former) => !FORMER_NAME.test(former))) return FORMER_NAME_SENTENCE;
     if (!(TOKEN_TYPES as readonly string[]).includes(token.type)) return `${token.path} has a type this app does not know.`;
     if ((token.value === undefined) === (token.values === undefined)) return `${token.path} needs one value, or a value for each mode.`;
     if (token.description !== undefined && token.description.length > KIT_LIMITS.description) return "A description is at most 200 characters.";

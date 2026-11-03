@@ -63,3 +63,22 @@ test("a token change reaches a live page and the editor's frame without a reload
   await expect.poll(async () => (await frameState(page, file))?.colour).toBe("rgb(24, 128, 56)");
   expect((await frameState(page, file))?.marker).toBe(8);
 });
+
+test("removing the kit clears the tokens a live frame shows, with no reload", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await writeKit(agent, kitWith("#1a73e8"));
+  await expect.poll(() => readFile(projectPath(agent, "unframed-tokens.js"), "utf8").then((text) => text.includes("#1a73e8"), () => false)).toBe(true);
+
+  const { file } = await filledArtifact(agent, { id: "shape:brand", kind: "page", ref: "160", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Brand", html: swatchPage() });
+  await expect(shapeOnScreen(page, "shape:brand")).toBeVisible();
+  await clickShape(page, "shape:brand");
+  await expect.poll(async () => (await frameState(page, file))?.colour).toBe("rgb(26, 115, 232)");
+  await page.frames().find((candidate: Frame) => candidate.url().endsWith(`/${file}`))!.evaluate(() => {
+    (window as unknown as { __kitMarker?: number }).__kitMarker = 9;
+  });
+
+  // Undo of the first kit leaves the document without one.
+  await putRecords(agent, [{ id: "document:document", typeName: "document", gridSize: 10, name: "", meta: { unframed: {} } }]);
+  await expect.poll(async () => (await frameState(page, file))?.colour).toBe("rgba(0, 0, 0, 0)");
+  expect((await frameState(page, file))?.marker).toBe(9);
+});

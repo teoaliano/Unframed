@@ -68,7 +68,7 @@ test("a var() the kit does not have stays as written: no chip and no Detach", as
 
   await expect(parameters(page).getByRole("button", { name: /nope/ })).toHaveCount(0);
   await expect(parameters(page).getByRole("button", { name: /brand/ })).toHaveCount(0);
-  await parameters(page).getByRole("group", { name: "Text", exact: true }).getByRole("button", { name: "Use a token", exact: true }).first().click();
+  await parameters(page).getByRole("group", { name: "Text", exact: true }).getByRole("button", { name: /^Use a token/ }).first().click();
   await expect(page.getByRole("button", { name: "Detach", exact: true })).toHaveCount(0);
   await page.keyboard.press("Escape");
 });

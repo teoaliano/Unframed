@@ -39,9 +39,12 @@ export function installTokens(win: TokensWindow, core: KitCore, initial: Kit | n
   let mode: string | undefined;
 
   const install = () => {
-    if (kit === null) return;
     const doc = win.document;
     let style = doc.getElementById(STYLE_ID);
+    if (kit === null) {
+      if (style !== null) style.textContent = "";
+      return;
+    }
     if (style === null) {
       style = doc.createElement("style");
       style.id = STYLE_ID;
@@ -81,8 +84,8 @@ export function installTokens(win: TokensWindow, core: KitCore, initial: Kit | n
       applyMode(data.mode);
     } else if (data.type === "unframed:tokens:set") {
       const next = data.kit as { tokens?: unknown } | null;
-      if (typeof next !== "object" || next === null || !Array.isArray(next.tokens)) return;
-      kit = data.kit as Kit;
+      if (next !== null && (typeof next !== "object" || !Array.isArray(next.tokens))) return;
+      kit = next as Kit | null;
       applyMode(mode);
       install();
     } else {

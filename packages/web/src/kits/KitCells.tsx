@@ -5,7 +5,7 @@
  */
 import { EASES, isEaseName, type TextStyle, type Token, type TokenValue } from "@unframed/domain";
 import { EllipsisIcon } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
@@ -63,6 +63,8 @@ export const colourText = (hex: string, alpha: number): string => (alpha >= 100 
 /** A text field committed on Enter or blur, abandoned on Escape. It commits only a changed text. */
 const TextCell = ({ label, value, swatch, invalid, font = "mono", onCommit }: { readonly label: string; readonly value: string; readonly swatch?: boolean; readonly invalid: boolean; readonly font?: "default" | "mono"; readonly onCommit: (text: string) => void }) => {
   const [draft, setDraft] = useState(value);
+  // A value changed elsewhere (a cell's popover) shows at once, so the field never reads a stale value.
+  useEffect(() => setDraft(value), [value]);
   const commit = () => {
     if (draft !== value) onCommit(draft);
   };

@@ -245,6 +245,9 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   const undoable = useRef(0);
   const redoable = useRef(0);
   const preparedFor = useRef<string | undefined>(undefined);
+  // The file a prepare is making editable: until the shape shows another, Layers and Design wait, so nothing is
+  // recorded against the file the engine is replacing (an undo would bring it back).
+  const preparingFile = useRef<string | undefined>(undefined);
   const helloTimer = useRef<number | undefined>(undefined);
   // The element whose in-place text edit the editor allowed and the frame may answer with text (spec 18, Text in place).
   const textPending = useRef<string | null>(null);
@@ -770,6 +773,11 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   // The source tree of the file, and the prepare that makes an older file editable (spec 18, The editor).
   useEffect(() => {
     if (file === "") return;
+    // The shape shows another file: the prepared one, or a newer version the engine kept instead.
+    if (preparingFile.current !== undefined && file !== preparingFile.current) {
+      preparingFile.current = undefined;
+      setPreparing(false);
+    }
     let live = true;
     engine
       .call("artifact.sourceTree", { project, file })
@@ -778,21 +786,26 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
         setTree({ ready: answer.ready, elements: answer.elements, offTokens: answer.offTokens });
         if (answer.ready || preparedFor.current === file) return;
         preparedFor.current = file;
+        preparingFile.current = file;
         setPreparing(true);
         try {
+          // The engine points the shape at the prepared version itself, only while it still names this file, and
+          // the swap arrives as a change from the engine: out of the person's undo history, and never over a newer version.
           const prepared = await engine.call("artifact.prepareEdit", { project, shapeId });
-          if (!live) return;
-          if (prepared.file !== fileRef.current) {
-            // The swap is not a person's change, so it stays out of their undo history.
-            editor.run(() => editor.updateShape({ id: shapeId as TLShapeId, type: kind, props: { file: prepared.file } } as never), { history: "ignore" });
-            lastSet.current = prepared.file;
+          // What the shape names now, as this session's own file: a commit that follows at once rests on it.
+          lastSet.current = prepared.file;
+          if (fileRef.current !== file && preparingFile.current === file) {
+            preparingFile.current = undefined;
+            setPreparing(false);
           }
         } catch (error) {
+          if (preparingFile.current === file) {
+            preparingFile.current = undefined;
+            setPreparing(false);
+          }
           if (!live) return;
           setPrepareError(messageOf(error));
           setMode("interact");
-        } finally {
-          if (live) setPreparing(false);
         }
       })
       .catch((error: unknown) => {

@@ -29,6 +29,8 @@ export interface EditServiceDeps {
   readonly folder: (project: string) => Promise<string | undefined>;
   /** The canvas records of a project. */
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;
+  /** Points a shape at `to` while it still names `from`, in one step with that check; answers the file it names after. */
+  readonly swapFile: (project: string, shapeId: string, from: string, to: string) => Promise<string>;
 }
 
 type Origin = CommittedChange["origin"];
@@ -124,7 +126,8 @@ export const artifactEditService = (deps: EditServiceDeps) => {
       shapeId,
       edits: [PREPARE_EDIT],
     });
-    return { file: written.file };
+    // The engine makes the swap, not the web: a new version that landed while this one was written stays.
+    return { file: await deps.swapFile(project, shapeId, file, written.file) };
   },
 
   /** The person's source edits to an artifact's base file, written as a new version (spec 18). */
