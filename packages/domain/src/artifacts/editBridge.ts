@@ -612,7 +612,7 @@ export function installEditBridge(win: EditWindow): void {
     const undo = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z";
     // A motion also forwards its transport keys, so the editor's transport answers them from the frame.
     const transport = win.__timelines !== undefined && TRANSPORT_KEYS.includes(event.key);
-    if (KEYS_FORWARDED.includes(event.key) || (event.key === "Enter" && event.shiftKey) || undo || transport) {
+    if (KEYS_FORWARDED.includes(event.key) || event.key === "Enter" || undo || transport) {
       post({ type: "unframed:edit:key", key: event.key, shift: event.shiftKey === true, meta: event.metaKey === true, ctrl: event.ctrlKey === true });
     }
   };
@@ -1023,6 +1023,9 @@ export function installEditBridge(win: EditWindow): void {
         if (restore !== undefined) {
           restore();
           originals.get(el)?.delete("style:display");
+        } else if (el.style.getPropertyValue("display") === "none" && el.style.getPropertyPriority("display") === "important") {
+          // A hide the source carries is no preview's to restore, so the show takes its declaration out.
+          el.style.removeProperty("display");
         }
       }
       flags.set(el, flags.get(el) === true);

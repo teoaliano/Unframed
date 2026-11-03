@@ -90,6 +90,7 @@ export interface Shadow {
   readonly several: boolean;
 }
 
+const SHADOW_CAPTION: Record<Exclude<ShadowPart, "colour">, string> = { x: "X", y: "Y", blur: "Blur", spread: "Spread" };
 const SHADOW_PARTS = ["x", "y", "blur", "spread", "colour"] as const;
 type ShadowPart = (typeof SHADOW_PARTS)[number];
 
@@ -234,13 +235,14 @@ const NumberControl = ({
   );
 };
 
-const FontControl = ({ value, disabled, families, onCommit }: { readonly value: string; readonly disabled: boolean; readonly families: readonly string[]; readonly onCommit: (typed: string) => void }) => {
+const FontControl = ({ value, disabled, families, onCommit }: { readonly value: string; readonly disabled: boolean; readonly families: readonly string[]; readonly onCommit: (typed: string) => boolean }) => {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
   const commit = (typed: string) => {
     const next = typed.trim();
     if (next === "" || next === value) return;
-    onCommit(next);
+    // A refused family goes back to the one the element had, so the field never shows a value the file does not hold.
+    if (!onCommit(next)) setDraft(value);
   };
   const items = [...new Set([...families, ...GENERIC_FAMILIES])];
   return (
@@ -339,6 +341,8 @@ const ColourControl = ({ label, hex, mixed, disabled, onCommit }: { readonly lab
     </Popover>
   );
 };
+
+const Caption = ({ children }: { readonly children: ReactNode }) => <span className="mb-0.5 block text-xs text-muted-foreground">{children}</span>;
 
 const Row = ({ label, mark, token, children }: { readonly label: string; readonly mark?: string | undefined; readonly token?: ReactNode; readonly children: ReactNode }) => (
   <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-2">
@@ -786,7 +790,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
       const refusal = styleValueRefusal(property, value);
       if (refusal !== null) {
         showError(refusal);
-        return;
+        return false;
       }
     }
     for (const { subject, value } of writes) {
@@ -798,6 +802,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
       } else if (owner.owner === "dial") session.patchDial(owner.path, dialValueFor(dialAt(dials ?? {}, owner.path), value));
       else session.patch({ type: "style", elementId: subject.id, property, value });
     }
+    return true;
   };
 
   // The token slot of a field: the tokens it offers, written to every selected element. The padding and margin rows pass their four sides.
@@ -855,7 +860,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
     return view.sheet.rule === undefined ? (<>{chip}{slot}</>) : chip;
   };
 
-  const numberField = (label: string, property: string, options: { readonly format?: (value: string) => string; readonly write?: (typed: number, subject: Subject) => string } = {}) => {
+  const numberField = (label: string, property: string, options: { readonly format?: (value: string) => string; readonly write?: (typed: number, subject: Subject) => string; readonly placeholder?: string } = {}) => {
     const view = viewOf(property);
     const chip = chipFor(property, view);
     return (
@@ -863,7 +868,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
         {chip ?? <NumberControl
           label={label}
           value={view.mixed ? "" : (options.format ?? numberOf)(view.value)}
-          placeholder={view.mixed ? MIXED : undefined}
+          placeholder={view.mixed ? MIXED : options.placeholder}
           disabled={!view.editable}
           onCommit={(typed) => write(property, (subject) => (options.write ?? ((value, s) => numberValue(property, value, s.report.inline[property])))(typed, subject))}
         />}
@@ -939,13 +944,16 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   const shadowNumber = (part: Exclude<ShadowPart, "colour">, label: string) => {
     const view = shadowFields[part];
     return (
-      <NumberControl
-        label={label}
-        value={view.mixed ? "" : view.value}
-        placeholder={view.mixed ? MIXED : undefined}
-        disabled={!shadowEditable}
-        onCommit={(typed) => write("box-shadow", (subject) => shadowWith(shadowOf(subject.report.computed["box-shadow"]), part, String(typed)))}
-      />
+      <div>
+        <Caption>{SHADOW_CAPTION[part]}</Caption>
+        <NumberControl
+          label={label}
+          value={view.mixed ? "" : view.value}
+          placeholder={view.mixed ? MIXED : undefined}
+          disabled={!shadowEditable}
+          onCommit={(typed) => write("box-shadow", (subject) => shadowWith(shadowOf(subject.report.computed["box-shadow"]), part, String(typed)))}
+        />
+      </div>
     );
   };
 
@@ -980,7 +988,12 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   };
 
   // Visibility: a hide edit, for elements the source holds with an id and nothing locks them.
-  const visible = subjects.every((subject) => subject.element === undefined || !subject.element.hidden);
+  // The switch shows the burst's pending hide at once, before the commit writes it (spec 18, Visibility).
+  const hiddenNow = (subject: Subject): boolean => {
+    const edit = session.pending.find((item) => item.type === "hide" && item.elementId === subject.id);
+    return edit?.type === "hide" ? edit.hidden : subject.element?.hidden === true;
+  };
+  const visible = subjects.every((subject) => subject.element === undefined || !hiddenNow(subject));
   const visibleEditable = subjects.every((subject) => subject.element !== undefined && !subject.locked);
 
   // Image: one element at a time. An image edit still in the burst is the person's own, so its owner stays the source until it is written.
@@ -1097,8 +1110,8 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
             <KeywordControl label="Weight" value={weightView.value} mixed={weightView.mixed} options={WEIGHTS} disabled={!weightView.editable} onPick={(next) => write("font-weight", () => next)} />
           )}
         </Row>
-        {numberField("Line height", "line-height")}
-        {numberField("Letter spacing", "letter-spacing")}
+        {numberField("Line height", "line-height", { placeholder: "auto" })}
+        {numberField("Letter spacing", "letter-spacing", { placeholder: "normal" })}
         <Row label="Align">
           <ToggleGroup
             aria-label="Align"
@@ -1127,6 +1140,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
           <div role="group" aria-label="Border" className="flex min-w-0 flex-wrap items-center gap-1.5">
             {borderWidthChip ?? (
             <div className="w-20">
+              <Caption>Width</Caption>
               <NumberControl
                 label="Border width"
                 value={borderWidthView.mixed ? "" : numberOf(borderWidthView.value)}
@@ -1137,9 +1151,13 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
             </div>
             )}
             <div className="min-w-24 flex-1">
+              <Caption>Style</Caption>
               <KeywordControl label="Border style" value={borderStyleView.value} mixed={borderStyleView.mixed} options={BORDER_STYLES} disabled={!borderStyleView.editable} onPick={(next) => write("border-style", () => next)} />
             </div>
-            <ColourControl label="Border colour" hex={borderColourView.value} mixed={borderColourView.mixed} disabled={!borderColourView.editable} onCommit={(next) => write("border-color", () => next)} />
+            <div>
+              <Caption>Colour</Caption>
+              <ColourControl label="Border colour" hex={borderColourView.value} mixed={borderColourView.mixed} disabled={!borderColourView.editable} onCommit={(next) => write("border-color", () => next)} />
+            </div>
             {tokenSlot("border-color", borderColourView.editable)}
           </div>
         </Row>
@@ -1152,6 +1170,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
             {shadowNumber("blur", "Shadow blur")}
             {shadowNumber("spread", "Shadow spread")}
             <div className="col-span-2">
+              <Caption>Colour</Caption>
               <ColourControl
                 label="Shadow colour"
                 hex={shadowFields.colour.value}

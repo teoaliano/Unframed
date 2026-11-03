@@ -23,11 +23,14 @@ const imageFileOf = (editor: Editor, shape: TLShape | null | undefined): string 
   return marker?.kind === "project-file" ? marker.file : undefined;
 };
 
+/** A page is a drop target; a motion never is, its pictures are replaced in the editor (spec 18, On the canvas). */
+const isDropTarget = (type: string): boolean => isArtifactKind(type) && type !== "motion";
+
 /** The live pages a drag may drop on: artifacts with a file that run a frame now. */
 const livePages = (editor: Editor): TLShapeId[] =>
   editor
     .getCurrentPageShapes()
-    .filter((shape) => isArtifactKind(shape.type) && (shape.props as ArtifactShapeProps).file !== "" && isLive(editor, shape.id))
+    .filter((shape) => isDropTarget(shape.type) && (shape.props as ArtifactShapeProps).file !== "" && isLive(editor, shape.id))
     .map((shape) => shape.id);
 
 /** Posts one `unframed:edit:*` message to a live canvas frame, if it runs. */
@@ -69,8 +72,8 @@ export const DropOutline = ({ shapeId }: { readonly shapeId: string }) => {
     <div
       aria-hidden
       data-drop-outline=""
-      className="pointer-events-none absolute"
-      style={{ left: hit.box.x, top: hit.box.y, width: hit.box.w, height: hit.box.h, border: "2px solid var(--primary)" }}
+      className="pointer-events-none absolute border-2 border-primary"
+      style={{ left: hit.box.x, top: hit.box.y, width: hit.box.w, height: hit.box.h }}
     />
   );
 };
@@ -136,7 +139,7 @@ export const installImageDrop = (editor: Editor, engine: EngineConnection, proje
     if (info.name === "pointer_down") {
       const only = editor.getOnlySelectedShape();
       const file = imageFileOf(editor, only);
-      const pages = before.filter((id) => isArtifactKind(editor.getShape(id)?.type ?? "") && (editor.getShape(id)?.props as ArtifactShapeProps | undefined)?.file !== "");
+      const pages = before.filter((id) => isDropTarget(editor.getShape(id)?.type ?? "") && (editor.getShape(id)?.props as ArtifactShapeProps | undefined)?.file !== "");
       if (only && file !== undefined && pages.length === 1) {
         state.dropHolds.set(new Set(pages.map(String)));
         press = { image: only.id, mark: editor.markHistoryStoppingPoint("image drop"), dragging: false };
