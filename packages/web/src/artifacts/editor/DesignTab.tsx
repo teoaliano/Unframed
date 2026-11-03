@@ -851,7 +851,14 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   /** A board copy's chip (spec 20) beside the token slot: a rule-set field shows its chip alone, since its edit is the rule's. */
   const withSheet = (view: View, slot: ReactNode): ReactNode => {
     if (view.sheet?.kind !== "variants") return slot;
-    const chip = <Badge variant="outline" size="sm">{view.sheet.chip}</Badge>;
+    // A long scope truncates, with the whole text in the kit Tip, so it never runs under the field's control (spec 20).
+    const chip = (
+      <Tip label={view.sheet.chip}>
+        <Badge variant="outline" size="sm" className="min-w-0 max-w-full">
+          <span className="block min-w-0 truncate">{view.sheet.chip}</span>
+        </Badge>
+      </Tip>
+    );
     return view.sheet.rule === undefined ? (<>{chip}{slot}</>) : chip;
   };
 

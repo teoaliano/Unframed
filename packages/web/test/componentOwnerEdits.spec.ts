@@ -79,6 +79,12 @@ test("a background set by the base rule says it covers all variants except the o
   }).toPass({ timeout: 20_000 });
   await expect(design(page).getByTestId("variant-line")).toHaveText("Editing Price card · primary");
   await expect(design(page).getByRole("group", { name: "Fill", exact: true }).getByText("All variants, except kind: secondary", { exact: true })).toBeVisible({ timeout: 20_000 });
+  // The scope chip never covers the field's control: their boxes do not overlap.
+  const chipBox = await design(page).getByText("All variants, except kind: secondary", { exact: true }).boundingBox();
+  const fieldBox = await design(page).getByRole("button", { name: "Background", exact: true }).boundingBox();
+  expect(chipBox && fieldBox).toBeTruthy();
+  const overlap = chipBox!.x < fieldBox!.x + fieldBox!.width && fieldBox!.x < chipBox!.x + chipBox!.width && chipBox!.y < fieldBox!.y + fieldBox!.height && fieldBox!.y < chipBox!.y + chipBox!.height;
+  expect(overlap).toBe(false);
 
   await design(page).getByRole("button", { name: "Background", exact: true }).click();
   await page.getByRole("textbox", { name: "Hex", exact: true }).fill("#ff0000");
