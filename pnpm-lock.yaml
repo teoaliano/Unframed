@@ -57,9 +57,16 @@ importers:
       '@unframed/contracts':
         specifier: workspace:*
         version: link:../contracts
+      linkedom:
+        specifier: 0.18.13
+        version: 0.18.13
       parse5:
         specifier: 8.0.1
         version: 8.0.1
+    devDependencies:
+      gsap:
+        specifier: 3.15.0
+        version: 3.15.0
 
   packages/engine:
     dependencies:

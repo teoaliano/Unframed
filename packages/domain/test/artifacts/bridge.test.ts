@@ -10,6 +10,7 @@ const stubWindow = (options: { origin?: string; framed?: boolean; variables?: un
   const listeners: Listener[] = [];
   const wheels: Array<(event: unknown) => void> = [];
   const menus: Array<(event: unknown) => void> = [];
+  const tokenEvents: Array<() => void> = [];
   const parent = { postMessage: (message: unknown, targetOrigin: string) => posted.push({ message, targetOrigin }) };
   const loaded: Array<{ tag: string; src?: string }> = [];
   const win: any = {
@@ -18,8 +19,12 @@ const stubWindow = (options: { origin?: string; framed?: boolean; variables?: un
       createElement: (tag: string) => ({ tag, src: undefined as string | undefined }),
       head: { appendChild: (node: { tag: string; src?: string }) => loaded.push(node) },
     },
-    addEventListener: (type: string, listener: Listener) =>
-      type === "wheel" ? wheels.push(listener as (event: unknown) => void) : type === "contextmenu" ? menus.push(listener as (event: unknown) => void) : listeners.push(listener),
+    addEventListener: (type: string, listener: unknown) => {
+      if (type === "wheel") wheels.push(listener as (event: unknown) => void);
+      else if (type === "contextmenu") menus.push(listener as (event: unknown) => void);
+      else if (type === "unframed:tokens") tokenEvents.push(listener as () => void);
+      else listeners.push(listener as Listener);
+    },
     console: { error: (...args: unknown[]) => errors.push(args) },
     ...(options.variables === undefined ? {} : { __hfVariables: options.variables }),
   };
@@ -43,7 +48,11 @@ const stubWindow = (options: { origin?: string; framed?: boolean; variables?: un
     for (const listener of menus) listener(event);
     return prevented;
   };
-  return { win, parent, posted, errors, send, wheel, rightClick, loaded };
+  /** The window's unframed:tokens event, as the tokens script dispatches it. */
+  const tokensChanged = () => {
+    for (const listener of tokenEvents) listener();
+  };
+  return { win, parent, posted, errors, send, wheel, rightClick, loaded, tokensChanged };
 };
 
 describe("the built bridge", () => {
@@ -82,6 +91,21 @@ describe("the built bridge", () => {
     let applied: unknown;
     win.unframed.dials("Scene", { accent: "#a78bfa", speed: [1, 0.5, 2] }, (values: unknown) => (applied = values));
     expect(applied).toEqual({ accent: "#a78bfa", speed: 1.5 });
+  });
+
+  it("applies its last declaration again, with its current values, on the unframed:tokens event", () => {
+    const { win, send, tokensChanged } = stubWindow();
+    const applied: unknown[] = [];
+    win.unframed.dials("Scene", { speed: [1, 0, 5] }, (values: unknown) => applied.push(values));
+    send({ type: "unframed:dials:set", values: { speed: 3 } });
+    tokensChanged();
+    expect(applied).toEqual([{ speed: 1 }, { speed: 3 }, { speed: 3 }]);
+  });
+
+  it("does nothing on the unframed:tokens event before any declaration", () => {
+    const { tokensChanged, errors } = stubWindow();
+    tokensChanged();
+    expect(errors).toEqual([]);
   });
 
   it("refuses a bad config with a console error and null, and applies nothing", () => {
