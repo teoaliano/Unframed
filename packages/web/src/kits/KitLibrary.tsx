@@ -54,7 +54,7 @@ export const SaveKitDialog = ({ kit, onClose, onSaved }: { readonly kit: Kit; re
           <DialogDescription>{kitSaveSubtitle(kit)}</DialogDescription>
         </DialogHeader>
         <DialogPanel>
-          <Label>
+          <Label className="w-full">
             <span className="grid w-full gap-1.5">
             <span className="text-xs font-medium text-foreground">Name</span>
             <Input value={name} aria-invalid={problem !== undefined || undefined} onChange={(event) => setName(event.target.value)} />
@@ -63,7 +63,7 @@ export const SaveKitDialog = ({ kit, onClose, onSaved }: { readonly kit: Kit; re
           {problem !== undefined && (
             <Alert variant="error">{problem}</Alert>
           )}
-          <Label>
+          <Label className="w-full">
             <span className="grid w-full gap-1.5">
             <span className="text-xs font-medium text-foreground">Description</span>
             <Input placeholder="What it does, in a line" value={summary} onChange={(event) => setSummary(event.target.value)} />

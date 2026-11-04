@@ -103,7 +103,7 @@ export const ImportKitDialog = ({ kit, onClose }: { readonly kit: Kit | null; re
               </span>
             </Label>
           </div>
-          <Label>
+          <Label className="w-full">
             <span className="grid w-full gap-1.5">
             <span className="text-xs font-medium text-foreground">Paste</span>
             <Textarea aria-label="Paste" value={paste} onChange={(event) => setPaste(event.currentTarget.value)} />
