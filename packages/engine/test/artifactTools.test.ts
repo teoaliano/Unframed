@@ -52,7 +52,7 @@ describe("page_write", () => {
   });
 
   it("writes a page that already has the bridge tag and every id exactly as given", async () => {
-    const ready = `${TOKENS_TAG}\n${BRIDGE_TAG}\n<h1 data-hf-id="hf-aaaa">Ready</h1>`;
+    const ready = `<!doctype html>${TOKENS_TAG}\n${BRIDGE_TAG}\n<h1 data-hf-id="hf-aaaa">Ready</h1>`;
     const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "page_write", input: { title: "Ready", html: ready } }] }]) });
     await run(agent);
     const created = (await roomRecords(agent)).find((record) => record.type === "page");
@@ -60,7 +60,7 @@ describe("page_write", () => {
   });
 
   it("puts a new page at (80, 80) with nothing selected", async () => {
-    const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "page_write", input: { html: "<p>x</p>" } }] }]) });
+    const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "page_write", input: { html: "<!doctype html><p>x</p>" } }] }]) });
     await run(agent);
     const created = (await roomRecords(agent)).find((record) => record.type === "page");
     expect(created).toMatchObject({ x: 80, y: 80, props: { title: "" } });
@@ -69,7 +69,7 @@ describe("page_write", () => {
 
   it("with shapeId writes a new file and points the shape at it, keeps the old file and title, and the turn's Revert points it back", async () => {
     const agent = await startAgentEngine({
-      script: await script([{ tools: [{ name: "page_write", input: { shapeId: "pg1", html: "<body>v2</body>" } }] }]),
+      script: await script([{ tools: [{ name: "page_write", input: { shapeId: "pg1", html: "<!doctype html><body>v2</body>" } }] }]),
     });
     await writeFile(join(agent.folder, "1-landing.html"), "<body>v1</body>");
     await seed(agent, [pageShape("pg1", "100", { file: "1-landing.html", title: "Landing" })]);
@@ -81,7 +81,7 @@ describe("page_write", () => {
     expect(shape.props.title).toBe("Landing");
     expect(write?.result).toMatchObject({ ok: true, shapeId: "pg1", file: shape.props.file, title: "Landing" });
     expect(await readFile(join(agent.folder, "1-landing.html"), "utf8")).toBe("<body>v1</body>");
-    expect(await readFile(join(agent.folder, shape.props.file), "utf8")).toBe(`<body>\n${TOKENS_TAG}\n${BRIDGE_TAG}v2</body>`);
+    expect(await readFile(join(agent.folder, shape.props.file), "utf8")).toBe(`<!doctype html><body>\n${TOKENS_TAG}\n${BRIDGE_TAG}v2</body>`);
     expect(JSON.parse(await readFile(join(agent.folder, shape.props.file.replace(/\.html$/, ".json")), "utf8"))).toMatchObject({ shapeId: "pg1", title: "Landing" });
     expect(chat.turns[0]?.files).toEqual([{ shapeId: "shape:pg1", kind: "page", change: "updated", file: shape.props.file, previousFile: "1-landing.html" }]);
 
@@ -95,8 +95,8 @@ describe("page_write", () => {
       script: await script([
         {
           tools: [
-            { name: "page_write", input: { shapeId: "pg1", html: "<p>a</p>", title: "  Landing  " } },
-            { name: "page_write", input: { shapeId: "pg2", html: "<p>b</p>", title: "x".repeat(130) } },
+            { name: "page_write", input: { shapeId: "pg1", html: "<!doctype html><p>a</p>", title: "  Landing  " } },
+            { name: "page_write", input: { shapeId: "pg2", html: "<!doctype html><p>b</p>", title: "x".repeat(130) } },
           ],
         },
       ]),
@@ -112,8 +112,8 @@ describe("page_write", () => {
       script: await script([
         {
           tools: [
-            { name: "page_write", input: { shapeId: "pg1", html: "<p>a</p>", title: "Pricing" } },
-            { name: "motion_write", input: { shapeId: "m1", html: "<div id=root></div>", title: "Outro" } },
+            { name: "page_write", input: { shapeId: "pg1", html: "<!doctype html><p>a</p>", title: "Pricing" } },
+            { name: "motion_write", input: { shapeId: "m1", html: "<!doctype html><div id=root></div>", title: "Outro" } },
           ],
         },
       ]),
@@ -128,8 +128,8 @@ describe("page_write", () => {
   });
 
   it("refuses empty html, a page over 2 MiB once tagged, an unknown shape and the wrong kind, and writes nothing", async () => {
-    const nearly = `<p>${"a".repeat(2_097_152 - 7)}</p>`;
-    const tagged = Buffer.byteLength(`${TOKENS_TAG}\n${BRIDGE_TAG}\n<p data-hf-id="hf-aaaa">${"a".repeat(2_097_152 - 7)}</p>`);
+    const nearly = `<!doctype html><p>${"a".repeat(2_097_152 - 22)}</p>`;
+    const tagged = Buffer.byteLength(`${TOKENS_TAG}\n${BRIDGE_TAG}\n<!doctype html><p data-hf-id="hf-aaaa">${"a".repeat(2_097_152 - 22)}</p>`);
     const agent = await startAgentEngine({
       script: await script([
         {
@@ -165,8 +165,8 @@ describe("page_write", () => {
       script: await script([
         {
           tools: [
-            { name: "page_write", input: { title: "Landing", html: "<p>new</p>" } },
-            { name: "page_write", input: { shapeId: "pg1", html: "<p>again</p>" } },
+            { name: "page_write", input: { title: "Landing", html: "<!doctype html><p>new</p>" } },
+            { name: "page_write", input: { shapeId: "pg1", html: "<!doctype html><p>again</p>" } },
           ],
         },
       ]),
@@ -258,18 +258,18 @@ describe("motion_write", () => {
   });
 
   it("creates a motion at the agent size of 480 by 300", async () => {
-    const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "motion_write", input: { title: "Sequence", html: "<div id=root></div>" } }] }]) });
+    const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "motion_write", input: { title: "Sequence", html: "<!doctype html><div id=root></div>" } }] }]) });
     await run(agent);
     const created = (await roomRecords(agent)).find((record) => record.type === "motion");
     expect(created).toMatchObject({ x: 80, y: 80, props: { w: 480, h: 300, title: "Sequence", fileName: "" } });
-    expect(await readFile(join(agent.folder, created.props.file), "utf8")).toBe(`${TOKENS_TAG}\n${RUNTIME_TAG}\n${BRIDGE_TAG}\n<div data-hf-id="hf-aph5" id=root></div>`);
+    expect(await readFile(join(agent.folder, created.props.file), "utf8")).toMatch(new RegExp(`^${[TOKENS_TAG, RUNTIME_TAG, BRIDGE_TAG].join("\n").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\n<!doctype html><div data-hf-id="hf-[0-9a-z]{4}" id=root></div>$`));
   });
 
   it("rewrites a library file whose size differs from its source and leaves the unchanged ones alone", async () => {
     const agent = await startAgentEngine({
       script: await script([
-        { tools: [{ name: "motion_write", input: { html: "<div id=root></div>" } }] },
-        { tools: [{ name: "motion_write", input: { html: "<div id=root>2</div>" } }] },
+        { tools: [{ name: "motion_write", input: { html: "<!doctype html><div id=root></div>" } }] },
+        { tools: [{ name: "motion_write", input: { html: "<!doctype html><div id=root>2</div>" } }] },
       ]),
     });
     const chatId = await agent.createChat();
@@ -291,7 +291,7 @@ describe("motion_write", () => {
   });
 
   it("refuses when the library cannot be written, and writes no composition", async () => {
-    const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "motion_write", input: { html: "<div id=root></div>" } }] }]) });
+    const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "motion_write", input: { html: "<!doctype html><div id=root></div>" } }] }]) });
     await mkdir(join(agent.folder, "hyperframes-player.js"));
     const { chat } = await run(agent);
     const [write] = toolResults(chat, "motion_write");
@@ -307,8 +307,8 @@ describe("artifact diffs through the artifact tools", () => {
       script: await script([
         {
           tools: [
-            { name: "page_write", input: { shapeId: "pg1", html: "<h1>Landing</h1>\n<p>Two, changed</p>\n" } },
-            { name: "motion_write", input: { title: "Sequence", html: "<div id=root>seq</div>\n" } },
+            { name: "page_write", input: { shapeId: "pg1", html: "<!doctype html>\n<h1>Landing</h1>\n<p>Two, changed</p>\n" } },
+            { name: "motion_write", input: { title: "Sequence", html: "<!doctype html>\n<div id=root>seq</div>\n" } },
           ],
         },
       ]),

@@ -7,7 +7,7 @@
       "tools": [
         {
           "name": "page_write",
-          "input": { "shapeId": "pg1", "html": "<h1 data-hf-id=\"hf-aaaa\">Changed</h1>" }
+          "input": { "shapeId": "pg1", "html": "<!doctype html><h1 data-hf-id=\"hf-aaaa\">Changed</h1>" }
         }
       ]
     },
@@ -17,7 +17,7 @@
       "tools": [
         {
           "name": "page_write",
-          "input": { "shapeId": "pg1", "html": "<h1 data-hf-id=\"hf-aaaa\">Hi</h1><p>More</p>" }
+          "input": { "shapeId": "pg1", "html": "<!doctype html><h1 data-hf-id=\"hf-aaaa\">Hi</h1><p>More</p>" }
         }
       ]
     },

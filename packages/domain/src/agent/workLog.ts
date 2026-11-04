@@ -139,6 +139,10 @@ export const describeTool = (input: { readonly toolName: string; readonly itemTy
         return { label: `Read page ${title("page")}`, action: "read" };
       case "motion_write":
         return { label: `Wrote motion ${title("motion")}`, action: "canvas" };
+      case "page_edit":
+        return { label: `Edited page ${title("page")}`, action: "canvas" };
+      case "motion_edit":
+        return { label: `Edited motion ${title("motion")}`, action: "canvas" };
       case "motion_read":
         return { label: `Read motion ${title("motion")}`, action: "read" };
       case "component_write":
@@ -362,6 +366,8 @@ const ACTIVITY_BY_TOOL: ReadonlyArray<readonly [RegExp, string]> = [
   [/^mcp__unframed__page_write$/, "Writing the page…"],
   [/^mcp__unframed__page_read$/, "Reading the page…"],
   [/^mcp__unframed__motion_write$/, "Writing the motion…"],
+  [/^mcp__unframed__page_edit$/, "Editing the page…"],
+  [/^mcp__unframed__motion_edit$/, "Editing the motion…"],
   [/^mcp__unframed__motion_read$/, "Reading the motion…"],
   [/^mcp__unframed__component_write$/, "Writing the component…"],
   [/^mcp__unframed__component_read$/, "Reading the component…"],

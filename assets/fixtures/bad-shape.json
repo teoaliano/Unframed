@@ -13,7 +13,7 @@
           "input": {
             "shapeId": "m1",
             "title": "Polished",
-            "html": "<div id=\"root\" data-composition-id=\"main\" data-start=\"0\" data-duration=\"2\" data-width=\"640\" data-height=\"360\"></div>"
+            "html": "<!doctype html><div id=\"root\" data-composition-id=\"main\" data-start=\"0\" data-duration=\"2\" data-width=\"640\" data-height=\"360\"></div>"
           }
         }
       ]

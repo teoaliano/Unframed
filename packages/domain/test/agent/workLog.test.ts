@@ -67,6 +67,18 @@ describe("the work log", () => {
     expect((labels[0] as WorkGroup).summary).toBe("Used 1 tool, changed the canvas 4 times, read 2 files, and used the browser 1 time");
   });
 
+  it("labels the edit tools by the title their result gives, and names them in the activity line", () => {
+    const labels = workLog([
+      ...call("1", "mcp__unframed__page_edit", { shapeId: "p1", edits: [] }, { result: { ok: true, title: "Landing" } }),
+      ...call("2", "mcp__unframed__motion_edit", { shapeId: "m1", edits: [] }, { result: { ok: true, title: "Intro" } }),
+      ...call("3", "mcp__unframed__page_edit", { shapeId: "p2", edits: [] }, { result: {} }),
+    ]);
+    expect((labels[0] as WorkGroup).rows.map((row) => row.label)).toEqual(["Edited page Landing", "Edited motion Intro", "Edited page p2"]);
+    expect((labels[0] as WorkGroup).summary).toBe("Changed the canvas 3 times");
+    expect(activityLabel(call("4", "mcp__unframed__page_edit", {}, { status: "running" }), "t1")).toBe("Editing the page…");
+    expect(activityLabel(call("5", "mcp__unframed__motion_edit", {}, { status: "running" }), "t1")).toBe("Editing the motion…");
+  });
+
   it("labels the component tools by their title and names them in the activity line", () => {
     const labels = workLog([
       ...call("1", "mcp__unframed__component_write", { title: "Button" }),
