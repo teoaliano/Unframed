@@ -20,7 +20,6 @@ interface TokensWindow {
   console: { error(...args: unknown[]): void };
 }
 
-// Shipped as source text by tokensScript: refer to nothing outside the body but window, core and kit.
 export function installTokens(win: TokensWindow, core: KitCore, initial: Kit | null): void {
   const LOOPBACK = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
   const STYLE_ID = "unframed-tokens";

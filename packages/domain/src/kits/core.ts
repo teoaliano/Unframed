@@ -1,6 +1,5 @@
 import type { Kit, Token, TokenValue } from "./types.ts";
 
-// Shipped as source text by tokensScript: refer to nothing outside the body.
 export function kitCore(easeCss: Readonly<Record<string, string>>) {
   const SUFFIX = ["font-family", "font-size", "font-weight", "line-height", "letter-spacing"];
   const FIELDS = ["fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing"];
