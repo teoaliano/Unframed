@@ -1,7 +1,3 @@
-/**
- * Kit usage and kit export (spec 19). Usage reads each artifact's current file; export writes
- * one format into the project folder under an exclusive name, with an export sidecar.
- */
 import { constants } from "node:fs";
 import { open, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -15,7 +11,6 @@ export interface KitUsage {
   readonly modes: Record<string, string[]>;
 }
 
-/** Which artifact shapes use each token and each mode. Every token and every mode is listed, with none when none use it. */
 export const kitUsage = async (records: ReadonlyArray<TLRecord>, folder: string): Promise<KitUsage> => {
   const kit = kitOf(records);
   const usage: KitUsage = { tokens: {}, modes: {} };
@@ -35,7 +30,6 @@ export const kitUsage = async (records: ReadonlyArray<TLRecord>, folder: string)
   return usage;
 };
 
-/** The export's name stem, and the text it writes, for a format. */
 const exportOf = (kit: Kit, format: Format): { ext: string; text: string } => {
   switch (format) {
     case "dtcg":
@@ -47,7 +41,6 @@ const exportOf = (kit: Kit, format: Format): { ext: string; text: string } => {
   }
 };
 
-/** Writes the kit in one format under `<epochMs>-kit-<slug>` with an exclusive create, then its sidecar. */
 export const exportKit = async (folder: string, kit: Kit, format: Format, now = Date.now()): Promise<{ file: string }> => {
   const { ext, text } = exportOf(kit, format);
   const slug = projectSlug(kit.name) || "kit";
@@ -66,7 +59,6 @@ export const exportKit = async (folder: string, kit: Kit, format: Format, now = 
     } finally {
       await handle.close();
     }
-    // The sidecar takes the stem, so it never shares a name with the export.
     const sidecar = {
       source: "export",
       kind: "kit",

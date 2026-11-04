@@ -92,6 +92,11 @@ describe("planRename", () => {
     expect(planRename(board, "g", "den")?.title).toBeUndefined();
   });
 
+  it("gives a renamed component its name as its title, so the editor, the Design tab and the updates show it (spec 20)", () => {
+    const withComponent = [...board, { ...artifact("cp", "page"), kind: "component" as const, ref: "card" }];
+    expect(planRename(withComponent, "cp", "Price Card")).toMatchObject({ kind: "component", from: "card", to: "price-card", title: "price-card" });
+  });
+
   it("never rewrites a text result, even when it is the shape renamed", () => {
     expect(planRename(board, "t", "answer")).toEqual({ id: "t", kind: "prompt", from: "101", to: "answer", rewrites: [] });
   });

@@ -33,7 +33,6 @@ const startRendering = async (renderer: "ok" | "fail" | "no-chrome" = "ok"): Pro
 
 const room = async (rpc: TestRpcClient): Promise<any[]> => (await rpc.call("testCanvas.read", { project: "board" })).records as any[];
 
-/** Polls a render until it settles, answering every status it passed through. */
 const follow = async (rpc: TestRpcClient, id: string) => {
   const seen: any[] = [];
   for (let i = 0; i < 400; i++) {
@@ -67,6 +66,14 @@ describe("motion.upload", () => {
     expect(unnamed.fileName).toBe("motion.html");
     expect(unnamed.file).toMatch(/^\d+-motion\.html$/);
   });
+
+  const LIMIT = 20 * 1_048_576;
+  const atLimit = () => "<div id=root>" + "a".repeat(LIMIT - "<div id=root>".length - "</div>".length) + "</div>";
+
+  it("refuses a body one byte over 20 MB", async () => {
+    const { rpc } = await startRendering();
+    await expect(rpc.call("motion.upload", { project: "board", fileName: "x.html", html: atLimit() + "a" })).rejects.toMatchObject({ code: "bad_request" });
+  }, 120_000);
 
   it("refuses an empty body and one over 20 MB", async () => {
     const { rpc, folder } = await startRendering();
@@ -203,7 +210,6 @@ describe("lifecycle changes while a motion renders", () => {
     expect(existsSync(join(engine.dataDir, "output", "board"))).toBe(true);
     await follow(rpc, started.id);
     expect(await rpc.call("projects.rename", { name: "board", to: "renamed" })).toEqual({ name: "renamed", movedRenders: 0 });
-    // Closing the project stopped tracking its renders.
     await expect(rpc.call("motion.renderStatus", { project: "board", id: started.id })).rejects.toMatchObject({ message: "No such render." });
   });
 });

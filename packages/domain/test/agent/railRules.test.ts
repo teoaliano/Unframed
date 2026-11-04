@@ -11,13 +11,11 @@ describe("inline tabs", () => {
   });
 
   it("shows the newest that fit beside More, and the rest wait under it", () => {
-    // 100 + 80 + gap 4 + More (50 + gap 4) = 238; a third tab would need 302.
     expect(inline({ room: 238 })).toEqual([0, 1]);
     expect(inline({ room: 237 })).toEqual([0]);
   });
 
   it("keeps the active chat inline, in its place, when it is not among the newest that fit", () => {
-    // Chat 3 beside chat 0: 100 + 120 + gap 4 + More 54 = 278.
     expect(inline({ active: 3, room: 278 })).toEqual([0, 3]);
     expect(inline({ active: 3, room: 277 })).toEqual([3]);
     expect(inline({ active: 2, room: 238 })).toEqual([0, 2]);
@@ -148,7 +146,6 @@ describe("the recap rows", () => {
     sequence,
     createdAt: new Date(Date.UTC(2026, 8, 29, 10, 0, sequence)).toISOString(),
   });
-  /** A call as the runtime ingests it: the input on its start, the result on its end. */
   const call = (toolName: string, input: Record<string, unknown>, result: unknown = {}) => {
     const itemId = `i${++sequence}`;
     return [

@@ -1,10 +1,5 @@
-/**
- * Update impact (spec 20): the warning sentences an artifact's component update shows, from
- * the declaration it pins and the one it would move to, and the instances in its source.
- */
 import type { ComponentDeclaration } from "./sheet.ts";
 
-/** What one instance in an artifact's source sets: variant attributes, property attributes and the slots it fills ("" is the default slot). */
 export type InstanceUse = {
   readonly variants: Readonly<Record<string, string>>;
   readonly props: readonly string[];

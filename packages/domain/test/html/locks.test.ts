@@ -10,7 +10,6 @@ const check = (next: string, locked: string[], current = PAGE, kind?: "page" | "
   ...(kind === undefined ? {} : { kind }),
 });
 
-/** Replaces the first occurrence of `from` in the page with `to`, so the page's other elements stay as they are. */
 const edit = (from: string, to: string): string => {
   if (!PAGE.includes(from)) throw new Error(`fixture lacks ${from}`);
   return PAGE.replace(from, to);

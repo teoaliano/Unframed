@@ -1,9 +1,3 @@
-/**
- * Component sheets (spec 20): reads one sheet's four marked parts and refuses a malformed one
- * with the sentence the agent and the person see, first failure first. The markers are exact
- * and the template is found by its own div nesting, so the scan is regex-based like spec 09's
- * tag rules. No HTML parser ships in the web bundle.
- */
 
 export type ComponentPropType = "text" | "boolean" | "image";
 
@@ -21,13 +15,13 @@ export type ComponentSheet = {
   readonly examples: string;
 };
 
-export type ComponentSheetRead = { readonly ok: true; readonly sheet: ComponentSheet } | { readonly ok: false; readonly refusal: string };
+type ComponentSheetRead = { readonly ok: true; readonly sheet: ComponentSheet } | { readonly ok: false; readonly refusal: string };
 
 export const COMPONENT_TAG_MAX = 50;
-export const COMPONENT_VARIANTS_MAX = 4;
-export const COMPONENT_VARIANT_VALUES_MAX = 12;
-export const COMPONENT_PROPS_MAX = 16;
-export const COMPONENT_SLOTS_MAX = 8;
+const COMPONENT_VARIANTS_MAX = 4;
+const COMPONENT_VARIANT_VALUES_MAX = 12;
+const COMPONENT_PROPS_MAX = 16;
+const COMPONENT_SLOTS_MAX = 8;
 
 const TAG = /^uf-[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 const NAME = /^[a-z][a-z0-9-]{0,30}$/;
@@ -39,7 +33,7 @@ const isReservedName = (name: string): boolean => RESERVED.has(name) || name.sta
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
-export const componentTagRefusal = (tag: string): string =>
+const componentTagRefusal = (tag: string): string =>
   `the tag ${tag} is not a component tag; use uf- and lowercase words joined by hyphens, like uf-price-card`;
 
 const nameRefusal = (name: string): string =>
@@ -51,6 +45,7 @@ const MESSAGES = {
   style: 'a component sheet needs one <style type="text/x-uf-component" data-uf-component-style>',
   template: "a component sheet needs one <div data-uf-template hidden> holding its markup",
   script: "a component's template cannot hold a script; put behaviour in the page that uses it",
+  markup: "a component's template cannot hold an on attribute, a javascript: link, or an iframe, object or embed; put behaviour in the page that uses it",
   examples: "a component sheet holds at most one <div data-uf-example hidden>",
   tooMany: "a component has at most 4 variants, 16 properties and 8 slots",
   slotName: 'slots: a slot is "" for the default slot, or a name of lowercase letters, digits and hyphens',
@@ -61,7 +56,6 @@ type StartTag = { readonly name: string; readonly attrs: Readonly<Record<string,
 const START_TAG = /<([a-zA-Z][a-zA-Z0-9-]*)((?:\s+[^\s"'<>/=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*)\s*\/?>/g;
 const ATTRIBUTE = /([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
 
-/** The text with every comment blanked to spaces, so offsets still match the original. */
 const blankComments = (html: string): string => html.replace(/<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\n]/g, " "));
 
 const attributesOf = (source: string): Record<string, string> => {
@@ -77,11 +71,6 @@ const startTags = (text: string): StartTag[] =>
     end: match.index + match[0].length,
   }));
 
-/**
- * The inner markup of an element whose start tag ends at `tag.end`. A raw-text element
- * (script, style) ends at its first closing tag; any other element ends at its own matching
- * closing tag, counting nested elements of its name.
- */
 const innerOf = (html: string, text: string, tag: StartTag, rawText: boolean): string => {
   if (rawText) {
     const close = new RegExp(`</${tag.name}\\s*>`, "i").exec(text.slice(tag.end));
@@ -150,11 +139,6 @@ const readDeclaration = (json: string): ComponentDeclaration | string => {
   return { tag, variants: variantOut, props: propOut, slots: [...(slots as string[])] };
 };
 
-/**
- * Reads a component sheet. Returns its declaration, style, template and examples, or the
- * first refusal sentence (spec 20, the sheet's refusals in order). Canvas rules (a tag held
- * by another shape, a changed tag) are not checked here.
- */
 export const readComponentSheet = (html: string): ComponentSheetRead => {
   const text = blankComments(html);
   const tags = startTags(text);
@@ -190,6 +174,8 @@ export const readComponentSheet = (html: string): ComponentSheetRead => {
     if (!found) return refuse(slot === "" ? "slots: the template has no <slot>" : `slots: the template has no <slot name="${slot}">`);
   }
   if (/<script\b/i.test(templateText)) return refuse(MESSAGES.script);
+  const active = inside.some((tag) => tag.name === "iframe" || tag.name === "object" || tag.name === "embed" || Object.entries(tag.attrs).some(([name, value]) => name.startsWith("on") || /^\s*javascript:/i.test(value)));
+  if (active) return refuse(MESSAGES.markup);
   const nested = inside.find((tag) => tag.name.startsWith("uf-"));
   if (nested) {
     return refuse(
@@ -200,14 +186,8 @@ export const readComponentSheet = (html: string): ComponentSheetRead => {
   return { ok: true, sheet: { declaration: declared, style, template, examples: example } };
 };
 
-/** A component shape on the canvas, as the canvas rules read it: its id and its tag. */
 export type ComponentCanvasShape = { readonly id: string; readonly tag: string };
 
-/**
- * The canvas rules for a sheet about to be written (spec 20): the tag another component shape
- * holds, and, for a write to a shape, a tag that differs from the shape's. Returns the first
- * refusal sentence, or undefined. The nested-component rule is part of `readComponentSheet`.
- */
 export const sheetRefusal = (sheet: ComponentSheet, canvas: readonly ComponentCanvasShape[], shapeId?: string): string | undefined => {
   const tag = sheet.declaration.tag;
   const holder = canvas.find((shape) => shape.tag === tag && shape.id !== shapeId);

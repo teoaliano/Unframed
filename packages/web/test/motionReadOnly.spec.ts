@@ -6,10 +6,6 @@ import { editSummaries } from "./motionHelpers.ts";
 import { editor } from "./editorHarness.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
-/**
- * Dot's first tween is literal. Tween 1 is a loop (read-only). Tween 2 is built by a helper on Box (read-only). Tween 3 takes its
- * position from a computed expression, so its start is set by the agent's code while the rest of it is literal.
- */
 const READONLY = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}.dot{position:absolute;top:120px;width:60px;height:60px;background:#f00}#dot{left:20px}#box{left:300px;top:40px}</style></head><body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="8" data-width="640" data-height="360">
 <div class="dot clip" id="dot" data-uf-name="Dot" data-start="0" data-duration="8"></div><div class="dot clip" id="box" data-uf-name="Box" data-start="0" data-duration="8"></div>
@@ -43,14 +39,12 @@ const openMotion = async (page: Page, engine: TestEngine) => {
   await expect(region(page)).toBeVisible();
   await expect(bar(page, 3)).toBeAttached({ timeout: 40_000 });
   await expect.poll(async () => Number(await timeline(page).getByTestId("timeline-track").getAttribute("data-px-per-second"))).toBeGreaterThan(0);
-  // Two zoom steps in, so a short bar is wide enough to press on.
   await timeline(page).getByRole("button", { name: "Zoom in" }).click();
   await timeline(page).getByRole("button", { name: "Zoom in" }).click();
 };
 
 const fileOf = async (engine: TestEngine) => (await roomShapes(engine, "default", "motion")).find((record) => record.id === SHAPE)?.props;
 
-/** Drags a bar's middle 80 px to the right. */
 const dragBar = async (page: Page, tween: number) => {
   const box = await bar(page, tween).boundingBox();
   if (!box) throw new Error("no bar");
@@ -70,7 +64,6 @@ test("a loop's tween shows that the agent's code sets it, with the reason, and a
 
   await expect(panel(page).getByText("Set by the agent's code.").first()).toBeVisible();
   await expect(panel(page).getByText("It runs in a loop.")).toBeVisible();
-  // Nothing was written: the file is the one it was, and no edit version exists.
   await page.waitForTimeout(2500);
   expect((await fileOf(agent))?.file).toBe(before);
   expect(await editSummaries(agent)).toEqual([]);

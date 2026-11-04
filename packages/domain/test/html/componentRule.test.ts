@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applySourceEdits } from "../../src/html/sourceEdits.ts";
 
-/** Spec 20, task 23: the `componentRule` edit changes or adds one declaration in the rule its StyleRuleRef names. */
 
 const SHEET = `<!doctype html><html><head>
 <script type="application/json" data-uf-component>{"tag":"uf-button"}</script>

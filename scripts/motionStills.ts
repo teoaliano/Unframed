@@ -1,16 +1,3 @@
-/**
- * `node scripts/motionStills.ts <outDir> [composition.html ...]`: renders motion compositions
- * to MP4 with the HyperFrames producer the engine depends on, then extracts stills at 0 s,
- * 1 s and the last frame. Local compute only: no model call, nothing paid.
- *
- * Without composition paths it takes the motions in `assets/fixtures/*.json` (the scripted
- * agent's `motion_write` HTML). Run it once per HyperFrames version on the same machine, each
- * time into a new `outDir`, then compare the stills. Pixel difference for one still:
- * `ffmpeg -i a/0s.png -i b/0s.png -lavfi psnr -f null -`.
- *
- * Chrome comes from `UNFRAMED_CHROME_PATH`, else Google Chrome in /Applications. Needs
- * `ffmpeg` and `ffprobe` on PATH.
- */
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -41,14 +28,12 @@ if (!existsSync(chromePath)) {
   process.exit(1);
 }
 
-// The packages' exports maps do not offer these paths to require, so they are read from the install.
 const installed = (path: string): string => join(root, "packages/engine/node_modules", path);
 const producer = await import(pathToFileURL(installed("@hyperframes/producer/dist/index.js")).href);
 const engine = await import(pathToFileURL(installed("@hyperframes/engine/dist/index.js")).href);
 const runtimeSource = installed("@hyperframes/core/dist/hyperframe.runtime.iife.js");
 const gsapSource = installed("gsap/dist/gsap.min.js");
 
-/** Motion HTML from the fixtures: any string value that holds a composition root. */
 const fixtureCompositions = async (): Promise<Array<{ name: string; html: string }>> => {
   const dir = join(root, "assets/fixtures");
   const found: Array<{ name: string; html: string }> = [];
@@ -93,7 +78,6 @@ for (const composition of compositions) {
   const entry = `1-${composition.name}.html`;
   await rm(dir, { recursive: true, force: true });
   await mkdir(folder, { recursive: true });
-  // The library the app copies beside a motion (no player: a render does not use it), and the tags it injects.
   await writeFile(join(folder, entry), injectTags(composition.html, "motion"), "utf8");
   await copyFile(runtimeSource, join(folder, "hyperframes-runtime.js"));
   await copyFile(gsapSource, join(folder, "gsap.js"));

@@ -5,7 +5,6 @@ import { filledArtifact } from "./artifacts.ts";
 import { editSummaries, tweenPlace } from "./motionHelpers.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
-/** Dot's tween lasts as long as the parameter `speed` (2 s, between 0.5 and 4 s in steps of 0.1), and the agent's callback rebuilds it. */
 const DIAL = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}#dot{position:absolute;left:20px;top:120px;width:60px;height:60px;background:#f00}</style></head><body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360"><div id="dot" data-uf-name="Dot" class="clip" data-start="0" data-duration="4"></div></div>
 <script src="gsap.js"></script><script>
@@ -17,7 +16,6 @@ unframed.dials("Timing", { speed: [2, 0.5, 4, 0.1] }, function (v) {
 });
 </script></body></html>`;
 
-/** The same, but the tween starts at 1 s (a literal) and only its duration is the parameter: a left-edge stretch moves both. */
 const MIXED = DIAL.replace('tl.to("#dot", { x: 400, duration: v.speed }, 0);', 'tl.to("#dot", { x: 400, duration: v.speed }, 1);');
 
 const SHAPE = "shape:intro";
@@ -37,12 +35,10 @@ const openMotion = async (page: Page, engine: TestEngine, html: string) => {
   await page.mouse.dblclick(at.x, at.y);
   await expect(region(page)).toBeVisible();
   await expect(bar(page)).toHaveCount(1, { timeout: 40_000 });
-  // One step out of the fitted zoom keeps a bar's right end clear of the scrollbar, and the zoom is set once the strip has measured itself.
   await expect.poll(async () => Number(await timeline(page).getByTestId("timeline-track").getAttribute("data-px-per-second"))).toBeGreaterThan(0);
   await timeline(page).getByRole("button", { name: "Zoom out" }).click();
 };
 
-/** The zoom, and the x of the ruler's time zero: the places a pointer goes to. */
 const rulerOf = async (page: Page) => {
   const box = await timeline(page).getByTestId("timeline-ruler").boundingBox();
   const pxPerSecond = Number(await timeline(page).getByTestId("timeline-track").getAttribute("data-px-per-second"));
@@ -67,19 +63,15 @@ test("dragging a dial-owned bar's end moves the parameter at once, writes no ver
   await page.mouse.down();
   await page.mouse.move(ruler.x(3), edge.y, { steps: 8 });
 
-  // The bar, the frame's tween and the parameter all say three seconds while the drag goes on.
   await expect.poll(async () => Number(await bar(page).getAttribute("data-duration"))).toBeCloseTo(3, 1);
   await expect.poll(async () => (await tweenPlace(page)).duration).toBeCloseTo(3, 1);
   await page.mouse.up();
-  // The Parameters tab shows the held value at once, before the burst's pause writes it.
   await parameters(page).getByRole("tab", { name: "Parameters" }).click();
   await expect(parameters(page).getByRole("slider", { name: "Speed" })).toHaveAttribute("aria-valuenow", "3", { timeout: 5000 });
 
-  // No version: the file the shape names is the one it had, and no edit sidecar was written for the drag.
   await page.waitForTimeout(2500);
   expect((await fileOf(agent))?.file).toBe(before);
   expect((await editSummaries(agent)).length).toBe(0);
-  // The parameter is saved once, with the burst's commit, and the shape keeps its file.
   await expect.poll(async () => (await fileOf(agent))?.dials?.speed, { timeout: 10_000 }).toBeCloseTo(3, 1);
   expect((await fileOf(agent))?.file).toBe(before);
 });
@@ -113,7 +105,6 @@ test("a left-edge stretch on a dial-owned timing moves the start and the paramet
   const edge = await edgeOf(page, "left");
   await page.mouse.move(edge.x, edge.y);
   await page.mouse.down();
-  // From 1 s to 1.5 s: the start moves to 1.5 s and the end stays at 3 s, so the parameter becomes 1.5 s.
   await page.mouse.move(ruler.x(1.5), edge.y, { steps: 8 });
   await page.mouse.up();
 
@@ -124,7 +115,6 @@ test("a left-edge stretch on a dial-owned timing moves the start and the paramet
 
   await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(async () => (await fileOf(agent))?.file, { timeout: 15_000 }).toBe(before);
-  // The parameter is back where it was (the default, 2 s, as nothing saved it before).
   await expect.poll(async () => Number((await fileOf(agent))?.dials?.speed ?? 2), { timeout: 15_000 }).toBeCloseTo(2, 1);
   expect(moved).not.toBe(before);
 });

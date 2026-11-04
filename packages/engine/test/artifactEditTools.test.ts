@@ -6,7 +6,6 @@ import { scriptFolder, startAgentEngine, type AgentEngine } from "./agent.ts";
 import { motionShape, roomRecords, roomShape, seed, toolResults } from "./agentCanvas.ts";
 import { componentShape, pageShape } from "./canvasRecords.ts";
 
-/** Spec 09: `page_edit` and `motion_edit`, and the document checks on every agent write and edit. */
 
 const LIBRARY = ["gsap.js", "hyperframes-player.js", "hyperframes-runtime.js", "hyperframes-viewer.html", "unframed-dials.js", "unframed-edit.js", "unframed-tokens.js"];
 const LANDING = "<!doctype html><html><head><title>x</title></head><body><h1>Hello</h1><p>One</p></body></html>";
@@ -22,7 +21,6 @@ const run = async (agent: AgentEngine, overrides: { interactionMode?: "plan" } =
   return { chatId, chat: await agent.settled(chatId, 1) };
 };
 
-/** The page and motion files in the project folder, sidecars and library left out. */
 const artifactFiles = async (agent: AgentEngine) => (await readdir(agent.folder)).filter((name) => /^\d+-.*\.html$/.test(name) && !name.includes(".component.")).sort();
 
 const edit = (old_string: string, new_string: string) => ({ old_string, new_string });

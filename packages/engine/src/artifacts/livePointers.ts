@@ -1,12 +1,3 @@
-/**
- * The live viewer's pointers (spec 09): one small file, `unframed-live-<key>.js`, for each
- * artifact shape the person opened in a tab, naming the shape's current file and dials, or
- * that it was deleted. "Open in a new tab" writes the first one; from then on the pointer
- * file on disk is what marks the shape as followed, and the engine rewrites it after every
- * commit that touches the shape and when the project opens. Pointers, the viewer and the
- * check are helper files the engine keeps; the versioned artifact files are still never
- * overwritten.
- */
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { artifactTitle, isArtifactKind, kitStamp, type ArtifactKind, liveKey, livePointerFileName, livePointerKey, livePointerSource, parseLivePointer, type Kit, type LivePointer } from "@unframed/domain";
@@ -33,7 +24,6 @@ const pointerOf = (shape: ArtifactRecord, kit: Kit | null): LivePointer => {
   };
 };
 
-/** What a shape's pointer should say now: its current state, or deleted, keeping what it last named. */
 type Next = { readonly key: string; readonly shape: ArtifactRecord | undefined };
 
 export class LivePointers {
@@ -44,7 +34,6 @@ export class LivePointers {
     this.folder = folder;
   }
 
-  /** "Open in a new tab" on `shape`: writes its pointer, and the viewer and check beside it. */
   open(project: string, shape: TLRecord | undefined, kit: Kit | null = null): Promise<boolean> {
     if (!isArtifact(shape)) return Promise.resolve(false);
     const key = liveKey(shape.id);
@@ -56,7 +45,6 @@ export class LivePointers {
     });
   }
 
-  /** A room opened: every followed shape's pointer is brought up to date, or marked deleted. */
   opened(project: string, records: ReadonlyArray<TLRecord>, kit: Kit | null = null): void {
     void this.enqueue(project, async (folder) => {
       const keys = (await readdir(folder).catch(() => [] as string[])).flatMap((name) => livePointerKey(name) ?? []);
@@ -71,7 +59,6 @@ export class LivePointers {
     }).catch(() => undefined);
   }
 
-  /** A commit: the followed shapes it put are brought up to date, the ones it removed marked deleted. */
   committed(project: string, put: Iterable<TLRecord>, removed: ReadonlyArray<string>, kit: Kit | null = null): void {
     const next: Next[] = [];
     for (const record of put) {
@@ -86,7 +73,6 @@ export class LivePointers {
     void this.enqueue(project, (folder) => this.follow(folder, next, kit)).catch(() => undefined);
   }
 
-  /** The project kit changed: every followed artifact's pointer names the new stamp. */
   kitChanged(project: string, records: ReadonlyArray<TLRecord>, kit: Kit | null): void {
     const next: Next[] = [];
     for (const record of records) {
@@ -97,7 +83,6 @@ export class LivePointers {
     void this.enqueue(project, (folder) => this.follow(folder, next, kit)).catch(() => undefined);
   }
 
-  /** One chain, in commit order, so an older pointer never lands after a newer one. */
   private enqueue<A>(project: string, work: (folder: string) => Promise<A>): Promise<A | false> {
     const run = this.queue.then(async () => {
       const folder = await this.folder(project);
@@ -107,7 +92,6 @@ export class LivePointers {
     return run;
   }
 
-  /** Rewrites the pointers that exist among `next`. A shape with no pointer was never opened in a tab. */
   private async follow(folder: string, next: ReadonlyArray<Next>, kit: Kit | null): Promise<void> {
     for (const { key, shape } of next) {
       const before = await readFile(join(folder, livePointerFileName(key)), "utf8").catch(() => undefined);

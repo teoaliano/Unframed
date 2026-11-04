@@ -4,8 +4,6 @@ import { openCanvas } from "./canvas.ts";
 import { fileOf, htmlCount, onBoard, openEditor, parameters, preparedFile, selectByText, textOf } from "./editorHarness.ts";
 import { putRecords } from "./media.ts";
 
-/** The token chip and the token owner (spec 19, The token chip and The token owner): a var() of the kit shows a chip; another token and Detach commit source edits. */
-
 const BRAND = {
   format: 1,
   name: "Brand",
@@ -36,20 +34,18 @@ test("a var() of the kit shows a chip with its short path and value, another tok
   await preparedFile(agent);
   const countBefore = await htmlCount(agent);
 
-  // The chip: the last two path segments, and the value in the artifact's mode (light, the default).
   const chip = parameters(page).getByRole("button", { name: /brand\/primary/ });
   await expect(chip).toBeVisible();
   await expect(chip).toContainText("#1a73e8");
-  await expect(chip).toHaveAttribute("title", "color/brand/primary");
+  await chip.hover();
+  await expect(page.locator("[data-slot='tooltip-popup']")).toHaveText("color/brand/primary");
 
-  // Another token writes a token edit.
   await chip.click();
   await page.getByRole("button", { name: /color\/brand\/accent/ }).click();
   await expect.poll(() => htmlCount(agent), { timeout: 8000 }).toBe(countBefore + 1);
   expect(await textOf(agent, (await fileOf(agent))!)).toMatch(/color:\s*var\(--color-brand-accent\)/);
   await expect(parameters(page).getByRole("button", { name: /brand\/accent/ })).toBeVisible();
 
-  // Detach writes the resolved value as a literal.
   await parameters(page).getByRole("button", { name: /brand\/accent/ }).click();
   await page.getByRole("button", { name: "Detach", exact: true }).click();
   await expect.poll(() => htmlCount(agent), { timeout: 8000 }).toBe(countBefore + 2);
@@ -81,7 +77,6 @@ test("a text style whose five fields hold its sub-names shows a text style chip,
   await preparedFile(agent);
   const countBefore = await htmlCount(agent);
 
-  // The header chip comes first; each field of the style shows its own chip too.
   const styleChip = parameters(page).getByRole("group", { name: "Text", exact: true }).getByRole("button", { name: /type\/body/ }).first();
   await expect(styleChip).toBeVisible();
   await styleChip.click();

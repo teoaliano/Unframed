@@ -2,27 +2,23 @@ import type { ChatAttachment, ElementChip, ModelSelection } from "@unframed/cont
 import type { InteractionMode, RuntimeMode } from "@unframed/domain";
 import { newId, type ChatClient } from "./store.ts";
 
-/** A message ready to go: the text the model reads, its context and its uploaded attachments. */
-export interface Outgoing {
+interface Outgoing {
   readonly text: string;
   readonly selection: ReadonlyArray<string>;
   readonly attachments: ReadonlyArray<ChatAttachment>;
-  /** The element chips the person pointed at (spec 18). */
   readonly elements?: ReadonlyArray<ElementChip>;
 }
 
-export interface NewChat {
+interface NewChat {
   readonly modelSelection: ModelSelection;
   readonly runtimeMode: RuntimeMode;
   readonly interactionMode: InteractionMode;
-  /** The selected artifacts; the engine keeps only those the canvas says are artifacts. */
   readonly tags: ReadonlyArray<string>;
   readonly title?: string;
 }
 
 export { messageOf } from "./store.ts";
 
-/** Creates a chat and makes it the rail's active one before the engine answers, so its tab shows at once. */
 export const createChat = async (client: ChatClient, chat: NewChat, preview = ""): Promise<string> => {
   const threadId = newId("chat");
   const now = new Date().toISOString();
@@ -62,7 +58,6 @@ export const createChat = async (client: ChatClient, chat: NewChat, preview = ""
   return threadId;
 };
 
-/** Sends one message into a chat, shown at once as the person's message. */
 export const sendMessage = async (
   client: ChatClient,
   threadId: string,

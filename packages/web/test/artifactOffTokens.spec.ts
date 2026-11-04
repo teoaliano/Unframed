@@ -4,8 +4,6 @@ import { openCanvas } from "./canvas.ts";
 import { fileOf, htmlCount, onBoard, openEditor, outline, parameters, preparedFile, selectByText, textOf } from "./editorHarness.ts";
 import { putRecords } from "./media.ts";
 
-/** Off-token values in the Design tab (spec 19, Off-token values): the count, the rows, selection, Use token and the empty sentence. */
-
 const BRAND = {
   format: 1,
   name: "Brand",
@@ -16,7 +14,6 @@ const BRAND = {
   ],
 };
 
-/** A heading whose colour is the token's exact value inline, and a card whose top padding is the token's value in a rule. */
 const PAGE = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{margin:0}.card{padding-top: 16px}</style></head><body><main><h1 style="color: #1a73e8">Welcome</h1><p class="card">Card text</p></main></body></html>`;
 
 const seedKit = async (page: Page, engine: Parameters<typeof openCanvas>[1]) => {
@@ -26,7 +23,6 @@ const seedKit = async (page: Page, engine: Parameters<typeof openCanvas>[1]) => 
 
 const offTokensSection = (page: Page) => parameters(page).getByRole("group", { name: "Off-token values" });
 
-/** The Use token button of the row whose text holds `text`. */
 const useTokenOf = (page: Page, text: string) => offTokensSection(page).locator("div.grid").filter({ hasText: text }).getByRole("button", { name: "Use token", exact: true });
 
 test("the section counts the off-token values, lists each place, and selects an element or a rule's elements", async ({ page, agent }) => {
@@ -36,7 +32,6 @@ test("the section counts the off-token values, lists each place, and selects an 
   await selectByText(page, "Welcome");
   await preparedFile(agent);
 
-  // Closed by default: the count shows, the rows do not.
   const toggle = parameters(page).getByRole("button", { name: "Off-token values (2)", exact: true });
   await expect(toggle).toBeVisible();
   await expect(parameters(page).getByRole("button", { name: "Use token", exact: true })).toHaveCount(0);
@@ -47,7 +42,6 @@ test("the section counts the off-token values, lists each place, and selects an 
   await expect(offTokensSection(page)).toContainText("padding-top: 16px = --dimension-space-md");
   await expect(offTokensSection(page)).toContainText("In styles: .card");
 
-  // A rule's row selects the elements its selector matches.
   await parameters(page).getByRole("button", { name: /In styles: \.card/ }).click();
   await expect(outline(page, "selected")).toHaveCount(1, { timeout: 4000 });
 });
@@ -66,7 +60,6 @@ test("Use token writes a token edit on an inline value and on a style rule, and 
   expect(await textOf(agent, (await fileOf(agent))!)).toMatch(/style="color:\s*var\(--color-brand-primary\)"/);
   await expect(parameters(page).getByRole("button", { name: "Off-token values (1)", exact: true })).toBeVisible({ timeout: 8000 });
 
-  // The rule's row: its declaration takes the token and the count goes to zero.
   await useTokenOf(page, "padding-top: 16px").click();
   await expect.poll(() => htmlCount(agent), { timeout: 8000 }).toBe(countBefore + 2);
   expect(await textOf(agent, (await fileOf(agent))!)).toMatch(/\.card\{padding-top:\s*var\(--dimension-space-md\)\}|\.card \{\s*padding-top:\s*var\(--dimension-space-md\)/);

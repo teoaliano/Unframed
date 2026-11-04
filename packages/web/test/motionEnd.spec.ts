@@ -5,7 +5,6 @@ import { filledArtifact } from "./artifacts.ts";
 import { editSummaries } from "./motionHelpers.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
-/** A four-second motion whose last clip, Dot, ends at 3 s, so a drag of the end marker can snap to it. */
 const LENGTH = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}#dot{position:absolute;left:20px;top:120px;width:60px;height:60px;background:#f00}</style></head><body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360"><div id="dot" data-uf-name="Dot" class="clip" data-start="1" data-duration="2"></div></div>
 <script src="gsap.js"></script><script>
@@ -35,7 +34,6 @@ const openMotion = async (page: Page, engine: TestEngine) => {
   await timeline(page).getByRole("button", { name: "Zoom out" }).click();
 };
 
-/** The zoom in pixels a second, and the place of a time on the ruler, which starts at the time area's left edge. */
 const rulerAt = async (page: Page, seconds: number) => {
   const ruler = await timeline(page).getByTestId("timeline-ruler").boundingBox();
   const pxPerSecond = Number(await timeline(page).getByTestId("timeline-track").getAttribute("data-px-per-second"));
@@ -43,7 +41,6 @@ const rulerAt = async (page: Page, seconds: number) => {
   return { x: ruler.x + seconds * pxPerSecond, y: ruler.y + ruler.height / 2, bottom: ruler.y + ruler.height + 20 };
 };
 
-/** The composition's own length, as the frame's root element holds it now. */
 const rootDuration = async (page: Page): Promise<string | undefined> => {
   for (const frame of page.frames()) {
     if (!new URL(frame.url()).pathname.endsWith("-intro.html")) continue;
@@ -68,7 +65,6 @@ test("dragging the end marker near the last clip's end snaps the length to it, a
   const versions = (await editSummaries(agent)).length;
 
   await dragEndTo(page, 3, 3);
-  // While the drag goes on the marker and the readout show the new length: playback follows the drag.
   await expect.poll(() => timeline(page).getByTestId("timeline-end").textContent(), { timeout: 5_000 }).toBe("3 s");
   await page.mouse.up();
 
@@ -82,7 +78,6 @@ test("dragging the end marker onto the playhead snaps the length to the playhead
   await openMotion(page, agent);
   const versions = (await editSummaries(agent)).length;
 
-  // A press on the ruler seeks paused to 2.5 s, which is where the playhead stays.
   const at = await rulerAt(page, 2.5);
   await page.mouse.click(at.x, at.y);
   await dragEndTo(page, 2.5, 2);

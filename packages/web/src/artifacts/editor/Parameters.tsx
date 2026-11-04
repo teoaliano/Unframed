@@ -1,7 +1,3 @@
-/**
- * The editor's right column (spec 09): the artifact's parameters as DialKit controls, and the
- * box that asks the agent to add one.
- */
 import { addParameterInstruction, continuableChat, DEFAULT_RUNTIME_MODE, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
 import { Sparkles } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -15,32 +11,22 @@ import { messageOf, useChatClient, useChats, useProviders } from "../../agent/st
 import { useCanvasProject, useEngine } from "../../context.ts";
 import { DialControls } from "../DialControls.tsx";
 
-/** Each editor column is a card: the kit's card fill, border and radius. */
 export const COLUMN = "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border bg-card";
 
-/** A column's one-row header, 48 px tall over a border. */
 export const ColumnHeader = ({ children, className }: { readonly children: ReactNode; readonly className?: string }) => (
   <header className={cn("flex h-12 min-w-0 flex-none items-center gap-2 border-b px-2.5", className)}>{children}</header>
 );
 
-export interface ParametersProps {
+interface ParametersProps {
   readonly shapeId: TLShapeId;
   readonly kind: ArtifactKind;
-  /** The artifact's title, or its id when it has none. */
   readonly title: string;
-  /** What the artifact last announced; `undefined` until it announces. */
   readonly announcement: DialsAnnouncement | undefined;
   readonly saved: Readonly<Record<string, unknown>> | undefined;
-  /** Posts `unframed:dials:set` to the artifact's frame. */
   readonly post: (values: unknown) => void;
-  /** Called with the dial values as a change is written to the shape (spec 18: the Parameters value wins over a held one). */
   readonly onWrite?: (values: Readonly<Record<string, unknown>>) => void;
 }
 
-/**
- * The box at the foot of the column, and in the canvas panel of an artifact with no parameters: describe a
- * parameter, and the agent adds it through the artifact's own chat. On the canvas it also opens the rail.
- */
 export const AddParameter = ({
   shapeId,
   kind,
@@ -116,7 +102,6 @@ export const AddParameter = ({
   );
 };
 
-/** The Parameters tab's body (spec 09's column, under the editor's tab list): the dials, then the add box. */
 export const ParametersBody = ({ shapeId, kind, title, announcement, saved, post, onWrite }: ParametersProps) => {
   const hasParameters = announcement !== undefined && Object.keys(announcement.schema ?? {}).length > 0;
   return (

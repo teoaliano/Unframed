@@ -76,7 +76,7 @@ After this spec, one button is one component with a handful of variants, one men
 ### What changes and what stays
 
 - This spec changes colour, type, font, radius, spacing, borders, shadows, blur, focus rings, icon sizes, and which component renders each control.
-- It keeps layout and behaviour: where each surface sits, its width and height where a spec states one (the composer's 420 px, the rail's 380 px, the context menu's 188 px, the model dialog's 680 px, the final prompt dialog's 640 px, the settings dialog's 480 px, the editor's 360 / flexible / 320 grid), what it contains, its keyboard behaviour, and its motion timings. Where this spec names a replacement (the rail tabs), the replacement is the rule.
+- It keeps layout and behaviour: where each surface sits, its width and height where a spec states one (the composer's 420 px, the rail's 380 px, the context menu's 188 px, the model dialog's 680 px, the final prompt dialog's 640 px, the settings dialog's 480 px, the editor's 360 / flexible / 320 grid above a 1000 px window, which folds the rail into a Sheet below 1000 px and the parameters column too below 720 px, spec 09), what it contains, its keyboard behaviour, and its motion timings. Where this spec names a replacement (the rail tabs), the replacement is the rule.
 - Canvas content keeps tldraw's shape fonts. A prompt's text, a note, a geo label are document content: changing their font would reflow every existing board. Only tldraw's UI chrome takes the kit's font.
 - The white page of a filled page artifact stays white in both schemes (spec 09).
 - DialKit follows the app's scheme (spec 09); its colours come from the tokens.

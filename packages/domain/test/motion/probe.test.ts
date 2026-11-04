@@ -15,8 +15,6 @@ const fixture = (name: string) => {
 
 const none = { source: 0, dial: 0, token: 0, script: 0 };
 
-// Counts the file is written to produce. A row per file; the owner counts are for the start,
-// duration, every value at a diamond, and every stagger. Read-only reasons count per tween.
 const expected: [string, ProbeCounts][] = [
   ["01-literal-two-clips.html", { tweens: 2, start: { ...none, source: 2 }, duration: { ...none, source: 2 }, values: { ...none, source: 6 }, stagger: none, readOnly: {} }],
   ["02-dial-timing.html", { tweens: 1, start: { ...none, dial: 1 }, duration: { ...none, dial: 1 }, values: { ...none, dial: 2 }, stagger: none, readOnly: {} }],
@@ -33,8 +31,6 @@ describe("motion probe over the committed samples", () => {
   });
 
   it("does not read tweens made on a local alias of the timeline", () => {
-    // The parser locates calls on window.__timelines.main only. dials-timeline.md's example uses `tl`,
-    // so a file that follows the example reads as having no tweens (spec 21, Further Notes).
     const aliased = `window.__timelines = window.__timelines || {};
 var tl = window.__timelines.main = gsap.timeline({ paused: true });
 tl.fromTo('#box', { opacity: 0 }, { opacity: 1, duration: 1 }, 0);`;
@@ -42,7 +38,6 @@ tl.fromTo('#box', { opacity: 0 }, { opacity: 1, duration: 1 }, 0);`;
   });
 
   it("counts the scripted agent's motion writes", () => {
-    // dials: one literal fromTo; the other fixtures write no tween.
     const dials = fixture("dials").map(probeMotion);
     expect(dials).toEqual([
       { tweens: 1, start: { ...none, source: 1 }, duration: { ...none, source: 1 }, values: { ...none, source: 2 }, stagger: none, readOnly: {} },

@@ -2,13 +2,10 @@ import type { Page } from "@playwright/test";
 import { createChat, engineChat, engineChats, expect, promptBox, say, test } from "./agent.ts";
 import { SHAPE, editor, frameOf, onBoard, openEditor, parameters, selectByText } from "./editorHarness.ts";
 
-/** A heading and a paragraph: two elements the person can point at. */
 const PAGE = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}</style></head><body><main><h1 style="font-size: 32px">Welcome</h1><p style="font-size: 16px">Lead text</p></main></body></html>`;
 
-/** A paragraph whose size the page's own script sets: its value belongs to the agent's code, so Design shows it read-only. */
 const SCRIPTED = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}</style></head><body><main><p id="sum" style="font-size: 16px">Lead text</p></main><script>document.getElementById("sum").style.fontSize = "20px";</script></body></html>`;
 
-/** The rail column the editor shows beside the frame. */
 const rail = (page: Page) => editor(page).locator('[data-editor-column="rail"]');
 
 const tellButton = (page: Page) => parameters(page).getByRole("button", { name: "Tell the agent", exact: true });
@@ -21,18 +18,15 @@ test("Tell the agent puts a chip per selected element into a new chat tagged wit
 
   await tellButton(page).click();
 
-  // The chips show in the rail's composer, which has the focus. The new chat is made when the message is sent.
   await expect(rail(page).getByText("h1 · Welcome", { exact: true })).toBeVisible();
   await expect(rail(page).getByText("p · Lead text", { exact: true })).toBeVisible();
   await expect(promptBox(rail(page))).toBeFocused();
   await expect.poll(async () => (await engineChats(agent)).length).toBe(0);
 
-  // A chip can be removed; the other stays.
   await rail(page).getByRole("button", { name: "Remove h1 · Welcome", exact: true }).click();
   await expect(rail(page).getByText("h1 · Welcome", { exact: true })).toHaveCount(0);
   await expect(rail(page).getByText("p · Lead text", { exact: true })).toBeVisible();
 
-  // The sent message carries the chip, and its bubble counts it with the artifact.
   await say(rail(page), "make this bigger");
   await expect(rail(page).getByText("· 2 selected", { exact: true })).toBeVisible();
   await expect.poll(async () => (await engineChats(agent)).length).toBe(1);
@@ -76,7 +70,6 @@ test("a Layers row's menu tells the agent about that row, and holds rename, hide
   await openEditor(page);
   await parameters(page).getByRole("tab", { name: "Layers", exact: true }).click();
 
-  // Right-clicking a row selects it and opens its menu.
   const row = parameters(page).locator("[data-layer-row]").filter({ hasText: "Lead text" });
   await row.locator("[data-layer]").click({ button: "right" });
   for (const item of ["Tell the agent", "Rename", "Hide", "Lock"]) await expect(page.getByRole("menuitem", { name: item, exact: true })).toBeVisible();
@@ -86,13 +79,11 @@ test("a Layers row's menu tells the agent about that row, and holds rename, hide
   await expect(rail(page).getByText("h1 · Welcome", { exact: true })).toHaveCount(0);
   await expect(promptBox(rail(page))).toBeFocused();
 
-  // Hide from the menu does what the row's eye does.
   await row.locator("[data-layer]").click({ button: "right" });
   await page.getByRole("menuitem", { name: "Hide", exact: true }).click();
-  await expect(parameters(page).getByRole("button", { name: "Show Lead text", exact: true })).toBeVisible();
+  await expect(parameters(page).getByRole("button", { name: "Hidden Lead text", exact: true })).toHaveAttribute("aria-pressed", "true");
 
-  // Lock from the menu locks the element, as the row's lock does.
   await row.locator("[data-layer]").click({ button: "right" });
   await page.getByRole("menuitem", { name: "Lock", exact: true }).click();
-  await expect(parameters(page).getByRole("button", { name: "Unlock Lead text", exact: true })).toBeVisible();
+  await expect(parameters(page).getByRole("button", { name: "Locked Lead text", exact: true })).toHaveAttribute("aria-pressed", "true");
 });

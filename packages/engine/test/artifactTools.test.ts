@@ -44,7 +44,6 @@ describe("page_write", () => {
       bytes: Buffer.byteLength(`<html><head>${TOKENS_TAG}\n<title>x</title>${BRIDGE_TAG}\n</head><body>Hi</body></html>`),
       at: expect.stringMatching(/^\d{4}-\d\d-\d\dT/),
     });
-    // The engine writes the bridge from the domain module; its source text is the engine process's own.
     expect((await readFile(join(agent.folder, "unframed-dials.js"), "utf8")).split("\n")[0]).toBe(dialsBridgeSource().split("\n")[0]);
     const present = new Set(await readdir(agent.folder));
     expect(present.has("unframed-tokens.js")).toBe(true);
@@ -129,7 +128,6 @@ describe("page_write", () => {
   });
 
   it("refuses empty html, a page over 2 MiB once tagged, an unknown shape and the wrong kind, and writes nothing", async () => {
-    // The bridge tag and its newline take the page from exactly the limit to over it; the id on the paragraph takes it further.
     const nearly = `<!doctype html><p>${"a".repeat(2_097_152 - 22)}</p>`;
     const tagged = Buffer.byteLength(`${TOKENS_TAG}\n${BRIDGE_TAG}\n<!doctype html><p data-hf-id="hf-aaaa">${"a".repeat(2_097_152 - 22)}</p>`);
     const agent = await startAgentEngine({
@@ -193,7 +191,6 @@ describe("page_write", () => {
       ["Created page · Landing", { artifact: { shapeId: created, file: first!.result.file, title: "Landing", kind: "page", created: true } }, chat.turns[0]!.turnId],
       ["Updated page", { artifact: { shapeId: "pg1", file: second!.result.file, title: "", kind: "page", created: false } }, chat.turns[0]!.turnId],
     ]);
-    // The preview URL answers on the preview origin.
     const served = await agent.engine.request(new URL(first!.result.previewUrl).pathname, { port: agent.engine.previewPort, headers: { host: `127.0.0.1:${agent.engine.previewPort}` } });
     expect(served.text).toMatch(/<p data-hf-id="hf-[0-9a-z]{4}">new<\/p>/);
   });
@@ -255,7 +252,6 @@ describe("motion_write", () => {
     const viewer = await readFile(join(agent.folder, "hyperframes-viewer.html"), "utf8");
     expect(viewer).toContain("<title>motion</title>");
     expect(viewer).toContain('<script src="hyperframes-player.js"></script>');
-    // The player is made from script, with controls and autoplay outside the editor (spec 21, task 18).
     expect(viewer).toContain('document.createElement("hyperframes-player")');
     expect(viewer).toContain('player.setAttribute("runtime-src", "hyperframes-runtime.js")');
     expect(JSON.parse(await readFile(join(agent.folder, shape.props.file.replace(/\.html$/, ".json")), "utf8"))).toMatchObject({ source: "agent", kind: "motion", shapeId: "m1", title: "Intro" });

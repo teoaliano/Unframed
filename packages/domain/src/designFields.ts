@@ -1,23 +1,15 @@
-/**
- * The Design tab's fields (spec 18): the section and label each shows, the CSS property it
- * writes, the kind of value it takes and the values that pass. The web draws them; the engine
- * checks every style edit against them, so both read one table.
- */
 
-export type DesignSection = "Text" | "Fill" | "Shape" | "Spacing" | "Layout" | "Visibility" | "Image";
+type DesignSection = "Text" | "Fill" | "Shape" | "Spacing" | "Layout" | "Visibility" | "Image";
 
-/** `length`: a signed number with px, em, rem or % (or 0). `number`: unitless or px. `opacity`: 0 to 1. */
 export type DesignValueKind = "length" | "number" | "opacity" | "weight" | "color" | "keyword" | "family" | "shadow";
 
-/** How the field's number is written: px for lengths, unitless (or px) for line height, a percentage shown as 0 to 1 for opacity. */
-export type DesignUnit = "px" | "unitless" | "percent" | "none";
+type DesignUnit = "px" | "unitless" | "percent" | "none";
 
-export interface DesignField {
+interface DesignField {
   readonly section: DesignSection;
   readonly label: string;
   readonly property: string;
   readonly kind: DesignValueKind;
-  /** The accepted values of a `keyword` field; empty for the others. */
   readonly keywords: readonly string[];
   readonly unit: DesignUnit;
 }
@@ -69,8 +61,11 @@ const PATTERNS: Partial<Record<DesignValueKind, RegExp>> = {
   shadow: /^(?:none|[-+.\dA-Za-z#%(),'"/\s]*\d[-+.\dA-Za-z#%(),'"/\s]*)$/,
 };
 
+const SIGNED_PROPERTIES: ReadonlySet<string> = new Set(["margin-top", "margin-right", "margin-bottom", "margin-left", "letter-spacing"]);
+
 const valueFits = (field: DesignField, value: string): boolean => {
   if (value === "" || FORBIDDEN.some((re) => re.test(value))) return false;
+  if (value.startsWith("-") && !SIGNED_PROPERTIES.has(field.property) && (field.kind === "length" || field.kind === "number")) return false;
   if (field.kind === "keyword") return field.keywords.includes(value);
   if (field.kind === "weight") {
     const pattern = PATTERNS.weight;
@@ -80,15 +75,8 @@ const valueFits = (field: DesignField, value: string): boolean => {
   return pattern !== undefined && pattern.test(value);
 };
 
-/** `var(--name)` or `var(--name, fallback)`: a kit custom property with an optional fallback (spec 19). */
 const KIT_VAR = /^var\((--[A-Za-z0-9_-]+)(?:\s*,\s*(.*))?\)$/s;
 
-/**
- * Why a style value cannot be written to `property`, as the sentence the person sees, or null
- * when it can. A property that is not a design field is refused too. `kitNames` are the project
- * kit's custom property names, former names included: `var()` of one of them passes, and its
- * fallback (when it has one) must pass the field's own rule. Every other `var(` is refused.
- */
 export const styleValueRefusal = (property: string, value: string, kitNames: readonly string[] = []): string | null => {
   const field = DESIGN_FIELDS.find((candidate) => candidate.property === property);
   if (field === undefined) return `${property} cannot be edited here.`;

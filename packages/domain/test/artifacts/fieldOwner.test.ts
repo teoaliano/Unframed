@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fieldOwner, type FieldOwnerInput } from "../../src/index.ts";
 
-/** A stub normaliser: colours and lengths compare as their lowercase form, with a unit-less zero read as 0px. */
 const normalise = (value: string) => value.trim().toLowerCase().replace(/^#([0-9a-f]{3})$/, (_, h: string) => "#" + [...h].map((c) => c + c).join(""));
 
 const base = (over: Partial<FieldOwnerInput> = {}): FieldOwnerInput => ({

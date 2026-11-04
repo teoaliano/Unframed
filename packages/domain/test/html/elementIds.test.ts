@@ -106,10 +106,30 @@ describe("stampElementIds", () => {
   });
 
   it("writes the ids into markup the package re-serialises, and says so by changing its bytes", () => {
-    // An unquoted attribute holding a quote: the package's in-place path cannot align it, so it re-serialises.
     const out = stampElementIds('<p a=b"c>x</p><span>y</span>');
     expect(out).toContain('a="b&quot;c"');
     expect(idsIn(out)).toHaveLength(2);
     expect(stampElementIds(out)).toBe(out);
+  });
+
+  it("gives no id to an element inside a noscript, in the body or the head", () => {
+    const body = stampElementIds("<body><p>x</p><noscript><i>q</i></noscript></body>");
+    expect(body).toBe(`<body><p data-hf-id="${idsIn(body)[0]}">x</p><noscript><i>q</i></noscript></body>`);
+
+    const doc = stampElementIds(
+      '<!doctype html><html><head><title>T</title><noscript><link rel="x"><span>h</span></noscript></head>' +
+        "<body><div><noscript><p>a</p></noscript><b>b</b></div><noscript><em>c</em></noscript></body></html>",
+    );
+    expect(doc).toMatch(/<noscript><link rel="x"><span>h<\/span><\/noscript>/);
+    expect(doc).toMatch(/<noscript><p>a<\/p><\/noscript>/);
+    expect(doc).toMatch(/<noscript><em>c<\/em><\/noscript>/);
+    expect(idsIn(doc)).toHaveLength(2);
+    expect(stampElementIds(doc)).toBe(doc);
+  });
+
+  it("gives no id inside a noscript when the source needs a re-serialised stamp", () => {
+    const out = stampElementIds('<p a=b"c>x</p><noscript><i>q</i></noscript>');
+    expect(out).toContain("<noscript><i>q</i></noscript>");
+    expect(idsIn(out)).toHaveLength(1);
   });
 });

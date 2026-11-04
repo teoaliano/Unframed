@@ -65,23 +65,21 @@ describe("snapping", () => {
 
   it("snaps a move by whichever edge is nearer a target", () => {
     const targets = [{ priority: 0, time: 4.0 }];
-    // start at 3.98 (2 px from 4.0) and end at 5.5: the start edge snaps, so the bar moves to start 4.0
     expect(snapMove(3.98, 1.52, { targets, pxPerSecond: px })).toEqual({ start: 4.0, guide: true });
-    // the end edge 4.02 is in reach and the start 2.5 is not: the end snaps and the start moves with it
     expect(snapMove(2.5, 1.52, { targets: [{ priority: 0, time: 4.0 }], pxPerSecond: px })).toEqual({ start: 2.48, guide: true });
   });
 });
 
 describe("zoom", () => {
-  it("multiplies by exp(-deltaY * 0.014) around the cursor", () => {
+  it("multiplies by 1.2 for each 100 px of wheel, around the cursor", () => {
     const next = zoomAt({ pxPerSecond: 100, scrollLeft: 0 }, { deltaY: -10, cursorX: 200, fit: 10 });
-    expect(next.pxPerSecond).toBeCloseTo(100 * Math.exp(0.14), 6);
-    // the time under the cursor (2 s) stays under the cursor
+    expect(next.pxPerSecond).toBeCloseTo(100 * Math.pow(1.2, 0.1), 6);
+    expect(zoomAt({ pxPerSecond: 100, scrollLeft: 0 }, { deltaY: -100, cursorX: 0, fit: 10 }).pxPerSecond).toBeCloseTo(120, 6);
     expect(2 * next.pxPerSecond - next.scrollLeft).toBeCloseTo(200, 6);
   });
 
   it("limits the zoom to 10% of fit at the low end and 1,440 px a second at the high end", () => {
-    expect(zoomAt({ pxPerSecond: 100, scrollLeft: 0 }, { deltaY: 1000, cursorX: 0, fit: 50 }).pxPerSecond).toBe(5);
+    expect(zoomAt({ pxPerSecond: 100, scrollLeft: 0 }, { deltaY: 5000, cursorX: 0, fit: 50 }).pxPerSecond).toBe(5);
     expect(zoomAt({ pxPerSecond: 1000, scrollLeft: 0 }, { deltaY: -1000, cursorX: 0, fit: 50 }).pxPerSecond).toBe(ZOOM_LIMITS.max);
   });
 

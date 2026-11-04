@@ -5,7 +5,6 @@ import { artifactShape, filledArtifact, insideComposition } from "./artifacts.ts
 import { putRecords } from "./media.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
-/** A motion with one moving dot, so the frame has something to show. */
 const MOVER = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}#dot{position:absolute;left:20px;top:120px;width:80px;height:80px;background:#f00}</style></head><body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360"><div id="dot" class="clip" data-start="0" data-duration="4"></div></div>
 <script src="gsap.js"></script><script>window.__timelines = { main: gsap.timeline({ paused: true }).to("#dot", { x: 400, duration: 4 }, 0) };</script></body></html>`;
@@ -16,10 +15,8 @@ const region = (page: Page) => page.getByRole("region", { name: "Editing Intro" 
 const timeline = (page: Page) => page.getByRole("region", { name: "Timeline for Intro" });
 const column = (page: Page, name: "rail" | "centre" | "parameters") => editor(page).locator(`[data-editor-column="${name}"]`);
 
-// A motion takes a while to load its player and its composition.
 test.setTimeout(150_000);
 
-/** Opens the Intro motion's editor on the board, after deselecting so a double-click reaches the shape. */
 const openMotion = async (page: Page) => {
   await page.mouse.click(640, 600);
   const at = await centre(shapeOnScreen(page, SHAPE));
@@ -33,7 +30,6 @@ const boxOf = async (locator: Locator) => {
   return box;
 };
 
-/** Drags a point by `dy` pixels, in steps, so the pointer moves the way a person's does. */
 const dragBy = async (page: Page, locator: Locator, dy: number) => {
   const at = await centre(locator);
   await page.mouse.move(at.x, at.y);
@@ -51,13 +47,11 @@ test("a motion with a file opens its timeline under the frame, and a page has no
   const strip = await boxOf(timeline(page));
   expect(strip.height).toBeGreaterThanOrEqual(230);
   expect(strip.height).toBeLessThanOrEqual(250);
-  // The frame sits above the strip, in the centre column.
   const frame = await boxOf(editor(page).getByTestId("artifact-preview"));
   expect(frame.y + frame.height).toBeLessThanOrEqual(strip.y + 1);
   const centreColumn = await boxOf(column(page, "centre"));
   expect(Math.abs(strip.x - centreColumn.x)).toBeLessThanOrEqual(1);
   expect(strip.width).toBeCloseTo(centreColumn.width, 0);
-  // The editor's own frame has no controls of its own: the transport is the controls.
   await expect(region(page).frameLocator("iframe[data-artifact-frame]").locator("hyperframes-player")).not.toHaveAttribute("controls", "");
 });
 
@@ -92,13 +86,10 @@ test("the timeline resizes by its top border between 120 px and 60 % of the colu
   await dragBy(page, handle, -80);
   await expect.poll(async () => (await boxOf(timeline(page))).height).toBeCloseTo(before + 80, -1);
 
-  // Below the minimum: 120 px.
   await dragBy(page, handle, 1000);
   await expect.poll(async () => (await boxOf(timeline(page))).height).toBeCloseTo(120, 0);
 
-  // Above the maximum: 60 % of the centre column.
   await dragBy(page, timeline(page).getByRole("separator", { name: "Resize the timeline" }), -2000);
-  // The column is the whole editor's height: the centre column, the strip and the 12 px gap between them.
   const fullColumn = async () => (await boxOf(column(page, "centre"))).height + (await boxOf(timeline(page))).height + 12;
   const cap = Math.floor((await fullColumn()) * 0.6);
   await expect.poll(async () => (await boxOf(timeline(page))).height).toBeCloseTo(cap, 0);
@@ -108,7 +99,6 @@ test("the timeline resizes by its top border between 120 px and 60 % of the colu
   await dragBy(page, timeline(page).getByRole("separator", { name: "Resize the timeline" }), -60);
   await expect.poll(async () => (await boxOf(timeline(page))).height).toBeCloseTo(180, 0);
 
-  // The height is kept in the engine's preferences, so a reload opens the editor at it.
   await expect
     .poll(async () => (await (await agent.rpc()).call("preferences.get", { keys: ["editor.timeline"] })).values["editor.timeline"], { timeout: 10_000 })
     .toEqual({ height: 180, open: true });
@@ -128,7 +118,6 @@ test("Hide timeline collapses the strip to its transport row, Show timeline open
   await expect.poll(async () => (await boxOf(timeline(page))).height).toBeCloseTo(40, 0);
   await expect(timeline(page).getByRole("separator", { name: "Resize the timeline" })).toHaveCount(0);
   await expect(timeline(page).getByRole("button", { name: "Show timeline" })).toBeVisible();
-  // The choice is in the engine before the page reloads, which would otherwise cut the write short.
   await expect
     .poll(async () => (await (await agent.rpc()).call("preferences.get", { keys: ["editor.timeline"] })).values["editor.timeline"], { timeout: 10_000 })
     .toEqual({ height: 240, open: false });
@@ -161,7 +150,6 @@ test("on the canvas the motion's player keeps its own controls", async ({ page, 
   await openCanvas(page, agent);
   await filledArtifact(agent, { id: SHAPE, kind: "motion", ref: "150", at: { x: -520, y: -40 }, size: { w: 480, h: 270 }, title: "Intro", html: MOVER });
   await expect(shapeOnScreen(page, SHAPE)).toBeVisible();
-  // A canvas artifact shows its preview once it is selected.
   const at = await centre(shapeOnScreen(page, SHAPE));
   await page.mouse.click(at.x, at.y);
   const player = shapeOnScreen(page, SHAPE).frameLocator("iframe[data-artifact-frame]").locator("hyperframes-player");

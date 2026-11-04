@@ -1,15 +1,9 @@
-/**
- * Presets (spec 06): a saved group as tldraw content, how a selection becomes one, how one
- * goes back onto a canvas, and how the Library dialog lists them. Pure: the web hands in
- * tldraw's own copy of the selection and gets content back to put on the page.
- */
 import { mayBeGroupMember, wrapBox, type Box } from "./grouping.ts";
 import { refOnPaste, slugName } from "./groupRules.ts";
 import { readGroupRecipe, type RecipeMedium } from "./recipeRules.ts";
 import type { Token } from "./kits/types.ts";
 import { META_REF_TYPES, nextRef, rewriteRichTextTokens } from "./refs.ts";
 
-/** A shape record as tldraw's copy produces it. */
 export interface ContentShape {
   readonly id: string;
   readonly typeName: "shape";
@@ -30,11 +24,6 @@ export interface ContentAsset {
   readonly [key: string]: unknown;
 }
 
-/**
- * tldraw content: the shape records, the asset records, the bindings among them and the
- * schema they were written with, so tldraw's migrations apply on insert. A preset's content
- * holds exactly one root shape, the group.
- */
 export interface PresetContent {
   readonly schema: unknown;
   readonly shapes: ReadonlyArray<ContentShape>;
@@ -44,15 +33,13 @@ export interface PresetContent {
   readonly [key: string]: unknown;
 }
 
-export type PresetKind = "recipe" | "group";
-export type PresetSource = "user" | "system";
+type PresetKind = "recipe" | "group";
+type PresetSource = "user" | "system";
 
-/** One entry of `presets.json` (or a system preset, which is never stored). */
 export interface Preset {
   readonly format: 2;
   readonly id: string;
   readonly source: PresetSource;
-  /** Set by the engine at save. System presets, and presets spec 11 converts, have none. */
   readonly savedAt?: string;
   readonly name: string;
   readonly summary: string;
@@ -60,13 +47,10 @@ export interface Preset {
   readonly kind: PresetKind;
   readonly medium?: RecipeMedium;
   readonly content: PresetContent;
-  /** Spec 11: converted from an old entry on read, never written back. */
   readonly legacy?: true;
-  /** Spec 11: what the conversion could not keep. */
   readonly notes?: ReadonlyArray<string>;
 }
 
-/** A kit preset (spec 19): the kit's values and a revision that goes up on every update. It has no content. */
 export interface KitPreset {
   readonly format: 2;
   readonly id: string;
@@ -83,7 +67,6 @@ export interface KitPreset {
   readonly notes?: undefined;
 }
 
-/** Every entry the Library lists: content presets and kit presets. */
 export type LibraryEntry = Preset | KitPreset;
 
 export const PRESET_NOT_ONE_GROUP_MESSAGE = "A preset is one group.";
@@ -97,21 +80,13 @@ const PAGE = "page:page";
 const record = (value: unknown): Record<string, unknown> | undefined =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 
-// ---------------------------------------------------------------------------------------
-// From a selection to a preset.
 
-/** How a selection becomes one group, if it can. */
 export type PresetCase =
-  /** Exactly one group, with or without loose pages and motions: the preset is that group. */
   | { readonly kind: "group"; readonly groupId: string }
-  /** No group, at least one groupable shape: the preset wraps them in a new group. */
   | { readonly kind: "wrap"; readonly ids: ReadonlyArray<string> }
-  /** Two or more groups, or a group and loose groupable shapes. */
   | { readonly kind: "split" }
-  /** Nothing that may be in a group. */
   | { readonly kind: "empty" };
 
-/** Which of the four cases a selection is. A shape inside a selected group is that group's, not loose. */
 export const presetCase = (selection: ReadonlyArray<{ readonly id: string; readonly type: string; readonly parent?: string | undefined }>): PresetCase => {
   const groups = selection.filter((shape) => shape.type === "frame");
   const chosen = new Set(groups.map((shape) => shape.id));
@@ -122,7 +97,6 @@ export const presetCase = (selection: ReadonlyArray<{ readonly id: string; reado
   return { kind: "empty" };
 };
 
-/** What a copy never carries (spec 03's copy rule): a run marker, a run error, an unfilled placeholder's result meta. */
 const stripRunMeta = (meta: Readonly<Record<string, unknown>>): Record<string, unknown> => {
   const unframed = record(meta.unframed);
   if (!unframed) return { ...meta };
@@ -157,17 +131,10 @@ const freshShapeId = (shapes: ReadonlyArray<ContentShape>): string => {
   return id;
 };
 
-export type PresetFromSelection =
+type PresetFromSelection =
   | { readonly ok: true; readonly content: PresetContent; readonly kind: PresetKind; readonly medium?: RecipeMedium; readonly members: number }
   | { readonly ok: false; readonly error: string };
 
-/**
- * A preset's content from tldraw's copy of the selection (its roots in page space) and
- * the page bounds of those roots. One group is kept with its members; loose groupable
- * shapes are wrapped in a new group named after the preset. Pages and motions are never
- * saved. Every `project-file:` source becomes a `preset-file:<project>/<file>` pointer and
- * every run marker, run error and unfilled result meta is removed.
- */
 export const presetFromSelection = (
   captured: { readonly project: string; readonly content: PresetContent; readonly bounds: Readonly<Record<string, Box>> },
   details: { readonly name: string },
@@ -227,9 +194,8 @@ export const presetFromSelection = (
   return { ok: true, content: made, ...facts, members: shapes.filter((shape) => shape.parentId === groupId).length };
 };
 
-export type DescribedPreset = { readonly ok: true; readonly kind: PresetKind; readonly medium?: RecipeMedium } | { readonly ok: false };
+type DescribedPreset = { readonly ok: true; readonly kind: PresetKind; readonly medium?: RecipeMedium } | { readonly ok: false };
 
-/** The kind and medium of preset content, read from its one root group; not ok unless there is exactly one. */
 export const describePresetContent = (content: unknown): DescribedPreset => {
   const value = record(content);
   if (!value || !Array.isArray(value.shapes) || !Array.isArray(value.rootShapeIds) || value.rootShapeIds.length !== 1) return { ok: false };
@@ -240,21 +206,12 @@ export const describePresetContent = (content: unknown): DescribedPreset => {
   return recipe ? { ok: true, kind: "recipe", medium: recipe.medium } : { ok: true, kind: "group" };
 };
 
-// ---------------------------------------------------------------------------------------
-// From a preset back onto a canvas.
 
-export interface Instantiated {
+interface Instantiated {
   readonly content: PresetContent;
-  /** The group's shape id in `content`. */
   readonly rootId: string;
 }
 
-/**
- * Preset content made ready for a canvas: a shape whose `@id` is a name keeps it, suffixed
- * while `taken` (every `@id` on the canvas) holds it, and a shape with a minted `@id` gets
- * a fresh one from `mint`. Every whole token in the preset's prompts that names one of its
- * own shapes follows it to the new `@id`; any other token is left exactly as typed.
- */
 export const instantiate = (content: PresetContent, taken: Iterable<string>, mint: () => string): Instantiated => {
   const used = new Set(taken);
   const ids = new Map<string, string>();
@@ -279,19 +236,16 @@ export const instantiate = (content: PresetContent, taken: Iterable<string>, min
   return { content: { ...content, shapes: rewritten }, rootId: content.rootShapeIds[0]! };
 };
 
-/** Where bounds go to be centred on `centre`: their new top-left corner. */
 export const placeAt = (bounds: Box, centre: { readonly x: number; readonly y: number }): { x: number; y: number } => ({
   x: centre.x - bounds.w / 2,
   y: centre.y - bounds.h / 2,
 });
 
-export type PresetFile =
+type PresetFile =
   | {
-      /** The project a `preset-file:` pointer names; `''` means the project the preset goes into. */
       readonly project: string;
       readonly file: string;
     }
-  /** Bytes a converted old preset (spec 11) carries inline, written into the project on insert. */
   | { readonly dataUrl: string };
 
 const pointerOf = (src: unknown): PresetFile | undefined => {
@@ -305,7 +259,6 @@ const pointerOf = (src: unknown): PresetFile | undefined => {
 
 const pointerKey = (file: PresetFile) => ("dataUrl" in file ? file.dataUrl : `${file.project}/${file.file}`);
 
-/** Every distinct file a preset's assets point at, and every `data:` URL one carries (spec 11), in order: what the media copier copies in. */
 export const presetFiles = (content: PresetContent): PresetFile[] => {
   const seen = new Map<string, PresetFile>();
   for (const asset of content.assets) {
@@ -315,14 +268,8 @@ export const presetFiles = (content: PresetContent): PresetFile[] => {
   return [...seen.values()];
 };
 
-export type CopiedFile = { readonly file: string } | { readonly missing: true };
+type CopiedFile = { readonly file: string } | { readonly missing: true };
 
-/**
- * The content with each pointer replaced by its copy's `project-file:` marker, `copied`
- * answering `presetFiles(content)` in order. Every asset gets a fresh id from `newAssetId`,
- * so an insert never shares an asset with shapes already on the canvas. An asset whose file
- * is missing is dropped and its shapes arrive empty. `missing` counts the missing files.
- */
 export const resolvePresetFiles = (
   content: PresetContent,
   copied: ReadonlyArray<CopiedFile>,
@@ -351,12 +298,8 @@ export const resolvePresetFiles = (
   return { content: { ...content, shapes, assets }, missing };
 };
 
-// ---------------------------------------------------------------------------------------
-// The Library dialog's list.
 
-/** What the list reads of a preset. */
-/** A library entry's kind as the Library's filter sees it: a content kind or a kit. */
-export type LibraryKind = PresetKind | "kit";
+type LibraryKind = PresetKind | "kit";
 
 export type PresetSummary = Pick<Preset, "id" | "source" | "name" | "summary"> & {
   readonly kind: LibraryKind;
@@ -372,22 +315,18 @@ export interface LibraryControls {
   readonly type: "all" | LibraryKind;
   readonly source: "any" | PresetSource;
   readonly sort: LibrarySort;
-  /** 1-based. */
   readonly page: number;
 }
 
 export const LIBRARY_PAGE_SIZE = 10;
 
-export interface LibraryView<P extends PresetSummary> {
+interface LibraryView<P extends PresetSummary> {
   readonly items: ReadonlyArray<P>;
-  /** The page shown, clamped to the pages there are. */
   readonly page: number;
   readonly pages: number;
-  /** Presets that match, over every page. */
   readonly total: number;
 }
 
-/** Undated user presets rank above every system preset and below every dated one. */
 const UNDATED = -1;
 const SYSTEM = -2;
 
@@ -397,11 +336,6 @@ const rank = (preset: PresetSummary): number => {
   return Number.isNaN(time) ? UNDATED : time;
 };
 
-/**
- * The Library dialog's list: `presets` (user presets, then system presets) filtered by
- * type, source and query, then sorted, then cut into pages of 10. Sorting is stable;
- * Oldest and Z–A are the exact reverses of Newest and A–Z.
- */
 export const libraryView = <P extends PresetSummary>(presets: ReadonlyArray<P>, controls: LibraryControls): LibraryView<P> => {
   const query = controls.query.trim().toLowerCase();
   const matching = presets.filter(
@@ -419,13 +353,11 @@ export const libraryView = <P extends PresetSummary>(presets: ReadonlyArray<P>, 
   return { items: sorted.slice((page - 1) * LIBRARY_PAGE_SIZE, page * LIBRARY_PAGE_SIZE), page, pages, total: sorted.length };
 };
 
-/** The pagination's count: `11–20 of 23`. */
 export const libraryRange = (view: LibraryView<PresetSummary>): string => {
   const first = (view.page - 1) * LIBRARY_PAGE_SIZE + 1;
   return `${first}–${first + view.items.length - 1} of ${view.total}`;
 };
 
-/** The controls after a change: a new query, filter or sort goes back to page 1. */
 export const changeLibrary = (controls: LibraryControls, patch: Partial<LibraryControls>): LibraryControls => {
   const next = { ...controls, ...patch };
   const reset = (["query", "type", "source", "sort"] as const).some((key) => patch[key] !== undefined && patch[key] !== controls[key]);

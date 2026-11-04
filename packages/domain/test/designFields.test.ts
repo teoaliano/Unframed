@@ -7,7 +7,18 @@ describe("styleValueRefusal", () => {
   const cases: [string, string, boolean][] = [
     ["font-size", "12px", true],
     ["font-size", "1.5rem", true],
-    ["font-size", "-4px", true],
+    ["font-size", "-4px", false],
+    ["font-size", "-0.5em", false],
+    ["line-height", "-1", false],
+    ["line-height", "-1px", false],
+    ["gap", "-4px", false],
+    ["padding-left", "-2px", false],
+    ["border-width", "-1px", false],
+    ["border-radius", "-2px", false],
+    ["margin-top", "-4px", true],
+    ["margin-left", "-0.5rem", true],
+    ["letter-spacing", "-0.5px", true],
+    ["box-shadow", "-2px 2px 4px #000", true],
     ["font-size", "0", true],
     ["font-size", "12", false],
     ["font-size", "12vw", false],
@@ -74,9 +85,6 @@ describe("styleValueRefusal", () => {
 });
 
 describe("the web-facing domain", () => {
-  // Every file the root entry reaches through value imports (type-only imports ship no code) must
-  // be free of HTML parsers. That covers the motion folder too: its parser modules sit behind
-  // `@unframed/domain/motion`, and only parser-free motion modules are reachable from the root.
   const PARSER = /from "(parse5|linkedom|@hyperframes\/parsers[^"]*)"/;
   const VALUE_IMPORT = /\b(?:import|export)\s+(?!type\b)[^;]*?\bfrom\s+"(\.{1,2}\/[^"]+)"/g;
 

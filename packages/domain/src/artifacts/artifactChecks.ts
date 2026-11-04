@@ -1,13 +1,6 @@
-/**
- * What an agent's page or motion must be before it is written (spec 09, "Document checks"):
- * a whole HTML document that loads nothing from the internet, and a motion that loads no
- * script but the files Unframed puts beside it. Each check is cheap and unambiguous on purpose;
- * anything these patterns are unsure of is let through, because a wrong refusal costs the person a turn.
- */
 import type { ArtifactKind } from "./artifactRules.ts";
 
 export interface ArtifactProblem {
-  /** Stable across the same problem in two versions, so an edit is refused only for what it brings in. */
   readonly key: string;
   readonly message: string;
 }
@@ -26,16 +19,9 @@ const STYLE_BLOCK = /<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi;
 const CSS_URL = /url\(\s*['"]?\s*((?:https?:)?\/\/[^'")\s]+)/gi;
 const CSS_IMPORT = /@import\s+(?:url\(\s*)?['"]?\s*((?:https?:)?\/\/[^'")\s;]+)/gi;
 const JS_IMPORT = /\bimport\s*(?:\(\s*|[\w*{}\s,$]*?\bfrom\s*|)['"]((?:https?:)?\/\/[^'"]+)['"]/g;
-/** `rel` values whose `href` the browser fetches. */
 const LOADING_REL = /(?:^|\s)(?:stylesheet|icon|preload|modulepreload|prefetch|manifest|apple-touch-icon)(?:\s|$)/i;
-/**
- * The scripts a motion may load: GSAP, which the agent adds, and what the engine adds itself
- * (the runtime, the dials bridge, the tokens script and component pins). A file read back
- * with `motion_read` and written again carries all of them.
- */
 const MOTION_SCRIPTS = new Set(["gsap.js", "hyperframes-runtime.js", "hyperframe.runtime.iife.js", "unframed-dials.js", "unframed-tokens.js"]);
 const COMPONENT_PIN = /^[A-Za-z0-9][A-Za-z0-9._-]*\.component\.js$/;
-/** The attributes that fetch, per element. */
 const LOADING_ATTRIBUTES: Readonly<Record<string, ReadonlyArray<string>>> = {
   img: ["src", "srcset"],
   source: ["src", "srcset"],
@@ -68,7 +54,6 @@ const motionMayLoad = (src: string): boolean => {
   return MOTION_SCRIPTS.has(name) || COMPONENT_PIN.test(name);
 };
 
-/** Every problem the document has, in document order; none means it may be written. */
 export const artifactProblems = (html: string, kind: ArtifactKind): ArtifactProblem[] => {
   const problems: ArtifactProblem[] = [];
   const add = (key: string, message: string) => {
@@ -105,7 +90,6 @@ export const artifactProblems = (html: string, kind: ArtifactKind): ArtifactProb
 
   for (const block of text.matchAll(STYLE_BLOCK)) {
     const css = block[1]!;
-    // The imports go first, so an `@import url(...)` is reported as the import it is.
     for (const match of css.matchAll(CSS_IMPORT)) add(`css:${match[1]}`, `the CSS @import of ${shown(match[1]!)} ${OFFLINE}: ${STYLE_FIX}`);
     for (const match of css.matchAll(CSS_URL)) add(`css:${match[1]}`, `the CSS url(${shown(match[1]!)}) ${OFFLINE}: ${MEDIA_FIX}, or for a font a system font stack`);
   }
@@ -119,12 +103,6 @@ export const artifactProblems = (html: string, kind: ArtifactKind): ArtifactProb
   return problems;
 };
 
-/**
- * The refusal for a document an agent write or edit would put on disk, or `null` when it may
- * be written. It runs on the document as the agent sent it, before the engine adds its tags.
- * An edit passes `before`, the file it started from, and is refused only for problems that
- * file did not already have, so an uploaded file that breaks a rule can still be edited.
- */
 export const artifactCheckRefusal = (input: { readonly html: string; readonly kind: ArtifactKind; readonly before?: string }): string | null => {
   const { kind } = input;
   const had = new Set(input.before === undefined ? [] : artifactProblems(input.before, kind).map((problem) => problem.key));

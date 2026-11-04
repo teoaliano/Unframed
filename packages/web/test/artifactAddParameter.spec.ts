@@ -5,8 +5,8 @@ import { centre, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { createChat, engineChat, engineChats, expect, test, userTexts } from "./agent.ts";
 import { test as plain } from "./fixtures.ts";
 import { dialsPage, filledArtifact, writeBridge } from "./artifacts.ts";
+import { editor } from "./editorHarness.ts";
 
-const editor = (page: Page) => page.getByTestId("artifact-editor");
 const box = (page: Page) => editor(page).getByRole("textbox", { name: "Add a parameter" });
 
 const openOnPage = async (page: Page, engine: TestEngine) => {
@@ -17,7 +17,6 @@ const openOnPage = async (page: Page, engine: TestEngine) => {
   const at = await centre(shapeOnScreen(page, "shape:tuned"));
   await page.mouse.dblclick(at.x, at.y);
   await expect(page.getByRole("region", { name: "Editing Tuned" })).toBeVisible();
-  // The add box lives in the Parameters tab; the editor opens on Design (spec 18).
   await editor(page).locator('[data-editor-column="parameters"]').getByRole("tab", { name: "Parameters" }).click();
 };
 

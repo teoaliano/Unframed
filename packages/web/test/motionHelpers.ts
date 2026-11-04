@@ -3,7 +3,6 @@ import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
-/** The summary lines of every edit version the project holds, one list per version, oldest first by file name. */
 export const editSummaries = async (engine: TestEngine, project = "default"): Promise<string[][]> => {
   const names = (await readdir(join(engine.dataDir, "output", project))).filter((name) => name.endsWith(".json")).sort();
   const found: string[][] = [];
@@ -14,7 +13,6 @@ export const editSummaries = async (engine: TestEngine, project = "default"): Pr
   return found;
 };
 
-/** The first tween of the composition, as the frame's own timeline holds it now. */
 export const tweenPlace = async (page: Page): Promise<{ start: number; duration: number }> => {
   for (const frame of page.frames()) {
     if (!new URL(frame.url()).pathname.endsWith("-intro.html")) continue;
