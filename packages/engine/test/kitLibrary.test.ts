@@ -99,7 +99,6 @@ describe("the kit library store (spec 19, task 29)", () => {
     const { preset } = (await rpc.call("kit.saveToLibrary", { project: "board", name: "Brand kit", summary: "" })) as { preset: Record<string, any> };
     await setKit({ ...kit, from: { presetId: preset.id as string, revision: 1, base: { modes: kit.modes, tokens: kit.tokens } } });
     await rpc.call("kit.updateInLibrary", { project: "board" });
-    // The project still says revision 1; the library is now at 2.
     await setKit({ ...kit, tokens: [], from: { presetId: preset.id as string, revision: 1, base: { modes: kit.modes, tokens: kit.tokens } } });
     await expect(rpc.call("kit.updateInLibrary", { project: "board" })).rejects.toMatchObject({ code: "conflict", message: NEWER });
     expect((await readPresets())[0]).toMatchObject({ revision: 2 });

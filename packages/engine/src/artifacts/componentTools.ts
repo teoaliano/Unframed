@@ -1,9 +1,3 @@
-/**
- * The component tools (spec 20): `component_write` and `component_read`, on spec 07's Unframed
- * MCP server. A write checks the sheet, tags it, writes it with its compiled file, and moves a
- * component shape to the new version, through the same canvas change, turn record and activity
- * the artifact tools use.
- */
 import { randomUUID } from "node:crypto";
 import {
   AGENT_ARTIFACT_SIZE,
@@ -31,7 +25,7 @@ import {
 } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import type { Applied } from "../canvas/rooms.ts";
-import { lockRefusal, sourceTreeOf, stampElementIds } from "@unframed/domain/html";
+import { lockRefusal, sourceTreeOf } from "@unframed/domain/html";
 import { prepareComponentHtml } from "./artifactHtml.ts";
 import { refusal as refuse, type McpBinding, type McpTool, type ToolAnswer } from "../agent/mcp.ts";
 import { indexOnTop } from "../runs/placeholders.ts";
@@ -46,7 +40,6 @@ const isShape = (record: TLRecord | undefined): record is Shape => record?.typeN
 
 const PAGE_ID = "page:page";
 
-/** Finds the component shape an argument names, refusing another kind. */
 const findComponent = (records: ReadonlyArray<TLRecord>, shapeId: string): { shape: Shape } | { error: string } => {
   const shape = records.find((record) => record.id === roomShapeId(shapeId));
   if (!isShape(shape)) return { error: `no shape ${shapeId}` };
@@ -99,7 +92,6 @@ export class ComponentTools {
       if (refusal !== null) return refuse(refusal);
     }
 
-    // A component the person named keeps its name, as a page does (spec 09).
     const current = typeof target?.props.title === "string" ? target.props.title : "";
     const named = target !== undefined && !isMintedRef(readRef(target) ?? "0");
     const given = typeof args.title === "string" && !named ? args.title.slice(0, ARTIFACT_TITLE_MAX) : undefined;
@@ -183,7 +175,6 @@ export class ComponentTools {
     };
   }
 
-  /** The page and motion shapes that pin any version of the tag, and whether each pins the current one. */
   private async usedBy(project: string, records: ReadonlyArray<TLRecord>, tag: string, current: string): Promise<Array<{ shapeId: string; title: string; current: boolean }>> {
     const folder = await this.context.folder(project);
     const found: Array<{ shapeId: string; title: string; current: boolean }> = [];
@@ -213,7 +204,6 @@ export class ComponentTools {
     }
   }
 
-  /** The two tools, as the MCP server registers them. */
   tools(): McpTool[] {
     return [
       {

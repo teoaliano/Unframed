@@ -1,21 +1,12 @@
-/**
- * The chat rail's rules (spec 08): which chats the tab strip shows, which one is active,
- * what a tab reads, which chat a message from the toolbar continues, and the recap card's
- * rows. The strip's filter is any-of and the continue rule is all-of: they answer
- * different questions and must not be merged.
- */
 import type { ChatActivity, OutsideChatRef, TurnFile } from "./chatModel.ts";
 import { connectionClientLabel } from "../outside/connectionSetup.ts";
 import { shapeLabel } from "./shapeLabel.ts";
 import { agentShapeId, roomShapeId as shapeId } from "./turnText.ts";
 
-/** What the rules read of a chat: its summary. */
 export interface RailChat {
   readonly id: string;
-  /** An outside chat (spec 14) is never continuable: its agent does not read Unframed's messages. */
   readonly outside?: OutsideChatRef;
   readonly title: string;
-  /** The first message, at most 80 characters. */
   readonly preview: string;
   readonly tags: ReadonlyArray<string>;
   readonly status: "running" | "failed" | "idle";
@@ -25,11 +16,6 @@ export interface RailChat {
 const newestFirst = <C extends RailChat>(chats: ReadonlyArray<C>): C[] =>
   [...chats].sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : a.id < b.id ? 1 : -1));
 
-/**
- * The chats the strip shows, newest first: every chat with no artifact selected, else the
- * chats tagged with any selected artifact. A chat whose artifacts are all gone still
- * shows with nothing selected.
- */
 export const visibleChats = <C extends RailChat>(chats: ReadonlyArray<C>, selectedArtifactIds: ReadonlyArray<string>): C[] => {
   const ordered = newestFirst(chats);
   if (selectedArtifactIds.length === 0) return ordered;
@@ -37,17 +23,11 @@ export const visibleChats = <C extends RailChat>(chats: ReadonlyArray<C>, select
   return ordered.filter((chat) => chat.tags.some((tag) => selected.has(tag)));
 };
 
-/** The active tab: the one last chosen while it is still visible, else the newest visible one, else none. */
 export const nextActive = (activeId: string | null | undefined, visible: ReadonlyArray<{ readonly id: string }>): string | null => {
   if (activeId && visible.some((chat) => chat.id === activeId)) return activeId;
   return visible[0]?.id ?? null;
 };
 
-/**
- * The tabs the strip shows inline, as indexes into `widths` (its chats, newest first): the
- * most that fit in `room` px next to the More trigger, always including the active chat. The
- * rest sit under More. At least the active chat shows, even when it does not fit.
- */
 export const inlineTabs = ({
   widths,
   active,
@@ -56,7 +36,6 @@ export const inlineTabs = ({
   gap,
 }: {
   readonly widths: ReadonlyArray<number>;
-  /** The active chat's index, or -1 when none is. */
   readonly active: number;
   readonly room: number;
   readonly moreWidth: number;
@@ -64,7 +43,6 @@ export const inlineTabs = ({
 }): number[] => {
   const count = widths.length;
   if (count === 0) return [];
-  // The first `shown` chats, with the active one standing in for the last slot when it is not among them.
   const seated = (shown: number): number[] => {
     const set = Array.from({ length: shown }, (_, index) => index);
     if (active >= shown) set[shown - 1] = active;
@@ -83,7 +61,6 @@ const LABEL_PREVIEW = 32;
 
 const openingWords = (chat: Pick<RailChat, "preview">): string => chat.preview.replace(/\s+/g, " ").trim();
 
-/** A tab's text: its name (the person's or the agent's), else the first 32 characters of its first message, else "Chat". */
 export const tabLabel = (chat: Pick<RailChat, "title" | "preview">): string => {
   const title = chat.title.trim();
   if (title !== "") return title;
@@ -92,10 +69,8 @@ export const tabLabel = (chat: Pick<RailChat, "title" | "preview">): string => {
   return words.length > LABEL_PREVIEW ? `${words.slice(0, LABEL_PREVIEW).trimEnd()}…` : words;
 };
 
-/** A tab's tooltip: its label, then " · " and the opening words when they differ from it. */
 export const tabTooltip = (chat: Pick<RailChat, "title" | "preview"> & Partial<Pick<RailChat, "outside" | "createdAt">>): string => {
   const label = tabLabel(chat);
-  // An outside chat says which client it is, and that its agent is outside Unframed (spec 14).
   if (chat.outside !== undefined) {
     const when = chat.createdAt === undefined ? "" : `, ${new Date(chat.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
     return `${label} · ${connectionClientLabel(chat.outside.client)}, outside Unframed${when}`;
@@ -104,11 +79,6 @@ export const tabTooltip = (chat: Pick<RailChat, "title" | "preview"> & Partial<P
   return words === "" || words === label ? label : `${label} · ${words}`;
 };
 
-/**
- * The chat a message about `artifactIds` continues: the newest chat not running whose tags
- * include every one of them; with none selected, the newest chat not running that has no
- * tags. All-of on purpose: a chat that never saw B must not answer a message about A and B.
- */
 export const continuableChat = <C extends RailChat>(chats: ReadonlyArray<C>, artifactIds: ReadonlyArray<string>): C | undefined =>
   newestFirst(chats).find(
     (chat) => chat.status !== "running" && chat.outside === undefined && (artifactIds.length === 0 ? chat.tags.length === 0 : artifactIds.every((id) => chat.tags.includes(id))),
@@ -116,11 +86,6 @@ export const continuableChat = <C extends RailChat>(chats: ReadonlyArray<C>, art
 
 const counted = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
 
-/**
- * What Clear all chats says before it deletes: every chat not running goes, and running
- * ones are kept to finish. The engine decides again when the command runs, so a chat that
- * starts a turn in between is kept even though the dialog counted it.
- */
 export const clearAllChats = (
   chats: ReadonlyArray<Pick<RailChat, "status">>,
 ): {
@@ -128,7 +93,6 @@ export const clearAllChats = (
   readonly keeping: number;
   readonly description: string;
   readonly action: string;
-  /** The header button's tooltip: what it does, or why it does nothing now. */
   readonly tooltip: string;
   readonly disabled: boolean;
 } => {
@@ -146,13 +110,11 @@ export const clearAllChats = (
   };
 };
 
-/** The toast after Clear all chats, counted from what the engine removed, not from what the dialog said. */
 export const clearedNotice = (deleted: number, kept: number): { readonly title: string; readonly description?: string } => ({
   title: `Deleted ${counted(deleted, "chat", "chats")}`,
   ...(kept === 0 ? {} : { description: `${counted(kept, "running chat was", "running chats were")} kept.` }),
 });
 
-/** The artifacts a chat is linked to that are still on the canvas, in tag order, for Detach to offer. */
 export const linkedArtifacts = (
   tags: ReadonlyArray<string>,
   shapes: ReadonlyArray<RecapShape>,
@@ -164,10 +126,6 @@ export const linkedArtifacts = (
   });
 };
 
-// ---------------------------------------------------------------------------------------
-// The recap card.
-
-/** What the recap reads of a shape on the canvas now. */
 export interface RecapShape {
   readonly id: string;
   readonly kind: string;
@@ -179,9 +137,7 @@ export interface RecapRow {
   readonly shapeId: string;
   readonly kind: string;
   readonly label: string;
-  /** The shape is no longer on the canvas. */
   readonly deleted: boolean;
-  /** A page or motion whose file the turn wrote: the row offers View diff. */
   readonly rewritten: boolean;
 }
 
@@ -195,12 +151,6 @@ const toolName = (activity: ChatActivity): string => {
   return name.replace(/^mcp__unframed__/, "");
 };
 
-/**
- * The recap card's rows for one turn, in first-touch order: the shapes its page and motion
- * tool calls named, the shapes its `canvas_write` ops named (created ones by the id the
- * result gave them), then its turn changes. `canvas_read` contributes nothing. A shape no
- * longer on the canvas is marked deleted.
- */
 export const recapRows = (
   activities: ReadonlyArray<ChatActivity>,
   turnChanges: ReadonlyArray<TurnFile>,
@@ -216,7 +166,6 @@ export const recapRows = (
     if (kind !== undefined && !kinds.has(key)) kinds.set(key, kind);
     if (typeof title === "string" && title !== "") titles.set(key, title);
   };
-  // A provider may send a call's input only when it starts: take it from any of the call's activities.
   const inputs = new Map<unknown, unknown>();
   for (const activity of activities) {
     const payload = record(activity.payload);
@@ -258,7 +207,6 @@ export const recapRows = (
 
 const kindOfCreate = (op: Record<string, unknown>): string | undefined => (typeof op.kind === "string" ? op.kind : undefined);
 
-/** What a revert that left shapes alone says, naming each and who changed it since. */
 export const revertSkipLine = (skipped: ReadonlyArray<{ readonly label: string; readonly by: "person" | "another chat" | "a later turn" }>, restored: number): string | undefined => {
   if (skipped.length === 0) return undefined;
   if (restored === 0) return "Nothing to revert: everything this turn changed has changed since.";

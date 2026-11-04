@@ -1,4 +1,3 @@
-/** The CSS named colours, plus `transparent`: the names a tween-value may write (spec 21). */
 export const NAMED_COLOURS: ReadonlySet<string> = new Set([
   "aliceblue",
   "antiquewhite",

@@ -15,7 +15,6 @@ const upload = async (generating: Generating, name: string, bytes: Buffer, mime:
 const roomShapes = async (generating: Generating) =>
   ((await generating.rpc.call("testCanvas.read", { project: "board" })).records as any[]).filter((record) => record.typeName === "shape");
 
-// The tokens script and its transient temp files are helpers the room writes (spec 19), not a run's output.
 const filesIn = async (generating: Generating) => (await readdir(folderOf(generating))).filter((name) => !name.startsWith(".") && name !== "unframed.sqlite" && !name.startsWith("unframed.sqlite") && name !== "unframed-tokens.js" && !name.startsWith("unframed-tokens.js."));
 
 describe("run.image validation", () => {
@@ -106,7 +105,6 @@ describe("run.image, one output", () => {
     expect(started.batchId).toMatch(/^b-\d+$/);
     expect(started.placeholders).toHaveLength(1);
 
-    // The placeholder is in the room before the reply, carrying its marker and unfilled result meta.
     const [placeholder] = (await roomShapes(generating)).filter((shape) => shape.id === started.placeholders[0]);
     expect(placeholder).toMatchObject({
       type: "image",
@@ -135,7 +133,6 @@ describe("run.image, one output", () => {
     const done = await finished(generating.events, started.runId);
     expect(done).toEqual({ type: "finished", runId: started.runId, succeeded: 1, failed: 0, errors: [], orphaned: 0 });
 
-    // The upstream payload: only set params, auto dropped, references inlined.
     const [call] = generating.requests;
     expect(call!.headers.authorization).toBe(`Bearer ${KEY}`);
     expect(call!.body).toEqual({
@@ -150,7 +147,6 @@ describe("run.image, one output", () => {
       ],
     });
 
-    // The file and its sidecar.
     const stamp = new Date(placeholder.meta.unframed.run.startedAt).toISOString().replace(/[:.]/g, "-");
     const file = `${stamp}-a-lone-red-fox-at-dawn.png`;
     expect(await readFile(join(folderOf(generating), file))).toEqual(pngBytes(300, 200));
@@ -185,7 +181,6 @@ describe("run.image, one output", () => {
       },
     });
 
-    // The placeholder, filled in place: the file's aspect at its width, no marker.
     const records = (await generating.rpc.call("testCanvas.read", { project: "board" })).records as any[];
     const filled = records.find((record) => record.id === started.placeholders[0]);
     expect(filled.meta.unframed.run).toBeUndefined();
@@ -394,7 +389,6 @@ describe("a partial run", () => {
       expect(shape.meta.unframed.result).toMatchObject({ runCount: 4, batchId: started.batchId });
       expect(shape.props.assetId).toMatch(/^asset:/);
     }
-    // The row reads in run order.
     const placed = started.placeholders.map((id) => shapes.find((shape) => shape.id === id)).filter(Boolean);
     expect(placed[0].x).toBeLessThan(placed[1].x);
     await generating.engine.dispose();

@@ -4,7 +4,6 @@ import { componentShape, groupShape, pageShape, promptShape, videoShape } from "
 import { startEngine, type TestEngine } from "./harness.ts";
 import { connectTab } from "./syncClient.ts";
 
-/** Pushes one record as a tab and reports whether the room kept it. */
 const pushOne = async (engine: TestEngine, record: TLRecord) => {
   const tab = await connectTab(engine.port, "board");
   await tab.loaded;

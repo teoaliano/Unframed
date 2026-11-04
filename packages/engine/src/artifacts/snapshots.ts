@@ -1,10 +1,3 @@
-/**
- * Artifact snapshots (spec 09): the still an artifact shows while it is not live. The engine
- * renders one in its headless Chrome whenever a shape has none for its current file and size,
- * and after every file change, every saved dial change and every resize of more than 10 %,
- * debounced a second per shape and one at a time. They go into the regenerable cache folder
- * and never get sidecars.
- */
 import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { crc32, deflateSync } from "node:zlib";
@@ -17,33 +10,26 @@ import type { HeadlessChrome } from "./headlessChrome.ts";
 
 export const SNAPSHOT_FOLDER = join(".cache", "snapshots");
 
-/** How long a shape's changes settle before its snapshot is made. */
 const DEBOUNCE_MS = 1000;
-/** What a page gets to draw once loaded, before the picture is taken. */
 const SETTLE_MS = 500;
 
-export interface SnapshotJob {
+interface SnapshotJob {
   readonly project: string;
   readonly kind: ArtifactKind;
   readonly file: string;
   readonly w: number;
   readonly h: number;
   readonly dials: Readonly<Record<string, unknown>> | undefined;
-  /** The artifact on the preview origin, as the engine's own browser opens it. */
   readonly url: string;
-  /** The kit mode the picture shows: its name, or `null` with no kit (spec 19). */
   readonly mode: string | null;
-  /** The kit stamp the picture was made with, or `null` with no kit (spec 19). */
   readonly kit: string | null;
 }
 
-/** Makes the picture of one artifact at one size. `undefined` means no picture could be made (no Chromium). */
 export type SnapshotRenderer = (job: SnapshotJob) => Promise<Buffer | undefined>;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** A 1 by 1 PNG whose `tEXt` chunk says what it was asked to show: the test renderer's picture. */
-export const stubSnapshot = (text: Readonly<Record<string, unknown>>): Buffer => {
+const stubSnapshot = (text: Readonly<Record<string, unknown>>): Buffer => {
   const chunk = (type: string, data: Buffer) => {
     const length = Buffer.alloc(4);
     length.writeUInt32BE(data.length);
@@ -66,17 +52,12 @@ export const stubSnapshot = (text: Readonly<Record<string, unknown>>): Buffer =>
   ]);
 };
 
-/** `UNFRAMED_TEST_RENDERER=ok`: no browser, a small picture that records what it was asked, a moment of work. */
 export const stubSnapshotRenderer: SnapshotRenderer = async (job) => {
   const startedAt = Date.now();
   await sleep(150);
   return stubSnapshot({ url: job.url, file: job.file, w: job.w, h: job.h, dials: job.dials ?? null, mode: job.mode, kit: job.kit, startedAt, finishedAt: Date.now() });
 };
 
-/**
- * The real renderer: the artifact at the shape's size at 2x, its saved dials posted to it,
- * the load event plus 500 ms, a motion's player seeked by the domain rule.
- */
 export const chromeSnapshotRenderer =
   (chrome: HeadlessChrome): SnapshotRenderer =>
   (job) =>
@@ -85,9 +66,7 @@ export const chromeSnapshotRenderer =
       try {
         await page.setViewport({ width: Math.max(1, Math.round(job.w)), height: Math.max(1, Math.round(job.h)), deviceScaleFactor: 2 });
         await page.goto(job.url, { waitUntil: "load", timeout: 20_000 });
-        // A kit mode is posted as the frame would receive it: the tokens script applies it (spec 19).
         if (job.mode !== null) await page.evaluate(`window.postMessage({ type: "unframed:tokens:mode", mode: ${JSON.stringify(job.mode)} }, window.location.origin)`);
-        // Posted as the canvas would: the bridge (or the viewer, which relays it) applies them.
         if (job.dials !== undefined && Object.keys(job.dials).length > 0) {
           await page.evaluate(`window.postMessage({ type: "unframed:dials:set", values: ${JSON.stringify(job.dials)} }, window.location.origin)`);
         }
@@ -119,9 +98,8 @@ type ArtifactRecord = TLRecord & { type: ArtifactKind; props: { w: number; h: nu
 const isArtifact = (record: TLRecord | undefined): record is ArtifactRecord =>
   record?.typeName === "shape" && isArtifactKind(record.type) && typeof (record.props as { file?: unknown }).file === "string";
 
-export interface SnapshotDeps {
+interface SnapshotDeps {
   readonly renderer: SnapshotRenderer | undefined;
-  /** The project folder, or `undefined` when there is none. */
   readonly folder: (project: string) => Promise<string | undefined>;
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;
   readonly previewPort: number;
@@ -130,10 +108,8 @@ export interface SnapshotDeps {
 
 export class Snapshots {
   private readonly deps: SnapshotDeps;
-  /** What each shape's snapshot was last made (or asked) for, by `<project> <shape id>`. */
   private readonly seen = new Map<string, Seen>();
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
-  /** Shapes seen for the first time: rendered only when the cache has nothing that fits. */
   private readonly fresh = new Set<string>();
   private queue: Promise<unknown> = Promise.resolve();
 
@@ -141,22 +117,18 @@ export class Snapshots {
     this.deps = deps;
   }
 
-  /** Looks at every artifact of a room that just opened. */
   opened(project: string, records: ReadonlyArray<TLRecord>, kit: Kit | null = null): void {
     for (const record of records) if (isArtifact(record)) this.consider(project, record, kit);
   }
 
-  /** Looks at the artifacts a commit put. */
   committed(project: string, put: ReadonlyArray<TLRecord>, kit: Kit | null = null): void {
     for (const record of put) if (isArtifact(record)) this.consider(project, record, kit);
   }
 
-  /** A kit changed: every artifact whose file loads the tokens script is looked at again (spec 19). */
   kitChanged(project: string, records: ReadonlyArray<TLRecord>, kit: Kit | null): void {
     for (const record of records) if (isArtifact(record)) this.consider(project, record, kit, true);
   }
 
-  /** Forgets a project that closed: its timers stop, and the next open looks again. */
   forget(project: string): void {
     for (const [key, timer] of this.timers) {
       if (!key.startsWith(`${project} `)) continue;
@@ -174,7 +146,6 @@ export class Snapshots {
     const last = this.seen.get(key);
     if (last === undefined) this.fresh.add(key);
     else if (last.file === now.file && last.dials === now.dials && last.mode === now.mode && last.kit === now.kit && snapshotFits(last, now)) return;
-    // A real change since first sight: whatever the cache holds is not this.
     else this.fresh.delete(key);
     this.seen.set(key, now);
     clearTimeout(this.timers.get(key));
@@ -186,7 +157,6 @@ export class Snapshots {
     this.timers.set(key, timer);
   }
 
-  /** Every snapshot in the project's cache, newest last. */
   async list(project: string): Promise<ArtifactSnapshot[]> {
     const folder = await this.deps.folder(project);
     if (folder === undefined) return [];

@@ -7,12 +7,10 @@ import { pageShape } from "./canvasRecords.ts";
 
 const HEADING = '<h1 data-hf-id="hf-aaaa">Hi</h1>';
 
-/** The locked fixture, with one agent run per turn in the same chat. */
 const lockedAgent = async (): Promise<AgentEngine> => {
   const script = await readFile(join(FIXTURES, "locked.json"), "utf8");
   const agent = await startAgentEngine({ script: await scriptFolder({ locked: script }) });
   await writeFile(join(agent.folder, "1-locked.html"), `<script src="unframed-dials.js"></script>\n${HEADING}`);
-  // Another file without the locked element: pointing the page at it removes the lock's element.
   await writeFile(join(agent.folder, "2-other.html"), `<script src="unframed-dials.js"></script>\n<p>Other</p>`);
   await seed(agent, [pageShape("pg1", "100", { file: "1-locked.html", title: "Locked", lockedElements: ["hf-aaaa"] })]);
   return agent;
