@@ -174,3 +174,17 @@ test("a row selects its element in the frame, and an element picked in the frame
   }).toPass({ timeout: 40_000 });
   await expect(row(page, "Dot 3")).not.toHaveAttribute("data-selected", "true");
 });
+
+test("a very long element name truncates inside the label column and never runs over the track", async ({ page, agent }) => {
+  const LONG = "Dot with an extremely long layer name that should truncate in the timeline strip";
+  await openRows(page, agent, {}, ROWS.replace('data-uf-name="Dot 3"', `data-uf-name="${LONG}"`), LONG);
+  const label = row(page, LONG).getByRole("button", { name: `Select ${LONG}` });
+  const text = label.locator("span.truncate");
+  await expect(text).toHaveCSS("text-overflow", "ellipsis");
+  const button = (await label.boundingBox())!;
+  const track = (await timeline(page).getByTestId("timeline-track").boundingBox())!;
+  const cell = (await row(page, LONG).locator("div.sticky").first().boundingBox())!;
+  expect(button.x + button.width).toBeLessThanOrEqual(cell.x + cell.width + 0.5);
+  expect(await text.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+  expect(track.width).toBeGreaterThan(0);
+});

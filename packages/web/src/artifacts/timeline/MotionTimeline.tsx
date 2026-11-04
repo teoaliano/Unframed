@@ -286,7 +286,7 @@ const RowLine = ({
         )}
         {row.kind === "element" && row.element !== null ? (
           <Tip label={tip}>
-            <Button variant="ghost" size="xs" className="h-6 min-w-0" aria-label={`Select ${name}`} onClick={() => onSelectElement(row.element!)}>
+            <Button variant="ghost" size="xs" className="h-6 min-w-0 shrink" aria-label={`Select ${name}`} onClick={() => onSelectElement(row.element!)}>
               <span className="truncate">{name}</span>
             </Button>
           </Tip>
