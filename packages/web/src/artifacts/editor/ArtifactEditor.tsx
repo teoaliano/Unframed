@@ -547,7 +547,7 @@ export const ArtifactEditor = ({
   const parametersBody = (
     <>
       <ColumnHeader>
-        <Tabs value={shownPanel} onValueChange={(next) => setPanel(String(next) as Panel)} className="min-w-0">
+        <Tabs value={shownPanel} onValueChange={(next) => setPanel(String(next) as Panel)} className="h-12 min-w-0">
           <TabsList variant="underline" aria-label="Editor panels">
             <TabsTab value="design">Design</TabsTab>
             <TabsTab value="layers">Layers</TabsTab>
