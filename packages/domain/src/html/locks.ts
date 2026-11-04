@@ -1,13 +1,8 @@
-/**
- * Locks (spec 18): a write may not change or remove a locked element. A locked element is
- * compared with its own subtree only, so the agent may move it or change what surrounds it.
- */
 import type { ArtifactKind } from "../artifacts/artifactRules.ts";
 import { attr, type ChildNode, type Element, flatten, isComment, isElement, isText, parseSource, scopeRoots } from "./source.ts";
 import type { SourceTreeElement } from "./sourceTree.ts";
 import { parseHTML } from "linkedom";
 
-/** Elements whose text is kept exactly as written. */
 const EXACT_TEXT = new Set(["pre", "textarea", "script", "style"]);
 
 const normalisedStyle = (value: string): string =>
@@ -22,7 +17,6 @@ const normalisedStyle = (value: string): string =>
     })
     .join(";");
 
-/** A canonical form of a subtree: the rules in the spec's Locks and the agent, as one string per subtree. */
 const canonical = (node: ChildNode, exact: boolean): unknown => {
   if (isComment(node)) return null;
   if (isText(node)) {
@@ -40,7 +34,6 @@ const canonical = (node: ChildNode, exact: boolean): unknown => {
   return [node.tagName.toLowerCase(), attrs, kids];
 };
 
-/** The first element of each id in the source, document order. */
 const firstById = (html: string): Map<string, Element> => {
   const found = new Map<string, Element>();
   for (const node of flatten(scopeRoots(parseSource(html)))) {
@@ -50,12 +43,6 @@ const firstById = (html: string): Map<string, Element> => {
   return found;
 };
 
-/**
- * The locked element a style rule's selector reaches in a component sheet's template (spec 20), or
- * null. `:host` and its conditions are set aside, so `:host([kind="secondary"]) button` reaches the
- * template's buttons. A selector the scanner cannot test counts as reaching the first locked element,
- * so a lock is never bypassed by a selector this check does not understand.
- */
 export const ruleLockHit = (html: string, selector: string, locked: readonly string[]): string | null => {
   if (locked.length === 0) return null;
   let reach = selector.replace(/:host(?:\([^()]*\))?/g, "").trim();
@@ -80,7 +67,7 @@ export const ruleLockHit = (html: string, selector: string, locked: readonly str
   return null;
 };
 
-export interface LockCheck {
+interface LockCheck {
   readonly current: string;
   readonly next: string;
   readonly locked: readonly string[];
@@ -88,10 +75,6 @@ export interface LockCheck {
   readonly kind?: ArtifactKind;
 }
 
-/**
- * The refusal sentence when a write to `next` changes or removes a locked element of `current`,
- * or null when it does not. Names the first locked element hit and counts the others.
- */
 export const lockRefusal = (check: LockCheck): string | null => {
   const kind = check.kind ?? "page";
   const hits: { readonly id: string; readonly verb: "changes" | "removes" }[] = [];

@@ -1,18 +1,11 @@
 import { projectSlug } from "./slug.ts";
 
-/** Spec 01's slug rule, the one definition: project names, file names and group names. */
 export const slug = projectSlug;
 
-/** An `@id` reference: `@` followed by word characters and hyphens. */
 export const REF_TOKEN = /@([\w-]+)/g;
 
-/** The ids every `@` token in `text` names, in order. */
 export const refTokens = (text: string): string[] => [...text.matchAll(REF_TOKEN)].map((match) => match[1]!);
 
-/**
- * The narrow view of a canvas record these rules read. Records that are not shapes
- * (pages, assets, the document) may be passed and are ignored.
- */
 export interface CanvasRecordLike {
   readonly id?: string;
   readonly typeName?: string;
@@ -21,7 +14,6 @@ export interface CanvasRecordLike {
   readonly meta?: unknown;
 }
 
-/** The shape kinds that carry a ref in `meta.ref`. A group's ref is its name. */
 export const META_REF_TYPES: ReadonlySet<string> = new Set(["text", "image", "video", "page", "motion", "component"]);
 
 const field = (value: unknown, key: string): unknown =>
@@ -31,7 +23,6 @@ const isShape = (record: CanvasRecordLike): boolean => record.typeName === undef
 
 const INLINE_NODES = new Set(["text", "hardBreak", "mention"]);
 
-/** The plain text of tldraw rich text: paragraphs joined by `\n`. This is the prompt's text for every other purpose. */
 export const plainText = (richText: unknown): string => {
   const render = (node: unknown): string => {
     const type = field(node, "type");
@@ -48,7 +39,6 @@ export const plainText = (richText: unknown): string => {
   return render(richText);
 };
 
-/** A shape's ref: `meta.ref` for prompts, media, pages and motions, `props.name` for a group. */
 export const readRef = (shape: CanvasRecordLike): string | undefined => {
   if (!isShape(shape)) return undefined;
   if (shape.type === "frame") {
@@ -62,21 +52,14 @@ export const readRef = (shape: CanvasRecordLike): string | undefined => {
   return undefined;
 };
 
-/** A prompt's plain text, or `undefined` for any other record. */
 export const promptText = (shape: CanvasRecordLike): string | undefined =>
   isShape(shape) && shape.type === "text" ? plainText(field(shape.props, "richText")) : undefined;
 
 const NUMERIC = /^\d+$/;
 const FLOOR = 99n;
 
-/** A ref the canvas's counter minted, as opposed to a name someone gave. */
 export const isMintedRef = (ref: string): boolean => NUMERIC.test(ref);
 
-/**
- * The ref for a new shape: one more than the largest number among every numeric ref on
- * the canvas, every numeric `@` token in any prompt's text, and 99. Counting the tokens
- * is what stops a new shape from capturing a reference to a shape that was deleted.
- */
 export const nextRef = (records: Iterable<CanvasRecordLike>): string => {
   let largest = FLOOR;
   const consider = (candidate: string) => {
@@ -98,11 +81,6 @@ type IdMap = ReadonlyMap<string, string> | Readonly<Record<string, string>>;
 const lookup = (ids: IdMap, id: string): string | undefined =>
   ids instanceof Map ? ids.get(id) : Object.hasOwn(ids, id) ? (ids as Record<string, string>)[id] : undefined;
 
-/**
- * Pasted prompts that reference each other keep referencing each other: every whole
- * token that names a pasted shape's old ref becomes its new ref. Unknown tokens stay as
- * typed, and a rewritten token is never rewritten again.
- */
 export const rewriteTokensOnPaste = (texts: ReadonlyArray<string>, ids: IdMap): string[] =>
   texts.map((text) =>
     text.replace(REF_TOKEN, (token, id: string) => {
@@ -111,7 +89,6 @@ export const rewriteTokensOnPaste = (texts: ReadonlyArray<string>, ids: IdMap): 
     }),
   );
 
-/** `rewriteTokensOnPaste` over every text node of tldraw rich text. Answers a new document. */
 export const rewriteRichTextTokens = <T>(richText: T, ids: IdMap): T => {
   const visit = (node: unknown): unknown => {
     if (typeof node !== "object" || node === null) return node;

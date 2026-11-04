@@ -106,7 +106,6 @@ describe("stampElementIds", () => {
   });
 
   it("writes the ids into markup the package re-serialises, and says so by changing its bytes", () => {
-    // An unquoted attribute holding a quote: the package's in-place path cannot align it, so it re-serialises.
     const out = stampElementIds('<p a=b"c>x</p><span>y</span>');
     expect(out).toContain('a="b&quot;c"');
     expect(idsIn(out)).toHaveLength(2);
