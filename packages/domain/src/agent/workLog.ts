@@ -191,13 +191,13 @@ export const describeTool = (input: { readonly toolName: string; readonly itemTy
 
 const actionOf = (own: string): WorkAction => {
   if (own.startsWith("preview")) return "browser";
-  if (own === "canvas_write" || /^(page|motion|component)_write$/.test(own)) return "canvas";
+  if (own === "canvas_write" || /^(page|motion|component)_(write|edit)$/.test(own)) return "canvas";
   if (/^(page|motion|component)_read$/.test(own)) return "read";
   return "tool";
 };
 
 const failedLabel = (own: string, toolInput: Record<string, unknown>, title: (kind: string) => string): string => {
-  const artifact = /^(page|motion|component)_(write|read)$/.exec(own);
+  const artifact = /^(page|motion|component)_(write|read|edit)$/.exec(own);
   if (artifact) return `Couldn't ${artifact[2]} ${artifact[1]} ${title(artifact[1]!)}`;
   if (own.startsWith("preview")) return `Couldn't look at ${title("the page")} in a browser`;
   switch (own) {

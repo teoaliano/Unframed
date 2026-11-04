@@ -109,6 +109,8 @@ describe("the work log", () => {
         ...refused("12", "mcp__unframed__generate", { medium: "video" }),
         ...refused("13", "mcp__unframed__preview_open", { shapeId: "pg1" }),
         ...refused("14", "mcp__unframed__kit_write", {}),
+        ...refused("15", "mcp__unframed__page_edit", { shapeId: "pg1", edits: [{ old_string: "a", new_string: "b" }] }),
+        ...refused("16", "mcp__unframed__motion_edit", { shapeId: "mo1", edits: [{ old_string: "a", new_string: "b" }] }),
       ],
       { titleOf: (id) => titles[id] },
     );
@@ -128,12 +130,15 @@ describe("the work log", () => {
       "Couldn't start a video generation",
       "Couldn't look at Landing in a browser",
       "Couldn't run kit_write",
+      "Couldn't edit page Landing",
+      "Couldn't edit motion Intro",
     ]);
     expect(rows.every((row) => row.state === "failed")).toBe(true);
     expect(rows[0]!.detail).toBe("mcp__unframed__page_write was refused");
     expect(rows[12]!.detail).toBe("mcp__unframed__preview_open was refused");
     // A refused call counts as what it tried, so its group's summary reads the same as for a call that went through.
     expect(rows.slice(0, 2).map((row) => row.action)).toEqual(["canvas", "read"]);
+    expect(rows.slice(14).map((row) => row.action)).toEqual(["canvas", "canvas"]);
   });
 
   it("names a shape by its title when the call succeeded too, and reads a result the provider sent as text", () => {
