@@ -38,9 +38,12 @@ export const ensureTokens = (folder: string, kit: Kit | null): Promise<void> => 
 const inflight = new Set<Promise<unknown>>();
 
 export const ensureTokensFor = (folder: () => Promise<string | undefined>, kit: Kit | null, onError: (error: unknown) => void): void => {
-  const run = folder()
-    .then((path) => (path === undefined ? undefined : ensureTokens(path, kit)))
-    .catch(onError);
+  const write = queue.then(async () => {
+    const path = await folder();
+    if (path !== undefined) await writeOne(path, kit);
+  });
+  queue = write.catch(() => undefined);
+  const run = write.catch(onError);
   inflight.add(run);
   void run.finally(() => inflight.delete(run));
 };

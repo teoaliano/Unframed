@@ -58,3 +58,15 @@ test("the Kit mode picker sets a shape's mode from the toolbar and the editor he
   await expect.poll(() => modeOf(agent, "shape:brand")).toBeUndefined();
   await expect.poll(() => swatchIn(frame)).toBe("rgb(26, 115, 232)");
 });
+
+test("with two modes every colour field shows its whole hex value, and the Kit dialog does not scroll sideways", async ({ page, agent }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openCanvas(page, agent);
+  await writeKit(agent, kit);
+  await page.getByRole("button", { name: "Kit", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Kit" });
+  const fields = dialog.locator('td[data-mode] input[aria-label]');
+  await expect(fields).toHaveCount(2);
+  for (const field of await fields.all()) expect(await field.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  expect(await dialog.evaluate((element) => [element, ...element.querySelectorAll("*")].filter((child) => ["auto", "scroll"].includes(getComputedStyle(child).overflowX)).every((child) => child.scrollWidth <= child.clientWidth + 1))).toBe(true);
+});

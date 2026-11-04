@@ -24,7 +24,7 @@ export const KitModePicker = ({ shapeId, variant }: { readonly shapeId: TLShapeI
   if (!kit || kit.modes.length < 2) return null;
   const current = stored !== undefined && kit.modes.includes(stored) ? stored : kit.modes[0]!;
   const trigger = (
-    <SelectTrigger aria-label="Kit mode" size="sm" data-testid="kit-mode" className="w-auto shrink-0">
+    <SelectTrigger aria-label="Kit mode" size="sm" data-testid="kit-mode" className={variant === "header" ? "w-auto shrink-0 @max-[760px]/editor-header:min-w-0" : "w-auto shrink-0"}>
       <SunMoon aria-hidden />
       <span className={variant === "header" ? "@max-[760px]/editor-header:sr-only" : undefined}>
         <SelectValue>{current}</SelectValue>

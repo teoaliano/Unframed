@@ -55,7 +55,7 @@ const TextCell = ({ label, value, swatch, invalid, font = "mono", onCommit }: { 
     if (draft !== value) onCommit(draft);
   };
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-2">
+    <div className={swatch ? "flex min-w-28 flex-1 items-center gap-2" : "flex min-w-0 flex-1 items-center gap-2"}>
       {swatch && <span aria-hidden className="size-4 shrink-0 rounded-sm border" style={{ background: value }} />}
       <Input
         size="sm"
