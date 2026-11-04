@@ -10,6 +10,9 @@ export interface ImportFragment {
   readonly modes: string[];
   readonly tokens: Token[];
   readonly skipped: number;
+  readonly skippedNames?: ReadonlyArray<string>;
+  readonly modeless?: boolean;
+  readonly guidance?: string;
 }
 
 export type ImportResult = { ok: true; fragment: ImportFragment } | { ok: false; refusal: string };
@@ -162,6 +165,7 @@ export const fromDtcg = (files: ReadonlyArray<ImportFile>): ImportResult => {
   const modes: string[] = [];
   let skipped = 0;
   let name: string | undefined;
+  let guidance: string | undefined;
 
   for (const file of files) {
     let root: unknown;
@@ -174,6 +178,7 @@ export const fromDtcg = (files: ReadonlyArray<ImportFile>): ImportResult => {
     const extension = isRecord(root["$extensions"]) && isRecord(root["$extensions"][UNFRAMED]) ? (root["$extensions"][UNFRAMED] as Record<string, unknown>) : undefined;
     const fileModes = Array.isArray(extension?.["modes"]) ? (extension["modes"] as unknown[]).filter((mode): mode is string => typeof mode === "string") : undefined;
     if (name === undefined && typeof extension?.["name"] === "string") name = extension["name"] as string;
+    if (guidance === undefined && typeof extension?.["guidance"] === "string" && extension["guidance"].trim() !== "") guidance = extension["guidance"] as string;
     const mode = modeOfFile(file.name);
     const defaultMode = fileModes?.[0] ?? mode;
     for (const listed of fileModes ?? [mode]) if (!modes.includes(listed)) modes.push(listed);
@@ -218,7 +223,8 @@ export const fromDtcg = (files: ReadonlyArray<ImportFile>): ImportResult => {
     visit(root, [], undefined);
   }
 
-  return { ok: true, fragment: assemble(collected, modes.length > 0 ? modes : [DEFAULT_MODE], skipped, name) };
+  const fragment = assemble(collected, modes.length > 0 ? modes : [DEFAULT_MODE], skipped, name);
+  return { ok: true, fragment: guidance === undefined ? fragment : { ...fragment, guidance } };
 };
 
 const pathOfCssName = (name: string): string => name.replace(/^--/, "").split("-").join("/");
@@ -347,7 +353,7 @@ const DTCG_TYPE: Readonly<Record<TokenType, string>> = {
 };
 
 export const toDtcg = (kit: Kit): string => {
-  const root: Record<string, unknown> = { $extensions: { [UNFRAMED]: { name: kit.name, modes: kit.modes } } };
+  const root: Record<string, unknown> = { $extensions: { [UNFRAMED]: { name: kit.name, modes: kit.modes, ...(kit.guidance === undefined ? {} : { guidance: kit.guidance }) } } };
   const defaultMode = kit.modes[0]!;
   for (const token of kit.tokens) {
     const segments = token.path.split("/");

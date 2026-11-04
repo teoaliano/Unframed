@@ -13,6 +13,7 @@ export const KIT_LIMITS = {
   description: 200,
   path: 120,
   segments: 6,
+  guidance: 100_000,
 } as const;
 
 export const TEXT_STYLE_SUFFIX: Readonly<Record<TextStyleField, string>> = {

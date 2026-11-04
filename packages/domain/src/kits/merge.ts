@@ -3,6 +3,7 @@ import { type Kit, type Token, type TokenValue } from "./types.ts";
 interface KitSide {
   readonly modes: string[];
   readonly tokens: Token[];
+  readonly guidance?: string | undefined;
 }
 
 interface MergeCounts {
@@ -21,10 +22,16 @@ interface MergeConflict {
 
 export type MergeChoices = Readonly<Record<string, "mine" | "kit">>;
 
+export const GUIDANCE_CHOICE = "guidance";
+
+export type GuidanceMerge = "updated" | "kept" | "conflict";
+
 export interface MergeResult {
   readonly kit: Kit;
   readonly counts: MergeCounts;
   readonly conflicts: MergeConflict[];
+  readonly guidance?: GuidanceMerge;
+  readonly guidanceConflict?: { readonly here: string; readonly kit: string };
 }
 
 const canon = (value: unknown): string => {
@@ -136,11 +143,31 @@ export const mergeKit = (input: { project: Kit; base: KitSide; library: KitSide 
     tokens.push(row);
   }
 
-  return { kit: { ...project, modes, tokens }, counts, conflicts };
+  const { guidance: _guidance, ...rest } = project;
+  const merged = mergeGuidance(project.guidance, base.guidance, library.guidance, choices[GUIDANCE_CHOICE]);
+  return {
+    kit: { ...rest, modes, tokens, ...(merged.text === undefined ? {} : { guidance: merged.text }) },
+    counts,
+    conflicts,
+    ...(merged.outcome === undefined ? {} : { guidance: merged.outcome }),
+    ...(merged.conflict === undefined ? {} : { guidanceConflict: merged.conflict }),
+  };
+};
+
+const mergeGuidance = (project: string | undefined, base: string | undefined, library: string | undefined, choice: "mine" | "kit" | undefined) => {
+  const p = project ?? "";
+  const b = base ?? "";
+  const l = library ?? "";
+  const text = (value: string) => (value === "" ? undefined : value);
+  if (p === l) return { text: text(p), outcome: undefined, conflict: undefined };
+  if (l === b) return { text: text(p), outcome: "kept" as const, conflict: undefined };
+  if (p === b) return { text: text(l), outcome: "updated" as const, conflict: undefined };
+  return { text: text(choice === "kit" ? l : p), outcome: "conflict" as const, conflict: { here: p, kit: l } };
 };
 
 export const replaceKit = (project: Kit, library: Kit): Kit => {
-  const { from: _link, ...rest } = project;
+  const { from: _link, guidance: _guidance, ...rest } = project;
+  const guidance = library.guidance ?? project.guidance;
   const modes = [...project.modes, ...library.modes.filter((mode) => !project.modes.includes(mode))];
   const tokens = [...project.tokens];
   for (const incoming of library.tokens) {
@@ -148,5 +175,5 @@ export const replaceKit = (project: Kit, library: Kit): Kit => {
     if (at === -1) tokens.push(structuredClone(incoming));
     else tokens[at] = structuredClone(incoming);
   }
-  return { ...rest, name: library.name, modes, tokens };
+  return { ...rest, name: library.name, modes, tokens, ...(guidance === undefined ? {} : { guidance }) };
 };

@@ -6,6 +6,8 @@ import { changedBy, type TurnChangeRow } from "../agent/turnChanges.ts";
 
 const KIT_KEY_PREFIX = "kit:";
 
+export const KIT_GUIDANCE_KEY = `${KIT_KEY_PREFIX}:guidance`;
+
 interface KitPart {
   readonly typeName: "kit";
   readonly id: string;
@@ -18,6 +20,7 @@ const kitEntries = (kit: Kit | null): Map<string, TLRecord | undefined> => {
   const part = (key: string, value: unknown) => parts.set(key, { typeName: "kit", id: key, value } as unknown as TLRecord);
   part(`${KIT_KEY_PREFIX}name`, kit.name);
   part(`${KIT_KEY_PREFIX}modes`, { modes: kit.modes, defaultMode: kit.modes[0] });
+  if (kit.guidance !== undefined) part(KIT_GUIDANCE_KEY, kit.guidance);
   for (const token of kit.tokens) part(`${KIT_KEY_PREFIX}${token.path}`, token);
   return parts;
 };
@@ -69,6 +72,11 @@ export const planKitRevert = (
     if (row.shapeId === `${KIT_KEY_PREFIX}modes`) {
       const modes = (before as { modes?: string[] } | undefined)?.modes;
       if (modes !== undefined) kit = { ...kit, modes };
+      continue;
+    }
+    if (row.shapeId === KIT_GUIDANCE_KEY) {
+      const { guidance: _guidance, ...rest } = kit;
+      kit = typeof before === "string" ? { ...rest, guidance: before } : rest;
       continue;
     }
     const path = row.shapeId.slice(KIT_KEY_PREFIX.length);

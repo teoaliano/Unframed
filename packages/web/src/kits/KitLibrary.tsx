@@ -10,16 +10,17 @@ import { Label } from "~/components/ui/label";
 import { SAVE_FAILED_MESSAGE } from "../library/AddToLibraryDialog.tsx";
 import { useCanvasProject, useEngine } from "../context.ts";
 import { showError, showNotice } from "../toasts.tsx";
+import { systemKitPresets } from "../library/systemKits.ts";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
 const kitSaveSubtitle = (kit: Pick<Kit, "tokens" | "modes">): string =>
   `${kit.tokens.length} ${kit.tokens.length === 1 ? "token" : "tokens"} and ${kit.modes.length} ${kit.modes.length === 1 ? "mode" : "modes"}, saved as you have them now.`;
 
-export const linkFor = (presetId: string, revision: number, kit: { readonly modes: ReadonlyArray<string>; readonly tokens: ReadonlyArray<Token> }) => ({
+export const linkFor = (presetId: string, revision: number, kit: { readonly modes: ReadonlyArray<string>; readonly tokens: ReadonlyArray<Token>; readonly guidance?: string | undefined }) => ({
   presetId,
   revision,
-  base: { modes: [...kit.modes], tokens: structuredClone([...kit.tokens]) },
+  base: { modes: [...kit.modes], tokens: structuredClone([...kit.tokens]), ...(kit.guidance === undefined ? {} : { guidance: kit.guidance }) },
 });
 
 export const SaveKitDialog = ({ kit, onClose, onSaved }: { readonly kit: Kit; readonly onClose: () => void; readonly onSaved: (presetId: string, revision: number) => void }) => {
@@ -96,6 +97,8 @@ export const updateInLibrary = async (engine: ReturnType<typeof useEngine>, proj
 };
 
 export const libraryKitById = async (engine: EngineConnection, id: string): Promise<KitPreset | undefined> => {
+  const shipped = (await systemKitPresets().catch(() => [])).find((kit) => kit.id === id);
+  if (shipped !== undefined) return shipped;
   const { presets } = await engine.call("library.list");
   const found = (presets as unknown as LibraryEntry[]).find((entry) => entry.id === id);
   return found?.kind === "kit" ? found : undefined;

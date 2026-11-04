@@ -85,3 +85,16 @@ document, and three lines of assets/prompts/agent-system.md (thinking in proport
 change, no invented facts, the pixel density of attached screenshots) are adapted from
 fx0's design prompt. fx0 is used under the Apache License 2.0
 (https://www.apache.org/licenses/LICENSE-2.0). No fx0 code is carried.
+
+--------------------------------------------------------------------------------
+awesome-design-md (the library's system kits, spec 19)
+--------------------------------------------------------------------------------
+
+The ten DESIGN.md files in assets/design-md (apple, claude, vercel, notion, airbnb,
+linear.app, stripe, figma, bmw-m, coinbase) come from VoltAgent/awesome-design-md
+(https://github.com/VoltAgent/awesome-design-md, commit
+3b605329240ce735b510037cca322f1831fdd7f8), except one correction: stripe/DESIGN.md spells
+the brand "Stripi" three times upstream, and the copy here says "Stripe". The app turns each
+into a kit preset. They describe the visual language of those brands and are not affiliated
+with or endorsed by them. awesome-design-md is used under the MIT License; its text is in
+assets/design-md/LICENSE.

@@ -22,6 +22,7 @@ export const KitDefinition = Schema.Struct({
   name: Schema.String,
   modes: Schema.Array(Schema.String),
   tokens: Schema.Array(KitDefinitionToken),
+  guidance: Schema.optionalKey(Schema.String),
 });
 export type KitDefinition = typeof KitDefinition.Type;
 
@@ -64,7 +65,7 @@ export interface Token {
 export interface KitLink {
   presetId: string;
   revision: number;
-  base: { modes: string[]; tokens: Token[] };
+  base: { modes: string[]; tokens: Token[]; guidance?: string };
 }
 
 export interface Kit {
@@ -72,5 +73,6 @@ export interface Kit {
   name: string;
   modes: string[];
   tokens: Token[];
+  guidance?: string;
   from?: KitLink;
 }

@@ -318,7 +318,7 @@ test("import pasted CSS: the summary, then Import creates the kit as one undo st
   const importing = page.getByRole("dialog", { name: "Import" });
   await importing.getByRole("textbox", { name: "Paste" }).fill(":root { --color-brand-primary: #1a73e8; --space-md: 16px; }");
 
-  await expect(importing).toContainText("Adds 2 tokens, changes 0, adds the modes default. Skips 0 it could not read.");
+  await expect(importing).toContainText("Adds 2 tokens, changes 0, adds the default mode. Skips 0 it could not read.");
   await importing.getByRole("button", { name: "Import" }).click();
 
   await expect.poll(() => kitOf(engine, project)).toMatchObject({ name: "Kit", tokens: [expect.objectContaining({ path: "color/brand/primary", type: "color", value: "#1a73e8" }), expect.objectContaining({ path: "space/md", type: "dimension", value: "16px" })] });

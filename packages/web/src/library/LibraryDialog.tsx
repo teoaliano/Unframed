@@ -24,6 +24,7 @@ import { Tip } from "../chrome/ui.tsx";
 import { useEngine } from "../context.ts";
 import { showError } from "../toasts.tsx";
 import { builtInPresets } from "./systemPresets.ts";
+import { systemKitPresets } from "./systemKits.ts";
 import { labelHue, type Hue } from "../chrome/hue.ts";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
@@ -184,6 +185,7 @@ const readView = async (engine: ReturnType<typeof useEngine>): Promise<View> => 
 export const LibraryDialog = ({ onClose, onAdd, initialType = "all" }: { readonly onClose: () => void; readonly onAdd: (preset: LibraryEntry) => void; readonly initialType?: LibraryControls["type"] }) => {
   const engine = useEngine();
   const [presets, setPresets] = useState<ReadonlyArray<LibraryEntry>>([]);
+  const [kits, setKits] = useState<ReadonlyArray<LibraryEntry>>([]);
   const [readFailure, setReadFailure] = useState<string>();
   const [controls, setControls] = useState<LibraryControls>({ query: "", type: initialType, source: "any", sort: "newest", page: 1 });
   const [view, setView] = useState<View>("card");
@@ -193,6 +195,7 @@ export const LibraryDialog = ({ onClose, onAdd, initialType = "all" }: { readonl
   const search = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
+    setKits(await systemKitPresets().catch(() => []));
     try {
       const { presets: listed } = await engine.call("library.list");
       setPresets(listed as unknown as LibraryEntry[]);
@@ -215,7 +218,7 @@ export const LibraryDialog = ({ onClose, onAdd, initialType = "all" }: { readonl
   }, [engine, load]);
 
   const change = (patch: Partial<LibraryControls>) => setControls((current) => changeLibrary(current, patch));
-  const shown = libraryView([...presets, ...builtInPresets()], controls);
+  const shown = libraryView([...presets, ...builtInPresets(), ...kits], controls);
 
   const chooseView = (next: View) => {
     setView(next);

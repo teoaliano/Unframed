@@ -1,4 +1,4 @@
-import { applyKitOps, fromCss, fromDtcg, type ImportFile, type ImportFragment, type Kit, type KitOp, type TokenValue } from "@unframed/domain";
+import { applyKitOps, fromCss, fromDesignMd, fromDtcg, isDesignMd, skippedList, type ImportFile, type ImportResult, type ImportFragment, type Kit, type KitOp, type TokenValue } from "@unframed/domain";
 import { useEditor } from "tldraw";
 import { useMemo, useState, type DragEvent } from "react";
 import { Alert } from "~/components/ui/alert";
@@ -9,14 +9,18 @@ import { Textarea } from "~/components/ui/textarea";
 import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { commitKit } from "./kitRoom.ts";
 
-const importOps = (kit: Kit | null, fragment: ImportFragment, fallbackName: string): KitOp[] => {
+const modesOf = (kit: Kit | null, fragment: ImportFragment): string[] =>
+  fragment.modeless === true ? [kit?.modes[0] ?? "default"] : fragment.modes.length > 0 ? [...fragment.modes] : ["default"];
+
+export const importOps = (kit: Kit | null, fragment: ImportFragment, fallbackName: string): KitOp[] => {
   const ops: KitOp[] = [];
-  if (kit === null) ops.push({ op: "create", name: fragment.name ?? fallbackName, modes: fragment.modes.length > 0 ? fragment.modes : ["default"] });
-  else for (const mode of fragment.modes) if (!kit.modes.includes(mode)) ops.push({ op: "addMode", name: mode });
+  const modes = modesOf(kit, fragment);
+  if (kit === null) ops.push({ op: "create", name: fragment.name ?? fallbackName, modes });
+  else for (const mode of modes) if (!kit.modes.includes(mode)) ops.push({ op: "addMode", name: mode });
   for (const token of fragment.tokens) {
     const existing = kit?.tokens.find((candidate) => candidate.path === token.path);
-    const oneMode = token.value !== undefined && fragment.modes.length === 1 && existing !== undefined;
-    const imported: Record<string, TokenValue> | undefined = token.values ?? (oneMode ? { [fragment.modes[0]!]: token.value! } : undefined);
+    const oneMode = token.value !== undefined && modes.length === 1 && existing !== undefined;
+    const imported: Record<string, TokenValue> | undefined = token.values ?? (oneMode ? { [modes[0]!]: token.value! } : undefined);
     if (imported === undefined) {
       ops.push({ op: "setToken", path: token.path, type: token.type, value: token.value! });
       continue;
@@ -24,6 +28,7 @@ const importOps = (kit: Kit | null, fragment: ImportFragment, fallbackName: stri
     const current: Record<string, TokenValue> = existing?.values ?? (existing?.value !== undefined && kit !== null ? { [kit.modes[0]!]: existing.value } : {});
     ops.push({ op: "setToken", path: token.path, type: token.type, values: { ...current, ...imported } });
   }
+  if (fragment.guidance !== undefined) ops.push({ op: "setGuidance", guidance: fragment.guidance });
   return ops;
 };
 
@@ -31,17 +36,23 @@ const importSummary = (kit: Kit | null, fragment: ImportFragment): string => {
   const existing = new Set(kit?.tokens.map((token) => token.path) ?? []);
   const changes = fragment.tokens.filter((token) => existing.has(token.path)).length;
   const adds = fragment.tokens.length - changes;
-  const newModes = fragment.modes.filter((mode) => !(kit?.modes ?? []).includes(mode));
-  const modes = newModes.length > 0 ? `adds the modes ${newModes.join(", ")}. ` : "";
-  return `Adds ${adds} tokens, changes ${changes}, ${modes}Skips ${fragment.skipped} it could not read.`;
+  const newModes = modesOf(kit, fragment).filter((mode) => !(kit?.modes ?? []).includes(mode));
+  const modes = newModes.length === 1 && newModes[0] === "default" ? "adds the default mode. " : newModes.length > 0 ? `adds the modes ${newModes.join(", ")}. ` : "";
+  const guidance = fragment.guidance === undefined ? "" : kit?.guidance === undefined ? "Sets the guidance. " : "Replaces the guidance. ";
+  const names = fragment.skippedNames !== undefined && fragment.skippedNames.length > 0 ? `: ${skippedList(fragment.skippedNames)}` : "";
+  return `Adds ${adds} tokens, changes ${changes}, ${modes}${guidance}Skips ${fragment.skipped} it could not read${names}.`;
 };
 
-const baseName = (name: string) => name.replace(/\.json$/i, "").replace(/\.tokens$/i, "").replace(/\.css$/i, "").trim() || "Kit";
+const baseName = (name: string) => name.replace(/\.json$/i, "").replace(/\.tokens$/i, "").replace(/\.css$/i, "").replace(/\.(md|markdown)$/i, "").trim() || "Kit";
 
 const isJsonText = (text: string) => text.trimStart().startsWith("{");
 
-const readImport = (sources: ReadonlyArray<ImportFile>) => {
+export const ONE_DESIGN_MD = "Import one DESIGN.md at a time, on its own.";
+
+export const readImport = (sources: ReadonlyArray<ImportFile>): ImportResult | undefined => {
   if (sources.length === 0) return undefined;
+  const markdown = sources.filter(isDesignMd);
+  if (markdown.length > 0) return markdown.length === 1 && sources.length === 1 ? fromDesignMd(markdown[0]!.text) : { ok: false, refusal: ONE_DESIGN_MD };
   if (sources.every((source) => isJsonText(source.text))) return fromDtcg(sources);
   return fromCss(sources.map((source) => source.text).join("\n"));
 };
@@ -83,7 +94,7 @@ export const ImportKitDialog = ({ kit, onClose }: { readonly kit: Kit | null; re
       <DialogPopup data-testid="kit-import" className="max-w-[520px]">
         <DialogHeader>
           <DialogTitle>Import</DialogTitle>
-          <DialogDescription>Drop DTCG JSON or CSS files here, or paste CSS or DTCG JSON below.</DialogDescription>
+          <DialogDescription>Drop DTCG JSON, CSS or a DESIGN.md here, or paste one below.</DialogDescription>
         </DialogHeader>
         <DialogPanel>
           <div
@@ -98,8 +109,8 @@ export const ImportKitDialog = ({ kit, onClose }: { readonly kit: Kit | null; re
           >
             <Label>
               <span className="grid w-full justify-items-center gap-1 text-sm font-normal text-muted-foreground">
-              <span>Drop .json or .css files, or</span>
-              <Input type="file" multiple accept=".json,.css" aria-label="Choose files" onChange={(event) => void take([...(event.currentTarget.files ?? [])])} />
+              <span>Drop .json, .css or .md files, or</span>
+              <Input type="file" multiple accept=".json,.css,.md,.markdown" aria-label="Choose files" onChange={(event) => void take([...(event.currentTarget.files ?? [])])} />
               </span>
             </Label>
           </div>

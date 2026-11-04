@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { PLAN_NO_WRITES_MESSAGE, applyKitOps, cssName, resolve, type ActivityInput, type InteractionMode, type Kit, type KitOp } from "@unframed/domain";
+import { KIT_OPS_DESCRIPTION, KIT_READ_DESCRIPTION, KIT_WRITE_DESCRIPTION, PLAN_NO_WRITES_MESSAGE, applyKitOps, cssName, resolve, type ActivityInput, type InteractionMode, type Kit, type KitOp } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import type { Applied, CanvasChange, ChangeOrigin } from "../canvas/rooms.ts";
 import { refusal, type McpBinding, type McpTool, type ToolAnswer } from "../agent/mcp.ts";
@@ -17,7 +17,7 @@ interface KitToolContext {
 
 const DOCUMENT_ID = "document:document";
 
-const kitReadAnswer = (kit: Kit | null) => {
+export const kitReadAnswer = (kit: Kit | null) => {
   if (kit === null) return { kit: null };
   const defaultMode = kit.modes[0]!;
   return {
@@ -38,6 +38,7 @@ const kitReadAnswer = (kit: Kit | null) => {
         ...(token.formerNames === undefined ? {} : { formerNames: token.formerNames }),
       };
     }),
+    ...(kit.guidance === undefined ? {} : { guidance: kit.guidance }),
     ...(kit.from === undefined ? {} : { from: { library: kit.from.presetId, revision: kit.from.revision } }),
   };
 };
@@ -139,9 +140,3 @@ export class KitTools {
     ];
   }
 }
-
-const KIT_READ_DESCRIPTION =
-  "Read the project's kit: its tokens with their CSS names (use var(<css>) in CSS and unframed.token(\"<path>\") in script), the modes and the default mode. Answers { kit: null } when the project has no kit.";
-
-const KIT_WRITE_DESCRIPTION =
-  "Change the project's kit with one batch of ops, applied all or nothing, as one step of this turn that the person can revert. Ops: create {name, modes?}; rename {name}; setToken {path, type, value? | values?, description?}; renameToken {path, to}; deleteToken {path}; forgetFormerName {path, cssName}; addMode {name, copyFrom?}; renameMode {name, to}; deleteMode {name}; setDefaultMode {name}; reorder {paths}. Never redefine a kit CSS name in an artifact, and never set data-theme yourself.";
