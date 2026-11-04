@@ -176,6 +176,29 @@ describe("the recap rows", () => {
     expect(rows.some((row) => row.shapeId === "shape:p9")).toBe(false);
   });
 
+  it("leaves out calls that failed: a refused write touched nothing", () => {
+    const refused = (toolName: string, input: Record<string, unknown>) => {
+      const itemId = `i${++sequence}`;
+      return [
+        activity("tool.started", { itemId, itemType: "mcp_tool_call", status: "inProgress", data: { toolName, input } }),
+        activity("tool.completed", { itemId, itemType: "mcp_tool_call", status: "failed", data: { toolName, result: { error: "refused" } } }),
+      ];
+    };
+    const activities = [
+      ...refused("mcp__unframed__page_write", { shapeId: "g1", html: "" }),
+      ...refused("mcp__unframed__motion_write", { shapeId: "m1", html: "<p>" }),
+      ...refused("mcp__unframed__canvas_write", { ops: [{ type: "move", id: "p1", x: 0, y: 0 }] }),
+    ];
+    const shapes = [{ id: "shape:g1", kind: "page", title: "Landing" }];
+    expect(recapRows(activities, [], shapes)).toEqual([]);
+    expect(recapRows([...activities, ...call("mcp__unframed__page_read", { shapeId: "g1" })], [], shapes).map((row) => row.label)).toEqual(["Landing"]);
+  });
+
+  it("reads a created shape's id from a result Claude sent as text parts", () => {
+    const activities = call("mcp__unframed__canvas_write", { ops: [{ type: "create", id: "new:note", kind: "prompt", x: 0, y: 0 }] }, ["Note: the canvas changed.", '{"ok":true,"ids":{"new:note":"p7"}}']);
+    expect(recapRows(activities, [], [{ id: "shape:p7", kind: "prompt", title: "Note" }]).map((row) => row.label)).toEqual(["Note"]);
+  });
+
   it("adds the turn changes after the tool calls, and offers a diff for a page or motion whose file the turn wrote", () => {
     const activities = call("mcp__unframed__motion_write", { shapeId: "m1", title: "Intro" });
     const rows = recapRows(
@@ -205,6 +228,24 @@ describe("the recap rows", () => {
       [{ id: "shape:c1", kind: "component", title: "Button" }],
     );
     expect(rows).toEqual([{ shapeId: "shape:c1", kind: "component", label: "Button", deleted: false, rewritten: true }]);
+  });
+
+  it("lists the page and motion a turn edited, offering a diff for each", () => {
+    const rows = recapRows(
+      [...call("mcp__unframed__page_edit", { shapeId: "g1", edits: [] }, { ok: true, shapeId: "g1", title: "Landing" }), ...call("mcp__unframed__motion_edit", { shapeId: "m1", edits: [] })],
+      [
+        { shapeId: "shape:g1", kind: "page", change: "updated", file: "2-landing.html", previousFile: "1-landing.html" },
+        { shapeId: "shape:m1", kind: "motion", change: "updated", file: "2-intro.html", previousFile: "1-intro.html" },
+      ],
+      [
+        { id: "shape:g1", kind: "page", title: "Landing" },
+        { id: "shape:m1", kind: "motion", title: "Intro" },
+      ],
+    );
+    expect(rows).toEqual([
+      { shapeId: "shape:g1", kind: "page", label: "Landing", deleted: false, rewritten: true },
+      { shapeId: "shape:m1", kind: "motion", label: "Intro", deleted: false, rewritten: true },
+    ]);
   });
 
   it("marks a shape no longer on the canvas deleted, keeping the title the tool gave it", () => {

@@ -28,4 +28,5 @@ Each description lives in one file. Build the full text as each file says.
 
 - `page_write`: `page-write-tool.md`, followed by `dials-contract.md`.
 - `motion_write`: `motion-write-tool.md`, followed by `dials-contract.md`, then `dials-timeline.md`.
+- `page_edit` and `motion_edit`: their sections of `artifact-edit-tools.md`, each alone.
 - `page_read` and `motion_read`: `artifact-read-tools.md`.

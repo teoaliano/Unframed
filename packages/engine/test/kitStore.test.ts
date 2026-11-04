@@ -89,7 +89,7 @@ describe("the tokens script in a project folder (spec 19, task 10)", () => {
 
   it("ensures the script on an artifact write with no kit, and the page carries the tokens tag", async () => {
     const agent = await startAgentEngine({
-      script: await scriptFolder({ artifacts: { when: "^go", turns: [{ text: "Done.", tools: [{ name: "page_write", input: { html: "<p>x</p>" } }] }] } }),
+      script: await scriptFolder({ artifacts: { when: "^go", turns: [{ text: "Done.", tools: [{ name: "page_write", input: { html: "<!doctype html><p>x</p>" } }] }] } }),
     });
     engines.push(agent.engine);
     const chatId = await agent.createChat();
@@ -98,7 +98,7 @@ describe("the tokens script in a project folder (spec 19, task 10)", () => {
     expect(carries(await readFile(join(agent.folder, SCRIPT), "utf8"), null)).toBe(true);
     const created = (await roomRecords(agent)).find((record) => record.type === "page");
     expect(await readFile(join(agent.folder, created.props.file as string), "utf8")).toBe(
-      `<script src="unframed-tokens.js"></script>\n<script src="unframed-dials.js"></script>\n<p data-hf-id="hf-8uol">x</p>`,
+      `<script src="unframed-tokens.js"></script>\n<script src="unframed-dials.js"></script>\n<!doctype html><p data-hf-id="hf-8uol">x</p>`,
     );
   });
 });

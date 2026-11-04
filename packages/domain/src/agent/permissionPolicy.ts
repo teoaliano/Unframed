@@ -4,7 +4,7 @@ import { classifyRequest, type RequestType } from "./runtimeEvents.ts";
 
 export const UNFRAMED_TOOL_PREFIX = "mcp__unframed__";
 
-const UNFRAMED_WRITE_TOOLS: ReadonlySet<string> = new Set(["canvas_write", "page_write", "motion_write", "component_write", "generate", "kit_write"]);
+const UNFRAMED_WRITE_TOOLS: ReadonlySet<string> = new Set(["canvas_write", "page_write", "motion_write", "page_edit", "motion_edit", "component_write", "generate", "kit_write"]);
 
 type PolicyAnswer =
   | { readonly kind: "question" }

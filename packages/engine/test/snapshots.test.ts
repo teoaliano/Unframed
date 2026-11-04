@@ -89,7 +89,7 @@ describe("artifact snapshots", () => {
   });
 
   it("renders after an agent's write, with the file it wrote", async () => {
-    const script = await scriptFolder({ write: { when: "^go", turns: [{ text: "Done.", tools: [{ name: "page_write", input: { shapeId: "pg1", html: "<h1>v2</h1>" } }] }] } });
+    const script = await scriptFolder({ write: { when: "^go", turns: [{ text: "Done.", tools: [{ name: "page_write", input: { shapeId: "pg1", html: "<!doctype html><h1>v2</h1>" } }] }] } });
     const agent = await startSnapshotting("ok", script);
     const stream = agent.rpc.subscribe("artifact.snapshots", { project: "board" });
     await seed(agent, [pageShape("pg1", "100", { file: "1-landing.html", title: "Landing" })]);
