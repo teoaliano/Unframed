@@ -31,26 +31,20 @@ import { kitOf } from "../kits/tokensFile.ts";
 
 const PAGE_ID = "page:page";
 
-/** What the canvas tool service needs from the rest of the engine. */
-export interface CanvasToolDeps {
+interface CanvasToolDeps {
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;
   readonly apply: (project: string, change: CanvasChange, origin: ChangeOrigin) => Promise<Applied>;
   readonly folder: (project: string) => Promise<string>;
   readonly turnChanges: (project: string) => Promise<TurnChanges>;
-  /** The chat's running turn and the selection its latest message was sent with. */
   readonly chatTurn: (project: string, chatId: string) => { turnCount: number | undefined; interactionMode: InteractionMode; selection: ReadonlyArray<string> };
-  /** Whether the chat is an outside one, whose read answers the live selection (spec 14). */
   readonly isOutside: (project: string, chatId: string) => boolean;
-  /** The live selection of a project's windows, for an outside read. */
   readonly liveSelection: (project: string) => { shapeIds: string[]; note?: string };
-  /** Tags the chat with artifacts a write touched (the tag reactor). */
   readonly tag: (project: string, chatId: string, ids: ReadonlyArray<string>) => void;
 }
 
 const error = (message: string): ToolAnswer => ({ value: { error: message }, isError: true });
 
-/** A project file's facts: its original name, type and natural size, from its sidecar and header. */
-export const fileFacts = async (folder: string, name: string): Promise<FileFacts | undefined> => {
+const fileFacts = async (folder: string, name: string): Promise<FileFacts | undefined> => {
   if (!isBareFileName(name) || name.endsWith(".json") || name.startsWith("unframed.sqlite")) return undefined;
   const path = join(folder, name);
   const info = await stat(path).catch(() => undefined);
@@ -72,10 +66,6 @@ export const fileFacts = async (folder: string, name: string): Promise<FileFacts
   return { fileName, ...(mime === undefined ? {} : { mime }), ...(size ? { w: size.w, h: size.h } : {}), bytes: info.size };
 };
 
-/**
- * What `canvas_read` reads from the sheets (spec 20): each component shape's current declaration,
- * and each page or motion's pins. A file that cannot be read contributes nothing.
- */
 const componentFacts = async (folder: string, records: ReadonlyArray<TLRecord>) => {
   const declarations = new Map<string, ComponentDeclaration>();
   const pins = new Map<string, Pin[]>();
@@ -97,16 +87,11 @@ const componentFacts = async (folder: string, records: ReadonlyArray<TLRecord>) 
   return { declarations, pins };
 };
 
-/** The locked element ids of a page or motion record. */
 const lockedOf = (record: TLRecord | undefined): string[] => {
   const locked = (record as { props?: { lockedElements?: unknown } } | undefined)?.props?.lockedElements;
   return Array.isArray(locked) ? locked.filter((id): id is string => typeof id === "string") : [];
 };
 
-/**
- * A `file` change to a page or motion that has locks is a write to the locked elements: refused
- * when the new file changes or removes one (spec 18, Locks and the agent).
- */
 const fileLockRefusal = async (folder: string, put: ReadonlyArray<TLRecord>, before: ReadonlyMap<string, TLRecord | undefined>): Promise<string | undefined> => {
   for (const record of put) {
     const old = before.get(record.id as string);
@@ -135,11 +120,6 @@ const collectFiles = (ops: unknown): string[] => {
   return files;
 };
 
-/**
- * The canvas tool service (spec 07): `canvas_read` and `canvas_write` over the project's
- * sync room. A write is one batch and one room change with origin `chat:<chatId>`, and
- * records its turn changes; every artifact it touches tags the chat.
- */
 export class CanvasTools {
   private readonly deps: CanvasToolDeps;
 
@@ -227,7 +207,6 @@ export class CanvasTools {
     return { value: { ok: true, ids: prepared.ids, clock: applied.clock } };
   }
 
-  /** The two canvas tools, as the MCP server registers them. */
   tools(): McpTool[] {
     return [
       {

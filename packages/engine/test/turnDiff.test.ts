@@ -60,20 +60,17 @@ describe("artifact diffs", () => {
     const second = await agent.rpc.call("orchestration.getTurnDiff", { projectId: PROJECT, threadId: chatId, fromTurnCount: 1, toTurnCount: 2 });
     expect(second.files.map((file) => [file.shapeId, file.before, file.after, file.additions, file.deletions])).toEqual([["shape:pg1", "landing-v2.html", "landing-v3.html", 1, 1]]);
 
-    // The whole chat: each artifact from before the first turn to after the last.
     const all = await agent.rpc.call("orchestration.getFullThreadDiff", { projectId: PROJECT, threadId: chatId, toTurnCount: 2 });
     expect(all.files.map((file) => [file.shapeId, file.before, file.after, file.additions, file.deletions])).toEqual([
       ["shape:pg1", "landing-v1.html", "landing-v3.html", 3, 2],
       ["shape:m1", "intro-v1.html", "intro-v2.html", 1, 1],
     ]);
 
-    // A file over 2 MiB is named but not diffed.
     await agent.send(chatId, "rewrite with the big one");
     await agent.settled(chatId, 3);
     const big = await agent.rpc.call("orchestration.getTurnDiff", { projectId: PROJECT, threadId: chatId, fromTurnCount: 2, toTurnCount: 3 });
     expect(big.files).toEqual([expect.objectContaining({ shapeId: "shape:pg1", after: "huge.html", tooLarge: true, patch: "This file is too large to diff.", additions: 0, deletions: 0 })]);
 
-    // A change of whitespace only counts unless whitespace is ignored.
     await agent.send(chatId, "rewrite the spacing");
     await agent.settled(chatId, 4);
     const range = { projectId: PROJECT, threadId: chatId, fromTurnCount: 3, toTurnCount: 4 };
@@ -112,7 +109,6 @@ describe("component diffs", () => {
     const diff = await agent.rpc.call("orchestration.getTurnDiff", { projectId: PROJECT, threadId: chatId, fromTurnCount: 0, toTurnCount: 1 });
     expect(diff.files).toHaveLength(1);
     const [file] = diff.files;
-    // The written sheet gains the tokens, bridge and helper tags in its head, and its template gets element ids (spec 20).
     expect(file).toMatchObject({ shapeId: "shape:c1", label: "Button", kind: "component", before: "1-button.html", additions: 5, deletions: 2 });
     expect(file!.after).toMatch(/^\d+-button\.html$/);
     expect(file!.patch).toMatch(/<button data-hf-id="hf-[a-z0-9]+" data-uf-prop="label">Buy now<\/button>/);
