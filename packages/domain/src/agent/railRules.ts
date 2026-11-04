@@ -1,6 +1,7 @@
 import type { ChatActivity, OutsideChatRef, TurnFile } from "./chatModel.ts";
 import { connectionClientLabel } from "../outside/connectionSetup.ts";
 import { shapeLabel } from "./shapeLabel.ts";
+import { toolResult } from "./workLog.ts";
 import { agentShapeId, roomShapeId as shapeId } from "./turnText.ts";
 
 export interface RailChat {
@@ -172,12 +173,12 @@ export const recapRows = (
     const given = record(payload.data).input;
     if (activity.kind.startsWith("tool.") && given !== undefined && !inputs.has(payload.itemId)) inputs.set(payload.itemId, given);
   }
-  const completed = [...activities].filter((activity) => activity.kind === "tool.completed").sort((a, b) => a.sequence - b.sequence);
+  const completed = [...activities].filter((activity) => activity.kind === "tool.completed" && record(activity.payload).status !== "failed").sort((a, b) => a.sequence - b.sequence);
   for (const activity of completed) {
     const tool = toolName(activity);
     const data = record(record(activity.payload).data);
     const input = record(data.input ?? inputs.get(record(activity.payload).itemId));
-    const result = record(data.result);
+    const result = toolResult(data.result);
     if (ARTIFACT_TOOLS.has(tool)) {
       const kind = tool.startsWith("page") ? "page" : tool.startsWith("component") ? "component" : "motion";
       touch(input.shapeId ?? result.shapeId ?? result.id, kind, input.title);

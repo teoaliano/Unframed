@@ -67,4 +67,18 @@ describe("the transcript's timeline", () => {
     );
     expect(blocks(value)).toEqual(["u1", "item-1:completed", "a1", "item-2:completed", "a2"]);
   });
+
+  it("ends an outside chat's call that failed as failed, and names its shape through titleOf", () => {
+    const started: ChatActivity = { ...tool("tool.started", "item-7", 20, at(10)), payload: { itemId: "item-7", itemType: "mcp_tool_call", status: "inProgress", data: { toolName: "mcp__unframed__page_write", input: { shapeId: "g1" } } } };
+    const failed: ChatActivity = {
+      ...tool("tool.started", "item-7", 21, at(20)),
+      id: "tool.failed:item-7",
+      kind: "tool.failed",
+      payload: { itemId: "item-7", itemType: "mcp_tool_call", status: "failed", data: { toolName: "mcp__unframed__page_write", input: { shapeId: "g1" }, result: { error: "html must be a non-empty string" } } },
+    };
+    const value = chat([message("u1", "user", at(0))], [started, failed]);
+    expect(blocks(value)).toEqual(["u1", "item-7:failed"]);
+    const [work] = buildTimeline(value, { titleOf: (id) => (id === "g1" ? "Landing" : undefined) })[0]!.blocks.filter((block) => block.kind === "work");
+    expect(work?.kind === "work" && (work.entries[0] as WorkRow)).toMatchObject({ label: "Couldn't write page Landing", detail: "html must be a non-empty string" });
+  });
 });

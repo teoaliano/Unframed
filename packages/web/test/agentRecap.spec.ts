@@ -11,9 +11,14 @@ const RETITLE = {
   turns: [{ tools: [{ name: "canvas_write", input: { ops: [retitle("m1", "Intro (red)"), retitle("m2", "Outro (red)")] } }], text: "Retitled both." }],
 };
 
+const REFUSED_WRITE = {
+  when: "^rewrite the landing page",
+  turns: [{ tools: [{ name: "page_write", input: { shapeId: "g1", html: "" } }], text: "The write was refused." }],
+};
+
 const test = base.extend<{ agent: TestEngine }>({
   agent: async ({}, use) => {
-    const engine = await startAgentEngine({ script: await scriptFolder({ retitle: RETITLE }) });
+    const engine = await startAgentEngine({ script: await scriptFolder({ retitle: RETITLE, refused: REFUSED_WRITE }) });
     await use(engine);
     await engine.dispose();
   },
@@ -99,4 +104,20 @@ test("a revert names the shape it left alone because the person changed it since
   await expect(card.getByTestId("recap-skipped")).toHaveText("Left 1 shape alone because they changed since: Hand-made (by the person).");
   await expect.poll(() => titleOf(agent, "shape:m2")).toBe("Outro");
   expect(await titleOf(agent, "shape:m1")).toBe("Hand-made");
+});
+
+test("a refused page write says what it tried by the page's title, opens to the error the agent read, and gets no recap card", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await putRecords(agent, artifactColumn([{ id: "shape:g1", title: "Landing" }]));
+  await expect(shapeOnScreen(page, "shape:g1")).toBeVisible();
+  const panel = await openRail(page);
+  await say(panel, "rewrite the landing page");
+  await expect(panel.locator("[data-role='assistant']").last()).toContainText("The write was refused.");
+
+  await panel.getByRole("button", { name: /^Worked for/ }).click();
+  const row = panel.getByTestId("work-row").filter({ hasText: "Couldn't write page Landing" });
+  await expect(row).toHaveAttribute("data-state", "failed");
+  await row.getByRole("button").click();
+  await expect(row.getByTestId("work-row-body")).toHaveText("html must be a non-empty string");
+  await expect(panel.getByTestId("recap-card")).toHaveCount(0);
 });
