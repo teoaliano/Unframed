@@ -4,14 +4,10 @@ import { centre, openCanvas, roomShapes, shapeOnScreen } from "./canvas.ts";
 import { engineChats, engineChat, expect, say, test } from "./agent.ts";
 import { filledArtifact, projectPath } from "./artifacts.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
+import { column, editor, frameOf, outline, region } from "./editorHarness.ts";
 
 const PAGE = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}</style></head><body><main><h1 data-hf-id="hf-aaaa">Welcome</h1><p data-hf-id="hf-bbbb">Lead text</p></main></body></html>`;
 
-const editor = (page: Page) => page.getByTestId("artifact-editor");
-const region = (page: Page) => page.getByRole("region", { name: "Editing Landing" });
-const frameOf = (page: Page) => region(page).frameLocator("iframe[data-artifact-frame]");
-const column = (page: Page, name: "rail" | "centre" | "parameters") => editor(page).locator(`[data-editor-column="${name}"]`);
-const outline = (page: Page, kind: "hover" | "selected") => page.locator(`[data-edit-outline="${kind}"]`);
 const rows = (page: Page) => column(page, "parameters").locator("[data-layer-row]");
 const rowOf = (page: Page, label: string): Locator => rows(page).filter({ hasText: label }).first();
 

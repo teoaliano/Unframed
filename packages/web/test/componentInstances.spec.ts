@@ -8,6 +8,7 @@ import { filledArtifact, writeProjectFile } from "./artifacts.ts";
 import { writeSheet } from "./components.ts";
 import { putRecords } from "./media.ts";
 import { componentShape } from "./components.ts";
+import { parameters, region } from "./editorHarness.ts";
 
 const CARD_FILE = "1761400000001-card.html";
 const BUTTON_FILE = "1761400000000-price-card.html";
@@ -29,11 +30,9 @@ const PAGE = `<!doctype html><html><head>
 <uf-card label="Card"><span slot="action">Slotted span</span><uf-price-card slot="action" label="Go"></uf-price-card></uf-card>
 </body></html>`;
 
-const region = (page: Page) => page.getByRole("region", { name: "Editing Landing" });
 const frame = (page: Page) => region(page).frameLocator("iframe[data-artifact-frame]");
-const design = (page: Page) => page.getByTestId("artifact-editor").locator('[data-editor-column="parameters"]');
 const outline = (page: Page, kind: "selected" | "hover") => page.locator(`[data-edit-outline="${kind}"]`);
-const headerTag = (page: Page, tag: string) => design(page).getByTestId("design-tab").getByText(tag, { exact: true }).first();
+const headerTag = (page: Page, tag: string) => parameters(page).getByTestId("design-tab").getByText(tag, { exact: true }).first();
 
 const clickUntilSelected = async (page: Page, at: () => ReturnType<Page["locator"]>) => {
   await expect(async () => {
@@ -60,7 +59,7 @@ test("hover and click pick an instance, never its insides, and a slotted child i
 
   await clickUntilSelected(page, () => frame(page).locator("uf-price-card").first().locator("button"));
   await expect(headerTag(page, "uf-price-card")).toBeVisible();
-  await expect(design(page).getByText("button", { exact: true })).toHaveCount(0);
+  await expect(parameters(page).getByText("button", { exact: true })).toHaveCount(0);
 
   await clickUntilSelected(page, () => frame(page).getByText("Slotted span", { exact: true }));
   await expect(headerTag(page, "span")).toBeVisible();
@@ -68,8 +67,8 @@ test("hover and click pick an instance, never its insides, and a slotted child i
   await clickUntilSelected(page, () => frame(page).locator("uf-price-card").nth(1).locator("button"));
   await expect(headerTag(page, "uf-price-card")).toBeVisible();
 
-  await design(page).getByRole("tab", { name: "Layers" }).click();
-  const layers = design(page).getByRole("list", { name: "Layers" });
+  await parameters(page).getByRole("tab", { name: "Layers" }).click();
+  const layers = parameters(page).getByRole("list", { name: "Layers" });
   await expect(layers.getByRole("button", { name: "Hidden uf-price-card" })).toHaveCount(2);
   await expect(layers.getByRole("button", { name: "Hidden button" })).toHaveCount(0);
 });

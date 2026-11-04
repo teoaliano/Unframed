@@ -10,6 +10,7 @@ export const SHAPE = "shape:landing";
 
 export const editor = (page: Page) => page.getByTestId("artifact-editor");
 export const region = (page: Page) => page.getByRole("region", { name: "Editing Landing" });
+export const column = (page: Page, name: "rail" | "centre" | "parameters") => editor(page).locator(`[data-editor-column="${name}"]`);
 export const frameOf = (page: Page) => region(page).frameLocator("iframe[data-artifact-frame]");
 export const parameters = (page: Page) => editor(page).locator('[data-editor-column="parameters"]');
 export const outline = (page: Page, kind: "hover" | "selected") => page.locator(`[data-edit-outline="${kind}"]`);

@@ -3,11 +3,10 @@ import { centre, openCanvas, roomShapes, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 import { filledArtifact, projectPath } from "./artifacts.ts";
 import { readFile } from "node:fs/promises";
+import { frameOf, region } from "./editorHarness.ts";
 
 const OLD = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}</style></head><body><main><h1>Welcome</h1><p>Old text</p></main></body></html>`;
 
-const region = (page: Page) => page.getByRole("region", { name: "Editing Landing" });
-const frameOf = (page: Page) => region(page).frameLocator("iframe[data-artifact-frame]");
 const fileOf = async (engine: Parameters<typeof roomShapes>[0]): Promise<string | undefined> =>
   (await roomShapes(engine, "default", "page")).find((record) => record.id === "shape:landing")?.props?.file;
 

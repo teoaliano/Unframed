@@ -3,11 +3,11 @@ import { centre, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 import { componentShape, writeSheet } from "./components.ts";
 import { putRecords } from "./media.ts";
+import { parameters } from "./editorHarness.ts";
 
 const PRICE_CARD = { tag: "uf-price-card", variants: { kind: ["primary", "secondary"], size: ["sm", "md"] } };
 
 const region = (page: Page) => page.getByRole("region", { name: "Editing Price card" });
-const design = (page: Page) => page.getByTestId("artifact-editor").locator('[data-editor-column="parameters"]');
 const frame = (page: Page) => region(page).frameLocator("iframe[data-artifact-frame]");
 const outline = (page: Page, kind: "selected" | "copy") => page.locator(`[data-edit-outline="${kind}"]`);
 
@@ -30,7 +30,7 @@ test("a click on a board cell picks the element inside it, names its variant, an
     await expect(outline(page, "selected")).toHaveCount(1, { timeout: 1000 });
   }).toPass({ timeout: 20_000 });
 
-  await expect(design(page).getByTestId("variant-line")).toHaveText("Editing Price card · secondary · md");
-  await expect(design(page).getByTestId("variant-line")).toBeVisible();
+  await expect(parameters(page).getByTestId("variant-line")).toHaveText("Editing Price card · secondary · md");
+  await expect(parameters(page).getByTestId("variant-line")).toBeVisible();
   await expect(outline(page, "copy")).toHaveCount(3);
 });

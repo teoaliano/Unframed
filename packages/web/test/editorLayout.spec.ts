@@ -3,11 +3,10 @@ import { openCanvas, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 import { filledArtifact } from "./artifacts.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
+import { column, editor } from "./editorHarness.ts";
 
 const SHAPE = "shape:landing";
 const LONG_TITLE = "Long ".repeat(40).trim();
-const editor = (page: Page) => page.getByTestId("artifact-editor");
-const column = (page: Page, name: "rail" | "centre" | "parameters") => editor(page).locator(`[data-editor-column="${name}"]`);
 const region = (page: Page, title: string) => page.getByRole("region", { name: `Editing ${title}` });
 const timeline = (page: Page) => page.getByRole("region", { name: "Timeline for Intro" });
 const boxOf = async (locator: ReturnType<Page["locator"]>) => {

@@ -2,15 +2,10 @@ import type { Locator, Page } from "@playwright/test";
 import { centre, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 import { filledArtifact } from "./artifacts.ts";
+import { column, editor, frameOf, modeButton, outline, region } from "./editorHarness.ts";
 
 const PAGE = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}</style></head><body><main><h1>Welcome</h1><p>Lead text</p><a href="https://example.invalid/">Go</a></main></body></html>`;
 
-const editor = (page: Page) => page.getByTestId("artifact-editor");
-const region = (page: Page) => page.getByRole("region", { name: "Editing Landing" });
-const frameOf = (page: Page) => region(page).frameLocator("iframe[data-artifact-frame]");
-const column = (page: Page, name: "rail" | "centre" | "parameters") => editor(page).locator(`[data-editor-column="${name}"]`);
-const outline = (page: Page, kind: "hover" | "selected") => page.locator(`[data-edit-outline="${kind}"]`);
-const modeButton = (page: Page, name: "Edit" | "Interact"): Locator => region(page).getByRole("group", { name: "Mode" }).getByRole("button", { name, exact: true });
 
 const onBoard = async (page: Page, engine: Parameters<typeof openCanvas>[1]) => {
   await openCanvas(page, engine);

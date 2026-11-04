@@ -6,6 +6,7 @@ import { expect, test } from "./agent.ts";
 import { filledArtifact, projectPath, writeProjectFile } from "./artifacts.ts";
 import { componentShape, SHEET_FILE, sheetHtml } from "./components.ts";
 import { putRecords } from "./media.ts";
+import { parameters } from "./editorHarness.ts";
 
 const PRICE_CARD = { tag: "uf-price-card", variants: { kind: ["primary", "secondary"] } };
 const NEW_SHEET = "1761400005000-price-card.html";
@@ -14,7 +15,6 @@ const CARD_PAGE = `<!doctype html><html><head><script src="${compiledFileName(SH
 
 const editor = (page: Page) => page.getByRole("region", { name: "Editing Landing" });
 const frame = (page: Page) => editor(page).frameLocator("iframe[data-artifact-frame]");
-const design = (page: Page) => page.getByTestId("artifact-editor").locator('[data-editor-column="parameters"]');
 const headerButton = (page: Page) => editor(page).getByRole("button", { name: "Component updates available", exact: true });
 const popover = (page: Page) => page.getByRole("dialog", { name: "Component updates", exact: true });
 const canvasBadge = (page: Page) => page.getByTestId("component-updates-badge");
@@ -48,7 +48,7 @@ test("a component edit shows Updates on the page, the editor offers Update and t
     await frame(page).locator("uf-price-card").first().locator("button").click();
     await expect(page.locator('[data-edit-outline="selected"]')).toHaveCount(1, { timeout: 1000 });
   }).toPass({ timeout: 20_000 });
-  const instance = design(page).getByTestId("instance-section");
+  const instance = parameters(page).getByTestId("instance-section");
   await expect(instance.getByText("This instance uses an older version of Price card.", { exact: true })).toBeVisible({ timeout: 20_000 });
   await instance.getByRole("button", { name: "Update Price card", exact: true }).click();
 

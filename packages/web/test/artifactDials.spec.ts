@@ -8,8 +8,8 @@ import { clickShape } from "./generation.ts";
 import { putRecords } from "./media.ts";
 import { dialsPage, filledArtifact, insideComposition, insideFrame, projectPath, writeBridge, writeProjectFile } from "./artifacts.ts";
 import { expectToken, inBothSchemes, styleOf } from "./kit.ts";
+import { editor } from "./editorHarness.ts";
 
-const editor = (page: Page) => page.getByTestId("artifact-editor");
 const editorFrame = (page: Page): FrameLocator => editor(page).frameLocator("iframe[data-artifact-frame]");
 const shown = async (frame: FrameLocator) => JSON.parse((await frame.locator("#values").textContent()) ?? "null");
 

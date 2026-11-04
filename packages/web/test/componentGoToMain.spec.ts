@@ -6,6 +6,7 @@ import { expect, test } from "./agent.ts";
 import { filledArtifact, writeProjectFile } from "./artifacts.ts";
 import { componentShape, SHEET_FILE } from "./components.ts";
 import { putRecords } from "./media.ts";
+import { parameters } from "./editorHarness.ts";
 
 const SHEET = stampElementIds(`<!doctype html><html><head><meta charset="utf-8">${BRIDGE_TAG}${COMPONENT_HELPER_TAG}</head><body style="margin:0">
 <script type="application/json" data-uf-component>{"tag":"uf-price-card","variants":{},"props":{"label":"text"},"slots":[]}</script>
@@ -17,7 +18,6 @@ const PAGE = `<!doctype html><html><head><script src="${compiledFileName(SHEET_F
 
 const region = (page: Page, name: string) => page.getByRole("region", { name: `Editing ${name}` });
 const frame = (page: Page) => region(page, "Landing").frameLocator("iframe[data-artifact-frame]");
-const design = (page: Page) => page.getByTestId("artifact-editor").locator('[data-editor-column="parameters"]');
 const outline = (page: Page) => page.locator('[data-edit-outline="selected"]');
 
 const openPageEditor = async (page: Page) => {
@@ -32,7 +32,7 @@ const selectInstance = async (page: Page) => {
     await frame(page).locator("uf-price-card").first().locator("button").click();
     await expect(outline(page)).toHaveCount(1, { timeout: 1000 });
   }).toPass({ timeout: 20_000 });
-  await expect(design(page).getByTestId("instance-section")).toBeVisible({ timeout: 20_000 });
+  await expect(parameters(page).getByTestId("instance-section")).toBeVisible({ timeout: 20_000 });
 };
 
 test("Go to main component opens the component's editor", async ({ page, agent }) => {
@@ -45,7 +45,7 @@ test("Go to main component opens the component's editor", async ({ page, agent }
 
   await openPageEditor(page);
   await selectInstance(page);
-  await design(page).getByRole("button", { name: "Go to main component", exact: true }).click();
+  await parameters(page).getByRole("button", { name: "Go to main component", exact: true }).click();
 
   await expect(region(page, "Price card").getByTestId("artifact-editor-kind")).toHaveText("component", { timeout: 20_000 });
 });
@@ -58,7 +58,7 @@ test("Go to main component is disabled, with its tooltip, when no component shap
 
   await openPageEditor(page);
   await selectInstance(page);
-  const button = design(page).getByRole("button", { name: "Go to main component", exact: true });
+  const button = parameters(page).getByRole("button", { name: "Go to main component", exact: true });
   await expect(button).toHaveAttribute("aria-disabled", "true");
   await button.hover();
   await expect(page.getByText("The main component was deleted.", { exact: true })).toBeVisible();

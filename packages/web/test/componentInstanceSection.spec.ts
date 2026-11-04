@@ -6,6 +6,7 @@ import { centre, openCanvas, roomShapes, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 import { filledArtifact, projectPath, writeProjectFile } from "./artifacts.ts";
 import { SHEET_FILE } from "./components.ts";
+import { parameters, region } from "./editorHarness.ts";
 
 const SHEET = stampElementIds(`<!doctype html><html><head><meta charset="utf-8">${BRIDGE_TAG}${COMPONENT_HELPER_TAG}</head><body style="margin:0">
 <script type="application/json" data-uf-component>{"tag":"uf-price-card","variants":{"kind":["primary","secondary"]},"props":{"label":"text","disabled":"boolean"},"slots":[]}</script>
@@ -24,9 +25,7 @@ const PAGE = `<!doctype html><html><head><script src="${compiledFileName(SHEET_F
 <script>document.querySelectorAll("uf-price-card")[1].setAttribute("kind", "secondary");</script>
 </body></html>`;
 
-const region = (page: Page) => page.getByRole("region", { name: "Editing Landing" });
 const frame = (page: Page) => region(page).frameLocator("iframe[data-artifact-frame]");
-const design = (page: Page) => page.getByTestId("artifact-editor").locator('[data-editor-column="parameters"]');
 const outline = (page: Page, kind: "selected" | "hover") => page.locator(`[data-edit-outline="${kind}"]`);
 const firstButton = (page: Page) => frame(page).locator("uf-price-card").first().locator("button");
 const secondButton = (page: Page) => frame(page).locator("uf-price-card").nth(1).locator("button");
@@ -49,20 +48,20 @@ test("the Instance section sets an instance's variant, text and boolean live, an
   await expect(region(page)).toBeVisible();
 
   await clickUntilSelected(page, () => firstButton(page));
-  const section = design(page).getByTestId("instance-section");
+  const section = parameters(page).getByTestId("instance-section");
   await expect(section).toBeVisible({ timeout: 20_000 });
   await expect(section.getByText("uf-price-card", { exact: true })).toBeVisible();
-  await expect(design(page).getByRole("group", { name: "Text", exact: true })).toHaveCount(0);
+  await expect(parameters(page).getByRole("group", { name: "Text", exact: true })).toHaveCount(0);
 
-  await expect(design(page).getByRole("combobox", { name: "kind", exact: true })).toHaveText("primary");
-  await design(page).getByRole("combobox", { name: "kind", exact: true }).click();
+  await expect(parameters(page).getByRole("combobox", { name: "kind", exact: true })).toHaveText("primary");
+  await parameters(page).getByRole("combobox", { name: "kind", exact: true }).click();
   await page.getByRole("option", { name: "secondary", exact: true }).click();
   await expect(firstButton(page)).toHaveCSS("background-color", "rgb(238, 238, 238)");
 
-  await design(page).getByRole("textbox", { name: "label", exact: true }).fill("Buy now");
+  await parameters(page).getByRole("textbox", { name: "label", exact: true }).fill("Buy now");
   await expect(firstButton(page)).toHaveText("Buy now");
 
-  await design(page).getByRole("switch", { name: "disabled", exact: true }).click();
+  await parameters(page).getByRole("switch", { name: "disabled", exact: true }).click();
   await expect(firstButton(page)).toHaveCSS("opacity", "0.5");
 
   await expect
@@ -78,6 +77,6 @@ test("the Instance section sets an instance's variant, text and boolean live, an
     .toMatch(/^(?=.*kind="secondary")(?=.*label="Buy now")(?=.*\bdisabled\b)/);
 
   await clickUntilSelected(page, () => secondButton(page));
-  await expect(design(page).getByText("Set by the agent's code.", { exact: true }).first()).toBeVisible({ timeout: 20_000 });
-  await expect(design(page).getByRole("combobox", { name: "kind", exact: true })).toBeDisabled();
+  await expect(parameters(page).getByText("Set by the agent's code.", { exact: true }).first()).toBeVisible({ timeout: 20_000 });
+  await expect(parameters(page).getByRole("combobox", { name: "kind", exact: true })).toBeDisabled();
 });

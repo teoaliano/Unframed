@@ -4,12 +4,10 @@ import { createChat, expect, openRail, test } from "./agent.ts";
 import { putRecords } from "./media.ts";
 import { artifactShape, filledArtifact } from "./artifacts.ts";
 import { connectTab } from "../../engine/test/syncClient.ts";
-import { preparedFile } from "./editorHarness.ts";
+import { column, editor, preparedFile } from "./editorHarness.ts";
 import { expectSlot, expectToken, inBothSchemes, styleOf } from "./kit.ts";
 
-const editor = (page: Page) => page.getByTestId("artifact-editor");
 const openParameters = (page: Page) => editor(page).locator('[data-editor-column="parameters"]').getByRole("tab", { name: "Parameters" }).click();
-const column = (page: Page, name: "rail" | "centre" | "parameters") => editor(page).locator(`[data-editor-column="${name}"]`);
 
 const hitIsWatermark = (page: Page): Promise<boolean> =>
   page.evaluate(() => {

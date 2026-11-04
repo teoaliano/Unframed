@@ -5,39 +5,18 @@ import { centre, openCanvas, roomShapes, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 import { filledArtifact, projectPath } from "./artifacts.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
+import { editor, frameOf, modeButton, outline, parameters, preparedFile, region, textOf } from "./editorHarness.ts";
 
 const PAGE = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}</style></head><body><main><h1 style="font-size: 32px">Welcome</h1><p style="font-size: 16px">Lead text</p></main></body></html>`;
 
-const editor = (page: Page) => page.getByTestId("artifact-editor");
-const region = (page: Page) => page.getByRole("region", { name: "Editing Landing" });
-const frameOf = (page: Page) => region(page).frameLocator("iframe[data-artifact-frame]");
-const parameters = (page: Page) => editor(page).locator('[data-editor-column="parameters"]');
 const heading = (page: Page) => frameOf(page).getByRole("heading", { name: "Welcome" });
-const outline = (page: Page, kind: "hover" | "selected") => page.locator(`[data-edit-outline="${kind}"]`);
-const modeButton = (page: Page, name: "Edit" | "Interact"): Locator => region(page).getByRole("group", { name: "Mode" }).getByRole("button", { name, exact: true });
 const sizeField = (page: Page) => parameters(page).getByRole("spinbutton", { name: "Size", exact: true });
 
 const fileOf = async (engine: TestEngine): Promise<string | undefined> => (await roomShapes(engine, "default", "page")).find((record) => record.id === "shape:landing")?.props?.file;
 
 const htmlCount = async (engine: TestEngine): Promise<number> => (await readdir(join(engine.dataDir, "output", "default"))).filter((name) => name.endsWith(".html")).length;
 
-const textOf = (engine: TestEngine, file: string): Promise<string> => readFile(projectPath(engine, file), "utf8");
 
-const preparedFile = async (engine: TestEngine): Promise<string> => {
-  let found = "";
-  await expect
-    .poll(
-      async () => {
-        const file = await fileOf(engine);
-        if (file === undefined) return false;
-        found = file;
-        return (await textOf(engine, file)).includes("data-hf-id");
-      },
-      { timeout: 20_000 },
-    )
-    .toBe(true);
-  return found;
-};
 
 const onBoard = async (page: Page, engine: TestEngine) => {
   await openCanvas(page, engine);

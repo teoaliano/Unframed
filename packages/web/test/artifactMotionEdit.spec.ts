@@ -3,14 +3,13 @@ import { centre, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 import { filledArtifact, insideComposition } from "./artifacts.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
+import { editor, outline } from "./editorHarness.ts";
 
 const MOVER = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}#dot{position:absolute;left:20px;top:120px;width:80px;height:80px;background:#f00}</style></head><body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360"><div id="dot" class="clip" data-start="0" data-duration="4"></div></div>
 <script src="gsap.js"></script><script>window.__timelines = { main: gsap.timeline({ paused: true }).to("#dot", { x: 400, duration: 4 }, 0) };</script></body></html>`;
 
-const editor = (page: Page) => page.getByTestId("artifact-editor");
 const region = (page: Page) => page.getByRole("region", { name: "Editing Intro" });
-const outline = (page: Page, kind: "hover" | "selected") => page.locator(`[data-edit-outline="${kind}"]`);
 const viewer = (page: Page) => region(page).frameLocator("iframe[data-artifact-frame]");
 
 const compositionFrame = async (page: Page) => {

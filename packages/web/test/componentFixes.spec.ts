@@ -5,13 +5,13 @@ import { expect, test } from "./agent.ts";
 import { projectPath, writeProjectFile } from "./artifacts.ts";
 import { componentShape, SHEET_FILE, sheetHtml, writeSheet } from "./components.ts";
 import { putRecords } from "./media.ts";
+import { parameters } from "./editorHarness.ts";
 
 const PRICE_CARD = { tag: "uf-price-card", variants: { kind: ["primary", "secondary"] } };
 const LONG = "a".repeat(200);
 
 const region = (page: Page, title: string) => page.getByRole("region", { name: `Editing ${title}` });
 const frame = (page: Page, title: string) => region(page, title).frameLocator("iframe[data-artifact-frame]");
-const design = (page: Page) => page.getByTestId("artifact-editor").locator('[data-editor-column="parameters"]');
 
 const openComponentEditor = async (page: Page, id: string, title: string) => {
   await page.mouse.click(640, 600);
@@ -37,7 +37,7 @@ test("renaming a component shows its new name in the editor header, the Design t
 
   await openComponentEditor(page, "shape:card", "renamed-price-card");
   await expect(page.getByTestId("artifact-editor-title")).toHaveText("renamed-price-card");
-  await expect(design(page).getByTestId("component-section")).toBeVisible();
+  await expect(parameters(page).getByTestId("component-section")).toBeVisible();
 });
 
 test("a sheet whose declaration is not valid JSON shows one line in the board instead of a blank frame", async ({ page, agent }) => {
@@ -71,7 +71,7 @@ test("a 200-character variant value truncates in the board and the Component sec
   await openComponentEditor(page, "shape:card", "Long value");
 
   await expect(frame(page, "Long value").getByTitle(LONG)).toHaveCSS("text-overflow", "ellipsis", { timeout: 20_000 });
-  const section = design(page).getByTestId("component-section");
+  const section = parameters(page).getByTestId("component-section");
   await expect(section.getByText(LONG)).toBeVisible();
   const past = await section.evaluate((element) => {
     const right = element.getBoundingClientRect().right;

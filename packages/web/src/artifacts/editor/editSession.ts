@@ -487,11 +487,11 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       return true;
     }
     if (modified) return false;
-    if (key === "v" || key === "V") {
+    if (key.toLowerCase() === "v") {
       setMode("edit");
       return true;
     }
-    if (key === "i" || key === "I") {
+    if (key.toLowerCase() === "i") {
       setMode("interact");
       return true;
     }
@@ -618,7 +618,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       }
       case "unframed:edit:key": {
         const key = String(message.key ?? "");
-        if (modeRef.current !== "edit" && key !== "v" && key !== "V" && key !== "i" && key !== "I") return;
+        if (modeRef.current !== "edit" && !/^[vi]$/i.test(key)) return;
         const modifiers = { shift: message.shift === true, meta: message.meta === true, ctrl: message.ctrl === true };
         if (key === "Enter" && !modifiers.shift && !modifiers.meta && !modifiers.ctrl) {
           const [only] = selectionRef.current;

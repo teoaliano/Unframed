@@ -5,8 +5,8 @@ import { centre, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { createChat, engineChat, engineChats, expect, test, userTexts } from "./agent.ts";
 import { test as plain } from "./fixtures.ts";
 import { dialsPage, filledArtifact, writeBridge } from "./artifacts.ts";
+import { editor } from "./editorHarness.ts";
 
-const editor = (page: Page) => page.getByTestId("artifact-editor");
 const box = (page: Page) => editor(page).getByRole("textbox", { name: "Add a parameter" });
 
 const openOnPage = async (page: Page, engine: TestEngine) => {

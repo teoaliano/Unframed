@@ -6,6 +6,7 @@ import { centre, openCanvas, roomShapes, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 import { filledArtifact, projectPath, writeBridge, writeProjectFile } from "./artifacts.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
+import { editor, frameOf, parameters } from "./editorHarness.ts";
 
 const OWNERS = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}#pinned{background:#ffffff !important}</style>${BRIDGE_TAG}</head><body><main><h1 id="title" style="font-size: 32px">Welcome</h1><p id="sum" style="font-size: 16px">Lead text</p><p id="pinned" style="background: #eeeeee">Pinned</p></main>
 <script>
@@ -30,10 +31,7 @@ unframed.dials("Frame", { pad: 12, edge: "#123456" }, function (v) {
 });
 </script></body></html>`;
 
-const editor = (page: Page) => page.getByTestId("artifact-editor");
 const region = (page: Page) => page.getByRole("region", { name: "Editing Owners" });
-const frameOf = (page: Page) => region(page).frameLocator("iframe[data-artifact-frame]");
-const parameters = (page: Page) => editor(page).locator('[data-editor-column="parameters"]');
 const outline = (page: Page) => page.locator('[data-edit-outline="selected"]');
 
 const fileOf = async (engine: TestEngine): Promise<string | undefined> => (await roomShapes(engine, "default", "page")).find((record) => record.id === "shape:owners")?.props?.file;

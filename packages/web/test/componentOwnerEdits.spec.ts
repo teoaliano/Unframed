@@ -7,11 +7,11 @@ import { expect, test } from "./agent.ts";
 import { projectPath, writeProjectFile } from "./artifacts.ts";
 import { componentShape, SHEET_FILE, writeSheet } from "./components.ts";
 import { putRecords } from "./media.ts";
+import { parameters } from "./editorHarness.ts";
 
 const PRICE_CARD = { tag: "uf-price-card", variants: { kind: ["primary", "secondary"] } };
 
 const region = (page: Page) => page.getByRole("region", { name: "Editing Price card" });
-const design = (page: Page) => page.getByTestId("artifact-editor").locator('[data-editor-column="parameters"]');
 const frame = (page: Page) => region(page).frameLocator("iframe[data-artifact-frame]");
 const outline = (page: Page, kind: "selected" | "copy") => page.locator(`[data-edit-outline="${kind}"]`);
 const cellButton = (page: Page, cell: number) => frame(page).locator("uf-price-card").nth(cell).locator("button");
@@ -34,10 +34,10 @@ test("a background set by a variant rule changes only that variant's cells, and 
     await cellButton(page, 1).click();
     await expect(outline(page, "selected")).toHaveCount(1, { timeout: 1000 });
   }).toPass({ timeout: 20_000 });
-  await expect(design(page).getByTestId("variant-line")).toHaveText("Editing Price card · secondary");
+  await expect(parameters(page).getByTestId("variant-line")).toHaveText("Editing Price card · secondary");
 
-  await expect(design(page).getByRole("group", { name: "Fill", exact: true }).getByText("kind: secondary", { exact: true })).toBeVisible({ timeout: 20_000 });
-  await design(page).getByRole("button", { name: "Background", exact: true }).click();
+  await expect(parameters(page).getByRole("group", { name: "Fill", exact: true }).getByText("kind: secondary", { exact: true })).toBeVisible({ timeout: 20_000 });
+  await parameters(page).getByRole("button", { name: "Background", exact: true }).click();
   await page.getByRole("textbox", { name: "Hex", exact: true }).fill("#ff0000");
   await page.getByRole("textbox", { name: "Hex", exact: true }).press("Enter");
   await page.keyboard.press("Escape");
@@ -51,9 +51,9 @@ test("a background set by a variant rule changes only that variant's cells, and 
     }, { timeout: 15_000 })
     .toMatch(/:host\(\[kind="secondary"\]\) button \{[^}]*background-color: #ff0000;/);
 
-  await expect(design(page).getByText("All variants", { exact: true }).first()).toBeVisible();
-  await design(page).getByRole("spinbutton", { name: "Padding top", exact: true }).fill("20");
-  await design(page).getByRole("spinbutton", { name: "Padding top", exact: true }).press("Enter");
+  await expect(parameters(page).getByText("All variants", { exact: true }).first()).toBeVisible();
+  await parameters(page).getByRole("spinbutton", { name: "Padding top", exact: true }).fill("20");
+  await parameters(page).getByRole("spinbutton", { name: "Padding top", exact: true }).press("Enter");
   await expect(cellButton(page, 0)).toHaveCSS("padding-top", "20px", { timeout: 15_000 });
   await expect(cellButton(page, 1)).toHaveCSS("padding-top", "20px");
 });
@@ -69,16 +69,16 @@ test("a background set by the base rule says it covers all variants except the o
     await cellButton(page, 0).click();
     await expect(outline(page, "selected")).toHaveCount(1, { timeout: 1000 });
   }).toPass({ timeout: 20_000 });
-  await expect(design(page).getByTestId("variant-line")).toHaveText("Editing Price card · primary");
-  await expect(design(page).getByRole("group", { name: "Fill", exact: true }).getByText("All variants, except kind: secondary", { exact: true })).toBeVisible({ timeout: 20_000 });
-  const fill = design(page).getByRole("group", { name: "Fill", exact: true });
+  await expect(parameters(page).getByTestId("variant-line")).toHaveText("Editing Price card · primary");
+  await expect(parameters(page).getByRole("group", { name: "Fill", exact: true }).getByText("All variants, except kind: secondary", { exact: true })).toBeVisible({ timeout: 20_000 });
+  const fill = parameters(page).getByRole("group", { name: "Fill", exact: true });
   const chipBox = await fill.getByText("All variants, except kind: secondary", { exact: true }).boundingBox();
   const fieldBox = await fill.getByRole("button", { name: "Background", exact: true }).boundingBox();
   expect(chipBox && fieldBox).toBeTruthy();
   const overlap = chipBox!.x < fieldBox!.x + fieldBox!.width && fieldBox!.x < chipBox!.x + chipBox!.width && chipBox!.y < fieldBox!.y + fieldBox!.height && fieldBox!.y < chipBox!.y + chipBox!.height;
   expect(overlap).toBe(false);
 
-  await design(page).getByRole("button", { name: "Background", exact: true }).click();
+  await parameters(page).getByRole("button", { name: "Background", exact: true }).click();
   await page.getByRole("textbox", { name: "Hex", exact: true }).fill("#ff0000");
   await page.getByRole("textbox", { name: "Hex", exact: true }).press("Enter");
   await page.keyboard.press("Escape");
@@ -115,7 +115,7 @@ test("a token declared in a base rule is a token chip, another token writes into
     await cellButton(page, 0).click();
     await expect(outline(page, "selected")).toHaveCount(1, { timeout: 1000 });
   }).toPass({ timeout: 20_000 });
-  const fill = design(page).getByRole("group", { name: "Fill", exact: true });
+  const fill = parameters(page).getByRole("group", { name: "Fill", exact: true });
   await expect(fill.getByTitle("color/brand/primary")).toBeVisible({ timeout: 20_000 });
 
   await fill.getByTitle("color/brand/primary").click();
@@ -165,6 +165,6 @@ test("a calc() set by the component's style is read-only, with the owner's sente
     await cellButton(page, 0).click();
     await expect(outline(page, "selected")).toHaveCount(1, { timeout: 1000 });
   }).toPass({ timeout: 20_000 });
-  await expect(design(page).getByText("Set by the component's style.", { exact: true })).toBeVisible({ timeout: 20_000 });
-  await expect(design(page).getByRole("spinbutton", { name: "Padding top", exact: true })).toBeDisabled();
+  await expect(parameters(page).getByText("Set by the component's style.", { exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(parameters(page).getByRole("spinbutton", { name: "Padding top", exact: true })).toBeDisabled();
 });
