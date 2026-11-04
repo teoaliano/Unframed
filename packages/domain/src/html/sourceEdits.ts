@@ -268,8 +268,6 @@ const replaceRuleValue = (html: string, ref: { block: number; selector: string; 
 
 const isImageFile = (file: string): boolean => IMAGE_FILE.test(file);
 
-const escapeText = (text: string): string => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
 const escapeAttribute = (value: string): string => value.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 
 const renderAttribute = (name: string, value: string): string => `${name}="${escapeAttribute(value)}"`;
@@ -277,7 +275,7 @@ const renderAttribute = (name: string, value: string): string => `${name}="${esc
 const setText = (html: string, el: Element, text: string): string => {
   const startTag = el.sourceCodeLocation?.startTag;
   if (startTag === undefined) return html;
-  const escaped = escapeText(text);
+  const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const textNodes = el.childNodes.filter(isText);
   const pieces: Splice[] = [];
   if (textNodes.length === 0) {
