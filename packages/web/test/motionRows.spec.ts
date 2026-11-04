@@ -53,7 +53,8 @@ test("clips come in track order, element rows sit under their clip or under Comp
   const order = () => rows(page).evaluateAll((elements) => elements.map((element) => `${(element as HTMLElement).dataset.rowKind}:${(element as HTMLElement).dataset.rowName}`));
   await expect.poll(order, { timeout: 20_000 }).toEqual(["clip:Logo", "element:Logo", "element:Dot 1", "element:Dot 2", "clip:Title", "element:Title", "composition:Composition", "element:Dot 3", "runtime:body > div:nth-of-type(2)"]);
 
-  await expect(row(page, "body > div:nth-of-type(2)", "runtime")).toHaveAttribute("title", "Made by the agent's code while the motion runs.");
+  await row(page, "body > div:nth-of-type(2)", "runtime").getByText("body > div:nth-of-type(2)", { exact: true }).hover();
+  await expect(page.getByText("Made by the agent's code while the motion runs.")).toBeVisible();
 });
 
 test("a staggered tween draws a bar on each target, offset by the stagger, and a repeating tween draws its repeats and its diamonds", async ({ page, agent }) => {

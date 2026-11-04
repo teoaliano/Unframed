@@ -17,7 +17,7 @@ export const DEFAULT_EASE = "power1.out";
 
 const SAMPLE_COUNT = 24;
 
-export const bezierSamples = ([x1, y1, x2, y2]: readonly [number, number, number, number]): number[] => {
+const bezierSamples = ([x1, y1, x2, y2]: readonly [number, number, number, number]): number[] => {
   const coordinate = (t: number, a: number, b: number) => 3 * (1 - t) * (1 - t) * t * a + 3 * (1 - t) * t * t * b + t * t * t;
   const samples: number[] = [];
   for (let i = 0; i < SAMPLE_COUNT; i++) {
@@ -34,7 +34,7 @@ export const bezierSamples = ([x1, y1, x2, y2]: readonly [number, number, number
   return samples;
 };
 
-export const curveOfText = (text: string): number[] | null => {
+const curveOfText = (text: string): number[] | null => {
   const catalogue = EASES.find((ease) => ease.name === text.trim());
   if (catalogue) return [...catalogue.samples];
   const bezier = parseBezier(text);

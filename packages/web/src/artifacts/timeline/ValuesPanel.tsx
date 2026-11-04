@@ -9,7 +9,7 @@ import { Tip } from "../../chrome/ui.tsx";
 import { EasePicker } from "./EasePicker.tsx";
 import type { EaseChoice, EaseValue } from "./ease.ts";
 
-export interface PanelToken {
+interface PanelToken {
   readonly name: string;
   readonly value: string;
   readonly options: ReadonlyArray<{ readonly path: string; readonly value: string }>;
@@ -45,7 +45,6 @@ export interface ValuesPanelProps {
   readonly ask: (() => void) | null;
   readonly onClose: () => void;
   readonly anchor: () => Element | null;
-  readonly className?: string;
 }
 
 const FORMAT = { useGrouping: false, maximumFractionDigits: 3 } as const;
@@ -55,40 +54,44 @@ const shortPath = (path: string): string => path.split("/").slice(-2).join("/");
 const TokenChip = ({ token }: { readonly token: PanelToken }) => {
   const [open, setOpen] = useState(false);
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger render={<Button variant="outline" size="sm" className="min-w-0 justify-start" title={token.name} aria-label={`${shortPath(token.name)} token`} />}>
-        <span className="truncate font-mono text-xs">{`${shortPath(token.name)} · ${token.value}`}</span>
-      </PopoverTrigger>
-      <PopoverPopup side="left" align="start" padding="compact" className="w-60" aria-label="Tokens" initialFocus={false}>
-        <div className="flex flex-col gap-0.5">
-          {token.options.map((option) => (
+    <Tip label={token.name}>
+      <span className="flex min-w-0">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger render={<Button variant="outline" size="sm" className="min-w-0 justify-start" aria-label={`${shortPath(token.name)} token`} />}>
+          <span className="truncate font-mono text-xs">{`${shortPath(token.name)} · ${token.value}`}</span>
+        </PopoverTrigger>
+        <PopoverPopup side="left" align="start" padding="compact" className="w-60" aria-label="Tokens" initialFocus={false}>
+          <div className="flex flex-col gap-0.5">
+            {token.options.map((option) => (
+              <Button
+                key={option.path}
+                variant={option.path === token.name ? "secondary" : "ghost"}
+                size="sm"
+                className="justify-between"
+                onClick={() => {
+                  setOpen(false);
+                  token.onChoose(option.path);
+                }}
+              >
+                <span className="truncate">{option.path}</span>
+                <span className="font-mono text-xs text-muted-foreground">{option.value}</span>
+              </Button>
+            ))}
             <Button
-              key={option.path}
-              variant={option.path === token.name ? "secondary" : "ghost"}
+              variant="ghost"
               size="sm"
-              className="justify-between"
               onClick={() => {
                 setOpen(false);
-                token.onChoose(option.path);
+                token.onDetach();
               }}
             >
-              <span className="truncate">{option.path}</span>
-              <span className="font-mono text-xs text-muted-foreground">{option.value}</span>
+              Detach
             </Button>
-          ))}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setOpen(false);
-              token.onDetach();
-            }}
-          >
-            Detach
-          </Button>
-        </div>
-      </PopoverPopup>
+          </div>
+        </PopoverPopup>
     </Popover>
+      </span>
+    </Tip>
   );
 };
 
@@ -101,22 +104,22 @@ const Control = ({ label, control }: { readonly label: string; readonly control:
 const NumberControl = ({ label, value, unit, editable, onCommit }: { readonly label: string; readonly value: number; readonly unit: string; readonly editable: boolean; readonly onCommit: (value: number) => void }) => {
   const [attempts, setAttempts] = useState(0);
   return (
-  <span className="flex items-center gap-1">
-    <NumberField key={`${label}:${value}:${attempts}`} size="sm" className="w-24" defaultValue={value} format={FORMAT} disabled={!editable} onValueCommitted={(typed) => {
-      if (typed !== null && Number.isFinite(typed) && typed !== value) onCommit(typed);
-      setAttempts((count) => count + 1);
-    }}>
-      <NumberFieldGroup>
-        <NumberFieldInput
-          aria-label={label}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") event.currentTarget.blur();
-          }}
-        />
-      </NumberFieldGroup>
-    </NumberField>
-    {unit !== "" && <span className="text-xs text-muted-foreground">{unit}</span>}
-  </span>
+    <span className="flex items-center gap-1">
+      <NumberField key={`${label}:${value}:${attempts}`} size="sm" className="w-24" defaultValue={value} format={FORMAT} disabled={!editable} onValueCommitted={(typed) => {
+        if (typed !== null && Number.isFinite(typed) && typed !== value) onCommit(typed);
+        setAttempts((count) => count + 1);
+      }}>
+        <NumberFieldGroup>
+          <NumberFieldInput
+            aria-label={label}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+            }}
+          />
+        </NumberFieldGroup>
+      </NumberField>
+      {unit !== "" && <span className="text-xs text-muted-foreground">{unit}</span>}
+    </span>
   );
 };
 
@@ -170,9 +173,9 @@ const FieldRow = ({ field }: { readonly field: PanelField }) => (
   </div>
 );
 
-export const ValuesPanel = ({ title, group, method, fields, ease, onEase, repeat, sentence, readOnly, ask, onClose, anchor, className }: ValuesPanelProps) => (
+export const ValuesPanel = ({ title, group, method, fields, ease, onEase, repeat, sentence, readOnly, ask, onClose, anchor }: ValuesPanelProps) => (
   <Popover open onOpenChange={(open) => !open && onClose()}>
-    <PopoverPopup anchor={anchor} side="bottom" align="start" padding="none" initialFocus={false} finalFocus={false} className={`w-[280px] ${className ?? ""}`}>
+    <PopoverPopup anchor={anchor} side="bottom" align="start" padding="none" initialFocus={false} finalFocus={false} className="w-[280px]">
       <section aria-label={`Values for ${title}`} data-testid="values-panel" className="p-3">
         <header className="mb-2 flex items-center gap-2">
           <span className="min-w-0 flex-1 truncate text-sm font-medium">

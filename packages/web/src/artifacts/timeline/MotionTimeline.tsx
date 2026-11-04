@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronLeft, ChevronRight, Code, Film, Layers, Lock, Maximize2, Minus, PanelBottom, Pause, Play, Repeat, Square, Volume2, VolumeX, ZoomIn, ZoomOut } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent, type KeyboardEvent as ReactKeyboardEvent, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent, type KeyboardEvent as ReactKeyboardEvent, type CSSProperties, type ReactElement } from "react";
 import { clampDialValue, dialAt, fitZoom, rulerStep, snapMove, snapTime, zoomAt, zoomButton, type DialSchema, type Kit, type Owner, type SnapTarget, type Tween, type TweenRef } from "@unframed/domain";
 import type { SourceEdit } from "@unframed/contracts";
 import type { ChipElement } from "@unframed/domain";
@@ -38,7 +38,7 @@ const DRAG_PIXELS = 3;
 
 const COLOUR = /^(#[0-9a-f]{3,8}|rgba?\(|hsla?\(|oklch\(|[a-z]+$)/i;
 
-type PanelProps = Omit<ValuesPanelProps, "onClose" | "className">;
+type PanelProps = Omit<ValuesPanelProps, "onClose">;
 
 const MIN_DURATION = 0.033;
 const FRAME_SECONDS = 1 / 30;
@@ -91,9 +91,11 @@ interface ClipGesture {
 
 const freeHint = (): string => (typeof navigator !== "undefined" && /Mac/i.test(navigator.platform) ? "Hold Option to place freely" : "Hold Alt to place freely");
 
+const Hint = ({ label, children }: { readonly label: string | null | undefined; readonly children: ReactElement }) => (label ? <Tip label={label}>{children}</Tip> : children);
+
 const tickLabel = (seconds: number): string => `${Number(seconds.toFixed(2))} s`;
 
-export interface MotionTimelineProps {
+interface MotionTimelineProps {
   readonly title: string;
   readonly closePanel: { current: (() => boolean) | undefined };
   readonly engine: EngineConnection;
@@ -221,6 +223,7 @@ const RowLine = ({
 }) => {
   const runtime = row.kind === "runtime";
   const name = row.name;
+  const tip = runtime ? "Made by the agent's code while the motion runs." : name;
   const lanes = laneOf(row.bars);
   const keyframes = row.bars.flatMap((bar) => (bar.copy ? [] : bar.diamonds));
   const hitSide = (at: number): number => {
@@ -243,7 +246,6 @@ const RowLine = ({
       data-row-key={row.element ?? row.key}
       data-selected={selected ? "true" : undefined}
       data-hidden={row.hidden ? "true" : undefined}
-      title={runtime ? "Made by the agent's code while the motion runs." : undefined}
       className={cn("flex flex-none", selected && "bg-accent/40", runtime && "text-muted-foreground", row.hidden && "opacity-50")}
       style={{ height: row.height }}
     >
@@ -252,20 +254,20 @@ const RowLine = ({
           {row.locked && <Lock aria-hidden data-testid="timeline-lock" aria-label="Locked. Unlock it in Layers to edit it." className="absolute bottom-0 right-0 size-2.5 text-muted-foreground" />}
           <div className="flex items-center">
             {row.expandable && (
-              <Tip label={name}>
+              <Tip label={tip}>
                 <Button variant="ghost" size="icon-micro" className="-my-1.5 h-6 w-3" aria-label={`${row.expanded ? "Collapse" : "Expand"} ${name}`} onClick={onToggle}>
                   {row.expanded ? <ChevronDown aria-hidden className="size-2.5" /> : <ChevronRight aria-hidden className="size-2.5" />}
                 </Button>
               </Tip>
             )}
             {row.kind === "element" && row.element !== null ? (
-              <Tip label={name}>
+              <Tip label={tip}>
                 <Button variant="ghost" size="icon-micro" className="-my-1.5 h-6 w-3" aria-label={`Select ${name}`} onClick={() => onSelectElement(row.element!)}>
                   <Square aria-hidden className="size-2.5" />
                 </Button>
               </Tip>
             ) : !row.expandable ? (
-              <Tip label={name}>
+              <Tip label={tip}>
                 <span role="img" aria-label={name} className="inline-flex size-3 items-center justify-center text-muted-foreground">
                   {row.kind === "clip" ? <Film aria-hidden className="size-2.5" /> : row.kind === "composition" ? <Layers aria-hidden className="size-2.5" /> : row.kind === "runtime" ? <Code aria-hidden className="size-2.5" /> : <Minus aria-hidden className="size-2.5" />}
                 </span>
@@ -283,13 +285,13 @@ const RowLine = ({
           <span className="size-4 flex-none" />
         )}
         {row.kind === "element" && row.element !== null ? (
-          <Tip label={name}>
+          <Tip label={tip}>
             <Button variant="ghost" size="xs" className="h-6 min-w-0" aria-label={`Select ${name}`} onClick={() => onSelectElement(row.element!)}>
               <span className="truncate">{name}</span>
             </Button>
           </Tip>
         ) : (
-          <Tip label={name}>
+          <Tip label={tip}>
             <span className={cn("truncate", row.kind === "composition" && "font-medium", row.kind === "clip" && "font-medium")}>{name}</span>
           </Tip>
         )}
@@ -298,61 +300,62 @@ const RowLine = ({
       )}
       <div className="relative flex-none border-b" style={{ width: timeWidth, height: row.height }}>
         {row.span !== null && (
-          <div
-            data-testid="timeline-clip-bar"
-            data-start={row.span.start}
-            data-duration={row.span.duration}
-            title={clipNote ?? undefined}
-            onPointerDown={(event) => {
-              event.stopPropagation();
-              onClipDown?.(event);
-            }}
-            onPointerMove={onClipMove}
-            onPointerUp={onClipUp}
-            onPointerCancel={onClipUp}
-            className={cn("absolute top-1/2 h-3 -translate-y-1/2 rounded-sm bg-muted-foreground/40", clipNote === undefined || clipNote === null ? "cursor-grab" : "cursor-not-allowed")}
-            style={{ left: row.span.start * pxPerSecond, width: Math.max(row.span.duration * pxPerSecond, 2) }}
-          />
+          <Hint label={clipNote}>
+            <div
+              data-testid="timeline-clip-bar"
+              data-start={row.span.start}
+              data-duration={row.span.duration}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                onClipDown?.(event);
+              }}
+              onPointerMove={onClipMove}
+              onPointerUp={onClipUp}
+              onPointerCancel={onClipUp}
+              className={cn("absolute top-1/2 h-3 -translate-y-1/2 rounded-sm bg-muted-foreground/40", clipNote === undefined || clipNote === null ? "cursor-grab" : "cursor-not-allowed")}
+              style={{ left: row.span.start * pxPerSecond, width: Math.max(row.span.duration * pxPerSecond, 2) }}
+            />
+          </Hint>
         )}
         {row.bars.map((bar, index) => {
           const thin = (row.kind === "element" && !row.expanded) || lanes.lanes > 1;
           const chosen = bar.tween >= 0 && bar.tween === selectedTween;
           const centre = ((lanes.lane[index] ?? 0) + 0.5) / lanes.lanes;
           return (
-            <div
-              key={`${bar.tween}:${bar.target}:${bar.group ?? ""}:${index}`}
-              data-testid="timeline-bar"
-              data-tween={bar.tween}
-              data-target={bar.target}
-              data-start={bar.start}
-              data-duration={bar.duration}
-              data-copy={bar.copy ? "true" : undefined}
-              data-stagger={bar.stagger ?? undefined}
-              data-selected={chosen ? "true" : undefined}
-              role="button"
-              tabIndex={0}
-              aria-label={barLabel(bar)}
-              title={bar.readOnly ?? undefined}
-              onKeyDown={(event) => onBarKey(bar, event)}
-              onPointerDown={(event) => {
-                event.stopPropagation();
-                onBarDown(bar, event);
-              }}
-              onPointerMove={onBarMove}
-              onPointerUp={onBarUp}
-              onPointerCancel={onBarUp}
-              onClick={(event) => event.stopPropagation()}
-              onDoubleClick={() => onOpenValues(bar, null)}
-              className={cn(
-                "absolute -translate-y-1/2 rounded-sm",
-                cursorOf(bar),
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                thin ? "h-1.5" : "h-3",
-                bar.copy ? "bg-primary/25" : bar.readOnly !== null ? "bg-muted-foreground/50" : "bg-primary/70",
-                chosen && "ring-1 ring-foreground",
-              )}
-              style={{ left: bar.start * pxPerSecond, width: Math.max(bar.duration * pxPerSecond, 2), top: `${centre * 100}%` }}
-            />
+            <Hint key={`${bar.tween}:${bar.target}:${bar.group ?? ""}:${index}`} label={bar.readOnly}>
+              <div
+                data-testid="timeline-bar"
+                data-tween={bar.tween}
+                data-target={bar.target}
+                data-start={bar.start}
+                data-duration={bar.duration}
+                data-copy={bar.copy ? "true" : undefined}
+                data-stagger={bar.stagger ?? undefined}
+                data-selected={chosen ? "true" : undefined}
+                role="button"
+                tabIndex={0}
+                aria-label={barLabel(bar)}
+                onKeyDown={(event) => onBarKey(bar, event)}
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                  onBarDown(bar, event);
+                }}
+                onPointerMove={onBarMove}
+                onPointerUp={onBarUp}
+                onPointerCancel={onBarUp}
+                onClick={(event) => event.stopPropagation()}
+                onDoubleClick={() => onOpenValues(bar, null)}
+                className={cn(
+                  "absolute -translate-y-1/2 rounded-sm",
+                  cursorOf(bar),
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  thin ? "h-1.5" : "h-3",
+                  bar.copy ? "bg-primary/25" : bar.readOnly !== null ? "bg-muted-foreground/50" : "bg-primary/70",
+                  chosen && "ring-1 ring-foreground",
+                )}
+                style={{ left: bar.start * pxPerSecond, width: Math.max(bar.duration * pxPerSecond, 2), top: `${centre * 100}%` }}
+              />
+            </Hint>
           );
         })}
         {row.bars.flatMap((bar, index) =>
@@ -940,7 +943,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
   };
 
   const readOnlyField = (field: PanelField): PanelField => {
-    const control: PanelControl = field.control.kind === "text" ? field.control : field.control.kind === "number" ? { ...field.control, editable: false } : { ...field.control, editable: false };
+    const control: PanelControl = field.control.kind === "text" ? field.control : { ...field.control, editable: false };
     return { key: field.key, label: field.label, control };
   };
 
@@ -1255,31 +1258,32 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
                   <LoopHandle label="Loop Out" testId="timeline-loop-out" at={range.end * pxPerSecond} onDown={(event) => onHandleDown("out", event)} onMove={onHandleMove} onUp={onHandleUp} />
                 )}
                 {ticks.map((at) => (
-                    <span key={at} data-testid="timeline-tick" data-time={at} aria-hidden className="pointer-events-none absolute inset-y-0 border-l pl-1 text-[10px] leading-6 text-muted-foreground" style={{ left: at * pxPerSecond }}>
+                    <span key={at} data-testid="timeline-tick" data-time={at} aria-hidden className="pointer-events-none absolute inset-y-0 border-l pl-1 text-3xs leading-6 text-muted-foreground" style={{ left: at * pxPerSecond }}>
                       {tickLabel(at)}
                     </span>
                   ))}
                   {length > 0 && (
                     <span
                       data-testid="timeline-end"
-                      className={cn("pointer-events-none absolute inset-y-0 border-foreground text-[10px] leading-6 font-medium", endFlip ? "border-r-2 pr-1 text-right" : "border-l-2 pl-1")}
+                      className={cn("pointer-events-none absolute inset-y-0 border-foreground text-3xs leading-6 font-medium", endFlip ? "border-r-2 pr-1 text-right" : "border-l-2 pl-1")}
                       style={{ left: length * pxPerSecond, transform: endFlip ? "translateX(-100%)" : undefined }}
                     >
                       {tickLabel(length)}
                     </span>
                   )}
                   {length > 0 && (
-                    <div
-                      data-testid="timeline-end-handle"
-                      role="presentation"
-                      title={endEditable ? undefined : "The length is set by the agent's code."}
-                      className={cn("absolute inset-y-0 z-[5] w-3 -translate-x-1/2 touch-none", endEditable ? "cursor-ew-resize" : "cursor-not-allowed")}
-                      style={{ left: length * pxPerSecond }}
-                      onPointerDown={onEndDown}
-                      onPointerMove={onEndMove}
-                      onPointerUp={onEndUp}
-                      onPointerCancel={onEndUp}
-                    />
+                    <Hint label={endEditable ? null : "The length is set by the agent's code."}>
+                      <div
+                        data-testid="timeline-end-handle"
+                        role="presentation"
+                        className={cn("absolute inset-y-0 z-[5] w-3 -translate-x-1/2 touch-none", endEditable ? "cursor-ew-resize" : "cursor-not-allowed")}
+                        style={{ left: length * pxPerSecond }}
+                        onPointerDown={onEndDown}
+                        onPointerMove={onEndMove}
+                        onPointerUp={onEndUp}
+                        onPointerCancel={onEndUp}
+                      />
+                    </Hint>
                   )}
                 </div>
               </div>

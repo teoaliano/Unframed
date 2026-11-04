@@ -2,7 +2,6 @@ import type { MotionTimelineReading, SourceEdit } from "@unframed/contracts";
 import { numberOf } from "./rows.ts";
 
 export type ClipOf = MotionTimelineReading["clips"][number];
-export type TweenOf = MotionTimelineReading["tweens"][number];
 
 export const clipNoteOf = (clip: ClipOf): string | null => {
   if ("refused" in clip.carry) return clip.carry.refused;

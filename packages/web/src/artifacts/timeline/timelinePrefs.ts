@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import type { EngineConnection } from "../../rpc/engine.ts";
 
-export const TIMELINE_PREFS_KEY = "editor.timeline";
+const TIMELINE_PREFS_KEY = "editor.timeline";
 
 export interface TimelinePrefs {
   readonly height: number;
   readonly open: boolean;
 }
 
-export const DEFAULT_TIMELINE_PREFS: TimelinePrefs = { height: 240, open: true };
+const DEFAULT_TIMELINE_PREFS: TimelinePrefs = { height: 240, open: true };
 export const TIMELINE_MIN_HEIGHT = 120;
-export const TIMELINE_MAX_SHARE = 0.6;
+const TIMELINE_MAX_SHARE = 0.6;
 
 export const clampTimelineHeight = (height: number, column: number): number => {
   const largest = column > 0 ? Math.max(TIMELINE_MIN_HEIGHT, Math.floor(column * TIMELINE_MAX_SHARE)) : Infinity;

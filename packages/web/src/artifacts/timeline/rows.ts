@@ -1,10 +1,10 @@
 import { dialAt, type DialLimit, type DialSchema, type PropertyGroup, type Tween, type Owner } from "@unframed/domain";
 import type { MotionTimelineReading, SourceEdit } from "@unframed/contracts";
 
-export const ROW_HEIGHT = 24;
-export const LANE_HEIGHT = 20;
+const ROW_HEIGHT = 24;
+const LANE_HEIGHT = 20;
 
-export const GROUP_ORDER: readonly PropertyGroup[] = ["position", "scale", "size", "rotation", "visual", "other"];
+const GROUP_ORDER: readonly PropertyGroup[] = ["position", "scale", "size", "rotation", "visual", "other"];
 
 export interface LiveTween {
   readonly targets: readonly string[];
@@ -44,7 +44,7 @@ export interface RowView {
   readonly group: PropertyGroup | null;
 }
 
-export interface RowsInput {
+interface RowsInput {
   readonly reading: MotionTimelineReading;
   readonly names: Readonly<Record<string, string>>;
   readonly dials: Readonly<Record<string, unknown>>;
@@ -152,10 +152,12 @@ export const buildRows = (input: RowsInput): RowView[] => {
   const animated = new Set(reading.tweens.flatMap((tween) => tween.targets));
   const takeSourceLive = (): LiveTween | undefined => {
     const sourced = (candidate: LiveTween) => candidate.targets.length > 0 && candidate.targets.every((target) => elements[target] !== undefined);
-    const index = [input.live.findIndex((candidate, at) => !liveUsed.has(at) && sourced(candidate) && !candidate.targets.some((target) => animated.has(target))), input.live.findIndex((candidate, at) => !liveUsed.has(at) && sourced(candidate))].find((at) => at !== -1) ?? -1;
-    if (index === -1) return undefined;
-    liveUsed.add(index);
-    return input.live[index];
+    const free = (candidate: LiveTween, at: number) => !liveUsed.has(at) && sourced(candidate);
+    const index = input.live.findIndex((candidate, at) => free(candidate, at) && !candidate.targets.some((target) => animated.has(target)));
+    const chosen = index !== -1 ? index : input.live.findIndex(free);
+    if (chosen === -1) return undefined;
+    liveUsed.add(chosen);
+    return input.live[chosen];
   };
 
   const barsByElement = new Map<string, BarView[]>();
@@ -219,7 +221,7 @@ export const buildRows = (input: RowsInput): RowView[] => {
   };
 
   const rows: RowView[] = [];
-  const clips = [...reading.clips].sort((a, b) => a.track - b.track || (startOf(a.start, dials) - startOf(b.start, dials)));
+  const clips = [...reading.clips].sort((a, b) => a.track - b.track || ((numberOf(a.start, dials) ?? 0) - (numberOf(b.start, dials) ?? 0)));
   const placed = new Set<string>();
   for (const clip of clips) {
     const moved = input.pending.find((edit): edit is Extract<SourceEdit, { type: "clip-time" }> => edit.type === "clip-time" && edit.clip === clip.hfId);
@@ -256,8 +258,6 @@ export const buildRows = (input: RowsInput): RowView[] => {
   }
   return rows;
 };
-
-const startOf = (owner: Owner, dials: Readonly<Record<string, unknown>>): number => numberOf(owner, dials) ?? 0;
 
 const entryOf = (schema: DialSchema | undefined, path: readonly string[]): DialSchema[string] | undefined => {
   let folder: DialSchema | undefined = schema;

@@ -129,7 +129,8 @@ test("a clip whose tween is timed by the agent's code cannot move: its bar says 
   await openMotion(page, agent, REFUSED);
   const before = (await fileOf(agent))?.file;
   const versions = (await editSummaries(agent)).length;
-  await expect(clipBar(page)).toHaveAttribute("title", "This clip can't move: the position tween on Dot is timed by the agent's code.");
+  await clipBar(page).hover();
+  await expect(page.getByText("This clip can't move: the position tween on Dot is timed by the agent's code.")).toBeVisible();
 
   await dragClip(page, 0.5, 0.5);
   await page.waitForTimeout(2_000);
@@ -140,5 +141,6 @@ test("a clip whose tween is timed by the agent's code cannot move: its bar says 
 
 test("a clip another clip starts relative to cannot move, and its bar says so", async ({ page, agent }) => {
   await openMotion(page, agent, RELATIVE);
-  await expect(clipBar(page)).toHaveAttribute("title", "This clip can't move: other starts relative to it.");
+  await clipBar(page).hover();
+  await expect(page.getByText("This clip can't move: other starts relative to it.")).toBeVisible();
 });
