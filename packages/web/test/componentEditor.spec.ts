@@ -122,6 +122,7 @@ test("at 1280 by 720 the header keeps the title, the use count, the Mode toggle 
     expect(box.width, `${name} has width`).toBeGreaterThan(20);
     boxes[name] = box;
   }
+  expect(boxes.kit!.width, "icon-only Kit mode takes only its icon's room").toBeLessThan(100);
   const names = Object.keys(boxes);
   for (let i = 0; i < names.length; i++)
     for (let j = i + 1; j < names.length; j++) {
