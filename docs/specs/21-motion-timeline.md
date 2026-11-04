@@ -286,7 +286,7 @@ A UI kit Popover, 280 px wide, anchored to the bar or diamond it opened from. A 
 
 ### The ease picker
 
-- A UI kit Popover from the `Ease` field: spec 19's ease catalogue, grouped by family. Linear first (written `none`), then Sine, Power1, Power2, Power3, Power4, Expo, Circ, Back, Elastic and Bounce, each a row with `In`, `Out` and `In-out` (written `<family>.in`, `.out`, `.inOut`): the catalogue's 31 eases. Each choice shows spec 19's ease curve for it. The current ease is checked.
+- A UI kit Menu from the `Ease` field, its choices radio items: spec 19's ease catalogue, grouped by family. Linear first (written `none`), then Sine, Power1, Power2, Power3, Power4, Expo, Circ, Back, Elastic and Bounce, each a row with `In`, `Out` and `In-out` (written `<family>.in`, `.out`, `.inOut`): the catalogue's 31 eases. Each choice shows spec 19's ease curve for it. The current ease is checked.
 - An ease written in a form the list does not name (an alias like `quad.out`, a parameter like `back.out(3)`, `steps(5)`) shows as written at the top, checked. Picking another replaces it.
 - With a kit (spec 19), a `Kit` group lists the easing tokens by name, each with spec 19's ease curve when its value is a catalogue ease or a cubic bezier.
 - When the ease is a select dial, only the dial's options can be chosen. Every other row is disabled, with the tooltip `This ease comes from the parameter {path}, which offers only its own options.` Choosing one sets the dial.
