@@ -1,9 +1,3 @@
-/**
- * Off-token values (spec 19): the literal values in an artifact's source that sit close to a
- * kit token. Pure apart from the HTML parse (linkedom, which only the engine and the domain
- * tests reach). A literal is compared with each token in each mode; exact beats near, then
- * the smaller difference, then the spacing or text keyword a path has, then the kit's order.
- */
 import { parseHTML } from "linkedom";
 import { cubicBezierOf } from "./easings.ts";
 import { parseStylesheet } from "./css.ts";
@@ -12,28 +6,20 @@ import { cssName, resolve } from "./runtime.ts";
 import { colourDistance, firstFamily, isShadow, lengthPx, normaliseShadow, parseBezier, parseColour, parseLength, parseTime, parseWeight, weightNumber, type OkColour } from "./values.ts";
 import { TEXT_STYLE_SUFFIX, type Kit, type TextStyle, type TextStyleField } from "./types.ts";
 
-/** The address of one rule in an artifact's `<style>` elements (spec 19, Style rule references). */
 export interface StyleRuleRef {
-  /** The index of the `<style>` element in document order, counting every one. */
   readonly block: number;
-  /** The rule's selector as written. */
   readonly selector: string;
-  /** Which rule with that selector text in the block, 0 first. */
   readonly occurrence: number;
 }
 
-/** Where a value is: an element (by its `data-hf-id`) or a style rule. */
 export type OffTokenPlace = { readonly elementId: string } | { readonly rule: StyleRuleRef };
 
 export interface OffTokenValue {
   readonly place: OffTokenPlace;
   readonly property: string;
-  /** The literal as written in the source. */
   readonly value: string;
-  /** The token's path, and its CSS name (for a text style field, the field's own name). */
   readonly path: string;
   readonly css: string;
-  /** The token's value in the mode it matched, as text. */
   readonly tokenValue: string;
   readonly exact: boolean;
 }
@@ -54,13 +40,10 @@ const TEXT = ["font", "text", "size"];
 const SPACING_PROPERTY = /^(padding|margin)(-|$)|^(gap|row-gap|column-gap)$/;
 const RADIUS_PROPERTY = /^border-radius/;
 const TEXT_PROPERTY: Readonly<Record<string, TextStyleField>> = { "font-size": "fontSize", "line-height": "lineHeight", "letter-spacing": "letterSpacing" };
-/** Properties whose values are names, not colours, even when a name reads as one. */
 const NOT_COLOUR = /^(font-family|font-weight|animation-name|content|font-feature-settings|grid-area|grid-template-areas)$/;
 
-/** The keyword rank of a path: 0 when a segment is one of the keywords, else 1. */
 const rank = (path: string, keywords: string[]): number => (path.split("/").some((segment) => keywords.includes(segment)) ? 0 : 1);
 
-/** Removes every call to a function (balanced, fallback included), so its contents are not read as literals. */
 const withoutCalls = (value: string, name: RegExp): string => {
   let out = value;
   for (let match = name.exec(out); match !== null; match = name.exec(out)) {
@@ -83,7 +66,6 @@ const withoutCalls = (value: string, name: RegExp): string => {
   return out;
 };
 
-/** The colour literals of a value: functions, hex, and named colours. */
 const colourLiterals = (value: string): string[] => {
   const found: string[] = [];
   let rest = value.replace(/(?:rgba?|hsla?|oklch)\([^()]*\)/gi, (text) => {
@@ -100,13 +82,10 @@ const colourLiterals = (value: string): string[] => {
   return found;
 };
 
-/** The length literals of a value, with their units. */
 const lengthLiterals = (value: string): string[] => value.match(/(?<![\w.])-?(?:\d+\.?\d*|\.\d+)(?:px|rem|em|%)(?![\w])/gi) ?? [];
 
-/** The time literals of a value, in ms or s. */
 const timeLiterals = (value: string): string[] => value.match(/(?<![\w.])-?(?:\d+\.?\d*|\.\d+)(?:ms|s)(?![\w])/gi) ?? [];
 
-/** The lengths in px a token offers for a literal, in kit order. Text style fields carry their own CSS names. */
 interface LengthOffer {
   readonly path: string;
   readonly css: string;
@@ -117,7 +96,6 @@ interface LengthOffer {
   readonly order: number;
 }
 
-/** Whether a match is nearer than another: exact first, then the smaller difference, the keyword, and the kit's order. */
 const better = (a: Match, b: Match): boolean => {
   if (a.exact !== b.exact) return a.exact;
   if (a.difference !== b.difference) return a.difference < b.difference;
@@ -125,7 +103,6 @@ const better = (a: Match, b: Match): boolean => {
   return a.order < b.order;
 };
 
-/** The scan of one declaration: every literal that matches a token, the best match for each. */
 const scanDeclaration = (kit: Kit, property: string, rawValue: string): Array<{ literal: string; match: Match }> => {
   const found: Array<{ literal: string; match: Match }> = [];
   let order = 0;
@@ -295,7 +272,6 @@ const scanDeclaration = (kit: Kit, property: string, rawValue: string): Array<{ 
   return found;
 };
 
-/** Every literal in the artifact's source that sits close to a token of the kit. */
 export const offTokenValues = (html: string, kit: Kit): OffTokenValue[] => {
   if (kit.tokens.length === 0) return [];
   const { document } = parseHTML(html) as unknown as { document: { querySelectorAll(selector: string): ArrayLike<unknown> } };

@@ -1,15 +1,8 @@
-/**
- * Token values read by the rules: colours (OKLab, for the off-token distance), lengths,
- * times, font weights, cubic beziers, shadows and font families. Pure. Used by the kit
- * rules, the formats and the off-token scan; the browser never needs them.
- */
 
 export interface OkColour {
-  /** OKLab lightness, a and b. */
   readonly l: number;
   readonly a: number;
   readonly b: number;
-  /** 0 to 1. */
   readonly alpha: number;
 }
 
@@ -27,7 +20,6 @@ for (let i = 0; i < NAMED_LIST.length; i += 2) {
 
 const toLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
 
-/** sRGB 0 to 1 channels to OKLab (Björn Ottosson's matrices). */
 const srgbToOk = (r: number, g: number, b: number): [number, number, number] => {
   const lr = toLinear(r);
   const lg = toLinear(g);
@@ -60,7 +52,6 @@ const hslToRgb = (h: number, s: number, l: number): [number, number, number] => 
 
 const NUMBER = /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i;
 
-/** The components of `name(…)`: the numbers, with `%` kept, split on commas and spaces, and the alpha after `/`. */
 const functionArgs = (text: string, name: string): { parts: string[]; alpha?: string } | null => {
   const match = new RegExp(`^${name}\\((.*)\\)$`, "i").exec(text.trim());
   if (!match) return null;
@@ -88,7 +79,6 @@ const fromRgb = (r: number, g: number, b: number, alpha: number): OkColour => {
   return { l, a, b: bb, alpha };
 };
 
-/** Reads a CSS colour: hex (3, 4, 6 or 8 digits), rgb(), rgba(), hsl(), hsla(), oklch() or a named colour. Null when it is none of them. */
 export const parseColour = (text: string): OkColour | null => {
   const value = text.trim();
   const hex = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(value);
@@ -135,12 +125,10 @@ export const parseColour = (text: string): OkColour | null => {
   return null;
 };
 
-/** The distance between two colours in OKLab, times 100 (the scale the off-token thresholds use). */
 export const colourDistance = (x: OkColour, y: OkColour): number => Math.hypot(x.l - y.l, x.a - y.a, x.b - y.b) * 100;
 
 const LENGTH = /^(-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?)(px|rem|em|%)$/i;
 
-/** Reads a length with px, rem, em or %, and a bare 0 as px. Null when it is none of them. */
 export const parseLength = (text: string): Length | null => {
   const value = text.trim();
   if (value === "0") return { value: 0, unit: "px" };
@@ -149,13 +137,11 @@ export const parseLength = (text: string): Length | null => {
   return { value: Number(match[1]), unit: match[2]!.toLowerCase() as Length["unit"] };
 };
 
-/** A length in px (rem and em at 16 px), or undefined for a percentage, which has no px value. */
 export const lengthPx = (length: Length): number | undefined => {
   if (length.unit === "%") return undefined;
   return length.unit === "rem" || length.unit === "em" ? length.value * 16 : length.value;
 };
 
-/** A time in milliseconds, from ms or s. Null when it is neither. */
 export const parseTime = (text: string): number | null => {
   const match = /^(-?(?:\d+\.?\d*|\.\d+))(ms|s)$/i.exec(text.trim());
   if (!match) return null;
@@ -165,7 +151,6 @@ export const parseTime = (text: string): number | null => {
 
 const WEIGHT_KEYWORDS = ["normal", "bold", "lighter", "bolder"];
 
-/** Whether a weight is a number from 1 to 1000 (or its text) or one of the four keywords. */
 export const parseWeight = (value: unknown): boolean => {
   if (typeof value === "number") return Number.isFinite(value) && value >= 1 && value <= 1000;
   if (typeof value !== "string") return false;
@@ -174,7 +159,6 @@ export const parseWeight = (value: unknown): boolean => {
   return /^\d+$/.test(text) && Number(text) >= 1 && Number(text) <= 1000;
 };
 
-/** The number a weight compares as: normal is 400, bold is 700; undefined for lighter and bolder. */
 export const weightNumber = (value: unknown): number | undefined => {
   if (typeof value === "number") return value;
   const text = typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -183,7 +167,6 @@ export const weightNumber = (value: unknown): number | undefined => {
   return /^\d+$/.test(text) ? Number(text) : undefined;
 };
 
-/** Four numbers of a cubic-bezier() with x between 0 and 1, or null. */
 export const parseBezier = (text: string): [number, number, number, number] | null => {
   const match = /^cubic-bezier\(\s*([^,)]+),\s*([^,)]+),\s*([^,)]+),\s*([^,)]+)\)$/i.exec(text.trim());
   if (!match) return null;
@@ -194,7 +177,6 @@ export const parseBezier = (text: string): [number, number, number, number] | nu
   return [x1, y1, x2, y2];
 };
 
-/** A shadow in one spelling: lower case, one space at most, no space around commas or brackets, and zero without its unit. */
 export const normaliseShadow = (text: string): string =>
   text
     .trim()
@@ -203,8 +185,6 @@ export const normaliseShadow = (text: string): string =>
     .replace(/\s*([,()])\s*/g, "$1")
     .replace(/(^|[^\d.])0(px|rem|em|%)?(?![\d.])/g, (_match, before: string) => `${before}0`);
 
-/** Whether a shadow reads as CSS box-shadow: balanced brackets, no statement characters, and two lengths for its offsets. */
-/** Whether the quotes in a CSS value pair up: an open quote would swallow the rest of its declaration. */
 const quotesBalance = (text: string): boolean => (text.match(/"/g)?.length ?? 0) % 2 === 0 && (text.match(/'/g)?.length ?? 0) % 2 === 0;
 
 export const isShadow = (text: string): boolean => {
@@ -219,13 +199,11 @@ export const isShadow = (text: string): boolean => {
   return depth === 0 && /(^|\s)-?(\d+\.?\d*|\.\d+)(px|rem|em)?\s+-?(\d+\.?\d*|\.\d+)(px|rem|em)?/.test(value);
 };
 
-/** A font family list, as CSS text it cannot leave its own declaration: no block, comment, at-rule, url() or line break. */
 export const isFontFamily = (text: string): boolean => {
   const value = text.trim();
   return value !== "" && !/[;{}<>\\@\r\n]|\/\*|\*\/|url\(/i.test(value) && quotesBalance(value);
 };
 
-/** The first family of a font-family list, unquoted and lower-cased. */
 export const firstFamily = (text: string): string => {
   const first = text.split(",")[0] ?? "";
   return first.trim().replace(/^["']|["']$/g, "").trim().toLowerCase();

@@ -3,7 +3,7 @@
  * motion's reading, the dial values the frame runs, the burst's pending timing and the live tween report.
  * Pure: the strip only draws what this returns.
  */
-import { dialAt, type DialLimit, type DialSchema, type PropertyGroup, type Tween, type Owner } from "@unframed/domain";
+import { dialAt, groupOfKey, type DialLimit, type DialSchema, type PropertyGroup, type Tween, type Owner } from "@unframed/domain";
 import type { MotionTimelineReading, SourceEdit } from "@unframed/contracts";
 
 /** A row's height in pixels, and a lane's: the strip's row grid. */
@@ -145,16 +145,6 @@ const barsOf = (tween: Tween, target: string, offset: number, timing: { start: n
   }
   return [main, ...copies];
 }
-
-/** A property's group, as HyperFrames classes it (spec 21, Groups). */
-export const groupOfKey = (key: string): PropertyGroup => {
-  if (["x", "y", "xPercent", "yPercent"].includes(key)) return "position";
-  if (["scale", "scaleX", "scaleY"].includes(key)) return "scale";
-  if (["width", "height"].includes(key)) return "size";
-  if (["rotation", "skewX", "skewY"].includes(key)) return "rotation";
-  if (["opacity", "autoAlpha"].includes(key)) return "visual";
-  return "other";
-};
 
 /** The groups a tween animates, in lane order. */
 const groupsOfTween = (tween: Tween): PropertyGroup[] => GROUP_ORDER.filter((group) => tween.groups.includes(group));

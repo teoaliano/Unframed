@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { carryFor } from "../../src/index.ts";
 import { motionTimeline, type MotionTimeline, type RuntimeClips } from "../../src/motion/index.ts";
 
-// Clips a, b and c sit in the root; d is a clip nested in c; the tweens say who owns what.
 const html = (script: string, root = 'data-start="0" data-duration="6"', clips = "") => `<html><body>
 <div id="root" data-composition-id="main" data-width="640" data-height="360" ${root}>
   <div id="a" class="clip" data-start="0" data-duration="2"><div id="ta"></div></div>

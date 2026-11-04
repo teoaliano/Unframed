@@ -1,11 +1,5 @@
-/**
- * The component compiler (spec 20): a sheet becomes a self-contained script that defines its
- * custom element. The runtime below is one string, built into every compiled file and, later,
- * into the sheet helper, so the two cannot drift. The compiled file is frozen with its version.
- */
 import { readComponentSheet } from "./sheet.ts";
 
-/** The element definer. Its only global is `customElements`; it is wrapped in a block by `compileComponent`. */
 export const COMPONENT_RUNTIME = `
 function ufDefineComponent(decl, style, template, file) {
   if (customElements.get(decl.tag)) return;
@@ -71,16 +65,10 @@ function ufDefineComponent(decl, style, template, file) {
 }
 `;
 
-/** `<sheet base>.component.js` beside the sheet `<sheet base>.html`. */
 export const compiledFileName = (sheetFile: string): string => `${sheetFile.replace(/\.html$/i, "")}.component.js`;
 
-/** A JSON string literal that cannot close a script element or start a comment. */
 const literal = (value: unknown): string => JSON.stringify(value).replace(/</g, "\\u003c");
 
-/**
- * The compiled script for a sheet. Throws with the reader's refusal when the sheet is not a
- * valid component; the engine checks a sheet before it compiles it.
- */
 export const compileComponent = (sheetHtml: string, sheetFile: string): string => {
   const read = readComponentSheet(sheetHtml);
   if (!read.ok) throw new Error(read.refusal);

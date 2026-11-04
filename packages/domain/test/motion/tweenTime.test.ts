@@ -7,7 +7,6 @@ const stage = `<div id="root" data-composition-id="main" data-start="0" data-dur
   </div>
 </div>`;
 
-// title: literal fromTo; logo: dial duration; dot: loop-free keyframed to; inner sits in a helper; set on logo.
 const SCRIPT = `window.__timelines = window.__timelines || {};
 window.__timelines.main = gsap.timeline({ paused: true });
 window.__timelines.main.fromTo('#title', { opacity: 0 }, { opacity: 1, duration: 0.8 }, 0.2);
