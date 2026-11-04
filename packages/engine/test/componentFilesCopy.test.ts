@@ -1,11 +1,10 @@
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { compileComponent, compiledFileName } from "@unframed/domain";
+import { compileComponent, compiledFileName, readPins } from "@unframed/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { componentShape } from "./canvasRecords.ts";
 import { startEngine, type TestEngine } from "./harness.ts";
-
-/** Spec 20, task 39: `files.copy` across projects brings a page's pinned sheets and compiled files. */
 
 const BUTTON = `<!doctype html><html><head>
 <script type="application/json" data-uf-component>{"tag":"uf-button","variants":{"kind":["primary","secondary"]},"props":{"label":"text"},"slots":[]}</script>
@@ -14,7 +13,6 @@ const BUTTON = `<!doctype html><html><head>
 
 const PAGE = `<!doctype html><html><head><script src="1-button.component.js" data-uf-component="uf-button"></script></head><body><uf-button kind="secondary"></uf-button></body></html>`;
 
-/** A copy is written like any artifact: tokens and dials tags and element ids are stamped on (specs 18 and 19). The rest must match. */
 const unstamped = (html: string): string =>
   html
     .replace(/<script src="unframed-(?:tokens|dials)\.js"><\/script>\n?/g, "")
@@ -25,7 +23,7 @@ describe("files.copy brings a page's pinned components", () => {
   const folder = (project: string) => join(engine.dataDir, "output", project);
 
   beforeAll(async () => {
-    engine = await startEngine();
+    engine = await startEngine({ env: { UNFRAMED_TEST_CANVAS: "1" } });
     const rpc = await engine.rpc();
     await rpc.call("projects.create", { name: "one" });
     await rpc.call("projects.create", { name: "two" });
@@ -54,6 +52,19 @@ describe("files.copy brings a page's pinned components", () => {
     await (await engine.rpc()).call("files.copy", { project: "two", file: "5-page.html", from: "one" });
     expect(await readFile(join(folder("two"), "1-button.html"), "utf8")).toBe("<script type=\"application/json\" data-uf-component>{}</script>\n");
     expect(await readFile(join(folder("two"), "4-other.html"), "utf8")).toBe("<h1>keep me</h1>");
+  });
+
+  it("keeps the pin a copied page brings when the destination holds the same tag under another sheet", async () => {
+    const rpc = await engine.rpc();
+    await rpc.call("projects.create", { name: "three" });
+    await rpc.call("testCanvas.apply", {
+      project: "three",
+      change: { put: [componentShape("held", "uf-button", { file: "9-button.html", title: "Button" })], remove: [] },
+      origin: { kind: "system", id: "test-seed" },
+    });
+    await writeFile(join(folder("one"), "6-held.html"), PAGE);
+    const { file } = await rpc.call("files.copy", { project: "three", file: "6-held.html", from: "one" });
+    expect(readPins(await readFile(join(folder("three"), file), "utf8"))).toEqual([{ tag: "uf-button", sheet: "1-button.html" }]);
   });
 
   it("copies a page with no pins as it did before", async () => {

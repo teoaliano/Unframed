@@ -13,7 +13,6 @@ const KIT_OPS = [
 const script = (turns: Array<Array<{ name: string; input: Record<string, unknown> }>>) =>
   scriptFolder({ kits: { when: "^go", turns: turns.map((tools) => ({ text: "Done.", tools })) } });
 
-/** Runs one scripted turn in a new chat and answers the chat. */
 const runTurn = async (agent: AgentEngine, mode?: "plan") => {
   const chatId = await agent.createChat(mode === undefined ? {} : { interactionMode: mode });
   await agent.send(chatId, "go", {});

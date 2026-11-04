@@ -16,7 +16,6 @@ import { record } from "../record.ts";
 
 export const EMPTY_CHAT = "Ask about what is on the canvas, or say what should change or be made. Whatever is selected comes with the message as context.";
 
-/** The transcript's scroll area: the timeline's column, in t3code's type. */
 const SCROLLER_CLASS = "flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-3.5 pt-3.5 pb-2.5 text-sm leading-relaxed";
 
 const REASONING_BODY_CLASS = `${BODY_CLASS} max-h-96 overflow-auto text-sm whitespace-pre-wrap text-muted-foreground select-text`;
@@ -24,10 +23,8 @@ const REASONING_BODY_CLASS = `${BODY_CLASS} max-h-96 overflow-auto text-sm white
 const COLLAPSE_CHARACTERS = 600;
 const COLLAPSE_LINES = 8;
 
-/** A message's author, as t3code names it for the outline: quiet, above the text. */
 const AUTHOR_CLASS = "mb-1 text-xs font-medium text-muted-foreground";
 
-/** The person's message exactly as typed, in t3code's message bubble: never parsed as markdown. Long ones collapse. */
 const UserMessage = ({ message, running, onEdit }: { readonly message: ChatMessage; readonly running: boolean; readonly onEdit: (restoreCanvas: boolean) => void }) => {
   const [confirming, setConfirming] = useState(false);
   const long = message.text.length > COLLAPSE_CHARACTERS || message.text.split("\n").length > COLLAPSE_LINES;
@@ -79,7 +76,7 @@ const UserMessage = ({ message, running, onEdit }: { readonly message: ChatMessa
   );
 };
 
-export interface TranscriptProps {
+interface TranscriptProps {
   readonly client: ChatClient;
   readonly chatId: string;
   readonly embedded: boolean;
@@ -87,7 +84,6 @@ export interface TranscriptProps {
   readonly onOpenEditor?: (shapeId: string) => void;
 }
 
-/** The line at the foot of an outside chat once its session ends or its connection is revoked (spec 14). */
 const OutsideNote = ({ activities }: { readonly activities: Chat["activities"] }) => {
   const last = [...activities].reverse().find((activity) => activity.kind === "outside.disconnected" || activity.kind === "outside.session-ended");
   if (!last) return null;
@@ -95,13 +91,11 @@ const OutsideNote = ({ activities }: { readonly activities: Chat["activities"] }
   return <p className="m-0 text-xs text-muted-foreground" data-testid="outside-note">{text}</p>;
 };
 
-/** One chat's messages, work log, recap cards and activity line (t3code's timeline). */
 export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }: TranscriptProps) => {
   const chat = useWatchedThread(client, chatId);
   const editor = useMaybeEditor();
   const running = chat?.latestTurn?.state === "running";
 
-  // A rewind that left shapes alone says which in the rail's error line, as the recap card does.
   const seenRewinds = useRef<Set<string> | undefined>(undefined);
   useEffect(() => {
     if (!chat) return;
@@ -140,7 +134,6 @@ export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }:
     const element = scroller.current;
     if (!element || !chat) return;
     if (anchored.current !== undefined && lastUser !== anchored.current) {
-      // A message just sent sits near the top, so the reply streams in under it.
       const sent = element.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(lastUser ?? "")}"]`);
       if (sent) element.scrollTop = Math.max(0, sent.offsetTop - 12);
       following.current = true;
@@ -208,7 +201,6 @@ export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }:
                 {turn.turn && recap(turn.turn)}
               </div>
             );
-          // A settled turn folds its work and thinking behind "Worked for"; what was said stays.
           const users = turn.blocks.filter((item) => item.kind === "message" && item.message.role === "user");
           const folded = turn.blocks.filter((item) => item.kind === "work" || (item.kind === "message" && item.message.role === "reasoning"));
           const said = turn.blocks.filter((item) => (item.kind === "message" && item.message.role === "assistant") || item.kind === "retry" || item.kind === "plan");
@@ -248,7 +240,6 @@ export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }:
   );
 };
 
-/** Reasoning (t3code's row): "Thinking" while it streams, then "Thought", folded. */
 const Reasoning = ({ message }: { readonly message: ChatMessage }) => {
   const [open, setOpen] = useState(false);
   return (
@@ -265,7 +256,6 @@ const Reasoning = ({ message }: { readonly message: ChatMessage }) => {
   );
 };
 
-/** A settled turn's work, behind how long it took ("You stopped after" when interrupted): t3code's turn fold. */
 const WorkedFor = ({ turn, children }: { readonly turn: ChatTurn; readonly children: ReactNode }) => {
   const [open, setOpen] = useState(false);
   const started = Date.parse(turn.startedAt ?? turn.requestedAt);
@@ -288,11 +278,9 @@ const WorkedFor = ({ turn, children }: { readonly turn: ChatTurn; readonly child
   );
 };
 
-/** The quiet lines of the transcript: retries, limits, what the agent is doing. */
 const NOTICE_CLASS = "m-0 px-1 text-sm leading-relaxed text-muted-foreground";
 
-/** A provider retry, said in words. */
-export const retrySentence = (payload: unknown): string => {
+const retrySentence = (payload: unknown): string => {
   const p = record(payload);
   const status = typeof p.status === "number" || (typeof p.status === "string" && p.status !== "") ? ` (${String(p.status)})` : "";
   const wait = typeof p.delayMs === "number" && p.delayMs > 0 ? ` in ${Math.round(p.delayMs / 1000)}s` : "";
@@ -311,10 +299,6 @@ const resetTime = (resetsAt: unknown): string | undefined => {
   return resetMoment(new Date(resetsAt), new Date());
 };
 
-/**
- * A usage limit that was hit, for the chat's latest turn only, so the next turn clears it; a
- * later "allowed" notice clears it too. Claude's "close to the limit" warnings show nothing.
- */
 const LimitLine = ({ chat }: { readonly chat: Chat }) => {
   const latest = chat.latestTurn;
   const notice = [...chat.activities].reverse().find((activity) => activity.kind === "rate-limit");
@@ -331,7 +315,6 @@ const LimitLine = ({ chat }: { readonly chat: Chat }) => {
   return null;
 };
 
-/** What the agent is doing, with the time since the turn began once it passes ten seconds. */
 const ActivityLine = ({ label, since }: { readonly label: string; readonly since: string }) => (
   <p className="m-0 px-1 text-sm leading-relaxed text-muted-foreground tabular-nums" data-testid="activity-line">
     {label}
@@ -339,7 +322,6 @@ const ActivityLine = ({ label, since }: { readonly label: string; readonly since
   </p>
 );
 
-/** Its own component, so its tick never re-renders the transcript. */
 const Elapsed = ({ since }: { readonly since: string }) => {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {

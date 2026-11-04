@@ -1,40 +1,29 @@
-/**
- * Kit merge (spec 19): "Update from kit" is a three-way merge of the project's kit, the library
- * kit as the project last took it (the base) and the library kit as it is now, per token path
- * and per mode value. `replaceKit` is the other path: applying a different library kit.
- */
 import { type Kit, type Token, type TokenValue } from "./types.ts";
 
-export interface KitSide {
+interface KitSide {
   readonly modes: string[];
   readonly tokens: Token[];
   readonly guidance?: string | undefined;
 }
 
-export interface MergeCounts {
+interface MergeCounts {
   readonly updated: number;
   readonly added: number;
   readonly kept: number;
   readonly removed: number;
 }
 
-/** A value both sides changed differently, for one mode. `here` is the project's text, `kit` the library's. */
-export interface MergeConflict {
+interface MergeConflict {
   readonly path: string;
   readonly mode: string;
   readonly here: string;
   readonly kit: string;
 }
 
-/**
- * The person's choice per conflict, keyed `path|mode`, and the guidance's under `GUIDANCE_CHOICE`,
- * which holds no `|` and so never meets a token's key. Keeping the project's value is the default.
- */
 export type MergeChoices = Readonly<Record<string, "mine" | "kit">>;
 
 export const GUIDANCE_CHOICE = "guidance";
 
-/** What the merge did with the guidance: took the library's, kept the project's change, or found both changed. Absent when nothing changed. */
 export type GuidanceMerge = "updated" | "kept" | "conflict";
 
 export interface MergeResult {
@@ -42,11 +31,9 @@ export interface MergeResult {
   readonly counts: MergeCounts;
   readonly conflicts: MergeConflict[];
   readonly guidance?: GuidanceMerge;
-  /** Both sides' guidance when both changed it differently; an empty text is no guidance. */
   readonly guidanceConflict?: { readonly here: string; readonly kit: string };
 }
 
-/** A stable text of a value, with object keys sorted, so two equal values compare equal. */
 const canon = (value: unknown): string => {
   if (typeof value !== "object" || value === null) return JSON.stringify(value) ?? "undefined";
   const keys = Object.keys(value).sort();
@@ -57,7 +44,6 @@ const same = (a: unknown, b: unknown): boolean => canon(a) === canon(b);
 
 const text = (value: unknown): string => (value === undefined ? "(deleted)" : typeof value === "object" ? canon(value) : String(value));
 
-/** The value a token has in a mode: its one value, its value for the mode, or the side's default mode's. */
 const valueAt = (side: KitSide, token: Token | undefined, mode: string): TokenValue | undefined => {
   if (token === undefined) return undefined;
   if (token.value !== undefined) return token.value;
@@ -68,7 +54,6 @@ const valueAt = (side: KitSide, token: Token | undefined, mode: string): TokenVa
 
 const findToken = (side: KitSide, path: string): Token | undefined => side.tokens.find((token) => token.path === path);
 
-/** The token written from per-mode values: one value when every mode has the same one, else a value per mode. */
 const tokenFrom = (base: Pick<Token, "path" | "type" | "description" | "formerNames">, modes: string[], valueOf: (mode: string) => TokenValue): Token => {
   const values = modes.map((mode) => valueOf(mode));
   const single = values.every((value) => same(value, values[0]));
@@ -78,12 +63,6 @@ const tokenFrom = (base: Pick<Token, "path" | "type" | "description" | "formerNa
   return token;
 };
 
-/**
- * Merges the library kit into the project. A conflict keeps the project's value unless the
- * choices name the library's. Counts: `updated` took the library's, `added` came from the
- * library, `kept` the project changed and kept, `removed` the library deleted and the project
- * keeps. The name, the modes' order and the link (`from`) are the project's.
- */
 export const mergeKit = (input: { project: Kit; base: KitSide; library: KitSide }, choices: MergeChoices = {}): MergeResult => {
   const { project, base, library } = input;
   const modes = [...project.modes, ...library.modes.filter((mode) => !project.modes.includes(mode) && !base.modes.includes(mode))];
@@ -114,7 +93,6 @@ export const mergeKit = (input: { project: Kit; base: KitSide; library: KitSide 
       continue;
     }
     if (p === undefined && b !== undefined && l !== undefined) {
-      // The project deleted it. Unchanged in the library: it stays deleted. Changed: a conflict.
       const changed = modes.some((mode) => !same(valueAt(base, b, mode), valueAt(library, l, mode)));
       if (!changed) continue;
       const mode = modes[0]!;
@@ -126,7 +104,6 @@ export const mergeKit = (input: { project: Kit; base: KitSide; library: KitSide 
       continue;
     }
 
-    // Both sides have it (or both added it): merge each mode's value on its own.
     const pToken = p!;
     let tookLibrary = false;
     let keptProject = false;
@@ -177,7 +154,6 @@ export const mergeKit = (input: { project: Kit; base: KitSide; library: KitSide 
   };
 };
 
-/** The guidance merges as one more value: the side that changed it wins, and both changing it differently is a conflict. */
 const mergeGuidance = (project: string | undefined, base: string | undefined, library: string | undefined, choice: "mine" | "kit" | undefined) => {
   const p = project ?? "";
   const b = base ?? "";
@@ -189,7 +165,6 @@ const mergeGuidance = (project: string | undefined, base: string | undefined, li
   return { text: text(choice === "kit" ? l : p), outcome: "conflict" as const, conflict: { here: p, kit: l } };
 };
 
-/** Applies a different library kit: the project's modes with the library's added, the library's name, its tokens set and the project's others kept, and its guidance when it has one. The caller links it to the preset. */
 export const replaceKit = (project: Kit, library: Kit): Kit => {
   const { from: _link, guidance: _guidance, ...rest } = project;
   const guidance = library.guidance ?? project.guidance;

@@ -16,7 +16,9 @@ import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogHeader, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "~/components/ui/input-group";
+import { Empty, EmptyDescription } from "~/components/ui/empty";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
+import { Separator } from "~/components/ui/separator";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { Tip } from "../chrome/ui.tsx";
 import { useEngine } from "../context.ts";
@@ -27,8 +29,8 @@ import { labelHue, type Hue } from "../chrome/hue.ts";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
-export const DELETE_FAILED_MESSAGE = "Could not delete that preset. Is the local server running?";
-export const EMPTY_LIBRARY_MESSAGE = "Nothing here yet. Try another category or clear the search.";
+const DELETE_FAILED_MESSAGE = "Could not delete that preset. Is the local server running?";
+const EMPTY_LIBRARY_MESSAGE = "Nothing here yet. Try another category or clear the search.";
 const VIEW_PREFERENCE = "library.view";
 
 type View = "card" | "list";
@@ -40,7 +42,6 @@ const SORTS: ReadonlyArray<{ readonly value: LibrarySort; readonly label: string
   { value: "za", label: "Z–A" },
 ];
 
-/** Each kind's chip: its label, icon and the Tailwind palette hue its label Badge tints from. */
 const CHIPS: Record<string, { readonly label: string; readonly Icon: LucideIcon; readonly hue: Hue }> = {
   recipe: { label: "Recipe", Icon: Workflow, hue: "purple" },
   group: { label: "Group", Icon: Group, hue: "blue" },
@@ -52,7 +53,6 @@ const CHIPS: Record<string, { readonly label: string; readonly Icon: LucideIcon;
   kit: { label: "Kit", Icon: Palette, hue: "amber" },
 };
 
-/** What a preset is, what it makes (recipes only) and whose it is. */
 const chipsOf = (preset: LibraryEntry): string[] => [preset.kind, ...(preset.kind === "recipe" && preset.medium ? [preset.medium] : []), preset.source];
 
 const Chip = ({ kind }: { readonly kind: string }) => {
@@ -73,7 +73,6 @@ const Chips = ({ preset }: { readonly preset: LibraryEntry }) => (
   </span>
 );
 
-/** Under a converted old preset's summary (spec 11): where it came from and what it lost. */
 const LegacyLine = ({ preset }: { readonly preset: LibraryEntry }) =>
   preset.legacy ? (
     <span className="text-xs text-muted-foreground" data-testid="preset-legacy">
@@ -81,7 +80,6 @@ const LegacyLine = ({ preset }: { readonly preset: LibraryEntry }) =>
     </span>
   ) : null;
 
-/** A kit's size on its card: `{n} tokens · {m} modes`. */
 const KitLine = ({ preset }: { readonly preset: LibraryEntry }) =>
   preset.kind === "kit" ? (
     <span className="text-xs text-muted-foreground" data-testid="kit-counts">
@@ -89,7 +87,6 @@ const KitLine = ({ preset }: { readonly preset: LibraryEntry }) =>
     </span>
   ) : null;
 
-/** The one action a card offers: Apply for a kit, Add for a content preset. */
 const actionOf = (preset: LibraryEntry): string => (preset.kind === "kit" ? "Apply" : "Add");
 
 const DeleteButton = ({ preset, onDelete }: { readonly preset: LibraryEntry; readonly onDelete: (preset: LibraryEntry) => void }) => (
@@ -145,9 +142,9 @@ const Row = ({ preset, onAdd, onDelete }: ItemProps) => (
         <Chips preset={preset} />
       </span>
       {preset.summary !== "" && (
-        <span className="line-clamp-3 text-xs text-muted-foreground" title={preset.summary}>
-          {preset.summary}
-        </span>
+        <Tip label={preset.summary}>
+          <span className="line-clamp-3 text-xs text-muted-foreground">{preset.summary}</span>
+        </Tip>
       )}
       <KitLine preset={preset} />
       <LegacyLine preset={preset} />
@@ -176,7 +173,6 @@ const Toggles = <T extends string>({ label, value, options, onChange }: { label:
   </ToggleGroup>
 );
 
-/** Reads the remembered view: list only when the preference says so; card when it is missing or cannot be read. */
 const readView = async (engine: ReturnType<typeof useEngine>): Promise<View> => {
   try {
     const { values } = await engine.call("preferences.get", { keys: [VIEW_PREFERENCE] });
@@ -186,10 +182,6 @@ const readView = async (engine: ReturnType<typeof useEngine>): Promise<View> => 
   }
 };
 
-/**
- * The Library dialog: the user presets, read afresh every time it opens, then the system
- * presets; searched, filtered, sorted and cut into pages by the domain's library view.
- */
 export const LibraryDialog = ({ onClose, onAdd, initialType = "all" }: { readonly onClose: () => void; readonly onAdd: (preset: LibraryEntry) => void; readonly initialType?: LibraryControls["type"] }) => {
   const engine = useEngine();
   const [presets, setPresets] = useState<ReadonlyArray<LibraryEntry>>([]);
@@ -197,15 +189,12 @@ export const LibraryDialog = ({ onClose, onAdd, initialType = "all" }: { readonl
   const [readFailure, setReadFailure] = useState<string>();
   const [controls, setControls] = useState<LibraryControls>({ query: "", type: initialType, source: "any", sort: "newest", page: 1 });
   const [view, setView] = useState<View>("card");
-  // The preset the delete confirm names; it stays set while the confirm animates out.
   const [deleting, setDeleting] = useState<LibraryEntry>();
   const [confirming, setConfirming] = useState(false);
-  // The list shows once the file has been read, so it never reorders under the pointer.
   const [loaded, setLoaded] = useState(false);
   const search = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
-    // The shipped kits come from bundled files, so they show even when presets.json cannot be read.
     setKits(await systemKitPresets().catch(() => []));
     try {
       const { presets: listed } = await engine.call("library.list");
@@ -301,6 +290,7 @@ export const LibraryDialog = ({ onClose, onAdd, initialType = "all" }: { readonl
                   { value: "kit", label: "Kits" },
                 ]}
               />
+              <Separator orientation="vertical" className="h-5" />
               <Toggles<LibraryControls["source"]>
                 label="Source"
                 value={controls.source}
@@ -315,7 +305,9 @@ export const LibraryDialog = ({ onClose, onAdd, initialType = "all" }: { readonl
             {readFailure !== undefined && <Alert variant="error">Your presets could not be read: {readFailure}</Alert>}
             <div className="min-h-0 flex-1 overflow-y-auto" data-scrolls="true">
               {!loaded ? null : shown.items.length === 0 ? (
-                <p className="m-0 py-8 text-center text-sm text-muted-foreground">{EMPTY_LIBRARY_MESSAGE}</p>
+                <Empty>
+                  <EmptyDescription>{EMPTY_LIBRARY_MESSAGE}</EmptyDescription>
+                </Empty>
               ) : (
                 <ul className={view === "card" ? "m-0 grid list-none grid-cols-2 gap-2.5 p-0" : "m-0 list-none p-0"} aria-label="Presets">
                   {shown.items.map((preset) => (

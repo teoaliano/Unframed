@@ -1,8 +1,3 @@
-/**
- * The kits that ship in the library (spec 19): ten DESIGN.md files from VoltAgent/awesome-design-md
- * (MIT), kept under `assets/design-md/<folder>/`, each made a system kit preset by the same
- * importer the Kit dialog's Import uses. They are never written to `presets.json`.
- */
 import type { KitPreset } from "../presetRules.ts";
 import { fromDesignMd } from "./designMd.ts";
 import { kitRefusal } from "./rules.ts";
@@ -11,12 +6,10 @@ import type { Kit } from "./types.ts";
 export interface SystemKit {
   readonly id: string;
   readonly name: string;
-  /** The folder under `assets/design-md/` that holds its `DESIGN.md`. */
   readonly folder: string;
   readonly summary: string;
 }
 
-/** Raise it when a shipped DESIGN.md or the importer changes, so projects that applied a shipped kit are offered Update from kit. */
 export const SYSTEM_KIT_REVISION = 1;
 
 export const SYSTEM_KITS: ReadonlyArray<SystemKit> = [
@@ -32,7 +25,6 @@ export const SYSTEM_KITS: ReadonlyArray<SystemKit> = [
   { id: "kit-coinbase", name: "Coinbase", folder: "coinbase", summary: "Institutional finance on pure white with Coinbase Blue as the one accent." },
 ];
 
-/** A shipped kit as a library preset, from its DESIGN.md. Throws when the file does not import, which a test rules out for every shipped file. */
 export const systemKitPreset = (entry: SystemKit, markdown: string): KitPreset => {
   const read = fromDesignMd(markdown);
   if (!read.ok) throw new Error(`${entry.folder}/DESIGN.md: ${read.refusal}`);

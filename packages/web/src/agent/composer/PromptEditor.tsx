@@ -277,7 +277,7 @@ export const PromptEditor = ({ placeholder, label, onChange, onFocus, onBlur, on
   useImperativeHandle(
     handle,
     () => ({
-      element: () => (editor?.view.dom as HTMLElement | undefined) ?? null,
+      element: () => (editor?.isInitialized && !editor.isDestroyed ? (editor.view.dom as HTMLElement) : null),
       focus: () => editor?.commands.focus("end"),
       text: () => (editor && !editor.isDestroyed ? draftText(editor.getJSON()) : ""),
       // The first editor can be destroyed and replaced while the box mounts: a call then does nothing.

@@ -5,7 +5,6 @@ import { fromDtcg, toDtcg } from "../../src/kits/formats.ts";
 import { kitRefusal } from "../../src/kits/rules.ts";
 import type { Kit } from "../../src/kits/types.ts";
 
-/** Spec 19: a kit's guidance is one more value, set by an op, merged three ways, and carried by DTCG. */
 
 const kit = (guidance?: string): Kit => ({
   format: 1,

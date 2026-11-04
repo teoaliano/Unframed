@@ -155,3 +155,63 @@ describe("tween-value: owners and locks", () => {
     });
   });
 });
+
+describe("tween-value: a value cannot break out of the script", () => {
+  it.each([
+    ["a script close tag", "rgb(</script><script>alert(1)</script>)"],
+    ["a lone angle bracket", "rgb(1, 2, 3)<"],
+    ["a close sequence", "rgb(1, 2, 3)</"],
+  ])("refuses a colour with %s", (_name, colour) => {
+    const box = tween(html(), 1);
+    const result = value([{ type: "tween-value", tween: box.ref, at: 1, property: "color", value: colour }]);
+    expect(result).toEqual({ ok: false, refusal: "A value cannot contain <." });
+  });
+
+  it("refuses a number-like value with an angle bracket", () => {
+    const box = tween(html(), 1);
+    expect(value([{ type: "tween-value", tween: box.ref, at: 1, property: "x", value: "<120px" as unknown as number }])).toEqual({
+      ok: false,
+      refusal: "A value cannot contain <.",
+    });
+  });
+});
+
+describe("tween-value: the rest of the file is left as it was", () => {
+  const dollars = html(`window.__timelines = {};
+window.__timelines.main = gsap.timeline({ paused: true });
+window.__timelines.main.to('#box', { x: 10, color: '#abc', content: "a$$b", label: "a$&b", tail: "x$'y", duration: 1 }, 1);`);
+
+  it("keeps $ patterns in sibling properties when another property is edited", () => {
+    const box = tween(dollars, 0);
+    const result = done([{ type: "tween-value", tween: box.ref, at: 1, property: "x", value: 99 }], dollars);
+    expect(result.html).toContain(`content: "a$$b"`);
+    expect(result.html).toContain(`label: "a$&b"`);
+    expect(result.html).toContain(`tail: "x$'y"`);
+    expect(at(result.html, 0, 1).x).toEqual({ kind: "source", value: 99 });
+  });
+
+  it("keeps $ patterns in a token expression written beside them", () => {
+    const box = tween(dollars, 0);
+    const result = done([{ type: "tween-value", tween: box.ref, at: 1, property: "x", value: 5 }, { type: "tween-value", tween: box.ref, at: 1, property: "color", value: { token: "color/accent" } }], dollars);
+    expect(result.html).toContain(`content: "a$$b"`);
+    expect(result.html).toContain('unframed.token("color/accent")');
+  });
+
+  it("keeps the property order of the diamond when a value is edited", () => {
+    const ordered = html(`window.__timelines = {};
+window.__timelines.main = gsap.timeline({ paused: true });
+window.__timelines.main.to('#box', { x: 10, color: '#abc', duration: 1, ease: 'power1.out' }, 1);`);
+    const box = tween(ordered, 0);
+    const result = done([{ type: "tween-value", tween: box.ref, at: 1, property: "color", value: "#fff" }], ordered);
+    expect(result.html).toContain(`to('#box', { x: 10, color: "#fff", duration: 1, ease: 'power1.out' }, 1)`);
+  });
+
+  it("keeps the order of a from-value's and a keyframe step's properties", () => {
+    const steps = html(`window.__timelines = {};
+window.__timelines.main = gsap.timeline({ paused: true });
+window.__timelines.main.fromTo('#box', { x: 0, y: 4 }, { x: 10, y: 4, duration: 1 }, 1);`);
+    const box = tween(steps, 0);
+    const result = done([{ type: "tween-value", tween: box.ref, at: 0, property: "y", value: 2 }], steps);
+    expect(result.html).toContain(`fromTo('#box', { x: 0, y: 2 }, { x: 10, y: 4, duration: 1 }, 1)`);
+  });
+});

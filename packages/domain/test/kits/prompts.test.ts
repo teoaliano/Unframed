@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { KIT_OPS_DESCRIPTION, KIT_READ_DESCRIPTION, KIT_WRITE_DESCRIPTION } from "../../src/index.ts";
 
-/** Spec 19: the kit tools' model-facing text is the asset's text. */
 
 const blocks = (file: string): string[] => {
   const text = readFileSync(join(import.meta.dirname, "../../../../assets/prompts", file), "utf8");

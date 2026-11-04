@@ -23,7 +23,6 @@ describe("element chips in the preamble (spec 18)", () => {
     await agent.send(chatId, "pointed at the heading", { selection: ["shape:pg1"], elements: [CHIP] });
     const chat = await agent.settled(chatId, 1);
 
-    // The scripted reply only comes when the preamble matched the fixture's elements part.
     expect(chat.messages.some((message) => message.text === "I can see the heading you pointed at.")).toBe(true);
     const user = chat.messages.find((message) => message.role === "user");
     expect(user?.context).toEqual({ selection: ["shape:pg1"], elements: [CHIP] });

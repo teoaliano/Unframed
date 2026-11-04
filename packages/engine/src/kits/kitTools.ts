@@ -1,8 +1,3 @@
-/**
- * The kit tools (spec 19): `kit_read` and `kit_write` on the Unframed MCP server. The kit is
- * the document record's `meta.unframed.kit`, so a write is one room change with the chat's
- * origin: every op is applied by the domain's `applyKitOps` first, and a refusal writes nothing.
- */
 import { randomUUID } from "node:crypto";
 import { KIT_OPS_DESCRIPTION, KIT_READ_DESCRIPTION, KIT_WRITE_DESCRIPTION, PLAN_NO_WRITES_MESSAGE, applyKitOps, cssName, resolve, type ActivityInput, type InteractionMode, type Kit, type KitOp } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
@@ -12,8 +7,7 @@ import { kitOf } from "./tokensFile.ts";
 import { changedKitParts } from "./kitTurn.ts";
 import type { TurnChanges } from "../agent/turnChanges.ts";
 
-/** What the kit tools reach of the rest of the engine. The agent runtime's tool context satisfies it. */
-export interface KitToolContext {
+interface KitToolContext {
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;
   readonly apply: (project: string, change: CanvasChange, origin: ChangeOrigin) => Promise<Applied>;
   readonly chatTurn: (project: string, chatId: string) => { turnCount: number | undefined; turnId: string | undefined; interactionMode: InteractionMode };
@@ -23,7 +17,6 @@ export interface KitToolContext {
 
 const DOCUMENT_ID = "document:document";
 
-/** The kit a read answers: its tokens with their CSS names, the values as stored, and its guidance. */
 export const kitReadAnswer = (kit: Kit | null) => {
   if (kit === null) return { kit: null };
   const defaultMode = kit.modes[0]!;
@@ -52,11 +45,6 @@ export const kitReadAnswer = (kit: Kit | null) => {
 
 const isArtifactShape = (record: TLRecord): boolean => record.typeName === "shape" && (record.type === "page" || record.type === "motion");
 
-/**
- * The shape puts a kit op needs in the same write: a renamed mode moves every page and
- * motion on the old name to the new one. A deleted mode needs none: a mode the kit lacks is
- * read as the default.
- */
 const modeMoves = (records: ReadonlyArray<TLRecord>, ops: ReadonlyArray<KitOp>): TLRecord[] => {
   const renames = new Map<string, string>();
   for (const op of ops) if (op.op === "renameMode") renames.set(op.name, op.to);
@@ -99,9 +87,10 @@ export class KitTools {
     const meta = document.meta as Record<string, unknown>;
     const unframed = (meta.unframed ?? {}) as Record<string, unknown>;
     const next = { ...document, meta: { ...meta, unframed: { ...unframed, kit: result.kit } } } as unknown as TLRecord;
+    const puts = [next, ...modeMoves(records, ops)];
     let applied: Applied;
     try {
-      applied = await context.apply(binding.project, { put: [next, ...modeMoves(records, ops)], remove: [] }, { kind: "server", id: `chat:${binding.chatId}` });
+      applied = await context.apply(binding.project, { put: puts, remove: [] }, { kind: "server", id: `chat:${binding.chatId}` });
     } catch (failure) {
       return refusal(failure instanceof Error && failure.message.trim() !== "" ? failure.message : "the kit could not be written");
     }
@@ -109,7 +98,7 @@ export class KitTools {
       const parts = changedKitParts(before, result.kit);
       const shapesBefore = new Map<string, TLRecord | undefined>();
       const shapesAfter = new Map<string, TLRecord | undefined>();
-      for (const put of [next, ...modeMoves(records, ops)]) {
+      for (const put of puts) {
         if (put.typeName !== "shape") continue;
         shapesBefore.set(put.id as string, records.find((record) => record.id === put.id));
         shapesAfter.set(put.id as string, put);
@@ -122,12 +111,11 @@ export class KitTools {
         applied.clock,
       );
     }
-    const created = before === null;
     context.activity(binding.project, binding.chatId, {
       id: `kit:${randomUUID()}`,
       tone: "tool",
       kind: "kit.written",
-      summary: created ? "Created the kit" : "Updated the kit",
+      summary: before === null ? "Created the kit" : "Updated the kit",
       payload: { kit: { name: result.kit.name, tokens: result.kit.tokens.length, modes: result.kit.modes } },
       turnId: turn.turnId ?? null,
       createdAt: new Date().toISOString(),
@@ -135,7 +123,6 @@ export class KitTools {
     return { value: { ok: true, tokens: result.kit.tokens.length, modes: result.kit.modes, clock: applied.clock } };
   }
 
-  /** The two kit tools, as the MCP server registers them. */
   tools(): McpTool[] {
     return [
       {
@@ -147,7 +134,7 @@ export class KitTools {
       {
         name: "kit_write",
         description: KIT_WRITE_DESCRIPTION,
-        inputSchema: { type: "object", properties: { ops: { type: "array", items: { type: "object" }, description: KIT_OPS_DESCRIPTION } }, required: ["ops"] },
+        inputSchema: { type: "object", properties: { ops: { type: "array", items: { type: "object" }, description: "The kit operations, in order. See kit_write's description for each op." } }, required: ["ops"] },
         call: (binding, args) => this.write(binding, args),
       },
     ];

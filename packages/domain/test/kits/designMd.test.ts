@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { fromDesignMd, isDesignMd, kitRefusal, skippedList, SYSTEM_KITS, systemKitPreset, type ImportFragment } from "../../src/index.ts";
 
-/** Spec 19: a DESIGN.md imports as tokens and guidance, and the ten shipped ones become system kits. */
 
 const designMd = join(import.meta.dirname, "../../../../assets/design-md");
 const shipped = (folder: string) => readFileSync(join(designMd, folder, "DESIGN.md"), "utf8");

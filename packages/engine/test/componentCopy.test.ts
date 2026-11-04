@@ -7,8 +7,6 @@ import { startAgentEngine, type AgentEngine } from "./agent.ts";
 import { seed } from "./agentCanvas.ts";
 import { componentShape } from "./canvasRecords.ts";
 
-/** Spec 20, task 38: `component.copy` writes a sheet with a fresh tag and its compiled file. */
-
 const BUTTON = `<!doctype html><html><head>
 <script type="application/json" data-uf-component>{"tag":"uf-button","variants":{"kind":["primary","secondary"]},"props":{"label":"text"},"slots":[]}</script>
 <style type="text/x-uf-component" data-uf-component-style>:host { display: inline-block; }</style>

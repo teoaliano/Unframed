@@ -6,7 +6,6 @@ type Listener = (event: { source: unknown; origin: string; data: unknown }) => v
 const OWN = "http://localhost:18787";
 const CANVAS = "http://127.0.0.1:5001";
 
-/** The viewer against stubs: a canvas above it, a composition inside it, and a player with an iframe. */
 const stubViewer = (options: { scale?: number; left?: number; top?: number } = {}) => {
   const listeners: Listener[] = [];
   const canvas = { postMessage: (...args: unknown[]) => canvasPosted.push(args) };
@@ -47,7 +46,6 @@ describe("the built motion viewer relay", () => {
 
   it("relays a composition's edit messages to the canvas, with boxes moved through the frame's offset and scale", () => {
     const { canvas, composition, from, canvasPosted } = stubViewer({ scale: 2, left: 10, top: 20 });
-    // The composition announces dials first, so the viewer knows it.
     from(composition, OWN, { type: "unframed:dials", name: "Scene", config: {}, schema: {}, values: {} });
     from(canvas, CANVAS, { type: "unframed:edit:hello" });
     canvasPosted.length = 0;
@@ -101,7 +99,6 @@ describe("the built motion viewer relay", () => {
   });
 });
 
-/** The viewer's relay against a stub window: a canvas and a composition, each a window that records its posts. */
 const runRelay = () => {
   const own = "http://localhost:18787";
   const listeners: Listener[] = [];
@@ -132,7 +129,6 @@ describe("the motion viewer relays the tokens messages from its canvas", () => {
       { message: { type: "unframed:tokens:set", kit: { format: 1, name: "Brand", modes: ["light", "dark"], tokens: [] } }, targetOrigin: "http://localhost:18787" },
     ]);
 
-    // Another window on the loopback, and a canvas on a foreign origin, are ignored.
     const before = viewer.composition.log.length;
     viewer.send({ name: "other" }, { type: "unframed:tokens:mode", mode: "light" });
     viewer.send(viewer.canvas, { type: "unframed:tokens:mode", mode: "light" }, "https://example.com");

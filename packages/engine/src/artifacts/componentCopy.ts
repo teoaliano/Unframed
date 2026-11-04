@@ -1,7 +1,3 @@
-/**
- * `component.copy` (spec 20): a copy of a component sheet under a fresh tag. Within a project the
- * tag always changes; across projects the tag stays when the destination's canvas does not hold it.
- */
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isBareFileName } from "@unframed/contracts";
@@ -16,16 +12,11 @@ export class ComponentCopyRefused extends Error {
   }
 }
 
-/**
- * Copies `file` from `source` into `destination`. `taken` holds the tags the destination's canvas
- * has. Answers the new file and its tag.
- */
 export const copyComponentSheet = async (input: {
   readonly source: string;
   readonly destination: string;
   readonly file: string;
   readonly taken: ReadonlySet<string>;
-  /** Set when the copy comes from another project: the tag is kept when the destination does not hold it. */
   readonly ofProject?: string | undefined;
 }): Promise<{ file: string; tag: string }> => {
   if (!isBareFileName(input.file)) throw new ComponentCopyRefused("bad_request", "That is not a file in this project.");

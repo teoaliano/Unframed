@@ -6,8 +6,6 @@ import { componentShape, pageShape } from "./canvasRecords.ts";
 import { startEngine, type TestEngine } from "./harness.ts";
 import { connectTab } from "./syncClient.ts";
 
-/** Spec 20, tasks 23 and 24: `artifact.edit` on a component sheet writes a componentRule and refuses one that reaches a locked template element. */
-
 const SHEET = `<!doctype html><html><head>
 <script src="unframed-dials.js"></script>
 <script type="application/json" data-uf-component>{"tag":"uf-button","variants":{"kind":["primary","secondary"]},"props":{"label":"text"},"slots":[]}</script>

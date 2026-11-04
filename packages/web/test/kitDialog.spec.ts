@@ -6,8 +6,6 @@ import { centre, openCanvas, roomRecords, toast } from "./canvas.ts";
 import { dropFiles, putRecords } from "./media.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
-/** The Kit dialog (spec 19): the bottom bar's Kit button, the empty state, and New kit. */
-
 const kitDialog = (page: Page): Locator => page.getByRole("dialog", { name: "Kit" });
 
 const kitOf = async (engine: TestEngine, project: string) => {
@@ -39,7 +37,6 @@ test("New kit creates a kit named Kit with one mode, default, and shows it", asy
   await expect.poll(() => kitOf(engine, project)).toEqual({ format: 1, name: "Kit", modes: ["default"], tokens: [] });
 });
 
-/** A project kit seeded into the room: two modes, one colour per mode, one dimension, one duration and an easing. */
 const seededKit = {
   format: 1,
   name: "Brand",
@@ -111,13 +108,11 @@ test("one value for all modes, an easing from the catalogue, and Add token", asy
   await page.getByRole("button", { name: "Kit", exact: true }).click();
   const dialog = kitDialog(page);
 
-  // A per-mode token collapses to one value for all modes: the default mode's value is kept.
   await row(dialog, "color/brand/primary").getByRole("button", { name: "Token options color/brand/primary" }).click();
   await page.getByRole("menuitem", { name: "One value for all modes" }).click();
   await expect(row(dialog, "color/brand/primary").locator("[data-mode='all']")).toBeVisible();
   await expect.poll(() => kitOf(engine, project)).toMatchObject({ tokens: expect.arrayContaining([expect.objectContaining({ path: "color/brand/primary", value: "#1a73e8" })]) });
 
-  // The easing cell lists the 31 eases with their curves, and a cubic bezier entry.
   await row(dialog, "easing/motion/ease").getByRole("combobox", { name: "easing/motion/ease value" }).click();
   await expect(page.getByRole("option")).toHaveCount(32);
   await expect(page.getByRole("option", { name: "Cubic bezier" })).toBeVisible();
@@ -302,7 +297,6 @@ test("Update in library replaces the library kit, adds to its revision, and keep
   const dark = row(dialog, "color/brand/primary").locator("[data-mode='dark'] input");
   await dark.fill("#000000");
   await dark.press("Enter");
-  // The engine answers the update from the room, so the edit has to reach it first.
   await expect.poll(() => tokenOf(engine, project, "color/brand/primary")).toMatchObject({ values: { light: "#1a73e8", dark: "#000000" } });
   await dialog.getByRole("button", { name: "More" }).click();
   await page.getByRole("menuitem", { name: "Update in library" }).click();
@@ -367,7 +361,6 @@ test("export writes the kit to the project folder and says so with a Reveal acti
   expect(JSON.parse(await readFile(join(outputFolder(engine, project), exported!), "utf8"))).toMatchObject({ color: { brand: { primary: { $type: "color", $value: "#1a73e8" } } } });
 });
 
-/** A kit with one token of each editor: a colour with an alias target, a dimension, a duration, a weight and a text style. */
 const editorKit = {
   format: 1,
   name: "Brand",
@@ -388,7 +381,6 @@ const openEditorKit = async (page: Page, engine: TestEngine, kit: unknown = edit
   await page.getByRole("button", { name: "Kit", exact: true }).click();
   return { project, dialog: kitDialog(page) };
 };
-
 
 test("the colour popover edits the colour and its opacity, committed as one value", async ({ page, engine }) => {
   const { project, dialog } = await openEditorKit(page, engine);
@@ -480,13 +472,12 @@ test("past 200 rows the table draws only the rows in view, and scrolling reaches
   expect(await dialog.locator("[data-token]").count()).toBeLessThan(60);
   await expect(row(dialog, "dimension/space/t259")).toHaveCount(0);
 
-  await dialog.locator(".max-h-\\[480px\\]").evaluate((element) => {
+  await dialog.locator('[data-slot="table-container"]').evaluate((element) => {
     element.scrollTop = element.scrollHeight;
   });
   await expect(row(dialog, "dimension/space/t259")).toBeVisible();
 });
 
-/** Adds a token of a type from the Add token row. The row's path field keeps the text on a refusal. */
 const addToken = async (page: Page, dialog: Locator, path: string, type: string) => {
   await dialog.getByRole("button", { name: "Add token" }).click();
   await dialog.getByRole("textbox", { name: "Token path" }).fill(path);

@@ -1,8 +1,3 @@
-/**
- * The editor's Layers tab (spec 18, The Layers tab): the artifact's elements as a tree in document
- * order, with the frame's runtime elements greyed under their nearest parent with an id. A row
- * selects its element, hovers it in the frame, renames it, hides it and locks it.
- */
 import type { SourceTreeElement } from "@unframed/contracts";
 import type { ArtifactKind, ChipElement } from "@unframed/domain";
 import { Eye, EyeOff, Film, Frame, Image, Link, Lock, LockOpen, MessageSquarePlus, MousePointerClick, Pencil, Square, Type, ChevronDown, ChevronRight } from "lucide-react";
@@ -14,45 +9,32 @@ import { cn } from "~/lib/utils";
 import { chipDataFor } from "./chipData.ts";
 import type { EditSession, LiveNode } from "./editSession.ts";
 
-/** The hidden trigger a Layers menu is opened through (the menu is controlled, anchored to the row). */
 const LAYER_MENU_TRIGGER = "layers-row-menu-trigger";
 
 const INDENT_PX = 12;
 const NAME_MAX = 60;
 
-/** Layer open state per artifact, kept for the session: a parent is open until it is collapsed. */
 const collapsedBy = new Map<string, Set<string>>();
 
-/** One row: a source element, or a runtime element the script made (no id, read-only). */
 interface Row {
   readonly key: string;
-  readonly id: string | null;
   readonly tag: string;
   readonly depth: number;
-  readonly parent: string | null;
   readonly element: SourceTreeElement | null;
   readonly hasChildren: boolean;
   readonly inLocked: boolean;
 }
 
-const KIND_ICON: Record<string, typeof Type> = { image: Image, link: Link, button: MousePointerClick, media: Film, frame: Frame, text: Type, shape: Square };
-
-/** The icon a row shows, from its tag and whether it holds text only. */
 const iconOf = (tag: string, text: string | null): typeof Type => {
-  if (tag === "img" || tag === "picture" || tag === "svg") return KIND_ICON.image!;
-  if (tag === "a") return KIND_ICON.link!;
-  if (tag === "button") return KIND_ICON.button!;
-  if (tag === "video" || tag === "audio") return KIND_ICON.media!;
-  if (tag === "iframe") return KIND_ICON.frame!;
-  if (text !== null) return KIND_ICON.text!;
-  return KIND_ICON.shape!;
+  if (tag === "img" || tag === "picture" || tag === "svg") return Image;
+  if (tag === "a") return Link;
+  if (tag === "button") return MousePointerClick;
+  if (tag === "video" || tag === "audio") return Film;
+  if (tag === "iframe") return Frame;
+  return text !== null ? Type : Square;
 };
 
-/**
- * The rows in document order. Source elements nest by their parent's id; each runtime element
- * sits under the nearest source element above it, after that element's source children.
- */
-export const layerRows = (elements: readonly SourceTreeElement[], live: readonly LiveNode[], collapsed: ReadonlySet<string>, locked: readonly string[]): Row[] => {
+const layerRows = (elements: readonly SourceTreeElement[], live: readonly LiveNode[], collapsed: ReadonlySet<string>, locked: readonly string[]): Row[] => {
   const known = new Set(elements.map((element) => element.id));
   const childrenOf = new Map<string | null, SourceTreeElement[]>();
   for (const element of elements) {
@@ -84,26 +66,23 @@ export const layerRows = (elements: readonly SourceTreeElement[], live: readonly
     if (!open) return;
     for (const element of childrenOf.get(parent) ?? []) {
       const kids = (childrenOf.get(element.id)?.length ?? 0) > 0 || (runtimeOf.get(element.id)?.length ?? 0) > 0;
-      rows.push({ key: element.id, id: element.id, tag: element.tag, depth, parent, element, hasChildren: kids, inLocked: underLocked(element.id) && !lockedSet.has(element.id) });
+      rows.push({ key: element.id, tag: element.tag, depth, element, hasChildren: kids, inLocked: underLocked(element.id) && !lockedSet.has(element.id) });
       emit(element.id, depth + 1);
     }
     for (const node of runtimeOf.get(parent) ?? []) {
-      rows.push({ key: node.selector, id: null, tag: node.tag, depth, parent, element: null, hasChildren: false, inLocked: false });
+      rows.push({ key: node.selector, tag: node.tag, depth, element: null, hasChildren: false, inLocked: false });
     }
   };
   emit(null, 0);
   return rows;
 };
 
-export interface LayersTabProps {
+interface LayersTabProps {
   readonly session: EditSession;
   readonly kind: ArtifactKind;
-  /** The artifact's shape id, which keys the open state of its layers. */
   readonly shapeId: string;
   readonly locked: readonly string[];
-  /** Locks or unlocks an element. The editor writes the shape and its one undo step. */
   readonly onLock: (id: string, on: boolean) => void;
-  /** Tell the agent: the chips of the selected elements go into the artifact's chat (spec 18, Point and tell). */
   readonly onTell: (elements: ChipElement[]) => void;
 }
 
@@ -111,15 +90,12 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
   const { tree, preparing, selection, pending, live, reports } = session;
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => collapsedBy.get(shapeId) ?? new Set());
   const [renaming, setRenaming] = useState<string | null>(null);
-  /** The row whose context menu is open, and the row it is anchored to. */
   const [menuFor, setMenuFor] = useState<{ readonly id: string; readonly anchor: HTMLElement }>();
   const [draft, setDraft] = useState("");
   const cancelled = useRef(false);
 
-  // The frame is asked for its live tree when the tab opens, so a runtime element the script added since is listed.
   useEffect(() => session.requestLive(), []);
 
-  // A selection made in the frame opens the rows above it and brings its row into view.
   useEffect(() => {
     const [only] = selection;
     if (only === undefined || !tree) return;
@@ -133,7 +109,6 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
       collapsedBy.set(shapeId, next);
       setCollapsed(next);
     }
-    // Only a change of the selection reveals a row; a collapse the person made stays made.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selection.join(",")]);
 
@@ -171,7 +146,6 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
     else session.setSelection([id]);
   };
 
-  /** The chips of the selected elements, for Tell the agent: a selected element with no source and no report is left out. */
   const chipsOfSelection = (): ChipElement[] =>
     selection.flatMap((id) => {
       const source = tree.elements.find((candidate) => candidate.id === id);
@@ -203,10 +177,9 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
     <ul aria-label="Layers" className="m-0 flex min-h-0 list-none flex-col gap-0.5 overflow-auto p-1.5" onMouseLeave={() => session.hoverLayer(null)}>
       {rows.map((row) => {
         if (row.element === null) {
-          // A runtime element: greyed, labelled by its tag, read-only.
           return (
             <li key={`runtime-${row.key}`} data-layer-runtime="" style={{ paddingInlineStart: `${row.depth * INDENT_PX}px` }}>
-              <div className="flex min-w-0 items-center gap-1.5 px-1 py-0.5 text-sm text-muted-foreground opacity-60">
+              <div className="flex min-w-0 items-center gap-1.5 px-1 py-0.5 text-sm text-muted-foreground">
                 <span className="size-3.5 shrink-0" aria-hidden />
                 <span className="truncate">{row.tag}</span>
                 <span className="shrink-0 text-xs">Set by the agent's code</span>
@@ -219,14 +192,14 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
         const selected = selection.includes(id);
         const hidden = pendingHidden(id) ?? element.hidden;
         const name = pendingName(id);
-        const label = name === undefined ? element.name : name === null ? element.name : name;
+        const label = name ?? element.name;
         const Icon = iconOf(element.tag, element.text);
         const isLocked = locked.includes(id);
         const open = !collapsed.has(id);
         return (
-          <li key={id} data-layer-row={id} style={{ paddingInlineStart: `${row.depth * INDENT_PX}px` }} className="group">
+          <li key={id} data-layer-row={id} data-selected={selected ? "true" : undefined} style={{ paddingInlineStart: `${row.depth * INDENT_PX}px` }} className="group">
             <div
-              className="flex min-w-0 items-center gap-1"
+              className={cn("flex min-w-0 items-center gap-1 rounded-sm", selected && "bg-accent")}
               onMouseEnter={() => session.hoverLayer(id)}
               onContextMenu={(event) => {
                 event.preventDefault();
@@ -247,6 +220,7 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
                   autoFocus
                   className="min-w-0 flex-1"
                   value={draft}
+                  onFocus={(event) => event.currentTarget.select()}
                   onChange={(event) => setDraft(event.currentTarget.value)}
                   onBlur={() => finishRename(element, !cancelled.current)}
                   onKeyDown={(event) => {
@@ -266,6 +240,12 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
                   onDoubleClick={() => startRename(element)}
                   onKeyDown={(event) => {
                     if (event.key !== "Enter" || event.target !== event.currentTarget) return;
+                    if (element.text !== null) {
+                      event.preventDefault();
+                      session.setSelection([id]);
+                      session.startText(id);
+                      return;
+                    }
                     startRename(element);
                   }}
                 >
@@ -280,13 +260,13 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label={hidden ? `Show ${label}` : `Hide ${label}`}
+                  aria-label={`Hidden ${label}`}
                   aria-pressed={hidden}
                   onClick={() => session.patch({ type: "hide", elementId: id, hidden: !hidden })}
                 >
                   {hidden ? <EyeOff aria-hidden /> : <Eye aria-hidden />}
                 </Button>
-                <Button variant="ghost" size="icon-sm" aria-label={isLocked ? `Unlock ${label}` : `Lock ${label}`} aria-pressed={isLocked} onClick={() => onLock(id, !isLocked)}>
+                <Button variant="ghost" size="icon-sm" aria-label={`Locked ${label}`} aria-pressed={isLocked} onClick={() => onLock(id, !isLocked)}>
                   {isLocked ? <Lock aria-hidden /> : row.inLocked ? <Lock aria-hidden className="opacity-40" /> : <LockOpen aria-hidden />}
                 </Button>
               </span>
@@ -313,7 +293,6 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
   );
 };
 
-/** The row menu: Tell the agent, then the same rename, hide and lock the row's controls do. */
 const LayerMenu = ({
   anchor,
   label,
@@ -333,7 +312,7 @@ const LayerMenu = ({
   readonly onHide: () => void;
   readonly onLock: () => void;
 }) => (
-  <MenuPopup anchor={anchor} side="right" align="start" sideOffset={4} className="max-w-[260px]" finalFocus={() => false} aria-label={`${label} actions`}>
+  <MenuPopup anchor={anchor} side="right" align="start" sideOffset={4} className="max-w-65" finalFocus={() => false} aria-label={`${label} actions`}>
     <MenuItem onClick={onTell}>
       <MessageSquarePlus aria-hidden />
       Tell the agent

@@ -49,13 +49,20 @@ describe("motionTimeline: groups", () => {
     ["size", "width: 10", ["size"]],
     ["rotation", "rotation: 90", ["rotation"]],
     ["visual", "opacity: 0", ["visual"]],
-    ["other", "color: '#fff'", ["other"]],
+    ["visual colour", "color: '#fff'", ["visual"]],
+    ["visual background", "backgroundColor: '#fff'", ["visual"]],
+    ["visual border colour", "borderColor: '#fff'", ["visual"]],
+    ["other", "boxShadow: '0 0 1px #000'", ["other"]],
   ])("classifies %s", (_name, prop, groups) => {
     expect(tween(`window.__timelines.main.to('#a', { ${prop}, duration: 1 }, 0);`).groups).toEqual(groups);
   });
 
   it("lists every group a mixed tween animates, in the lane order", () => {
-    expect(tween("window.__timelines.main.to('#a', { color: '#fff', x: 1, opacity: 0, duration: 1 }, 0);").groups).toEqual(["position", "visual", "other"]);
+    expect(tween("window.__timelines.main.to('#a', { color: '#fff', x: 1, opacity: 0, duration: 1 }, 0);").groups).toEqual(["position", "visual"]);
+  });
+
+  it("lists the other group after the visual one when a tween also animates a shadow", () => {
+    expect(tween("window.__timelines.main.to('#a', { backgroundColor: '#fff', boxShadow: '0 0 1px #000', duration: 1 }, 0);").groups).toEqual(["visual", "other"]);
   });
 
   it("reads the groups of keyframed values", () => {

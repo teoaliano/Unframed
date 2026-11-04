@@ -1,12 +1,3 @@
-/**
- * Kit formats (spec 19): import from DTCG JSON and from CSS custom properties, and export to
- * DTCG JSON, CSS and Tailwind v4 `@theme`. Import reads what it can, counts what it cannot and
- * returns a fragment; the caller merges it with `applyKitOps`. Export and import round-trip.
- *
- * In a DTCG file the token's `$value` is the default mode's value in DTCG form. The unframed
- * extension holds each mode's value in the kit's own text form, so every type comes back as
- * it was written.
- */
 import { kitCss } from "./runtime.ts";
 import { cubicBezierOf, isEaseName } from "./easings.ts";
 import { parseStylesheet } from "./css.ts";
@@ -15,17 +6,12 @@ import { isShadow, parseBezier, parseColour, parseLength, parseTime, parseWeight
 import { TEXT_STYLE_FIELDS, type Kit, type Token, type TokenType, type TokenValue } from "./types.ts";
 
 export interface ImportFragment {
-  /** The name the file carries in the unframed extension, when it has one. */
   readonly name?: string;
   readonly modes: string[];
   readonly tokens: Token[];
-  /** Tokens and declarations the import could not read. */
   readonly skipped: number;
-  /** What was skipped, by name, when the format can name it (a DESIGN.md's front matter entries). */
   readonly skippedNames?: ReadonlyArray<string>;
-  /** True when the values belong to no mode: they go to the kit's default mode, and add none. */
   readonly modeless?: boolean;
-  /** Markdown the kit takes as its guidance. */
   readonly guidance?: string;
 }
 
@@ -44,7 +30,6 @@ const ALIAS = /^\{(.+)\}$/;
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const isAlias = (value: unknown): boolean => typeof value === "string" && ALIAS.test(value);
 
-/** A DTCG path in the kit's form: segments split on `.` and `/`, camel case and spaces made dashes, lower case. */
 const pathOf = (raw: string): string =>
   raw
     .split(/[./]/)
@@ -52,20 +37,17 @@ const pathOf = (raw: string): string =>
     .filter((segment) => segment !== "")
     .join("/");
 
-/** A DTCG reference `{group.token}` as the kit's alias `{group/token}`. */
 const aliasOf = (value: string): string | undefined => {
   const match = ALIAS.exec(value.trim());
   return match ? `{${pathOf(match[1]!)}}` : undefined;
 };
 
-/** A DTCG dimension or duration: the object form (`{ value, unit }`) or a string, as the kit's text. */
 const measure = (value: unknown): string | undefined => {
   if (typeof value === "string") return value.trim() === "" ? undefined : value.trim();
   if (isRecord(value) && typeof value["value"] === "number" && typeof value["unit"] === "string") return `${value["value"]}${value["unit"]}`;
   return undefined;
 };
 
-/** The kit's value for a DTCG value of one of the kit's types (`dimension` for a number too), or undefined when it cannot be read. */
 const readDtcg = (type: string, value: unknown, path: string): TokenValue | undefined => {
   if (typeof value === "string" && aliasOf(value) !== undefined) return aliasOf(value);
   switch (type) {
@@ -109,7 +91,6 @@ const readDtcg = (type: string, value: unknown, path: string): TokenValue | unde
   }
 };
 
-/** A DTCG shadow: CSS text, or one or more layers as objects (offsetX, offsetY, blur, spread, color). */
 const readShadow = (value: unknown): string | undefined => {
   if (typeof value === "string") return value;
   const layers = Array.isArray(value) ? value : [value];
@@ -145,7 +126,6 @@ const KIT_TYPE: Readonly<Record<string, TokenType>> = {
   typography: "textStyle",
 };
 
-/** The mode a file stands for: its name without `.json` and `.tokens`, or the default mode when that is not a mode name. */
 const modeOfFile = (name: string): string => {
   const base = name.replace(/\.json$/i, "").replace(/\.tokens$/i, "").trim();
   return base === "" || base === "tokens" || modeRefusal(base) !== null ? DEFAULT_MODE : base;
@@ -154,13 +134,10 @@ const modeOfFile = (name: string): string => {
 interface Collected {
   type: TokenType;
   description?: string;
-  /** Values by mode. */
   values: Record<string, TokenValue>;
-  /** True when the token came from one place with one value, so it is one value for every mode. */
   shared: boolean;
 }
 
-/** The tokens as the kit holds them: one value when every mode has the same one (or the token was one value), else a value per mode. */
 const assemble = (collected: Map<string, Collected>, modes: string[], skipped: number, name?: string): ImportFragment => {
   const tokens: Token[] = [];
   for (const [path, entry] of collected) {
@@ -178,13 +155,11 @@ const assemble = (collected: Map<string, Collected>, modes: string[], skipped: n
   return { ...(name !== undefined ? { name } : {}), modes, tokens, skipped };
 };
 
-/** Whether a value holds an alias anywhere. Those are checked when the kit is whole, not here. */
 const holdsAlias = (value: unknown): boolean => {
   if (isAlias(value)) return true;
   return isRecord(value) && TEXT_STYLE_FIELDS.some((field) => isAlias(value[field]));
 };
 
-/** Imports DTCG JSON files. Each file is a mode named from its file name, unless the unframed extension names the kit's modes. */
 export const fromDtcg = (files: ReadonlyArray<ImportFile>): ImportResult => {
   const collected = new Map<string, Collected>();
   const modes: string[] = [];
@@ -217,7 +192,6 @@ export const fromDtcg = (files: ReadonlyArray<ImportFile>): ImportResult => {
         return;
       }
       const path = pathOf(segments.join("/"));
-      // A DTCG number is a size only under a space, size or radius group; elsewhere it is not a token.
       const isNumberSize = typeName === "number" && DIMENSION_GROUPS.some((group) => path.split("/").includes(group));
       const dtcgType = isNumberSize ? "dimension" : typeName;
       const kitType = dtcgType === undefined ? undefined : KIT_TYPE[dtcgType];
@@ -253,10 +227,8 @@ export const fromDtcg = (files: ReadonlyArray<ImportFile>): ImportResult => {
   return { ok: true, fragment: guidance === undefined ? fragment : { ...fragment, guidance } };
 };
 
-/** The kit path of a CSS custom property name: `--color-brand-primary` is `color/brand/primary`. */
 const pathOfCssName = (name: string): string => name.replace(/^--/, "").split("-").join("/");
 
-/** The kit type a CSS value reads as, by its shape and its name, or undefined. */
 const typeOfCss = (name: string, value: string): TokenType | undefined => {
   if (parseBezier(value) !== null) return "easing";
   if (name.includes("shadow") && isShadow(value)) return "shadow";
@@ -268,7 +240,6 @@ const typeOfCss = (name: string, value: string): TokenType | undefined => {
   return undefined;
 };
 
-/** The mode a rule's selector names: `:root` is the default mode, a theme selector its mode, anything else none. */
 const modeOfSelector = (selector: string): string | undefined => {
   if (selector === ":root") return DEFAULT_MODE;
   const patterns: ReadonlyArray<RegExp> = [/^\[data-theme\s*=\s*["']?([a-z0-9-]+)["']?\]$/i, /^:root\.([a-z0-9-]+)$/i, /^\.theme-([a-z0-9-]+)$/i, /^\.([a-z0-9-]+)$/i];
@@ -279,7 +250,6 @@ const modeOfSelector = (selector: string): string | undefined => {
   return undefined;
 };
 
-/** Imports the custom properties of a stylesheet: `:root` is the default mode, each theme block its mode, and each value's type is read from its shape. */
 export const fromCss = (text: string): ImportResult => {
   const collected = new Map<string, Collected>();
   const modes: string[] = [DEFAULT_MODE];
@@ -322,7 +292,6 @@ export const fromCss = (text: string): ImportResult => {
     }
   }
 
-  // An alias takes the type of the token it refers to. One that refers to no token is skipped.
   for (const { path, target } of aliases) {
     const entry = collected.get(path);
     if (entry === undefined) continue;
@@ -338,7 +307,6 @@ export const fromCss = (text: string): ImportResult => {
   return { ok: true, fragment: assemble(collected, modes, skipped) };
 };
 
-/** DTCG's form of a kit value, for the default mode's `$value`. */
 const dtcgValue = (type: TokenType, value: TokenValue): unknown => {
   if (isAlias(value)) return `{${String(value).slice(1, -1).split("/").join(".")}}`;
   switch (type) {
@@ -384,7 +352,6 @@ const DTCG_TYPE: Readonly<Record<TokenType, string>> = {
   easing: "cubicBezier",
 };
 
-/** The DTCG JSON of a kit: a group per path segment, the default mode's value, and every mode's value and the guidance in the unframed extension. */
 export const toDtcg = (kit: Kit): string => {
   const root: Record<string, unknown> = { $extensions: { [UNFRAMED]: { name: kit.name, modes: kit.modes, ...(kit.guidance === undefined ? {} : { guidance: kit.guidance }) } } };
   const defaultMode = kit.modes[0]!;
@@ -408,10 +375,8 @@ export const toDtcg = (kit: Kit): string => {
   return JSON.stringify(root, null, 2) + "\n";
 };
 
-/** The CSS custom properties, exactly as the tokens script writes them. */
 export const toCss = (kit: Kit): string => kitCss(kit);
 
-/** Tailwind v4 `@theme`: the default mode inside `@theme`, the other modes as theme blocks. */
 export const toTailwind = (kit: Kit): string => {
   const title = kit.name.replace(/\*\//g, "* /");
   return [

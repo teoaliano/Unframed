@@ -5,8 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ensureComponentLibrary, writeComponentSheet } from "../src/artifacts/artifactStore.ts";
 import { makeTempDir } from "./engineProcess.ts";
 
-/** Spec 20, task 7: the artifact store writes a component sheet, its compiled file and its sidecar. */
-
 const SHEET = `<!doctype html><html><head>
 <script type="application/json" data-uf-component>{"tag":"uf-button","variants":{"kind":["primary","secondary"]},"props":{"label":"text"},"slots":[]}</script>
 <style type="text/x-uf-component" data-uf-component-style>:host { display: inline-block; }</style>

@@ -1,8 +1,3 @@
-/**
- * Apply on a kit card in the Library (spec 19). A project with no kit takes the library kit as a
- * copy, linked to its preset. A project whose kit came from that preset updates from it. Any other
- * kit is replaced, after a confirmation that names both kits.
- */
 import { GUIDANCE_CHOICE, mergeKit, replaceKit, type Kit, type KitPreset, type MergeChoices, type MergeResult, type Token } from "@unframed/domain";
 import { useState } from "react";
 import type { Editor } from "tldraw";
@@ -15,7 +10,6 @@ import { kitOf, writeKit } from "./kitRoom.ts";
 import { kitUi } from "./state.ts";
 import { linkFor } from "./KitLibrary.tsx";
 
-/** The copy of a library kit a project takes: its values, the project's own name for it, and the link. */
 const kitFrom = (preset: KitPreset): Kit => ({
   format: 1,
   name: preset.kit.name,
@@ -27,7 +21,6 @@ const kitFrom = (preset: KitPreset): Kit => ({
 
 const applied = (name: string) => showNotice(`Applied “${name}” to this project.`, "info");
 
-/** Apply from a library kit card: copies, updates or asks, as the project's kit allows. */
 export const applyLibraryKit = (editor: Editor, preset: KitPreset, confirm: () => void): void => {
   const kit = kitOf(editor);
   if (kit === null) {
@@ -42,7 +35,6 @@ export const applyLibraryKit = (editor: Editor, preset: KitPreset, confirm: () =
   confirm();
 };
 
-/** The confirmation for replacing the project's kit with a library kit. The replacement is one undo step. */
 export const ReplaceKitDialog = ({ editor, preset, onClose }: { readonly editor: Editor; readonly preset: KitPreset; readonly onClose: () => void }) => {
   const current = kitOf(editor);
   const replace = () => {
@@ -68,7 +60,6 @@ export const ReplaceKitDialog = ({ editor, preset, onClose }: { readonly editor:
   );
 };
 
-/** The three-way merge of the project's kit with a library kit as it is now, with the person's choices applied. */
 export const mergeWith = (project: Kit, preset: KitPreset, choices: MergeChoices = {}): MergeResult =>
   mergeKit(
     {
@@ -79,7 +70,6 @@ export const mergeWith = (project: Kit, preset: KitPreset, choices: MergeChoices
     choices,
   );
 
-/** Whether a library kit would change the project at all: an update, an addition, a removal, a conflict, or a mode. */
 export const hasDifferences = (result: MergeResult, project: Kit): boolean =>
   result.counts.updated + result.counts.added + result.counts.removed > 0 ||
   result.conflicts.length > 0 ||
@@ -95,10 +85,8 @@ const GUIDANCE_LINE: Readonly<Record<string, string>> = {
   kept: "The guidance stays as you changed it here.",
 };
 
-/** The first words of a guidance, for a conflict row: a whole guidance is too long to compare there. */
 const opening = (text: string) => (text === "" ? "(none)" : text.length > 160 ? `${text.slice(0, 159).trimEnd()}…` : text);
 
-/** A value as the dialog shows it: a swatch for a colour, then its text. */
 const ValueText = ({ colour, text }: { readonly colour: boolean; readonly text: string }) => (
   <span className="inline-flex items-center gap-1.5 font-mono text-xs">
     {colour && <span aria-hidden className="size-3 shrink-0 rounded-sm border" style={{ background: text }} />}
@@ -106,7 +94,6 @@ const ValueText = ({ colour, text }: { readonly colour: boolean; readonly text: 
   </span>
 );
 
-/** Update from kit (spec 19): the counts, a row per conflict to keep or take, and one undo step on Update. */
 export const UpdateFromKitDialog = ({ editor, preset, onClose }: { readonly editor: Editor; readonly preset: KitPreset; readonly onClose: () => void }) => {
   const project = kitOf(editor);
   const [choices, setChoices] = useState<MergeChoices>({});

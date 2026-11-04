@@ -6,8 +6,7 @@ import { expect, test } from "./agent.ts";
 import { filledArtifact, writeProjectFile } from "./artifacts.ts";
 import { componentShape, SHEET_FILE } from "./components.ts";
 import { putRecords } from "./media.ts";
-
-/** Spec 20, task 35: a deleted component shape leaves its instances working, offers no update, and undo brings it back. */
+import { parameters } from "./editorHarness.ts";
 
 const SHEET = stampElementIds(`<!doctype html><html><head><meta charset="utf-8">${BRIDGE_TAG}${COMPONENT_HELPER_TAG}</head><body style="margin:0">
 <script type="application/json" data-uf-component>{"tag":"uf-price-card","variants":{},"props":{"label":"text"},"slots":[]}</script>
@@ -18,8 +17,7 @@ const SHEET = stampElementIds(`<!doctype html><html><head><meta charset="utf-8">
 const PAGE = `<!doctype html><html><head><script src="${compiledFileName(SHEET_FILE)}" data-uf-component="uf-price-card"></script></head><body style="margin:0;font:16px sans-serif"><uf-price-card label="Buy now"></uf-price-card></body></html>`;
 
 const frame = (page: Page) => page.getByRole("region", { name: "Editing Landing" }).frameLocator("iframe[data-artifact-frame]");
-const design = (page: Page) => page.getByTestId("artifact-editor").locator('[data-editor-column="parameters"]');
-const goToMain = (page: Page) => design(page).getByRole("button", { name: "Go to main component", exact: true });
+const goToMain = (page: Page) => parameters(page).getByRole("button", { name: "Go to main component", exact: true });
 
 test("a deleted component leaves its instances working, offers no update, and undo brings it back", async ({ page, agent }) => {
   await openCanvas(page, agent);
@@ -29,7 +27,6 @@ test("a deleted component leaves its instances working, offers no update, and un
   await expect(shapeOnScreen(page, "shape:card")).toBeVisible();
   await expect(shapeOnScreen(page, "shape:landing")).toBeVisible();
 
-  // Delete the component shape on the canvas (no confirmation), then undo it straight away: the component is back.
   const deleteCard = async () => {
     await page.mouse.click(640, 600);
     const card = await centre(shapeOnScreen(page, "shape:card"));
@@ -42,7 +39,6 @@ test("a deleted component leaves its instances working, offers no update, and un
   await page.keyboard.press("ControlOrMeta+z");
   await expect(shapeOnScreen(page, "shape:card")).toBeVisible();
 
-  // Deleted again: the instance still renders in the editor, no update is offered, and Go to main component is disabled.
   await deleteCard();
   await expect(page.getByText("Updates", { exact: true })).toHaveCount(0);
   await page.mouse.click(640, 600);

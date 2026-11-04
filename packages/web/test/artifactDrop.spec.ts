@@ -32,7 +32,6 @@ test("dropped .html files become pages at the drop point, 24 apart; a failed upl
   expect(two.props.title).toBe("Two");
   expect(two.x! - one.x!).toBeCloseTo(24, 5);
   expect(two.y! - one.y!).toBeCloseTo(24, 5);
-  // Spec 18, Tags on uploads, drops and pastes and When: a dropped .html gets the dials bridge tag, then an id on each element.
   const oneFile = await readFile(projectPath(engine, one.props.file), "utf8");
   expect(oneFile).toContain('<script src="unframed-dials.js"></script>');
   expect(oneFile).toMatch(/<h1 data-hf-id="hf-[a-z0-9]{4}">one<\/h1>/);
@@ -50,7 +49,6 @@ test("an .html dropped on a page replaces its file and keeps its title, and Cmd-
   await page.keyboard.press("Shift+1");
   await page.waitForTimeout(400);
 
-  // An empty page takes the dropped file's name as its title.
   await dropFiles(page, await centre(shapeOnScreen(page, "shape:blank")), [{ name: "Pricing.html", mime: "text/html", bytes: Buffer.from("<h1>Pricing</h1>") }]);
   await waitForRoom(engine, "default", (records) => records.find((record) => record.id === "shape:blank" && record.props.title === "Pricing"));
 
@@ -60,14 +58,12 @@ test("an .html dropped on a page replaces its file and keeps its title, and Cmd-
     return shape && shape.props.file !== first ? shape : undefined;
   });
   expect(replaced.props).toMatchObject({ title: "Landing", fileName: "Second.html" });
-  // Spec 18, Tags on uploads, drops and pastes and When: the replacement gets the bridge tag and element ids too.
   const secondFile = await readFile(projectPath(engine, replaced.props.file), "utf8");
   expect(secondFile).toContain('<script src="unframed-dials.js"></script>');
   expect(secondFile).toMatch(/<h1 data-hf-id="hf-[a-z0-9]{4}">Second version<\/h1>/);
   expect(existsSync(projectPath(engine, first))).toBe(true);
   expect((await roomRecords(engine, "default")).filter((record) => record.type === "page")).toHaveLength(2);
 
-  // The replace is one undo step: Cmd-Z points the page back at the file it had.
   await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(async () => (await settledRecord(engine, "default", "shape:landing"))?.props.file).toBe(first);
   expect((await roomRecords(engine, "default")).find((record) => record.id === "shape:blank")?.props.title).toBe("Pricing");
@@ -97,7 +93,6 @@ test("a composition dropped on a motion goes through the motion upload and plays
   await clickShape(page, "shape:intro");
   const viewer = insideFrame(page, "shape:intro");
   await expect(insideComposition(viewer).locator("#word")).toHaveText("Dropped in", { timeout: 15_000 });
-  // Muted, with controls, and playing on its own.
   const player = viewer.locator("hyperframes-player");
   await expect(player).toHaveAttribute("muted", "");
   await expect(player).toHaveAttribute("controls", "");
@@ -123,7 +118,6 @@ agentTest("deleting an artifact asks nothing and keeps its files and chats; Cmd-
   await page.keyboard.press("ControlOrMeta+z");
   await expect(shapeOnScreen(page, "shape:landing")).toBeVisible();
   await expect.poll(async () => (await roomRecords(agent, "default")).find((record) => record.id === "shape:landing")?.props.file).toBe(file);
-  // Selected again, it finds the chat about it.
   await clickShape(page, "shape:landing");
   await openRail(page);
   await expect(rail(page).getByRole("tab", { name: /About landing/ })).toBeVisible();

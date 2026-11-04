@@ -5,7 +5,6 @@ import { openLibrary, presetItem, shownNames } from "./library.ts";
 import { dropFiles, putRecords } from "./media.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
-/** Spec 19: a DESIGN.md imports into the kit, the Kit dialog shows and edits the guidance, and ten kits ship in the library. */
 
 type KitRecord = { name: string; modes: string[]; tokens: Array<{ path: string; type: string; value?: unknown; values?: Record<string, unknown> }>; guidance?: string; from?: { presetId: string } };
 

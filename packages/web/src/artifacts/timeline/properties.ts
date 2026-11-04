@@ -1,7 +1,3 @@
-/**
- * The names the values panel gives a GSAP property (spec 21, The values panel). They follow the Design tab's names for the same
- * CSS properties, so a value reads as the Design tab reads it. A property not listed is spelled out from its camel case.
- */
 const LABELS: Readonly<Record<string, string>> = {
   x: "X",
   y: "Y",
@@ -31,7 +27,6 @@ const LABELS: Readonly<Record<string, string>> = {
   gap: "Gap",
 };
 
-/** The degree sign a bare number of these properties shows after it. GSAP reads the number as degrees, so the file keeps it bare. */
 const DEGREES: ReadonlySet<string> = new Set(["rotation", "rotationX", "rotationY", "skewX", "skewY"]);
 
 export const propertyLabel = (property: string): string => {
@@ -41,5 +36,4 @@ export const propertyLabel = (property: string): string => {
   return words.charAt(0).toUpperCase() + words.slice(1);
 };
 
-/** The unit a number of this property shows when the file writes it bare. */
 export const bareUnitOf = (property: string): string => (DEGREES.has(property) ? "°" : "");

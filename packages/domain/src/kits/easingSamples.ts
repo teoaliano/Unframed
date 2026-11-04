@@ -1,4 +1,3 @@
-/** GSAP named eases: 24 samples of each curve (ease(i / 23)) and 40 samples of the linear() ones (ease(i / 39)), from GSAP 3.15.0. Generated once with GSAP; the test checks them against gsap.parseEase. */
 export const EASE_SAMPLES: Readonly<Record<string, ReadonlyArray<number>>> = {
   "none": [0, 0.043478, 0.086957, 0.130435, 0.173913, 0.217391, 0.26087, 0.304348, 0.347826, 0.391304, 0.434783, 0.478261, 0.521739, 0.565217, 0.608696, 0.652174, 0.695652, 0.73913, 0.782609, 0.826087, 0.869565, 0.913043, 0.956522, 1],
   "sine.in": [0, 0.002331, 0.009314, 0.020916, 0.037083, 0.057739, 0.082789, 0.112115, 0.145581, 0.18303, 0.224289, 0.269164, 0.317447, 0.368912, 0.42332, 0.480416, 0.539935, 0.601599, 0.66512, 0.730203, 0.796544, 0.863833, 0.931758, 1],

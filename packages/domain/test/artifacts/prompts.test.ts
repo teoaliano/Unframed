@@ -37,6 +37,7 @@ const sections = (file: string) =>
 describe("the artifact tools' model-facing text is the assets' text", () => {
   it("holds the write descriptions, the dials paragraphs and the performance paragraph", () => {
     expect(PAGE_WRITE_TEXT).toBe(blocks("page-write-tool.md")[0]);
+    expect(PAGE_WRITE_TEXT).toContain("nothing external loads, except the engine's component pins.");
     expect(MOTION_WRITE_TEXT).toBe(blocks("motion-write-tool.md")[0]);
     expect(DIALS_CONTRACT).toBe(blocks("dials-contract.md")[0]);
     expect(DIALS_TIMELINE).toBe(blocks("dials-timeline.md")[0]);

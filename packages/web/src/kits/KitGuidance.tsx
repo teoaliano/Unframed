@@ -1,7 +1,3 @@
-/**
- * The Kit dialog's Guidance section (spec 19): the kit's guidance read as markdown, and Edit to
- * change it as plain text. Saving is one kit edit, so one undo step.
- */
 import type { KitOp } from "@unframed/domain";
 import { useState } from "react";
 import { Button } from "~/components/ui/button";
@@ -47,7 +43,6 @@ export const KitGuidance = ({ guidance, apply }: { readonly guidance: string | u
             autoFocus
             onChange={(event) => setDraft(event.currentTarget.value)}
             onKeyDown={(event) => {
-              // Esc leaves the editor, not the dialog; Cmd or Ctrl and Enter saves.
               if (event.key === "Escape") {
                 event.stopPropagation();
                 cancel();

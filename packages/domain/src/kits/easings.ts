@@ -1,16 +1,8 @@
-/**
- * The ease catalogue (spec 19): the 31 GSAP named eases in the order the dialog lists them,
- * their labels, their 24 curve samples, and the CSS form each one takes in a custom property.
- * The GSAP name is the source of truth; the CSS forms are a table for the browser.
- */
 import { EASE_LINEAR_SAMPLES, EASE_SAMPLES } from "./easingSamples.ts";
 
 export interface Ease {
-  /** The GSAP name, such as `power2.out`, or `none`. */
   readonly name: string;
-  /** `Linear` for none; otherwise the family and the direction, such as `Power2 · Out`. */
   readonly label: string;
-  /** 24 values of the curve at i / 23. */
   readonly samples: ReadonlyArray<number>;
 }
 
@@ -37,14 +29,12 @@ export const labelOf = (name: string): string => {
   return `${FAMILY_LABEL[family!]} · ${DIRECTION_LABEL[direction!]}`;
 };
 
-/** The catalogue, in order. */
 export const EASES: ReadonlyArray<Ease> = EASE_NAMES.map((name) => ({ name, label: labelOf(name), samples: EASE_SAMPLES[name]! }));
 
 export const easeLabel = (name: string): string => labelOf(name);
 
 export const isEaseName = (name: string): boolean => EASE_NAMES.includes(name);
 
-/** The usual CSS cubic beziers (the easings.net values) for power, sine, expo, circ and back. */
 const BEZIERS: Readonly<Record<string, readonly [number, number, number, number]>> = {
   "sine.in": [0.12, 0, 0.39, 0],
   "sine.out": [0.61, 1, 0.88, 1],
@@ -74,7 +64,6 @@ const BEZIERS: Readonly<Record<string, readonly [number, number, number, number]
 
 const fmt = (n: number) => String(Number(n.toFixed(4)));
 
-/** The CSS form of each catalogue name: a cubic bezier, linear() for elastic and bounce, linear for none. */
 export const EASE_CSS: Readonly<Record<string, string>> = Object.fromEntries(
   EASE_NAMES.map((name) => {
     if (name === "none") return [name, "linear"];
@@ -84,7 +73,6 @@ export const EASE_CSS: Readonly<Record<string, string>> = Object.fromEntries(
   }),
 );
 
-/** The four coordinates of a catalogue name's cubic bezier, or undefined for the sampled ones. */
 export const cubicBezierOf = (name: string): [number, number, number, number] | undefined => {
   const bezier = BEZIERS[name];
   return bezier ? [...bezier] : undefined;

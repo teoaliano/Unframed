@@ -1,16 +1,12 @@
-/**
- * Artifacts at the Effect boundary (spec 09): the motion upload, render start and status RPCs
- * and the snapshot stream, over the artifact store, the renderer and the snapshot service.
- */
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { TLRecord } from "@tldraw/tlschema";
 import type { ArtifactImage, ArtifactSnapshot, ComponentPins as ComponentPinsItem, ComponentUpdate, MotionTimelineReading, OffTokenFound, RenderStatus, SourceEdit, SourceTreeElement } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
-import { injectTags, projectSlug, shapeKind } from "@unframed/domain";
+import { projectSlug, shapeKind } from "@unframed/domain";
 import { motionTimeline } from "@unframed/domain/motion";
-import { byteSize, prepareArtifactHtml } from "./artifactHtml.ts";
+import { prepareArtifactHtml } from "./artifactHtml.ts";
 import { artifactEditService } from "./editService.ts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -39,10 +35,8 @@ import { chromeSnapshotRenderer, Snapshots, stubSnapshotRenderer, type SnapshotR
 import { SettingsStore } from "../settingsStore.ts";
 import { Shutdown } from "../shutdown.ts";
 
-/** A composition upload may be at most 20 MB. */
 const UPLOAD_LIMIT = 20 * 1_048_576;
 
-/** The engine pointing a shape at its prepared version (spec 18): no person and no chat made it. */
 const PREPARE_ORIGIN: ChangeOrigin = { kind: "server", id: "artifact:prepare" };
 
 export class Artifacts extends Context.Service<
@@ -59,24 +53,16 @@ export class Artifacts extends Context.Service<
     }) => Effect.Effect<{ id: string; status: "queued"; placeholder: string }, UnframedError>;
     readonly renderStatus: (project: string, id: string) => Effect.Effect<RenderStatus, UnframedError>;
     readonly snapshots: (project: string) => Stream.Stream<ArtifactSnapshot, UnframedError>;
-    /** The timeline reading of a motion file (spec 21), cached per file for the life of the engine. */
     readonly timeline: (project: string, file: string) => Effect.Effect<MotionTimelineReading, UnframedError>;
-    /** Every page and motion file's component pins, then each newly named file's (spec 20). */
     readonly componentPins: (project: string) => Stream.Stream<ComponentPinsItem, UnframedError>;
-    /** `component.copy` (spec 20): a sheet copied under its fresh tag. */
     readonly componentCopy: (input: { project: string; file: string; from?: string | undefined }) => Effect.Effect<{ file: string; tag: string }, UnframedError>;
-    /** `component.updates` (spec 20): the components a page or motion has an older version of. */
     readonly componentUpdates: (project: string, shapeId: string) => Effect.Effect<ComponentUpdate[], UnframedError>;
-    /** "Open in a new tab": the shape's live viewer pointer, kept current from then on. */
     readonly openLive: (project: string, shapeId: string) => Effect.Effect<{}, UnframedError>;
-    /** The element editor's file operations (spec 18). */
     readonly sourceTree: (project: string, file: string) => Effect.Effect<{ ready: boolean; elements: SourceTreeElement[]; offTokens: OffTokenFound[] }, UnframedError>;
     readonly prepareEdit: (project: string, shapeId: string) => Effect.Effect<{ file: string }, UnframedError>;
     readonly edit: (project: string, shapeId: string, baseFile: string, edits: SourceEdit[]) => Effect.Effect<{ file: string; summary: string[] }, UnframedError>;
     readonly images: (project: string) => Effect.Effect<{ images: ArtifactImage[] }, UnframedError>;
-    /** The Chromium this machine has, for the agent's previews and snapshots. */
     readonly findChrome: () => Promise<string | undefined>;
-    /** The engine-owned headless Chrome that snapshots and the agent's previews share. */
     readonly chrome: HeadlessChrome;
   }
 >()("unframed/engine/Artifacts") {}
@@ -102,7 +88,6 @@ export const artifactsLayer = Layer.effect(
     const backend = config.testRenderer === "ok" || config.testRenderer === "fail" ? stubBackend(config.testRenderer, fixture) : producerBackend(chrome);
 
     const headless = new HeadlessChrome(chrome);
-    // What an engine that died without closing its browser left behind.
     void sweepChromeProfiles().catch((error: unknown) => logError(`could not sweep old headless Chrome profiles: ${errorText(error)}`));
     yield* shutdown.register("headless Chrome", Effect.promise(() => headless.close()));
 
@@ -126,7 +111,6 @@ export const artifactsLayer = Layer.effect(
       snapshots.committed(project, [...change.records.values()], kit);
     });
 
-    // The tokens script follows the kit: after every commit that touches the document record, and when a room opens.
     const writeTokens = (project: string, kit: ReturnType<typeof kitOf>) =>
       ensureTokensFor(() => media.folder(project), kit, (error) => logError(`${project}: could not write ${TOKENS_FILE}: ${errorText(error)}`));
     yield* rooms.afterOpen((project, room) => writeTokens(project, kitOf(room.read())));

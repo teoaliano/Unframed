@@ -2,6 +2,8 @@ import { applyKitOps, type KitOp, type KitPreset } from "@unframed/domain";
 import { useEffect, useRef, useState } from "react";
 import { useEditor, useValue, type TLShapeId } from "tldraw";
 import { EllipsisIcon } from "lucide-react";
+import { Alert, AlertAction, AlertDescription } from "~/components/ui/alert";
+import { Empty, EmptyContent, EmptyDescription } from "~/components/ui/empty";
 import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPopup, AlertDialogTitle } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
@@ -18,17 +20,15 @@ import { ImportKitDialog } from "./KitImport.tsx";
 import { KitGuidance } from "./KitGuidance.tsx";
 import { showError, showReveal } from "../toasts.tsx";
 
-export const NO_KIT_MESSAGE = "This project has no kit yet. A kit holds the colours, sizes, fonts and motion values its pages and motions share.";
-export const DEFAULT_KIT_NAME = "Kit";
+const NO_KIT_MESSAGE = "This project has no kit yet. A kit holds the colours, sizes, fonts and motion values its pages and motions share.";
+const DEFAULT_KIT_NAME = "Kit";
 
-/** What the confirm dialog is asking about, if anything. */
 type Ask = { readonly kind: "token"; readonly path: string } | { readonly kind: "mode"; readonly mode: string } | { readonly kind: "kit" };
 
 const NO_USE = { tokens: {}, modes: {} } as KitUsageCounts;
 
 const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
 
-/** The Kit dialog (spec 19): the empty state, or the kit's name, the table, and its menu. */
 export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => void; readonly onFromLibrary: () => void }) => {
   const editor = useEditor();
   const engine = useEngine();
@@ -39,16 +39,12 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
   const [ask, setAsk] = useState<Ask>();
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
-  // The library kit this project came from: undefined while it is read, null when it is gone.
   const [linkedPreset, setLinkedPreset] = useState<KitPreset | null>();
-  // The name of the library kit the project came from, kept once it was read, so its deletion can still name it.
   const [presetName, setPresetName] = useState<string>();
-  // The engine refused Update in library because the library kit is newer; the dialog offers Update from kit.
   const [newer, setNewer] = useState<string>();
   const fromId = kit?.from?.presetId;
   const fromRevision = kit?.from?.revision;
 
-  // Used-by counts are read when the dialog opens and after each kit change (spec 19).
   useEffect(() => {
     if (kit === null) return;
     engine
@@ -57,20 +53,17 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
       .catch(() => setUsage(NO_USE));
   }, [engine, project, kit]);
 
-  /** Commits ops as one undo step. Returns the refusal, so a field can show it under itself. */
   const apply = (ops: ReadonlyArray<KitOp>): string | undefined => {
     const result = commitKit(editor, ops);
     setProblem(result.ok ? undefined : result.refusal);
     return result.ok ? undefined : result.refusal;
   };
 
-  /** After a save or an update, the project's link says which library kit it matches, as it is now. */
   const relink = (presetId: string, revision: number) => {
     const current = kitOf(editor);
     if (current !== null) linkKit(editor, linkFor(presetId, revision, current));
   };
 
-  // The library kit a project came from is read when the dialog opens and after each update.
   useEffect(() => {
     if (fromId === undefined) return;
     let live = true;
@@ -94,14 +87,12 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
     } else if (outcome.kind === "newer") setNewer(outcome.message);
   };
 
-  /** Opens Update from kit for the library kit this project came from. */
   const updateFromKit = async () => {
     if (kit?.from === undefined) return;
     const found = await libraryKitById(engine, kit.from.presetId);
     if (found !== undefined) kitUi(editor).update((state) => ({ ...state, merging: found }));
   };
 
-  /** The source line: the library kit it came from, the offer of Update from kit, or that the library kit is gone. */
   const sourceLine = () => {
     if (kit === null || kit.from === undefined || linkedPreset === undefined) return null;
     if (linkedPreset === null)
@@ -119,8 +110,6 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
     );
   };
 
-
-  /** Export writes the kit into the project folder; the toast offers to reveal the file. */
   const exportKit = (format: KitExportFormat) => {
     engine
       .call("kit.exportFile", { project, format })
@@ -151,9 +140,9 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
           </DialogHeader>
           <DialogPanel>
             {kit === null ? (
-              <div className="grid gap-4">
-                <p className="text-sm text-muted-foreground">{NO_KIT_MESSAGE}</p>
-                <div className="flex flex-wrap gap-2">
+              <Empty>
+                <EmptyDescription>{NO_KIT_MESSAGE}</EmptyDescription>
+                <EmptyContent className="flex-row flex-wrap justify-center">
                   <Button onClick={() => apply([{ op: "create", name: DEFAULT_KIT_NAME, modes: ["default"] }])}>New kit</Button>
                   <Button variant="outline" onClick={onFromLibrary}>
                     From library
@@ -161,18 +150,20 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
                   <Button variant="outline" onClick={() => setImporting(true)}>
                     Import
                   </Button>
-                </div>
-              </div>
+                </EmptyContent>
+              </Empty>
             ) : (
               <div className="grid gap-4">
                 {sourceLine()}
                 {newer !== undefined && (
-                  <p role="alert" className="m-0 flex flex-wrap items-center gap-2 text-sm text-destructive">
-                    {newer}
-                    <Button variant="outline" size="sm" onClick={() => void updateFromKit()}>
-                      Update from kit
-                    </Button>
-                  </p>
+                  <Alert variant="error">
+                    <AlertDescription>{newer}</AlertDescription>
+                    <AlertAction>
+                      <Button variant="outline" size="sm" onClick={() => void updateFromKit()}>
+                        Update from kit
+                      </Button>
+                    </AlertAction>
+                  </Alert>
                 )}
                 <div className="flex items-center gap-2">
                   <Input
@@ -196,11 +187,7 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
                 <KitTable kit={kit} usage={usage} apply={apply} titleOf={titleOf} onAskDeleteToken={(path) => setAsk({ kind: "token", path })} onAskDeleteMode={(mode) => setAsk({ kind: "mode", mode })} />
               </div>
             )}
-            {problem !== undefined && (
-              <p role="alert" className="text-sm text-destructive">
-                {problem}
-              </p>
-            )}
+            {problem !== undefined && <Alert variant="error">{problem}</Alert>}
           </DialogPanel>
         </DialogPopup>
       </Dialog>
@@ -215,7 +202,6 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
       )}
 
       <AlertDialog open={ask !== undefined} onOpenChange={(open) => !open && setAsk(undefined)}>
-        {/* A deleted token or mode takes its row with it: focus goes to the table's search field, inside this dialog. */}
         <AlertDialogPopup className="max-w-[400px]" finalFocus={() => document.querySelector<HTMLElement>('[data-testid="kit"] input[type="search"]') ?? true}>
           <AlertDialogHeader>
             {ask?.kind === "token" && (
@@ -249,7 +235,6 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
   );
 };
 
-/** The kit's More menu: the actions that are not a cell's. */
 const EXPORTS: ReadonlyArray<{ readonly format: KitExportFormat; readonly label: string }> = [
   { format: "dtcg", label: "DTCG JSON" },
   { format: "css", label: "CSS variables" },

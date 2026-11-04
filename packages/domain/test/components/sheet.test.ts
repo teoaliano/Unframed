@@ -96,3 +96,34 @@ describe("readComponentSheet", () => {
     );
   });
 });
+
+describe("markup a template may not hold (spec 20)", () => {
+  const withTemplate = (markup: string) => declaration(GOOD).replace('<div data-uf-template hidden>', `<div data-uf-template hidden>${markup}`);
+
+  it.each([
+    ["an event handler", '<img data-uf-prop="icon" src="a.png" onerror="alert(1)">'],
+    ["an event handler on a span", '<span onclick="x()">Buy</span>'],
+    ["a javascript: link", '<a href="javascript:alert(1)">Buy</a>'],
+    ["a javascript: source", '<img data-uf-prop="icon" src="javascript:alert(1)">'],
+    ["an iframe", '<iframe src="x.html"></iframe>'],
+    ["an object", '<object data="x.svg"></object>'],
+    ["an embed", '<embed src="x.svg">'],
+  ])("refuses %s in the template", (_name, markup) => {
+    expect(readComponentSheet(withTemplate(markup)).ok).toBe(false);
+  });
+
+  it("names the refusal in one sentence", () => {
+    expect(refusal(withTemplate('<span onclick="x()">Buy</span>'))).toBe(
+      "a component's template cannot hold an on attribute, a javascript: link, or an iframe, object or embed; put behaviour in the page that uses it",
+    );
+  });
+
+  it("allows an ordinary link and a data-uf attribute that starts with on", () => {
+    const read = readComponentSheet(withTemplate('<a href="https://example.com/">Buy</a><span data-uf-onboarding="x">Buy</span>'));
+    expect(read.ok).toBe(true);
+  });
+
+  it("ignores these names inside a comment", () => {
+    expect(readComponentSheet(withTemplate('<!-- <img onerror="alert(1)"> --><span>Buy</span>')).ok).toBe(true);
+  });
+});

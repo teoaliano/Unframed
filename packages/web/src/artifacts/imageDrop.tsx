@@ -1,10 +1,3 @@
-/**
- * Dropping an image on a live page (spec 18, Images, On the canvas). While one image with a file
- * is dragged, the pages that are live are asked, once per animation frame, for the picture under
- * the pointer; the answer is outlined. A drop on a picture puts the image back where the drag
- * began and swaps the picture in one step, with no burst. Nothing here runs on the canvas thread
- * beyond posting a message and drawing one outline.
- */
 import { parseAssetMarker, type ArtifactShapeProps } from "@unframed/contracts";
 import { isArtifactKind } from "@unframed/domain";
 import { useEditor, useValue, type Editor, type TLAssetId, type TLShape, type TLShapeId } from "tldraw";
@@ -14,7 +7,6 @@ import { showError, showNotice } from "../toasts.tsx";
 import type { EditMessage } from "./ArtifactFrame.tsx";
 import { artifactsOf, isLive, type DropHit } from "./state.ts";
 
-/** The project file an image shape shows: its asset's source names it. */
 const imageFileOf = (editor: Editor, shape: TLShape | null | undefined): string | undefined => {
   if (!shape || shape.type !== "image") return undefined;
   const assetId = (shape.props as { assetId?: unknown }).assetId;
@@ -23,22 +15,18 @@ const imageFileOf = (editor: Editor, shape: TLShape | null | undefined): string 
   return marker?.kind === "project-file" ? marker.file : undefined;
 };
 
-/** The live pages a drag may drop on: artifacts with a file that run a frame now. */
+const isDropTarget = (type: string): boolean => isArtifactKind(type) && type !== "motion";
+
 const livePages = (editor: Editor): TLShapeId[] =>
   editor
     .getCurrentPageShapes()
-    .filter((shape) => isArtifactKind(shape.type) && (shape.props as ArtifactShapeProps).file !== "" && isLive(editor, shape.id))
+    .filter((shape) => isDropTarget(shape.type) && (shape.props as ArtifactShapeProps).file !== "" && isLive(editor, shape.id))
     .map((shape) => shape.id);
 
-/** Posts one `unframed:edit:*` message to a live canvas frame, if it runs. */
 const postTo = (editor: Editor, id: string, message: unknown): void => {
   artifactsOf(editor).editPosts.get(id)?.(message);
 };
 
-/**
- * A message from a canvas frame's edit bridge. Its ready answer sets the bridge's mode and locks
- * (interact, so it draws and picks nothing, and knows what is locked); a hit answer sets the drop hit.
- */
 export const onFrameEdit = (editor: Editor, shapeId: string, message: EditMessage): void => {
   const state = artifactsOf(editor);
   if (message.type === "unframed:edit:ready") {
@@ -57,7 +45,6 @@ export const onFrameEdit = (editor: Editor, shapeId: string, message: EditMessag
   state.dropHit.set({ shapeId, elementId, target, box });
 };
 
-/** The outline over the picture an image drag would replace: one 2 px primary line over the frame. */
 export const DropOutline = ({ shapeId }: { readonly shapeId: string }) => {
   const editor = useEditor();
   const hit = useValue("image drop hit", () => {
@@ -69,19 +56,14 @@ export const DropOutline = ({ shapeId }: { readonly shapeId: string }) => {
     <div
       aria-hidden
       data-drop-outline=""
-      className="pointer-events-none absolute"
-      style={{ left: hit.box.x, top: hit.box.y, width: hit.box.w, height: hit.box.h, border: "2px solid var(--primary)" }}
+      className="pointer-events-none absolute border-2 border-primary"
+      style={{ left: hit.box.x, top: hit.box.y, width: hit.box.w, height: hit.box.h }}
     />
   );
 };
 
-/**
- * Installs the drop for one canvas. A press on an image deselects the page it was dragged onto, so
- * the page that was selected alone when the press began is held live until the drag ends.
- */
 export const installImageDrop = (editor: Editor, engine: EngineConnection, project: string): (() => void) => {
   const state = artifactsOf(editor);
-  // The selection as the previous event left it: a press is judged against what was selected before it.
   let lastSelection: TLShapeId[] = [];
   let press: { readonly image: TLShapeId; readonly mark: string; dragging: boolean } | undefined;
   let frame: number | undefined;
@@ -118,7 +100,6 @@ export const installImageDrop = (editor: Editor, engine: EngineConnection, proje
           showNotice("This page changed somewhere else. Your last change wasn't saved.", "warning");
           return;
         }
-        // The swap is one step of its own, so Cmd-Z takes back the picture and nothing else.
         editor.markHistoryStoppingPoint("image swap");
         editor.updateShape({ id: hit.shapeId as TLShapeId, type: shape.type, props: { file: answer.file } } as never);
       })
@@ -136,7 +117,7 @@ export const installImageDrop = (editor: Editor, engine: EngineConnection, proje
     if (info.name === "pointer_down") {
       const only = editor.getOnlySelectedShape();
       const file = imageFileOf(editor, only);
-      const pages = before.filter((id) => isArtifactKind(editor.getShape(id)?.type ?? "") && (editor.getShape(id)?.props as ArtifactShapeProps | undefined)?.file !== "");
+      const pages = before.filter((id) => isDropTarget(editor.getShape(id)?.type ?? "") && (editor.getShape(id)?.props as ArtifactShapeProps | undefined)?.file !== "");
       if (only && file !== undefined && pages.length === 1) {
         state.dropHolds.set(new Set(pages.map(String)));
         press = { image: only.id, mark: editor.markHistoryStoppingPoint("image drop"), dragging: false };
@@ -150,7 +131,6 @@ export const installImageDrop = (editor: Editor, engine: EngineConnection, proje
       const file = imageFileOf(editor, editor.getShape(press.image));
       const dropping = press.dragging && hit !== undefined && file !== undefined;
       if (dropping) {
-        // The move is taken back to the start of the press, so it is not recorded; the swap is what the person keeps.
         editor.bailToMark(press.mark);
         swap(hit, file);
       }

@@ -1,11 +1,6 @@
-/**
- * Component updates on screen (spec 20): the tags a page or motion pins at an older sheet than the
- * component shape on this canvas holds. The pins come from the engine's stream; the shapes are the store's.
- */
 import type { Editor } from "tldraw";
 import { pinsOf } from "./componentPins.ts";
 
-/** The tags a file pins whose component shape now points at another sheet, in the file's pin order. */
 export const updateTagsOf = (editor: Editor, project: string, file: string): string[] => {
   if (file === "") return [];
   const pins = pinsOf(project).get().get(file) ?? [];
