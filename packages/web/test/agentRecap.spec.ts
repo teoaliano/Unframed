@@ -16,9 +16,14 @@ const REFUSED_WRITE = {
   turns: [{ tools: [{ name: "page_write", input: { shapeId: "g1", html: "" } }], text: "The write was refused." }],
 };
 
+const REFUSED_EDIT = {
+  when: "^change the landing headline",
+  turns: [{ tools: [{ name: "page_edit", input: { shapeId: "g1", edits: [{ old_string: "text that is not on the page", new_string: "New headline" }] } }], text: "The edit was refused." }],
+};
+
 const test = base.extend<{ agent: TestEngine }>({
   agent: async ({}, use) => {
-    const engine = await startAgentEngine({ script: await scriptFolder({ retitle: RETITLE, refused: REFUSED_WRITE }) });
+    const engine = await startAgentEngine({ script: await scriptFolder({ retitle: RETITLE, refused: REFUSED_WRITE, refusedEdit: REFUSED_EDIT }) });
     await use(engine);
     await engine.dispose();
   },
@@ -119,5 +124,21 @@ test("a refused page write says what it tried by the page's title, opens to the 
   await expect(row).toHaveAttribute("data-state", "failed");
   await row.getByRole("button").click();
   await expect(row.getByTestId("work-row-body")).toHaveText("html must be a non-empty string");
+  await expect(panel.getByTestId("recap-card")).toHaveCount(0);
+});
+
+test("a refused page edit says what it tried by the page's title, opens to the error the agent read, and gets no recap card", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await putRecords(agent, artifactColumn([{ id: "shape:g1", title: "Landing" }]));
+  await expect(shapeOnScreen(page, "shape:g1")).toBeVisible();
+  const panel = await openRail(page);
+  await say(panel, "change the landing headline");
+  await expect(panel.locator("[data-role='assistant']").last()).toContainText("The edit was refused.");
+
+  await panel.getByRole("button", { name: /^Worked for/ }).click();
+  const row = panel.getByTestId("work-row").filter({ hasText: "Couldn't edit page Landing" });
+  await expect(row).toHaveAttribute("data-state", "failed");
+  await row.getByRole("button").click();
+  await expect(row.getByTestId("work-row-body")).toHaveText("page g1 has no file yet; write it with page_write");
   await expect(panel.getByTestId("recap-card")).toHaveCount(0);
 });

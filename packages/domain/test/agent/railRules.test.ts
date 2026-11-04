@@ -187,6 +187,8 @@ describe("the recap rows", () => {
     const activities = [
       ...refused("mcp__unframed__page_write", { shapeId: "g1", html: "" }),
       ...refused("mcp__unframed__motion_write", { shapeId: "m1", html: "<p>" }),
+      ...refused("mcp__unframed__page_edit", { shapeId: "g1", edits: [{ old_string: "a", new_string: "b" }] }),
+      ...refused("mcp__unframed__motion_edit", { shapeId: "m1", edits: [{ old_string: "a", new_string: "b" }] }),
       ...refused("mcp__unframed__canvas_write", { ops: [{ type: "move", id: "p1", x: 0, y: 0 }] }),
     ];
     const shapes = [{ id: "shape:g1", kind: "page", title: "Landing" }];
