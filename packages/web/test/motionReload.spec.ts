@@ -4,7 +4,6 @@ import { expect, test } from "./agent.ts";
 import { filledArtifact } from "./artifacts.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
-/** A motion whose dot moves for four seconds, so a bar drag has a whole timeline to move in. */
 const MOVER = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}#dot{position:absolute;left:20px;top:120px;width:80px;height:80px;background:#f00}</style></head><body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360"><div id="dot" data-uf-name="Dot" class="clip" data-start="0" data-duration="4"></div></div>
 <script src="gsap.js"></script><script>
@@ -18,7 +17,6 @@ const timeline = (page: Page) => page.getByRole("region", { name: "Timeline for 
 const bar = (page: Page) => timeline(page).locator('[data-testid="timeline-row"][data-row-kind="element"][data-row-name="Dot"] [data-testid="timeline-bar"]');
 const readout = (page: Page) => timeline(page).getByTestId("timeline-readout");
 const region = (page: Page) => page.getByRole("region", { name: "Editing Intro" });
-/** The time the composition's own timeline is at, read from the frame that is shown now (undefined while no document answers). */
 const frameTime = async (page: Page): Promise<number | undefined> => {
   for (const frame of page.frames()) {
     if (!new URL(frame.url()).pathname.endsWith("-intro.html")) continue;
@@ -43,7 +41,6 @@ const openMover = async (page: Page, engine: TestEngine) => {
   await expect.poll(async () => Number(await timeline(page).getByTestId("timeline-track").getAttribute("data-px-per-second"))).toBeGreaterThan(0);
 };
 
-/** Drags the dot's bar a half second to the right and releases; the version follows one pause later. */
 const dragBar = async (page: Page) => {
   const box = await bar(page).boundingBox();
   if (!box) throw new Error("no bar");
@@ -57,15 +54,12 @@ const dragBar = async (page: Page) => {
 
 test("after a new version the playhead stays where it was, paused, and the edited bar does not jump back while the new reading loads", async ({ page, agent }) => {
   await openMover(page, agent);
-  // Two seconds in, by Shift+Right (ten frames a press) with the strip focused.
   await timeline(page).getByTestId("timeline-rows").click();
   for (let step = 0; step < 6; step++) await page.keyboard.press("Shift+ArrowRight");
   await expect(readout(page)).toContainText("0:02.00", { timeout: 10_000 });
 
   const before = await fileOf(agent);
   await dragBar(page);
-  // From the release until the new version's reading is in (the pause, the commit and the load), the bar stays where the person
-  // dragged it: present, and at 0.5 s. The sampling runs past the new file, so a bar that drops out at the commit is seen.
   const starts: Array<string | null> = [];
   const until = Date.now() + 4000;
   while (Date.now() < until) {
@@ -75,7 +69,6 @@ test("after a new version the playhead stays where it was, paused, and the edite
   expect(starts.length).toBeGreaterThan(20);
   expect(starts.every((start) => start !== null && Math.abs(Number(start) - 0.5) < 0.05)).toBe(true);
 
-  // The new version loads as a fresh document: the playhead is still at 2 s, paused.
   await expect(readout(page)).toContainText("0:02.00", { timeout: 15_000 });
   await expect.poll(() => frameTime(page), { timeout: 15_000 }).toBeCloseTo(2, 1);
   await expect(timeline(page).getByRole("button", { name: "Play (Space)", exact: true })).toBeVisible();
@@ -93,7 +86,6 @@ test("after a new version a playing motion keeps playing from where it was", asy
   const before = await fileOf(agent);
   await dragBar(page);
   await expect.poll(() => fileOf(agent), { timeout: 15_000 }).not.toBe(before);
-  // Playing again, from a time past the 2 s it started at, and the play state the person set is kept.
   await expect(timeline(page).getByRole("button", { name: "Pause (Space)", exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(readout(page)).toContainText(/0:0[2-3]\.\d\d \/ 0:04\.00/);
   await expect.poll(() => frameTime(page), { timeout: 15_000 }).toBeGreaterThan(2);

@@ -1,7 +1,3 @@
-/**
- * Artifacts on the canvas (spec 09): the editor's entry point (double-click, the toolbar's Editor and the recap card's Editor all call it), the
- * canvas Parameters panel, the frame hold, the snapshot stream and the preview origin's port.
- */
 import { isArtifactKind } from "@unframed/domain";
 import { lazy, Suspense, useCallback, useEffect } from "react";
 import { createPortal } from "react-dom";
@@ -17,19 +13,16 @@ import { installImageDrop } from "./imageDrop.tsx";
 import { watchComponentPins } from "./componentPins.ts";
 import { watchSnapshots } from "./snapshots.ts";
 
-// Loaded with the editor or the first Parameters panel only: DialKit and its stylesheet never reach a board where neither opens.
 const ArtifactEditor = lazy(() => import("./editor/ArtifactEditor.tsx").then((module) => ({ default: module.ArtifactEditor })));
 const ParametersPanel = lazy(() => import("./ParametersPanel.tsx").then((module) => ({ default: module.ParametersPanel })));
 
-/** What opening the editor saved, to put back on close. */
 interface Opened {
   readonly camera: TLCamera;
 }
 
 const saved = new WeakMap<Editor, Opened>();
 
-/** Opens the editor on one artifact: saves the camera, selects it alone, closes the composer, then shows the editor. */
-export const openArtifactEditor = (editor: Editor, shapeId: TLShapeId): void => {
+const openArtifactEditor = (editor: Editor, shapeId: TLShapeId): void => {
   const shape = editor.getShape(shapeId);
   if (!shape || !isArtifactKind(shape.type)) return;
   const state = artifactsOf(editor);
@@ -39,8 +32,7 @@ export const openArtifactEditor = (editor: Editor, shapeId: TLShapeId): void => 
   state.editing.set(shapeId);
 };
 
-/** Closes the editor and puts the camera back exactly where it was. */
-export const closeArtifactEditor = (editor: Editor): void => {
+const closeArtifactEditor = (editor: Editor): void => {
   const state = artifactsOf(editor);
   if (state.editing.get() === undefined) return;
   state.editing.set(undefined);
@@ -92,10 +84,6 @@ export const ArtifactsHost = () => {
   );
 };
 
-/**
- * The editor replaces the canvas on screen while it is open. The tldraw editor and its
- * undo history stay mounted beneath it, blurred, so none of its shortcuts runs.
- */
 const EditorOverlay = ({ editor, shapeId }: { readonly editor: Editor; readonly shapeId: TLShapeId }) => {
   const host = editor.getContainer().parentElement;
   const close = useCallback(() => closeArtifactEditor(editor), [editor]);
@@ -104,7 +92,6 @@ const EditorOverlay = ({ editor, shapeId }: { readonly editor: Editor; readonly 
     host?.setAttribute("data-artifact-editor", "");
     const stopCard = registerSlot("artifactEditorOpen", true);
     editor.blur();
-    // Keep the canvas out of the keyboard's way for as long as the editor is open.
     const stop = editor.store.listen(() => {
       if (editor.getInstanceState().isFocused) editor.blur();
     });
@@ -112,7 +99,6 @@ const EditorOverlay = ({ editor, shapeId }: { readonly editor: Editor; readonly 
       stop();
       stopCard();
       host?.removeAttribute("data-artifact-editor");
-      // Back on the canvas, the keyboard is the canvas's again: Cmd-Z undoes a dial change.
       if (!editor.isDisposed) editor.focus();
     };
   }, [editor, host]);

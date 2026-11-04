@@ -13,7 +13,6 @@ test("a sheet opened on its own shows its board: one labelled cell per combinati
     await expect(page.getByText("secondary · md", { exact: true })).toBeVisible();
     await expect(page.locator("uf-price-card")).toHaveCount(4);
     await expect(page.locator("uf-price-card").first().locator("span")).toHaveText("Example");
-    // The first combination is the default one: its button takes the colours of the style's default rule.
     const background = await page.locator("uf-price-card").first().evaluate((host) => getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor);
     expect(background).toBe("rgb(17, 17, 17)");
   } finally {

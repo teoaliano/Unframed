@@ -1,7 +1,3 @@
-/**
- * The instances of a component tag in a document (spec 20), as the update warnings read them: the
- * variant values and property attributes each instance sets, and the slots it fills.
- */
 import type { ComponentDeclaration } from "../components/sheet.ts";
 import type { InstanceUse } from "../components/updates.ts";
 import { attr, flatten, isText, parseSource, scopeRoots, type ScopeNode } from "./source.ts";
@@ -19,7 +15,6 @@ const useOf = (node: ScopeNode, declaration: Pick<ComponentDeclaration, "variant
   return { variants, props, slots: [...slots] };
 };
 
-/** Every instance of `tag` in the document, as the uses its declaration's update warnings count. */
 export const instanceUses = (html: string, tag: string, declaration: Pick<ComponentDeclaration, "variants" | "props">): InstanceUse[] =>
   flatten(scopeRoots(parseSource(html)))
     .filter((node) => node.el.tagName.toLowerCase() === tag)

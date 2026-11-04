@@ -1,7 +1,3 @@
-/**
- * The pins feed (spec 20): each page and motion file the canvas names, with the component pins
- * in its source. A file never changes, so its pins are read once and kept by name.
- */
 import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { TLRecord } from "@tldraw/tlschema";
@@ -12,10 +8,9 @@ export interface PinsItem {
   readonly pins: ReadonlyArray<Pin>;
 }
 
-export interface ComponentPinsDeps {
+interface ComponentPinsDeps {
   readonly folder: (project: string) => Promise<string | undefined>;
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;
-  /** Hands one item to the stream's subscribers. */
   readonly publish: (project: string, item: PinsItem) => void;
 }
 
@@ -27,7 +22,6 @@ const fileOf = (record: TLRecord): string | undefined => {
 };
 
 export class ComponentPins {
-  /** Project slug to file name to its pins. */
   private readonly known = new Map<string, Map<string, ReadonlyArray<Pin>>>();
   private readonly deps: ComponentPinsDeps;
 
@@ -44,7 +38,6 @@ export class ComponentPins {
     return files;
   }
 
-  /** The pins of one file, or `undefined` when it cannot be read yet (it is then not kept). */
   private async pinsOf(project: string, folder: string, file: string): Promise<ReadonlyArray<Pin> | undefined> {
     const files = this.cache(project);
     const kept = files.get(file);
@@ -56,7 +49,6 @@ export class ComponentPins {
     return pins;
   }
 
-  /** Every artifact file the canvas names, with its pins, for a new subscriber. */
   async initial(project: string): Promise<PinsItem[]> {
     const folder = await this.deps.folder(project);
     if (folder === undefined) return [];
@@ -70,7 +62,6 @@ export class ComponentPins {
     return items;
   }
 
-  /** After a commit: each file it newly names is read and published. */
   async committed(project: string, records: ReadonlyArray<TLRecord>): Promise<void> {
     const folder = await this.deps.folder(project);
     if (folder === undefined) return;

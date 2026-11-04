@@ -50,15 +50,18 @@ HyperFrames, GSAP and DialKit (pages and motions, spec 09)
 --------------------------------------------------------------------------------
 
 Motions are HyperFrames compositions. HyperFrames (@hyperframes/core, @hyperframes/player,
-@hyperframes/producer, @hyperframes/engine) is used under the Apache License 2.0; the
-player's global build and the runtime build are copied into project folders, beside the
-compositions that load them, as hyperframes-player.js and hyperframes-runtime.js.
+@hyperframes/producer, @hyperframes/engine) is used under the Apache License 2.0
+(https://www.apache.org/licenses/LICENSE-2.0); the player's global build and the runtime build
+are copied into project folders, beside the compositions that load them, as
+hyperframes-player.js and hyperframes-runtime.js.
 @hyperframes/parsers (Apache License 2.0) is pinned for the element id scheme of spec 18.
 HyperFrames Studio (packages/studio in HyperFrames, Apache License 2.0, Copyright 2026 HeyGen,
 Inc.) is the source of the tween patcher in the edit bridge (spec 21). Its gsapRuntimePatch.ts is
 ported into unframed-edit.js and changed: the header of that part names the file, the licence and
-the changes. The live-time, snapping and zoom patterns of the timeline are rewritten from the
-descriptions of Studio's, and are not copied.
+the changes. That part is used under the Apache License, Version 2.0
+(https://www.apache.org/licenses/LICENSE-2.0), and so is the rest of HyperFrames named above.
+The live-time, snapping and zoom patterns of the timeline are rewritten from the descriptions of
+Studio's, and are not copied.
 
 parse5 (MIT) reads an artifact's HTML in the engine, for element editing (spec 18). It is
 never bundled with the web client.

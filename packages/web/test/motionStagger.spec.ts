@@ -5,7 +5,6 @@ import { filledArtifact } from "./artifacts.ts";
 import { editSummaries, tweenPlace } from "./motionHelpers.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
-/** Three dots staggered 0.2 s apart from 1 s: Dot 1 at 1 s, Dot 2 at 1.2 s, Dot 3 at 1.4 s. */
 const STAGGER = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}.dot{position:absolute;top:120px;width:40px;height:40px;background:#f00}</style></head><body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360">
 <div class="dot" id="d1" data-uf-name="Dot 1" style="left:20px"></div><div class="dot" id="d2" data-uf-name="Dot 2" style="left:80px"></div><div class="dot" id="d3" data-uf-name="Dot 3" style="left:140px"></div>
@@ -45,7 +44,6 @@ test("dragging any target's bar moves the whole stagger, and each target keeps i
   const before = await fileOf(agent);
   const pxPerSecond = Number(await timeline(page).getByTestId("timeline-track").getAttribute("data-px-per-second"));
 
-  // Grab Dot 2's bar a quarter in and drag it half a second to the right.
   const box = await bars(page, "Dot 2").boundingBox();
   if (!box) throw new Error("no bar");
   const y = box.y + box.height / 2;
@@ -64,9 +62,7 @@ test("the stagger field respaces the bars, one number for the whole cascade", as
   await openMotion(page, agent);
   await expect.poll(() => starts(page)).toEqual([1, 1.2, 1.4]);
 
-  // A double-click on a bar opens its timing; the Stagger field sets the spacing between targets.
   await bars(page, "Dot 1").dblclick();
-  // The values panel is a popover in the page, so its Stagger field is found there.
   const stagger = page.getByRole("textbox", { name: "Stagger" });
   await expect(stagger).toHaveValue("0.2");
   await stagger.fill("0.4");

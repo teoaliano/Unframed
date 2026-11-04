@@ -6,15 +6,10 @@ import { artifactShape } from "./artifacts.ts";
 import { putRecords } from "./media.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
-/**
- * Spec 21, task 40: the timeline budget. A motion with 60 tweens over 6 clips, the strip open, plays for 4 s and then a bar is
- * dragged for 2 s, in the hosted shape. The thresholds are enforced by `pnpm test:perf`; under `CI` they are not.
- */
 
 const CLIPS = 6;
 const TWEENS_PER_CLIP = 10;
 
-/** Six clips of ten elements, each element moved by one tween, so the strip has 60 tweens and 66 rows. */
 const MANY = (() => {
   const elements = (clip: number) =>
     Array.from({ length: TWEENS_PER_CLIP }, (_, index) => `<div id="c${clip}-e${index}" class="dot" style="left:${(index % 5) * 120}px;top:${Math.floor(index / 5) * 150 + clip * 4}px"></div>`).join("");
@@ -57,13 +52,11 @@ test("a motion with 60 tweens over 6 clips plays for 4 s and drags a bar for 2 s
   await expect(timeline(page).locator('[data-testid="timeline-row"]')).not.toHaveCount(0, { timeout: 40_000 });
   await expect.poll(() => page.evaluate(() => (window as any).__fps?.frameTime() ?? 0)).toBeGreaterThan(0);
   await page.waitForTimeout(1000);
-  // Only the rows in view are mounted: 66 rows in all, of which a 240 px strip shows about eight.
   const mounted = await timeline(page).locator('[data-testid="timeline-row"]').count();
   expect(mounted).toBeGreaterThan(0);
   expect(mounted).toBeLessThan(30);
   await page.evaluate(() => ((window as any).__longTasks = []));
 
-  // Play for 4 s. The meter measures gestures, so a key every 16 ms keeps one running; Shift does nothing in the editor.
   const playing = timeline(page).getByRole("button", { name: "Play (Space)", exact: true });
   await timeline(page).getByTestId("timeline-rows").click();
   const beforePlay = await gestureCount(page);
@@ -81,7 +74,6 @@ test("a motion with 60 tweens over 6 clips plays for 4 s and drags a bar for 2 s
   expectFrameBudget(playStats, "timeline play", { median: 16.7, over33: 0.02 });
   expectNoLongTasks(playLongTasks, "timeline play");
 
-  // Drag the first bar back and forth for 2 s, one move every 16 ms.
   await page.evaluate(() => ((window as any).__longTasks = []));
   const row = timeline(page).locator('[data-testid="timeline-row"][data-row-kind="element"]').first();
   const box = await row.locator('[data-testid="timeline-bar"]').first().boundingBox();

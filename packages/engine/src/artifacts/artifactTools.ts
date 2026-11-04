@@ -1,8 +1,3 @@
-/**
- * The four artifact tools (spec 09): `page_write`, `page_read`, `motion_write` and
- * `motion_read`, on spec 07's Unframed MCP server. Both kinds are built from one definition,
- * so the new-file rule, placement, result and event cannot drift between them.
- */
 import { randomUUID } from "node:crypto";
 import {
   AGENT_ARTIFACT_SIZE,
@@ -49,35 +44,27 @@ import { ensureTokens, kitOf } from "../kits/tokensFile.ts";
 
 const PAGE_ID = "page:page";
 
-/** What the agent's tools reach of the rest of the engine; the agent runtime supplies it. */
 export interface AgentToolContext {
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;
   readonly apply: (project: string, change: CanvasChange, origin: ChangeOrigin) => Promise<Applied>;
   readonly folder: (project: string) => Promise<string>;
   readonly turnChanges: (project: string) => Promise<TurnChanges>;
-  /** The chat's running turn and the selection its latest message was sent with. */
   readonly chatTurn: (
     project: string,
     chatId: string,
   ) => { turnCount: number | undefined; turnId: string | undefined; interactionMode: InteractionMode; selection: ReadonlyArray<string> };
-  /** Tags the chat with artifacts a write touched (the tag reactor). */
   readonly tag: (project: string, chatId: string, ids: ReadonlyArray<string>) => void;
   readonly activity: (project: string, chatId: string, activity: ActivityInput) => void;
-  /** Whether the chat is an outside one (spec 14). */
   readonly isOutside: (project: string, chatId: string) => boolean;
-  /** The live selection of a project's windows, for an outside read (spec 14). */
   readonly liveSelection: (project: string) => { shapeIds: string[]; note?: string };
 }
 
 type Shape = TLRecord & { type: string; props: Record<string, unknown>; meta: Record<string, unknown> };
 
-/** The locked element ids of an artifact shape (spec 18). */
 export const lockedOf = (shape: Shape): string[] => (Array.isArray(shape.props.lockedElements) ? shape.props.lockedElements.filter((id): id is string => typeof id === "string") : []);
 
 const isShape = (record: TLRecord | undefined): record is Shape => record?.typeName === "shape";
 
-
-/** Finds the shape an argument names, as the agent names it, and refuses the wrong kind. */
 const findArtifact = (records: ReadonlyArray<TLRecord>, shapeId: string, kind: ArtifactKind): { shape: Shape } | { error: string } => {
   const shape = records.find((record) => record.id === roomShapeId(shapeId));
   if (!isShape(shape)) return { error: `no shape ${shapeId}` };
@@ -115,7 +102,6 @@ export class ArtifactTools {
       target = found.shape;
     }
     const current = typeof target?.props.title === "string" ? target.props.title : "";
-    // A page or motion the person named keeps their name: its title is that name (spec 09).
     const named = target !== undefined && !isMintedRef(readRef(target) ?? "0");
     const given = typeof args.title === "string" && !named ? args.title.slice(0, ARTIFACT_TITLE_MAX) : undefined;
     const title = (given ?? current).trim();
@@ -221,7 +207,6 @@ export class ArtifactTools {
     }
   }
 
-  /** The four tools, as the MCP server registers them. */
   tools(): McpTool[] {
     const writeSchema = (args: Readonly<Record<"html" | "shapeId" | "title", string>>) => ({
       type: "object",

@@ -7,8 +7,6 @@ const OWN = "http://localhost:18787";
 const CANVAS = "http://127.0.0.1:5001";
 const OTHER = "http://127.0.0.1:5002";
 
-// The viewer against stubs (spec 21, task 18): a player whose calls are recorded, a composition
-// frame, a canvas that is the editor, and a requestAnimationFrame the test ticks by hand.
 const stub = (search = "?c=comp.html") => {
   const listeners: Listener[] = [];
   const frames: Array<(now: number) => void> = [];
@@ -170,5 +168,6 @@ describe("the viewer page", () => {
     expect(page).toContain("editor");
     expect(page).toContain("setAttribute(\"controls\"");
     expect(page).toContain("setAttribute(\"autoplay\"");
+    expect(page).toContain("disable-click-to-play");
   });
 });

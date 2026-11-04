@@ -1,19 +1,9 @@
-/**
- * What the canvas knows about its artifacts beyond their records (spec 09): which are pinned
- * with "Keep playing", which one is open in the editor, which one has its Parameters panel
- * open, which ones run a live frame and what each live frame announced, the preview origin's
- * port and each shape's status line. Every fact a shape component reads is
- * a computed value keyed to that shape and answers in primitives, so panning re-renders no
- * shape.
- */
 import { farOffscreen, isArtifactKind, liveArtifacts, LIVE_SELECTED_LIMIT, PIN_LIMIT, type DialsAnnouncement } from "@unframed/domain";
 import type { RenderStatus } from "@unframed/contracts";
 import { atom, computed, react, type Atom, type Computed, type Editor, type TLShapeId } from "tldraw";
 
-/** The preview origin's port, from the engine's settings. Unknown until they arrive. */
 export const previewPort: Atom<number | undefined> = atom("preview port", undefined);
 
-/** Pinned artifacts per project. Kept in memory: pinning is for the session at hand. */
 const pins = new Map<string, Atom<ReadonlyArray<string>>>();
 
 export const pinnedAtom = (project: string): Atom<ReadonlyArray<string>> => {
@@ -25,7 +15,6 @@ export const pinnedAtom = (project: string): Atom<ReadonlyArray<string>> => {
   return found;
 };
 
-/** Toggles "Keep playing". Answers false, changing nothing, when three are already pinned. */
 export const togglePin = (project: string, id: string): boolean => {
   const pinned = pinnedAtom(project);
   const current = pinned.get();
@@ -39,36 +28,21 @@ export const togglePin = (project: string, id: string): boolean => {
 };
 
 interface CanvasArtifacts {
-  /** The project this canvas shows, which the pins are kept under. */
   readonly project: Atom<string>;
-  /** The artifact open in the editor. */
   readonly editing: Atom<TLShapeId | undefined>;
-  /** The artifact whose Parameters panel is open on the canvas. */
   readonly tuning: Atom<TLShapeId | undefined>;
-  /** The artifact whose editor opens with its component updates popover (spec 20, the Updates badge). */
   readonly updatesOpen: Atom<TLShapeId | undefined>;
-  /** What each live canvas frame last announced, by shape, and how to post `unframed:dials:set` to it. */
   readonly heard: Atom<ReadonlyMap<string, DialsAnnouncement>>;
   readonly posts: Map<string, (values: unknown) => void>;
-  /**
-   * Set from a press on the canvas until the double-click window after it has passed, so a
-   * frame never takes the second click of a double-click that selected it.
-   */
   readonly hold: Atom<boolean>;
   readonly live: Computed<ReadonlySet<string>>;
-  /** Upload and render errors, under their shape, until the next upload or render starts. */
   readonly problems: Atom<ReadonlyMap<string, string>>;
-  /** Each motion's render in flight, by shape: starting until the engine answers, then its status. */
   readonly renders: Atom<ReadonlyMap<string, { readonly starting: boolean; readonly status?: RenderStatus }>>;
-  /** How to post an `unframed:edit:*` message to a live canvas frame, by shape (spec 18, an image drop). */
   readonly editPosts: Map<string, (message: unknown) => void>;
-  /** The picture under an image drag's pointer on a live page, as the frame's bridge reported it. */
   readonly dropHit: Atom<DropHit | undefined>;
-  /** Pages an image drag may drop on though the press deselected them: they stay live until the drag ends. */
   readonly dropHolds: Atom<ReadonlySet<string>>;
 }
 
-/** A picture an image drag would replace: its page, the element, which target of it, and its box in the page. */
 export interface DropHit {
   readonly shapeId: string;
   readonly elementId: string;
@@ -92,7 +66,6 @@ export const artifactsOf = (editor: Editor): CanvasArtifacts => {
     const project = atom("artifact project", "");
     const dropHolds = atom<ReadonlySet<string>>("image drop holds", new Set());
     const live = computed<ReadonlySet<string>>("live artifacts", () => {
-      // The editor unloads the canvas's frames: at most one artifact document runs while editing.
       if (editing.get() !== undefined) return new Set();
       const selected = editor.getSelectedShapeIds().filter((id) => hasFile(editor, id));
       const centreOf = (id: TLShapeId) => editor.getShapePageBounds(id)?.center ?? { x: 0, y: 0 };
@@ -125,10 +98,6 @@ export const artifactsOf = (editor: Editor): CanvasArtifacts => {
   return found;
 };
 
-/**
- * Whether this artifact runs a live frame: it is live and not more than a viewport width off
- * screen, unless its Parameters panel is open, which needs the frame wherever it is.
- */
 export const isLive = (editor: Editor, id: TLShapeId): boolean => {
   const state = artifactsOf(editor);
   if (!state.live.get().has(id)) return false;
@@ -138,7 +107,6 @@ export const isLive = (editor: Editor, id: TLShapeId): boolean => {
   return !!bounds && !farOffscreen({ x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h }, { x: viewport.x, y: viewport.y, w: viewport.w, h: viewport.h });
 };
 
-/** Whether the frame takes the pointer: the shape is selected, nothing is being dragged or resized, and no click is in flight. */
 export const isInteractive = (editor: Editor, id: TLShapeId): boolean =>
   editor.getSelectedShapeIds().includes(id) &&
   !artifactsOf(editor).hold.get() &&
@@ -153,10 +121,8 @@ export const setProblem = (editor: Editor, id: string, message: string | undefin
   });
 };
 
-/** How long after a press a frame stays out of the pointer's way: past a double-click. */
 const HOLD_MS = 500;
 
-/** Holds every frame off the pointer from a press until the double-click window after it has passed. */
 export const installFrameHold = (editor: Editor): (() => void) => {
   const { hold } = artifactsOf(editor);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -177,29 +143,24 @@ export const installFrameHold = (editor: Editor): (() => void) => {
   };
 };
 
-/** A live canvas frame mounted: an image drag posts `unframed:edit:*` to it through this. */
 export const reachEdit = (editor: Editor, id: string, post: (message: unknown) => void): void => {
   artifactsOf(editor).editPosts.set(id, post);
 };
 
-/** A canvas frame unmounted: it can no longer be posted to, and an answer it owed is void. */
 export const forgetEdit = (editor: Editor, id: string): void => {
   const state = artifactsOf(editor);
   state.editPosts.delete(id);
   if (state.dropHit.get()?.shapeId === id) state.dropHit.set(undefined);
 };
 
-/** A live canvas frame announced its parameters. */
 export const hearFrame = (editor: Editor, id: string, announcement: DialsAnnouncement): void => {
   artifactsOf(editor).heard.update((current) => new Map(current).set(id, announcement));
 };
 
-/** A live canvas frame mounted: the Parameters panel posts to it through this. */
 export const reachFrame = (editor: Editor, id: string, post: (values: unknown) => void): void => {
   artifactsOf(editor).posts.set(id, post);
 };
 
-/** A canvas frame unmounted or loads a new file: what it announced no longer holds. */
 export const forgetFrame = (editor: Editor, id: string): void => {
   const state = artifactsOf(editor);
   state.posts.delete(id);
@@ -211,13 +172,11 @@ export const forgetFrame = (editor: Editor, id: string): void => {
   });
 };
 
-/** Opens the canvas Parameters panel on one artifact, or closes it when it is already open there. */
 export const toggleTuning = (editor: Editor, id: TLShapeId): void => {
   const { tuning } = artifactsOf(editor);
   tuning.set(tuning.get() === id ? undefined : id);
 };
 
-/** The panel belongs to its artifact selected alone: another selection, a deletion or the editor closes it. */
 export const installTuningWatch = (editor: Editor): (() => void) => {
   const { tuning, editing } = artifactsOf(editor);
   const stop = react("tuning follows the selection", () => {

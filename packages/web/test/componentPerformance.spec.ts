@@ -8,16 +8,9 @@ import { artifactShape, writeProjectFile } from "./artifacts.ts";
 import { componentShape, sheetHtml } from "./components.ts";
 import { putRecords } from "./media.ts";
 
-/**
- * Spec 20, task 47: the canvas budget with components. Ten pages each pin one of five component shapes, and five of the
- * pages pin an older sheet than their component now holds, so five of them show the Updates badge. The board pans for 4 s in
- * the hosted shape, as spec 09's artifact budget does. The thresholds are enforced by `pnpm test:perf`; under `CI` they are not.
- */
-
 const COMPONENTS = 5;
 const PAGES = 10;
 
-// The first five pages pin the sheets the components held before their edit; the other five pin the sheets they hold now.
 const oldSheet = (index: number) => `1761400${index}000-card-${index}.html`;
 const newSheet = (index: number) => `1761500${index}000-card-${index}.html`;
 const tagOf = (index: number) => `uf-card-${index}`;
@@ -63,7 +56,6 @@ test("ten pages pinning five components, five behind, pan for 4 s in the hosted 
   await page.keyboard.press("Shift+1");
   await page.waitForTimeout(500);
 
-  // Five pages show the badge; the components and the other five pages show none.
   await expect(page.getByTestId("component-updates-badge")).toHaveCount(5, { timeout: 20_000 });
   await expect(shapeOnScreen(page, "shape:page-0")).toBeVisible();
 

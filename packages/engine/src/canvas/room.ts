@@ -31,20 +31,16 @@ import {
 } from "./starter.ts";
 import { SYNC_TABLE_PREFIX } from "./tables.ts";
 
-/** Records to put (whole, current schema) and ids to remove, in one change. */
 export interface CanvasChange {
   readonly put: ReadonlyArray<TLRecord>;
   readonly remove: ReadonlyArray<string>;
 }
 
 export interface Applied {
-  /** The room clock after the change. */
   readonly clock: number;
-  /** The change that puts back what this one replaced or removed. */
   readonly inverse: CanvasChange;
 }
 
-/** One row of the canvas change log. */
 export interface ChangeLogRow {
   readonly clock: number;
   readonly origin: ChangeOrigin;
@@ -52,13 +48,10 @@ export interface ChangeLogRow {
   readonly removed: ReadonlyArray<string>;
 }
 
-/** A change the room refused: a record that fails the schema. */
 export class InvalidChange extends Error {}
 
-/** A tab closed this way does not reconnect: tldraw's sync error close code. */
 export const SYNC_ERROR_CLOSE = 4099;
 
-/** The room's schema: the canvas records, with the kit rules the domain holds (spec 19). */
 let roomSchemaCache: ReturnType<typeof roomSchema> | undefined;
 const roomSchemaOf = () => (roomSchemaCache ??= roomSchema(kitRefusal));
 
@@ -74,7 +67,27 @@ const initialSnapshot = (): RoomSnapshot => ({
   ],
 });
 
-/** Refuses records that fail the canvas schema, naming the first one. */
+const componentTagOf = (record: TLRecord): { id: string; tag: string } | undefined => {
+  if (record.typeName !== "shape" || record.type !== "component") return undefined;
+  const tag = (record as unknown as { props: { tag?: unknown } }).props.tag;
+  return typeof tag === "string" ? { id: record.id, tag } : undefined;
+};
+
+const refuseDuplicateTags = (put: ReadonlyArray<TLRecord>, removed: ReadonlySet<string>, held: Iterable<TLRecord>): void => {
+  const incoming = put.map(componentTagOf).filter((component) => component !== undefined);
+  if (incoming.length === 0) return;
+  const holders = new Map<string, string>();
+  for (const record of held) {
+    const component = componentTagOf(record);
+    if (component && !removed.has(component.id)) holders.set(component.tag, component.id);
+  }
+  for (const component of incoming) {
+    const holder = holders.get(component.tag);
+    if (holder !== undefined && holder !== component.id) throw new InvalidChange(`${component.tag} is already the component ${holder}; write to that shape, or choose another tag`);
+    holders.set(component.tag, component.id);
+  }
+};
+
 const validateRecords = (records: ReadonlyArray<TLRecord>): void => {
   const schema = roomSchemaOf();
   for (const record of records) {
@@ -88,11 +101,6 @@ const validateRecords = (records: ReadonlyArray<TLRecord>): void => {
   }
 };
 
-/**
- * Writes a project's first canvas into a database no room has opened (spec 11's import):
- * tldraw's document and page, then `records` as one change in the change log with
- * `origin`. A room opened on it later finds a canvas and seeds no starter content.
- */
 export const writeFirstCanvas = (db: DatabaseSync, records: ReadonlyArray<TLRecord>, origin: ChangeOrigin): void => {
   validateRecords(records);
   const sql = new NodeSqliteWrapper(db, { tablePrefix: SYNC_TABLE_PREFIX }) as unknown as TLSyncSqliteWrapper;
@@ -105,25 +113,17 @@ export const writeFirstCanvas = (db: DatabaseSync, records: ReadonlyArray<TLReco
 const frameText = (data: RawData): string =>
   Buffer.isBuffer(data) ? data.toString("utf8") : Array.isArray(data) ? Buffer.concat(data).toString("utf8") : Buffer.from(data).toString("utf8");
 
-export interface RoomHooks {
-  /** Runs after every committed change, outside the transaction. */
+interface RoomHooks {
   readonly onCommit: (room: CanvasRoom, change: CommittedChange) => void;
-  /** Called when the room has had no client and no engine-side call for the idle delay. */
   readonly onIdle: (room: CanvasRoom) => void;
   readonly idleMs: number;
 }
 
-/**
- * One project's tldraw sync room over its project database. Every tab of the project is
- * a session; engine-side writes go through `apply`, reach every tab as remote changes,
- * and never enter a tab's undo history.
- */
 export class CanvasRoom {
   private readonly tl: TLSocketRoom<TLRecord, void>;
   private readonly storage: LoggedStorage;
   private readonly db: DatabaseSync;
   private currentOrigin: ChangeOrigin = STORAGE_ORIGIN;
-  /** The socket each session is on now. A reconnect replaces it before the old one reports its close. */
   private readonly sessionSockets = new Map<string, WebSocket>();
   private readonly sockets = new Set<WebSocket>();
   private inflight = 0;
@@ -139,7 +139,6 @@ export class CanvasRoom {
     this.db = db;
     const sql = new NodeSqliteWrapper(db, { tablePrefix: SYNC_TABLE_PREFIX }) as unknown as TLSyncSqliteWrapper;
     const fresh = !SQLiteSyncStorage.hasBeenInitialized(sql);
-    // A new canvas starts from tldraw's document and page records in this schema.
     const inner = new SQLiteSyncStorage<TLRecord>(fresh ? { sql, snapshot: initialSnapshot() } : { sql });
     this.storage = new LoggedStorage(inner, db, () => this.currentOrigin, (change) => this.hooks.onCommit(this, change));
     this.tl = new TLSocketRoom<TLRecord, void>({
@@ -175,7 +174,6 @@ export class CanvasRoom {
     this.idleTimer.unref();
   }
 
-  /** Runs an engine-side call: the room does not idle-close while one is in flight. */
   engineCall<T>(run: () => T): T {
     this.inflight++;
     clearTimeout(this.idleTimer);
@@ -187,7 +185,6 @@ export class CanvasRoom {
     }
   }
 
-  /** Takes a tab's socket. `early` holds any frames it sent before the room was ready. */
   attach(ws: WebSocket, sessionId: string, early: ReadonlyArray<RawData>): void {
     if (this.closed) {
       ws.close(1012, "room closed");
@@ -222,7 +219,6 @@ export class CanvasRoom {
     for (const data of early) onMessage(data);
   }
 
-  /** Every document record in the room. */
   read(): TLRecord[] {
     return this.storage.getSnapshot().documents.map((doc) => doc.state as TLRecord);
   }
@@ -235,13 +231,11 @@ export class CanvasRoom {
     return this.storage.getClock();
   }
 
-  /**
-   * Writes a change from the engine. Every connected tab receives it as a remote change.
-   * Answers the clock after it and the inverse change. A record that fails the schema
-   * refuses the whole change.
-   */
   apply(change: CanvasChange, origin: ChangeOrigin): Applied {
     validateRecords(change.put);
+    if (change.put.some((record) => componentTagOf(record) !== undefined)) {
+      refuseDuplicateTags(change.put, new Set(change.remove), this.storage.transaction((txn) => Array.from(txn.values())).result);
+    }
     const inverse: { put: TLRecord[]; remove: string[] } = { put: [], remove: [] };
     const result = this.withOrigin(origin, () =>
       this.storage.transaction((txn) => {
@@ -262,7 +256,6 @@ export class CanvasRoom {
     return { clock: result.documentClock, inverse };
   }
 
-  /** The ids among `recordIds` that a tab changed after `clock`. Engine-side changes do not count. */
   changedSince(recordIds: ReadonlyArray<string>, clock: number): string[] {
     const wanted = new Set(recordIds);
     const changed = new Set<string>();
@@ -277,7 +270,6 @@ export class CanvasRoom {
     return recordIds.filter((id) => changed.has(id));
   }
 
-  /** Every change log row after `clock`, oldest first, with who asked for it. */
   changeLog(clock: number): ChangeLogRow[] {
     return this.db
       .prepare("SELECT clock, origin_kind, origin_id, put, removed FROM canvas_changes WHERE clock > ? ORDER BY clock")
@@ -290,7 +282,6 @@ export class CanvasRoom {
       }));
   }
 
-  /** Flushes storage, then disconnects every tab. The room cannot be used afterwards. */
   close(code = 1001, reason = "closing"): void {
     if (this.closed) return;
     clearTimeout(this.idleTimer);
@@ -348,11 +339,6 @@ export class CanvasRoom {
     );
   }
 
-  /**
-   * The shapes this change gave a ref another shape held first. A shape whose ref the
-   * change left alone held it first; among the ones it gave a ref, an updated shape comes
-   * before a created one.
-   */
   refCollisions(change: CommittedChange): TLShape[] {
     if (change.refChanged.length === 0) return [];
     const shapes = this.read().filter((record): record is TLShape => record.typeName === "shape");

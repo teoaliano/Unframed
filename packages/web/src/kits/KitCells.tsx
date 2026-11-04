@@ -1,38 +1,28 @@
-/**
- * The cell editors of the Kit table (spec 19). A cell holds one value of a token in one mode,
- * or the one value of a token for every mode. Each commit is one kit edit; a refusal shows under
- * the cell. Every cell's popover starts with a "Use a token" list of tokens of the same type.
- */
 import { EASES, isEaseName, type TextStyle, type Token, type TokenValue } from "@unframed/domain";
 import { EllipsisIcon } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 
-export const CUBIC_BEZIER = "cubic-bezier";
+const CUBIC_BEZIER = "cubic-bezier";
 const BEZIER_DEFAULT = "cubic-bezier(0.25, 0.1, 0.25, 1)";
 
-/** A value as the cell shows it: text for a literal, the alias written as `{path}`. */
 export const displayOf = (value: TokenValue | undefined): string => (value === undefined ? "" : typeof value === "object" ? JSON.stringify(value) : String(value));
 
-/** The token path an alias value names, or undefined for a literal or a text style. */
 export const aliasOf = (value: TokenValue | undefined): string | undefined => (typeof value === "string" ? /^\{(.+)\}$/.exec(value)?.[1] : undefined);
 
-/** Esc abandons the field it is typed in; it does not also close the dialog around it. */
 export const keepEscapeInField = (event: { stopPropagation: () => void; nativeEvent: Event }) => {
   event.stopPropagation();
   event.nativeEvent.stopImmediatePropagation();
 };
 
-/** A cubic bezier written as CSS text. */
 const isBezierText = (value: string): boolean => /^cubic-bezier\(/.test(value);
 
-/** What the text the person typed means as a stored value: a number for a plain font weight, otherwise the text. */
 export const valueOf = (token: Pick<Token, "type">, text: string): TokenValue => (token.type === "fontWeight" && /^\d+$/.test(text) ? Number(text) : text);
 
-/** A curve of 24 samples, as a small SVG line. */
 const Curve = ({ samples }: { readonly samples: ReadonlyArray<number> }) => (
   <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.5" className="shrink-0">
     <polyline points={samples.map((y, index) => `${(index / (samples.length - 1)) * 22 + 1},${23 - Math.min(Math.max(y, -0.2), 1.2) * 20}`).join(" ")} />
@@ -50,26 +40,22 @@ const WEIGHT_ITEMS = FONT_WEIGHTS.map((value) => ({ value, label: value }));
 const UNITS = { dimension: ["px", "rem", "em", "%"], duration: ["ms", "s"] } as const;
 const NUMBER_UNIT = /^(-?\d*\.?\d+)(px|rem|em|%|ms|s)$/;
 
-/** The alpha of a `#rrggbb` or `#rrggbbaa` colour, and its six-digit hex; undefined for any other text. */
-export const parseHex = (text: string): { hex: string; alpha: number } | undefined => {
+const parseHex = (text: string): { hex: string; alpha: number } | undefined => {
   const match = /^#([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(text.trim());
   if (match === null) return undefined;
   return { hex: `#${match[1]!.toLowerCase()}`, alpha: match[2] === undefined ? 100 : Math.round((parseInt(match[2], 16) / 255) * 100) };
 };
 
-/** The CSS text for a hex colour at an opacity: six digits at full opacity, eight digits below it. */
-export const colourText = (hex: string, alpha: number): string => (alpha >= 100 ? hex : `${hex}${Math.round((alpha / 100) * 255).toString(16).padStart(2, "0")}`);
+const colourText = (hex: string, alpha: number): string => (alpha >= 100 ? hex : `${hex}${Math.round((alpha / 100) * 255).toString(16).padStart(2, "0")}`);
 
-/** A text field committed on Enter or blur, abandoned on Escape. It commits only a changed text. */
 const TextCell = ({ label, value, swatch, invalid, font = "mono", onCommit }: { readonly label: string; readonly value: string; readonly swatch?: boolean; readonly invalid: boolean; readonly font?: "default" | "mono"; readonly onCommit: (text: string) => void }) => {
   const [draft, setDraft] = useState(value);
-  // A value changed elsewhere (a cell's popover) shows at once, so the field never reads a stale value.
   useEffect(() => setDraft(value), [value]);
   const commit = () => {
     if (draft !== value) onCommit(draft);
   };
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-2">
+    <div className={swatch ? "flex min-w-28 flex-1 items-center gap-2" : "flex min-w-0 flex-1 items-center gap-2"}>
       {swatch && <span aria-hidden className="size-4 shrink-0 rounded-sm border" style={{ background: value }} />}
       <Input
         size="sm"
@@ -91,7 +77,6 @@ const TextCell = ({ label, value, swatch, invalid, font = "mono", onCommit }: { 
   );
 };
 
-/** A number and a unit, for a dimension or a duration. The unit commits at once; the number on Enter or blur. */
 const NumberUnitCell = ({ label, type, number, unit, onCommit }: { readonly label: string; readonly type: "dimension" | "duration"; readonly number: string; readonly unit: string; readonly onCommit: (text: string) => void }) => {
   const [draft, setDraft] = useState(number);
   const commit = () => {
@@ -132,7 +117,6 @@ const NumberUnitCell = ({ label, type, number, unit, onCommit }: { readonly labe
   );
 };
 
-/** An easing cell: the 31 GSAP eases with their curves, and a cubic bezier entry, which keeps its own text field. */
 const EaseCell = ({ label, value, invalid, onChoose, onText }: { readonly label: string; readonly value: string; readonly invalid: boolean; readonly onChoose: (next: string) => void; readonly onText: (text: string) => void }) => {
   const bezier = isBezierText(value);
   const current = isEaseName(value) ? value : bezier ? CUBIC_BEZIER : undefined;
@@ -163,7 +147,6 @@ const EaseCell = ({ label, value, invalid, onChoose, onText }: { readonly label:
   );
 };
 
-/** A font weight: a select of 100 to 900 and the keywords. */
 const WeightCell = ({ label, value, onChoose }: { readonly label: string; readonly value: string; readonly onChoose: (next: string) => void }) => (
   <Select items={WEIGHT_ITEMS} value={value} onValueChange={(next) => next && onChoose(next as string)}>
     <SelectTrigger aria-label={`${label} weight`} className="min-w-0 flex-1">
@@ -179,7 +162,6 @@ const WeightCell = ({ label, value, onChoose }: { readonly label: string; readon
   </Select>
 );
 
-/** The "Use a token" list at the top of a popover: the tokens of the same type, the cell's own excluded. */
 const AliasList = ({ token, tokens, onUse }: { readonly token: Token; readonly tokens: ReadonlyArray<Token>; readonly onUse: (path: string) => void }) => {
   const choices = tokens.filter((candidate) => candidate.type === token.type && candidate.path !== token.path);
   return (
@@ -198,7 +180,6 @@ const AliasList = ({ token, tokens, onUse }: { readonly token: Token; readonly t
   );
 };
 
-/** A popover on a cell: its trigger, then the alias list, then the cell's own fields. */
 const CellPopover = ({ label, token, tokens, trigger, onUse, children }: { readonly label: string; readonly token: Token; readonly tokens: ReadonlyArray<Token>; readonly trigger: ReactNode; readonly onUse: (path: string) => void; readonly children?: ReactNode }) => (
   <Popover>
     <PopoverTrigger render={<Button variant="ghost" size="sm" className="min-w-0 shrink-0" aria-label={`Options ${label}`} />}>{trigger}</PopoverTrigger>
@@ -211,7 +192,6 @@ const CellPopover = ({ label, token, tokens, trigger, onUse, children }: { reado
   </Popover>
 );
 
-/** A colour's popover fields: the colour input, the CSS text and the opacity. The colour input commits when the drag ends. */
 const ColourFields = ({ label, text, invalid, onCommit }: { readonly label: string; readonly text: string; readonly invalid: boolean; readonly onCommit: (text: string) => void }) => {
   const parsed = parseHex(text);
   const [dragging, setDragging] = useState<string>();
@@ -219,7 +199,7 @@ const ColourFields = ({ label, text, invalid, onCommit }: { readonly label: stri
   const alpha = parsed?.alpha ?? 100;
   return (
     <div className="grid gap-2">
-      <label className="flex items-center gap-2 text-xs">
+      <Label>
         Colour
         <Input
           size="sm"
@@ -233,8 +213,8 @@ const ColourFields = ({ label, text, invalid, onCommit }: { readonly label: stri
             setDragging(undefined);
           }}
         />
-      </label>
-      <label className="flex items-center gap-2 text-xs">
+      </Label>
+      <Label>
         Opacity
         <Input
           size="sm"
@@ -255,32 +235,32 @@ const ColourFields = ({ label, text, invalid, onCommit }: { readonly label: stri
           }}
         />
         %
-      </label>
+      </Label>
       <TextCell label={`${label} CSS text`} value={text} invalid={invalid} font="mono" onCommit={onCommit} />
     </div>
   );
 };
 
-/** A text style's popover fields: family, size, weight, line height and letter spacing, each committed on its own. */
 const STYLE_FIELDS: ReadonlyArray<keyof TextStyle> = ["fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing"];
 
 const TextStyleFields = ({ label, style, invalid, onCommit }: { readonly label: string; readonly style: TextStyle; readonly invalid: boolean; readonly onCommit: (next: TextStyle) => void }) => (
   <div className="grid gap-2">
     {STYLE_FIELDS.map((field) => (
-      <label key={field} className="grid gap-1 text-xs">
-        {field}
-        <TextCell
-          label={`${label} text style ${field}`}
-          value={String(style[field])}
-          invalid={invalid}
-          onCommit={(text) => onCommit({ ...style, [field]: (field === "fontWeight" && /^\d+$/.test(text)) || (field === "lineHeight" && /^\d*\.?\d+$/.test(text)) ? Number(text) : text })}
-        />
-      </label>
+      <Label key={field}>
+        <span className="grid w-full gap-1">
+          {field}
+          <TextCell
+            label={`${label} text style ${field}`}
+            value={String(style[field])}
+            invalid={invalid}
+            onCommit={(text) => onCommit({ ...style, [field]: (field === "fontWeight" && /^\d+$/.test(text)) || (field === "lineHeight" && /^\d*\.?\d+$/.test(text)) ? Number(text) : text })}
+          />
+        </span>
+      </Label>
     ))}
   </div>
 );
 
-/** One cell: the editor for its type, its popover, and the alias chip when the value is an alias. */
 export const ValueCell = ({ token, tokens, label, value, onCommit }: { readonly token: Token; readonly tokens: ReadonlyArray<Token>; readonly label: string; readonly value: TokenValue | undefined; readonly onCommit: (next: TokenValue) => string | undefined }) => {
   const [problem, setProblem] = useState<string>();
   const commit = (next: TokenValue) => setProblem(onCommit(next));

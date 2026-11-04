@@ -14,7 +14,6 @@ const activity = (kind: string, payload: Record<string, unknown>, fields: Partia
   ...fields,
 });
 
-/** One call's started and completed activities, as the runtime ingests them. */
 const call = (itemId: string, toolName: string, input: Record<string, unknown>, end: { status?: string; itemType?: string; result?: unknown } = {}) => {
   const itemType = end.itemType ?? (toolName.startsWith("mcp__") ? "mcp_tool_call" : toolName === "Bash" ? "command_execution" : toolName === "Edit" ? "file_change" : "dynamic_tool_call");
   return [

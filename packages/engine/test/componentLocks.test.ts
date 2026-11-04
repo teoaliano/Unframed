@@ -1,11 +1,9 @@
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { scriptFolder, startAgentEngine, type AgentEngine } from "./agent.ts";
 import { roomShape, seed, toolResults } from "./agentCanvas.ts";
 import { componentShape } from "./canvasRecords.ts";
-
-/** Spec 20, task 12: `component_write` runs spec 18's lock check against the shape's current sheet. */
 
 const LOCKED = `<!doctype html><html><head>
 <script src="unframed-dials.js"></script>

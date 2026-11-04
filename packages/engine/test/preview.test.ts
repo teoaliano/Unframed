@@ -6,7 +6,6 @@ import { makeTempDir, startEngine, type TestEngine } from "./harness.ts";
 const CSP =
   "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-ancestors http://localhost:* http://127.0.0.1:*";
 
-/** An engine with a project `board` holding `files`. */
 const withProject = async (files: Record<string, string | Buffer>): Promise<{ engine: TestEngine; folder: string }> => {
   const engine = await startEngine();
   await (await engine.rpc()).call("projects.create", { name: "board" });
@@ -41,13 +40,16 @@ describe("the preview origin", () => {
     const served = await preview(engine, "/p/board/landing.html?v=2#top");
     expect(served.status).toBe(200);
     expect(served.headers["content-type"]).toBe("text/html; charset=utf-8");
-    // The project segment is slugged with the project rule.
     expect((await preview(engine, "/p/Board/landing.html")).status).toBe(200);
     for (const path of ["/", "/p", "/p/board", "/p/board/", "/p//landing.html", "/p/board/x/landing.html", "/api/file/board/landing.html", "/q/board/landing.html", "/p/%20%20/landing.html"]) {
       await expectNotFound(engine, path);
     }
     for (const method of ["POST", "PUT", "DELETE", "OPTIONS"]) await expectNotFound(engine, "/p/board/landing.html", method);
-    await expectNotFound(engine, "/p/board/missing.html");
+    const missing = await preview(engine, "/p/board/missing.html");
+    expect(missing.status).toBe(404);
+    expect(missing.headers["content-type"]).toBe("text/html; charset=utf-8");
+    expect(missing.text).toContain("This file is no longer in the project.");
+    expect(missing.text).not.toContain("<script");
     await expectNotFound(engine, "/p/nothere/landing.html");
   });
 
@@ -182,6 +184,8 @@ describe("the preview origin", () => {
     const fresh = await preview(engine, "/p/board/fresh.html");
     expect(fresh.status).toBe(200);
     expect(fresh.text).toBe("<h1>new</h1>");
-    await expectNotFound(engine, "/p/board/landing.html");
+    const gone = await preview(engine, "/p/board/landing.html");
+    expect(gone.status).toBe(404);
+    expect(gone.text).toContain("This file is no longer in the project.");
   });
 });

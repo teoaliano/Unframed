@@ -1,6 +1,3 @@
-// Counts the tweens of every motion file in the folders given, by owner and read-only reason
-// (spec 21, task 4). Prints one JSON line per file. Reads only; writes nothing.
-//   node scripts/motionProbe.ts <folder> [<folder> ...]
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { probeMotion } from "../packages/domain/src/motion/index.ts";

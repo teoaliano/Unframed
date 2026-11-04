@@ -85,9 +85,6 @@ describe("styleValueRefusal", () => {
 });
 
 describe("the web-facing domain", () => {
-  // Every file the root entry reaches through value imports (type-only imports ship no code) must
-  // be free of HTML parsers. That covers the motion folder too: its parser modules sit behind
-  // `@unframed/domain/motion`, and only parser-free motion modules are reachable from the root.
   const PARSER = /from "(parse5|linkedom|@hyperframes\/parsers[^"]*)"/;
   const VALUE_IMPORT = /\b(?:import|export)\s+(?!type\b)[^;]*?\bfrom\s+"(\.{1,2}\/[^"]+)"/g;
 

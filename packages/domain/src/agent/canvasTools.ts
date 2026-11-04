@@ -1,8 +1,3 @@
-/**
- * The canvas tools' pure half (spec 07): what `canvas_read` shows the agent, and how a
- * `canvas_write` batch becomes one room change: every refusal, provisional ids, the
- * canvas's own `@id` counter, run markers stripped, group rules and rename.
- */
 import type { Box } from "../grouping.ts";
 import { boxesOverlap, clampGroupSize, mayBeGroupMember } from "../grouping.ts";
 import { planRename } from "../groupRules.ts";
@@ -14,7 +9,6 @@ import type { Pin } from "../components/pins.ts";
 import { nameRefusal, slugName, uniqueName } from "../groupRules.ts";
 import { agentShapeId, roomShapeId } from "./turnText.ts";
 
-/** A canvas record as these rules read it: tldraw's fields, loosely typed. */
 export interface CanvasRecord {
   readonly id: string;
   readonly typeName: string;
@@ -51,8 +45,7 @@ export const shapeKind = (type: string | undefined): ShapeKind => {
 
 const isShape = (record: CanvasRecord): boolean => record.typeName === "shape";
 
-/** Every shape in paint order: the page's children by index, a group's children right after it. */
-export const paintOrder = (records: ReadonlyArray<CanvasRecord>): CanvasRecord[] => {
+const paintOrder = (records: ReadonlyArray<CanvasRecord>): CanvasRecord[] => {
   const shapes = records.filter(isShape);
   const children = new Map<string, CanvasRecord[]>();
   for (const shape of shapes) {
@@ -79,7 +72,6 @@ const assetOf = (records: ReadonlyMap<string, CanvasRecord>, shape: CanvasRecord
 
 const PROJECT_FILE = "project-file:";
 
-/** A media shape's file (a project file name) or clip link, from its asset. */
 export const mediaSource = (asset: CanvasRecord | undefined): { file?: string; url?: string } => {
   const src = obj(asset?.props).src;
   if (typeof src !== "string") return {};
@@ -96,32 +88,25 @@ const isDefaultCrop = (crop: unknown): boolean => {
   return value.isCircle !== true && topLeft.x === 0 && topLeft.y === 0 && bottomRight.x === 1 && bottomRight.y === 1;
 };
 
-export interface ShapeBoxes {
-  /** The box in the shape's parent's space (its `x, y` as the document holds them). */
+interface ShapeBoxes {
   readonly local: Box;
-  /** The box on the page. */
   readonly page: Box;
 }
 
-export interface CanvasViewInput {
+interface CanvasViewInput {
   readonly records: ReadonlyArray<CanvasRecord>;
   readonly boxes: ReadonlyMap<string, ShapeBoxes>;
-  /** Each result's recipe, read from its sidecar, by room id. */
   readonly recipes: ReadonlyMap<string, unknown>;
-  /** The room ids the person had selected with the latest message. */
   readonly selection: ReadonlyArray<string>;
-  /** Each component shape's current sheet declaration, by room id; absent when the sheet cannot be read (spec 20). */
   readonly declarations?: ReadonlyMap<string, ComponentDeclaration>;
-  /** Each page or motion's pins, by room id (spec 20). */
   readonly pins?: ReadonlyMap<string, ReadonlyArray<Pin>>;
 }
 
-export interface CanvasView {
+interface CanvasView {
   readonly shapes: ReadonlyArray<Record<string, unknown>>;
   readonly selection: ReadonlyArray<string>;
 }
 
-/** The facts the generation rules read, for the mark rule, reading order and rename. */
 export const canvasShapesOf = (records: ReadonlyArray<CanvasRecord>, boxes: ReadonlyMap<string, ShapeBoxes>): CanvasShape[] => {
   const byId = new Map(records.map((record) => [record.id, record]));
   return paintOrder(records).map((shape, z) => {
@@ -145,8 +130,7 @@ export const canvasShapesOf = (records: ReadonlyArray<CanvasRecord>, boxes: Read
   });
 };
 
-/** The image each mark sits on: the topmost image with a file that it overlaps and sits above (spec 03's rule). */
-export const markOwner = (shapes: ReadonlyArray<CanvasShape>): Map<string, string> => {
+const markOwner = (shapes: ReadonlyArray<CanvasShape>): Map<string, string> => {
   const images = shapes.filter((shape) => shape.kind === "image" && shape.file !== undefined);
   const owners = new Map<string, string>();
   for (const mark of shapes) {
@@ -161,11 +145,6 @@ export const markOwner = (shapes: ReadonlyArray<CanvasShape>): Map<string, strin
   return owners;
 };
 
-/**
- * What `canvas_read` answers: every shape in z-order with its id, kind, position, size and
- * its kind's fields, and the latest message's selection filtered to shapes that exist. No
- * byte of media: files are named, never read.
- */
 export const canvasView = (input: CanvasViewInput): CanvasView => {
   const byId = new Map(input.records.map((record) => [record.id, record]));
   const shapes = canvasShapesOf(input.records, input.boxes);
@@ -222,7 +201,6 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
         entry.file = typeof props.file === "string" ? props.file : "";
         entry.title = typeof props.title === "string" ? props.title : "";
         if (props.dials !== undefined && Object.keys(obj(props.dials)).length > 0) entry.dials = props.dials;
-        // A pin whose tag has no component shape waits for nothing, so it counts as current.
         const pinned = input.pins?.get(record.id) ?? [];
         if (pinned.length > 0) entry.components = pinned.map((pin) => ({ tag: pin.tag, sheet: pin.sheet, current: currentSheets.get(pin.tag) === undefined || currentSheets.get(pin.tag) === pin.sheet }));
         if (typeof props.mode === "string") entry.mode = props.mode;
@@ -264,16 +242,12 @@ const round = (value: number, places = 2): number => {
   return Math.round(value * factor) / factor;
 };
 
-// ---------------------------------------------------------------------------------------
-// canvas_write
-
-export const MAX_OPS = 200;
+const MAX_OPS = 200;
 
 const OP_TYPES = new Set(["create", "update", "move", "resize", "delete", "reparent", "rename"]);
 const CREATE_KINDS = new Set(["prompt", "image", "video", "group", "mark"]);
 const MARK_TYPES = new Set(["geo", "note", "arrow", "line"]);
 
-/** What the engine knows about a project file: its original name, type and natural size. */
 export interface FileFacts {
   readonly fileName: string;
   readonly mime?: string;
@@ -284,26 +258,21 @@ export interface FileFacts {
 
 export interface BatchContext {
   readonly records: ReadonlyArray<CanvasRecord>;
-  /** The facts of a bare file name in the project folder; `undefined` when there is none. */
   readonly file: (name: string) => FileFacts | undefined;
   readonly newShapeId: () => string;
   readonly newAssetId: () => string;
-  /** A fractional index above `below` (tldraw's `getIndexAbove`). */
   readonly indexAbove: (below: string | undefined) => string;
   readonly pageId: string;
   readonly boxes: ReadonlyMap<string, ShapeBoxes>;
-  /** The kit's mode names; a page or motion may only name one of them (spec 19). */
   readonly modes?: ReadonlyArray<string>;
 }
 
-export type PreparedBatch =
+type PreparedBatch =
   | {
       readonly ok: true;
       readonly put: ReadonlyArray<CanvasRecord>;
       readonly remove: ReadonlyArray<string>;
-      /** Each provisional id, mapped to the id the agent reads. */
       readonly ids: Readonly<Record<string, string>>;
-      /** Every shape the batch created, changed or removed, as room ids. */
       readonly touched: ReadonlyArray<string>;
     }
   | { readonly ok: false; readonly error: string };
@@ -321,13 +290,11 @@ const hasDataUrl = (value: unknown): boolean => {
   return false;
 };
 
-/** The run marker and run error belong to the engine: never taken from what the agent sends. */
 const stripEngineKeys = (props: Record<string, unknown>): Record<string, unknown> => {
   const { meta: _meta, unframed: _unframed, ...rest } = props;
   return rest;
 };
 
-/** tldraw rich text for plain text: one paragraph per line. */
 export const richTextOf = (text: string) => ({
   type: "doc",
   content: text.split("\n").map((line) => (line === "" ? { type: "paragraph" } : { type: "paragraph", content: [{ type: "text", text: line }] })),
@@ -410,7 +377,6 @@ const MARK_DEFAULTS: Record<string, (w: number, h: number) => Record<string, unk
 
 const TEXT_LABEL_TYPES = new Set(["geo", "note", "arrow", "text"]);
 
-/** Applies a batch to a working copy of the canvas, all or nothing. */
 class Batch {
   readonly working: Map<string, CanvasRecord>;
   readonly original: ReadonlyMap<string, CanvasRecord>;
@@ -461,7 +427,6 @@ class Batch {
     return [...this.working.values()];
   }
 
-  /** A group's page position, for keeping a member where it is on screen. */
   groupOrigin(group: CanvasRecord): { x: number; y: number } {
     return { x: group.x ?? 0, y: group.y ?? 0 };
   }
@@ -477,7 +442,6 @@ const fileOf = (op: string, ctx: BatchContext, props: Record<string, unknown>): 
   return facts;
 };
 
-/** The first refusal a batch meets before the canvas sees it, in op order. */
 const precheck = (ops: ReadonlyArray<unknown>, ctx: BatchContext): void => {
   const existing = new Set(ctx.records.map((record) => record.id));
   const created = new Set<string>();
@@ -524,8 +488,7 @@ const assetRecord = (id: string, type: "image" | "video", src: string, facts: Fi
 
 const HTTPS = /^https:\/\/.+/;
 
-/** A media shape's new asset from `props.file` or, for a video, `props.url`. */
-const mediaAsset = (op: string, batch: Batch, ctx: BatchContext, kind: "image" | "video", props: Record<string, unknown>): CanvasRecord | undefined => {
+const mediaAsset = (op: string, ctx: BatchContext, kind: "image" | "video", props: Record<string, unknown>): CanvasRecord | undefined => {
   if (typeof props.file === "string") {
     const facts = ctx.file(props.file)!;
     return assetRecord(ctx.newAssetId(), kind, `${PROJECT_FILE}${props.file}`, facts, facts.fileName);
@@ -584,7 +547,7 @@ const create = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
     }
     case "image":
     case "video": {
-      const asset = mediaAsset("create", batch, ctx, kind, props);
+      const asset = mediaAsset("create", ctx, kind, props);
       const facts = typeof props.file === "string" ? ctx.file(props.file) : undefined;
       const naturalW = facts?.w && facts.w > 0 ? facts.w : undefined;
       const naturalH = facts?.h && facts.h > 0 ? facts.h : undefined;
@@ -627,7 +590,6 @@ const create = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
   batch.put(record);
 };
 
-/** Renames any shape with an `@id` exactly as the canvas does (spec 06). */
 const renameShape = (batch: Batch, ctx: BatchContext, shape: CanvasRecord, typed: unknown, op: string): void => {
   if (readRef(shape) === undefined) refuse(`${op}: ${agentShapeId(shape.id)} has no @id to rename`);
   if (typeof typed !== "string") refuse(`${op}: name must be a string`);
@@ -658,7 +620,6 @@ const update = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
   const props: Record<string, unknown> = { ...obj(shape.props) };
   const kind = shapeKind(shape.type);
   if (kind === "component") {
-    // A component's tag and sheet are written by component_write, which checks the sheet against the canvas (spec 20).
     for (const field of ["tag", "file"]) if (field in patch) refuse(`update: ${field} is written by component_write`);
   }
   if (kind === "group" && "name" in patch) {
@@ -668,7 +629,7 @@ const update = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
     return applyPatch(batch, renamed, { ...obj(renamed.props) }, rest);
   }
   if (kind === "image" || kind === "video") {
-    const asset = mediaAsset("update", batch, ctx, kind, patch);
+    const asset = mediaAsset("update", ctx, kind, patch);
     const { file: _file, url: _url, ...rest } = patch;
     if (asset) {
       batch.put(asset);
@@ -760,11 +721,6 @@ const reparent = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>):
   batch.put({ ...shape, parentId: group.id, x: pageX - target.x, y: pageY - target.y, index: batch.indexFor(group.id) });
 };
 
-/**
- * Prepares one `canvas_write` batch: the refusals first, in op order, then each op on a
- * working copy. Answers the whole change to put and remove, or the first error; nothing
- * is applied on an error.
- */
 export const prepareBatch = (ops: unknown, ctx: BatchContext): PreparedBatch => {
   try {
     if (!Array.isArray(ops) || ops.length === 0) refuse("ops must be a non-empty array");

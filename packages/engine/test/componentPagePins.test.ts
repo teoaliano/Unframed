@@ -6,8 +6,6 @@ import { scriptFolder, startAgentEngine, type AgentEngine } from "./agent.ts";
 import { roomShape, seed, toolResults } from "./agentCanvas.ts";
 import { componentShape, pageShape } from "./canvasRecords.ts";
 
-/** Spec 20, task 15: `page_write` and `motion_write` inject pins for the canvas's components and return `components`. */
-
 const BUTTON = `<!doctype html><html><head>
 <script type="application/json" data-uf-component>{"tag":"uf-button","variants":{"kind":["primary","secondary"]},"props":{"label":"text"},"slots":[]}</script>
 <style type="text/x-uf-component" data-uf-component-style>:host { display: inline-block; }</style>
@@ -16,7 +14,6 @@ const BUTTON = `<!doctype html><html><head>
 const script = (tools: Array<{ name: string; input: Record<string, unknown> }>) =>
   scriptFolder({ pins: { when: "^go", turns: [{ text: "Done.", tools }] } });
 
-/** The sheets of a project: a current button and an older one, each with its compiled file. */
 const writeSheets = async (agent: AgentEngine) => {
   for (const sheet of ["1-button.html", "2-button.html"]) {
     await writeFile(join(agent.folder, sheet), BUTTON);
@@ -24,7 +21,7 @@ const writeSheets = async (agent: AgentEngine) => {
   }
 };
 
-const run = async (agent: AgentEngine, kind: "page_write" | "motion_write" | "both", html: string) => {
+const run = async (agent: AgentEngine, kind: "page_write" | "motion_write" | "both") => {
   const names = kind === "both" ? ["page_write", "motion_write"] : [kind];
   const chatId = await agent.createChat();
   await agent.send(chatId, "go", {});
@@ -38,7 +35,7 @@ describe("page_write and motion_write pins (spec 20)", () => {
     });
     await writeSheets(agent);
     await seed(agent, [componentShape("c1", "uf-button", { file: "2-button.html", title: "Button" }), pageShape("pg1", "100")]);
-    const { chat } = await run(agent, "page_write", "");
+    const { chat } = await run(agent, "page_write");
     const [write] = toolResults(chat, "page_write");
     expect(write?.status).toBe("completed");
     const file = (await roomShape(agent, "pg1")).props.file as string;
@@ -59,7 +56,7 @@ describe("page_write and motion_write pins (spec 20)", () => {
     });
     await writeSheets(agent);
     await seed(agent, [componentShape("c1", "uf-button", { file: "2-button.html", title: "Button" }), pageShape("pg1", "100", { file: "", title: "Page" })]);
-    const { chat } = await run(agent, "page_write", "");
+    const { chat } = await run(agent, "page_write");
     const [first, second] = toolResults(chat, "page_write");
     expect(first?.result).toMatchObject({ components: { pinned: ["uf-button"], olderVersions: ["uf-button"], unknownTags: [] } });
     expect(second?.result).not.toHaveProperty("components");

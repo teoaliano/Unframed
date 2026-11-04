@@ -21,14 +21,12 @@ import type { RefMinter } from "./refs.ts";
 import { ARTIFACT_DEFAULT_SIZE } from "./shapes/artifact.tsx";
 import { setProblem } from "../artifacts/state.ts";
 
-/** What paste and drop need to know about the open canvas. */
 export interface ContentContext {
   readonly project: string;
   readonly engine: EngineConnection;
   readonly minter: RefMinter;
 }
 
-/** Copied tldraw content carries the project it came from, so a paste elsewhere copies its files. */
 type UnframedContent = TLContent & { unframedProject?: string };
 
 const MULTI_DROP_OFFSET = 24;
@@ -46,11 +44,7 @@ const kindOf = (file: File): DroppedKind | undefined => {
 
 const withoutExtension = (name: string) => name.replace(/\.[^.]*$/, "");
 
-/**
- * Makes the asset for a media file with tldraw's asset utils (which read its natural size)
- * and uploads it through the asset store. Images are never scaled or re-encoded.
- */
-export const uploadMediaFile = async (editor: Editor, kind: MediaKind, file: File): Promise<TLAsset> => {
+const uploadMediaFile = async (editor: Editor, kind: MediaKind, file: File): Promise<TLAsset> => {
   if (kind === "video" && file.size > VIDEO_FILE_LIMIT) throw new MediaRefused(VIDEO_TOO_LARGE_MESSAGE);
   const util = editor.getAssetUtilForMimeType(file.type);
   if (!util) throw new Error(`${file.type || "this type"} is not a picture or clip the canvas can show`);
@@ -82,7 +76,6 @@ const createPage = (editor: Editor, file: string, fileName: string, point: VecLi
   return id;
 };
 
-/** Uploads one file, then puts its shape at `point` (captured when the file arrived). */
 const addFile = async (editor: Editor, ctx: ContentContext, file: File, kind: DroppedKind, point: VecLike, failure: string) => {
   try {
     if (kind === "page") {
@@ -100,11 +93,6 @@ const addFile = async (editor: Editor, ctx: ContentContext, file: File, kind: Dr
   }
 };
 
-/**
- * An `.html` dropped onto a page or a motion (spec 09) replaces its file: a page takes it as a
- * plain upload, a motion through the motion upload, which adds the runtime and the bridge.
- * The title keeps its value when it has one. One person edit, one undo step.
- */
 const replaceArtifactFile = async (editor: Editor, ctx: ContentContext, target: TLShape, file: File) => {
   setProblem(editor, target.id, undefined);
   try {
@@ -126,13 +114,7 @@ const replaceArtifactFile = async (editor: Editor, ctx: ContentContext, target: 
   }
 };
 
-/**
- * Files dropped on the canvas. A picture dropped on an image, or a clip on a video,
- * replaces its media, and an `.html` dropped on a page or a motion replaces its file;
- * anything else lands at the drop point, several files 24 px apart. Only images, clips up
- * to 25 MB and HTML pages are taken.
- */
-export const handleDrop = async (editor: Editor, ctx: ContentContext, files: ReadonlyArray<File>, point: VecLike) => {
+const handleDrop = async (editor: Editor, ctx: ContentContext, files: ReadonlyArray<File>, point: VecLike) => {
   const [only] = files;
   if (files.length === 1 && only) {
     const target = editor.getShapeAtPoint(point, { hitInside: true, hitFrameInside: false });
@@ -165,17 +147,12 @@ export const handleDrop = async (editor: Editor, ctx: ContentContext, files: Rea
   );
 };
 
-/** tldraw names a pasted blob "tldrawFile"; a file with no real name is named from its type. */
 const named = (file: File, kind: MediaKind): File =>
   file.name === "" || file.name === "tldrawFile" ? new File([file], pastedFileName(kind, file.type), { type: file.type }) : file;
 
 const selectedOfKind = (editor: Editor, kind: MediaKind) =>
   editor.getSelectedShapes().filter((shape): shape is MediaShape => shape.type === kind);
 
-/**
- * A picture or clip pasted from the system clipboard: every selected shape of its kind
- * takes the new media, or else a new shape appears at the pointer.
- */
 const pasteFiles = async (editor: Editor, ctx: ContentContext, files: ReadonlyArray<File>, point: VecLike = editor.inputs.getCurrentPagePoint()) => {
   let placed = 0;
   for (const pastedFile of files) {
@@ -200,10 +177,6 @@ const pasteFiles = async (editor: Editor, ctx: ContentContext, files: ReadonlyAr
   }
 };
 
-/**
- * Pasted or dropped text: a single https link to a clip becomes a video (or fills the
- * selected videos); any other non-empty text becomes a prompt. Links never unfurl.
- */
 const handleText = async (editor: Editor, text: string, point: VecLike) => {
   const trimmed = text.trim();
   if (trimmed === "") return;
@@ -225,12 +198,6 @@ const handleText = async (editor: Editor, text: string, point: VecLike) => {
   editor.select(id);
 };
 
-/**
- * tldraw's own paste of shapes, fixed up before the shapes are committed: fresh refs in
- * order, names kept unless taken, references among the pasted prompts rewritten to them, a page or motion given
- * its own copy of its file, and every file copied in when the shapes came from another
- * project. A file that cannot be copied leaves its shape empty.
- */
 const fixUpPastedShapes = async (editor: Editor, ctx: ContentContext, pasted: UnframedContent): Promise<TLContent> => {
   const content = structuredClone(pasted) as UnframedContent;
   const source = content.unframedProject ?? ctx.project;
@@ -238,7 +205,6 @@ const fixUpPastedShapes = async (editor: Editor, ctx: ContentContext, pasted: Un
 
   const copy = async (file: string) => (await ctx.engine.call("files.copy", { project: ctx.project, file, from: source })).file;
 
-  // A component gets a fresh tag and its own sheet (spec 20). A copy that fails pastes nothing for that shape.
   const failedComponents = new Set<TLShape>();
   for (const shape of content.shapes) {
     if (shape.type === "component") {
@@ -280,7 +246,6 @@ const fixUpPastedShapes = async (editor: Editor, ctx: ContentContext, pasted: Un
         kept.push({ ...asset, id: AssetRecordType.createId(), props: { ...asset.props, src: null } } as TLAsset);
       }
     }
-    // Copies get their own asset ids, so the source project's assets stay untouched.
     const renamed = new Map(content.assets.map((asset, index) => [asset.id, kept[index]!]));
     for (const shape of content.shapes) {
       const props = shape.props as { assetId?: string | null };
@@ -293,8 +258,6 @@ const fixUpPastedShapes = async (editor: Editor, ctx: ContentContext, pasted: Un
   }
 
   const ids = new Map<string, string>();
-  // Refs are unique across the canvas, so a pasted name is taken by any of them. A name is
-  // kept, suffixed when taken (spec 06); a minted ref is minted again.
   const taken = new Set(editor.getCurrentPageShapes().flatMap((shape) => readRef(shape) ?? []));
   const mint = () => ctx.minter.mint();
   for (const shape of content.shapes) {
@@ -321,11 +284,6 @@ const fixUpPastedShapes = async (editor: Editor, ctx: ContentContext, pasted: Un
   return content;
 };
 
-/**
- * A result pasted from another project brings its recipe along (spec 03): its sidecar and
- * every file the recipe names are copied in beside the image's copy. A result whose recipe
- * cannot come along pastes as an ordinary image.
- */
 const copyRecipes = async (ctx: ContentContext, source: string, content: TLContent) => {
   const byId = new Map(content.assets.map((asset) => [asset.id as string, asset]));
   for (const shape of content.shapes) {
@@ -335,7 +293,6 @@ const copyRecipes = async (ctx: ContentContext, source: string, content: TLConte
     const assetId = (shape.props as { assetId?: string | null }).assetId;
     const marker = parseAssetMarker(String((assetId ? byId.get(assetId)?.props as { src?: string | null } | undefined : undefined)?.src ?? ""));
     try {
-      // A text result (spec 05) has no picture: its sidecar is its one file.
       const file = shape.type === "text" ? result.sidecar : marker?.kind === "project-file" ? marker.file : undefined;
       if (file === undefined) throw new Error("the result has no picture here");
       const copied = await ctx.engine.call("recipe.copy", { project: ctx.project, from: source, sidecar: result.sidecar, file });
@@ -348,7 +305,6 @@ const copyRecipes = async (ctx: ContentContext, source: string, content: TLConte
   }
 };
 
-/** The one place paste and drop are decided: tldraw's handlers for files, text and links are replaced. */
 export const installExternalContent = (editor: Editor, ctx: ContentContext): void => {
   editor.registerExternalContentHandler("files", async ({ files, point }) =>
     handleDrop(editor, ctx, files, point ?? editor.getViewportPageBounds().center),
@@ -368,14 +324,12 @@ export const installExternalContent = (editor: Editor, ctx: ContentContext): voi
   editor.registerExternalContentHandler("embed", () => undefined);
 };
 
-/** Clipboard hooks for the canvas options: paste goes through the handlers above, copy marks its project. */
 export const clipboardOptions = (ctx: Pick<ContentContext, "project"> & { readonly context: () => ContentContext | undefined }): Partial<TldrawOptions> => ({
   onBeforePasteFromClipboard: async ({ editor, content }: { editor: Editor; content: TLExternalContent<unknown> }) => {
     const current = ctx.context();
     if (!current) return undefined;
     switch (content.type) {
       case "files": {
-        // Copying one image also puts its picture on the clipboard; the shapes still win.
         const shapes = content.sources?.find((source) => source.type === "tldraw");
         if (shapes?.type === "tldraw") {
           return { type: "tldraw", content: await fixUpPastedShapes(editor, current, shapes.data as UnframedContent) };
@@ -398,7 +352,6 @@ export const clipboardOptions = (ctx: Pick<ContentContext, "project"> & { readon
     }
   },
   onBeforeCopyToClipboard: ({ editor, content }: { editor: Editor; content: TLContent }) => {
-    // tldraw puts resolved URLs in copied assets; the clipboard keeps the file markers.
     const assets = content.assets.map((asset) => {
       const stored = editor.getAsset(asset.id);
       return stored ? ({ ...asset, props: { ...asset.props, src: (stored.props as { src?: string | null }).src ?? null } } as TLAsset) : asset;
@@ -413,7 +366,6 @@ export const clipboardOptions = (ctx: Pick<ContentContext, "project"> & { readon
   },
 });
 
-/** The picture of an image shape as PNG, re-encoded from its original file. */
 export const imagePng = (editor: Editor, project: string, shape: TLShape): Promise<Blob> | undefined => {
   const assetId = (shape.props as { assetId?: TLAsset["id"] | null }).assetId;
   const asset = assetId ? editor.getAsset(assetId) : undefined;
@@ -432,10 +384,6 @@ export const imagePng = (editor: Editor, project: string, shape: TLShape): Promi
   })();
 };
 
-/**
- * tldraw writes the clipboard itself right after its copy hook; the next write also gets
- * the picture as `image/png`, in the same clipboard item and so inside the same gesture.
- */
 const addPngToNextClipboardWrite = (png: Promise<Blob>) => {
   const clipboard = navigator.clipboard as Clipboard & { write: Clipboard["write"] };
   if (!clipboard?.write) return;

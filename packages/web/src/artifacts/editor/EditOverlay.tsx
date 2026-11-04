@@ -1,22 +1,14 @@
-/**
- * The outlines the editor draws over the frame (spec 18, Outlines): a 1 px ring under the pointer,
- * a 2 px primary outline on each selected element with its name above. The frame is never drawn
- * on; the boxes come from the edit bridge, and the layer takes no pointer.
- */
 import { Fragment } from "react";
 import type { EditBox } from "@unframed/domain";
 import type { EditReport } from "./editSession.ts";
 
-export interface EditOverlayProps {
+interface EditOverlayProps {
   readonly hovered: EditReport | null;
-  /** The element a Layers row hovers. It is outlined in place of the pointer's own hover. */
   readonly layerHover?: string | null;
   readonly selection: readonly string[];
   readonly reports: Readonly<Record<string, EditReport>>;
   readonly boxes: Readonly<Record<string, EditBox>>;
-  /** The boxes of every copy of a board element, by its template id: the copies other than the picked one outline faintly. */
   readonly copies?: Readonly<Record<string, readonly EditBox[]>>;
-  /** The name each element shows: its layer name or derived label, by element id. */
   readonly names: Readonly<Record<string, string>>;
 }
 
@@ -29,12 +21,12 @@ export const EditOverlay = ({ hovered, layerHover = null, selection, reports, bo
     {layerHover === null && hovered !== null && hovered.id !== null && !selection.includes(hovered.id) && (
       <div
         data-edit-outline="hover"
-        className="absolute"
-        style={{ ...place(boxes[hovered.id] ?? hovered.box), border: "1px solid var(--ring)" }}
+        className="absolute border border-ring"
+        style={place(boxes[hovered.id] ?? hovered.box)}
       />
     )}
     {layerHover !== null && !selection.includes(layerHover) && boxes[layerHover] !== undefined && (
-      <div data-edit-outline="hover" className="absolute" style={{ ...place(boxes[layerHover]!), border: "1px solid var(--ring)" }} />
+      <div data-edit-outline="hover" className="absolute border border-ring" style={place(boxes[layerHover]!)} />
     )}
     {selection.map((id) => {
       const box = boxes[id] ?? reports[id]?.box;
@@ -44,9 +36,9 @@ export const EditOverlay = ({ hovered, layerHover = null, selection, reports, bo
       return (
         <Fragment key={id}>
           {others.map((copy, index) => (
-            <div key={index} data-edit-outline="copy" className="absolute" style={{ ...place(copy), border: "1px solid var(--primary)", opacity: 0.5 }} />
+            <div key={index} data-edit-outline="copy" className="absolute border border-primary opacity-50" style={place(copy)} />
           ))}
-        <div data-edit-outline="selected" className="absolute" style={{ ...place(box), border: "2px solid var(--primary)" }}>
+        <div data-edit-outline="selected" className="absolute border-2 border-primary shadow-[0_0_0_1px_#fff,0_0_0_2px_#000]" style={place(box)}>
           <span
             className="absolute bottom-full left-0 mb-0.5 max-w-60 truncate rounded-sm px-1 text-xs leading-4 text-primary-foreground"
             style={{ background: "var(--primary)" }}

@@ -8,16 +8,9 @@ import { BRIDGE_FILE, EDIT_BRIDGE_FILE, ensureBridge, ensureComponentHelper, ens
 import { NOT_FOUND } from "./respond.ts";
 import { guardUpgrade, refuseUpgrade } from "./guard.ts";
 
-/**
- * The preview origin (spec 09): a second loopback listener that serves artifact files and
- * nothing else. It answers exactly one path shape, `/p/<project>/<file>`, and must never
- * gain a second route: a page served anywhere else would be the app to the browser.
- */
-
 const PREVIEW_CSP =
   "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-ancestors http://localhost:* http://127.0.0.1:*";
 
-/** The allow-list. Everything else is 404, which keeps sidecars, the database and temp files unservable. */
 const CONTENT_TYPES: Readonly<Record<string, string>> = {
   html: "text/html; charset=utf-8",
   js: "text/javascript; charset=utf-8",
@@ -53,10 +46,6 @@ const decode = (segment: string): string | undefined => {
   }
 };
 
-/**
- * The pure step: a request's method, URL and headers to the project file it names, or the
- * refusal. The guard runs first, with the same decision the app origin uses.
- */
 const resolvePreview = (request: {
   readonly method: string | undefined;
   readonly url: string | undefined;
@@ -80,9 +69,11 @@ const resolvePreview = (request: {
   return { kind: "file", project: slug, file, contentType };
 };
 
-const refuse = (res: http.ServerResponse, status: number, body: string, head: boolean) => {
+const MISSING_PAGE = `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:24px;font:13px system-ui, sans-serif;color:#6b6b6b;background:#ffffff">This file is no longer in the project.</body></html>`;
+
+const refuse = (res: http.ServerResponse, status: number, body: string, head: boolean, type = "text/plain; charset=utf-8") => {
   res.writeHead(status, {
-    "content-type": "text/plain; charset=utf-8",
+    "content-type": type,
     "content-length": Buffer.byteLength(body),
     "cache-control": "no-store",
     "x-content-type-options": "nosniff",
@@ -90,7 +81,6 @@ const refuse = (res: http.ServerResponse, status: number, body: string, head: bo
   res.end(head ? undefined : body);
 };
 
-/** The ETag: size and whole-millisecond mtime, both in hex. */
 const etagOf = (size: number, mtimeMs: number) => `"${size.toString(16)}-${Math.floor(mtimeMs).toString(16)}"`;
 
 const COMPILED_SUFFIX = ".component.js";
@@ -107,20 +97,19 @@ const handler =
     } catch {
       return refuse(res, 404, "not found", head);
     }
-    // The bridge and the live viewer are generated: a frame asking for one gets the current
-    // one, so a fix reaches projects written before it. Only in a project that exists: a
-    // request never makes a folder.
     const name = basename(path);
     const refresh =
       name === BRIDGE_FILE || name === EDIT_BRIDGE_FILE ? ensureBridge : name === COMPONENT_HELPER_FILE ? ensureComponentHelper : name === LIVE_VIEWER_FILE || name === LIVE_CHECK_FILE ? ensureLiveViewer : undefined;
     const folderExists = (await stat(dirname(path)).catch(() => undefined))?.isDirectory() ?? false;
     if (refresh !== undefined && folderExists) await refresh(dirname(path)).catch(() => undefined);
-    // A missing compiled component is built from its sheet, the same bytes the compiler makes (spec 20).
     if (folderExists && name.endsWith(COMPILED_SUFFIX) && !(await stat(path).catch(() => undefined))?.isFile()) {
       await ensureCompiledComponent(dirname(path), name).catch(() => false);
     }
     const info = await stat(path).catch(() => undefined);
-    if (!info?.isFile()) return refuse(res, 404, "not found", head);
+    if (!info?.isFile()) {
+      if (info === undefined && folderExists && name.endsWith(".html")) return refuse(res, 404, MISSING_PAGE, head, "text/html; charset=utf-8");
+      return refuse(res, 404, "not found", head);
+    }
     const etag = etagOf(info.size, info.mtimeMs);
     const headers: http.OutgoingHttpHeaders = {
       "content-security-policy": PREVIEW_CSP,
@@ -161,25 +150,15 @@ const listenOn = (server: http.Server, host: string, port: number): Promise<numb
     server.listen({ port, host, exclusive: true });
   });
 
-/** Errors that mean this machine has no IPv6 loopback, so `localhost` only ever reaches 127.0.0.1. */
 const NO_IPV6 = new Set(["EADDRNOTAVAIL", "EAFNOSUPPORT", "EINVAL"]);
 
-export interface PreviewOrigin {
+interface PreviewOrigin {
   readonly port: number;
-  /** The fixed port it asked for when something else held it, so it took an OS-assigned one. */
   readonly taken: number | undefined;
-  /** Stops accepting connections on every address it listens on. */
   readonly stopListening: () => void;
   readonly closeAllConnections: () => void;
 }
 
-/**
- * Starts the preview origin on `127.0.0.1` at `wanted`, and on `[::1]` at the same port
- * where the machine has it, so `localhost` answers whichever address it resolves to. When
- * another program holds `wanted` on either address it takes an OS-assigned port instead
- * (`0` asks for one from the start). It reads the output folder through `outputDir` on
- * every request, so a settings change moves it without a restart.
- */
 export const startPreviewOrigin = async (outputDir: () => Promise<string>, wanted: number): Promise<PreviewOrigin> => {
   const make = () => {
     const server = http.createServer({ requireHostHeader: false }, (req, res) => {
@@ -214,7 +193,6 @@ export const startPreviewOrigin = async (outputDir: () => Promise<string>, wante
       },
     );
     if (both === undefined) {
-      // Something else holds this port on ::1, where `localhost` may reach it: try another pair.
       v4.close();
       fixed = false;
       continue;

@@ -6,8 +6,6 @@ import { roomRecords, seed, toolResults } from "./agentCanvas.ts";
 import { componentShape, pageShape } from "./canvasRecords.ts";
 import { outsideLink } from "./outsideCalls.ts";
 
-/** Spec 20, tasks 17 and 18: components on `canvas_read` and `canvas_write`, and on the outside list. */
-
 const BUTTON = `<!doctype html><html><head>
 <script type="application/json" data-uf-component>{"tag":"uf-button","variants":{"kind":["primary","secondary"]},"props":{"label":"text"},"slots":[]}</script>
 <style type="text/x-uf-component" data-uf-component-style>:host { display: inline-block; }</style>
@@ -17,13 +15,11 @@ const PAGE = `<!doctype html><html><head><script src="1-button.component.js" dat
 
 type Call = { name: string; input: Record<string, unknown> };
 
-/** A scripted agent whose turns make the given calls, one list of calls per turn. */
 const scripted = async (turns: Call[][]): Promise<AgentEngine> =>
   startAgentEngine({
     script: await scriptFolder({ components: { when: "^go", turns: turns.map((tools) => ({ text: "Done.", tools })) } }),
   });
 
-/** Sends one message and waits for its turn to settle; returns the chat. */
 const turn = async (agent: AgentEngine, chatId: string, number: number) => {
   await agent.send(chatId, "go", {});
   return agent.settled(chatId, number);

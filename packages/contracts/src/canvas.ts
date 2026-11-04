@@ -1,8 +1,3 @@
-/**
- * The canvas schema: tldraw's own records, minus embeds and bookmarks, plus the Unframed
- * shape kinds. The engine's sync room and the web's store validate against this one
- * schema, so a record one side accepts the other accepts too.
- */
 import {
   createShapePropsMigrationIds,
   createShapePropsMigrationSequence,
@@ -18,25 +13,18 @@ import {
 import { T } from "@tldraw/validate";
 import type { Kit } from "./kits.ts";
 
-// ---------------------------------------------------------------------------------------
-// Asset markers: the one definition.
 
 export const PROJECT_FILE = "project-file:";
 export const PRESET_FILE = "preset-file:";
 
-/** A file name inside a marker is a bare basename: never `/`, `\` or `..`. */
 export const isBareFileName = (name: string): boolean =>
   name !== "" && name !== "." && !name.includes("/") && !name.includes("\\") && !name.includes("..");
 
-export type AssetMarker =
+type AssetMarker =
   | { readonly kind: "project-file"; readonly file: string }
   | { readonly kind: "link"; readonly url: string }
   | { readonly kind: "preset-file"; readonly project: string; readonly file: string };
 
-/**
- * Reads an asset `src` as one of the three markers: a file in this project, a linked
- * `https://` clip, or a preset's portable pointer. Anything else is not a marker.
- */
 export const parseAssetMarker = (src: string): AssetMarker | undefined => {
   if (src.startsWith(PROJECT_FILE)) {
     const file = src.slice(PROJECT_FILE.length);
@@ -56,35 +44,22 @@ export const parseAssetMarker = (src: string): AssetMarker | undefined => {
 
 export const projectFileMarker = (file: string): string => `${PROJECT_FILE}${file}`;
 
-/**
- * `data:` and `blob:` sources may reach the room, which rewrites them within 2 seconds:
- * a data URL into a project file, a blob URL into no source at all.
- */
 const isTransientSource = (src: string): boolean => src.startsWith("data:") || src.startsWith("blob:");
 
 const assetSource = (allowLinks: boolean) =>
   T.string.nullable().check((src) => {
-    // tldraw makes an asset with an empty source before its upload answers.
     if (src === null || src === "" || isTransientSource(src)) return;
     const marker = parseAssetMarker(src);
     if (marker?.kind === "project-file" || (allowLinks && marker?.kind === "link")) return;
     throw new T.ValidationError(`Expected a project file or ${allowLinks ? "an https link" : "no source"}, got ${JSON.stringify(src)}`);
   });
 
-// ---------------------------------------------------------------------------------------
-// Shape meta and props.
 
-/** Where later specs keep their fields (result, run, runError, recipe), and nowhere else in meta. */
 const unframedMeta = { unframed: T.jsonValue.optional() };
 
 export interface PromptMeta {
   readonly ref: string;
   readonly sized?: boolean;
-  readonly unframed?: unknown;
-}
-
-export interface RefMeta {
-  readonly ref: string;
   readonly unframed?: unknown;
 }
 
@@ -94,7 +69,12 @@ const bareFileOrEmpty = T.string.check((file) => {
   if (file !== "" && !isBareFileName(file)) throw new T.ValidationError(`Expected a file name, got ${JSON.stringify(file)}`);
 });
 
-/** A page or motion: its file in the project folder (`''` when empty), title and original file name. */
+export const isSheetFileName = (name: string): boolean => /^[A-Za-z0-9][A-Za-z0-9._-]{0,200}\.html$/.test(name);
+
+const sheetFileOrEmpty = T.string.check((file) => {
+  if (file !== "" && !isSheetFileName(file)) throw new T.ValidationError(`Expected a component sheet file name, got ${JSON.stringify(file)}`);
+});
+
 export interface ArtifactShapeProps {
   w: number;
   h: number;
@@ -102,9 +82,7 @@ export interface ArtifactShapeProps {
   title: string;
   fileName: string;
   dials?: Record<string, unknown>;
-  /** The kit mode this artifact shows (spec 19). Absent means the kit's default mode. */
   mode?: string;
-  /** Element ids the person locked in Layers (spec 18). Absent when none. */
   lockedElements?: string[];
 }
 
@@ -119,28 +97,18 @@ const artifactProps = {
   lockedElements: T.arrayOf(T.string).optional(),
 };
 
-/**
- * Every later change to page and motion props is a migration here, used by the room and the web alike.
- * The first adds `lockedElements`; a record without it has no locks, so nothing is rewritten.
- * `mode` (spec 19) is optional and needs none.
- */
 const artifactMigrations = (kind: ArtifactType) => {
   const ids = createShapePropsMigrationIds(kind, { AddLockedElements: 1 });
   return createShapePropsMigrationSequence({ sequence: [{ id: ids.AddLockedElements, up: (props) => props }] });
 };
 
 export const ARTIFACT_TYPES = ["page", "motion"] as const;
-export type ArtifactType = (typeof ARTIFACT_TYPES)[number];
+type ArtifactType = (typeof ARTIFACT_TYPES)[number];
 
-/** A component's tag: `uf-` and lowercase words joined by hyphens, at most 50 characters (spec 20). */
-export const COMPONENT_TAG = /^uf-[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+const COMPONENT_TAG = /^uf-[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 export const COMPONENT_TAG_MAX = 50;
 
-/**
- * A component shape: the current sheet of a shared custom element (spec 20). `tag` is set at
- * creation and never changes; the room refuses a shape whose tag breaks the tag rule.
- */
-export interface ComponentShapeProps {
+interface ComponentShapeProps {
   w: number;
   h: number;
   file: string;
@@ -163,8 +131,7 @@ declare module "@tldraw/tlschema" {
   }
 }
 
-/** The shape kinds Unframed adds meaning to. Every other tldraw shape is a mark. */
-export type UnframedKind = "prompt" | "image" | "video" | "group" | "page" | "motion" | "component";
+type UnframedKind = "prompt" | "image" | "video" | "group" | "page" | "motion" | "component";
 
 export const kindOfShapeType = (type: string): UnframedKind | "mark" => {
   switch (type) {
@@ -185,10 +152,6 @@ export const kindOfShapeType = (type: string): UnframedKind | "mark" => {
 
 const { embed: _embed, bookmark: _bookmark, ...keptShapes } = defaultShapeSchemas;
 
-/**
- * The kit's shape, before a rule reads it: the fields every rule assumes. A kit that lacks one
- * is refused here, so the rules never meet a broken record (spec 19).
- */
 const kitShape = T.object({
   format: T.literal(1),
   name: T.string,
@@ -196,11 +159,6 @@ const kitShape = T.object({
   tokens: T.arrayOf(T.jsonValue),
 }).allowUnknownProperties();
 
-/**
- * The document record's kit must have the right shape and pass `refusalOf`, the domain's kit
- * rules, which the engine supplies. Contracts depends on no other workspace package, so the
- * rules come in as a function and the room keeps them.
- */
 const checkKit = (document: unknown, refusalOf: (kit: Kit) => string | null): void => {
   const kit = (document as { meta?: { unframed?: { kit?: unknown } } } | null)?.meta?.unframed?.kit;
   if (kit === undefined) return;
@@ -226,7 +184,7 @@ const buildSchema = (refusalOf?: (kit: Kit) => string | null): TLSchema => {
       page: { props: artifactProps, meta: refMeta, migrations: artifactMigrations("page") },
       motion: { props: artifactProps, meta: refMeta, migrations: artifactMigrations("motion") },
       component: {
-        props: { ...artifactProps, tag: componentTag },
+        props: { ...artifactProps, file: sheetFileOrEmpty, tag: componentTag },
         meta: refMeta,
         migrations: createShapePropsMigrationSequence({ sequence: [] }),
       },
@@ -249,11 +207,9 @@ const buildSchema = (refusalOf?: (kit: Kit) => string | null): TLSchema => {
   return built;
 };
 
-/** The one canvas schema, made once, without the kit rules (the web store reads it this way). */
 export const canvasSchema = (): TLSchema => {
   schema ??= buildSchema();
   return schema;
 };
 
-/** The canvas schema the engine's room uses: the same records, plus the kit rules it is given (spec 19). */
 export const roomSchema = (refusalOf: (kit: Kit) => string | null): TLSchema => buildSchema(refusalOf);

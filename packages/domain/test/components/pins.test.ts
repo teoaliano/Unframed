@@ -29,7 +29,6 @@ describe("readPins", () => {
 describe("injectPins and setPin", () => {
   const RUNTIME = '<script src="hyperframes-runtime.js" data-hyperframes-preview-runtime></script>';
   const BRIDGE = '<script src="unframed-dials.js"></script>';
-  /** The project: 2-button is the current button, 1-button an older one; 3-card is the card. */
   const registry = {
     current: new Map([
       ["uf-button", "2-button.html"],
@@ -89,5 +88,25 @@ describe("injectPins and setPin", () => {
     const html = page(`${TOKENS_TAG}\n<script src="1-button.component.js" data-uf-component="uf-button"></script>\n${BRIDGE}`, "<uf-button></uf-button>");
     expect(readPins(setPin(html, "uf-button", "2-button.html"))).toEqual([{ tag: "uf-button", sheet: "2-button.html" }]);
     expect(readPins(setPin(html, "uf-card", "3-card.html")).map((pin) => pin.tag)).toEqual(["uf-card", "uf-button"]);
+  });
+});
+
+describe("sheet names in pins (spec 20)", () => {
+  const hostile = 'x.html" onload="alert(1)" x="';
+  const page = `<!doctype html><html><head></head><body><uf-button></uf-button></body></html>`;
+
+  it("setPin refuses a sheet name that is not a bare file name, and writes nothing", () => {
+    expect(() => setPin(page, "uf-button", hostile)).toThrow(/not a sheet file name/);
+    expect(() => setPin(page, "uf-button", "../x.html")).toThrow();
+  });
+
+  it("injectPins never writes a current sheet name that is not a bare file name", () => {
+    const registry = {
+      current: new Map([["uf-button", hostile]]),
+      sheets: new Map([[hostile, "uf-button"]]),
+    };
+    const result = injectPins(page, registry);
+    expect(result.html).not.toContain("onload");
+    expect(result.unknownTags).toEqual(["uf-button"]);
   });
 });
