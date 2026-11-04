@@ -16,6 +16,7 @@ import { loadCatalogue } from "../generate/catalogue.ts";
 import { showNotice } from "../toasts.tsx";
 import { Copy, linkClass, ModelSelect, SectionHeading } from "./fields.tsx";
 import { FOLLOW_UP_KEY, LocalAgents, PLAN_MODE_KEY, type FollowUp } from "./LocalAgents.tsx";
+import { IpadAccess } from "./IpadAccess.tsx";
 import { OutsideAgents } from "./OutsideAgents.tsx";
 import { useSettingsUi, type SettingsUi } from "./settingsUi.ts";
 
@@ -41,6 +42,7 @@ interface Draft {
   readonly claudePath: string;
   readonly codexPath: string;
   readonly claudeConfigDir: string;
+  readonly ipadPort: string;
 }
 
 const draftOf = (settings: Settings | undefined): Draft => ({
@@ -52,6 +54,7 @@ const draftOf = (settings: Settings | undefined): Draft => ({
   claudePath: settings?.claudePath ?? "",
   codexPath: settings?.codexPath ?? "",
   claudeConfigDir: settings?.claudeConfigDir ?? "",
+  ipadPort: settings === undefined ? "" : String(settings.ipadPort),
 });
 
 type Banner = { readonly kind: "error"; readonly message: string } | { readonly kind: "saved" };
@@ -65,6 +68,7 @@ const patchOf = (draft: Draft, settings: Settings): SettingsPatch => {
     if (value !== "" && value !== settings[field]) patch[field] = value;
   }
   for (const field of ["claudePath", "codexPath", "claudeConfigDir"] as const) if (draft[field] !== settings[field]) patch[field] = draft[field];
+  if (draft.ipadPort.trim() !== String(settings.ipadPort)) patch.ipadPort = draft.ipadPort.trim();
   return patch;
 };
 
@@ -370,6 +374,16 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
                 onFollowUp={setFollowUpPreference}
                 planMode={planMode}
                 onPlanMode={setPlanModePreference}
+              />
+              <IpadAccess
+                access={settings.ipadAccess}
+                onAccess={async (on) => {
+                  const next = await engine.call("settings.update", { ipadAccess: on ? "on" : "" });
+                  ui.setSettings(next);
+                  setDraft((current) => ({ ...current, ipadPort: String(next.ipadPort) }));
+                }}
+                port={draft.ipadPort}
+                onPort={(value) => edit({ ipadPort: value })}
               />
               <OutsideAgents />
             </>

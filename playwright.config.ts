@@ -6,7 +6,7 @@ import { defineConfig } from "@playwright/test";
  * shares one system clipboard, so these run one at a time in their own project, and no
  * other spec may touch the clipboard: a spec that starts to must be added here.
  */
-const CLIPBOARD = /\/(agentCopyText|agentMarkdown|artifactPaste|agentPlanCopy|contextMenu|copyImage|copyPaste|groupPaste|groupRefs|menuActions|pasteAcross|resultCopies|systemPaste|textCopies)\.spec\.ts$/;
+const CLIPBOARD = /\/(agentCopyText|agentMarkdown|artifactPaste|agentPlanCopy|contextMenu|copyImage|copyPaste|groupPaste|groupRefs|ipadCopy|menuActions|pasteAcross|resultCopies|systemPaste|textCopies)\.spec\.ts$/;
 
 /**
  * The ten-tab budget (spec 17) reads heap, DOM and listener counts and idle CPU that other work in the same run

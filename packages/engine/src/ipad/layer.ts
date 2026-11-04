@@ -148,6 +148,8 @@ export const ipadLayer = Layer.effect(
     const status = Effect.map(
       settings.view,
       (view): IpadStatus => ({
+        platform: testing ? "darwin" : config.platform,
+        hosted: testing || config.clientDist !== undefined,
         localName: localName ?? null,
         port: listener?.port ?? view.ipadPort,
         listening: listener !== undefined,

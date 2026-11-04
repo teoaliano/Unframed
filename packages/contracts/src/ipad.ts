@@ -1,6 +1,8 @@
 import * as Schema from "effect/Schema";
 
 export const IpadStatus = Schema.Struct({
+  platform: Schema.String,
+  hosted: Schema.Boolean,
   localName: Schema.NullOr(Schema.String),
   port: Schema.Number,
   listening: Schema.Boolean,
