@@ -4,17 +4,11 @@ import { centre, openCanvas, roomShapes, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 import { filledArtifact, projectPath } from "./artifacts.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
+import { column, editor, frameOf, modeButton, outline, region } from "./editorHarness.ts";
 
-/** A page with two elements that carry ids, so the frame can name one. */
 const PAGE = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}</style></head><body><main><h1 data-hf-id="hf-aaaa">Welcome</h1><p data-hf-id="hf-bbbb">Lead text</p></main></body></html>`;
 
-const editor = (page: Page) => page.getByTestId("artifact-editor");
-const region = (page: Page) => page.getByRole("region", { name: "Editing Landing" });
-const frameOf = (page: Page) => region(page).frameLocator("iframe[data-artifact-frame]");
-const column = (page: Page, name: "rail" | "centre" | "parameters") => editor(page).locator(`[data-editor-column="${name}"]`);
-const outline = (page: Page, kind: "hover" | "selected") => page.locator(`[data-edit-outline="${kind}"]`);
 const rowOf = (page: Page, label: string): Locator => column(page, "parameters").locator("[data-layer-row]").filter({ hasText: label }).first();
-const modeButton = (page: Page, name: "Edit" | "Interact"): Locator => region(page).getByRole("group", { name: "Mode" }).getByRole("button", { name, exact: true });
 
 const pageShape = async (engine: TestEngine) => (await roomShapes(engine, "default", "page")).find((record) => record.id === "shape:pg1");
 const textOf = async (engine: TestEngine): Promise<string> => {
@@ -35,7 +29,6 @@ const openEditor = async (page: Page) => {
   await expect(region(page)).toBeVisible();
 };
 
-/** The artifact frame's own document, from which a page would send its messages. */
 const frameWindow = async (page: Page): Promise<Frame> => {
   const handle = await region(page).locator("iframe[data-artifact-frame]").elementHandle();
   const frame = await handle!.contentFrame();

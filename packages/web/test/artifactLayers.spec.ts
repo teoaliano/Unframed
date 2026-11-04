@@ -4,21 +4,14 @@ import { centre, openCanvas, roomShapes, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 import { filledArtifact, projectPath } from "./artifacts.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
+import { column, editor, frameOf, outline, region } from "./editorHarness.ts";
 
-/** A page with a heading, a paragraph, a box with a span in it, and a paragraph a script adds at run time. */
 const PAGE = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}</style></head><body><main><h1>Welcome</h1><p>Lead text</p><div class="box"><span>Inside</span></div></main><script>document.body.appendChild(Object.assign(document.createElement("p"), { textContent: "Made by script" }));</script></body></html>`;
 
-const editor = (page: Page) => page.getByTestId("artifact-editor");
-const region = (page: Page) => page.getByRole("region", { name: "Editing Landing" });
-const frameOf = (page: Page) => region(page).frameLocator("iframe[data-artifact-frame]");
-const column = (page: Page, name: "rail" | "centre" | "parameters") => editor(page).locator(`[data-editor-column="${name}"]`);
-const outline = (page: Page, kind: "hover" | "selected") => page.locator(`[data-edit-outline="${kind}"]`);
 const rows = (page: Page) => column(page, "parameters").locator("[data-layer-row]");
-/** The Layers row whose text names `label`: its button selects, and its icons hide, lock and rename. */
 const rowOf = (page: Page, label: string): Locator => rows(page).filter({ hasText: label }).first();
 const layerButton = (page: Page, label: string): Locator => rowOf(page, label).locator("[data-layer]");
 
-/** The file the Landing page shape names in the room. The room lags the editor by a sync round, so reads poll. */
 const fileOf = async (engine: TestEngine): Promise<string | undefined> => (await roomShapes(engine, "default", "page")).find((record) => record.id === "shape:landing")?.props?.file;
 const textOf = async (engine: TestEngine): Promise<string> => {
   const file = await fileOf(engine);
@@ -48,9 +41,7 @@ test("Layers lists the elements in document order, with the runtime element grey
   expect(names).toEqual(["main", "Welcome", "Lead text", "box", "Inside"]);
   const runtime = column(page, "parameters").locator("[data-layer-runtime]");
   await expect(runtime).toContainText("Set by the agent's code");
-  // The runtime row is read-only but still readable: no dimming, so its text keeps 4.5:1 against the panel.
   await expect(runtime.locator("div").first()).not.toHaveClass(/opacity-60/);
-  // The box is a parent: it nests its span one step deeper than itself.
   expect(await rows(page).nth(4).evaluate((item) => (item as HTMLElement).style.paddingInlineStart)).toBe("24px");
 });
 

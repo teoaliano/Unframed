@@ -7,8 +7,6 @@ import { filledArtifact, writeProjectFile } from "./artifacts.ts";
 import { componentShape, SHEET_FILE } from "./components.ts";
 import { putRecords } from "./media.ts";
 
-/** Spec 20, task 43: a token restyles a component's board and a page's instances; the Kit mode picker switches the instances' look. */
-
 const kitWith = (light: string, dark: string): Kit => ({
   format: 1,
   name: "Brand",
@@ -19,7 +17,6 @@ const kitWith = (light: string, dark: string): Kit => ({
 const writeKit = (engine: Parameters<typeof putRecords>[0], next: Kit) =>
   putRecords(engine, [{ id: "document:document", typeName: "document", gridSize: 10, name: "", meta: { unframed: { kit: next } } }]);
 
-// A button whose colour is the kit's brand token, in a sheet with its tokens tag and the helper.
 const SHEET = stampElementIds(`<!doctype html><html><head><meta charset="utf-8">${TOKENS_TAG}${BRIDGE_TAG}${COMPONENT_HELPER_TAG}</head><body style="margin:0">
 <script type="application/json" data-uf-component>{"tag":"uf-price-card","variants":{},"props":{"label":"text"},"slots":[]}</script>
 <style type="text/x-uf-component" data-uf-component-style>:host { display: inline-block; } button { background: var(--color-brand-primary); color: #ffffff; padding: 8px 12px; }</style>
@@ -49,11 +46,9 @@ test("a token change restyles a component's board and a page's instances at once
   await expect(region(page, "Landing")).toBeVisible();
   await expect(instanceButton(page)).toHaveCSS("background-color", "rgb(26, 115, 232)", { timeout: 20_000 });
 
-  // The person changes the token's light value: the page's instance follows.
   await writeKit(agent, kitWith("#e53935", "#8ab4f8"));
   await expect(instanceButton(page)).toHaveCSS("background-color", "rgb(229, 57, 53)", { timeout: 20_000 });
 
-  // The component's board follows too.
   await page.getByRole("button", { name: "Back to canvas" }).click();
   await openEditorOn(page, "shape:card");
   await expect(region(page, "Price card")).toBeVisible();

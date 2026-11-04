@@ -2,13 +2,10 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "./agent.ts";
 import { fileOf, frameOf, htmlCount, onBoard, openEditor, parameters, preparedFile, selectByText, textOf } from "./editorHarness.ts";
 
-/** A heading, a paragraph with its own padding, and a card: the Fill, Shape and Spacing fields all have something to show. */
 const PAGE = `<!doctype html><html><head><style>body{margin:0;font:16px Georgia, serif}main{padding:16px}</style></head><body><main><h1 style="font-size: 32px; padding-top: 4px">Welcome</h1><p style="padding-top: 8px">Lead text</p><div class="card" style="height: 40px">Card</div></main></body></html>`;
 
-/** A flex row with a gap, and a paragraph that is not flex: Layout and Gap show only for the row. */
 const ROW_PAGE = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}</style></head><body><main><div class="row" style="display: flex; gap: 4px; padding: 6px"><span>One</span><span>Two</span></div><p>Lead text</p></main></body></html>`;
 
-/** A card with two shadows (read-only in Design) and a card with one (editable). */
 const SHADOW_PAGE = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}</style></head><body><main><div class="many" style="height: 40px; box-shadow: 0 1px 2px #000000, 0 2px 4px #111111">Many</div><div class="one" style="height: 40px; box-shadow: 0 1px 2px #000000">One</div></main></body></html>`;
 
 const field = (page: Page, name: string) => parameters(page).getByRole("spinbutton", { name, exact: true });
@@ -20,13 +17,11 @@ test("Fill, Shape and Spacing fields write their declarations in one version, an
   const before = await preparedFile(agent);
   const countBefore = await htmlCount(agent);
 
-  // The Font combobox lists the family the document uses, with the generic families beside it.
   await parameters(page).getByLabel("Font", { exact: true }).focus();
   await page.keyboard.press("ArrowDown");
   await expect(page.getByRole("option", { name: "Georgia", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
 
-  // Colour and Background are popovers: a colour input and a hex field.
   await parameters(page).getByRole("button", { name: "Background", exact: true }).click();
   await page.getByRole("textbox", { name: "Hex", exact: true }).fill("#00ff00");
   await page.getByRole("textbox", { name: "Hex", exact: true }).press("Enter");
@@ -39,11 +34,9 @@ test("Fill, Shape and Spacing fields write their declarations in one version, an
   await field(page, "Padding top").fill("12");
   await field(page, "Padding top").press("Enter");
 
-  // The frame shows the change before anything is saved.
   await expect(frameOf(page).getByRole("heading", { name: "Welcome" })).toHaveCSS("background-color", "rgb(0, 255, 0)", { timeout: 2000 });
   expect(await htmlCount(agent)).toBe(countBefore);
 
-  // One version for the whole group, written 1.5 s after the last edit.
   await expect.poll(() => htmlCount(agent), { timeout: 8000 }).toBe(countBefore + 1);
   await expect.poll(() => fileOf(agent), { timeout: 8000 }).not.toBe(before);
   const written = await textOf(agent, (await fileOf(agent))!);
@@ -61,7 +54,6 @@ test("Layout shows only for a flex element, Gap for flex or grid, and a Directio
   await expect(parameters(page).getByRole("combobox", { name: "Direction", exact: true })).toHaveCount(0);
   await expect(field(page, "Gap")).toHaveCount(0);
 
-  // The row's padding is the click target: the spans cover its content.
   await frameOf(page).locator(".row").click({ position: { x: 2, y: 2 } });
   await expect(parameters(page).getByRole("combobox", { name: "Direction", exact: true })).toBeVisible();
   await expect(field(page, "Gap")).toHaveValue("4");
@@ -128,7 +120,6 @@ test("Visible shows the new state at once, and a shown element returns in the fr
   const visible = parameters(page).getByRole("switch", { name: "Visible", exact: true });
 
   await visible.click();
-  // Both the switch and the frame change within the burst's 1.5 s pause, not at its commit.
   await expect(visible).toHaveAttribute("aria-checked", "false", { timeout: 500 });
   await expect(frameOf(page).getByText("Lead text")).toBeHidden({ timeout: 500 });
   await expect.poll(async () => (await textOf(agent, (await fileOf(agent))!)).match(/data-uf-hidden/) !== null, { timeout: 8000 }).toBe(true);

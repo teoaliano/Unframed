@@ -4,15 +4,11 @@ import { createChat, expect, openRail, test } from "./agent.ts";
 import { putRecords } from "./media.ts";
 import { artifactShape, filledArtifact } from "./artifacts.ts";
 import { connectTab } from "../../engine/test/syncClient.ts";
-import { preparedFile } from "./editorHarness.ts";
+import { column, editor, preparedFile } from "./editorHarness.ts";
 import { expectSlot, expectToken, inBothSchemes, styleOf } from "./kit.ts";
 
-const editor = (page: Page) => page.getByTestId("artifact-editor");
-/** The Parameters tab is one of the editor's panels; the Design tab is shown on open (spec 18). */
 const openParameters = (page: Page) => editor(page).locator('[data-editor-column="parameters"]').getByRole("tab", { name: "Parameters" }).click();
-const column = (page: Page, name: "rail" | "centre" | "parameters") => editor(page).locator(`[data-editor-column="${name}"]`);
 
-/** Whether the element at the watermark's centre is the watermark itself, not something laid over it. */
 const hitIsWatermark = (page: Page): Promise<boolean> =>
   page.evaluate(() => {
     const watermark = document.querySelector(".tl-watermark_SEE-LICENSE");
@@ -48,19 +44,15 @@ test("double-click opens the editor: rail, live frame and parameters, with Back 
   await expect(frame).not.toHaveAttribute("loading", "lazy");
   await expect(region.frameLocator("iframe[data-artifact-frame]").getByRole("heading", { name: "Welcome" })).toBeVisible();
   await expect(column(page, "parameters")).toContainText("Parameters");
-  // The canvas's own frames unload while the editor is open.
   await expect(shapeOnScreen(page, "shape:landing").locator("iframe")).toHaveCount(0);
-  // tldraw's watermark stays visible over the editor's bottom-right corner, and wins a click there.
   await expect(page.locator(".tl-watermark_SEE-LICENSE")).toBeVisible();
   expect(await hitIsWatermark(page)).toBe(true);
 
   await region.getByRole("button", { name: "Back to canvas" }).click();
   await expect(editor(page)).toHaveCount(0);
   expect(await shapeOnScreen(page, "shape:landing").boundingBox()).toEqual(before);
-  // The double-click opened the editor and nothing else: no prompt where it landed.
   expect((await roomRecords(agent, "default")).filter((record) => record.type === "text")).toHaveLength(2);
 
-  // Deselect and pan away (a selected artifact's frame takes a double-click as its own), open again, and Escape comes back to exactly where it was.
   await page.mouse.click(640, 560);
   await page.mouse.move(640, 360);
   await page.mouse.wheel(120, 60);
@@ -95,7 +87,6 @@ test("the three columns run to the window's bottom edge at the margin they keep 
   const watermark = (await page.locator(".tl-watermark_SEE-LICENSE").boundingBox())!;
   expect(watermark.y + watermark.height).toBeLessThanOrEqual(height);
   expect(await hitIsWatermark(page)).toBe(true);
-  // Nothing else laid over the editor: every point of the window outside the watermark hits the editor.
   const strays = await page.evaluate(({ x, y, w, h }) => {
     const editor = document.querySelector("[data-testid='artifact-editor']")!;
     const hits: string[] = [];
@@ -109,7 +100,6 @@ test("the three columns run to the window's bottom edge at the margin they keep 
     return hits;
   }, { x: watermark.x, y: watermark.y, w: watermark.width, h: watermark.height });
   expect(strays).toEqual([]);
-  // Every control in the parameters column ends above the watermark's top edge.
   await openParameters(page);
   for (const control of [column(page, "parameters").getByRole("button", { name: "Add" }), column(page, "parameters").getByPlaceholder(/Describe a parameter/)]) {
     const box = (await control.boundingBox())!;
@@ -141,22 +131,18 @@ test("the rail's header makes room for the shell's window buttons inline, moving
   await page.mouse.dblclick(at.x, at.y);
   await expect(railHeader).toBeVisible();
   const plain = { header: (await railHeader.boundingBox())!, icon: (await icon.boundingBox())! };
-  // In a browser the three headers line up.
   expect(Math.abs((await middle(railHeader)) - (await middle(back)))).toBeLessThanOrEqual(1);
 
-  // The shell's buttons sit left of where it put the card: the header's content starts at the card's left edge and stays level.
   await shellStyle(".unframed-chrome-left { top: 8px; left: 80px; }");
   await expect.poll(async () => (await icon.boundingBox())!.x).toBeGreaterThanOrEqual((await card()).x);
   expect((await railHeader.boundingBox())!.y).toBe(plain.header.y);
   expect(Math.abs((await middle(railHeader)) - (await middle(back)))).toBeLessThanOrEqual(1);
 
-  // Moved down as well, the header comes down by as much as the card did, and no more.
   await shellStyle(".unframed-chrome-left { top: 40px; left: 80px; }");
   await expect.poll(async () => (await railHeader.boundingBox())!.y).toBe(plain.header.y + 32);
   expect((await icon.boundingBox())!.x).toBeGreaterThanOrEqual((await card()).x);
   expect((await back.boundingBox())!.y).toBeLessThan((await railHeader.boundingBox())!.y);
 
-  // The style removed, the header goes back.
   await shellStyle(undefined);
   await expect.poll(async () => (await railHeader.boundingBox())!.y).toBe(plain.header.y);
   await expect.poll(async () => (await icon.boundingBox())!.x).toBe(plain.icon.x);
@@ -172,8 +158,6 @@ test("Escape closes the editor from a button in its chat column, though not from
   await column(page, "rail").getByRole("textbox", { name: "Message the agent" }).click();
   await page.keyboard.press("Escape");
   await expect(editor(page)).toBeVisible();
-  // As after a click on a tab or on the recap card's Editor: the focus is on a button in the column.
-  // (A click on the active tab opens its menu, which Escape closes first.)
   await column(page, "rail").getByRole("tab", { selected: false }).click();
   await page.keyboard.press("Escape");
   await expect(editor(page)).toHaveCount(0);
@@ -181,11 +165,9 @@ test("Escape closes the editor from a button in its chat column, though not from
 
 test("nothing covers the editor's chat header, with the canvas rail docked or closed, in a browser or with the shell's card moved", async ({ page, agent }) => {
   await openCanvas(page, agent);
-  // Right of where the docked rail sits, so a double-click reaches it with the rail open.
   await filledArtifact(agent, { id: "shape:landing", kind: "page", ref: "150", at: { x: 600, y: 60 }, size: { w: 300, h: 200 }, title: "Landing", html: "<h1>Welcome</h1>" });
   await expect(shapeOnScreen(page, "shape:landing")).toBeVisible();
   const railHeader = column(page, "rail").locator("header").first();
-  /** Whether every point along the header's left half hits the header itself. */
   const headerUncovered = async () => {
     const box = (await railHeader.boundingBox())!;
     return page.evaluate(
@@ -219,7 +201,6 @@ test("nothing covers the editor's chat header, with the canvas rail docked or cl
       await expect(railHeader).toBeVisible();
       await page.waitForTimeout(100);
       expect(await headerUncovered(), `shell ${shell}, rail docked ${docked}`).toBe(true);
-      // In a browser the three column headers line up.
       if (!shell) expect(Math.abs((await middle(railHeader)) - (await middle(column(page, "centre").getByRole("button", { name: "Back to canvas" }))))).toBeLessThanOrEqual(1);
       await page.keyboard.press("Escape");
       await expect(editor(page)).toHaveCount(0);
@@ -246,7 +227,6 @@ test("Escape typed in the composer or the parameter box stays in the editor, and
   await page.keyboard.press("Escape");
   await expect(region).toBeVisible();
 
-  // Focus on the editor's own controls: Delete, Backspace and tool keys reach no canvas shortcut.
   await region.getByRole("button", { name: "Back to canvas" }).focus();
   await page.keyboard.press("Delete");
   await page.keyboard.press("Backspace");
@@ -255,7 +235,6 @@ test("Escape typed in the composer or the parameter box stays in the editor, and
   await page.waitForTimeout(300);
   expect((await roomRecords(agent, "default")).some((record) => record.id === "shape:landing")).toBe(true);
   expect((await roomRecords(agent, "default")).filter((record) => record.type === "page")).toHaveLength(1);
-  // The first Escape closes the Back button's tooltip; the next closes the editor.
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
   await expect(region).toHaveCount(0);
@@ -276,7 +255,6 @@ test("an artifact with no file says so and offers no new tab; Open in a new tab 
   const at = await centre(shapeOnScreen(page, "shape:landing"));
   await page.mouse.dblclick(at.x, at.y);
   const landing = page.getByRole("region", { name: "Editing Landing" });
-  // The editor prepares a page written before element editing and swaps its file: wait for the room and the frame to agree.
   let file = "";
   await expect
     .poll(async () => {
@@ -289,10 +267,8 @@ test("an artifact with no file says so and offers no new tab; Open in a new tab 
   await landing.getByRole("button", { name: "Open in a new tab" }).click();
   const tab = await opened;
   await tab.waitForLoadState();
-  // The app is on localhost, so the artifact is on the other loopback name.
   expect(tab.url()).toBe(`http://127.0.0.1:${agent.previewPort}/p/default/unframed-live.html?s=landing`);
   await expect(tab.frameLocator("iframe").getByRole("heading", { name: "Welcome" })).toBeVisible({ timeout: 10_000 });
-  // The live viewer follows the newest file, which the engine's prepare may have just moved the shape to.
   await expect
     .poll(async () => (await tab.locator("iframe").getAttribute("src")) === ((await roomRecords(agent, "default")).find((record) => record.id === "shape:landing")!.props.file as string), {
       timeout: 15_000,
@@ -308,7 +284,6 @@ test("deleting the artifact from another tab closes the editor", async ({ page, 
   await page.mouse.dblclick(at.x, at.y);
   await expect(page.getByRole("region", { name: "Editing Landing" })).toBeVisible();
 
-  // Another tab's delete reaches this one as a remote change of the room, as this one does.
   const tab = await connectTab(agent.port, "default");
   await tab.loaded;
   await tab.remove(["shape:landing"]);
@@ -323,13 +298,11 @@ test("the editor's columns, header actions and parameter box are the kit's, in b
   await page.mouse.dblclick(at.x, at.y);
   const region = page.getByRole("region", { name: "Editing Landing" });
   await expect(region).toBeVisible();
-  // The grid stays 360, flexible, 320, with 12 px gaps and padding.
   expect((await column(page, "rail").boundingBox())!.width).toBe(360);
   expect((await column(page, "parameters").boundingBox())!.width).toBe(320);
   const [rail, centreColumn] = [(await column(page, "rail").boundingBox())!, (await column(page, "centre").boundingBox())!];
   expect(centreColumn.x - (rail.x + rail.width)).toBe(12);
   expect(rail.x).toBe(12);
-  // The centre's frame fills the space under the header.
   const frame = (await region.locator("iframe[data-artifact-frame]").boundingBox())!;
   expect(frame.width).toBeGreaterThan(centreColumn.width - 4);
   expect(frame.y + frame.height).toBeGreaterThan(centreColumn.y + centreColumn.height - 4);
@@ -358,7 +331,6 @@ test("the editor's columns, header actions and parameter box are the kit's, in b
   });
 });
 
-/** A page that shows its own viewport, and a number drawn once per load, so a reload shows. */
 const VIEWPORT_PAGE = `<!doctype html><html><body><h1 id="vp"></h1><p id="boot"></p><script>
 document.getElementById("boot").textContent = String(Math.random());
 const show = () => (document.getElementById("vp").textContent = innerWidth + "x" + innerHeight);
@@ -388,8 +360,6 @@ test("the editor sizes its preview to Fill, Desktop, Tablet, Mobile or a typed s
   const region = page.getByRole("region", { name: "Editing Landing" });
   const inside = region.frameLocator("iframe[data-artifact-frame]");
   const frame = region.locator("iframe[data-artifact-frame]");
-  // Spec 18: a page with no element ids is prepared on open, and the swap then shows the prepared file in the frame.
-  // The boot number is read from that frame, so the size changes below are checked against the document the editor keeps.
   const prepared = await preparedFile(agent);
   await expect(frame).toHaveAttribute("src", new RegExp(prepared.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   await expect(trigger()).toContainText("Fill");
@@ -403,11 +373,9 @@ test("the editor sizes its preview to Fill, Desktop, Tablet, Mobile or a typed s
     ["Mobile 390", [390, 844]],
   ] as const) {
     await choose(label);
-    // A named size closes the popover; reopened, the choice carries the check.
     await expect(popup()).toHaveCount(0);
     await expect(trigger()).toContainText(label);
     await expect(inside.locator("#vp")).toHaveText(`${viewport[0]}x${viewport[1]}`);
-    // Shrunk to fit inside the column, its shape kept.
     const box = (await frame.boundingBox())!;
     expect(box.width).toBeLessThan(viewport[0]);
     expect(box.x).toBeGreaterThanOrEqual(body.x);
@@ -422,7 +390,6 @@ test("the editor sizes its preview to Fill, Desktop, Tablet, Mobile or a typed s
   await expect(popup().getByRole("radio", { name: "Mobile 390" }).locator("svg")).toHaveCount(1);
   await expect(popup().getByRole("radio", { name: "Fill" }).locator("svg")).toHaveCount(0);
 
-  // A typed size, in the popover: Custom keeps it open; a size that fits shows unscaled.
   await popup().getByRole("radio", { name: "Custom" }).click();
   await expect(popup()).toBeVisible();
   await expect(popup().getByLabel("Preview width")).toBeFocused();
@@ -438,7 +405,6 @@ test("the editor sizes its preview to Fill, Desktop, Tablet, Mobile or a typed s
   }).toEqual([400, 300]);
   await expect(region.getByTestId("artifact-preview-scale")).toHaveCount(0);
 
-  // An emptied side shows the size in use again; a side under 100 px is held at 100.
   await popup().getByLabel("Preview width").fill("");
   await popup().getByLabel("Preview width").press("Enter");
   await expect(popup().getByLabel("Preview width")).toHaveValue("400");
@@ -450,17 +416,14 @@ test("the editor sizes its preview to Fill, Desktop, Tablet, Mobile or a typed s
   await popup().getByLabel("Preview height").fill("300");
   await popup().getByLabel("Preview height").press("Enter");
   await expect(inside.locator("#vp")).toHaveText("400x300");
-  // Every change resized the same document; none reloaded it.
   await expect(inside.locator("#boot")).toHaveText(boot!);
 
-  // Esc closes the popover and leaves the editor open; the next one closes the editor.
   await page.keyboard.press("Escape");
   await expect(popup()).toHaveCount(0);
   await expect(region).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(region).toHaveCount(0);
 
-  // Remembered for this artifact; another one opens on Fill; nothing is written to the shape.
   await open("shape:landing", "Landing");
   await expect(trigger()).toContainText("400 × 300");
   await expect(inside.locator("#vp")).toHaveText("400x300");
@@ -471,14 +434,12 @@ test("the editor sizes its preview to Fill, Desktop, Tablet, Mobile or a typed s
   const record = (await roomRecords(agent, "default")).find((item) => item.id === "shape:landing")!;
   expect(Object.keys(record.props).sort()).toEqual(["fileName", "file", "h", "title", "w"].sort());
 
-  // Session memory only: a reload starts on Fill.
   await page.reload();
   await expect(page.locator("[data-canvas-project] .tl-canvas")).toBeVisible({ timeout: 20_000 });
   await expect(shapeOnScreen(page, "shape:landing")).toBeVisible();
   await open("shape:landing", "Landing");
   await expect(trigger()).toContainText("Fill");
 
-  // Back to Fill from a size: the frame takes the column again.
   await choose("Mobile 390");
   await expect(inside.locator("#vp")).toHaveText("390x844");
   await choose("Fill");
@@ -494,7 +455,6 @@ test("in a narrow window the editor's header never overflows: the title stays, a
   await openCanvas(page, agent);
   await filledArtifact(agent, { id: "shape:intro", kind: "motion", ref: "150", at: { x: -520, y: -40 }, size: { w: 320, h: 180 }, title: "A motion with a long title", html: MOTION });
   await expect(shapeOnScreen(page, "shape:intro")).toBeVisible();
-  // The narrow window shows only part of the motion: double-click the middle of what shows.
   const shown = (await shapeOnScreen(page, "shape:intro").boundingBox())!;
   const left = Math.max(shown.x, 0);
   await page.mouse.dblclick((left + Math.min(shown.x + shown.width, 1024)) / 2, shown.y + shown.height / 2);
@@ -514,7 +474,6 @@ test("in a narrow window the editor's header never overflows: the title stays, a
     }
   };
   await whole();
-  // Fill reads as proportions, not as "go full screen", in the icon-only header too.
   await expect(region.getByRole("button", { name: "Preview size" }).locator("svg.lucide-proportions")).toHaveCount(1);
   await region.getByRole("button", { name: "Preview size" }).click();
   await page.getByRole("dialog", { name: "Preview size" }).getByRole("radio", { name: "Custom" }).click();

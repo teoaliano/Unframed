@@ -1,8 +1,3 @@
-/**
- * The artifact editor (spec 09): the full-screen view of one artifact. The chat rail on the
- * left filtered to it, the artifact live in the centre, and on the right the Design, Layers and
- * Parameters tabs. Spec 18 adds the Edit and Interact modes and the edit session behind them.
- */
 import type { ArtifactShapeProps, ComponentUpdate } from "@unframed/contracts";
 import {
   artifactTitle,
@@ -70,7 +65,6 @@ import { makeEditableInstruction, tellAgent } from "./tellAgent.ts";
 import { MotionTimeline } from "../timeline/MotionTimeline.tsx";
 import { MotionTransport, type TransportZone } from "../timeline/transport.ts";
 
-/** Below these window widths the agent rail, then the parameters column, fold into a kit Sheet (spec 09, the editor). */
 const RAIL_FOLDS = "(max-width: 999px)";
 const PARAMETERS_FOLD = "(max-width: 719px)";
 
@@ -84,31 +78,19 @@ const useWindowQuery = (query: string): boolean =>
     () => window.matchMedia(query).matches,
   );
 
-export interface ArtifactEditorProps {
+interface ArtifactEditorProps {
   readonly shapeId: TLShapeId;
   readonly onClose: () => void;
-  /** Opens another artifact, from the rail's recap card. */
   readonly onOpen: (shapeId: string) => void;
 }
 
 type Panel = "design" | "layers" | "parameters";
 
-/** The panel each artifact's editor last showed, for the session: the choice is never written. */
 const panelRemembered = new Map<string, Panel>();
 
-/** A key typed where text goes belongs to that field, not to the editor. */
-const typingIn = (target: EventTarget | null): boolean => {
-  const element = target instanceof HTMLElement ? target : null;
-  if (!element) return false;
-  return (
-    element.isContentEditable ||
-    element.tagName === "INPUT" ||
-    element.tagName === "TEXTAREA" ||
-    element.closest("[contenteditable='true']") !== null
-  );
-};
+const typingIn = (target: EventTarget | null): boolean =>
+  target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, [contenteditable='true']") !== null);
 
-/** Where the focus is, for a motion's transport keys: the page body, the frame, or the strip's time area. Undefined elsewhere (spec 21). */
 const transportZone = (): TransportZone | undefined => {
   const active = document.activeElement;
   if (
@@ -119,9 +101,7 @@ const transportZone = (): TransportZone | undefined => {
     return "body";
   if (active instanceof HTMLIFrameElement) return "frame";
   if (!(active instanceof HTMLElement)) return undefined;
-  // The tldraw container holds the focus after a click on the editor's own surface, where the frame is.
   if (active.classList.contains("tl-container")) return "frame";
-  // The time area itself, and the transport's buttons. A row, a bar, a diamond or a menu keeps its own keys.
   if (active.hasAttribute("data-timeline-focus")) return "strip";
   if (
     active.closest("[data-testid='timeline-transport']") !== null &&
@@ -133,10 +113,6 @@ const transportZone = (): TransportZone | undefined => {
 
 const stop = (event: { stopPropagation(): void }) => event.stopPropagation();
 
-/**
- * The editor is portaled beside the canvas but sits inside its React tree, where tldraw's
- * canvas handlers would hear these through the portal and pan or select beneath it.
- */
 const KEEP_FROM_CANVAS = {
   onPointerDown: stop,
   onPointerMove: stop,
@@ -151,7 +127,6 @@ const KEEP_FROM_CANVAS = {
 const isUndo = (event: KeyboardEvent): boolean =>
   (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z";
 
-/** How often, and how many times, an empty `component.updates` answer is asked again while the canvas shows an update (spec 20). */
 const UPDATE_RETRIES = 8;
 const UPDATE_RETRY_MS = 250;
 
@@ -185,7 +160,6 @@ export const ArtifactEditor = ({
     },
     [editor, shapeId],
   );
-  // How many page and motion shapes on this canvas pin the component's tag (spec 20, the editor's header).
   const uses = useValue(
     "component uses",
     () => {
@@ -213,21 +187,17 @@ export const ArtifactEditor = ({
   });
   const sessionRef = useRef(session);
   sessionRef.current = session;
-  // The motion strip's values panel, which an Esc closes first (spec 21): the strip sets the closer when it mounts.
   const closePanel = useRef<(() => boolean) | undefined>(undefined);
-  // A motion's transport (spec 21): the strip's buttons and keys drive the player through its viewer.
   const [transport] = useState(() => new MotionTransport());
   useEffect(() => () => transport.dispose(), [transport]);
   const onPlayerReady = useCallback(
     (send: (message: unknown) => void) => transport.connect(send),
     [transport],
   );
-  // Whether the shown artifact is a motion with a file: only then do the transport's keys act.
   const motionShown = useRef(false);
   motionShown.current =
     facts !== undefined && facts.kind === "motion" && facts.file !== "";
 
-  // Component updates (spec 20): the tags this artifact pins at an older sheet, and the engine's rows for them. The popover opens from the header or the canvas badge.
   const updateKey = useValue(
     "component update tags",
     () => updateTagsOf(editor, project, facts?.file ?? "").join(","),
@@ -237,7 +207,6 @@ export const ArtifactEditor = ({
     [],
   );
   const [updatesShown, setUpdatesShown] = useState(false);
-  /** What the header announces after an update (spec 20, Accepting), and the row that takes focus once the rows change. */
   const [updateNote, setUpdateNote] = useState("");
   const updateFocus = useRef<string | undefined>(undefined);
   useEffect(() => {
@@ -262,7 +231,6 @@ export const ArtifactEditor = ({
     setUpdatesShown(true);
     artifactsOf(editor).updatesOpen.set(undefined);
   }, [badgeRequested, editor]);
-  // The engine reads the canvas as it holds it, which can lag an edit made a moment ago (an undo, say): an empty answer while the canvas shows an update is asked again.
   const retries = useRef(0);
   useEffect(() => {
     if (updateKey === "") {
@@ -294,11 +262,9 @@ export const ArtifactEditor = ({
       window.clearTimeout(timer);
     };
   }, [engine, project, shapeId, updateKey]);
-  /** Accepts the update of each listed component: one undoable version, written at once (spec 20, Accepting). */
   const acceptUpdates = useCallback(
     async (tags: readonly string[]) => {
       const session = sessionRef.current;
-      // A pending burst is written first, as its own version, so the update is one undo step of its own.
       await session.commit();
       const accepted = updateRows.filter((row) => tags.includes(row.tag));
       for (const row of accepted)
@@ -310,10 +276,8 @@ export const ArtifactEditor = ({
     },
     [updateRows],
   );
-  // The saved dials with the burst's held values over them: the frame and the Parameters tab show what the person set.
   const dials = dialsWith(facts?.dials, session.held);
 
-  /** Locks or unlocks an element: the shape's `lockedElements`, one undo step, and no new version (spec 18, Lock and unlock). */
   const setLocked = useCallback(
     (id: string, on: boolean) => {
       const current =
@@ -327,7 +291,6 @@ export const ArtifactEditor = ({
       editor.markHistoryStoppingPoint("lock");
       const shape = editor.getShape(shapeId);
       if (shape && next.length === 0) {
-        // No lock left: the key goes, so the shape holds no lockedElements at all.
         const { lockedElements: _gone, ...rest } = shape.props as {
           lockedElements?: string[];
         };
@@ -345,21 +308,18 @@ export const ArtifactEditor = ({
   );
 
   const close = useCallback(() => {
-    // Closing saves a pending burst first, as switching mode or element does (spec 18, Bursts).
     void sessionRef.current.commit();
     onClose();
   }, [onClose]);
   const closeRef = useRef(close);
   closeRef.current = close;
 
-  // The artifact deleted by the agent, another tab or an undo: its burst is dropped and the editor closes itself.
   useEffect(() => {
     if (!gone) return;
     sessionRef.current.discard(true);
     onClose();
   }, [gone, onClose]);
 
-  // Cmd-Z in the editor is the editor's: it runs before tldraw's own undo, so the canvas keeps its history out of reach.
   useEffect(() => {
     const onUndo = (event: KeyboardEvent) => {
       if (
@@ -382,9 +342,7 @@ export const ArtifactEditor = ({
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      // A folded rail or parameters sheet takes its own Esc.
       if (event.key === "Escape" && sheetOpenRef.current) return;
-      // Esc ends the innermost open thing first: a motion's values panel (spec 21), then the session's own selections (spec 18).
       if (
         event.key === "Escape" &&
         !event.defaultPrevented &&
@@ -401,8 +359,6 @@ export const ArtifactEditor = ({
       )
         return;
       if (isUndo(event)) return;
-      // The transport takes its keys only where the focus is the frame, the strip or the page body (spec 21, the shortcuts).
-      // Space on a focused button is that button's (Play, or a toggle), so the transport leaves it alone.
       const zone =
         event.key === " " && document.activeElement instanceof HTMLButtonElement
           ? undefined
@@ -438,7 +394,6 @@ export const ArtifactEditor = ({
   }, [editor]);
 
   const [announcement, setAnnouncement] = useState<DialsAnnouncement>();
-  // The old parameters stay until the new version announces its own, or until it has none (spec 09, the editor).
   const clearAnnouncement = useCallback(() => setAnnouncement(undefined), []);
   const post = useRef<((values: unknown) => void) | undefined>(undefined);
   const onReady = useCallback((send: (values: unknown) => void) => {
@@ -446,7 +401,6 @@ export const ArtifactEditor = ({
   }, []);
   const onEdit = useCallback(
     (message: EditMessage) => {
-      // A motion's keys from the frame (Edit mode only) reach the transport first, as the same keys typed in the editor would.
       if (message.type === "unframed:edit:key" && motionShown.current) {
         const modifiers = {
           shift: message.shift === true,
@@ -456,7 +410,6 @@ export const ArtifactEditor = ({
         if (transport.handleKey(String(message.key ?? ""), modifiers, "frame"))
           return;
       }
-      // Esc from the frame does what Esc does in the editor: it clears a selection, else closes (spec 18, Keys).
       if (message.type === "unframed:edit:key" && message.key === "Escape") {
         if (!sessionRef.current.handleKey("Escape", { shift: false, meta: false, ctrl: false })) closeRef.current();
         return;
@@ -473,7 +426,6 @@ export const ArtifactEditor = ({
   const railFolded = useWindowQuery(RAIL_FOLDS);
   const parametersFolded = useWindowQuery(PARAMETERS_FOLD);
   const [sheetChoice, setSheet] = useState<"agent" | "parameters">();
-  // A folded column's sheet is open only while its column is folded: a wider window closes it.
   const sheet =
     (sheetChoice === "agent" && railFolded) ||
     (sheetChoice === "parameters" && parametersFolded)
@@ -496,7 +448,6 @@ export const ArtifactEditor = ({
   useLayoutEffect(() => {
     const element = body.current;
     if (!element) return;
-    // A sized preview sits 12 px inside the column, in a 1 px border.
     const measure = () =>
       setArea({ w: element.clientWidth - 26, h: element.clientHeight - 26 });
     measure();
@@ -506,11 +457,8 @@ export const ArtifactEditor = ({
   }, [facts === undefined]);
   const viewport = editorPreviewViewport(size);
   const scale = viewport === undefined ? 1 : previewScale(viewport, area);
-  // The editor's column height, which caps the motion timeline at 60 % of it (spec 21). It is the grid's height less its padding,
-  // not the centre column's, which shrinks as the timeline grows.
   const grid = useRef<HTMLDivElement>(null);
   const [columnHeight, setColumnHeight] = useState(0);
-  // The Design tab's Show on timeline: the element and property, with a count so a repeat of the same request is still a request (spec 21).
   const [reveal, setReveal] = useState<{
     readonly element: string;
     readonly property: string;
@@ -534,17 +482,18 @@ export const ArtifactEditor = ({
   }, [facts === undefined]);
 
   if (!facts) return null;
+  const hasFile = facts.file !== "";
+  const tell = (elements: ChipElement[]) => tellAgent(chatClient, shapeId, elements);
+  const ask = (field: string, elements: ChipElement[]) => tellAgent(chatClient, shapeId, elements, makeEditableInstruction(field));
   const displayTitle = artifactTitle(facts);
   const title =
     displayTitle === "" ? shapeId.replace(/^shape:/, "") : displayTitle;
   const component = facts.kind === "component";
   const Icon =
     facts.kind === "page" ? AppWindow : component ? Component : Clapperboard;
-  // A component has no Parameters tab: its values are the sheet's own, and a motion's dials do not apply.
   const shownPanel: Panel =
     component && panel === "parameters" ? "design" : panel;
   const askAboutComponent = () => {
-    // The component's chip names its tag, so the agent can find every instance of it.
     const chip: ChipElement = {
       elementId: null,
       liveSelector: facts.tag,
@@ -556,7 +505,6 @@ export const ArtifactEditor = ({
     };
     tellAgent(chatClient, shapeId, [chip]);
   };
-  // The component shape a tag names: the Instance section's header and its Go to main component (spec 20). Undefined when no shape holds it.
   const componentOf = (tag: string) => {
     const shape = editor
       .getCurrentPageShapes()
@@ -575,12 +523,9 @@ export const ArtifactEditor = ({
           file: (shape.props as { file?: string }).file,
         };
   };
-  // The pending burst is written first, as switching the editor does, so the page's last change is not lost.
   const goToMain = (id: string) => {
     void sessionRef.current.commit().then(() => onOpen(id));
   };
-  const mode: EditMode = session.mode;
-  // The values the frame is running: the saved ones over the artifact's declared defaults, which is what a field's owner is matched against.
   const normalised =
     announcement === undefined
       ? undefined
@@ -593,23 +538,16 @@ export const ArtifactEditor = ({
   for (const element of session.tree?.elements ?? [])
     names[element.id] = element.name;
 
-  // A motion with a file has its timeline in a second row under the centre column (spec 21). Below a 1280 px window
-  // the timeline spans the centre and right columns, and the right column stops above it.
-  const timeline = facts.kind === "motion" && facts.file !== "";
+  const timeline = facts.kind === "motion" && hasFile;
   const columns = railFolded
     ? parametersFolded
       ? "grid-cols-[minmax(0,1fr)]"
       : "grid-cols-[minmax(0,1fr)_320px]"
     : "grid-cols-[360px_minmax(0,1fr)_320px]";
-  // The parameters column's content: the column itself, or the sheet a narrow window folds it into.
   const parametersBody = (
     <>
       <ColumnHeader>
-        <Tabs
-          value={shownPanel}
-          onValueChange={(next) => setPanel(String(next) as Panel)}
-          className="h-12 min-w-0"
-        >
+        <Tabs value={shownPanel} onValueChange={(next) => setPanel(String(next) as Panel)} className="h-12 min-w-0">
           <TabsList variant="underline" aria-label="Editor panels">
             <TabsTab value="design">Design</TabsTab>
             <TabsTab value="layers">Layers</TabsTab>
@@ -631,18 +569,9 @@ export const ArtifactEditor = ({
           locked={facts.locked}
           kit={kit}
           mode={facts.mode}
-          onOpenKit={() =>
-            kitUi(editor).update((state) => ({ ...state, open: true }))
-          }
-          onTell={(elements) => tellAgent(chatClient, shapeId, elements)}
-          onAsk={(field, elements) =>
-            tellAgent(
-              chatClient,
-              shapeId,
-              elements,
-              makeEditableInstruction(field),
-            )
-          }
+          onOpenKit={() => kitUi(editor).update((state) => ({ ...state, open: true }))}
+          onTell={tell}
+          onAsk={ask}
           onShowOnTimeline={(element, property) =>
             setReveal({ element, property, nonce: (reveal?.nonce ?? 0) + 1 })
           }
@@ -671,7 +600,7 @@ export const ArtifactEditor = ({
           shapeId={shapeId}
           locked={facts.locked}
           onLock={setLocked}
-          onTell={(elements) => tellAgent(chatClient, shapeId, elements)}
+          onTell={tell}
         />
       )}
       {shownPanel === "parameters" && (
@@ -690,7 +619,6 @@ export const ArtifactEditor = ({
     </>
   );
   return (
-    // Full height. tldraw's watermark stays over its bottom-right corner: tldraw.css lifts the tldraw container above this layer.
     <div
       ref={grid}
       data-testid="artifact-editor"
@@ -726,7 +654,6 @@ export const ArtifactEditor = ({
         )}
         aria-label={`Editing ${title}`}
       >
-        {/* A container, so a narrow column folds its labels into icons rather than overflow. */}
         <ColumnHeader className="@container/editor-header gap-1">
           <Tip label="Back to canvas (Esc)">
             <Button
@@ -756,7 +683,6 @@ export const ArtifactEditor = ({
             </Tip>
           )}
           <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-          {/* The title and the use count keep their width and the kind word truncates first, so neither is squeezed away (spec 09, the header). */}
           <span className="flex min-w-0 flex-1 items-baseline gap-2">
             <Tip label={title}>
               <span
@@ -783,13 +709,13 @@ export const ArtifactEditor = ({
               </span>
             )}
           </span>
-          {facts.file !== "" && (
+          {hasFile && (
             <ToggleGroup
               aria-label="Mode"
               variant="default"
               size="xs"
               className="shrink-0"
-              value={[mode]}
+              value={[session.mode]}
               onValueChange={(next) => {
                 const [picked] = next as EditMode[];
                 if (picked === "edit" || picked === "interact")
@@ -814,13 +740,13 @@ export const ArtifactEditor = ({
               </Tip>
             </ToggleGroup>
           )}
-          {facts.file !== "" && kit && (
+          {hasFile && kit && (
             <KitModePicker shapeId={shapeId} variant="header" />
           )}
           <span role="status" className="sr-only">
             {updateNote}
           </span>
-          {facts.file !== "" && updateRows.length > 0 && (
+          {hasFile && updateRows.length > 0 && (
             <Popover open={updatesShown} onOpenChange={setUpdatesShown}>
               <PopoverTrigger
                 render={
@@ -910,13 +836,13 @@ export const ArtifactEditor = ({
               </PopoverPopup>
             </Popover>
           )}
-          {facts.file !== "" && (
+          {hasFile && (
             <PreviewSizeControl size={size} onChange={setSize} scale={scale} />
           )}
-          {facts.kind === "motion" && facts.file !== "" && (
+          {facts.kind === "motion" && hasFile && (
             <RenderButton shapeId={shapeId} />
           )}
-          {facts.file !== "" && port !== undefined && (
+          {hasFile && port !== undefined && (
             <Tip label="Open in a new tab">
               <Button
                 variant="ghost"
@@ -924,8 +850,6 @@ export const ArtifactEditor = ({
                 className="shrink-0"
                 aria-label="Open in a new tab"
                 onClick={() => {
-                  // Opened first, while the click still counts as the person's: the tab waits for
-                  // the pointer the engine writes next.
                   window.open(
                     outsideUrlOf(
                       project,
@@ -974,7 +898,6 @@ export const ArtifactEditor = ({
           {facts.file === "" ? (
             <p className="m-auto p-6 text-center text-sm text-muted-foreground">{`This ${facts.kind} has no file yet. Ask the agent to write one.`}</p>
           ) : port === undefined ? null : (
-            // The same two boxes hold the frame at every size, so changing the size never reloads the document.
             <div
               data-testid="artifact-preview"
               className={cn(
@@ -1026,7 +949,7 @@ export const ArtifactEditor = ({
                   onPlayer={transport.onPlayerMessage}
                   onPlayerReady={onPlayerReady}
                 />
-                {mode === "edit" && (
+                {session.mode === "edit" && (
                   <EditOverlay
                     hovered={session.hovered}
                     layerHover={session.layerHover}
@@ -1042,7 +965,6 @@ export const ArtifactEditor = ({
           )}
         </div>
       </section>
-      {/* The bottom 40 px hold tldraw's watermark, which sits over this corner, so the controls end above it. */}
       {!parametersFolded && (
         <section
           data-editor-column="parameters"
@@ -1069,14 +991,7 @@ export const ArtifactEditor = ({
           locked={facts.locked}
           column={columnHeight}
           transport={transport}
-          onAsk={(field, elements) =>
-            tellAgent(
-              chatClient,
-              shapeId,
-              elements,
-              makeEditableInstruction(field),
-            )
-          }
+          onAsk={ask}
           kit={kit}
           mode={facts.mode}
           reveal={reveal}

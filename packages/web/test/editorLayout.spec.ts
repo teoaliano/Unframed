@@ -3,11 +3,10 @@ import { openCanvas, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 import { filledArtifact } from "./artifacts.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
+import { column, editor } from "./editorHarness.ts";
 
 const SHAPE = "shape:landing";
 const LONG_TITLE = "Long ".repeat(40).trim();
-const editor = (page: Page) => page.getByTestId("artifact-editor");
-const column = (page: Page, name: "rail" | "centre" | "parameters") => editor(page).locator(`[data-editor-column="${name}"]`);
 const region = (page: Page, title: string) => page.getByRole("region", { name: `Editing ${title}` });
 const timeline = (page: Page) => page.getByRole("region", { name: "Timeline for Intro" });
 const boxOf = async (locator: ReturnType<Page["locator"]>) => {
@@ -22,7 +21,6 @@ const MOTION = `<!doctype html><html><head><style>#root{position:relative;width:
 tl.to("#dot", { x: 400, duration: 4 }, 0);
 window.__timelines = { main: tl };</script></body></html>`;
 
-/** Opens a page, or a motion, in the editor, then sets the window to the size asked for: the shape is opened in a window that shows it. */
 const openEditor = async (page: Page, engine: TestEngine, options: { kind: "page" | "motion"; title: string; width?: number; height?: number }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openCanvas(page, engine);
@@ -47,7 +45,6 @@ test("below 1000 px the agent rail folds into a Show agent sheet, and below 720 
   await openEditor(page, agent, { kind: "page", title: "Landing", width: 800, height: 600 });
   await expect(column(page, "rail")).toBeHidden();
   await expect(column(page, "parameters")).toBeVisible();
-  // The preview column keeps the width the rail leaves.
   expect((await boxOf(column(page, "centre"))).width).toBeGreaterThan(400);
   await editor(page).getByRole("button", { name: "Show agent" }).click();
   const sheet = page.getByRole("dialog");
@@ -59,7 +56,6 @@ test("below 1000 px the agent rail folds into a Show agent sheet, and below 720 
   await page.setViewportSize({ width: 640, height: 800 });
   await expect(column(page, "parameters")).toBeHidden();
   await expect(column(page, "rail")).toBeHidden();
-  // The preview column takes the window less its padding.
   expect((await boxOf(column(page, "centre"))).width).toBeGreaterThan(600);
   await editor(page).getByRole("button", { name: "Show parameters" }).click();
   await expect(page.getByRole("dialog").getByRole("tab", { name: "Design" })).toBeVisible();
@@ -79,7 +75,6 @@ test("a 200-character title truncates with an ellipsis and never runs under the 
     const other = await boxOf(control);
     expect(box.x + box.width <= other.x || other.x + other.width <= box.x).toBe(true);
   }
-  // The full title is in a tooltip.
   await title.hover();
   await expect(page.locator("[data-slot='tooltip-popup']")).toHaveText(LONG_TITLE);
 });
@@ -103,7 +98,6 @@ test("the mode toggle items keep their names in tooltips once their labels fold 
 });
 
 test("the transport keeps Zoom in, Fit to length and Hide timeline reachable in a 320 px strip", async ({ page, agent }) => {
-  // A window of 344 px leaves a strip of 320 px: the narrowest the editor's motion strip gets.
   await openEditor(page, agent, { kind: "motion", title: "Intro", width: 344, height: 700 });
   const transport = timeline(page).getByTestId("timeline-transport");
   await expect(transport).toBeVisible();
