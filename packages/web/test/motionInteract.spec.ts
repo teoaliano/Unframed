@@ -6,7 +6,6 @@ import { expect, test } from "./agent.ts";
 import { filledArtifact, insideComposition, projectPath } from "./artifacts.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
-/** A motion whose dot moves for four seconds, and whose dot counts its own clicks, so a click in the frame can be seen. */
 const MOVER = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}#dot{position:absolute;left:20px;top:120px;width:80px;height:80px;background:#f00}</style></head><body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360"><div id="dot" data-uf-name="Dot" class="clip" data-start="0" data-duration="4"></div></div>
 <script src="gsap.js"></script><script>
@@ -21,7 +20,6 @@ const SHAPE = "shape:intro";
 const timeline = (page: Page) => page.getByRole("region", { name: "Timeline for Intro" });
 const bar = (page: Page) => timeline(page).locator('[data-testid="timeline-row"][data-row-kind="element"][data-row-name="Dot"] [data-testid="timeline-bar"]');
 const region = (page: Page) => page.getByRole("region", { name: "Editing Intro" });
-// The values panel is a popover in the page, not in the strip (spec 21, The values panel).
 const panel = (page: Page) => page.getByRole("region", { name: /^Values for/ });
 const outline = (page: Page, kind: "hover" | "selected") => page.locator(`[data-edit-outline="${kind}"]`);
 const modeButton = (page: Page, name: "Edit" | "Interact") => region(page).getByRole("group", { name: "Mode" }).getByRole("button", { name, exact: true });
@@ -43,7 +41,6 @@ const openMover = async (page: Page, engine: TestEngine) => {
   await expect(modeButton(page, "Interact")).toHaveAttribute("aria-pressed", "true");
 };
 
-/** The summary lines of every committed edit, oldest first. */
 const summaries = async (engine: TestEngine): Promise<string[][]> => {
   const names = (await readdir(join(engine.dataDir, "output", "default"))).filter((name) => name.endsWith(".json")).sort();
   const found: string[][] = [];
@@ -54,7 +51,6 @@ const summaries = async (engine: TestEngine): Promise<string[][]> => {
   return found;
 };
 
-/** Drags the dot's bar a half second to the right and releases: a burst is pending. */
 const dragBar = async (page: Page) => {
   const box = await bar(page).boundingBox();
   if (!box) throw new Error("no bar");
@@ -107,13 +103,11 @@ test("switching mode commits an open burst at once, either way", async ({ page, 
   await openMover(page, agent);
   const before = (await summaries(agent)).length;
 
-  // Interact to Edit: a burst begun in Interact commits when the mode changes, well before its pause.
   await dragBar(page);
   await modeButton(page, "Edit").click();
   await expect.poll(async () => (await summaries(agent)).length, { timeout: 1000 }).toBe(before + 1);
   expect((await summaries(agent)).at(-1)).toEqual(["Moved Dot position to 0.5 s"]);
 
-  // Edit to Interact: a burst begun in Edit commits the same way, and the second drag moves the bar on from 0.5 s.
   await dragBar(page);
   await modeButton(page, "Interact").click();
   await expect.poll(async () => (await summaries(agent)).length, { timeout: 1000 }).toBe(before + 2);
