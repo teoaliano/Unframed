@@ -5,8 +5,6 @@ import { expect, test } from "./agent.ts";
 import { filledArtifact } from "./artifacts.ts";
 import { putRecords } from "./media.ts";
 
-/** Spec 19, task 25: the live viewer tab follows a kit mode change and a new kit stamp, without a blank moment. */
-
 const kitWith = (dark: string): Kit => ({
   format: 1,
   name: "Brand",
@@ -20,7 +18,6 @@ const writeKit = (engine: Parameters<typeof putRecords>[0], kit: Kit) =>
 const swatchPage = () =>
   `<!doctype html><html><head>${TOKENS_TAG}<style>body{margin:0}</style></head><body><div id="swatch" style="width:300px;height:200px;background:var(--color-brand-primary)"></div></body></html>`;
 
-/** The live viewer's frame on screen, not a new version still loading behind it. */
 const showing = (tab: Page): FrameLocator => tab.frameLocator("iframe:not(.next)");
 const swatchOf = (tab: Page) => showing(tab).locator("#swatch").evaluate((element) => getComputedStyle(element).backgroundColor);
 
@@ -37,13 +34,11 @@ test("a page opened in a new tab follows the kit mode and a new kit stamp, with 
   await tab.waitForLoadState();
   await expect.poll(() => swatchOf(tab), { timeout: 10_000 }).toBe("rgb(26, 115, 232)");
 
-  // The editor's Kit mode picker: dark reaches the tab's frame.
   const editor = page.getByTestId("artifact-editor");
   await editor.getByRole("combobox", { name: "Kit mode" }).click();
   await page.getByRole("option", { name: "dark", exact: true }).click();
   await expect.poll(() => swatchOf(tab), { timeout: 10_000 }).toBe("rgb(138, 180, 248)");
 
-  // A new kit stamp: the tab swaps to a fresh frame that loads the new kit, still on dark, and nothing goes blank.
   await writeKit(agent, kitWith("#188038"));
   await expect.poll(() => swatchOf(tab), { timeout: 10_000 }).toBe("rgb(24, 128, 56)");
   await expect(tab.locator("iframe")).toHaveCount(1);

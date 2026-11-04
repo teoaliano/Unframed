@@ -1,7 +1,3 @@
-/**
- * The Kit on the canvas (spec 19): the Kit button in the bottom bar, beside Library, and the
- * Kit dialog it opens.
- */
 import { useEffect } from "react";
 import { TldrawUiButtonIcon, TldrawUiToolbarButton, useEditor, useValue } from "tldraw";
 import { registerSlot } from "../chrome/slots.ts";
@@ -10,7 +6,6 @@ import { KitDialog } from "./KitDialog.tsx";
 import { UpdateFromKitDialog } from "./KitApply.tsx";
 import { kitUi } from "./state.ts";
 
-/** The Kit in the bottom bar: a tldraw toolbar button beside Library. */
 const KitButton = () => {
   const editor = useEditor();
   return (

@@ -26,7 +26,6 @@ import {
 
 const assets = join(import.meta.dirname, "../../../../assets");
 
-/** Every fenced `text` block of a prompt asset, in order. */
 const blocks = (file: string): string[] => {
   const text = readFileSync(join(assets, "prompts", file), "utf8");
   return [...text.matchAll(/^(`{3,})text\n([\s\S]*?)\n\1$/gm)].map((match) => match[2]!);

@@ -1,4 +1,3 @@
-/** Valid canvas records for tests, in the canvas schema. */
 import type { TLRecord } from "@tldraw/tlschema";
 
 export const PAGE_ID = "page:page";
@@ -83,7 +82,6 @@ export const videoAsset = (id: string, src: string | null, props: Record<string,
     meta: {},
   }) as unknown as TLRecord;
 
-/** The plain text of a prompt record. */
 export const textOf = (record: TLRecord | undefined): string | undefined => {
   const doc = (record as { props?: { richText?: { content?: Array<{ content?: Array<{ text?: string }> }> } } } | undefined)?.props
     ?.richText;

@@ -2,8 +2,6 @@ import { parseGsapScriptAcornForWrite } from "@hyperframes/parsers/gsap-parser-a
 import { describe, expect, it } from "vitest";
 import { dialsCallback, ownerContextFor, ownerOf, type Owner } from "../../src/index.ts";
 
-// Parses `tl.to('#a', { x: <expr> }, 0)` inside a dials callback (or outside one) and returns the
-// owner of `x`. The script is the real source, so every node carries the offsets ownerOf reads.
 const ownerOfExpression = (expr: string, { inCallback = true, body }: { inCallback?: boolean; body?: string } = {}): Owner => {
   const call = `window.__timelines = window.__timelines || {};\nwindow.__timelines.main = gsap.timeline({ paused: true });\nwindow.__timelines.main.to('#a', { x: ${expr} }, 0);`;
   const source = inCallback

@@ -1,13 +1,7 @@
-/**
- * The kit record (spec 19). The record types live in contracts, the leaf every package may
- * import; they are re-exported here so domain code keeps its names. The domain adds the
- * constants its rules read.
- */
 import type { TokenType } from "@unframed/contracts";
 export type { Kit, KitLink, TextStyle, Token, TokenType, TokenValue } from "@unframed/contracts";
 export { TOKEN_TYPES } from "@unframed/contracts";
 
-/** The five fields a text style sets, in the order their custom properties are written. */
 export const TEXT_STYLE_FIELDS = ["fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing"] as const;
 export type TextStyleField = (typeof TEXT_STYLE_FIELDS)[number];
 
@@ -21,7 +15,6 @@ export const KIT_LIMITS = {
   segments: 6,
 } as const;
 
-/** The CSS property a text style field becomes, after the text style's name. */
 export const TEXT_STYLE_SUFFIX: Readonly<Record<TextStyleField, string>> = {
   fontFamily: "font-family",
   fontSize: "font-size",
@@ -30,7 +23,6 @@ export const TEXT_STYLE_SUFFIX: Readonly<Record<TextStyleField, string>> = {
   letterSpacing: "letter-spacing",
 };
 
-/** The type a text style field takes as a value, and so as an alias. */
 export const TEXT_STYLE_FIELD_TYPE: Readonly<Record<TextStyleField, TokenType>> = {
   fontFamily: "fontFamily",
   fontSize: "dimension",

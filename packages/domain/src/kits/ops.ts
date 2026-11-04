@@ -1,8 +1,3 @@
-/**
- * Kit edits (spec 19): every change to a kit is a list of ops applied here, so the dialog,
- * import, the merge and `kit_write` share one set of rules. All or nothing: the first op
- * that breaks a rule stops the list and nothing is written.
- */
 import { kitRefusal, modeRefusal } from "./rules.ts";
 import { cssName } from "./runtime.ts";
 import type { Kit, Token, TokenType, TokenValue } from "./types.ts";
@@ -22,7 +17,6 @@ export type KitOp =
   | { op: "setDefaultMode"; name: string }
   | { op: "reorder"; paths: string[] };
 
-/** The result: the kit (null after `remove`), or the first refusal with its op, counted from 1. */
 export type KitOpsResult = { ok: true; kit: Kit | null } | { ok: false; op: number; refusal: string };
 
 class Refusal extends Error {}
@@ -40,7 +34,6 @@ const modeNamed = (kit: Kit, name: string): void => {
   if (!kit.modes.includes(name)) refuse(`There is no mode ${name} in the kit.`);
 };
 
-/** One op on a kit (a copy is made, so the caller's kit is never changed). Returns the new kit, null for `remove`, or throws a refusal. */
 const applyOne = (current: Kit | null, op: KitOp): Kit | null => {
   if (op.op === "create") {
     if (current !== null) refuse("This project already has a kit.");
@@ -149,7 +142,6 @@ const applyOne = (current: Kit | null, op: KitOp): Kit | null => {
   }
 };
 
-/** Applies the ops in order. All or nothing: a refusal names its op and writes nothing. */
 export const applyKitOps = (kit: Kit | null, ops: ReadonlyArray<KitOp>): KitOpsResult => {
   let current = kit;
   for (let index = 0; index < ops.length; index++) {

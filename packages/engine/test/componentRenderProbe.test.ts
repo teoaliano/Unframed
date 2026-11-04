@@ -9,12 +9,6 @@ import { motionShape } from "./agentCanvas.ts";
 import { startEngine } from "./harness.ts";
 import type { TestRpcClient } from "./rpcClient.ts";
 
-/**
- * Spec 20, task 42: the real producer renders a motion whose only content is an instance filling the
- * frame in a token colour. A local render, no model and no network call. It skips, saying what is
- * missing, where Chrome or ffmpeg is not found.
- */
-
 const chrome = chromeCandidates({
   platform: process.platform,
   env: process.env,
@@ -60,7 +54,6 @@ ${BRIDGE_TAG}</head><body style="margin:0;background:#000">
 <script>window.__timelines = window.__timelines || {}; window.__timelines.main = gsap.timeline({ paused: true });</script>
 </body></html>`;
 
-/** The pixel at the frame's centre, as red, green and blue, read by ffmpeg at one second. */
 const centreAt1s = (mp4: string): number[] => {
   const raw = execFileSync("ffmpeg", ["-v", "error", "-ss", "1", "-i", mp4, "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], { maxBuffer: 16 * 1024 * 1024 });
   expect(raw.length).toBe(WIDTH * HEIGHT * 3);

@@ -1,16 +1,8 @@
-/**
- * The work log (spec 08, after t3code's `deriveWorkLogEntries`): a turn's tool calls, merged
- * by tool call id into rows with a label, a tone and a lifecycle state, consecutive rows
- * folded into a group whose summary counts what was done, sub-agents folded into one row
- * per spawn, and errors standing alone. Also the activity line's words for what the agent
- * is doing now.
- */
 import type { ChatActivity } from "./chatModel.ts";
 
-export type WorkTone = "thinking" | "tool" | "info" | "error";
-export type WorkState = "inProgress" | "completed" | "failed" | "declined" | "stopped";
-/** What a row counts as in its group's summary. */
-export type WorkAction = "read" | "change" | "command" | "web" | "code" | "tool" | "canvas" | "browser";
+type WorkTone = "thinking" | "tool" | "info" | "error";
+type WorkState = "inProgress" | "completed" | "failed" | "declined" | "stopped";
+type WorkAction = "read" | "change" | "command" | "web" | "code" | "tool" | "canvas" | "browser";
 
 export interface WorkRow {
   readonly kind: "row";
@@ -26,7 +18,7 @@ export interface WorkRow {
   readonly image?: string;
 }
 
-export interface SubagentTask {
+interface SubagentTask {
   readonly taskId: string;
   readonly title: string;
   readonly state: "working" | "completed" | "failed";
@@ -57,7 +49,6 @@ const text = (value: unknown): string | undefined => (typeof value === "string" 
 
 const UNFRAMED = "mcp__unframed__";
 
-/** Unframed's own tool, by its short name, else undefined. */
 const unframedTool = (name: string): string | undefined => (name.startsWith(UNFRAMED) ? name.slice(UNFRAMED.length) : undefined);
 
 const program = (command: string): string => {
@@ -89,7 +80,6 @@ interface Described {
   readonly image?: string;
 }
 
-/** A tool call's label and what it counts as, for the state it is in. */
 export const describeTool = (input: { readonly toolName: string; readonly itemType: string; readonly toolInput: Record<string, unknown>; readonly data: Record<string, unknown>; readonly result: Record<string, unknown>; readonly state: WorkState }): Described => {
   const { toolName, itemType, toolInput, data, result, state } = input;
   const own = unframedTool(toolName);
@@ -98,7 +88,6 @@ export const describeTool = (input: { readonly toolName: string; readonly itemTy
       case "canvas_read":
         return { label: "Read the canvas", action: "tool" };
       case "canvas_select": {
-        // A selection is not part of the canvas, so the row says Revert leaves it alone (spec 14).
         const count = Array.isArray(toolInput.shapeIds) ? toolInput.shapeIds.length : 0;
         return { label: count === 0 ? "Cleared the selection. Revert does not undo a selection." : `Selected ${plural(count, "shape")}. Revert does not undo a selection.`, action: "tool" };
       }
@@ -107,7 +96,6 @@ export const describeTool = (input: { readonly toolName: string; readonly itemTy
         return { label: `Changed the canvas (${plural(ops, "change")})`, action: "canvas" };
       }
       case "generate": {
-        // The row is the start of a paid generation; its landing is an activity of the turn (spec 14, "Cost shown").
         const medium = toolInput.medium === "video" ? "a video generation" : toolInput.medium === "text" ? "a text generation" : "an image generation";
         return { label: `Started ${medium}`, action: "tool" };
       }
@@ -174,7 +162,6 @@ const SUMMARY: Record<WorkAction, (n: number) => string> = {
   browser: (n) => `Used the browser ${plural(n, "time")}`,
 };
 
-/** A group's summary: what its rows did, counted, as one sentence ("Read 2 files, ran 3 commands, and changed 1 file"). */
 export const workSummary = (rows: ReadonlyArray<Pick<WorkRow, "action">>): string => {
   const counts = new Map<WorkAction, number>();
   for (const row of rows) counts.set(row.action, (counts.get(row.action) ?? 0) + 1);
@@ -187,7 +174,6 @@ export const workSummary = (rows: ReadonlyArray<Pick<WorkRow, "action">>): strin
   return `${parts.slice(0, -1).join(", ")}, and ${parts.at(-1)}`;
 };
 
-/** A duration as 1.2s, 12s, 1m 5s. */
 export const formatWorkDuration = (ms: number): string => {
   const seconds = Math.max(0, ms) / 1000;
   if (seconds < 10) return `${(Math.round(seconds * 10) / 10).toFixed(1).replace(/\.0$/, "")}s`;
@@ -206,10 +192,6 @@ const stateOf = (status: unknown, kind: string): WorkState => {
   return "inProgress";
 };
 
-/**
- * The work log of a stretch of activities, in order. With `settled`, a call still in
- * progress is shown as stopped: its turn is over.
- */
 export const workLog = (activities: ReadonlyArray<ChatActivity>, options: { readonly settled?: boolean } = {}): WorkEntry[] => {
   const ordered = [...activities].sort((a, b) => a.sequence - b.sequence);
   const turnsWithTasks = new Set(ordered.filter((activity) => TASK_KINDS.has(activity.kind)).map((activity) => activity.turnId));
@@ -313,9 +295,6 @@ export const workLog = (activities: ReadonlyArray<ChatActivity>, options: { read
   return entries;
 };
 
-// ---------------------------------------------------------------------------------------
-// The activity line.
-
 const ACTIVITY_BY_TOOL: ReadonlyArray<readonly [RegExp, string]> = [
   [/^mcp__unframed__canvas_read$/, "Reading the canvas…"],
   [/^mcp__unframed__canvas_write$/, "Changing the canvas…"],
@@ -338,11 +317,6 @@ const ACTIVITY_BY_TOOL: ReadonlyArray<readonly [RegExp, string]> = [
   [/toolsearch/i, "Looking for a tool…"],
 ];
 
-/**
- * What the activity line says while a turn runs: the label for the latest tool call of the
- * turn (kept after it returns, since the gap after a tool is where the model thinks), else
- * "Thinking…".
- */
 export const activityLabel = (activities: ReadonlyArray<ChatActivity>, turnId: string | null): string => {
   let latest: ChatActivity | undefined;
   for (const activity of activities) {

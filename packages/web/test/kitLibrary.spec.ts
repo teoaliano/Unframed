@@ -5,8 +5,6 @@ import { libraryDialog, openLibrary, presetItem, writePresets } from "./library.
 import { putRecords } from "./media.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
-/** The Library with kits (spec 19 tasks 30 and 31): the Kits filter, Apply, the replace confirm, delete, and Update from kit. */
-
 type KitRecord = { name: string; modes: string[]; tokens: Array<{ path: string; value?: unknown; values?: Record<string, unknown> }>; from?: { presetId: string; revision: number; base: unknown } };
 
 const kitOf = async (engine: TestEngine, project: string): Promise<KitRecord | undefined> => {
@@ -19,7 +17,6 @@ const libraryKits = async (engine: TestEngine): Promise<Array<Record<string, any
   return [...presets].filter((preset: { kind: string }) => preset.kind === "kit");
 };
 
-/** A kit preset as `presets.json` holds it: its values, a name and a revision, and no content. */
 const libraryKit = (id: string, name: string, options: { revision?: number; modes?: string[]; tokens?: unknown[] } = {}) => ({
   format: 2,
   id,
@@ -39,7 +36,6 @@ const libraryKit = (id: string, name: string, options: { revision?: number; mode
   },
 });
 
-/** A project kit seeded into the room. */
 const seedKit = (engine: TestEngine, kit: unknown) => putRecords(engine, [{ id: "document:document", typeName: "document", gridSize: 10, name: "", meta: { unframed: { kit } } }]);
 
 const mine = {
@@ -91,7 +87,6 @@ test("Apply on a project with no kit copies the kit in, linked to its preset, as
 test("Apply on a project with another kit asks first, then replaces it and keeps the project's own tokens", async ({ page, engine }) => {
   const project = await openCanvas(page, engine);
   await seedKit(engine, mine);
-  // The seeded kit has to reach the open canvas before Apply reads it.
   await page.getByRole("button", { name: "Kit", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Kit" }).getByRole("textbox", { name: "Kit name" })).toHaveValue("Mine");
   await page.keyboard.press("Escape");
@@ -154,7 +149,6 @@ test("Delete on a kit card asks with the kit's own body, and removes it", async 
 const tokenOf = async (engine: TestEngine, project: string, path: string) =>
   (await kitOf(engine, project))?.tokens.find((token) => token.path === path) as Record<string, any> | undefined;
 
-/** The project's kit as it took the library kit at revision 1: primary, a space token it changed, and one it added. */
 const linkedKit = {
   format: 1,
   name: "Brand",
@@ -177,7 +171,6 @@ const linkedKit = {
   },
 };
 
-/** The library kit at revision 2: primary's light value changed, space md changed, and a colour added. */
 const newerLibraryKit = libraryKit("kit-brand", "Brand", {
   revision: 2,
   tokens: [
@@ -187,7 +180,6 @@ const newerLibraryKit = libraryKit("kit-brand", "Brand", {
   ],
 });
 
-/** Seeds a project kit into the open canvas, opens the Kit dialog on it, and returns the dialog. */
 const openSeededKit = async (page: Page, engine: TestEngine, kit: { name: string }) => {
   await seedKit(engine, kit);
   await page.getByRole("button", { name: "Kit", exact: true }).click();
@@ -220,7 +212,6 @@ test("the source line names the library kit, and a newer library revision offers
   await expect.poll(() => tokenOf(engine, project, "dimension/space/md")).toMatchObject({ values: { light: "20px", dark: "18px" } });
   await expect.poll(() => tokenOf(engine, project, "dimension/space/lg")).toMatchObject({ value: "24px" });
 
-  // One undo step takes the whole update back.
   await page.keyboard.press("Escape");
   await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(() => kitOf(engine, project)).toMatchObject({ from: { revision: 1 } });
@@ -232,7 +223,6 @@ test("a library kit that is gone is said so, and the project keeps its copy", as
   await writePresets(engine, []);
   const dialog = await openSeededKit(page, engine, linkedKit);
 
-  // The dialog never read the library kit, so its name is not known; the project's kit name is not used in its place.
   await expect(dialog).toContainText("The library kit is gone. This project keeps its copy.");
   await expect(dialog.getByRole("button", { name: "Update from kit", exact: true })).toHaveCount(0);
   await dialog.getByRole("button", { name: "More" }).click();

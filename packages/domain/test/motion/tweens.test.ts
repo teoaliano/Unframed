@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { motionTimeline } from "../../src/motion/index.ts";
 
-// One motion: a body with two targets, and a script built from the given lines.
 const motion = (script: string, head = "") => `<html><head>${head}</head><body>
 <div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360">
   <div id="c" class="clip" data-start="0" data-duration="4"><div id="a"></div><div id="b"></div></div>
