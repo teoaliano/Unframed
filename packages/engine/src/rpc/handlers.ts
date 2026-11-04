@@ -33,6 +33,10 @@ import { Artifacts } from "../artifacts/layer.ts";
 import { legacyImportMethods } from "../legacy/methods.ts";
 import { ProjectDatabase } from "../projectDatabase.ts";
 import { projectActivityStream } from "../projectActivity.ts";
+import { IpadAccess } from "../ipad/layer.ts";
+import { CLIENT_HEADER } from "../ipad/deviceSockets.ts";
+
+const clientOf = (headers: Readonly<Record<string, string>>): "mac" | "device" => (headers[CLIENT_HEADER] === "device" ? "device" : "mac");
 
 const asUnframed = (error: unknown): UnframedError => (error instanceof UnframedError ? error : unframedError("internal", errorText(error)));
 
@@ -57,6 +61,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const artifacts = yield* Artifacts;
     const connections = yield* AgentConnections;
     const selectionHub = yield* SelectionHub;
+    const ipad = yield* IpadAccess;
     const legacy = legacyImportMethods(yield* ProjectDatabase, projects);
     const context = yield* Effect.context<SettingsStore | Projects | Native>();
 
@@ -64,10 +69,16 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       config.testCanvasRpc ? run() : Effect.fail(unframedError("unavailable", "That method is only for tests."));
 
     return guardHandlers({
-      "server.health": () => Effect.map(settings.view, (view) => ({ ...view, ok: true as const })),
+      "server.health": (_payload, { headers }) => Effect.map(settings.view, (view) => ({ ...view, ok: true as const, client: clientOf(headers) })),
+      "ipad.status": () => ipad.status,
+      "ipad.setAvailability": ({ available }) => Effect.as(ipad.setAvailability(available), {}),
+      "ipad.pairStart": () => ipad.pairStart,
+      "ipad.devices": () => Effect.map(ipad.devices, (devices) => ({ devices })),
+      "ipad.revoke": ({ id }) => Effect.as(ipad.revoke(id), {}),
+      "ipad.exportProfile": () => Effect.flatMap(ipad.exportProfile, (path) => Effect.as(native.reveal(config.ipadDir, [path]), { path })),
       "settings.get": () => settings.view,
       "settings.update": (patch) =>
-        Effect.tap(lifecycle.updateSettings(patch), () =>
+        Effect.tap(Effect.tap(lifecycle.updateSettings(patch), () => ipad.apply), () =>
           Effect.andThen(clearStoredModels(preferences, patch), () =>
             Effect.all([
               patch.claudePath !== undefined || patch.claudeConfigDir !== undefined ? detection.forget("claude") : Effect.void,

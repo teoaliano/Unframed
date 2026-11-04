@@ -38,6 +38,8 @@ import { OAuth, oauthLayer } from "./oauth/oauth.ts";
 import { providerDetectionLayer } from "./agent/detection.ts";
 import { Agents, agentsLayer } from "./agent/layer.ts";
 import { RpcSockets, rpcSocketsLayer } from "./rpc/sockets.ts";
+import { IpadAccess, ipadLayer } from "./ipad/layer.ts";
+import { presenceLayer } from "./ipad/presence.ts";
 import { Config } from "./services.ts";
 import { SettingsStore, settingsStoreLayer } from "./settingsStore.ts";
 import { Shutdown, shutdownLayer } from "./shutdown.ts";
@@ -121,12 +123,12 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
     Layer.provideMerge(mediaStoreLayer),
     Layer.provideMerge(canvasRoomsLayer),
     Layer.provideMerge(nativeLayer),
-    Layer.provideMerge(Layer.mergeAll(preferencesStoreLayer, agentConnectionsLayer, selectionHubLayer)),
+    Layer.provideMerge(Layer.mergeAll(preferencesStoreLayer, agentConnectionsLayer, selectionHubLayer, ipadLayer)),
     Layer.provideMerge(projectsLayer),
     Layer.provideMerge(projectDatabaseLayer),
     Layer.provideMerge(openProjectsLayer),
     Layer.provideMerge(settingsStoreLayer({ fileVars, processEnv: host.env, previewPort })),
-    Layer.provideMerge(shutdownLayer),
+    Layer.provideMerge(Layer.mergeAll(presenceLayer, shutdownLayer)),
     Layer.provideMerge(Layer.succeed(Config, config)),
     Layer.provideMerge(Layer.succeed(Ipc, { send: host.send })),
   );
@@ -156,23 +158,22 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
         projects: yield* Projects,
         agents: yield* Agents,
         oauth: yield* OAuth,
+        ipad: yield* IpadAccess,
         shutdown,
         outputDir: store.outputDir,
       };
     }),
   );
   outputDir = () => runtime.runPromise(booted.outputDir);
-  const { settings, sockets, rooms, media, projects, shutdown, agents, oauth } = booted;
+  const { settings, sockets, rooms, media, projects, shutdown, agents, oauth, ipad } = booted;
 
+  const fileRoute = projectFileRoute((project) => runtime.runPromise(projects.folder(project)));
+  const upload = uploadRoute(media);
+  const clientRoutes = config.clientDist === undefined ? [] : [clientRoute(config.clientDist)];
+  const upgrade = [sockets.upgrade, rooms.upgrade];
   const api = createApiServer({
-    http: [
-      projectFileRoute((project) => runtime.runPromise(projects.folder(project))),
-      uploadRoute(media),
-      ...agents.routes,
-      oauth.callbackRoute,
-      ...(config.clientDist === undefined ? [] : [clientRoute(config.clientDist)]),
-    ],
-    upgrade: [sockets.upgrade, rooms.upgrade],
+    http: [fileRoute, upload, ...agents.routes, oauth.callbackRoute, ...clientRoutes],
+    upgrade,
   });
   const apiPort = await listenLoopback(api, port.port).catch((error: unknown) => {
     throw new Error(`could not listen on ${LOOPBACK_HOST}:${port.port}: ${errorText(error)}`);
@@ -180,6 +181,12 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
 
   agents.runtime.setApiPort(apiPort);
   oauth.setApiPort(apiPort);
+  await runtime.runPromise(
+    ipad.install({
+      routes: [fileRoute, upload, agents.attachmentRoute, ...clientRoutes],
+      upgrades: upgrade,
+    }),
+  );
   process.stdout.write(banner(apiPort, settings));
   // Before the ready message, as spec 14's Implementation Decisions say: the shim finds the port once ready is sent.
   try {
@@ -193,6 +200,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
     const startedAt = Date.now();
     stopListening(api);
     preview.stopListening();
+    await runtime.runPromise(ipad.stop);
     await removeDiscovery(config.discoveryPath);
     await Promise.all([sockets.closeAll(1001), rooms.closeSockets(1001)]);
     await runtime.runPromise(shutdown.runHooks(startedAt));

@@ -19,8 +19,11 @@ describe("RPC socket", () => {
       codexPath: "",
       claudeConfigDir: "",
       previewPort: engine.previewPort,
+      ipadAccess: false,
+      ipadPort: 18790,
+      client: "mac",
     });
-    expect(await rpc.call("settings.get")).toEqual({ ...health, ok: undefined });
+    expect(await rpc.call("settings.get")).toEqual({ ...health, ok: undefined, client: undefined });
   });
 
   it("serves several sockets at once", async () => {

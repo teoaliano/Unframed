@@ -48,6 +48,7 @@ export class Agents extends Context.Service<
     readonly turnDiff: (input: { projectId: string; threadId: string; fromTurnCount: number; toTurnCount: number; ignoreWhitespace?: boolean }) => Effect.Effect<TurnDiff, UnframedError>;
     readonly createUploadUrl: (input: { name: string; mimeType: string; sizeBytes: number }) => Effect.Effect<{ relativeUrl: string; expiresAt: string }, UnframedError>;
     readonly routes: ReadonlyArray<Route>;
+    readonly attachmentRoute: Route;
   }
 >()("unframed/engine/Agents") {}
 
@@ -184,6 +185,7 @@ export const agentsLayer = Layer.effect(
         }),
       );
 
+    const attachmentRoute = runtime.attachments.route();
     return Agents.of({
       runtime,
       dispatch: (command) => {
@@ -224,8 +226,9 @@ export const agentsLayer = Layer.effect(
           call: (call) => runtime.outside.call(call),
           endSession: (sessionId) => runtime.endOutsideSession(sessionId),
         }),
-        runtime.attachments.route(),
+        attachmentRoute,
       ],
+      attachmentRoute,
     });
   }),
 );

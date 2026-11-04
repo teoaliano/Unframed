@@ -14,6 +14,8 @@ import { errorText, logError } from "../log.ts";
 import { OpenProjects } from "../openProjects.ts";
 import { ProjectDatabase } from "../projectDatabase.ts";
 import { SettingsStore } from "../settingsStore.ts";
+import { deviceOfRequest } from "../ipad/deviceSockets.ts";
+import { Presence } from "../ipad/presence.ts";
 import type { ChangeOrigin, CommittedChange } from "./loggedStorage.ts";
 import { CanvasRoom, InvalidChange, SYNC_ERROR_CLOSE, type Applied, type CanvasChange, type ChangeLogRow } from "./room.ts";
 
@@ -76,6 +78,7 @@ export const canvasRoomsLayer = Layer.effect(
   CanvasRooms,
   Effect.gen(function* () {
     const settings = yield* SettingsStore;
+    const presence = yield* Presence;
     const database = yield* ProjectDatabase;
     const openProjects = yield* OpenProjects;
     const context = yield* Effect.context<never>();
@@ -205,8 +208,9 @@ export const canvasRoomsLayer = Layer.effect(
     const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_REQUEST_BYTES, perMessageDeflate: false });
     const allSockets = new Set<WebSocket>();
 
-    const onSocket = (ws: WebSocket, project: string, sessionId: string | null) => {
+    const onSocket = (ws: WebSocket, project: string, sessionId: string | null, deviceId: string | undefined) => {
       allSockets.add(ws);
+      if (deviceId !== undefined) presence.track(deviceId, ws);
       ws.on("close", () => allSockets.delete(ws));
       ws.on("error", () => {});
       // The client speaks as soon as the socket opens; hold its frames until the room is ready.
@@ -249,7 +253,7 @@ export const canvasRoomsLayer = Layer.effect(
         project = "";
       }
       const sessionId = url.searchParams.get("sessionId");
-      wss.handleUpgrade(req, socket, head, (ws) => onSocket(ws, project, sessionId));
+      wss.handleUpgrade(req, socket, head, (ws) => onSocket(ws, project, sessionId, deviceOfRequest(req)));
       return true;
     };
 

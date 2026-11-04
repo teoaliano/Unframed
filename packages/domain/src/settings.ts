@@ -9,6 +9,7 @@ export const SETTINGS_DEFAULTS = {
   OPENROUTER_VIDEO_MODEL: "bytedance/seedance-2.0",
   OUTPUT_DIR: "./output",
   PORT: 8787,
+  IPAD_PORT: 18790,
 } as const;
 
 export type EnvVars = Readonly<Record<string, string | undefined>>;
@@ -23,6 +24,8 @@ export interface EffectiveSettings {
   readonly claudePath: string;
   readonly codexPath: string;
   readonly claudeConfigDir: string;
+  readonly ipadAccess: string;
+  readonly ipadPort: string;
 }
 
 /** A `.env` value, else a process environment value. An empty value counts as unset. */
@@ -46,6 +49,8 @@ export const effectiveSettings = (fileVars: EnvVars, processEnv: EnvVars): Effec
     claudePath: value("CLAUDE_PATH") ?? "",
     codexPath: value("CODEX_PATH") ?? "",
     claudeConfigDir: value("CLAUDE_CONFIG_DIR") ?? "",
+    ipadAccess: value("IPAD_ACCESS") ?? "",
+    ipadPort: value("IPAD_PORT") ?? "",
   };
 };
 
@@ -80,3 +85,12 @@ export const readPreviewPort = (processEnv: EnvVars): { readonly ok: true; reado
 
 /** The last four characters of the key, or `''`. The only part of the key the web learns. */
 export const keyHint = (key: string): string => (key.length === 0 ? "" : key.slice(-4));
+
+export const readIpadPort = (ipadPort: string, options: { readonly allowZero?: boolean } = {}): number => {
+  const value = ipadPort.trim();
+  if (value === "") return SETTINGS_DEFAULTS.IPAD_PORT;
+  if (options.allowZero === true && value === "0") return 0;
+  return isIpadPort(value) ? Number(value) : SETTINGS_DEFAULTS.IPAD_PORT;
+};
+
+export const isIpadPort = (value: string): boolean => /^\d{4,5}$/.test(value) && Number(value) >= 1024 && Number(value) <= 65535;

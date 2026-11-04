@@ -25,6 +25,7 @@ import { ArtifactOpenLive, ArtifactSnapshots, MotionRenderStart, MotionRenderSta
 import { LegacyImportMarkSeen, LegacyImportReport, LegacyImportRetry, LegacyImportStatus } from "./legacy.ts";
 import { AgentConnectionsCreate, AgentConnectionsCreateAnswer, AgentConnectionsListAnswer, AgentConnectionsRevoke, AgentConnectionsSetSpendLimit } from "./agentConnections.ts";
 import { SelectionApply, SelectionReport, SelectionSubscribe } from "./selection.ts";
+import { IpadDevicesAnswer, IpadExportProfileAnswer, IpadPairStartAnswer, IpadRevoke, IpadSetAvailability, IpadStatus } from "./ipad.ts";
 
 const Empty = Schema.Struct({});
 
@@ -70,6 +71,38 @@ export const SelectionSubscribeRpc = Rpc.make("selection.subscribe", {
 
 export const ServerHealth = Rpc.make("server.health", {
   success: Health,
+  error: UnframedError,
+});
+
+export const IpadStatusRpc = Rpc.make("ipad.status", {
+  success: IpadStatus,
+  error: UnframedError,
+});
+
+export const IpadSetAvailabilityRpc = Rpc.make("ipad.setAvailability", {
+  payload: IpadSetAvailability,
+  success: Empty,
+  error: UnframedError,
+});
+
+export const IpadPairStartRpc = Rpc.make("ipad.pairStart", {
+  success: IpadPairStartAnswer,
+  error: UnframedError,
+});
+
+export const IpadDevicesRpc = Rpc.make("ipad.devices", {
+  success: IpadDevicesAnswer,
+  error: UnframedError,
+});
+
+export const IpadRevokeRpc = Rpc.make("ipad.revoke", {
+  payload: IpadRevoke,
+  success: Empty,
+  error: UnframedError,
+});
+
+export const IpadExportProfileRpc = Rpc.make("ipad.exportProfile", {
+  success: IpadExportProfileAnswer,
   error: UnframedError,
 });
 
@@ -384,5 +417,11 @@ export const UnframedRpcs = RpcGroup.make(
   AgentConnectionsSetSpendLimitRpc,
   SelectionReportRpc,
   SelectionSubscribeRpc,
+  IpadStatusRpc,
+  IpadSetAvailabilityRpc,
+  IpadPairStartRpc,
+  IpadDevicesRpc,
+  IpadRevokeRpc,
+  IpadExportProfileRpc,
 );
 export type UnframedRpcs = typeof UnframedRpcs;

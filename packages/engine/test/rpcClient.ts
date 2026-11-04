@@ -12,6 +12,7 @@ import * as RpcClient from "effect/unstable/rpc/RpcClient";
 import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
 import * as Socket from "effect/unstable/socket/Socket";
+import WsWebSocket, { type ClientOptions } from "ws";
 
 type Rpcs = RpcGroup.Rpcs<typeof UnframedRpcs>;
 type Client = RpcClient.FromGroup<typeof UnframedRpcs>;
@@ -45,15 +46,26 @@ const unwrap = <A>(exit: Exit.Exit<A, unknown>): A => {
   throw Cause.squash(exit.cause);
 };
 
+export interface TlsOptions {
+  readonly ca: string;
+  readonly servername: string;
+  readonly headers: Record<string, string>;
+}
+
 /** An Effect RPC client over one WebSocket to the engine, with no reconnect. */
-export const connectRpc = async (url: string): Promise<TestRpcClient> => {
+export const connectRpc = async (url: string, tls?: TlsOptions): Promise<TestRpcClient> => {
   const scope = Effect.runSync(Scope.make());
   const protocol = Layer.effect(
     RpcClient.Protocol,
     RpcClient.makeProtocolSocket({ retryTransientErrors: false, retryPolicy: Schedule.recurs(0) }),
   ).pipe(
     Layer.provide(Socket.layerWebSocket(url)),
-    Layer.provide(Socket.layerWebSocketConstructorGlobal),
+    Layer.provide(
+      tls === undefined
+        ? Socket.layerWebSocketConstructorGlobal
+        : Layer.succeed(Socket.WebSocketConstructor, ((target: string) =>
+            new WsWebSocket(target, [], { ca: [tls.ca], servername: tls.servername, headers: tls.headers } as unknown as ClientOptions)) as never),
+    ),
     Layer.provide(RpcSerialization.layerJson),
   );
   // Built into the long-lived scope, or the socket closes as soon as `make` returns.
