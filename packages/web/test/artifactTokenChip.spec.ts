@@ -37,7 +37,8 @@ test("a var() of the kit shows a chip with its short path and value, another tok
   const chip = parameters(page).getByRole("button", { name: /brand\/primary/ });
   await expect(chip).toBeVisible();
   await expect(chip).toContainText("#1a73e8");
-  await expect(chip).toHaveAttribute("title", "color/brand/primary");
+  await chip.hover();
+  await expect(page.locator("[data-slot='tooltip-popup']")).toHaveText("color/brand/primary");
 
   await chip.click();
   await page.getByRole("button", { name: /color\/brand\/accent/ }).click();

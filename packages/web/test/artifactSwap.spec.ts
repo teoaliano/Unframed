@@ -4,9 +4,10 @@ import { centre, openCanvas, roomRecords, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 import { dialsPage, filledArtifact, projectPath, writeBridge } from "./artifacts.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
-import { editor, frameOf, outline, parameters } from "./editorHarness.ts";
+import { editor, outline, parameters } from "./editorHarness.ts";
 
 const region = (page: Page) => page.getByRole("region", { name: "Editing Tuned" });
+const frameOf = (page: Page) => region(page).frameLocator("iframe[data-artifact-frame]");
 const sizeField = (page: Page) => parameters(page).getByRole("spinbutton", { name: "Size", exact: true });
 
 const fileOf = async (engine: TestEngine): Promise<string | undefined> => (await roomRecords(engine, "default")).find((record) => record.id === "shape:tuned")?.props.file;
