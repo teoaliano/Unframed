@@ -7,8 +7,6 @@ import { scriptFolder, startAgentEngine, type AgentEngine } from "./agent.ts";
 import { roomRecords, roomShape, seed, toolResults } from "./agentCanvas.ts";
 import { componentShape, pageShape } from "./canvasRecords.ts";
 
-/** Spec 20, tasks 10, 11 and 13: `component_write` and `component_read` through the scripted agent. */
-
 const BUTTON = `<!doctype html><html><head>
 <script type="application/json" data-uf-component>{"tag":"uf-button","variants":{"kind":["primary","secondary"]},"props":{"label":"text"},"slots":[]}</script>
 <style type="text/x-uf-component" data-uf-component-style>:host { display: inline-block; }</style>

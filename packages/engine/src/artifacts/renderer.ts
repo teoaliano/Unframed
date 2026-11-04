@@ -1,10 +1,3 @@
-/**
- * Motion renders (spec 09): a composition to an MP4 with HyperFrames' producer and the
- * person's own Chrome, in the engine. Renders are an in-memory map, not a durable store: a
- * render is free local compute on files still on disk, so one lost to a restart costs a
- * click. Each joins spec 03's run registry, so its placeholder is resolved like any
- * non-durable run.
- */
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { copyFile, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -23,19 +16,15 @@ import { ensureTokens, kitOf } from "../kits/tokensFile.ts";
 
 const COMPOSITION_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.html?$/;
 
-/** One render's work handed to the producer: everything it reads and where it writes. */
-export interface ProducerRun {
-  /** The project folder, which the composition's relative names resolve against. */
+interface ProducerRun {
   readonly folder: string;
   readonly entry: string;
   readonly outputPath: string;
-  /** `{ unframedDials, unframedMode }` for the values the render has (spec 19 adds the mode), else `null`. */
   readonly variables: Record<string, unknown> | null;
   readonly chromePath: string;
   readonly onProgress: (progress: number, message: string) => void;
 }
 
-/** The producer's variables: the tuned dials and the kit mode, when there are any (spec 19). */
 const renderVariables = (dials: Record<string, unknown> | null, mode: string | undefined): Record<string, unknown> | null => {
   const variables: Record<string, unknown> = {};
   if (dials !== null && Object.keys(dials).length > 0) variables.unframedDials = dials;
@@ -43,21 +32,15 @@ const renderVariables = (dials: Record<string, unknown> | null, mode: string | u
   return Object.keys(variables).length === 0 ? null : variables;
 };
 
-/** The seam the test hook replaces: the producer and the Chrome search. */
-export interface RenderBackend {
+interface RenderBackend {
   readonly findChrome: () => Promise<string | undefined>;
   readonly produce: (run: ProducerRun) => Promise<void>;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** How long each stage of the `ok` stub takes, so a poll every 700 ms sees them. */
 const STUB_STAGE_MS = 450;
 
-/**
- * `UNFRAMED_TEST_RENDERER=ok`: 25, 50 and 75 with their messages, then a small fixture MP4,
- * and a last message naming the variables it received. `fail` fails at once.
- */
 export const stubBackend = (mode: "ok" | "fail", fixture: string): RenderBackend => ({
   findChrome: async () => "stub-chrome",
   produce: async (run) => {
@@ -79,7 +62,6 @@ export const stubBackend = (mode: "ok" | "fail", fixture: string): RenderBackend
   },
 });
 
-/** The producer's own logging, silenced except for errors. */
 const quietLogger = {
   error: (message: string) => logError(`render: ${message}`),
   warn: () => {},
@@ -88,16 +70,11 @@ const quietLogger = {
   isLevelEnabled: (level: string) => level === "error",
 };
 
-/**
- * The producer's config for a render. Static-frame dedup is off: HyperFrames would otherwise
- * copy one capture glitch through every static frame after it.
- */
 export const renderConfigFor = async (chromePath: string) => {
   const engine = await import("@hyperframes/engine");
   return engine.resolveConfig({ chromePath, fps: 30, quality: "standard", staticFrameDedup: false });
 };
 
-/** HyperFrames' producer, imported only when a render starts: 30 fps, standard quality, MP4. */
 export const producerBackend = (findChrome: () => Promise<string | undefined>): RenderBackend => ({
   findChrome,
   produce: async (run) => {
@@ -124,16 +101,13 @@ export class RenderRefused extends Error {
   }
 }
 
-export interface RendererDeps {
+interface RendererDeps {
   readonly backend: RenderBackend;
-  /** The project folder, or `undefined` when there is none. */
   readonly folder: (project: string) => Promise<string | undefined>;
   readonly slug: (project: string) => string;
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;
   readonly apply: (project: string, change: CanvasChange, origin: ChangeOrigin) => Promise<Applied>;
-  /** Spec 03's run registry. */
   readonly track: (runId: string, project: string) => { settle: (outcome: RunOutcome<LandedClip>) => void; forget: () => void };
-  /** Spec 01's open-project registry: answers the closer's unregister function. */
   readonly registerCloser: (project: string, close: () => Promise<void>) => Promise<unknown>;
 }
 
@@ -143,12 +117,10 @@ interface RenderJob extends RenderStatus {
 
 const origin = (id: string): ChangeOrigin => ({ kind: "server", id: `run:${id}` });
 
-
 const isPlainObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 export class Renderer {
   private readonly renders = new Map<string, RenderJob>();
-  /** Projects whose closer is registered with the open-project registry. */
   private readonly tracked = new Set<string>();
   private readonly deps: RendererDeps;
 

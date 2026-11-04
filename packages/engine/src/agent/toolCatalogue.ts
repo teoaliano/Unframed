@@ -7,12 +7,6 @@ import { KitTools } from "../kits/kitTools.ts";
 import { outsideSelectionTools } from "./selectionTools.ts";
 import { generateTool } from "./generateTool.ts";
 
-/**
- * The Unframed tool list, as the tool definitions give it: name, description and input schema.
- * The engine registers these same definitions, and the stdio shim answers `tools/list` from this
- * function while Unframed is closed, so the two cannot drift. The handlers are never called here;
- * the dependencies throw if one is.
- */
 const inert: any = new Proxy(
   {},
   {

@@ -195,7 +195,6 @@ describe("artifact.sourceTree and artifact.prepareEdit (spec 18)", () => {
         code: "bad_request",
         message: "There is no element hf-zzzz in this page any more.",
       });
-      // The edit grows the page: the element's text is replaced by a longer run, past the limit.
       const big = `<h1 data-hf-id="hf-aaaa">Hi</h1><p>${"a".repeat(2_000_000)}</p>`;
       await writeFile(join(folder, "1-big.html"), big);
       await put(pageShape("e5", "201", { file: "1-big.html", title: "Big" }));
@@ -302,7 +301,6 @@ describe("the preview origin and unframed-edit.js (spec 18)", () => {
     await writeFile(join(folder, "unframed-edit.js"), "stale");
     const served = await engine.request(`/p/frames/unframed-edit.js`, { port: engine.previewPort, headers: { host: `127.0.0.1:${engine.previewPort}` } });
     expect(served.status).toBe(200);
-    // The engine's copy of the source is its own text; the test process only compares the header line.
     expect(served.text.split("\n")[0]).toBe(editBridgeSource().split("\n")[0]);
     expect(served.text).toContain("installEditBridge");
     expect(served.headers["content-type"]).toMatch(/javascript/);

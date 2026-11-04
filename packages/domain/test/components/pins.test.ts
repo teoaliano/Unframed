@@ -29,7 +29,6 @@ describe("readPins", () => {
 describe("injectPins and setPin", () => {
   const RUNTIME = '<script src="hyperframes-runtime.js" data-hyperframes-preview-runtime></script>';
   const BRIDGE = '<script src="unframed-dials.js"></script>';
-  /** The project: 2-button is the current button, 1-button an older one; 3-card is the card. */
   const registry = {
     current: new Map([
       ["uf-button", "2-button.html"],

@@ -27,7 +27,6 @@ describe("a project folder with a kit is self-contained (spec 19, task 42)", () 
   it("serves a copied folder's page, its tokens script and its kit from the preview origin with no help from the app", async () => {
     const board = join(engine.dataDir, "output", "board");
     await writeFile(join(board, "1-page.html"), `<!doctype html><html><head><script src="unframed-tokens.js"></script></head><body><h1 style="color: var(--color-brand-primary)">Hi</h1></body></html>`);
-    // Wait for the room's write of the tokens script, carrying the kit, before copying the folder.
     await expect.poll(() => readFile(join(board, "unframed-tokens.js"), "utf8").catch(() => ""), { timeout: 10_000 }).toContain("color/brand/primary");
     await cp(board, join(engine.dataDir, "output", "copied"), { recursive: true });
 
@@ -37,7 +36,6 @@ describe("a project folder with a kit is self-contained (spec 19, task 42)", () 
     expect(page.text).toContain("var(--color-brand-primary)");
     const script = await get("/p/copied/unframed-tokens.js");
     expect(script.status).toBe(200);
-    // The script embeds the kit; the browser turns its paths into custom property names.
     expect(script.text).toContain("color/brand/primary");
     expect(script.text).toContain("#1a73e8");
   });

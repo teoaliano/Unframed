@@ -23,7 +23,6 @@ import { useWheelToCanvas } from "../canvas/wheelToCanvas.ts";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
-/** The gestures the bar hides for: dragging a shape or its handles, dragging the canvas, box selection. */
 const GESTURES = [
   "select.translating",
   "select.resizing",
@@ -39,14 +38,8 @@ const GESTURES = [
 const hiddenByGesture = (editor: Editor): boolean =>
   editor.isInAny(...GESTURES) || (editor.inputs.getIsPanning() && editor.inputs.getIsPointing());
 
-/** The band a shape's label takes above its top edge, in canvas units (spec 02). */
 const LABEL_BAND = 22;
 
-/**
- * The selection's bounds on screen, relative to the canvas, with the band of its labels on
- * top while a selected shape has a shown label, so the bar never covers the label of what it
- * is about.
- */
 const selectionOnScreen = (editor: Editor): ScreenBox | undefined => {
   const bounds = editor.getSelectionPageBounds();
   if (!bounds) return undefined;
@@ -57,18 +50,11 @@ const selectionOnScreen = (editor: Editor): ScreenBox | undefined => {
   return { x: topLeft.x, y: topLeft.y, w: bottomRight.x - topLeft.x, h: bottomRight.y - topLeft.y };
 };
 
-
-/**
- * The floating element that is the bar and grows into the composer on the same centre and
- * bottom edge (top edge when flipped below the selection). It measures its content and
- * animates to that size and place.
- */
 const Floating = ({ target, hidden, expanded, framed, children }: { target: ScreenBox | undefined; hidden: boolean; expanded: boolean; framed: boolean; children: ReactNode }) => {
   const editor = useEditor();
   const root = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ w: number; h: number }>();
-  // Only the morph between bar and composer animates; following the selection never lags.
   const [morphing, setMorphing] = useState(false);
   const wasExpanded = useRef(expanded);
   useWheelToCanvas(editor, root);
@@ -84,7 +70,6 @@ const Floating = ({ target, hidden, expanded, framed, children }: { target: Scre
     const element = content.current;
     if (!element) return;
     const measure = () => {
-      // The floating element's own border sits outside its content, else it clips the content's far edges.
       const outer = root.current;
       const border = outer ? outer.offsetWidth - outer.clientWidth : 0;
       const w = element.offsetWidth + border;
@@ -97,8 +82,6 @@ const Floating = ({ target, hidden, expanded, framed, children }: { target: Scre
     return () => observer.disconnect();
   }, []);
 
-  // The room reads the DOM (the chrome cards, tldraw's style panel), which mounts a frame after the selection
-  // changes; reading it again once that frame is painted keeps the toolbar clear of a panel it could not see.
   const [roomTick, setRoomTick] = useState(0);
   useEffect(() => {
     const frame = requestAnimationFrame(() => requestAnimationFrame(() => setRoomTick((tick) => tick + 1)));
@@ -112,7 +95,6 @@ const Floating = ({ target, hidden, expanded, framed, children }: { target: Scre
       ref={root}
       className={cn(
         "pointer-events-auto absolute z-[500] box-border overflow-hidden font-sans text-foreground data-[morphing=true]:transition-[left,top,width,height,border-radius,background-color,box-shadow] data-[morphing=true]:duration-200 data-[morphing=true]:ease-out motion-reduce:data-[morphing=true]:transition-none",
-        // The bar is a glass card and the Generate composer t3code's composer shell. The Agent tray draws its own shell.
         !expanded ? "rounded-xl border shadow-lg/5 surface-glass" : framed ? `${composerGlassClass} rounded-3xl border shadow-composer dark:shadow-none` : "rounded-3xl",
       )}
       data-testid="selection-toolbar"
@@ -130,7 +112,6 @@ const Floating = ({ target, hidden, expanded, framed, children }: { target: Scre
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
     >
-      {/* Bar and composer are different children, so under reduced motion each fades in as it replaces the other. */}
       <div
         ref={content}
         className="absolute left-0 top-0 data-[side=above]:top-auto data-[side=above]:bottom-0 motion-reduce:*:transition-opacity motion-reduce:*:duration-[120ms] motion-reduce:*:ease-linear motion-reduce:*:starting:opacity-0"
@@ -142,16 +123,10 @@ const Floating = ({ target, hidden, expanded, framed, children }: { target: Scre
   );
 };
 
-/** The bar's row of buttons and hint; `barClass` pads it inside the floating element. */
 const rowClass = "flex items-center gap-1.5";
 const barClass = `${rowClass} whitespace-nowrap p-1`;
 const hintClass = "px-1 text-xs text-muted-foreground";
 
-/**
- * The six-dot handle on a filled page or motion: its frame takes the pointer, so the shape
- * moves by this instead. A drag moves the selection with the pointer, and one undo takes
- * the whole move back.
- */
 const DragHandle = () => {
   const editor = useEditor();
   const drag = useRef<{ readonly from: { x: number; y: number }; readonly shapes: ReadonlyArray<{ id: TLShapeId; type: string; x: number; y: number }> }>(undefined);
@@ -208,10 +183,6 @@ const AgentButton = ({ onOpen }: { onOpen: () => void }) => {
   );
 };
 
-/**
- * The bar of one result: Generate takes the result as the input like any selection, and
- * Regenerate opens the composer in recipe mode on the run that made it.
- */
 const ResultBar = ({ state, onGenerate, agent }: { state: Extract<ToolbarState, { kind: "result" }>; onGenerate: () => void; agent: ReactNode }) => {
   const editor = useEditor();
   const engine = useEngine();
@@ -241,7 +212,6 @@ const ResultBar = ({ state, onGenerate, agent }: { state: Extract<ToolbarState, 
   return (
     <div className="flex flex-col gap-0.5 whitespace-nowrap p-1">
       <div className={rowClass}>
-        {/* Without Generate (a failed render), Regenerate is the primary action. */}
         <Button variant={state.generate ? "outline" : "default"} size="sm" onClick={() => void regenerate()}>
           Regenerate
         </Button>
@@ -261,11 +231,6 @@ const ResultBar = ({ state, onGenerate, agent }: { state: Extract<ToolbarState, 
   );
 };
 
-/**
- * The bar of a selection holding one recipe group: Generate runs the recipe at once (a
- * Free recipe stops at the final prompt), the hint names the group and the estimate, and
- * Recipe opens the composer on it.
- */
 const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "recipe" }>; agent: ReactNode }) => {
   const editor = useEditor();
   const engine = useEngine();
@@ -368,16 +333,11 @@ const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind
   }
 };
 
-/**
- * The selection toolbar: over every selection, its buttons decided from the selection, and
- * the composer it grows into. It hides while a gesture is under way.
- */
 export const SelectionToolbar = () => {
   const editor = useEditor();
   const project = useCanvasProject();
   const { agentTray } = useSlots();
   const composer = useValue("composer", () => composerState(editor).get(), [editor]);
-  // A name field sits in a label, right under the bar: the bar steps aside while it is open.
   const hidden = useValue("toolbar hidden", () => hiddenByGesture(editor) || renamingShape(editor).get() !== undefined, [editor]);
   const selectionKey = useValue("selection", () => editor.getSelectedShapeIds().join(" "), [editor]);
   const expanded = composer.mode !== "bar";
@@ -397,7 +357,6 @@ export const SelectionToolbar = () => {
   const lastTarget = useRef<ScreenBox>(undefined);
   if (target) lastTarget.current = target;
 
-  // Clicking empty canvas closes the composer; a changed selection leaves recipe mode.
   useEffect(() => {
     const { mode, recipe } = composerState(editor).get();
     if (selectionKey === "" && mode !== "bar") closeComposer(editor);

@@ -6,8 +6,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { componentShape } from "./canvasRecords.ts";
 import { startEngine, type TestEngine } from "./harness.ts";
 
-/** Spec 20, task 39: `files.copy` across projects brings a page's pinned sheets and compiled files. */
-
 const BUTTON = `<!doctype html><html><head>
 <script type="application/json" data-uf-component>{"tag":"uf-button","variants":{"kind":["primary","secondary"]},"props":{"label":"text"},"slots":[]}</script>
 <style type="text/x-uf-component" data-uf-component-style>:host { display: inline-block; }</style>
@@ -15,7 +13,6 @@ const BUTTON = `<!doctype html><html><head>
 
 const PAGE = `<!doctype html><html><head><script src="1-button.component.js" data-uf-component="uf-button"></script></head><body><uf-button kind="secondary"></uf-button></body></html>`;
 
-/** A copy is written like any artifact: tokens and dials tags and element ids are stamped on (specs 18 and 19). The rest must match. */
 const unstamped = (html: string): string =>
   html
     .replace(/<script src="unframed-(?:tokens|dials)\.js"><\/script>\n?/g, "")

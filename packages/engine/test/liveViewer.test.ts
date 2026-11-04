@@ -10,17 +10,12 @@ import { pageShape } from "./canvasRecords.ts";
 const CSP =
   "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-ancestors http://localhost:* http://127.0.0.1:*";
 
-/**
- * The viewer the engine wrote. Its script is a function's source text, which the engine's
- * runtime and the test's transform print differently, so the lines around it are compared.
- */
 const expectViewer = (text: string) => {
   const outside = (html: string) => html.replace(/<script>[\s\S]*<\/script>/, "<script></script>");
   expect(outside(text)).toBe(outside(liveViewerSource()));
   expect(text).toContain("unframed-live-");
 };
 
-/** What a pointer file says, read the way the viewer reads it: by calling its `unframedLive`. */
 const pointerOf = async (agent: AgentEngine, key: string): Promise<any> => {
   const text = await readFile(join(agent.folder, `unframed-live-${key}.js`), "utf8").catch(() => undefined);
   if (text === undefined) return undefined;
@@ -39,7 +34,6 @@ const eventually = async <T>(read: () => Promise<T>, check: (value: T) => boolea
   }
 };
 
-/** Writes records the way a tab would. The engine's own `system` writes run no commit work. */
 const put = (agent: AgentEngine, records: TLRecord[]) =>
   agent.rpc.call("testCanvas.apply", { project: "board", change: { put: records, remove: [] }, origin: { kind: "server", id: "test" } });
 
@@ -49,7 +43,6 @@ const remove = (agent: AgentEngine, ids: string[], kind: "server" | "system" = "
 const preview = (agent: AgentEngine, path: string) =>
   agent.engine.request(path, { port: agent.engine.previewPort, headers: { host: `localhost:${agent.engine.previewPort}` } });
 
-/** What "Open in a new tab" asks of the engine. */
 const openLive = (agent: AgentEngine, shapeId: string) => agent.rpc.call("artifact.openLive", { project: "board", shapeId });
 
 const liveFiles = async (agent: AgentEngine) => (await readdir(agent.folder)).filter((name) => name.startsWith("unframed-live")).sort();
@@ -76,7 +69,6 @@ describe("the live viewer's pointer", () => {
     const written = (await roomShape(agent, "pg1")).props.file as string;
     expect(written).not.toBe("1-landing.html");
     await eventually(() => pointerOf(agent, "pg1"), (pointer) => pointer?.file === written, "the new version");
-    // The versioned files are untouched: the old one still plays as written.
     expect(await readFile(join(agent.folder, "1-landing.html"), "utf8")).toBe("<body>v1</body>");
 
     const current = await roomShape(agent, "pg1");
@@ -87,7 +79,6 @@ describe("the live viewer's pointer", () => {
       title: "Landing",
       dials: { accent: "#ff0000", size: 30 },
     });
-    // The shape never opened in a tab still has no pointer.
     expect(await liveFiles(agent)).toEqual(["unframed-live-pg1.js", "unframed-live.html", "unframed-live.js"]);
   });
 
@@ -119,7 +110,6 @@ describe("the live viewer's pointer", () => {
     await expect(openLive(agent, "shape:nope")).rejects.toMatchObject({ code: "not_found", message: "There is no page or motion shape:nope on this canvas." });
     await expect(openLive(agent, "shape:a.b")).rejects.toMatchObject({ code: "not_found" });
     expect(await liveFiles(agent)).toEqual([]);
-    // An empty motion can be opened: its tab says it has no file yet.
     await openLive(agent, "shape:m1");
     expect(await pointerOf(agent, "m1")).toEqual({ kind: "motion", file: "", title: "Intro", dials: null });
   });
@@ -129,10 +119,8 @@ describe("the live viewer's pointer", () => {
     await put(first, [pageShape("pg1", "100", { file: "1-landing.html", title: "Landing" }), pageShape("pg2", "101", { file: "2-other.html" }, { y: 500 })]);
     await openLive(first, "shape:pg1");
     await openLive(first, "shape:pg2");
-    // Removed by the engine's own write, which runs no commit work: only the next open notices.
     await remove(first, ["shape:pg2"], "system");
     await first.engine.stop();
-    // A pointer left behind with a stale file, as after a crash.
     await writeFile(join(first.folder, "unframed-live-pg1.js"), livePointerSource({ kind: "page", file: "0-stale.html", title: "Landing", dials: null }));
 
     const second = await startAgentEngine({ dataDir: first.engine.dataDir });
@@ -166,7 +154,6 @@ describe("the live viewer's pointer", () => {
         etag: expect.stringMatching(/^"[0-9a-f]+-[0-9a-f]+"$/),
       });
     }
-    // A shape never opened has no pointer to serve.
     expect((await preview(agent, "/p/board/unframed-live-pg9.js")).status).toBe(404);
   });
 
@@ -176,7 +163,6 @@ describe("the live viewer's pointer", () => {
     await openLive(agent, "shape:pg1");
     await writeFile(join(agent.folder, "unframed-live.html"), "<p>an older viewer</p>");
     expectViewer((await preview(agent, "/p/board/unframed-live.html")).text);
-    // A request never makes a project folder, for the viewer or the bridge.
     for (const name of ["unframed-live.html", "unframed-dials.js"]) expect((await preview(agent, `/p/nothere/${name}`)).status).toBe(404);
     expect(await readdir(join(agent.folder, "..", "nothere")).catch(() => "missing")).toBe("missing");
   });

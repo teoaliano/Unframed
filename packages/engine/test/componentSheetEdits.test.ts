@@ -6,8 +6,6 @@ import { componentShape } from "./canvasRecords.ts";
 import { startEngine, type TestEngine } from "./harness.ts";
 import { connectTab } from "./syncClient.ts";
 
-/** Spec 20, the editor on a component: a sheet that has no element ids yet is prepared, then edited, like a page. */
-
 const DECLARATION = `<script type="application/json" data-uf-component>{"tag":"uf-button","variants":{"kind":["primary","secondary"]},"props":{"label":"text"},"slots":[]}</script>`;
 const STYLE = `<style type="text/x-uf-component" data-uf-component-style>:host { display: inline-block; }</style>`;
 const UNSTAMPED = `<!doctype html><html><head>\n${DECLARATION}\n${STYLE}\n</head><body><div data-uf-template hidden><button data-uf-prop="label">Buy</button></div></body></html>`;

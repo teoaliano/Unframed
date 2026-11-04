@@ -24,6 +24,8 @@ Spec 12's run on `build`, with the dev server stopped: `pnpm typecheck` exit 0 (
 
 ## Specs
 
+Specs 18 to 21 are merged to `main` through PRs #165, #172, #175, #177 and #178, with fixes in #179 to #183, #187 and #188.
+
 | # | Spec | Wave | State | Merge commit | Note |
 | --- | --- | --- | --- | --- | --- |
 | 01 | engine foundation | 1 | merged | f480398 | 54/54 tasks |
@@ -39,12 +41,14 @@ Spec 12's run on `build`, with the dev server stopped: `pnpm typecheck` exit 0 (
 | 11 | legacy import | 9 | merged | c264c38 | 46/46 tasks; covers spec 03's imported-recipe Regenerate and Recipe |
 | 12 | design system | 10 | merged | 4935b8b to 834be6d (merges 2d7b5fa, 39a1d4a, f15d45f), review fixes 2d7627f to bde5664 | 25/25 tasks. Written after the first build, at the person's request. Decisions settled during the run are under "Decisions" |
 | 13 | design-system catalogue | 11 | merged | see git log | 4/4 tasks. Written after spec 12's live review, at the person's request: a dev-only page at `/design-system/` on the web dev server |
-| 14 | external agents | 12 | not built | | 0/27 tasks. Written for issue #93 at the person's request, with every open question decided |
+| 14 | external agents | 12 | merged | PR #110, amended in #130, built in #131 to #142 | 46 tasks in the spec. Built after the first build; the commit log shows the series, and it was not re-verified task by task |
 | 15 | audio | 13 | not built | | 0/43 tasks. Written for issue #63 at the person's request; its questions are answered in the spec, and two facts await a paid call (Further Notes) |
-| 18 | element editing | | built, PR open | see the spec 18 PR | 40/41 tasks. Task 2 leaves out spec 16's node page writer, which spec 16 adds when it is built. Built by parallel Haiku agents, merged on `build/18-element-editing` |
-| 19 | kits and tokens | | built, PR open | see the spec 19 PR | 42/43 tasks. Task 43 is the person's step (rendering outside Unframed). Task 10 does not cover spec 16's node page writer |
-| 20 | components | | built, PR open | see the spec 20 PR | 46 of 47 tasks. Task 44 waits on spec 16 (the Make component, wire and node work that needs its node page writer). Task 16 leaves out spec 16's node page writer, which spec 16 adds when it is built. Written with 18 |
-| 21 | motion timeline | | built, PR open | see the spec 21 PR | Every task is built except task 4, the probe report (`docs/research/motion-editability.md`), which is the person's step and is not done. Task 2, the render comparison, was run on PR #165. Task 40 is the budget in `motionPerformance.spec.ts`, which `pnpm test:perf` runs; the strip mounts only the rows in view. This PR also closes the build's gaps (a set's diamond moves, hidden rows are greyed, the label column collapses under 900 px, quick frame steps all count) and the review's polish (Design tab names for values, a dashed snap guide, overlapping bars in lanes, the Design tab header wraps) |
+| 16 | nodes | | not built | | 0/31 tasks. Spec 18's element ids and bridge tag, and spec 20's task 44, wait on its node page writer |
+| 17 | project tabs | | merged | PRs #143, #146, #148, #149, #150 | 21 tasks. Its ten-tab budget runs in the isolated project of `pnpm test:browser` |
+| 18 | element editing | | merged | PR #172; fixes #180, #183 | 40/41 tasks. Task 2 leaves out spec 16's node page writer, which spec 16 adds when it is built. Built by parallel Haiku agents, on `build/18-element-editing` |
+| 19 | kits and tokens | | merged | PR #175; fix #181 | 42/43 tasks. Task 43 is the person's step (rendering outside Unframed). Task 10 does not cover spec 16's node page writer |
+| 20 | components | | merged | PR #177; fix #179 | 46 of 47 tasks. Task 44 waits on spec 16 (the Make component, wire and node work that needs its node page writer). Task 16 leaves out spec 16's node page writer, which spec 16 adds when it is built. Written with 18 |
+| 21 | motion timeline | | merged | PRs #165 (task 1), #178; fixes #187, #188 | Every task is built except task 4, the probe report (`docs/research/motion-editability.md`), which is the person's step and is not done. Task 2, the render comparison, was run on PR #165. Task 40 is the budget in `motionPerformance.spec.ts`, which `pnpm test:perf` runs; the strip mounts only the rows in view. The fix PRs also close the build's gaps (a set's diamond moves, hidden rows are greyed, the label column collapses under 900 px, quick frame steps all count) and the review's polish (Design tab names for values, a dashed snap guide, overlapping bars in lanes, the Design tab header wraps) |
 
 ## Performance budgets
 
@@ -109,25 +113,20 @@ Open for the person:
 
 ## Deferred items
 
-- Spec 18 and spec 16: spec 16 is not built, so its node page writer does not stamp element ids or inject the bridge tag yet (spec 18, Element ids). Spec 16's build adds it.
+- Spec 16 is not built, so its node page writer does not stamp element ids or inject the bridge tag yet (spec 18, Element ids). Spec 16's build adds it.
 - Spec 18: an element chip's excerpt rebuilds the start tag from the tag, `data-hf-id`, `data-uf-name`, `src` and inline style, because the web holds no source bytes; it can differ from the file.
 - Spec 18: the Image section shows for one selected element only.
 - Spec 19: token chips are missing for border colour, padding and margin sides, and shadow; those fields show the computed value.
 - Spec 19: a text style's off-token Use token writes all five longhands.
 - Spec 19: the Used by count path has no browser test.
-- CI: the `test` job runs the engine, domain and whole browser suite on one runner; with specs 18 and 19 it passed 30 minutes, so its limit is 45. Sharding the browser suite across runners would bring it back down.
-- Undo and selection: tldraw records selection changes as undo steps, so after opening an editor (which selects the shape) and closing it, the first Cmd-Z restores the earlier selection and the next one undoes the edit before it. This is canvas-wide tldraw behaviour, not specific to spec 20; changing it would change undo everywhere.
 - Spec 20: a token written inside a shorthand in a component rule (`background: var(...)`) is not offered as a token rule edit; only a rule's own longhand declaration is.
 - Spec 20: `component.updates` can answer empty right after an undo, because the engine reads the room before the undo syncs; the editor retries up to 8 times at 250 ms instead of the engine waiting.
 - Spec 01: the Electron 44 boot and the `dist` branch publish run only in the tag workflow. `scripts/electronSmoke.ts` ran with plain Node as the binary; `scripts/publishDist.sh` never ran.
-- Spec 04, task 21: the test moves the image through the room, not with a mouse drag, because dragging a selected shape moves the whole selection.
 - Spec 05: logic duplicated between `textRuns.ts` and spec 03's `runs.ts` (run-id minting, the `of` lookup, top-index lookup), and between the image and text catalogue functions.
 - Spec 05: a text result whose sidecar could not be written gets `sidecar: null`; duplicating it drops its result meta.
-- Spec 06: review smells left alone, 10 copies of `messageOf` and a paste fix-up that overlaps domain `instantiate`.
-- Spec 07: the Claude adapter and the zero-token probe never ran against a real CLI (spec 07 makes that a manual acceptance test). The Codex adapter ran end to end against a fake `codex app-server` only.
-- Spec 07: `runtime.ts` is 800 lines, and some contract and domain types are defined twice (a compile-time check in `layer.ts` catches drift).
-- Spec 08: `AgentTray.tsx` is 686 lines.
-- Spec 09: the real HyperFrames render is untested; tests use the `UNFRAMED_TEST_RENDERER` stub.
+- Spec 06: review smells left alone: 16 copies of `messageOf` and a paste fix-up that overlaps domain `instantiate`.
+- Spec 07: `packages/engine/src/agent/runtime.ts` is 1093 lines, and some contract and domain types are defined twice (a compile-time check in `layer.ts` catches drift).
+- Spec 08: `AgentTray.tsx` is 1303 lines.
 - Spec 09: `The render failed.` (a failure with no message) is unreachable in tests, because the stub's `fail` mode always carries a message.
 - Spec 09: `sharp`, a native addon, is installed through `@hyperframes/studio-server`. The render path never loads it today (spec 01 forbids native addons on runtime paths). Recheck on a HyperFrames upgrade.
 - Spec 09: a shape's last live still is kept for the session only.
@@ -137,6 +136,7 @@ Open for the person:
 - Spec 12: a few tests find elements by third-party class names that spec 12's test hooks section does not exempt (lucide icon classes in `addMenu.spec.ts` and `toasts.spec.ts`, DialKit's classes in `artifactDials.spec.ts`).
 - Spec 12: the sweep does not open the legacy import screens; `legacyImport.spec.ts` checks their kit slots.
 - The context-menu fix in `packages/web/src/canvas/ContextMenu.tsx` cancels the menu library's delayed refocus through an internal event name that tldraw bundles. A tldraw upgrade that renames it brings the bug back without failing anything else.
+- Undo and selection: tldraw records selection changes as undo steps, so after opening an editor (which selects the shape) and closing it, the first Cmd-Z restores the earlier selection and the next one undoes the edit before it. This is canvas-wide tldraw behaviour, not specific to spec 20; changing it would change undo everywhere.
 
 ## Needs you
 

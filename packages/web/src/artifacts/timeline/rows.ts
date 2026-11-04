@@ -1,4 +1,4 @@
-import { dialAt, type DialLimit, type DialSchema, type PropertyGroup, type Tween, type Owner } from "@unframed/domain";
+import { dialAt, groupOfKey, type DialLimit, type DialSchema, type PropertyGroup, type Tween, type Owner } from "@unframed/domain";
 import type { MotionTimelineReading, SourceEdit } from "@unframed/contracts";
 
 const ROW_HEIGHT = 24;
@@ -116,15 +116,6 @@ const barsOf = (tween: Tween, target: string, offset: number, timing: { start: n
   }
   return [main, ...copies];
 }
-
-export const groupOfKey = (key: string): PropertyGroup => {
-  if (["x", "y", "xPercent", "yPercent"].includes(key)) return "position";
-  if (["scale", "scaleX", "scaleY"].includes(key)) return "scale";
-  if (["width", "height"].includes(key)) return "size";
-  if (["rotation", "skewX", "skewY"].includes(key)) return "rotation";
-  if (["opacity", "autoAlpha"].includes(key)) return "visual";
-  return "other";
-};
 
 const groupsOfTween = (tween: Tween): PropertyGroup[] => GROUP_ORDER.filter((group) => tween.groups.includes(group));
 
@@ -258,6 +249,7 @@ export const buildRows = (input: RowsInput): RowView[] => {
   }
   return rows;
 };
+
 
 const entryOf = (schema: DialSchema | undefined, path: readonly string[]): DialSchema[string] | undefined => {
   let folder: DialSchema | undefined = schema;
