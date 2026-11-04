@@ -116,9 +116,9 @@ test("a token declared in a base rule is a token chip, another token writes into
     await expect(outline(page, "selected")).toHaveCount(1, { timeout: 1000 });
   }).toPass({ timeout: 20_000 });
   const fill = parameters(page).getByRole("group", { name: "Fill", exact: true });
-  await expect(fill.getByTitle("color/brand/primary")).toBeVisible({ timeout: 20_000 });
+  await expect(fill.getByRole("button", { name: /brand\/primary/ })).toBeVisible({ timeout: 20_000 });
 
-  await fill.getByTitle("color/brand/primary").click();
+  await fill.getByRole("button", { name: /brand\/primary/ }).click();
   await page.getByRole("dialog", { name: "Use a token" }).getByRole("button", { name: /color\/brand\/accent/ }).click();
   await page.keyboard.press("Escape");
   await expect(cellButton(page, 0)).toHaveCSS("background-color", "rgb(255, 0, 170)", { timeout: 15_000 });
@@ -133,8 +133,8 @@ test("a token declared in a base rule is a token chip, another token writes into
     await cellButton(page, 0).click();
     await expect(outline(page, "selected")).toHaveCount(1, { timeout: 1000 });
   }).toPass({ timeout: 20_000 });
-  await expect(fill.getByTitle("color/brand/accent")).toBeVisible({ timeout: 20_000 });
-  await fill.getByTitle("color/brand/accent").click();
+  await expect(fill.getByRole("button", { name: /brand\/accent/ })).toBeVisible({ timeout: 20_000 });
+  await fill.getByRole("button", { name: /brand\/accent/ }).click();
   await page.getByRole("dialog", { name: "Use a token" }).getByRole("button", { name: "Detach", exact: true }).click();
   await expect
     .poll(async () => {
@@ -142,7 +142,7 @@ test("a token declared in a base rule is a token chip, another token writes into
       return file === undefined ? "" : await readFile(projectPath(agent, file), "utf8");
     }, { timeout: 15_000 })
     .toMatch(/background-color: #ff00aa/);
-  await expect(fill.getByTitle("color/brand/accent")).toHaveCount(0);
+  await expect(fill.getByRole("button", { name: /brand\/accent/ })).toHaveCount(0);
   await expect(cellButton(page, 0)).toHaveCSS("background-color", "rgb(255, 0, 170)");
 });
 
