@@ -31,20 +31,17 @@ import { ArtifactEdit, ArtifactImages, ArtifactPrepareEdit, ArtifactSourceTree }
 
 const Empty = Schema.Struct({});
 
-/** Spec 14: the Settings block lists, makes and revokes the connections an outside agent uses. */
 export const AgentConnectionsList = Rpc.make("agentConnections.list", {
   success: AgentConnectionsListAnswer,
   error: UnframedError,
 });
 
-/** The token is in this answer once, and the engine keeps only its hash. */
 export const AgentConnectionsCreateRpc = Rpc.make("agentConnections.create", {
   payload: AgentConnectionsCreate,
   success: AgentConnectionsCreateAnswer,
   error: UnframedError,
 });
 
-/** Spec 14: the person sets, changes or removes an outside connection's spend limit. */
 export const AgentConnectionsSetSpendLimitRpc = Rpc.make("agentConnections.setSpendLimit", {
   payload: AgentConnectionsSetSpendLimit,
   success: Empty,
@@ -57,7 +54,6 @@ export const AgentConnectionsRevokeRpc = Rpc.make("agentConnections.revoke", {
   error: UnframedError,
 });
 
-/** Spec 14: a window reports its selection, and the engine asks it to select shapes. */
 export const SelectionReportRpc = Rpc.make("selection.report", {
   payload: SelectionReport,
   success: Empty,
@@ -87,14 +83,12 @@ export const SettingsUpdate = Rpc.make("settings.update", {
   error: UnframedError,
 });
 
-/** The current settings first, then one value per change from any source. */
 export const SettingsSubscribe = Rpc.make("settings.subscribe", {
   success: Settings,
   error: UnframedError,
   stream: true,
 });
 
-/** `path` is `''` when the person cancelled the dialog. */
 export const SettingsPickFolder = Rpc.make("settings.pickFolder", {
   success: Schema.Struct({ path: Schema.String }),
   error: UnframedError,
@@ -105,14 +99,12 @@ export const ProjectsList = Rpc.make("projects.list", {
   error: UnframedError,
 });
 
-/** Answers the slug the name became. */
 export const ProjectsCreate = Rpc.make("projects.create", {
   payload: Schema.Struct({ name: Schema.String }),
   success: Schema.Struct({ name: Schema.String }),
   error: UnframedError,
 });
 
-/** One project's live work and the work waiting on the person (spec 17). Only projects with either above zero are sent, and a project that falls to zero is sent once more with zeros. */
 export const ProjectActivity = Schema.Struct({
   project: Schema.String,
   running: Schema.Number,
@@ -120,7 +112,6 @@ export const ProjectActivity = Schema.Struct({
 });
 export type ProjectActivity = typeof ProjectActivity.Type;
 
-/** The activity of every project with live work, then one message per change (spec 17). */
 export const ProjectsActivity = Rpc.make("projects.activity", {
   success: ProjectActivity,
   error: UnframedError,
@@ -138,7 +129,6 @@ export const FilesReveal = Rpc.make("files.reveal", {
   error: UnframedError,
 });
 
-/** A project file's absolute path, built by the engine so it has the platform's separators. */
 export const FilesPath = Rpc.make("files.path", {
   payload: Schema.Struct({ project: Schema.String, fileName: Schema.String }),
   success: Schema.Struct({ path: Schema.String }),
@@ -155,7 +145,6 @@ export const PreferencesGet = Rpc.make("preferences.get", {
   error: UnframedError,
 });
 
-/** A `null` value deletes the key. */
 export const PreferencesSet = Rpc.make("preferences.set", {
   payload: Schema.Struct({ key: Schema.String, value: Schema.Unknown }),
   success: Empty,
@@ -165,10 +154,6 @@ export const PreferencesSet = Rpc.make("preferences.set", {
 export const PreferenceChange = Schema.Struct({ key: Schema.String, value: Schema.Unknown });
 export type PreferenceChange = typeof PreferenceChange.Type;
 
-/**
- * The current value of each key first (`null` for a key with no value), then one per
- * change from any socket. Without `keys`, every stored key and then every change.
- */
 export const PreferencesSubscribe = Rpc.make("preferences.subscribe", {
   payload: PreferenceKeys,
   success: PreferenceChange,
@@ -176,7 +161,6 @@ export const PreferencesSubscribe = Rpc.make("preferences.subscribe", {
   stream: true,
 });
 
-/** Copies a bare file name from `from` (default `project`) into `project` with a copy sidecar. */
 export const FilesCopy = Rpc.make("files.copy", {
   payload: Schema.Struct({
     project: Schema.String,
@@ -187,7 +171,6 @@ export const FilesCopy = Rpc.make("files.copy", {
   error: UnframedError,
 });
 
-/** A canvas change for the engine-side write: whole records to put and ids to remove. */
 export const CanvasChangePayload = Schema.Struct({
   put: Schema.Array(Schema.Unknown),
   remove: Schema.Array(Schema.String),
@@ -195,9 +178,6 @@ export const CanvasChangePayload = Schema.Struct({
 
 const CanvasOrigin = Schema.Struct({ kind: Schema.Literals(["server", "system"]), id: Schema.String });
 
-// Test-only: answered only when the engine runs with UNFRAMED_TEST_CANVAS=1 (spec 01's
-// table of test-only variables), so the engine seam can reach the room's engine-side
-// interface. Otherwise every one answers `unavailable`.
 
 export const TestCanvasRead = Rpc.make("testCanvas.read", {
   payload: Schema.Struct({ project: Schema.String }),
@@ -217,45 +197,36 @@ export const TestCanvasChangedSince = Rpc.make("testCanvas.changedSince", {
   error: UnframedError,
 });
 
-/** The catalogue for a medium, newest data from OpenRouter; on any upstream failure only the default model. */
 export const ModelsList = Rpc.make("models.list", {
   payload: ModelsListRequest,
   success: ModelsListAnswer,
   error: UnframedError,
 });
 
-/** One SKU list per endpoint of an image model; empty on any upstream failure. */
 export const ModelsImagePricing = Rpc.make("models.imagePricing", {
   payload: Schema.Struct({ id: Schema.String }),
   success: ImagePricingAnswer,
   error: UnframedError,
 });
 
-/** Starts an image run. Answers once its placeholders are in the room; outputs arrive on `run.subscribe`. */
 export const RunImage = Rpc.make("run.image", {
   payload: ImageRunRequest,
   success: RunStarted,
   error: UnframedError,
 });
 
-/** A result's recipe, from its sidecar. */
 export const RecipeRead = Rpc.make("recipe.read", {
   payload: Schema.Struct({ project: Schema.String, shapeId: Schema.String }),
   success: ResultRecipe,
   error: UnframedError,
 });
 
-/**
- * A result pasted into another project brings its recipe: the sidecar and every file the
- * recipe names are copied from `from` into `project`, beside `file` (the image's copy).
- */
 export const RecipeCopy = Rpc.make("recipe.copy", {
   payload: Schema.Struct({ project: Schema.String, from: Schema.String, sidecar: Schema.String, file: Schema.String }),
   success: Schema.Struct({ sidecar: Schema.String }),
   error: UnframedError,
 });
 
-/** Run events of one project, as they happen. */
 export const RunSubscribe = Rpc.make("run.subscribe", {
   payload: Schema.Struct({ project: Schema.String }),
   success: RunEvent,
@@ -263,14 +234,12 @@ export const RunSubscribe = Rpc.make("run.subscribe", {
   stream: true,
 });
 
-/** Records a chat command. Answers once its intent is committed, not once a provider answered. */
 export const OrchestrationDispatchCommand = Rpc.make("orchestration.dispatchCommand", {
   payload: ClientChatCommand,
   success: Schema.Struct({ sequence: Schema.Number }),
   error: UnframedError,
 });
 
-/** The project's chats as summaries: a snapshot, `synchronized`, then one item per change. */
 export const OrchestrationSubscribeShell = Rpc.make("orchestration.subscribeShell", {
   payload: Schema.Struct({ projectId: Schema.String, afterSequence: Schema.optionalKey(Schema.Number) }),
   success: ShellStreamItem,
@@ -278,7 +247,6 @@ export const OrchestrationSubscribeShell = Rpc.make("orchestration.subscribeShel
   stream: true,
 });
 
-/** One chat: a snapshot (or the events past `afterSequence`), `synchronized`, then its events as they commit. */
 export const OrchestrationSubscribeThread = Rpc.make("orchestration.subscribeThread", {
   payload: Schema.Struct({ projectId: Schema.String, threadId: Schema.String, afterSequence: Schema.optionalKey(Schema.Number) }),
   success: ThreadStreamItem,
@@ -286,38 +254,30 @@ export const OrchestrationSubscribeThread = Rpc.make("orchestration.subscribeThr
   stream: true,
 });
 
-/**
- * Each provider's status, cached for five minutes unless `refresh` is set. With `projectId`
- * the skills include that project's own.
- */
 export const ProvidersGetStatuses = Rpc.make("providers.getStatuses", {
   payload: Schema.Struct({ refresh: Schema.optionalKey(Schema.Boolean), projectId: Schema.optionalKey(Schema.String) }),
   success: ProviderStatuses,
   error: UnframedError,
 });
 
-/** A signed, one-use upload path for one attachment, valid ten minutes. */
 export const AttachmentsCreateUploadUrl = Rpc.make("attachments.createUploadUrl", {
   payload: CreateUploadUrlInput,
   success: CreateUploadUrlAnswer,
   error: UnframedError,
 });
 
-/** Chats whose messages or final replies match the query, one row per chat (spec 08). */
 export const OrchestrationSearchThreads = Rpc.make("orchestration.searchThreads", {
   payload: SearchThreadsInput,
   success: SearchThreadsAnswer,
   error: UnframedError,
 });
 
-/** The pages and motions written in turns `fromTurnCount + 1` to `toTurnCount`, as unified diffs (spec 08). */
 export const OrchestrationGetTurnDiff = Rpc.make("orchestration.getTurnDiff", {
   payload: TurnDiffInput,
   success: TurnDiff,
   error: UnframedError,
 });
 
-/** The same from the chat's start. */
 export const OrchestrationGetFullThreadDiff = Rpc.make("orchestration.getFullThreadDiff", {
   payload: FullThreadDiffInput,
   success: TurnDiff,

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applySourceEdits, type InstanceDeclarations } from "../../src/html/sourceEdits.ts";
 
-/** Spec 20, task 27: `applySourceEdits` sets and removes an instance's declared variant and property attributes. */
 
 const PAGE = `<!doctype html><html><head></head><body><uf-button data-hf-id="hf-aaaa" kind="primary" label="Buy"></uf-button><p data-hf-id="hf-bbbb">Plain</p></body></html>`;
 
