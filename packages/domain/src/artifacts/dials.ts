@@ -1,12 +1,13 @@
 
-type DialEntry =
+type DialEntry = (
   | { readonly kind: "number"; readonly value: number }
   | { readonly kind: "boolean"; readonly value: boolean }
   | { readonly kind: "color"; readonly value: string }
   | { readonly kind: "text"; readonly value: string }
   | { readonly kind: "range"; readonly value: number; readonly min: number; readonly max: number; readonly step?: number }
   | { readonly kind: "select"; readonly value: string; readonly options: ReadonlyArray<string> }
-  | { readonly kind: "folder"; readonly of: DialSchema };
+  | { readonly kind: "folder"; readonly of: DialSchema }
+) & { readonly description?: string };
 
 export type DialSchema = { readonly [key: string]: DialEntry };
 
@@ -28,6 +29,11 @@ export function dialRules(): DialRules {
     typeof value === "object" && value !== null && !Array.isArray(value);
   const COLOUR = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/;
   const isNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+  const isDescribed = (value: unknown): value is { value: unknown; description: string } =>
+    isObject(value) &&
+    typeof value.description === "string" &&
+    Object.prototype.hasOwnProperty.call(value, "value") &&
+    Object.keys(value).every((key) => key === "value" || key === "description");
 
   type Built = { schema: Record<string, DialEntry>; dialkit: Record<string, unknown> } | { error: string };
 
@@ -37,7 +43,13 @@ export function dialRules(): DialRules {
     for (const key of Object.keys(config)) {
       const value = config[key];
       const at = `${path}.${key}`;
-      if (isNumber(value)) {
+      if (isDescribed(value)) {
+        const inner = build({ [key]: value.value }, path);
+        if ("error" in inner) return inner;
+        const text = value.description.trim();
+        schema[key] = text === "" ? inner.schema[key]! : { ...inner.schema[key]!, description: text };
+        dialkit[key] = inner.dialkit[key];
+      } else if (isNumber(value)) {
         schema[key] = { kind: "number", value };
         dialkit[key] = value;
       } else if (typeof value === "boolean") {

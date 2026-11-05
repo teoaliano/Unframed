@@ -1,10 +1,54 @@
-import { mergeDialValues, normaliseDials, type DialsAnnouncement } from "@unframed/domain";
+import { mergeDialValues, normaliseDials, type DialSchema, type DialsAnnouncement } from "@unframed/domain";
 import { createDialKit, createDialRoot } from "dialkit/vanilla";
 import "dialkit/vanilla/styles.css";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useEditor, type TLShapeId } from "tldraw";
+import { Tooltip, TooltipPopup } from "~/components/ui/tooltip";
 
 const WRITE_DELAY_MS = 400;
+const TIP_DELAY_MS = 400;
+
+const LABELS = ".dialkit-slider-label, .dialkit-labeled-control-label, .dialkit-text-label, .dialkit-color-label, .dialkit-select-label, .dialkit-pad-label, .dialkit-image-label";
+
+export interface DialChrome {
+  readonly toolbar: HTMLElement;
+  readonly below: HTMLElement;
+  readonly values: () => Readonly<Record<string, unknown>>;
+}
+
+const bodyOf = (folder: Element): Element | null => folder.querySelector(":scope > .dialkit-folder-content > .dialkit-folder-inner");
+
+const describeLabels = (body: Element | null, schema: DialSchema): void => {
+  if (!body) return;
+  const entries = Object.values(schema);
+  const controls = [...body.children];
+  if (controls.length !== entries.length) return;
+  entries.forEach((entry, index) => {
+    const control = controls[index]!;
+    const label = entry.kind === "folder" ? control.querySelector(":scope > .dialkit-folder-header .dialkit-folder-title") : control.querySelector(LABELS);
+    if (label instanceof HTMLElement && entry.description !== undefined) {
+      label.dataset.unframedDescription = entry.description;
+      const named = entry.kind === "folder" ? control.querySelector(":scope > .dialkit-folder-header > .dialkit-folder-header-top") : (label.closest("[role], button, label") ?? control);
+      named?.setAttribute("aria-description", entry.description);
+    }
+    if (entry.kind === "folder") describeLabels(bodyOf(control), entry.of);
+  });
+};
+
+const withChrome = (target: HTMLElement): DialChrome | undefined => {
+  const toolbar = target.querySelector<HTMLElement>(".dialkit-panel-toolbar");
+  const header = toolbar?.closest(".dialkit-panel-header");
+  if (!toolbar || !header) return undefined;
+  toolbar.querySelector<HTMLElement>(".dialkit-toolbar-primary")?.style.setProperty("display", "none");
+  const slot = document.createElement("div");
+  slot.dataset.dialToolbar = "";
+  slot.style.display = "contents";
+  toolbar.append(slot);
+  const below = document.createElement("div");
+  below.dataset.dialBelowHeader = "";
+  header.after(below);
+  return { toolbar: slot, below, values: () => ({}) };
+};
 
 interface DialControlsProps {
   readonly shapeId: TLShapeId;
@@ -12,9 +56,13 @@ interface DialControlsProps {
   readonly saved: Readonly<Record<string, unknown>> | undefined;
   readonly post: (values: unknown) => void;
   readonly onWrite?: (values: Readonly<Record<string, unknown>>) => void;
+  readonly onChrome?: (chrome: DialChrome | undefined) => void;
 }
 
-export const DialControls = ({ shapeId, announcement, saved, post, onWrite }: DialControlsProps) => {
+export const DialControls = ({ shapeId, announcement, saved, post, onWrite, onChrome }: DialControlsProps) => {
+  const chromeTo = useRef(onChrome);
+  chromeTo.current = onChrome;
+  const [tip, setTip] = useState<{ readonly anchor: HTMLElement; readonly text: string }>();
   const editor = useEditor();
   const writtenTo = useRef(onWrite);
   writtenTo.current = onWrite;
@@ -65,13 +113,46 @@ export const DialControls = ({ shapeId, announcement, saved, post, onWrite }: Di
       } catch {
       }
     }
+    let currentValues: Record<string, unknown> = merged;
+    describeLabels(target.querySelector(".dialkit-folder-root > .dialkit-folder-content > .dialkit-folder-inner"), normalised.schema);
+    const chrome = withChrome(target);
+    if (chrome) chromeTo.current?.({ ...chrome, values: () => currentValues });
+    let hovered: HTMLElement | undefined;
+    let waiting: ReturnType<typeof setTimeout> | undefined;
+    const leave = () => {
+      clearTimeout(waiting);
+      hovered = undefined;
+      setTip(undefined);
+    };
+    const move = (event: PointerEvent) => {
+      if (event.buttons !== 0) return leave();
+      const over = [...target.querySelectorAll<HTMLElement>("[data-unframed-description]")].find((label) => {
+        const box = label.getBoundingClientRect();
+        return box.width > 0 && event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom;
+      });
+      if (over === hovered) return;
+      leave();
+      if (!over) return;
+      hovered = over;
+      waiting = setTimeout(() => setTip({ anchor: over, text: over.dataset.unframedDescription ?? "" }), TIP_DELAY_MS);
+    };
+    target.addEventListener("pointermove", move, true);
+    target.addEventListener("pointerleave", leave);
+    target.addEventListener("pointerdown", leave, true);
     const stop = kit.subscribe((values) => {
+      currentValues = values as Record<string, unknown>;
       postNow.current(values);
       pending.current = values as Record<string, unknown>;
       clearTimeout(timer.current);
       timer.current = setTimeout(() => writeNow.current(), WRITE_DELAY_MS);
     }, false);
     return () => {
+      target.removeEventListener("pointermove", move, true);
+      target.removeEventListener("pointerleave", leave);
+      target.removeEventListener("pointerdown", leave, true);
+      leave();
+      if (chrome) chromeTo.current?.(undefined);
+      chrome?.below.remove();
       follow.disconnect();
       stop();
       writeNow.current();
@@ -81,5 +162,16 @@ export const DialControls = ({ shapeId, announcement, saved, post, onWrite }: Di
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the announced text, which the effect reads through `latest`
   }, [announced]);
 
-  return <div ref={host} data-testid="artifact-dials" />;
+  return (
+    <>
+      <div ref={host} data-testid="artifact-dials" />
+      <Tooltip open={tip !== undefined}>
+        {tip && (
+          <TooltipPopup anchor={tip.anchor} side="top" sideOffset={6} data-testid="parameter-description">
+            {tip.text}
+          </TooltipPopup>
+        )}
+      </Tooltip>
+    </>
+  );
 };
