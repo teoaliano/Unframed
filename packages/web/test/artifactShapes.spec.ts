@@ -1,5 +1,5 @@
 import { BRIDGE_TAG } from "@unframed/domain";
-import { openCanvas, roomRecords, settledRecord, shapeOnScreen, waitForRoom } from "./canvas.ts";
+import { emptyCanvasPoint, openCanvas, roomRecords, settledRecord, shapeOnScreen, waitForRoom } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 import { clickShape, composer, toolbar } from "./generation.ts";
 import { putRecords } from "./media.ts";
@@ -126,6 +126,35 @@ test("a selected page or motion moves by the six-dot handle in its toolbar, and 
     await page.keyboard.press("Escape");
     await expect(toolbar(page)).toHaveCount(0);
   }
+});
+
+test("several selected pages and motions keep the six-dot handle, which moves them all together as one undo step", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await filledArtifact(engine, { id: "shape:landing", kind: "page", ref: "150", at: { x: 420, y: 60 }, title: "Landing", html: "<h1>Hello</h1>" });
+  await filledArtifact(engine, { id: "shape:intro", kind: "motion", ref: "151", at: { x: -200, y: 60 }, size: { w: 300, h: 200 }, title: "Intro", html: "<h1>Intro</h1>" });
+  const ids = ["shape:landing", "shape:intro"];
+  const before = await Promise.all(ids.map(async (id) => (await settledRecord(engine, "default", id))!));
+  for (const id of ids) await expect(shapeOnScreen(page, id)).toBeVisible();
+  const empty = await emptyCanvasPoint(page);
+  await page.mouse.click(empty.x, empty.y);
+  await page.keyboard.press("ControlOrMeta+a");
+  const handle = toolbar(page).getByRole("button", { name: "Drag to move" });
+  await expect(handle).toBeVisible();
+  await expect(toolbar(page).getByRole("button")).toHaveText(["", "Agent", "Generate"]);
+  const grip = (await handle.boundingBox())!;
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + grip.width / 2 + 120, grip.y + grip.height / 2 + 40, { steps: 8 });
+  await page.mouse.up();
+  const zoom = await page.evaluate(() => (window as unknown as { editor?: { getZoomLevel(): number } }).editor?.getZoomLevel() ?? 1);
+  for (const [index, id] of ids.entries()) {
+    await expect.poll(async () => Math.round(((await settledRecord(engine, "default", id))!.x as number) - (before[index]!.x as number)), { timeout: 15_000 }).toBeGreaterThan(0);
+    const moved = (await settledRecord(engine, "default", id))!;
+    expect((moved.x as number) - (before[index]!.x as number)).toBeCloseTo(120 / zoom, 0);
+    expect((moved.y as number) - (before[index]!.y as number)).toBeCloseTo(40 / zoom, 0);
+  }
+  await page.keyboard.press("ControlOrMeta+z");
+  for (const [index, id] of ids.entries()) await expect.poll(async () => (await settledRecord(engine, "default", id))!.x).toBe(before[index]!.x);
 });
 
 test("a pinch over a selected page zooms the canvas, not the app, even for a page written before the fix", async ({ page, engine }) => {

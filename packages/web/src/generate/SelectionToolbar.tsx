@@ -273,6 +273,7 @@ const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "rec
   const Overlay = definition?.Overlay;
   return (
     <div className={barClass}>
+      {state.drag && <DragHandle />}
       <Button size="sm" disabled={busy || progress !== undefined} onClick={() => void generate()}>
         {label}
       </Button>
@@ -319,6 +320,7 @@ const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind
     case "generate":
       return (
         <div className={barClass}>
+          {state.drag && <DragHandle />}
           <span className={hintClass} data-testid="selection-hint">
             {state.hint}
           </span>
@@ -329,7 +331,12 @@ const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind
         </div>
       );
     case "agent":
-      return agent === null ? null : <div className={barClass}>{agent}</div>;
+      return agent === null && !state.drag ? null : (
+        <div className={barClass}>
+          {state.drag && <DragHandle />}
+          {agent}
+        </div>
+      );
   }
 };
 
@@ -367,7 +374,7 @@ export const SelectionToolbar = () => {
   const agent = agentTray ? <AgentButton onOpen={() => openComposer(editor, "agent")} /> : null;
 
   if (selectionKey === "") return null;
-  if (!expanded && (state === undefined || state.kind === "none" || (state.kind === "agent" && agent === null))) return null;
+  if (!expanded && (state === undefined || state.kind === "none" || (state.kind === "agent" && agent === null && !state.drag))) return null;
 
   return (
     <Floating target={target ?? lastTarget.current} hidden={hidden} expanded={expanded} framed={composer.mode !== "agent"}>

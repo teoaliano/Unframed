@@ -28,9 +28,11 @@ export type ToolbarState =
   | { readonly kind: "result"; readonly shapeId: string; readonly generate: boolean }
   | { readonly kind: "generating"; readonly shapeId: string }
   | { readonly kind: "open"; readonly shapeId: string }
-  | { readonly kind: "generate"; readonly hint: string }
-  | { readonly kind: "recipe"; readonly groupId: string; readonly name: string; readonly runs: RunsValue }
-  | { readonly kind: "agent" };
+  | { readonly kind: "generate"; readonly hint: string; readonly drag?: true }
+  | { readonly kind: "recipe"; readonly groupId: string; readonly name: string; readonly runs: RunsValue; readonly drag?: true }
+  | { readonly kind: "agent"; readonly drag?: true };
+
+const holdsFrame = (shape: ToolbarShape): boolean => (shape.kind === "page" || shape.kind === "motion" || shape.kind === "component") && !!shape.file;
 
 export const recipeGroupOf = (selected: ReadonlyArray<ToolbarShape>): ToolbarShape | undefined => {
   const groups = selected.filter((shape) => shape.kind === "group" && shape.recipe !== undefined);
@@ -66,12 +68,13 @@ export const toolbarState = (input: ToolbarInput): ToolbarState => {
       if (only.generating) return { kind: "generating", shapeId: only.id };
       return { kind: "result", shapeId: only.id, generate: input.usable };
     }
-    if ((only.kind === "page" || only.kind === "motion" || only.kind === "component") && only.file) return { kind: "open", shapeId: only.id };
+    if (holdsFrame(only)) return { kind: "open", shapeId: only.id };
   }
+  const drag = selected.some(holdsFrame) ? ({ drag: true } as const) : {};
   const recipeGroup = recipeGroupOf(selected);
-  if (recipeGroup?.recipe) return { kind: "recipe", groupId: recipeGroup.id, name: recipeGroup.ref ?? "", runs: recipeGroup.recipe.runs };
-  if (input.usable) return { kind: "generate", hint: selectionHint(selected, input.results) };
-  return { kind: "agent" };
+  if (recipeGroup?.recipe) return { kind: "recipe", groupId: recipeGroup.id, name: recipeGroup.ref ?? "", runs: recipeGroup.recipe.runs, ...drag };
+  if (input.usable) return { kind: "generate", hint: selectionHint(selected, input.results), ...drag };
+  return { kind: "agent", ...drag };
 };
 
 export const modelPart = (model: string): string => {
