@@ -1,22 +1,43 @@
 import type { Page } from "@playwright/test";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { copySelection, openCanvas, shapeOnScreen, waitForRoom } from "./canvas.ts";
+import { centre, copySelection, openCanvas, shapeOnScreen, toast, waitForRoom } from "./canvas.ts";
 import { audioBytes, audioShapes, expect, filledAudio, test } from "./audio.ts";
 import { clickShape } from "./generation.ts";
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 
-const pasteSound = (page: Page, name: string) =>
+const pasteSound = (page: Page, name: string, type = "audio/wav") =>
   page.evaluate(
-    async ({ base64, name }) => {
+    async ({ base64, name, type }) => {
       const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
       const transfer = new DataTransfer();
-      transfer.items.add(new File([bytes], name, { type: "audio/wav" }));
+      transfer.items.add(new File([bytes], name, { type }));
       document.dispatchEvent(new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }));
     },
-    { base64: audioBytes(1).toString("base64"), name },
+    { base64: audioBytes(1).toString("base64"), name, type },
   );
+
+test("a pasted sound file the board cannot play is refused, and Copy @ref copies an audio shape's name", async ({ page, audio }) => {
+  const { engine } = audio;
+  await openCanvas(page, engine);
+  await page.mouse.click(900, 500);
+  const refused = toast(page, "That sound file is not a sound file the board can play. Use MP3, WAV or M4A.");
+  await expect
+    .poll(async () => {
+      if ((await refused.count()) === 0) await pasteSound(page, "", "audio/ogg");
+      return refused.count();
+    }, { intervals: [1000] })
+    .toBeGreaterThan(0);
+  expect(await audioShapes(engine)).toHaveLength(0);
+
+  await filledAudio(engine, "shape:named", "narration", { x: 420, y: 150 }, "named.wav");
+  const at = await centre(shapeOnScreen(page, "shape:named").getByTestId("audio-title"));
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.click(at.x, at.y, { button: "right" });
+  await page.getByTestId("context-menu").getByRole("menuitem", { name: "Copy @narration" }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("@narration");
+});
 
 test("a pasted sound file lands at the pointer as an audio shape, or fills every selected audio shape; a nameless one is named by its type", async ({ page, audio }) => {
   const { engine } = audio;

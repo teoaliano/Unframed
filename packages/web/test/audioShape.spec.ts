@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { centre, emptyCanvasPoint, openCanvas, roomRecords, shapeOnScreen } from "./canvas.ts";
+import { centre, emptyCanvasPoint, openCanvas, roomRecords, shapeOnScreen, toast } from "./canvas.ts";
 import { audioBytes, audioShapes, expect, filledAudio, test } from "./audio.ts";
 import { clickShape, composer, openComposer, toolbar } from "./generation.ts";
 import { pngBytes } from "./images.ts";
@@ -153,4 +153,27 @@ test("audio in other media: the unused mark in every tray, nothing sent, Agent o
   const records = await roomRecords(engine, "default");
   expect(records.find((record) => record.id === "shape:line")!.parentId).toBe("page:page");
   expect(records.find((record) => record.id === "shape:photo")!.parentId).not.toBe("page:page");
+});
+
+test("sound the board cannot play, and sound over 25 MB, are refused with a toast and leave nothing", async ({ page, audio }) => {
+  const { engine } = audio;
+  await openCanvas(page, engine);
+  const point = await emptyCanvasPoint(page);
+  await dropFiles(page, point, [{ name: "song.ogg", mime: "audio/ogg", bytes: audioBytes(1) }]);
+  await expect(toast(page, "song.ogg is not a sound file the board can play. Use MP3, WAV or M4A.")).toBeVisible();
+  await dropFiles(page, point, [{ name: "take.flac", mime: "", bytes: audioBytes(1) }]);
+  await expect(toast(page, "take.flac is not a sound file the board can play. Use MP3, WAV or M4A.")).toBeVisible();
+  await dropFiles(page, point, [{ name: "long.wav", mime: "audio/wav", size: 26_214_401 }]);
+  await expect(toast(page, "Sound file is too large. Keep it under 25MB.")).toBeVisible();
+  expect(await audioShapes(engine)).toHaveLength(0);
+
+  await page.getByRole("button", { name: "Add" }).click();
+  await page.getByRole("menuitem", { name: "Audio" }).click();
+  await expect.poll(async () => (await audioShapes(engine)).length).toBe(1);
+  const [empty] = await audioShapes(engine);
+  const chooser = page.waitForEvent("filechooser");
+  await card(page, empty!.id).getByRole("button", { name: "Choose file" }).click();
+  await (await chooser).setFiles({ name: "song.ogg", mimeType: "audio/ogg", buffer: audioBytes(1) });
+  await expect(toast(page, "song.ogg is not a sound file the board can play. Use MP3, WAV or M4A.")).toHaveCount(2);
+  expect((await audioShapes(engine))[0]!.props.file).toBe("");
 });

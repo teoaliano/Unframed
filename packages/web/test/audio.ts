@@ -1,7 +1,9 @@
 import type { Locator, Page } from "@playwright/test";
 import { audioBytes, ELEVENLABS_KEY, elevenLabsRoutes, elevenModel, elevenVoice, type ElevenLabsScript, type SpeechRequest } from "../../engine/test/elevenLabsStub.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
-import { imageCatalogue, routes } from "../../engine/test/openRouterStub.ts";
+import { imageCatalogue, imageGeneration, routes, type ImageRequest } from "../../engine/test/openRouterStub.ts";
+import { chatCompletions, type ChatRequest } from "../../engine/test/textStub.ts";
+import { pngBytes } from "./images.ts";
 import { roomShapes, type AnyRecord } from "./canvas.ts";
 import { expect, startHostedEngine, test as base } from "./fixtures.ts";
 import { CATALOGUE, composer, KEY } from "./generation.ts";
@@ -24,6 +26,8 @@ export interface AudioEngine {
   readonly engine: TestEngine;
   readonly speech: SpeechRequest[];
   readonly script: ElevenLabsScript;
+  readonly images: ImageRequest[];
+  readonly chat: ChatRequest[];
 }
 
 export const startAudio = async (options: { readonly openRouter?: boolean; readonly elevenLabs?: boolean; readonly script?: ElevenLabsScript; readonly dataDir?: string } = {}): Promise<AudioEngine> => {
@@ -42,15 +46,17 @@ export const startAudio = async (options: { readonly openRouter?: boolean; reado
     ...options.script,
   };
   const live = elevenLabsRoutes(script);
+  const images = imageGeneration(() => ({ kind: "image", bytes: pngBytes(32, 32), cost: 0.01 }));
+  const chat = chatCompletions(() => ({ kind: "text", text: "An answer.", cost: 0.001 }));
   const lines = [...(options.openRouter === false ? [] : [`OPENROUTER_API_KEY=${KEY}`]), ...(options.elevenLabs === false ? [] : [`ELEVENLABS_API_KEY=${ELEVENLABS_KEY}`])];
   const engine = await startHostedEngine({
     ...(options.dataDir === undefined ? {} : { dataDir: options.dataDir }),
     dotenv: lines.map((line) => `${line}\n`).join(""),
-    stub: routes(imageCatalogue({ data: CATALOGUE })),
+    stub: routes(imageCatalogue({ data: CATALOGUE }), images.handler, chat.handler),
     elevenLabs: live.handler,
   });
   origin = engine.elevenLabs!.origin;
-  return { engine, speech: live.speech, script };
+  return { engine, speech: live.speech, script, images: images.requests, chat: chat.requests };
 };
 
 export const test = base.extend<{ audio: AudioEngine }>({
