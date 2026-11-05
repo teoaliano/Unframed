@@ -14,6 +14,7 @@ import {
 } from "@unframed/domain";
 import { ChevronDown, GripVertical, Play } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { useEditor, useValue, type TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
@@ -171,7 +172,7 @@ const RunRow = ({ shape, estimate, blocked }: { readonly shape: NodeShape; reado
   );
 };
 
-export const NodeEditor = ({ shape }: { readonly shape: NodeShape }) => {
+export const NodeEditor = ({ shape, footer }: { readonly shape: NodeShape; readonly footer: HTMLElement | null }) => {
   const editor = useEditor();
   const engine = useEngine();
   const settings = useSettings();
@@ -320,7 +321,7 @@ export const NodeEditor = ({ shape }: { readonly shape: NodeShape }) => {
         onChange={(next) => setTray(next)}
         onMenuOpen={onMenuOpen}
       />
-      <RunRow shape={shape} estimate={estimate} blocked={refused !== undefined || needsKey || status === "waiting"} />
+      {footer && createPortal(<RunRow shape={shape} estimate={estimate} blocked={refused !== undefined || needsKey || status === "waiting"} />, footer)}
       <VersionsStrip shape={shape} />
       <ModelDialog
         open={dialogOpen}

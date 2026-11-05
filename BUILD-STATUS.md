@@ -70,7 +70,7 @@ Specs 18 to 21 are merged to `main` through PRs #165, #172, #175, #177 and #178,
 | 13 version operations | engine | `packages/engine/test/nodeRuns.test.ts` ("versions") |
 | 14 agent tools | engine | `packages/engine/test/agentNodes.test.ts` |
 | 15 flow save | engine | `packages/engine/test/nodeWriters.test.ts` ("flow.save"); insert is the tab's, in task 24 |
-| 16 node shape util | browser | `packages/web/test/nodeCard.spec.ts` (summary and live, size limits, header kept while the body scrolls, label) |
+| 16 node shape util | browser | `packages/web/test/nodeCard.spec.ts` (summary and live, size limits, header kept while the body scrolls, label); `vercel.spec.ts` (default size with the provider switch and versions: header, status and Run row in the card while the middle scrolls) |
 | 17 node composer | browser | `packages/web/test/nodeCard.spec.ts` (instruction persists, Cmd+Enter, last-used values on a new node) |
 | 18 wire drawing | browser | `packages/web/test/wires.spec.ts`, `wireCopies.spec.ts` |
 | 19 role chips | browser | `packages/web/test/wires.spec.ts` |

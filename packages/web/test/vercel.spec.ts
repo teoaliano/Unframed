@@ -310,6 +310,7 @@ test("a node with both keys: its own provider switch, Vercel's default model and
     await expect(switcher.getByRole("radio")).toHaveText(["OpenRouter", "Vercel"]);
     await expect(switcher.getByRole("radio", { name: "OpenRouter" })).toHaveAttribute("aria-checked", "true");
     await expect(card.getByTestId("model-chip")).toHaveText("gpt-image-2");
+    await expect(card.getByTestId("node-model")).toHaveText("gpt-image-2");
 
     await switcher.getByRole("radio", { name: "Vercel" }).click();
     await expect(switcher.getByRole("radio", { name: "Vercel" })).toHaveAttribute("aria-checked", "true");
@@ -358,6 +359,46 @@ test("a chain of Vercel nodes is priced from Vercel's catalogue in the toolbar a
     await expect.poll(async () => (await nodeRecord(engine, "b"))?.props.currentVersionId ?? null).not.toBeNull();
     expect(vercel.calls.filter((call) => call.path === "/v1/images/generations" || call.path === "/v1/images/edits").map((call) => call.body.model)).toEqual(["bfl/flux-kontext-pro", "bfl/flux-2-pro", "bfl/flux-2-pro"]);
     expect(images).toHaveLength(0);
+  } finally {
+    await engine.dispose();
+  }
+});
+
+test("at the default size with both keys and versions, a node keeps its header, status and Run row in the card while the middle scrolls", async ({ page }) => {
+  const { engine } = await start();
+  try {
+    const version = (id: string, at: string) => ({ id, runId: `r-${id}`, chainId: null, batchId: `b-${id}`, runIndex: 1, status: "done", file: `${id}.png`, fingerprint: "x", createdAt: at });
+    await openCanvas(page, engine);
+    await seedBoard(engine, [
+      promptShape("fox", "201", "a lone red fox", { x: -440, y: 0 }),
+      nodeShape("n", "202", { medium: "image", provider: "vercel", instruction: "at dusk", versions: [version("c", "2026-11-05T03:00:00Z"), version("b", "2026-11-05T02:00:00Z"), version("a", "2026-11-05T01:00:00Z")], currentVersionId: "c" }, { x: 120, y: -60 }),
+      wireShape("w", "fox", "n", "prompt"),
+    ]);
+    await selectNode(page, "n");
+    const card = nodeCard(page, "n");
+    await expect(card.getByRole("radiogroup", { name: "Provider" })).toHaveCount(1);
+    await expect(card.getByTestId("node-estimate")).toHaveText("est. ~$0.040");
+    const body = card.getByTestId("node-body");
+    const footer = card.getByTestId("node-footer");
+    await expect(footer.getByTestId("node-run")).toBeVisible();
+    await expect(footer.getByTestId("node-estimate")).toBeVisible();
+    expect(await body.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+    const inCard = async () => {
+      const cardBox = (await card.boundingBox())!;
+      for (const id of ["node-medium", "node-status", "node-run", "node-estimate"]) {
+        const box = (await card.getByTestId(id).boundingBox())!;
+        expect(box.y, id).toBeGreaterThanOrEqual(cardBox.y);
+        expect(box.y + box.height, id).toBeLessThanOrEqual(cardBox.y + cardBox.height);
+      }
+      const bodyBox = (await body.boundingBox())!;
+      const run = (await card.getByTestId("node-run").boundingBox())!;
+      expect(run.y).toBeGreaterThanOrEqual(bodyBox.y + bodyBox.height);
+    };
+    await inCard();
+    await body.evaluate((element) => (element.scrollTop = element.scrollHeight));
+    await expect(card.getByTestId("node-version").first()).toBeInViewport();
+    await inCard();
+    expect((await nodeRecord(engine, "n"))!.props).toMatchObject({ w: 380, h: 360 });
   } finally {
     await engine.dispose();
   }

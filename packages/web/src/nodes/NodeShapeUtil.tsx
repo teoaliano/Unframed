@@ -1,18 +1,19 @@
 import { NODE_MIN_HEIGHT, NODE_WIDTH, type NodeShapeProps, type NodeVersion } from "@unframed/contracts";
-import { currentVersion, modelPart, nodeProvider, nodeStatus, providerLabel, readRef } from "@unframed/domain";
+import { currentVersion, modelPart, nodeCatalogueOf, nodeProvider, nodeStatus, providerLabel, readRef } from "@unframed/domain";
 import { AppWindow, AudioLines, FileText, Workflow } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo } from "tldraw";
 import { Badge } from "~/components/ui/badge";
 import { fileUrl } from "../canvas/assetStore.ts";
 import { ShapeLabel } from "../canvas/shapes/ShapeLabel.tsx";
 import { useCanvasProject, useEngine } from "../context.ts";
+import { useKnownCatalogue } from "../generate/catalogue.ts";
 import { noteRender } from "../fps/renders.ts";
 import { type NodeShape } from "./facts.ts";
 import { nodeStatusOf } from "./graph.ts";
 import { NodeEditor } from "./NodeEditor.tsx";
 import { nodeStartValues } from "./nodeTray.ts";
-import { newNodeProps, nodeFrames, nodeModel } from "./operations.ts";
+import { newNodeProps, nodeFrames } from "./operations.ts";
 
 const versionProps = T.object({
   id: T.string,
@@ -128,6 +129,7 @@ const NodeCard = ({ shape }: { readonly shape: NodeShape }) => {
   const editor = useEditor();
   const live = useValue("node live", () => editor.getOnlySelectedShapeId() === shape.id, [editor, shape.id]);
   const scroller = useRef<HTMLDivElement>(null);
+  const [footer, setFooter] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
     const element = scroller.current;
     if (!element || !live) return;
@@ -139,6 +141,9 @@ const NodeCard = ({ shape }: { readonly shape: NodeShape }) => {
     return () => element.removeEventListener("wheel", stop);
   }, [live]);
   const props = shape.props;
+  const engine = useEngine();
+  const list = useKnownCatalogue(engine, nodeCatalogueOf(props.medium), nodeProvider(props));
+  const shownModel = props.model !== "" ? props.model : (list?.default ?? "");
   const current = currentVersion({ ...props, id: shape.id } as never);
   const name = readRef(shape);
   return (
@@ -151,7 +156,7 @@ const NodeCard = ({ shape }: { readonly shape: NodeShape }) => {
             {MEDIUM_WORDS[props.medium]}
           </Badge>
           <Badge variant="outline" data-testid="node-model">
-            <span className="max-w-44 truncate">{modelPart(nodeModel(props)) || "Default model"}</span>
+            <span className="max-w-44 truncate">{modelPart(shownModel) || "Default model"}</span>
           </Badge>
           {providerLabel(nodeProvider(props)).map((label) => (
             <Badge key={label} variant="outline" data-testid="node-provider">
@@ -164,7 +169,7 @@ const NodeCard = ({ shape }: { readonly shape: NodeShape }) => {
       </div>
       <div ref={scroller} className={`flex min-h-0 flex-1 flex-col gap-2 px-2.5 pb-2.5 ${live ? "pointer-events-auto overflow-y-auto" : "overflow-hidden"}`} data-testid="node-body">
         {live ? (
-          <NodeEditor shape={shape} />
+          <NodeEditor shape={shape} footer={footer} />
         ) : (
           <>
             <div className="relative min-h-24 flex-1 overflow-hidden rounded-lg border bg-muted/40" data-testid="node-result">
@@ -178,6 +183,7 @@ const NodeCard = ({ shape }: { readonly shape: NodeShape }) => {
           </>
         )}
       </div>
+      {live && <div ref={setFooter} className="pointer-events-auto shrink-0 border-t px-2.5 py-2" data-testid="node-footer" />}
     </HTMLContainer>
   );
 };
