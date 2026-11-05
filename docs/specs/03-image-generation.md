@@ -190,11 +190,11 @@ Decided from the selection by a pure function in the web (tested at the domain s
 | nothing | no bar |
 | exactly one result (spec terms: a shape with a recipe) | Regenerate, Agent, Generate (primary, last), as on any usable selection; the result's line shows under it. Generate is left out when the result has nothing to send (a failed render, spec 04), and Regenerate is then the primary |
 | exactly one result still generating | the hint `Generating…`, Agent |
-| exactly one page or motion with a file | a six-dot drag handle, Editor, Render for a motion (spec 09), Parameters (spec 09), the kit mode (spec 19), Scale (spec 09), Agent (spec 09 connects Editor to its editor, Parameters to its canvas panel and Scale to the artifact's scale on the canvas) |
+| exactly one page, motion or component with a file | a six-dot drag handle, Editor, Render for a motion (spec 09), Parameters for a page or motion (spec 09), the kit mode (spec 19), Scale for a page or motion (spec 09; a component has no Scale), Agent (spec 09 connects Editor to its editor, Parameters to its canvas panel and Scale to the artifact's scale on the canvas). Scale is offered for one selected artifact only, never for a multi-selection |
 | usable | hint, Agent, Generate (primary, last) |
 | not usable | Agent only |
 
-Whenever the selection holds more than one shape and at least one of them is a page, motion or component with a file, the bar for it (usable, not usable or recipe) starts with the same six-dot drag handle, which moves every selected shape together, since a live artifact's frame takes the pointer and would otherwise leave the selection with nothing to drag by.
+Whenever the selection holds more than one shape and at least one of them is a page, motion or component with a file, the bar for it (usable, not usable or recipe) starts with the same six-dot drag handle, which moves every selected shape together, the pointer's move on the page converted into each shape's own parent space so a shape inside a group (rotated or not) follows the pointer, since a live artifact's frame takes the pointer and would otherwise leave the selection with nothing to drag by.
 
 The hint is `@<name>` when the selection is exactly one group, otherwise `N selected` where N counts the selected shapes as tldraw counts them (a group is one). When the selection is exactly the members of one batch (spec 05), the hint is `4 images · $0.6720`.
 

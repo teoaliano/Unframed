@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { until, scriptFolder, startAgentEngine, type AgentEngine } from "./agent.ts";
@@ -161,6 +161,50 @@ describe("artifact snapshots", () => {
     await writeFile(join(agent.folder, "unrelated.js"), "1");
     await new Promise((resolve) => setTimeout(resolve, 2000));
     expect(stream.values).toHaveLength(4);
+  });
+
+  it("tells the app when an artifact's file or a file it loads changes on disk, once per change, and not for an unrelated file", async () => {
+    const agent = await startSnapshotting("no-chrome");
+    await writeFile(join(agent.folder, "3-app.html"), `<!doctype html><script src="app.js"></script>`);
+    await writeFile(join(agent.folder, "app.js"), "1");
+    const changes = agent.rpc.subscribe("artifact.fileChanges", { project: "board" });
+    await seed(agent, [pageShape("pg1", "100", { file: "3-app.html" }), pageShape("pg2", "101", { file: "1-landing.html" }, { y: 500 })]);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await writeFile(join(agent.folder, "app.js"), "2");
+    await until(async () => changes.values.length === 1, "the change to the script");
+    expect(changes.values[0]).toEqual({ file: "3-app.html", at: expect.any(Number) });
+    await writeFile(join(agent.folder, "1-landing.html"), "<h1>Edited</h1>");
+    await until(async () => changes.values.length === 2, "the change to the other page");
+    expect(changes.values[1]).toMatchObject({ file: "1-landing.html" });
+    await writeFile(join(agent.folder, "unrelated.js"), "1");
+    await writeFile(join(agent.folder, "nested.js"), "1");
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(changes.values).toHaveLength(2);
+  });
+
+  it("stops following a project's files once it closes, and follows them in the project's new folder after the output folder changes", async () => {
+    const agent = await startSnapshotting();
+    await writeFile(join(agent.folder, "3-app.html"), `<!doctype html><script src="app.js"></script>`);
+    await writeFile(join(agent.folder, "app.js"), "1");
+    await seed(agent, [pageShape("pg1", "100", { file: "3-app.html" })]);
+    await until(async () => (await snapshotFiles(agent)).length === 1, "the first snapshot");
+
+    const moved = join(agent.engine.dataDir, "elsewhere");
+    await mkdir(join(moved, "board"), { recursive: true });
+    await writeFile(join(moved, "board", "3-app.html"), `<!doctype html><script src="app.js"></script>`);
+    await writeFile(join(moved, "board", "app.js"), "1");
+    await agent.rpc.call("settings.update", { outputDir: moved });
+    const stream = agent.rpc.subscribe("artifact.snapshots", { project: "board" });
+    await agent.rpc.call("testCanvas.read", { project: "board" });
+    await seed(agent, [pageShape("pg1", "100", { file: "3-app.html" })]);
+    await until(async () => stream.values.length === 1, "the first snapshot in the new folder");
+
+    await writeFile(join(agent.folder, "app.js"), "2");
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    expect(stream.values).toHaveLength(1);
+
+    await writeFile(join(moved, "board", "app.js"), "2");
+    await until(async () => stream.values.length === 2, "the snapshot after the script changed in the new folder");
   });
 
   it("renders again, on opening a project, a snapshot older than its page or a file the page loads", async () => {

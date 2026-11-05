@@ -1,4 +1,4 @@
-import { isArtifactScale } from "@unframed/contracts";
+import { ARTIFACT_SCALE_MAX, isArtifactScale } from "@unframed/contracts";
 import { projectSlug } from "../slug.ts";
 import { ADD_PARAMETER_TEMPLATE } from "./prompts.ts";
 
@@ -170,19 +170,28 @@ export const snapshotFits = (snapshot: { readonly w: number; readonly h: number 
   Math.abs(shape.w - snapshot.w) <= snapshot.w * 0.1 && Math.abs(shape.h - snapshot.h) <= snapshot.h * 0.1;
 
 export const ARTIFACT_SCALES = [0.25, 0.5, 0.75, 1, 1.5, 2] as const;
-export const artifactScale = (props: { readonly scale?: unknown }): number => (isArtifactScale(props.scale) ? props.scale : 1);
+export const ARTIFACT_LAYOUT_MAX = 4096;
 
-export const artifactLayoutSize = (props: { readonly w: number; readonly h: number; readonly scale?: unknown }): { w: number; h: number } => {
+interface Scaled {
+  readonly w: number;
+  readonly h: number;
+  readonly scale?: unknown;
+}
+
+export const cappedArtifactScale = (props: Scaled): number =>
+  Math.min(ARTIFACT_SCALE_MAX, Math.max(isArtifactScale(props.scale) ? props.scale : 1, props.w / ARTIFACT_LAYOUT_MAX, props.h / ARTIFACT_LAYOUT_MAX));
+
+export const artifactScale = (props: Scaled): number => cappedArtifactScale(props);
+
+export const artifactLayoutSize = (props: Scaled): { w: number; h: number } => {
   const scale = artifactScale(props);
   return { w: props.w / scale, h: props.h / scale };
 };
 
-export const rescaledArtifact = (
-  props: { readonly w: number; readonly h: number; readonly scale?: unknown },
-  next: number,
-): { w: number; h: number; scale: number | undefined } => {
+export const scaledArtifactProps = <P extends Scaled>(props: P, next: number): Omit<P, "scale"> & { w: number; h: number; scale?: number } => {
   const layout = artifactLayoutSize(props);
-  return { w: layout.w * next, h: layout.h * next, scale: next === 1 ? undefined : next };
+  const { scale: _scale, ...rest } = props;
+  return { ...rest, w: layout.w * next, h: layout.h * next, ...(next === 1 ? {} : { scale: next }) };
 };
 
 const REFERENCE_PATTERNS = [
@@ -201,9 +210,8 @@ const localPath = (raw: string): string | undefined => {
   } catch {
     path = bare;
   }
-  const parts = path.split("/").filter((part) => part !== "" && part !== ".");
-  if (parts.length === 0 || parts.includes("..")) return undefined;
-  return parts.join("/");
+  const name = path.replace(/^(\.\/)+/, "");
+  return name === "" || name === "." || name === ".." || name.includes("/") || name.includes("\\") ? undefined : name;
 };
 
 export const artifactReferences = (html: string): string[] => {

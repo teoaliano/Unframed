@@ -1,9 +1,9 @@
 import { BRIDGE_TAG } from "@unframed/domain";
-import { emptyCanvasPoint, openCanvas, roomRecords, settledRecord, shapeOnScreen, waitForRoom } from "./canvas.ts";
+import { centre, emptyCanvasPoint, openCanvas, roomRecords, settledRecord, shapeOnScreen, waitForRoom } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 import { clickShape, composer, toolbar } from "./generation.ts";
-import { putRecords } from "./media.ts";
-import { artifactShape, filledArtifact, frameOf } from "./artifacts.ts";
+import { groupRecord, putRecords } from "./media.ts";
+import { artifactShape, filledArtifact, frameOf, writeProjectFile } from "./artifacts.ts";
 
 test("the add menu makes empty pages and motions of 480 by 320 with their kind tab and icon, and no button", async ({ page, engine }) => {
   await openCanvas(page, engine);
@@ -155,6 +155,36 @@ test("several selected pages and motions keep the six-dot handle, which moves th
   }
   await page.keyboard.press("ControlOrMeta+z");
   for (const [index, id] of ids.entries()) await expect.poll(async () => (await settledRecord(engine, "default", id))!.x).toBe(before[index]!.x);
+});
+
+test("the drag handle moves pages inside a rotated group with the pointer, converting the move into the group's space", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await putRecords(engine, [{ ...groupRecord("shape:turned", "turned", { x: 900, y: 120 }, { w: 300, h: 560 }), rotation: Math.PI / 2 }]);
+  await writeProjectFile(engine, "inner-one.html", "<h1>One</h1>");
+  await writeProjectFile(engine, "inner-two.html", "<h1>Two</h1>");
+  await putRecords(engine, [
+    { ...artifactShape({ id: "shape:one", kind: "page", ref: "151", at: { x: 20, y: 20 }, size: { w: 200, h: 140 }, title: "One", file: "inner-one.html" }), parentId: "shape:turned" },
+    { ...artifactShape({ id: "shape:two", kind: "page", ref: "152", at: { x: 20, y: 300 }, size: { w: 200, h: 140 }, title: "Two", file: "inner-two.html" }), parentId: "shape:turned" },
+  ]);
+  const ids = ["shape:one", "shape:two"];
+  for (const id of ids) await expect(shapeOnScreen(page, id)).toBeVisible();
+  const centres = async () => Promise.all(ids.map((id) => centre(shapeOnScreen(page, id).locator("[data-testid='artifact-card']"))));
+  const before = await centres();
+  await page.mouse.click(before[1]!.x, before[1]!.y);
+  await page.keyboard.press("ControlOrMeta+a");
+  const handle = toolbar(page).getByRole("button", { name: "Drag to move" });
+  await expect(handle).toBeVisible();
+  await expect(toolbar(page).getByRole("button", { name: "Editor" })).toHaveCount(0);
+  const grip = (await handle.boundingBox())!;
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + grip.width / 2 + 60, grip.y + grip.height / 2 + 40, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => (await centres()).map((point, index) => [Math.round(point.x - before[index]!.x), Math.round(point.y - before[index]!.y)])).toEqual([
+    [60, 40],
+    [60, 40],
+  ]);
+  for (const id of ids) expect((await settledRecord(engine, "default", id))?.parentId).toBe("shape:turned");
 });
 
 test("a selected page scales on the canvas from its toolbar, keeping its layout size, and one undo takes it back", async ({ page, engine }) => {

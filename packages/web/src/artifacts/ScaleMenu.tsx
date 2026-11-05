@@ -1,5 +1,5 @@
 import type { ArtifactShapeProps } from "@unframed/contracts";
-import { ARTIFACT_SCALES, artifactScale, rescaledArtifact } from "@unframed/domain";
+import { ARTIFACT_SCALES, artifactScale, scaledArtifactProps } from "@unframed/domain";
 import { ChevronDown, Scaling } from "lucide-react";
 import { useEditor, useValue, type Editor, type TLShape, type TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
@@ -13,15 +13,16 @@ export const setArtifactScale = (editor: Editor, shapeId: TLShapeId, next: numbe
   if (!shape) return;
   const props = shape.props as ArtifactShapeProps;
   if (artifactScale(props) === next) return;
-  const sized = rescaledArtifact(props, next);
-  const { scale: _scale, ...rest } = props;
   editor.markHistoryStoppingPoint("artifact scale");
-  editor.store.put([{ ...shape, props: { ...rest, w: sized.w, h: sized.h, ...(sized.scale === undefined ? {} : { scale: sized.scale }) } } as TLShape]);
+  editor.store.put([{ ...shape, props: scaledArtifactProps(props, next) } as TLShape]);
 };
 
 export const ScaleMenu = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   const editor = useEditor();
-  const scale = useValue("artifact scale", () => artifactScale((editor.getShape(shapeId)?.props ?? {}) as { scale?: unknown }), [editor, shapeId]);
+  const scale = useValue("artifact scale", () => {
+    const props = editor.getShape(shapeId)?.props as ArtifactShapeProps | undefined;
+    return props === undefined ? 1 : artifactScale(props);
+  }, [editor, shapeId]);
   return (
     <Menu>
       <Tip label="Scale on the canvas">

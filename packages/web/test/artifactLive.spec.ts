@@ -1,9 +1,9 @@
 import type { Page } from "@playwright/test";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
-import { centre, shapeOnScreen } from "./canvas.ts";
+import { centre, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { expect, startHostedEngine, test } from "./fixtures.ts";
 import { clickShape } from "./generation.ts";
-import { filledArtifact } from "./artifacts.ts";
+import { filledArtifact, insideFrame, writeProjectFile } from "./artifacts.ts";
 
 const frames = (page: Page) => page.locator(".tl-shape iframe[data-artifact-frame]");
 
@@ -153,4 +153,29 @@ test("an artifact that is not live shows its snapshot once the engine has made o
   } finally {
     await engine.dispose();
   }
+});
+
+test("a live page reloads when its own file or a file it loads changes on disk, keeping its file", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await writeProjectFile(engine, "live-app.js", "document.getElementById('out').textContent = 'Script one';");
+  const { file } = await filledArtifact(engine, {
+    id: "shape:live",
+    kind: "page",
+    ref: "150",
+    at: { x: 420, y: 60 },
+    title: "Live",
+    html: `<!doctype html><html><body><h1 id="out">Loading</h1><script src="live-app.js?v=1"></script></body></html>`,
+  });
+  await clickShape(page, "shape:live");
+  const heading = insideFrame(page, "shape:live").getByRole("heading");
+  await expect(heading).toHaveText("Script one");
+
+  await writeProjectFile(engine, "live-app.js", "document.getElementById('out').textContent = 'Script two';");
+  await expect(heading).toHaveText("Script two", { timeout: 10_000 });
+
+  await writeProjectFile(engine, file, `<!doctype html><html><body><h1 id="out">Edited in place</h1></body></html>`);
+  await expect(heading).toHaveText("Edited in place", { timeout: 10_000 });
+  await writeProjectFile(engine, "unrelated.js", "1");
+  await page.waitForTimeout(1500);
+  await expect(heading).toHaveText("Edited in place");
 });

@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { TLRecord } from "@tldraw/tlschema";
-import type { ArtifactImage, ArtifactSnapshot, ComponentPins as ComponentPinsItem, ComponentUpdate, MotionTimelineReading, OffTokenFound, RenderStatus, SourceEdit, SourceTreeElement } from "@unframed/contracts";
+import type { ArtifactFileChange, ArtifactImage, ArtifactSnapshot, ComponentPins as ComponentPinsItem, ComponentUpdate, MotionTimelineReading, OffTokenFound, RenderStatus, SourceEdit, SourceTreeElement } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
 import { projectSlug, shapeKind } from "@unframed/domain";
 import { motionTimeline } from "@unframed/domain/motion";
@@ -54,6 +54,7 @@ export class Artifacts extends Context.Service<
     }) => Effect.Effect<{ id: string; status: "queued"; placeholder: string }, UnframedError>;
     readonly renderStatus: (project: string, id: string) => Effect.Effect<RenderStatus, UnframedError>;
     readonly snapshots: (project: string) => Stream.Stream<ArtifactSnapshot, UnframedError>;
+    readonly fileChanges: (project: string) => Stream.Stream<ArtifactFileChange, UnframedError>;
     readonly timeline: (project: string, file: string) => Effect.Effect<MotionTimelineReading, UnframedError>;
     readonly componentPins: (project: string) => Stream.Stream<ComponentPinsItem, UnframedError>;
     readonly componentCopy: (input: { project: string; file: string; from?: string | undefined }) => Effect.Effect<{ file: string; tag: string }, UnframedError>;
@@ -102,26 +103,38 @@ export const artifactsLayer = Layer.effect(
       previewPort: (yield* settings.view).previewPort,
       publish: (project, snapshot) => void run(PubSub.publish(written, { project, snapshot })),
     });
+    const fileChanges = yield* PubSub.unbounded<{ readonly project: string; readonly change: ArtifactFileChange }>();
     yield* rooms.afterOpen((project, room) => {
       snapshots.opened(project, room.read(), kitOf(room.read()));
+      let closed = false;
+      let unwatch: (() => void) | undefined;
+      void run(
+        openProjects.register(
+          project,
+          "artifact file watch",
+          Effect.sync(() => {
+            closed = true;
+            unwatch?.();
+            snapshots.forget(project);
+          }),
+        ),
+      );
+      const announced = new Map<string, number>();
       void media.folder(project).then((folder) => {
-        const unwatch =
-          folder === undefined || snapshotRenderer === undefined
-            ? () => undefined
-            : watchFolder(folder, (names) => {
-                const records = room.read();
-                void snapshots.changed(project, names, records, kitOf(records)).catch((error: unknown) => logError(`snapshots after a file change in ${project}: ${errorText(error)}`));
-              });
-        void run(
-          openProjects.register(
-            project,
-            "artifact snapshots",
-            Effect.sync(() => {
-              unwatch();
-              snapshots.forget(project);
-            }),
-          ),
-        );
+        if (closed || folder === undefined) return;
+        unwatch = watchFolder(folder, (names) => {
+          const records = room.read();
+          snapshots.filesChanged(project, names, records, kitOf(records)).then(
+            (changes) => {
+              for (const change of changes) {
+                if (closed || change.at <= (announced.get(change.file) ?? -Infinity)) continue;
+                announced.set(change.file, change.at);
+                void run(PubSub.publish(fileChanges, { project, change }));
+              }
+            },
+            (error: unknown) => logError(`artifacts after a file change in ${project}: ${errorText(error)}`),
+          );
+        });
       });
     });
     yield* rooms.afterCommit((project, change, room) => {
@@ -259,6 +272,16 @@ export const artifactsLayer = Layer.effect(
                 Stream.filter((item) => item.project === slug),
                 Stream.map((item) => item.snapshot),
               ),
+            );
+          }),
+        ),
+      fileChanges: (project) =>
+        Stream.unwrap(
+          Effect.map(PubSub.subscribe(fileChanges), (subscription) => {
+            const slug = projectSlug(project);
+            return Stream.fromSubscription(subscription).pipe(
+              Stream.filter((item) => item.project === slug),
+              Stream.map((item) => item.change),
             );
           }),
         ),

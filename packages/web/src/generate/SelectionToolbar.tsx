@@ -129,7 +129,7 @@ const hintClass = "px-1 text-xs text-muted-foreground";
 
 const DragHandle = () => {
   const editor = useEditor();
-  const drag = useRef<{ readonly from: { x: number; y: number }; readonly shapes: ReadonlyArray<{ id: TLShapeId; type: string; x: number; y: number }> }>(undefined);
+  const drag = useRef<{ readonly from: { x: number; y: number }; readonly shapes: ReadonlyArray<{ id: TLShapeId; type: string; page: { x: number; y: number } }> }>(undefined);
   return (
     <Tip label="Drag to move" side="top">
       <Button
@@ -144,7 +144,7 @@ const DragHandle = () => {
           editor.markHistoryStoppingPoint("drag handle");
           drag.current = {
             from: editor.screenToPage({ x: event.clientX, y: event.clientY }),
-            shapes: editor.getSelectedShapes().map((shape) => ({ id: shape.id, type: shape.type, x: shape.x, y: shape.y })),
+            shapes: editor.getSelectedShapes().map((shape) => ({ id: shape.id, type: shape.type, page: editor.getShapePageTransform(shape).point() })),
           };
         }}
         onPointerMove={(event) => {
@@ -153,7 +153,12 @@ const DragHandle = () => {
           const now = editor.screenToPage({ x: event.clientX, y: event.clientY });
           const dx = now.x - start.from.x;
           const dy = now.y - start.from.y;
-          editor.updateShapes(start.shapes.map((shape) => ({ id: shape.id, type: shape.type, x: shape.x + dx, y: shape.y + dy })) as Parameters<typeof editor.updateShapes>[0]);
+          editor.updateShapes(
+            start.shapes.map((shape) => {
+              const local = editor.getPointInParentSpace(shape.id, { x: shape.page.x + dx, y: shape.page.y + dy });
+              return { id: shape.id, type: shape.type, x: local.x, y: local.y };
+            }) as Parameters<typeof editor.updateShapes>[0],
+          );
         }}
         onPointerUp={() => {
           drag.current = undefined;

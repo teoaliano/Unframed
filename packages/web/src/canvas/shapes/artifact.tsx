@@ -1,5 +1,5 @@
-import type { ArtifactShapeProps } from "@unframed/contracts";
-import { artifactLayoutSize, artifactScale, artifactTitle, readRef, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
+import { artifactScaleProp, type ArtifactShapeProps } from "@unframed/contracts";
+import { artifactScale, artifactTitle, readRef, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
 import { AppWindow, Clapperboard, Component } from "lucide-react";
 import { useCallback, useEffect, type ReactNode } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape, type TLShapeId } from "tldraw";
@@ -7,7 +7,7 @@ import { ArtifactFrame, type ArtifactFrameProps, type EditMessage } from "../../
 import { DropOutline, onFrameEdit } from "../../artifacts/imageDrop.tsx";
 import { ProblemLine, RenderRow } from "../../artifacts/RenderRow.tsx";
 import { Button } from "~/components/ui/button";
-import { snapshotsOf, snapshotUrl, stillOf } from "../../artifacts/snapshots.ts";
+import { fileChangesOf, snapshotsOf, snapshotUrl, stillOf } from "../../artifacts/snapshots.ts";
 import { kitOf } from "../../artifacts/kit.ts";
 import { artifactsOf, forgetEdit, forgetFrame, hearFrame, isInteractive, isLive, previewPort, reachEdit, reachFrame } from "../../artifacts/state.ts";
 import { Tip } from "../../chrome/ui.tsx";
@@ -32,7 +32,7 @@ const artifactProps: RecordProps<TLShape<"page"> | TLShape<"motion">> = {
   fileName: T.string,
   dials: T.dict(T.string, T.jsonValue).optional(),
   mode: T.string.optional(),
-  scale: T.number.optional(),
+  scale: artifactScaleProp.optional(),
 };
 
 const componentProps: RecordProps<TLShape<"component">> = { w: T.nonZeroNumber, h: T.nonZeroNumber, file: T.string, title: T.string, fileName: T.string, tag: T.string };
@@ -126,8 +126,9 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
   const kit = useValue("project kit", () => kitOf(editor), [editor]);
   const title = artifactTitle(props);
   const name = nameOf(shape);
+  const changedAt = useValue("artifact file change", () => (live ? fileChangesOf(project).get().get(props.file) : undefined), [project, props.file, live]);
   const scale = kind === "component" ? 1 : artifactScale(props);
-  const layout = artifactLayoutSize({ w: props.w, h: props.h, scale });
+  const layout = { w: props.w / scale, h: props.h / scale };
   const updates = useValue("component updates", () => updateTagsOf(editor, project, props.file).join(","), [editor, project, props.file]);
   return (
     <>
@@ -135,7 +136,7 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
         <ShapeLabel shapeId={shape.id} kind={kind} name={readRef(shape)} width={props.w} text={name !== undefined ? `@${name}` : title} end={kind !== "component" && updates !== "" ? <UpdatesBadge shapeId={shape.id} /> : undefined} />
         {live && port !== undefined ? (
           <Scaled scale={scale} layout={layout}>
-            <CanvasFrame key={props.file} shapeId={shape.id} project={project} kind={kind} file={props.file} previewPort={port} dials={props.dials} kit={kit} mode={props.mode} interactive={interactive} lazy />
+            <CanvasFrame key={`${props.file} ${changedAt ?? ""}`} shapeId={shape.id} project={project} kind={kind} file={props.file} previewPort={port} dials={props.dials} kit={kit} mode={props.mode} interactive={interactive} lazy />
           </Scaled>
         ) : (
           <Still shape={shape} title={title} />

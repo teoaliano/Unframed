@@ -247,6 +247,9 @@ describe("canvas_write batches", () => {
     expect(back.put[0]!.props).toMatchObject({ w: 640, h: 360 });
     expect(back.put[0]!.props).not.toHaveProperty("scale");
     expect(error([{ type: "update", id: "m1", props: { scale: 9 } }], [motion("m1", "Intro")])).toBe("update: scale must be a number from 0.1 to 4");
+    const tiny = prepareBatch([{ type: "update", id: "m1", props: { w: 480, h: 270, scale: 0.1 } }], context([motion("m1", "Intro")]));
+    if (!tiny.ok) throw new Error(tiny.error);
+    expect(tiny.put[0]!.props!.scale).toBeCloseTo(480 / 4096, 10);
   });
 
   it("keeps media's aspect on resize", () => {

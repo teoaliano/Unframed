@@ -28,9 +28,9 @@ export type ToolbarState =
   | { readonly kind: "result"; readonly shapeId: string; readonly generate: boolean }
   | { readonly kind: "generating"; readonly shapeId: string }
   | { readonly kind: "open"; readonly shapeId: string }
-  | { readonly kind: "generate"; readonly hint: string; readonly drag?: true }
-  | { readonly kind: "recipe"; readonly groupId: string; readonly name: string; readonly runs: RunsValue; readonly drag?: true }
-  | { readonly kind: "agent"; readonly drag?: true };
+  | { readonly kind: "generate"; readonly hint: string; readonly drag: boolean }
+  | { readonly kind: "recipe"; readonly groupId: string; readonly name: string; readonly runs: RunsValue; readonly drag: boolean }
+  | { readonly kind: "agent"; readonly drag: boolean };
 
 const holdsFrame = (shape: ToolbarShape): boolean => (shape.kind === "page" || shape.kind === "motion" || shape.kind === "component") && !!shape.file;
 
@@ -70,11 +70,11 @@ export const toolbarState = (input: ToolbarInput): ToolbarState => {
     }
     if (holdsFrame(only)) return { kind: "open", shapeId: only.id };
   }
-  const drag = selected.some(holdsFrame) ? ({ drag: true } as const) : {};
+  const drag = selected.length > 1 && selected.some(holdsFrame);
   const recipeGroup = recipeGroupOf(selected);
-  if (recipeGroup?.recipe) return { kind: "recipe", groupId: recipeGroup.id, name: recipeGroup.ref ?? "", runs: recipeGroup.recipe.runs, ...drag };
-  if (input.usable) return { kind: "generate", hint: selectionHint(selected, input.results), ...drag };
-  return { kind: "agent", ...drag };
+  if (recipeGroup?.recipe) return { kind: "recipe", groupId: recipeGroup.id, name: recipeGroup.ref ?? "", runs: recipeGroup.recipe.runs, drag };
+  if (input.usable) return { kind: "generate", hint: selectionHint(selected, input.results), drag };
+  return { kind: "agent", drag };
 };
 
 export const modelPart = (model: string): string => {

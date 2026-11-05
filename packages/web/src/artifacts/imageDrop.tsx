@@ -80,7 +80,7 @@ export const installImageDrop = (editor: Editor, engine: EngineConnection, proje
         if (state.dropHit.get()?.shapeId === id) state.dropHit.set(undefined);
         continue;
       }
-      const scale = artifactScale(editor.getShape(id)?.props as { scale?: unknown });
+      const scale = artifactScale(editor.getShape(id)!.props as ArtifactShapeProps);
       postTo(editor, id, { type: "unframed:edit:hitTest", x: (point.x - bounds.x) / scale, y: (point.y - bounds.y) / scale });
     }
   };

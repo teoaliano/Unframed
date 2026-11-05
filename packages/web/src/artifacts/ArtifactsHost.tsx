@@ -11,7 +11,7 @@ import { RenderButton } from "./render.tsx";
 import { artifactsOf, installFrameHold, installTuningWatch, previewPort } from "./state.ts";
 import { installImageDrop } from "./imageDrop.tsx";
 import { watchComponentPins } from "./componentPins.ts";
-import { watchSnapshots } from "./snapshots.ts";
+import { watchFileChanges, watchSnapshots } from "./snapshots.ts";
 import { ScaleMenu } from "./ScaleMenu.tsx";
 
 const ArtifactEditor = lazy(() => import("./editor/ArtifactEditor.tsx").then((module) => ({ default: module.ArtifactEditor })));
@@ -58,6 +58,7 @@ export const ArtifactsHost = () => {
       installFrameHold(editor),
       installImageDrop(editor, engine, project),
       watchSnapshots(engine, project),
+      watchFileChanges(engine, project),
       watchComponentPins(engine, project),
       registerSlot("openArtifact", openArtifactEditor),
       registerSlot("renderButton", RenderButton),

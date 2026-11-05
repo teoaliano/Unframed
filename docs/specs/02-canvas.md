@@ -143,7 +143,7 @@ Unframed data lives in tldraw's own fields where tldraw has one, and in `meta` o
 | image | `image` | `meta.ref: string`; `props.assetId` null when empty |
 | video | `video` | `meta.ref: string`; `props.assetId` null when empty |
 | group | `frame` | `props.name` IS the ref. No `meta.ref`, because a second string would drift from the name |
-| page | `page` (custom) | `meta.ref: string`; `props: { w, h, file: string, title: string, fileName: string, dials?: Record<string, unknown> }`. `file` is `''` when empty, `fileName` is the original name of a dropped or uploaded file (`''` otherwise), `dials` is absent until spec 09 stores tuned values |
+| page | `page` (custom) | `meta.ref: string`; `props: { w, h, file: string, title: string, fileName: string, dials?: Record<string, unknown>, mode?: string, lockedElements?: string[], scale?: number }`. `file` is `''` when empty, `fileName` is the original name of a dropped or uploaded file (`''` otherwise), `dials` is absent until spec 09 stores tuned values, `mode` is spec 19's kit mode, `lockedElements` spec 18's locks, and `scale` spec 09's scale on the canvas (0.1 to 4, absent meaning 1; `w` and `h` stay the size on the canvas) |
 | motion | `motion` (custom) | same as page |
 | mark | any other tldraw shape | none |
 

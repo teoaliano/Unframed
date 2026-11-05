@@ -93,7 +93,7 @@ export const ARTIFACT_SCALE_MAX = 4;
 export const isArtifactScale = (scale: unknown): scale is number =>
   typeof scale === "number" && Number.isFinite(scale) && scale >= ARTIFACT_SCALE_MIN && scale <= ARTIFACT_SCALE_MAX;
 
-const artifactScaleProp = T.number.check((scale) => {
+export const artifactScaleProp = T.number.check((scale) => {
   if (!isArtifactScale(scale)) throw new T.ValidationError(`Expected a scale from ${ARTIFACT_SCALE_MIN} to ${ARTIFACT_SCALE_MAX}, got ${JSON.stringify(scale)}`);
 });
 
