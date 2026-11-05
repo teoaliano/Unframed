@@ -123,7 +123,7 @@ export const VersionsStrip = ({ shape }: { readonly shape: NodeShape }) => {
           <VersionView version={current} medium={medium} />
         </div>
       )}
-      <ol className="m-0 flex list-none gap-2 overflow-x-auto p-0 pt-1.5 pr-1.5" aria-label="Versions" data-testid="node-versions">
+      <ol className="m-0 flex list-none gap-2.5 overflow-x-auto p-0 pt-2.5 pr-2" aria-label="Versions" data-testid="node-versions">
         {versions.map((version, index) => (
           <Thumb key={version.id} shape={shape} version={version} index={versions.length - 1 - index} />
         ))}
