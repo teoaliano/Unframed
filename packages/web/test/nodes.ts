@@ -1,6 +1,6 @@
 /** Browser-seam helpers for nodes and wires: a board seeded through the room, and the node card on screen. */
 import type { Locator, Page } from "@playwright/test";
-import type { TLRecord } from "@tldraw/tlschema";
+import type { TLRecord } from "tldraw";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { roomRecords, shapeOnScreen, waitForRoom, type AnyRecord } from "./canvas.ts";
 import { expect } from "./fixtures.ts";
