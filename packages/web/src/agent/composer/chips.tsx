@@ -1,6 +1,6 @@
 import type { ElementChip } from "@unframed/contracts";
 import { shapeKind, shapeLabel, type ShapeKind } from "@unframed/domain";
-import { AlignLeft, AppWindow, AudioLines, Clapperboard, Component, Group, Image, PenLine, SquareMousePointer, SquarePlay, X, type LucideIcon } from "lucide-react";
+import { AlignLeft, AppWindow, AudioLines, Cable, Clapperboard, Component, Group, Image, PenLine, SquareMousePointer, SquarePlay, Workflow, X, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useValue, type Editor, type TLShapeId } from "tldraw";
 import { Badge } from "~/components/ui/badge";
@@ -15,6 +15,8 @@ export const KIND_ICONS: Record<ShapeKind, LucideIcon> = {
   page: AppWindow,
   motion: Clapperboard,
   component: Component,
+  node: Workflow,
+  wire: Cable,
   mark: PenLine,
 };
 
@@ -27,6 +29,8 @@ const KIND_NOUNS: Record<ShapeKind, string> = {
   page: "page",
   motion: "motion",
   component: "component",
+  node: "node",
+  wire: "wire",
   mark: "mark",
 };
 

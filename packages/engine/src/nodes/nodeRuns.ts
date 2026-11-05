@@ -14,6 +14,7 @@ import {
   type VideoStartRequest,
 } from "@unframed/contracts";
 import {
+  artifactUrl,
   audioRunParams,
   canvasShapesOf,
   downstreamRun,
@@ -265,7 +266,6 @@ export const nodeRunsLayer = Layer.effect(
       let bytes: Buffer | undefined;
       if (config.testRenderer === "ok") bytes = Buffer.from(`capture of ${file} ${pageHash}`);
       else if (config.testRenderer === undefined) {
-        const { artifactUrl } = await import("@unframed/domain");
         const url = artifactUrl({ appHostname: "localhost", previewPort: (await runPromise(settings.view)).previewPort, project, file, kind: "page" });
         bytes = await artifacts.chrome.use(async (browser) => {
           const page = await browser.newPage();

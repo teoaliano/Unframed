@@ -1,0 +1,164 @@
+import { UnframedError, type ImagePricingAnswer, type RenderedInputs } from "@unframed/contracts";
+import {
+  downstreamRun,
+  estimateImageRun,
+  estimateVideo,
+  formatEstimate,
+  modelPart,
+  nodeName,
+  nodeRequest,
+  planChain,
+  videoSettings,
+  type DownstreamScope,
+  type Slot,
+  type VideoEntry,
+  type VideoPropValue,
+} from "@unframed/domain";
+import { atom, type Editor } from "tldraw";
+import { loadCatalogue } from "../generate/catalogue.ts";
+import { referencesFor } from "../generate/render.ts";
+import type { EngineConnection } from "../rpc/engine.ts";
+import { showError } from "../toasts.tsx";
+import { catalogueOf, nodeCanvas } from "./facts.ts";
+import { nodeFrames, nodeModel } from "./operations.ts";
+
+export interface ChainStep {
+  readonly id: string;
+  readonly name: string;
+  readonly model: string;
+  readonly estimate: number | null;
+  readonly paid: boolean;
+}
+
+const pricing = new Map<string, Promise<ImagePricingAnswer | undefined>>();
+
+const imagePricing = (engine: EngineConnection, model: string) => {
+  let known = pricing.get(model);
+  if (!known) {
+    known = engine.call("models.imagePricing", { id: model }).catch(() => undefined);
+    pricing.set(model, known);
+  }
+  return known;
+};
+
+/** One node's estimate as the chain button and the confirmation show it. */
+export const stepEstimate = async (editor: Editor, engine: EngineConnection, id: string): Promise<ChainStep | undefined> => {
+  const canvas = nodeCanvas(editor);
+  const node = canvas.nodes.get(id);
+  if (!node) return undefined;
+  const catalogue = await loadCatalogue(engine, catalogueOf(node.medium)).catch(() => undefined);
+  const model = node.model !== "" ? node.model : (catalogue?.default ?? nodeModel(node));
+  const entry = catalogue?.models.find((each) => each.id === model);
+  const step = { id, name: nodeName(canvas, id), model: modelPart(model), paid: node.medium !== "audio" };
+  if (node.medium === "image") {
+    const answer = await imagePricing(engine, model);
+    if (!answer) return { ...step, estimate: null };
+    const request = nodeRequest({ node, canvas, assume: new Set(canvas.nodes.keys()) });
+    const images = request.ok ? request.references.filter((slot) => slot.kind === "image").length : 0;
+    const chosen = {
+      ...(typeof node.params.quality === "string" ? { quality: node.params.quality } : {}),
+      ...(typeof node.params.resolution === "string" ? { resolution: node.params.resolution } : {}),
+    };
+    return { ...step, estimate: estimateImageRun({ endpoints: answer.endpoints, chosen, referenceImages: images, outputs: node.runs ?? 1 }) };
+  }
+  if (node.medium === "video") {
+    const settings = videoSettings(entry as VideoEntry | undefined, node.params as Record<string, VideoPropValue>);
+    return { ...step, estimate: estimateVideo({ pricing: entry?.pricing, resolution: settings.resolution, duration: settings.duration }) };
+  }
+  return { ...step, estimate: null };
+};
+
+/** The nodes a run starts, in order: one node, its downstream, or a chain from a selection. */
+export const runOrder = (editor: Editor, ids: ReadonlyArray<string>, downstream?: DownstreamScope): { readonly steps: ReadonlyArray<string> } | { readonly error: string } => {
+  const canvas = nodeCanvas(editor);
+  const frames = (id: string) => {
+    const node = canvas.nodes.get(id);
+    return node ? nodeFrames(node) : [];
+  };
+  const chosen = downstream !== undefined && ids.length === 1 ? downstreamRun(canvas, ids[0]!, downstream, frames) : ids;
+  const plan = planChain(canvas, chosen);
+  return plan.ok ? { steps: plan.steps } : { error: plan.message };
+};
+
+export const chainTotal = (steps: ReadonlyArray<ChainStep>): { readonly label: string | undefined; readonly missing: ReadonlyArray<string> } => {
+  const paid = steps.filter((step) => step.paid);
+  const missing = paid.filter((step) => step.estimate === null).map((step) => step.name);
+  const sum = paid.reduce((total, step) => total + (step.estimate ?? 0), 0);
+  if (paid.length === 0) return { label: undefined, missing };
+  return { label: missing.length === 0 ? `~$${sum < 0.1 ? sum.toFixed(3) : sum.toFixed(2)}` : undefined, missing };
+};
+
+export const stepLabel = (step: ChainStep): string => (step.estimate === null ? (step.paid ? "no exact estimate" : "ElevenLabs credits") : formatEstimate(step.estimate));
+
+interface Confirming {
+  readonly steps: ReadonlyArray<ChainStep>;
+  readonly answer: (run: boolean) => void;
+}
+
+/** The chain confirmation the dialog shows, while one waits. */
+export const chainConfirmation = atom<Confirming | undefined>("chain confirmation", undefined);
+
+const confirmChain = (steps: ReadonlyArray<ChainStep>): Promise<boolean> =>
+  new Promise((resolve) => {
+    chainConfirmation.set({
+      steps,
+      answer: (run) => {
+        chainConfirmation.set(undefined);
+        resolve(run);
+      },
+    });
+  });
+
+/** The sketches and marked pictures the steps send, drawn and uploaded once, by slot. */
+const renderInputs = async (editor: Editor, project: string, steps: ReadonlyArray<string>): Promise<RenderedInputs> => {
+  const canvas = nodeCanvas(editor);
+  const drawn = new Map<string, Slot>();
+  for (const [index, id] of steps.entries()) {
+    const node = canvas.nodes.get(id);
+    if (!node) continue;
+    const request = nodeRequest({ node, canvas, assume: new Set(steps.slice(0, index)) });
+    if (!request.ok) continue;
+    for (const slot of [...request.references, ...request.frames.map((frame) => frame.slot)]) {
+      if (slot.source.type === "composite" || slot.source.type === "sketch") drawn.set(slot.shapeId, slot);
+    }
+  }
+  if (drawn.size === 0) return {};
+  const slots = [...drawn.values()];
+  const refs = await referencesFor(editor, project, slots);
+  return Object.fromEntries(slots.map((slot, index) => [slot.shapeId, refs[index]!]));
+};
+
+const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
+
+/**
+ * Runs one node, its downstream, or a chain. A chain with two or more paid steps asks once,
+ * listing each step; a single Run keeps its one click. A refusal is a toast.
+ */
+export const runNodes = async (input: {
+  readonly editor: Editor;
+  readonly engine: EngineConnection;
+  readonly project: string;
+  readonly ids: ReadonlyArray<string>;
+  readonly downstream?: DownstreamScope | undefined;
+}): Promise<boolean> => {
+  const { editor, engine, project, ids, downstream } = input;
+  const order = runOrder(editor, ids, downstream);
+  if ("error" in order) {
+    showError(order.error);
+    return false;
+  }
+  try {
+    if (order.steps.length > 1) {
+      const steps = (await Promise.all(order.steps.map((id) => stepEstimate(editor, engine, id)))).filter((step): step is ChainStep => step !== undefined);
+      if (steps.filter((step) => step.paid).length >= 2 && !(await confirmChain(steps))) return false;
+    }
+    const rendered = await renderInputs(editor, project, order.steps);
+    if (downstream !== undefined && ids.length === 1) await engine.call("node.run", { project, shapeId: ids[0]!, downstream: true, scope: downstream, rendered });
+    else if (ids.length === 1 && order.steps.length === 1 && order.steps[0] === ids[0]) await engine.call("node.run", { project, shapeId: ids[0]!, rendered });
+    else await engine.call("chain.run", { project, shapeIds: [...ids], rendered });
+    return true;
+  } catch (error) {
+    showError(messageOf(error));
+    return false;
+  }
+};

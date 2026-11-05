@@ -1,14 +1,15 @@
 import type { AddAction } from "@unframed/domain";
 import { createShapeId, startEditingShapeWithRichText, type Editor, type TLShapeId, type VecLike } from "tldraw";
 
-export type AddKind = "prompt" | "image" | "video" | "audio" | "group" | "page" | "motion";
+export type AddKind = "prompt" | "image" | "video" | "audio" | "group" | "node" | "page" | "motion";
 
-const SHAPE_TYPE: Record<AddKind, "text" | "image" | "video" | "audio" | "frame" | "page" | "motion"> = {
+const SHAPE_TYPE: Record<AddKind, "text" | "image" | "video" | "audio" | "frame" | "node" | "page" | "motion"> = {
   prompt: "text",
   image: "image",
   video: "video",
   audio: "audio",
   group: "frame",
+  node: "node",
   page: "page",
   motion: "motion",
 };
@@ -28,7 +29,7 @@ export const addShape = (editor: Editor, kind: AddKind, placement: Placement): T
   const point = "at" in placement ? placement.at : placement.centre;
   editor.markHistoryStoppingPoint(`add ${kind}`);
   editor.run(() => {
-    editor.createShape({ id, type, x: point.x, y: point.y });
+    editor.createShape({ id, type, x: point.x, y: point.y, ...(kind === "node" ? { meta: { unframed: { fresh: true } } } : {}) });
     const bounds = "centre" in placement ? editor.getShapePageBounds(id) : undefined;
     if (bounds) {
       const shape = editor.getShape(id)!;

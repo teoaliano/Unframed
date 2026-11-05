@@ -30,7 +30,7 @@ export const viewsFinalPrompt = (props: TrayProps): boolean => props[VIEW_FINAL_
 
 const chipText = (runs: RunsValue) => (runs === "free" ? "Free" : `${runs}×`);
 
-const RunsChip = ({ props, onChange, open, onOpenChange }: TrayPropChipProps) => {
+const RunsChip = ({ props, onChange, open, onOpenChange, offersFree = true }: TrayPropChipProps & { readonly offersFree?: boolean }) => {
   const runs = runsOf(props);
   const field = useRef<HTMLInputElement>(null);
   const free = useRef<HTMLButtonElement>(null);
@@ -86,7 +86,7 @@ const RunsChip = ({ props, onChange, open, onOpenChange }: TrayPropChipProps) =>
               />
             </NumberFieldGroup>
           </NumberField>
-          <Tip label={FREE_TOOLTIP} side="right">
+          {offersFree && <Tip label={FREE_TOOLTIP} side="right">
             <Toggle
               ref={free}
               size="sm"
@@ -96,7 +96,7 @@ const RunsChip = ({ props, onChange, open, onOpenChange }: TrayPropChipProps) =>
             >
               Free
             </Toggle>
-          </Tip>
+          </Tip>}
           {runs === "free" && (
             <Label>
               <Checkbox checked={viewsFinalPrompt(props)} onCheckedChange={(checked) => set({ [VIEW_FINAL_PROMPT_KEY]: checked })} />
@@ -130,3 +130,8 @@ export const runsProp: TrayPropDefinition = {
   add: (props) => ({ ...props, [RUNS_KEY]: 1 }),
   Chip: RunsChip,
 };
+
+const CountChip = (props: TrayPropChipProps) => <RunsChip {...props} offersFree={false} />;
+
+/** Spec 16: a node's Runs, a count only. Free needs a list from a selection, which a node does not have. */
+export const nodeRunsProp: TrayPropDefinition = { ...runsProp, Chip: CountChip };
