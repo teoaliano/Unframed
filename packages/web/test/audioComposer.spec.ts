@@ -71,6 +71,14 @@ test("the voice dialog lists, searches, marks the current voice, and Escape clos
   await expect(dialog.getByRole("heading", { name: "Voices" })).toBeVisible();
   await expect(dialog.getByRole("link", { name: "Browse voices on ElevenLabs" })).toHaveAttribute("href", "https://elevenlabs.io/app/voice-library");
   await expect(dialog.locator("tbody tr")).toHaveCount(2);
+  await dialog.getByRole("button", { name: "Load more" }).click();
+  await expect(dialog.locator("tbody tr")).toHaveCount(3);
+  await expect(dialog.getByRole("button", { name: "Load more" })).toHaveCount(0);
+  await expect(dialog.locator('[data-voice="marcus02"]').getByRole("button", { name: /^Preview/ })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Preview Olivia" }).click();
+  await expect(dialog.getByRole("button", { name: "Stop Olivia" })).toBeVisible();
+  await dialog.getByRole("button", { name: "Stop Olivia" }).click();
+  await expect(dialog.getByRole("button", { name: "Preview Olivia" })).toBeVisible();
   await expect(dialog.locator('[data-voice="olivia01"]')).toContainText("british · female · young · narration");
   await expect(dialog.locator('[data-voice="marcus02"]')).toContainText("cloned");
   await expect(dialog.locator('[data-voice="marcus02"]').getByLabel("Current voice")).toBeVisible();

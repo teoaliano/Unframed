@@ -1,4 +1,3 @@
-/** Spec 15's ElevenLabs calls: the voices list, the audio run and the key's status. */
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import { UnframedError } from "./errors.ts";
@@ -40,13 +39,11 @@ export type AudioRunParams = typeof AudioRunParams.Type;
 
 export const AudioRunRequest = Schema.Struct({
   project: Schema.String,
-  /** The default audio model when absent. */
   model: Schema.optionalKey(Schema.String),
   voice: Schema.Struct({ id: Schema.String, name: Schema.String }),
   params: AudioRunParams,
   selectionPrompt: Schema.String,
   instruction: Schema.String,
-  /** The spoken text: the selection's prompts and the instruction, joined. */
   prompt: Schema.String,
   sources: Schema.Array(Schema.String),
   anchor: PageBox,
@@ -70,7 +67,6 @@ export type ElevenLabsStatus = typeof ElevenLabsStatus.Type;
 
 export const VoicesList = Rpc.make("voices.list", { payload: VoicesListRequest, success: VoicesListAnswer, error: UnframedError });
 
-/** Starts an audio run. Answers once its placeholder is in the room; the outcome arrives on `run.subscribe`. */
 export const RunAudio = Rpc.make("run.audio", { payload: AudioRunRequest, success: RunStarted, error: UnframedError });
 
 export const ElevenLabsStatusRpc = Rpc.make("elevenlabs.status", { success: ElevenLabsStatus, error: UnframedError });
@@ -80,7 +76,6 @@ export const SettingsRemoveElevenLabsKey = Rpc.make("settings.removeElevenLabsKe
   error: UnframedError,
 });
 
-/** The sidecar beside each generated audio file. It has no `cost` field: credits are not dollars. */
 export interface AudioSidecar {
   readonly kind: "audio";
   readonly prompt: string;

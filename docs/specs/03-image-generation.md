@@ -206,7 +206,7 @@ Placement: centred above the selection's screen bounds, 12 px gap, where the bou
 
 Width 420 px. Three bands. The bar grows into t3code's composer shell (spec 12): `rounded-3xl`, a glass fill of `--card` (dark: `--surface-raised`) at the glass opacity with the glass blur, the kit border, and `shadow-composer` in light (none in dark, as in t3code). The radius, fill and shadow change within the same 200 ms morph.
 
-Top band: the medium switch (the kit's `segmented` ToggleGroup of the registered media, with radio semantics, lowercase labels `image`, `video`, `text`) on the left; the source count on the right in `text-xs` muted foreground, the same text as the toolbar hint (`3 selected`, `@character`), or `recipe · N sources` in recipe mode (`recipe · 1 source` for one).
+Top band: the medium switch (the kit's `segmented` ToggleGroup of the registered media, with radio semantics, lowercase labels `image`, `video`, `text`, `audio` (spec 15)) on the left; the source count on the right in `text-xs` muted foreground, the same text as the toolbar hint (`3 selected`, `@character`), or `recipe · N sources` in recipe mode (`recipe · 1 source` for one).
 
 Box: the instruction editor (Tiptap, one paragraph per line, the `@` mention menu of spec 02's prompt editing), placeholder `What should this make?`, autofocused on open, inside the kit's field frame (input border, background, `rounded-lg`, the focus ring while the editor has focus). Attachments and chips are off in the Generate tray. The send button sits at the box's bottom right with the price estimate immediately to its left; it is t3code's labelled message-action pill (spec 12, shared with the Agent tray's round Send), with an up arrow, in `--message-action` (the primary colour). Send label: `Generate` (spec 05 adds `Generate 4×`). Cmd+Enter (Ctrl+Enter off macOS) sends wherever focus is while the composer is open, except in a text field outside it or while one of its menus is open; Enter and Shift+Enter insert a line. While the send is being acknowledged, the button shows a spinner and is disabled; a second press does nothing.
 
@@ -383,13 +383,14 @@ A result is an ordinary image shape (spec 02; a prompt in spec 05, a video in sp
 ```ts
 type ResultMeta = {                 // meta.unframed.result
   sidecar: string | null            // file name of the sidecar in the project folder; null on an unfilled placeholder
-  medium: 'image' | 'text' | 'video'
+  medium: 'image' | 'text' | 'video' | 'audio'    // audio: spec 15
   model: string
   batchId: string; runIndex: number; runCount: number
   cost: number | null
   sources: string[]                 // shape ids, for the tether only
   batchExtraCost?: number           // spec 05: a Free batch's repair call, on every member
   recipe?: ResultRecipe             // spec 11 only: an imported result's approximate recipe
+  credits?: number | null           // spec 15 only: the ElevenLabs credits an audio result used; its cost stays null
 }
 ```
 
@@ -399,7 +400,7 @@ The recipe itself lives in the sidecar, never on the shape, with one exception: 
 
 ```ts
 type ResultRecipe = {               // what a result's sidecar holds: everything needed to repeat its run
-  medium: 'image' | 'video' | 'text'
+  medium: 'image' | 'video' | 'text' | 'audio'
   model: string
   params: Record<string, string | number | boolean>  // the props that were sent, keys as the medium's tray names them (spec 04 adds inputMode, duration, generate_audio, shareLocalVideos)
   selectionPrompt: string           // the selection's composed prompt parts, joined (spec 05 Free: shared context and the section)
@@ -415,7 +416,7 @@ type RecipeRef = { kind: 'image' | 'video'; file: string; original?: string }
                // for video with params.inputMode 'first_frame' or 'first_last', references are the frames, first then last
 
 type GroupRecipe = {                // a group's standing settings (spec 06), stored as meta.unframed.recipe on the group
-  medium: 'image' | 'video' | 'text'
+  medium: 'image' | 'video' | 'text' | 'audio'
   model: string
   params: Record<string, string | number | boolean>
   runs: number | 'free'             // 1 to 10, or Free (spec 05); 1 for video and text

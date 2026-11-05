@@ -70,7 +70,6 @@ export class Runs extends Context.Service<
     readonly image: (request: ImageRunRequest) => Effect.Effect<{ runId: string; batchId: string; placeholders: string[] }, UnframedError>;
     /** Spec 05: answers once the run's empty text result is in the room; the answer fills it later. */
     readonly text: (request: TextRunRequest) => Effect.Effect<{ runId: string; batchId: string; placeholders: string[] }, UnframedError>;
-    /** Spec 15: answers once the run's empty audio shape is in the room; ElevenLabs' answer fills it later. */
     readonly audio: (request: AudioRunRequest) => Effect.Effect<{ runId: string; batchId: string; placeholders: string[] }, UnframedError>;
     /** Spec 05: one text call that lands nothing. */
     readonly complete: (request: TextCompleteRequest) => Effect.Effect<TextCompleteAnswer, UnframedError>;

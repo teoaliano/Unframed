@@ -90,10 +90,8 @@ const traitsOf = (entry: AudioCatalogueEntry | undefined): AudioModelTraits | un
   };
 };
 
-/** Whether a model takes Speed: every model id but the two v4 ones, an unknown row included. */
 export const takesSpeed = (model: string | undefined): boolean => model === undefined || !NO_SPEED_MODELS.includes(model);
 
-/** The props a model declares, in tray order, and what it takes. A `params: null` row is unknown. */
 export const audioParams = (entry: AudioCatalogueEntry | undefined, model: string | undefined = entry?.id): AudioParams => {
   const traits = traitsOf(entry);
   const delivery: RangeProp[] = [STABILITY];
@@ -116,7 +114,6 @@ export const audioParams = (entry: AudioCatalogueEntry | undefined, model: strin
   };
 };
 
-/** A fresh tray's props: every delivery prop the model takes at its default. */
 export const audioDefaults = (params: AudioParams): Record<string, AudioValue> =>
   Object.fromEntries(params.delivery.map((prop) => [prop.key, prop.default]));
 
@@ -128,7 +125,6 @@ const isSeed = (value: unknown): boolean => typeof value === "number" && Number.
 
 const decimals = (value: number): string => String(value);
 
-/** The refusal for the first param outside its range, or `undefined` when every one is in range. */
 export const audioRangeRefusal = (params: Readonly<Record<string, unknown>>): string | undefined => {
   for (const [key, prop] of Object.entries(RANGES)) {
     if (params[key] !== undefined && !inRange(prop, params[key])) return `${prop.label} has to be between ${decimals(prop.min)} and ${decimals(prop.max)}.`;
@@ -137,7 +133,6 @@ export const audioRangeRefusal = (params: Readonly<Record<string, unknown>>): st
   return undefined;
 };
 
-/** Whether one stored value may stay with this model. */
 const keeps = (key: string, value: AudioValue, params: AudioParams): boolean => {
   if (key === VOICE_ID || key === VOICE_NAME) return typeof value === "string" && value !== "";
   if (key === "stability" || key === "similarity_boost") return inRange(RANGES[key]!, value);
@@ -150,11 +145,9 @@ const keeps = (key: string, value: AudioValue, params: AudioParams): boolean => 
   return false;
 };
 
-/** Stored or recorded props, kept only where the model takes them. An unknown row never drops a stored Style or Speaker boost. */
 export const audioKeep = (props: AudioProps, params: AudioParams): Record<string, AudioValue> =>
   Object.fromEntries(Object.entries(props).filter(([key, value]) => keeps(key, value, params)));
 
-/** The tray after a model change: the delivery props back to their defaults, undeclared traits gone; voice, format and seed kept. */
 export const audioReset = (props: AudioProps, params: AudioParams): Record<string, AudioValue> => {
   const next: Record<string, AudioValue> = {};
   for (const key of [VOICE_ID, VOICE_NAME, "output_format", "seed", "similarity_boost", "use_speaker_boost", "language_code"]) {
@@ -164,7 +157,6 @@ export const audioReset = (props: AudioProps, params: AudioParams): Record<strin
   return { ...next, ...audioDefaults(params) };
 };
 
-/** How many advanced props are set, for the `Advanced · 2` chip. */
 export const advancedCount = (props: AudioProps): number =>
   (["similarity_boost", "use_speaker_boost", "output_format", "seed", "language_code"] as const).filter((key) => props[key] !== undefined).length;
 
@@ -188,7 +180,6 @@ export interface SpeechCall {
   };
 }
 
-/** The speech call for a text and the params a run sets: `voice_settings` holds exactly the set delivery keys, and is absent with none. */
 export const speechCall = (input: { readonly text: string; readonly model: string; readonly params: Readonly<Record<string, unknown>> }): SpeechCall => {
   const settings: Record<string, number | boolean> = {};
   for (const key of DELIVERY_KEYS) {
@@ -208,7 +199,6 @@ export const speechCall = (input: { readonly text: string; readonly model: strin
   };
 };
 
-/** The params a run sends: the tray's props without the voice. */
 export const audioRunParams = (props: AudioProps): Record<string, number | boolean | string> =>
   Object.fromEntries(Object.entries(props).filter(([key]) => key !== VOICE_ID && key !== VOICE_NAME));
 
@@ -218,7 +208,6 @@ export interface AudioRequest extends SpeechCall {
   readonly roles: Readonly<Record<string, string>>;
 }
 
-/** Every media slot of a composition, unused: an audio run sends text only. */
 export const audioRoles = (composition: Pick<Composition, "roles" | "references">): Record<string, string> => {
   const roles: Record<string, string> = {};
   for (const key of Object.keys(composition.roles)) roles[key] = UNUSED_ROLE;
@@ -226,7 +215,6 @@ export const audioRoles = (composition: Pick<Composition, "roles" | "references"
   return roles;
 };
 
-/** The spoken text, the speech call and the roles for the selection's media. */
 export const audioRequest = (input: {
   readonly composition: Pick<Composition, "prompt" | "roles" | "references">;
   readonly props: AudioProps;
@@ -247,11 +235,8 @@ export const NOTHING_TO_SAY = "Nothing to say. Select a prompt, or type an instr
 export const PICK_A_VOICE = "Pick a voice for this line.";
 
 export interface AudioStatusInput {
-  /** The spoken text. */
   readonly text: string;
-  /** A circular reference that stops the run. */
   readonly error?: string | undefined;
-  /** The media slots the selection holds, none of which is sent. */
   readonly media: ReadonlyArray<{ readonly kind: "image" | "video" }>;
   readonly voice: { readonly id: string } | undefined;
   readonly model: string | undefined;
@@ -266,7 +251,6 @@ export const audioMediaWarning = (media: ReadonlyArray<{ readonly kind: "image" 
   return `${media.length} images and clips are selected, but audio models only read text. They will not be sent.`;
 };
 
-/** The audio medium's status band: blockers in the order they are looked for, then the media warning. */
 export const audioStatus = (input: AudioStatusInput): { readonly warnings: string[]; readonly blockers: string[] } => {
   const blockers: string[] = [];
   if (!input.hasKey) blockers.push(ELEVENLABS_NO_KEY);
@@ -281,7 +265,6 @@ export const audioStatus = (input: AudioStatusInput): { readonly warnings: strin
   return { warnings: warning === undefined ? [] : [warning], blockers };
 };
 
-/** The `character-cost` header as credits: a finite number at or above zero, else `null`. */
 export const creditsFrom = (header: string | null | undefined): number | null => {
   const value = header?.trim();
   if (value === undefined || value === "") return null;
@@ -300,7 +283,6 @@ const parsed = (body: string): unknown => {
   }
 };
 
-/** ElevenLabs' own words: `detail.message`, else a string `detail`, else the first 300 characters of the body. */
 export const elevenLabsMessage = (_status: number, body: string): string => {
   const detail = field(parsed(body), "detail");
   const message = field(detail, "message");
@@ -311,7 +293,6 @@ export const elevenLabsMessage = (_status: number, body: string): string => {
 
 const CREDIT_CODES = ["insufficient_credits", "quota_exceeded"];
 
-/** The sentence a failed speech call reaches the person with. */
 export const speechFailure = (status: number, body: string): string => {
   const upstream = elevenLabsMessage(status, body);
   const detail = field(parsed(body), "detail");
@@ -322,10 +303,8 @@ export const speechFailure = (status: number, body: string): string => {
   return `ElevenLabs (${status}): ${upstream}`;
 };
 
-/** The file extension of an output format: `mp3` for `mp3_`, `wav` for `wav_`. */
 export const audioExtension = (format: string | undefined): "mp3" | "wav" => (format?.startsWith("wav_") ? "wav" : "mp3");
 
-/** `m:ss`. */
 export const audioClock = (seconds: number): string => {
   const whole = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
@@ -333,7 +312,6 @@ export const audioClock = (seconds: number): string => {
 
 const creditNumber = (value: number): string => new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
 
-/** The line under a selected audio result: `<model> · <m:ss> · <n> credits`, any unknown part left out. */
 export const audioLine = (input: { readonly model: string; readonly durationMs?: number | null | undefined; readonly credits?: number | null | undefined }): string =>
   [
     input.model,
@@ -341,7 +319,6 @@ export const audioLine = (input: { readonly model: string; readonly durationMs?:
     ...(typeof input.credits === "number" ? [`${creditNumber(input.credits)} ${input.credits === 1 ? "credit" : "credits"}`] : []),
   ].join(" · ");
 
-/** A result's spoken text as the card's title: whitespace collapsed, the first 40 characters, ellipsised. */
 export const audioTitle = (text: string): string => {
   const collapsed = text.replace(/\s+/g, " ").trim();
   return collapsed.length > 40 ? `${collapsed.slice(0, 40)}…` : collapsed;

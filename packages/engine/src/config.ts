@@ -41,7 +41,6 @@ export interface EngineConfig {
   readonly clientDist: string | undefined;
   /** Every OpenRouter URL the engine builds starts with this. */
   readonly openRouterOrigin: string;
-  /** Every ElevenLabs URL the engine builds starts with this (spec 15). */
   readonly elevenLabsOrigin: string;
   readonly oauthBounce: string | undefined;
   readonly chromePath: string | undefined;

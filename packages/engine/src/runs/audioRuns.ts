@@ -42,7 +42,6 @@ const origin = (runId: string): ChangeOrigin => ({ kind: "server", id: runOrigin
 const definedParams = (params: AudioRunRequest["params"]): Record<string, string | number | boolean> =>
   Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined)) as Record<string, string | number | boolean>;
 
-/** Spec 15's audio runs: one ElevenLabs speech call that lands as an audio shape. */
 export const makeAudioRuns = (deps: AudioRunDeps) => {
   const { settings, rooms } = deps;
 
@@ -175,7 +174,6 @@ export const makeAudioRuns = (deps: AudioRunDeps) => {
         await deps.publish(project, { type: "output", runId, runIndex: 1, ok: false, error: outcome.error });
         await deps.publish(project, { type: "finished", runId, succeeded: 0, failed: 1, errors: [outcome.error], orphaned: 0 });
       };
-      // The run lives in the engine: nothing here waits on the socket that started it.
       void finish().catch((error: unknown) => logError(`${runId}: ${errorText(error)}`));
 
       return { runId, batchId, placeholders: [shapeId] };

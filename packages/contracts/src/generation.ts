@@ -89,7 +89,6 @@ export const ResultMeta = Schema.Struct({
   batchExtraCost: Schema.optionalKey(Schema.Number),
   /** Spec 11 only: an imported result's approximate recipe. */
   recipe: Schema.optionalKey(ResultRecipe),
-  /** Spec 15: the ElevenLabs credits an audio result used; present only on audio results. */
   credits: Schema.optionalKey(Schema.NullOr(Schema.Number)),
 });
 export type ResultMeta = typeof ResultMeta.Type;
@@ -217,7 +216,6 @@ export const RunEvent = Schema.Union([
     shapeId: Schema.String,
     file: Schema.String,
     cost: Schema.NullOr(Schema.Number),
-    /** Spec 15: an audio output's ElevenLabs credits. */
     credits: Schema.optionalKey(Schema.NullOr(Schema.Number)),
   }),
   Schema.Struct({ type: Schema.Literal("output"), runId: Schema.String, runIndex: Schema.Number, ok: Schema.Literal(false), error: Schema.String }),

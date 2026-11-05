@@ -1,7 +1,3 @@
-/**
- * Browser-seam helpers for spec 15: an engine with both keys (or either), the image
- * catalogue and a scripted ElevenLabs, audio shape records, and ways to reach the audio medium.
- */
 import type { Locator, Page } from "@playwright/test";
 import { audioBytes, ELEVENLABS_KEY, elevenLabsRoutes, elevenModel, elevenVoice, type ElevenLabsScript, type SpeechRequest } from "../../engine/test/elevenLabsStub.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
@@ -31,12 +27,16 @@ export interface AudioEngine {
 }
 
 export const startAudio = async (options: { readonly openRouter?: boolean; readonly elevenLabs?: boolean; readonly script?: ElevenLabsScript; readonly dataDir?: string } = {}): Promise<AudioEngine> => {
+  let origin = "";
   const script: ElevenLabsScript = {
     models: AUDIO_MODELS,
     voices: (query) => {
       const search = (query.get("search") ?? "").toLowerCase();
-      const voices = VOICES.filter((voice) => search === "" || voice.name.toLowerCase().includes(search));
-      return { status: 200, body: { voices, has_more: false, next_page_token: null } };
+      if (query.get("next_page_token") === "page-2") return { status: 200, body: { voices: [elevenVoice("aria03", "Aria", { category: "professional", preview_url: null })], has_more: false, next_page_token: null } };
+      const voices = VOICES.filter((voice) => search === "" || voice.name.toLowerCase().includes(search)).map((voice) =>
+        voice.voice_id === "olivia01" ? { ...voice, preview_url: `${origin}/preview/olivia.wav` } : voice,
+      );
+      return { status: 200, body: { voices, has_more: search === "", next_page_token: search === "" ? "page-2" : null } };
     },
     speech: () => ({ kind: "audio", bytes: audioBytes(2), headers: { "character-cost": "124" } }),
     ...options.script,
@@ -49,6 +49,7 @@ export const startAudio = async (options: { readonly openRouter?: boolean; reado
     stub: routes(imageCatalogue({ data: CATALOGUE })),
     elevenLabs: live.handler,
   });
+  origin = engine.elevenLabs!.origin;
   return { engine, speech: live.speech, script };
 };
 
@@ -77,7 +78,6 @@ export const audioRecord = (id: string, ref: string, at: { x: number; y: number 
   meta: { ref, ...meta },
 });
 
-/** A filled audio shape on the board, its file uploaded first. */
 export const filledAudio = async (engine: TestEngine, id: string, ref: string, at: { x: number; y: number }, name = "line.wav", seconds = 2, project = "default") => {
   const file = await uploadToEngine(engine, name, audioBytes(seconds), "audio/wav", project);
   await putRecords(engine, [audioRecord(id, ref, at, { file, fileName: name })], project);

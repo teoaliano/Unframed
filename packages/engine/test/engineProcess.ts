@@ -40,7 +40,6 @@ export interface EngineOptions {
   openRouterStub?: boolean;
   /** How the stub answers, from the start. */
   stub?: StubHandler;
-  /** Point `UNFRAMED_TEST_ELEVENLABS_ORIGIN` at a second stub (spec 15), answering with this handler (`true`: 404 until set). */
   elevenLabs?: StubHandler | true;
 }
 

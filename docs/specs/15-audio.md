@@ -104,7 +104,7 @@ What carries over from the issue and what changes:
 | --- | --- | --- | --- |
 | Audio params | domain | `audioParams(entry)` returns the props the model declares and their ranges or values; `audioDefaults(params)`, `audioReset(props, params)`, `audioKeep(props, params)` | new |
 | Audio request | domain | `audioRequest({ composition, props, voice, model })` returns `{ text, voiceId, query: { output_format }, body: { text, model_id, voice_settings?, seed?, language_code? } }` and the roles for the selection's media | new; deep: the tray, the badges and the engine payload all come from it |
-| Audio status | domain | `audioStatus({ composition, props, voice, entry, hasKey })` returns spec 03's `TrayStatus` | new |
+| Audio status | domain | `audioStatus({ text, error, media, voice, model, params, hasKey })` returns the band's blockers and warnings (the web adds spec 03's `TrayStatus` shape); it takes the spoken text rather than a composition so recipe mode, which has none, uses the same rule | new |
 | ElevenLabs answers | domain | `creditsFrom(headerValue)`, `elevenLabsMessage(status, body)`, `audioExtension(format)`, `audioLine({ model, durationMs, credits })` | new |
 | ElevenLabs status copy | domain | turns an `ElevenLabsStatus` into the Settings lines | new, beside spec 10's key status copy |
 | Settings rules | domain | the two new `.env` variables, their validators and normalising | extended (spec 01) |
@@ -185,6 +185,8 @@ Registered into spec 03's medium registry with label `audio`, catalogue `audio`,
 | Format | `output_format` | always | the kit's Select of the formats below | unset (`mp3_44100_128`) |
 | Seed | `seed` | always | the kit's NumberField, whole numbers 0 to 4294967295 | unset |
 | Language | `language_code` | the model declares at least one language | the kit's Combobox of the model's languages, `name (language_id)` | unset |
+
+  Each row's `Reset` stays enabled when the prop is unset (it does nothing then), so the keyboard never drops out of the popover after a reset.
 
   Formats offered: `mp3_44100_128`, `mp3_44100_192`, `mp3_44100_96`, `mp3_44100_64`, `mp3_22050_32`, `wav_44100`, `wav_48000`, `wav_24000`, `wav_16000`. ElevenLabs also offers PCM, Opus, μ-law and A-law, which make files a browser cannot play from disk without a container, so they are not offered. Some formats need a higher ElevenLabs plan; a refusal arrives as an upstream error with ElevenLabs' message. WAV stays offered on every model, Eleven v4 included, until a paid probe shows v4 refuses it: third-party listings of v4 name MP3, PCM, Opus, μ-law and A-law, while the speech endpoint lists `wav_*`. Meanwhile a refusal reaches the person as ElevenLabs' own message.
 
@@ -499,6 +501,8 @@ ElevenLabs' authentication docs describe API keys sent in the `xi-api-key` heade
 The issue's split is kept: the settings that change how a line sounds (Stability, Style, Speed) are visible chips; the ones that change fidelity or the file (Similarity, Speaker boost, Format, Seed, Language) wait behind Advanced. ElevenLabs' models list declares `can_use_style` and `can_use_speaker_boost`, so those two follow the model the way spec 03's props do.
 
 ### To confirm with a paid call
+
+Both items below are still open. The build follows the best current assumption for each, against the stub only: no paid call has been made.
 
 - The `character-cost` header is treated as credits after the model's rate. ElevenLabs' docs call it the generation's "character costs" without saying which; the person's paid call with a Flash model (which bills half) and a known text confirms it. If it turns out to be raw characters, the result line and sidecar multiply by the model's rate instead.
 - WAV on Eleven v4: kept until the person's paid probe shows v4 refuses it.

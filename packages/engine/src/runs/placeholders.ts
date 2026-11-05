@@ -208,7 +208,6 @@ const clipFillChange = (shape: Shape, landed: LandedClip): CanvasChange => {
   return { put: [asset, filled], remove: [] };
 };
 
-/** What landed for an audio run (spec 15): the file, its sidecar (`null` when none could be written) and the credits it used. */
 export interface LandedAudio {
   readonly kind: "audio";
   readonly file: string;
@@ -216,7 +215,6 @@ export interface LandedAudio {
   readonly credits: number | null;
 }
 
-/** An empty audio shape where a line will land, carrying its marker and unfilled result meta. */
 export const audioPlaceholder = (input: {
   readonly at: { readonly x: number; readonly y: number };
   readonly index: string;

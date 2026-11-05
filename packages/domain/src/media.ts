@@ -163,7 +163,6 @@ export type DroppedKind = "image" | "video" | "audio" | "page";
 
 const AUDIO_NAME = /\.(mp3|wav|m4a)$/i;
 
-/** What a dropped or pasted file becomes on the canvas, by its type, else by its name; `undefined` for anything else. */
 export const dropKind = (file: { readonly type: string; readonly name: string }): DroppedKind | undefined => {
   if (file.type.startsWith("image/")) return "image";
   if (file.type.startsWith("video/")) return "video";

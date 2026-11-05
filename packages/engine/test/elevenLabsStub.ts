@@ -1,7 +1,3 @@
-/**
- * A scripted ElevenLabs for the engine seam (spec 15): the models list, the voices search,
- * text to speech and the subscription, each answering whatever a test scripts.
- */
 import type http from "node:http";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -75,7 +71,6 @@ export interface ElevenLabsScript {
   speech?: (request: SpeechRequest) => SpeechAnswer | Promise<SpeechAnswer>;
 }
 
-/** The stub's handler and every speech request it received. */
 export const elevenLabsRoutes = (script: ElevenLabsScript) => {
   const speech: SpeechRequest[] = [];
   const handler: StubHandler = (req, body, res) => {
@@ -92,6 +87,11 @@ export const elevenLabsRoutes = (script: ElevenLabsScript) => {
     if (req.method === "GET" && url.pathname === "/v1/user/subscription") {
       const answer = script.subscription ?? { status: 200, body: { tier: "creator", character_count: 100, character_limit: 1000, next_character_count_reset_unix: 1_800_000_000 } };
       json(res, answer.status, answer.body ?? {});
+      return true;
+    }
+    if (req.method === "GET" && url.pathname.startsWith("/preview/")) {
+      res.writeHead(200, { "content-type": "audio/wav" });
+      res.end(audioBytes(3));
       return true;
     }
     const match = /^\/v1\/text-to-speech\/([^/]+)$/.exec(url.pathname);
@@ -140,7 +140,6 @@ export interface Speaking {
   readonly script: ElevenLabsScript;
 }
 
-/** An engine with both keys (unless `.env` is given), the test canvas, a project `board`, a live `run.subscribe` and a scripted ElevenLabs. */
 export const startSpeaking = async (options: EngineOptions & { script?: ElevenLabsScript } = {}): Promise<Speaking> => {
   const script: ElevenLabsScript = options.script ?? {};
   const live = elevenLabsRoutes(script);

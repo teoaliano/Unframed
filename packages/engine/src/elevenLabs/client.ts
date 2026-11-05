@@ -8,7 +8,6 @@ const SPEECH_TIMEOUT_MS = 120_000;
 const field = (value: unknown, key: string): unknown =>
   typeof value === "object" && value !== null ? (value as Record<string, unknown>)[key] : undefined;
 
-/** A failure the person reads, as ElevenLabs answered it. */
 export class ElevenLabsError extends Error {}
 
 const causeText = (error: unknown): string => {
@@ -44,7 +43,6 @@ const toModel = (raw: unknown): ModelEntry | undefined => {
   };
 };
 
-/** The text-to-speech models, in ElevenLabs' order, with the default appended when it is missing. Never fails. */
 export const listAudioModels = async (origin: string, key: string, fallback: string): Promise<{ models: ModelEntry[]; default: string }> => {
   const defaultRow: ModelEntry = { id: fallback, name: fallback, created: null, params: null };
   if (key === "") return { models: [defaultRow], default: fallback };
@@ -77,7 +75,6 @@ const toVoice = (raw: unknown): Voice | undefined => {
   };
 };
 
-/** One page of the account's voices. Fails with ElevenLabs' message. */
 export const listVoices = async (origin: string, key: string, input: { readonly search?: string | undefined; readonly pageToken?: string | undefined }): Promise<VoicesListAnswer> => {
   const query = new URLSearchParams({ page_size: "100" });
   if (input.search !== undefined && input.search.trim() !== "") query.set("search", input.search.trim());
@@ -108,7 +105,6 @@ export type SpeechOutcome =
   | { readonly ok: true; readonly bytes: Buffer; readonly credits: number | null; readonly requestId: string | null }
   | { readonly ok: false; readonly error: string };
 
-/** One text-to-speech call. Never rejects: every failure is an outcome with the sentence the person sees. */
 export const speak = async (origin: string, key: string, voiceId: string, call: SpeechCall): Promise<SpeechOutcome> => {
   let response: Response;
   try {
@@ -137,7 +133,6 @@ export const speak = async (origin: string, key: string, voiceId: string, call: 
   return { ok: true, bytes, credits: creditsFrom(response.headers.get("character-cost")), requestId: requestId === null || requestId === "" ? null : requestId };
 };
 
-/** The account's subscription, as Settings shows it. */
 export const subscriptionStatus = async (origin: string, key: string): Promise<ElevenLabsStatus> => {
   if (key === "") return { hasKey: false };
   let response: Response;

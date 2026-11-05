@@ -74,7 +74,6 @@ const useIsSelected = (shape: AudioShape) => {
   return useValue("audio selected", () => editor.getSelectedShapeIds().includes(shape.id), [editor, shape.id]);
 };
 
-/** Fills an audio shape with an uploaded file. */
 export const fillAudio = (editor: Editor, shapeId: TLShapeId, saved: { readonly file: string; readonly fileName: string }) => {
   const shape = editor.getShape<AudioShape>(shapeId);
   if (!shape) return;

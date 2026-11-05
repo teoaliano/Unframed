@@ -1,4 +1,3 @@
-/** Spec 15's `ElevenLabsStatus`, as `elevenlabs.status` answers it. */
 export type ElevenLabsStatusValue =
   | { readonly hasKey: false }
   | { readonly hasKey: true; readonly revoked: true }
@@ -11,10 +10,6 @@ export type ElevenLabsStatusValue =
       readonly resetsAt: string | null;
     };
 
-/**
- * The line under the ElevenLabs key field. `status` is `undefined` when it was not fetched
- * or the fetch failed. The usage is the account's, never the key's.
- */
 export const elevenLabsStatusCopy = (input: {
   readonly hasKey: boolean;
   readonly keyHint: string;
