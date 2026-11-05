@@ -1,4 +1,4 @@
-import { NO_NODES_MESSAGE, chainNodesOf, downstreamRun } from "@unframed/domain";
+import { NO_NODES_MESSAGE } from "@unframed/domain";
 import { ChevronDown, Play } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useEditor, useValue } from "tldraw";
@@ -6,8 +6,7 @@ import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFoote
 import { Button } from "~/components/ui/button";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
 import { useCanvasProject, useEngine } from "../context.ts";
-import {nodeCanvas } from "./facts.ts";
-import { nodeFrames } from "./operations.ts";
+import { downstreamCounts, selectionNodes } from "./graph.ts";
 import { chainConfirmation, chainTotal, runNodes, stepEstimate, stepLabel, type ChainStep } from "./runs.ts";
 import { WireHandles } from "./WireHandles.tsx";
 
@@ -75,28 +74,19 @@ export const NodeRunButtons = ({ primary }: { readonly primary: boolean }) => {
   const editor = useEditor();
   const engine = useEngine();
   const project = useCanvasProject();
-  const selection = useValue(
+  const selectionKey = useValue(
     "node selection",
     () => {
-      const canvas = nodeCanvas(editor);
       const selected = editor.getSelectedShapeIds();
-      const nodes = chainNodesOf(canvas, selected);
-      const only = selected.length === 1 && canvas.nodes.has(selected[0]!) ? selected[0]! : undefined;
-      const frames = (id: string) => {
-        const node = canvas.nodes.get(id);
-        return node ? nodeFrames(node) : [];
-      };
-      const running = only !== undefined && canvas.nodes.get(only)?.run !== undefined;
-      return {
-        nodes,
-        only,
-        running,
-        pending: only === undefined ? 0 : downstreamRun(canvas, only, "pending", frames).length,
-        all: only === undefined ? 0 : downstreamRun(canvas, only, "all", frames).length,
-      };
+      const nodes = selectionNodes(editor, selected);
+      const only = selected.length === 1 && editor.getShape(selected[0]!)?.type === "node" ? selected[0]! : undefined;
+      const running = only !== undefined && (editor.getShape(only)?.props as { run?: unknown } | undefined)?.run !== undefined;
+      const counts = only === undefined ? { pending: 0, all: 0 } : downstreamCounts(editor, only);
+      return JSON.stringify({ nodes, only, running, ...counts });
     },
     [editor],
   );
+  const selection = JSON.parse(selectionKey) as { nodes: string[]; only?: string; running: boolean; pending: number; all: number };
   const steps = useChainSteps(selection.only === undefined ? selection.nodes : []);
   const [busy, setBusy] = useState(false);
   if (selection.nodes.length === 0) return null;
@@ -142,6 +132,6 @@ export const NodeRunButtons = ({ primary }: { readonly primary: boolean }) => {
   );
 };
 
-export const selectionNodeCount = (editor: ReturnType<typeof useEditor>): number => chainNodesOf(nodeCanvas(editor), editor.getSelectedShapeIds()).length;
+export const selectionNodeCount = (editor: ReturnType<typeof useEditor>): number => selectionNodes(editor, editor.getSelectedShapeIds()).length;
 
 export { NO_NODES_MESSAGE };

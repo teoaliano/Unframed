@@ -720,7 +720,7 @@ export const nodeRunsLayer = Layer.effect(
     });
 
     yield* rooms.afterCommit((_project, change, room) => {
-      if (change.removed.length === 0) return;
+      if (change.removed.length === 0 && !change.put.some((id) => (change.records.get(id) as { type?: string } | undefined)?.type === "wire")) return;
       const orphans = room
         .read()
         .filter((record) => record.typeName === "shape" && (record as { type?: string }).type === "wire")

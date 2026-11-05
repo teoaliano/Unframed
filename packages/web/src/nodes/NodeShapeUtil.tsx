@@ -10,7 +10,8 @@ import { useCanvasProject, useEngine } from "../context.ts";
 import { loadLastUsed } from "../generate/lastUsed.ts";
 import { mediumDefinition } from "../generate/mediumRegistry.ts";
 import { noteRender } from "../fps/renders.ts";
-import {nodeCanvas, type NodeShape } from "./facts.ts";
+import { type NodeShape } from "./facts.ts";
+import { nodeStatusOf } from "./graph.ts";
 import { NodeEditor } from "./NodeEditor.tsx";
 import { newNodeProps, nodeFrames, nodeModel } from "./operations.ts";
 
@@ -80,15 +81,7 @@ export const VersionView = ({ version, medium, fit = "contain" }: { readonly ver
 
 const StatusLine = ({ shape }: { readonly shape: NodeShape }) => {
   const editor = useEditor();
-  const status = useValue(
-    "node status",
-    () => {
-      const canvas = nodeCanvas(editor);
-      const node = canvas.nodes.get(shape.id);
-      return node ? nodeStatus({ node, canvas, frames: nodeFrames(node) }) : undefined;
-    },
-    [editor, shape.id],
-  );
+  const status = useValue("node status", () => nodeStatusOf(editor, shape.id), [editor, shape.id]);
   if (!status || status.state === "ready") return null;
   return (
     <div className="flex min-h-5 items-start gap-1.5 text-xs" data-testid="node-status" data-state={status.state} role={status.state === "failed" ? "alert" : "status"}>
@@ -146,6 +139,7 @@ const NodeCard = ({ shape }: { readonly shape: NodeShape }) => {
   useEffect(() => {
     const element = scroller.current;
     if (!element || !live) return;
+    element.scrollTop = 0;
     const stop = (event: WheelEvent) => {
       if (element.scrollHeight > element.clientHeight && !event.ctrlKey) event.stopPropagation();
     };
@@ -158,7 +152,7 @@ const NodeCard = ({ shape }: { readonly shape: NodeShape }) => {
   return (
     <HTMLContainer id={shape.id} className="box-border flex flex-col rounded-xl border bg-card font-sans text-foreground shadow-xs/5" data-testid="node-card" data-node-live={live ? "true" : undefined} data-medium={props.medium} style={{ width: props.w, height: props.h }}>
       <ShapeLabel shapeId={shape.id} kind="node" name={name} width={props.w} text={name !== undefined ? `@${name}` : "Node"} />
-      <div ref={scroller} className={`flex min-h-0 flex-1 flex-col gap-2 p-2.5 ${live ? "pointer-events-auto overflow-y-auto" : "overflow-hidden"}`}>
+      <div className="flex shrink-0 flex-col gap-2 px-2.5 pt-2.5 pb-2" data-testid="node-header">
         <div className="flex items-center gap-1.5">
           <Workflow className="size-3.5 text-muted-foreground" aria-hidden />
           <Badge variant="outline" data-testid="node-medium">
@@ -170,6 +164,8 @@ const NodeCard = ({ shape }: { readonly shape: NodeShape }) => {
           {props.versions.length > 1 && <span className="ml-auto text-2xs text-muted-foreground tabular-nums" data-testid="node-version-count">{`${props.versions.length} versions`}</span>}
         </div>
         <StatusLine shape={shape} />
+      </div>
+      <div ref={scroller} className={`flex min-h-0 flex-1 flex-col gap-2 px-2.5 pb-2.5 ${live ? "pointer-events-auto overflow-y-auto" : "overflow-hidden"}`} data-testid="node-body">
         {live ? (
           <NodeEditor shape={shape} />
         ) : (

@@ -1,5 +1,5 @@
 import { NODE_MEDIA, type NodeMedium, type NodeShapeProps, type NodeVersion } from "@unframed/contracts";
-import { currentVersion, downstreamRun, nodeName, nodeRequest, nodeStatus, shapeName, type Composition, nodeCatalogueOf } from "@unframed/domain";
+import { currentVersion, nodeCatalogueOf, nodeName, nodeRequest, shapeName, type Composition } from "@unframed/domain";
 import { ChevronDown, GripVertical, Play } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import { useEditor, useValue, type TLShapeId } from "tldraw";
@@ -19,8 +19,9 @@ import { canvasShapes } from "../generate/facts.ts";
 import { loadLastUsed, saveLastUsed } from "../generate/lastUsed.ts";
 import { mediumDefinition, type PropValue, type RunSource } from "../generate/mediumRegistry.ts";
 import { nodeRunsProp, RUNS_KEY } from "../generate/runsProp.tsx";
-import {isWireShape, nodeCanvas, type NodeShape } from "./facts.ts";
-import { moveWire, nodeFrames, nodeRoles, updateNode } from "./operations.ts";
+import { type NodeShape } from "./facts.ts";
+import { downstreamCounts, nodeRequestOf, nodeStatusOf, nodeView } from "./graph.ts";
+import { moveWire, nodeFrames, updateNode } from "./operations.ts";
 import { runNodes } from "./runs.ts";
 import { VersionsStrip } from "./VersionsStrip.tsx";
 
@@ -40,15 +41,16 @@ const splitTray = (medium: NodeMedium, tray: Record<string, PropValue>): Pick<No
 
 const InputList = ({ shape }: { readonly shape: NodeShape }) => {
   const editor = useEditor();
-  const wires = useValue(
+  const wiresKey = useValue(
     "node inputs",
     () => {
-      const canvas = nodeCanvas(editor);
-      const roles = nodeRoles(editor, shape.id);
-      return canvas.wires.filter((wire) => wire.to === shape.id).map((wire) => ({ id: wire.id, name: shapeName(canvas, wire.from), role: roles[wire.id] ?? wire.role }));
+      const canvas = nodeView(editor, shape.id);
+      const roles = nodeRequestOf(editor, shape.id)?.roles ?? {};
+      return JSON.stringify(canvas.wires.filter((wire) => wire.to === shape.id).map((wire) => ({ id: wire.id, name: shapeName(canvas, wire.from), role: roles[wire.id] ?? wire.role })));
     },
     [editor, shape.id],
   );
+  const wires = JSON.parse(wiresKey) as Array<{ id: string; name: string; role: string }>;
   const dragged = useRef<string>(undefined);
   const [over, setOver] = useState<string>();
   if (wires.length === 0) {
@@ -105,18 +107,8 @@ const RunRow = ({ shape, estimate, blocked }: { readonly shape: NodeShape; reado
   const project = useCanvasProject();
   const [busy, setBusy] = useState(false);
   const running = shape.props.run !== undefined;
-  const counts = useValue(
-    "downstream counts",
-    () => {
-      const canvas = nodeCanvas(editor);
-      const frames = (id: string) => {
-        const node = canvas.nodes.get(id);
-        return node ? nodeFrames(node) : [];
-      };
-      return { pending: downstreamRun(canvas, shape.id, "pending", frames).length, all: downstreamRun(canvas, shape.id, "all", frames).length };
-    },
-    [editor, shape.id],
-  );
+  const countsKey = useValue("downstream counts", () => JSON.stringify(downstreamCounts(editor, shape.id)), [editor, shape.id]);
+  const counts = JSON.parse(countsKey) as { pending: number; all: number };
   const run = async (downstream?: "pending" | "all") => {
     if (busy || running) return;
     setBusy(true);
@@ -176,21 +168,13 @@ export const NodeEditor = ({ shape }: { readonly shape: NodeShape }) => {
   const request = useValue(
     "node request",
     () => {
-      const canvas = nodeCanvas(editor);
+      const canvas = nodeView(editor, shape.id);
       const node = canvas.nodes.get(shape.id);
       return node ? nodeRequest({ node, canvas, frames: nodeFrames(node), referenceCap: params.referenceCap, model }) : undefined;
     },
     [editor, shape.id, params.referenceCap, model],
   );
-  const status = useValue(
-    "node state",
-    () => {
-      const canvas = nodeCanvas(editor);
-      const node = canvas.nodes.get(shape.id);
-      return node ? nodeStatus({ node, canvas, frames: nodeFrames(node) }).state : undefined;
-    },
-    [editor, shape.id],
-  );
+  const status = useValue("node state", () => nodeStatusOf(editor, shape.id)?.state, [editor, shape.id]);
 
   const source: RunSource = useMemo(() => {
     const composition: Composition = {

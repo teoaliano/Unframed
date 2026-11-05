@@ -24,12 +24,6 @@ export const nodeFrames = (props: Pick<NodeShapeProps, "medium" | "model">): str
 };
 
 /** The roles each wire into a node shows, from the one function that also builds its run. */
-export const nodeRoles = (editor: Editor, nodeId: string): Readonly<Record<string, string>> => {
-  const canvas = nodeCanvas(editor);
-  const node = canvas.nodes.get(nodeId);
-  if (!node) return {};
-  return nodeRequest({ node, canvas, frames: nodeFrames(node) }).roles;
-};
 
 /** Draws a wire from `from` into `to`, or says why it cannot be drawn. */
 export const connectWire = (editor: Editor, from: TLShapeId, to: TLShapeId | undefined): boolean => {

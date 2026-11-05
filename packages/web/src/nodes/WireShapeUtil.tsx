@@ -1,13 +1,15 @@
 import { type WireRole, type WireShapeProps } from "@unframed/contracts";
 import { rolesFor, sourceOf } from "@unframed/domain";
+import { useMemo } from "react";
 import { Polyline2d, ShapeUtil, SVGContainer, T, useEditor, useValue, Vec, type Editor, type RecordProps, type TLShapeId } from "tldraw";
 import { Badge } from "~/components/ui/badge";
 import { Menu, MenuGroup, MenuGroupLabel, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuRadioItemIndicator, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
 import { controlEvents } from "../canvas/shapes/media.tsx";
 import { labelHue } from "../chrome/hue.ts";
 import { noteRender } from "../fps/renders.ts";
-import {nodeCanvas, type WireShape } from "./facts.ts";
-import { nodeFrames, nodeRoles, setWireFiles, setWireRole } from "./operations.ts";
+import { type WireShape } from "./facts.ts";
+import { inputOrder, nodeRequestOf, nodeView } from "./graph.ts";
+import { nodeFrames, setWireFiles, setWireRole } from "./operations.ts";
 
 const wireProps: RecordProps<WireShape> = {
   from: T.string,
@@ -25,23 +27,23 @@ interface Ends {
 
 const INSET = 48;
 
-/**
- * Where a wire runs: from the right edge of its source to the left edge of its node, in page
- * space. The wires into a node land down its left edge in the order of its input list.
- */
 const endsOf = (editor: Editor, wire: WireShape): Ends | undefined => {
   const { props } = wire;
   const from = editor.getShapePageBounds(props.from as TLShapeId);
   const to = editor.getShapePageBounds(props.to as TLShapeId);
   if (!from || !to) return undefined;
-  const siblings = editor
-    .getCurrentPageShapesSorted()
-    .filter((shape) => shape.type === "wire" && (shape.props as WireShapeProps).to === props.to)
-    .map((shape) => shape.id);
-  const at = Math.max(0, siblings.indexOf(wire.id));
+  const { at, of } = inputOrder(editor, wire.id, props.to);
   const span = Math.max(0, to.h - INSET * 2);
-  const y = siblings.length <= 1 ? to.midY : to.minY + INSET + (span * at) / (siblings.length - 1);
+  const y = of <= 1 ? to.midY : to.minY + INSET + (span * at) / (of - 1);
   return { start: new Vec(from.maxX, from.midY), end: new Vec(to.minX, Math.min(to.maxY - INSET / 2, y)) };
+};
+
+const endsKey = (ends: Ends | undefined): string => (ends ? `${ends.start.x},${ends.start.y},${ends.end.x},${ends.end.y}` : "");
+
+const endsFromKey = (key: string): Ends | undefined => {
+  if (key === "") return undefined;
+  const [sx, sy, ex, ey] = key.split(",").map(Number) as [number, number, number, number];
+  return { start: new Vec(sx, sy), end: new Vec(ex, ey) };
 };
 
 const control = (ends: Ends) => {
@@ -73,17 +75,18 @@ const ROLE_WORDS: Record<WireRole, string> = { prompt: "Prompt", reference: "Ref
 
 const RoleChip = ({ wire, at }: { readonly wire: WireShape; readonly at: Vec }) => {
   const editor = useEditor();
-  const label = useValue("wire role", () => nodeRoles(editor, wire.props.to)[wire.id] ?? wire.props.role, [editor, wire.props.to, wire.id]);
-  const offered = useValue(
+  const label = useValue("wire role", () => nodeRequestOf(editor, wire.props.to)?.roles[wire.id] ?? wire.props.role, [editor, wire.props.to, wire.id]);
+  const offeredKey = useValue(
     "wire roles offered",
     () => {
-      const canvas = nodeCanvas(editor);
+      const canvas = nodeView(editor, wire.props.to);
       const node = canvas.nodes.get(wire.props.to);
       const source = sourceOf(canvas, wire.props.from);
-      return node && source ? { page: source === "page" || source === "node-page", roles: rolesFor(node.medium, nodeFrames(node), source) } : { page: false, roles: [] as WireRole[] };
+      return JSON.stringify(node && source ? { page: source === "page" || source === "node-page", roles: rolesFor(node.medium, nodeFrames(node), source) } : { page: false, roles: [] as WireRole[] });
     },
     [editor, wire.props.to, wire.props.from],
   );
+  const offered = JSON.parse(offeredKey) as { page: boolean; roles: WireRole[] };
   const events = controlEvents(editor);
   const chosen = (wire.meta.unframed as { chosen?: boolean } | undefined)?.chosen === true;
   return (
@@ -148,7 +151,8 @@ const RoleChip = ({ wire, at }: { readonly wire: WireShape; readonly at: Vec }) 
 const Wire = ({ wire }: { readonly wire: WireShape }) => {
   noteRender(wire.id);
   const editor = useEditor();
-  const ends = useValue("wire ends", () => endsOf(editor, editor.getShape(wire.id) as WireShape ?? wire), [editor, wire.id]);
+  const key = useValue("wire ends", () => endsKey(endsOf(editor, (editor.getShape(wire.id) as WireShape | undefined) ?? wire)), [editor, wire.id]);
+  const ends = useMemo(() => endsFromKey(key), [key]);
   const selected = useValue("wire selected", () => editor.getSelectedShapeIds().includes(wire.id), [editor, wire.id]);
   if (!ends) return null;
   return (

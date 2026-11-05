@@ -35,3 +35,20 @@ describe("wires whose end is gone", () => {
     }
   });
 });
+
+describe("the room and wire ends", () => {
+  it("refuses a wire whose ends are not shape ids, and drops one that names a shape the canvas does not hold", async () => {
+    const agent = await startAgentEngine();
+    await seed(agent, [nodeShape("n", "201", { medium: "text" })]);
+    const bad = { ...wireShape("w", "n", "n", "prompt"), props: { from: "page:page", to: "shape:n", role: "prompt" } };
+    await expect(agent.rpc.call("testCanvas.apply", { project: "board", change: { put: [bad as never], remove: [] }, origin: { kind: "server", id: "test" } })).rejects.toMatchObject({
+      message: expect.stringContaining("Expected a shape id"),
+    });
+    await agent.rpc.call("testCanvas.apply", { project: "board", change: { put: [wireShape("ghost", "nothing", "n", "prompt")], remove: [] }, origin: { kind: "server", id: "test" } });
+    const started = Date.now();
+    while ((await roomRecords(agent)).some((record) => record.id === "shape:ghost")) {
+      if (Date.now() - started > 5000) throw new Error("the wire to nothing stayed");
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  });
+});
