@@ -20,7 +20,8 @@ const useRecapRows = (editor: Editor | null, activities: ReadonlyArray<ChatActiv
           const shape = editor?.getShape(roomShapeId(id) as TLShapeId);
           if (!shape) return [];
           const props = shape.props as Record<string, unknown>;
-          const title = text(props.title);
+          const ref = text((shape.meta as Record<string, unknown>).ref);
+          const title = shape.type === "node" ? `Node${ref === undefined ? "" : ` @${ref}`}` : shape.type === "wire" ? `Wire, ${String(props.role)}` : text(props.title);
           const fileName = text(props.fileName);
           return [{ id: shape.id, kind: shapeKind(shape.type), ...(title !== undefined ? { title } : {}), ...(fileName !== undefined ? { fileName } : {}) }];
         }),
