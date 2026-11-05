@@ -138,6 +138,16 @@ rl.on("line", (line) => {
         send({ id: message.id, result: { data: [{ name: "unframed", tools, resources: [], resourceTemplates: [], authStatus: "unsupported" }] } });
       });
     case "turn/start": return void runTurn(message);
+    case "thread/compact/start": {
+      const threadId = message.params.threadId;
+      const turnId = "cx-compact-" + runId + "-" + (++turns);
+      send({ id: message.id, result: {} });
+      send({ method: "turn/started", params: { threadId, turn: { id: turnId } } });
+      send({ method: "item/started", params: { threadId, turnId, item: { type: "contextCompaction", id: "compact-" + turns } } });
+      send({ method: "item/completed", params: { threadId, turnId, item: { type: "contextCompaction", id: "compact-" + turns } } });
+      send({ method: "thread/tokenUsage/updated", params: { threadId, turnId, tokenUsage: { total: { inputTokens: 50, outputTokens: 10, totalTokens: 60 }, last: { totalTokens: 9000 }, modelContextWindow: 272000 } } });
+      return send({ method: "turn/completed", params: { threadId, turn: { id: turnId, status: "completed" } } });
+    }
     case "turn/interrupt": return send({ id: message.id, result: {} });
     case "thread/rollback": return send({ id: message.id, result: { thread: { id: message.params.threadId } } });
     default: return send({ id: message.id, error: { code: -32601, message: "method not found" } });
@@ -182,6 +192,60 @@ rl.on("line", (line) => {
   const response = message.request.subtype === "initialize" ? init : {};
   send({ type: "control_response", response: { subtype: "success", request_id: message.request_id, response } });
 });
+rl.on("close", () => process.exit(0));
+`),
+  );
+
+/**
+ * A signed-in `claude` that also runs turns of the Agent SDK's stream-json protocol: every user
+ * message it gets is logged to `FAKE_CLAUDE_MESSAGES`. A message whose whole content is the string
+ * `/compact` compacts as Claude Code does (a compacting status, a compact boundary, an empty
+ * result); any other message is a command Claude does not know when it starts with `/` and
+ * arrives as content blocks, so it answers as a prompt: "You said: <text>".
+ */
+export const fakeClaudeTurns = (dir: string) =>
+  write(
+    join(dir, "claude"),
+    script(`
+if (args[0] === "--version") { console.log("2.1.280 (Claude Code)"); process.exit(0); }
+const fs = require("node:fs");
+const init = ${JSON.stringify({ commands: [], models: [], account: { email: "person@example.com", subscriptionType: "Max" } })};
+const send = (message) => process.stdout.write(JSON.stringify(message) + "\\n");
+const session = "fake-session-" + Math.random().toString(16).slice(2, 8);
+let turns = 0;
+const listTools = async () => {
+  const index = args.indexOf("--mcp-config");
+  if (index === -1) return [];
+  const server = JSON.parse(args[index + 1]).mcpServers.unframed;
+  const answer = await fetch(server.url, { method: "POST", headers: { ...server.headers, "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }) });
+  return (await answer.json()).result.tools.map((tool) => "mcp__unframed__" + tool.name);
+};
+let queue = Promise.resolve();
+const rl = require("node:readline").createInterface({ input: process.stdin });
+rl.on("line", (line) => { queue = queue.then(() => handle(line)); });
+const handle = async (line) => {
+  const message = JSON.parse(line);
+  if (message.type === "control_request") {
+    const response = message.request.subtype === "initialize" ? init : {};
+    return send({ type: "control_response", response: { subtype: "success", request_id: message.request_id, response } });
+  }
+  if (message.type !== "user") return;
+  if (process.env.FAKE_CLAUDE_MESSAGES) fs.appendFileSync(process.env.FAKE_CLAUDE_MESSAGES, JSON.stringify(message.message) + "\\n");
+  turns++;
+  if (turns === 1) send({ type: "system", subtype: "init", session_id: session, tools: await listTools(), model: "claude-opus-5-5", cwd: process.cwd(), permissionMode: "bypassPermissions" });
+  const content = message.message.content;
+  const result = (usage) => send({ type: "result", subtype: "success", session_id: session, is_error: false, result: "", usage, total_cost_usd: 0, modelUsage: { "claude-opus-5-5": { contextWindow: 200000 } } });
+  if (content === "/compact") {
+    send({ type: "system", subtype: "status", status: "compacting", session_id: session });
+    send({ type: "system", subtype: "compact_boundary", session_id: session, compact_metadata: { trigger: "manual", pre_tokens: 214000, post_tokens: 12000 } });
+    send({ type: "system", subtype: "status", status: null, session_id: session });
+    return result({ input_tokens: 0, output_tokens: 0 });
+  }
+  const text = typeof content === "string" ? content : content.filter((block) => block.type === "text").map((block) => block.text).join("\\n");
+  const id = "msg-" + turns;
+  send({ type: "assistant", uuid: "uuid-" + turns, session_id: session, parent_tool_use_id: null, message: { id, role: "assistant", model: "claude-opus-5-5", content: [{ type: "text", text: "You said: " + text }], usage: { input_tokens: 214000, output_tokens: 10 } } });
+  result({ input_tokens: 214000, output_tokens: 10 });
+};
 rl.on("close", () => process.exit(0));
 `),
   );

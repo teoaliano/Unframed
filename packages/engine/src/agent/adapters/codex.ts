@@ -8,6 +8,7 @@ import {
   codexPolicy,
   codexUserInputAnswer,
   mapCodexNotification,
+  isCompactCommand,
   modelMessage,
   readCodexRequest,
   type ApprovalDecision,
@@ -201,6 +202,10 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
         emit(input.chatId, { type: "turn.completed", turnId: input.turnId, payload: { state: "failed", errorMessage: failure } });
         session.turnId = undefined;
         return { turnId: input.turnId };
+      }
+      if (input.command && isCompactCommand(input.text)) {
+        await session.rpc.request("thread/compact/start", { threadId: session.threadId });
+        return { turnId: input.turnId, resumeCursor: { threadId: session.threadId } };
       }
       const policy = codexPolicy(session.runtimeMode);
       const model = input.modelSelection.model;

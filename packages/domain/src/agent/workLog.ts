@@ -154,6 +154,9 @@ export const describeTool = (input: { readonly toolName: string; readonly itemTy
         return { label: own, action: "tool" };
     }
   }
+  if (itemType === "context_compaction") {
+    return { label: state === "inProgress" ? "Compacting the context" : state === "failed" ? "Couldn't compact the context" : "Compacted the context", action: "tool" };
+  }
   const name = toolName.toLowerCase();
   const command = text(toolInput.command) ?? text(toolInput.cmd) ?? text(data.command);
   if (itemType === "command_execution" || command !== undefined) {

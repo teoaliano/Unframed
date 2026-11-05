@@ -116,6 +116,24 @@ export const mapClaudeMessage = (state: ClaudeMapState, message: unknown, contex
           if (check.failure) toolsFailure = check.failure;
           break;
         }
+        case "status":
+          if (m.status === "compacting") {
+            events.push({ type: "item.started", ...turn, itemId: `compaction:${context.turnId ?? "turn"}`, payload: { itemType: "context_compaction", status: "inProgress", title: "Compacting context" } });
+          }
+          break;
+        case "compact_boundary": {
+          const metadata = obj(m.compact_metadata);
+          const before = num(metadata.pre_tokens);
+          const after = num(metadata.post_tokens);
+          events.push({
+            type: "item.completed",
+            ...turn,
+            itemId: `compaction:${context.turnId ?? "turn"}`,
+            payload: { itemType: "context_compaction", status: "completed", title: "Context compacted", data: { ...(before === undefined ? {} : { preTokens: before }), ...(after === undefined ? {} : { postTokens: after }) } },
+          });
+          next = { ...next, lastCallTokens: after };
+          break;
+        }
         case "api_retry":
           events.push({
             type: "runtime.retry",

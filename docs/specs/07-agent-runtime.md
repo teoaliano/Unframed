@@ -549,6 +549,10 @@ The model's copy of a message is the person's text preceded by a preamble; the s
 
 `lastClock` is stamped when a turn settles, and nowhere else.
 
+**Provider commands** (t3code's rule). A message with no attachments whose text starts with `/` and a letter or digit is a provider command: it gets no preamble and goes to the provider as typed, so the provider runs it as its own command instead of reading it as a prompt (with a selection or change note in front, Claude answers `/compact` with "that is a Claude Code command"). Its turn settles without stamping `lastClock`, so the change note it skipped reaches the next message. Claude gets the command as the message's plain text content, not as content blocks. Codex has no slash commands in its app-server: `/compact` becomes `thread/compact/start {threadId}`, whose `turn/started`, `contextCompaction` item and `turn/completed` notifications map as a turn's do; any other command goes to `turn/start` as text.
+
+**Compaction** is a `context_compaction` item. Claude's `system` `status: "compacting"` opens it ("Compacting context") and its `compact_boundary` completes it ("Context compacted", with `{preTokens, postTokens}` from `compact_metadata`); the context used reported at the end of that turn is `post_tokens` when Claude gives it. Codex's `contextCompaction` item maps to the same item type.
+
 The system prompt tells the agent how to read the selection. Selection is context, never a target field: one artifact selected is what the message is about unless the sentence says otherwise; nothing selected means something new should be made when the sentence asks for something; several selected means the agent decides from the sentence (the same edit to all, an edit to one, a different edit to each, a new artifact made from copies of them, or a question) and asks in its reply only when the sentence is genuinely ambiguous. It never asks which mode was meant, and it never changes what is selected. There is no `target` anywhere in the protocol.
 
 ### Attachments
@@ -617,6 +621,7 @@ Turn = { text: string,
 
 - `when` is matched case-insensitively against a chat's first message. The chosen script sticks to that chat for its whole life. Fallbacks: a script with no `when`, then the only script when just one was loaded. With several and no match the turn fails with `no agent script matches "<first 60 characters>"`.
 - Turn N answers the chat's Nth message; past the end the turn fails with `agent script <name> has <n> turn(s); the chat is on turn <m>`.
+- A `/compact` turn (a provider command) reports a `context_compaction` item, started and completed, before the turn's `usage` and text, as Claude and Codex do; the script still needs a turn for it (its `text` may be empty).
 - `expectPreamble` must match the preamble the turn was given, or the turn fails with `agent script <name> turn <n>: preamble did not match /<re>/: it was "<preamble>"`.
 - Order within a turn: on turn 1, the canvas tools check and the session event; then retries and the rate-limit notice; then sub-agent tasks; then the question, if any, waiting for the answer; then each `provider` call goes through the real permission decision for the chat's mode (asking the person when the mode says so, and waiting); a decline stops the rest of the turn and the answer is `refusedText`; then each `tools` call runs the real handler; then `usage`, when given, is reported as `thread.token-usage.updated`; then the text streams as one delta and the turn settles.
 - `title` is used as the chat's name on turn 1 instead of asking a model; empty means no name.

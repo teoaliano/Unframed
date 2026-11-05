@@ -117,4 +117,30 @@ describe("Codex runs a chat", () => {
     expect(chat.latestTurn?.state).toBe("error");
     expect(chat.session?.lastError).toBe("The agent session started without the canvas tools (mcp__unframed__motion_read). This is a bug in Unframed, not your setup.");
   });
+
+  it("compacts on /compact with Codex's own thread/compact/start, not as a prompt", async () => {
+    const dir = await makeTempDir("unframed-codex-");
+    const codex = await fakeCodexAppServer(join(dir, "bin"));
+    const shell = await fakeShell(join(dir, "shell"));
+    const messages = join(dir, "messages.log");
+    const agent = await startAgentEngine({
+      dotenv: `CODEX_PATH=${codex}\nCLAUDE_PATH=${join(dir, "none")}\n`,
+      env: { UNFRAMED_TEST_AGENT_SCRIPT: undefined, SHELL: shell, FAKE_SHELL_PATH: "", FAKE_CODEX_MESSAGES: messages, FAKE_CODEX_THREADS: join(dir, "threads.log") },
+    });
+    const chatId = await agent.createChat({ modelSelection: { provider: "codex", model: "gpt-6", traits: {} } });
+    await agent.send(chatId, "clean the build folder");
+    const parked = await (await agent.watch(chatId)).until((chat) => openRequests(chat, "approval").length === 1, "the approval");
+    const request = openRequests(parked, "approval")[0]!.payload as { requestId: string };
+    await agent.dispatch({ type: "thread.approval.respond", threadId: chatId, requestId: request.requestId, decision: "accept" });
+    await agent.settled(chatId, 1);
+    await agent.send(chatId, "/compact");
+    const chat = await agent.settled(chatId, 2);
+    expect(chat.latestTurn?.state).toBe("completed");
+    const sent = (await fakeCodexMessages(messages)).flatMap((entry) => (entry.message ? [entry.message] : []));
+    const compact = sent.find((message) => message.method === "thread/compact/start");
+    expect(compact.params).toEqual({ threadId: sent.find((message) => message.method === "turn/start").params.threadId });
+    expect(sent.filter((message) => message.method === "turn/start")).toHaveLength(1);
+    const compaction = chat.activities.filter((activity) => (activity.payload as { itemType?: string }).itemType === "context_compaction");
+    expect(compaction.map((activity) => activity.kind)).toEqual(["tool.started", "tool.completed"]);
+  });
 });

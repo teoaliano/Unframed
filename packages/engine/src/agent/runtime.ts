@@ -8,6 +8,7 @@ import {
   elementContext,
   roomShapeId,
   changeNote,
+  isProviderCommand,
   chatSummary,
   DEFAULT_RUNTIME_MODE,
   classifyToolItem,
@@ -122,6 +123,7 @@ interface ActiveTurn {
   readonly interactionMode: InteractionMode;
   readonly startedAt: number;
   readonly model: string;
+  readonly command: boolean;
 }
 
 class ProjectAgent {
@@ -565,6 +567,7 @@ export class AgentRuntime {
     if (!chat) return;
     const message = chat.messages.find((known) => known.id === requested.messageId);
     const steer = requested.steer === true;
+    const command = isProviderCommand(message?.text ?? "", message?.attachments?.length ?? 0);
     const selection = await this.resolveModel((requested.modelSelection as ModelSelection | undefined) ?? chat.modelSelection);
     if (!steer) {
       this.activeTurns.set(chatId, {
@@ -573,6 +576,7 @@ export class AgentRuntime {
         interactionMode: requested.interactionMode,
         startedAt: Date.now(),
         model: selection.model,
+        command,
       });
       if (Number(requested.turnCount) === 1 && message?.context?.selection.length) {
         await this.tag(agent.slug, chatId, await this.artifactsAmong(agent.slug, message.context.selection));
@@ -580,7 +584,7 @@ export class AgentRuntime {
     }
     try {
       const records = await this.deps.rooms.read(agent.slug);
-      const preamble = await this.preamble(agent, chat, message?.context?.selection ?? [], message?.context?.elements ?? [], message?.attachments ?? [], records);
+      const preamble = command ? "" : await this.preamble(agent, chat, message?.context?.selection ?? [], message?.context?.elements ?? [], message?.attachments ?? [], records);
       const live = this.providers.has(chatId);
       if (!live) await this.internal(agent, chatId, { type: "thread.session.set", session: { status: "starting", activeTurnId: String(requested.turnId), lastError: null } });
       await this.providers.ensure(agent.slug, agent.engine.chat(chatId) ?? chat, agent.folder, agent.engine, selection);
@@ -597,6 +601,7 @@ export class AgentRuntime {
         modelSelection: selection,
         interactionMode: requested.interactionMode ?? chat.interactionMode,
         steer,
+        ...(command ? { command: true } : {}),
       });
     } catch (error) {
       const text = errorText(error);
@@ -865,10 +870,11 @@ export class AgentRuntime {
         });
       }
     }
-    const clock = await this.deps.rooms.clock(agent.slug).catch(() => null);
+    const active = this.activeTurns.get(chatId);
+    const command = active?.turnId === turn.turnId && active.command;
+    const clock = command ? null : await this.deps.rooms.clock(agent.slug).catch(() => null);
     await this.internal(agent, chatId, { type: "thread.turn.settle", turnCount: turn.turnCount, clock, ...(outcome.usage === undefined ? {} : { usage: outcome.usage }) });
     await this.internal(agent, chatId, { type: "thread.turn.files.complete", turnCount: turn.turnCount, files: agent.turnChanges.files(chatId, turn.turnCount) });
-    const active = this.activeTurns.get(chatId);
     await writeTurnSidecar(agent.folder, {
       chatId,
       turn: turn.turnCount,

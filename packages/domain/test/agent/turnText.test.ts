@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   answersWithFiles,
   buildPreamble,
+  isCompactCommand,
+  isProviderCommand,
   changeNote,
   checkCanvasTools,
   classifyOrigin,
@@ -138,3 +140,16 @@ describe("an answer's files", () => {
     expect(answersWithFiles({ look: "Warm" }, {})).toEqual({ look: "Warm" });
   });
 });
+
+describe("provider commands", () => {
+  it("is a message with no attachments whose text starts with a slash and a name", () => {
+    expect(isProviderCommand("/compact", 0)).toBe(true);
+    expect(isProviderCommand("  /review the diff", 0)).toBe(true);
+    expect(isProviderCommand("/compact", 1)).toBe(false);
+    expect(isProviderCommand("compact", 0)).toBe(false);
+    expect(isProviderCommand("/ nothing", 0)).toBe(false);
+    expect(isCompactCommand(" /Compact ")).toBe(true);
+    expect(isCompactCommand("/compact now")).toBe(false);
+  });
+});
+

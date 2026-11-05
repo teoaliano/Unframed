@@ -85,6 +85,7 @@ interface ClaudeSession {
 const IMAGE_TYPES = new Set(["image/gif", "image/jpeg", "image/png", "image/webp"]);
 
 const messageContent = async (input: TurnInput): Promise<SDKUserMessage["message"]["content"]> => {
+  if (input.command) return input.text.trim();
   const blocks: Array<Record<string, unknown>> = [{ type: "text", text: modelMessage(input.preamble, input.text) }];
   for (const attachment of input.attachments) {
     if (attachment.kind !== "image" || !IMAGE_TYPES.has(attachment.type)) continue;

@@ -140,6 +140,20 @@ describe("Claude event mapping", () => {
     ]);
   });
 
+  it("maps /compact's status and compact boundary to one context compaction item, and the context left after it", () => {
+    const { events } = replay([
+      { type: "system", subtype: "status", status: "compacting", session_id: SESSION },
+      { type: "system", subtype: "compact_boundary", session_id: SESSION, compact_metadata: { trigger: "manual", pre_tokens: 214000, post_tokens: 12000 } },
+      { type: "result", subtype: "success", session_id: SESSION, is_error: false, result: "", usage: { input_tokens: 0, output_tokens: 0 }, modelUsage: { opus: { contextWindow: 200000 } } },
+    ]);
+    const items = events.filter((event) => event.type.startsWith("item."));
+    expect(items).toEqual([
+      { type: "item.started", turnId: "turn:1", itemId: "compaction:turn:1", payload: { itemType: "context_compaction", status: "inProgress", title: "Compacting context" } },
+      { type: "item.completed", turnId: "turn:1", itemId: "compaction:turn:1", payload: { itemType: "context_compaction", status: "completed", title: "Context compacted", data: { preTokens: 214000, postTokens: 12000 } } },
+    ]);
+    expect(events.find((event) => event.type === "thread.token-usage.updated")?.payload).toMatchObject({ usage: { usedTokens: 12000, maxTokens: 200000 } });
+  });
+
   it("maps api_retry, a rate limit event and the task messages", () => {
     const { events } = replay([
       { type: "system", subtype: "api_retry", attempt: 2, max_retries: 10, retry_delay_ms: 4000, error_status: 529, error: "overloaded" },
