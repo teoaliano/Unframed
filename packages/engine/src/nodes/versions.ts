@@ -111,12 +111,6 @@ export const stopNode = (get: Get, id: string, reason: string, chainId?: string)
   return put(node, { ...withoutKeys(node.props, "run"), error: reason });
 };
 
-export const releaseNode = (get: Get, id: string, chainId: string): CanvasChange | undefined => {
-  const node = get(id);
-  if (!isNode(node) || node.props.run?.chainId !== chainId || node.props.run.runId !== "") return undefined;
-  return put(node, withoutKeys(node.props, "run"));
-};
-
 /** Applies a node change decided from the room as it is now, logging a failure rather than throwing. */
 export const applyNodeChange = (
   rooms: CanvasRooms["Service"],

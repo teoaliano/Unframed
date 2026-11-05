@@ -69,7 +69,7 @@ import { shapeBoxes } from "../runs/shapeBounds.ts";
 import { Config } from "../services.ts";
 import { SettingsStore } from "../settingsStore.ts";
 import { RenderJobs } from "../video/renderJobs.ts";
-import { applyNodeChange, dropVersion, fillVersion, finishRun, isNode, nodeOrigin, nodeSidecarFields, queueNodes, releaseNode, startVersions, stopNode, type NodeTarget } from "./versions.ts";
+import { applyNodeChange, dropVersion, fillVersion, finishRun, isNode, nodeOrigin, nodeSidecarFields, queueNodes, startVersions, stopNode, type NodeTarget } from "./versions.ts";
 
 export const NODE_GONE = "There is no such node on this canvas.";
 export const NODE_BUSY = (name: string) => `${name} is running. Wait for it to finish.`;
@@ -575,7 +575,6 @@ export const nodeRunsLayer = Layer.effect(
       let failedName = "";
       try {
         for (const [index, id] of steps.entries()) {
-          await applyNodeChange(rooms, runPromise, project, (get) => releaseNode(get, id, chainId), chainId);
           const { records, canvas } = await readCanvas(project);
           const step = planned[index]!;
           const composed = await compose(canvas, id, new Set(), input.agent === true, input.rendered ?? {});
@@ -609,7 +608,7 @@ export const nodeRunsLayer = Layer.effect(
             project,
             (get) => {
               const node = get(id);
-              if (!isNode(node) || node.props.error !== undefined || node.props.run !== undefined) return undefined;
+              if (!isNode(node) || node.props.error !== undefined || (node.props.run !== undefined && node.props.run.runId !== "")) return undefined;
               return stopNode(get, id, outcome.ok ? "" : outcome.error);
             },
             chainId,
