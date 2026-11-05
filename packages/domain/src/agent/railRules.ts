@@ -24,6 +24,21 @@ export const visibleChats = <C extends RailChat>(chats: ReadonlyArray<C>, select
   return ordered.filter((chat) => chat.tags.some((tag) => selected.has(tag)));
 };
 
+export const railShown = <C extends RailChat>(input: {
+  readonly chats: ReadonlyArray<C>;
+  readonly selected: ReadonlyArray<string>;
+  readonly chosen: string | null;
+  readonly pinned: string | null;
+  readonly drafting: boolean;
+}): { readonly visible: C[]; readonly active: string | null } => {
+  const shown = visibleChats(input.chats, input.selected);
+  const pinned = input.pinned === null ? undefined : input.chats.find((chat) => chat.id === input.pinned);
+  const visible = pinned && !shown.includes(pinned) ? [pinned, ...shown] : shown;
+  if (input.drafting) return { visible, active: null };
+  const active = input.pinned !== null && visible.some((chat) => chat.id === input.pinned) ? input.pinned : nextActive(input.chosen, visible);
+  return { visible, active };
+};
+
 export const nextActive = (activeId: string | null | undefined, visible: ReadonlyArray<{ readonly id: string }>): string | null => {
   if (activeId && visible.some((chat) => chat.id === activeId)) return activeId;
   return visible[0]?.id ?? null;

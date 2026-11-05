@@ -69,7 +69,7 @@ export interface TopBarProps {
   readonly squareStart?: boolean | undefined;
 }
 
-const BAR_HEIGHT = 36;
+export const TOP_BAR_HEIGHT = 36;
 /**
  * Window edge to the bar on macOS. The shell puts the traffic lights at x 12 (main.js `trafficLightPosition`), the same
  * as the margin above and below them (the OS draws them about 13 px tall, centred on the bar's 18 px midline). The three
@@ -96,10 +96,10 @@ const barEnd = (width: number) =>
   `H${n(width - END_BOTTOM)}C${n(width - 7.4)} 36 ${n(width - 2.19)} 29.07 ${width} ${MID}C${n(width + 1.5)} 10.05 ${n(width + 3.4)} 4.7 ${n(width + END_TOP)} 0`;
 
 /** The bar's outline as one path. The fill closes the top against the window edge; the stroke does not, so the border is the outline and nothing more. */
-const barFill = (width: number, squareStart: boolean) => (squareStart ? `M0 0V${BAR_HEIGHT}${barEnd(width)}Z` : `${startEnd}${barEnd(width)}Z`);
+const barFill = (width: number, squareStart: boolean) => (squareStart ? `M0 0V${TOP_BAR_HEIGHT}${barEnd(width)}Z` : `${startEnd}${barEnd(width)}Z`);
 /** A square start has no side at the window edge, so its outline starts on the bottom border. */
 const barStroke = (width: number, squareStart: boolean) =>
-  squareStart ? `M0 ${BAR_HEIGHT}${barEnd(width)}` : barFill(width, false).replace(/Z$/, "");
+  squareStart ? `M0 ${TOP_BAR_HEIGHT}${barEnd(width)}` : barFill(width, false).replace(/Z$/, "");
 
 const DRAG = "[-webkit-app-region:drag]";
 const NO_DRAG_CONTROLS = "[&_button]:[-webkit-app-region:no-drag]";
@@ -227,7 +227,7 @@ export const TopBar = ({
   return (
     <div data-slot="top-bar" data-platform={platform} ref={rootRef} {...region(`relative box-border flex h-9 w-full min-w-0 items-stretch ${DRAG}`, regions.frame)}>
       <div data-slot="top-bar-body" ref={bodyRef} aria-hidden className="absolute inset-y-0 left-0 right-0">
-        <svg className="pointer-events-none absolute inset-0 overflow-visible" width={bodyWidth} height={BAR_HEIGHT}>
+        <svg className="pointer-events-none absolute inset-0 overflow-visible" width={bodyWidth} height={TOP_BAR_HEIGHT}>
           <path d={barFill(bodyWidth, squareStart)} className="fill-background stroke-none" />
           <path d={barStroke(bodyWidth, squareStart)} className="fill-none stroke-border" />
         </svg>

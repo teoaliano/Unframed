@@ -104,7 +104,7 @@ A switch is `activate(name)`. In order:
 
 Steps 3 and 4 are the same work the picker does today, so a switch costs what a picker switch costs. The rail's open state, width and the Settings dialog are global and are not torn down.
 
-An artifact editor open on the active tab closes on a switch, because the editor belongs to the project it opened in. The strip stays visible above the editor, so switching from the editor is one click.
+An artifact editor open on the active tab closes on a switch, because the editor belongs to the project it opened in. The whole top bar stays visible above the editor, which starts at the bar's bottom edge (spec 09), so switching from the editor is one click.
 
 ### What a background tab holds
 

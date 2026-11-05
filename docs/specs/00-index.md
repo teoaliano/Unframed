@@ -6,7 +6,7 @@ Read this file before any spec. It holds what every spec shares: the product in 
 
 Unframed is a local, pay-per-generation image, video and text generator on an infinite canvas. You put material on the canvas (text, images, clips, drawings), select some of it, and either **Generate** (one paid model call through OpenRouter) or hand it to the **Agent** (a local coding agent, Claude or Codex, running on your own subscription). Results land back on the canvas as ordinary shapes you can select into the next run. Every run writes its output file and a JSON sidecar into the project folder. Nothing is hosted: the engine runs on your machine, binds loopback only, and holds your OpenRouter key.
 
-The canvas is tldraw. **The selection is the input set** of a run. A named group is a selection you keep, and it can carry standing generation settings (a recipe). Nodes and wires (spec 16) add a second, persistent input set: a node is a card on the canvas with its own tray and instruction, its inputs are the shapes wired into it, and its results stay in it as versions. The agent can also write HTML pages and HyperFrames motion compositions onto the canvas, tuned with DialKit parameters in a panel beside them or in a full-screen editor.
+The canvas is tldraw. **The selection is the input set** of a run. A named group is a selection you keep, and it can carry standing generation settings (a recipe). Nodes and wires (spec 16) add a second, persistent input set: a node is a card on the canvas with its own tray and instruction, its inputs are the shapes wired into it, and its results stay in it as versions. The agent can also write HTML pages and HyperFrames motion compositions onto the canvas, tuned with DialKit parameters in a panel beside them or in an editor that takes the canvas's place below the top bar.
 
 This is a rewrite of an existing app. Every capability the old app had is kept. The specs describe behaviour and file formats. They never describe the old code, and the old code is not available to you. Do not look for it.
 
@@ -63,7 +63,7 @@ Use these words, and only these, for these things.
 - **Composer**: the one input component. It has a **Generate tray** and an **Agent tray**.
 - **Chat**: one conversation with the agent. It is made of **turns**. A chat has **tags**: the artifacts it has touched.
 - **Artifact**: a page or a motion.
-- **Editor**: the full-screen view of one artifact: chat on the left, the artifact in the centre, **dials** (DialKit parameters) on the right.
+- **Editor**: the view of one artifact that takes the canvas's place below the top bar: chat on the left, the artifact in the centre, **dials** (DialKit parameters) on the right.
 - **Render job**: a durable record of a paid video generation that outlives the browser tab.
 - **Preview origin**: the second loopback HTTP server that serves artifact files and nothing else, on a fixed port (18787) unless something else holds it.
 - **Live viewer**: the small page "Open in a new tab" opens. It shows a page or motion's newest version with its current dials, and follows both while the app is open (spec 09).

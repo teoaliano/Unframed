@@ -8,11 +8,11 @@ import { SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { atom, react, useEditor, useValue, type TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
+import { cn } from "~/lib/utils";
 import { useWheelToCanvas } from "../canvas/wheelToCanvas.ts";
 import { Tip } from "../chrome/ui.tsx";
 import { canvasRoom, placeBeside } from "../generate/floating.ts";
-import { DialControls } from "./DialControls.tsx";
-import { AddParameter } from "./editor/Parameters.tsx";
+import { ParametersContent } from "./editor/Parameters.tsx";
 import { artifactsOf } from "./state.ts";
 
 const stop = (event: { stopPropagation(): void }) => event.stopPropagation();
@@ -107,15 +107,9 @@ export const ParametersPanel = ({ shapeId }: { readonly shapeId: TLShapeId }) =>
           </Button>
         </Tip>
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden" data-scrolls="true">
-        {announcement === undefined ? (
-          <p className="mx-2.5 my-4 text-sm text-muted-foreground">No parameters yet.</p>
-        ) : (
-          <DialControls shapeId={shapeId} announcement={announcement} saved={facts.dials} post={post} />
-        )}
+      <div className={cn("min-h-0 flex-1 overflow-y-auto overflow-x-hidden", announcement === undefined && "pb-2.5")} data-scrolls="true">
+        <ParametersContent shapeId={shapeId} kind={facts.kind} title={title} announcement={announcement} saved={facts.dials} post={post} place="canvas" />
       </div>
-      {/* With nothing to tune, the panel asks the agent for parameters rather than end there. */}
-      {announcement === undefined && <AddParameter shapeId={shapeId} kind={facts.kind} title={title} hasParameters={false} openRail />}
     </section>
   );
 };
