@@ -21,6 +21,7 @@ import { errorText, logError, logInfo } from "../log.ts";
 import type { SettingsStore } from "../settingsStore.ts";
 import { audioPlaceholder, clearChange, fillFor, indexOnTop, isShape, type LandedAudio, type RunOutcome } from "./placeholders.ts";
 import { fileStamp, writeResultFile, writeSidecar } from "./resultFiles.ts";
+import { applyNodeChange, dropVersion, fillVersion, finishRun, nodeSidecarFields, startVersions, type NodeTarget } from "../nodes/versions.ts";
 
 export interface AudioRunDeps {
   readonly settings: SettingsStore["Service"];
@@ -53,7 +54,7 @@ export const makeAudioRuns = (deps: AudioRunDeps) => {
       if (refusal !== undefined) return yield* unframedError("bad_request", refusal);
     });
 
-  const audio = (request: AudioRunRequest) =>
+  const audio = (request: AudioRunRequest, into?: NodeTarget) =>
     Effect.gen(function* () {
       const folder = yield* deps.projectFolder(request.project);
       const project = projectSlug(request.project);
@@ -72,6 +73,7 @@ export const makeAudioRuns = (deps: AudioRunDeps) => {
       }
       const pageId = records.find((record) => record.typeName === "page")?.id ?? "page:page";
       const [at] = placeResults(request.anchor, [AUDIO_DEFAULT_SIZE], deps.obstacles(records, request));
+      let versionId: string | undefined;
       const placeholder = audioPlaceholder({
         at: at!,
         index: indexOnTop(records, pageId),
@@ -80,10 +82,26 @@ export const makeAudioRuns = (deps: AudioRunDeps) => {
         marker: { runId, runIndex: 1, startedAt },
         result: { sidecar: null, medium: "audio", model, batchId, runIndex: 1, runCount: 1, cost: null, credits: null, sources: [...request.sources] },
       });
-      const shapeId = placeholder.id as string;
+      const shapeId = into !== undefined ? into.shapeId : (placeholder.id as string);
 
       const run = deps.register(runId, project);
-      yield* rooms.apply(request.project, { put: [placeholder], remove: [] }, origin(runId)).pipe(Effect.tapError(() => Effect.sync(run.forget)));
+      if (into !== undefined) {
+        const started = yield* rooms
+          .applyWhen(
+            request.project,
+            (get) => {
+              const made = startVersions(get, into.shapeId, { runId, chainId: into.chainId, batchId, count: 1, fingerprint: into.fingerprint, startedAt });
+              versionId = made?.ids[0];
+              return made?.change;
+            },
+            origin(runId),
+          )
+          .pipe(Effect.tapError(() => Effect.sync(run.forget)));
+        if (started === undefined) {
+          run.forget();
+          return yield* unframedError("not_found", "That node is no longer on the canvas.");
+        }
+      } else yield* rooms.apply(request.project, { put: [placeholder], remove: [] }, origin(runId)).pipe(Effect.tapError(() => Effect.sync(run.forget)));
       yield* Effect.promise(() => deps.publish(project, { type: "started", runId, batchId, count: 1 }));
 
       const params = definedParams(request.params);
@@ -107,6 +125,7 @@ export const makeAudioRuns = (deps: AudioRunDeps) => {
           references: [],
           sources: [...request.sources],
           ...(of === undefined ? {} : { of }),
+          ...nodeSidecarFields(into, versionId),
         };
         const sidecar: AudioSidecar = {
           kind: "audio",
@@ -127,6 +146,7 @@ export const makeAudioRuns = (deps: AudioRunDeps) => {
           createdAt: new Date().toISOString(),
           file,
           recipe,
+          ...nodeSidecarFields(into, versionId),
         };
         let sidecarName: string | null = `${base}.json`;
         await writeSidecar(folder, base, sidecar).catch((error: unknown) => {
@@ -146,6 +166,17 @@ export const makeAudioRuns = (deps: AudioRunDeps) => {
           outcome = { ok: false, error: errorText(error) };
         }
         run.settle(outcome);
+        if (into !== undefined && versionId !== undefined) {
+          const id = versionId;
+          await applyNodeChange(rooms, deps.runPromise, request.project, (get) => (outcome.ok ? fillVersion(get, into.shapeId, id, { file: outcome.landed.file, fileName: outcome.landed.file }) : dropVersion(get, into.shapeId, id)), runId);
+          const errors = outcome.ok ? [] : [outcome.error];
+          if (outcome.ok) await deps.publish(project, { type: "output", runId, runIndex: 1, ok: true, shapeId, versionId: id, file: outcome.landed.file, cost: null, credits: outcome.landed.credits });
+          else await deps.publish(project, { type: "output", runId, runIndex: 1, ok: false, error: outcome.error, shapeId, versionId: id });
+          await applyNodeChange(rooms, deps.runPromise, request.project, (get) => finishRun(get, into.shapeId, runId, errors), runId);
+          await deps.publish(project, { type: "finished", runId, succeeded: outcome.ok ? 1 : 0, failed: outcome.ok ? 0 : 1, errors, orphaned: 0, shapeId });
+          into.onFinished?.({ succeeded: outcome.ok ? 1 : 0, errors });
+          return;
+        }
         const change = await deps
           .runPromise(
             Effect.map(rooms.read(request.project), (now) => {
@@ -171,9 +202,12 @@ export const makeAudioRuns = (deps: AudioRunDeps) => {
         await deps.publish(project, { type: "output", runId, runIndex: 1, ok: false, error: outcome.error });
         await deps.publish(project, { type: "finished", runId, succeeded: 0, failed: 1, errors: [outcome.error], orphaned: 0 });
       };
-      void finish().catch((error: unknown) => logError(`${runId}: ${errorText(error)}`));
+      void finish().catch((error: unknown) => {
+        logError(`${runId}: ${errorText(error)}`);
+        into?.onFinished?.({ succeeded: 0, errors: [errorText(error)] });
+      });
 
-      return { runId, batchId, placeholders: [shapeId] };
+      return { runId, batchId, placeholders: [versionId ?? shapeId] };
     });
 
   return { audio };

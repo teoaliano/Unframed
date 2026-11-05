@@ -37,6 +37,8 @@ import { Artifacts } from "../artifacts/layer.ts";
 import { legacyImportMethods } from "../legacy/methods.ts";
 import { ProjectDatabase } from "../projectDatabase.ts";
 import { projectActivityStream } from "../projectActivity.ts";
+import { NodeRuns } from "../nodes/nodeRuns.ts";
+import { flowContent } from "../nodes/flowSave.ts";
 
 const asUnframed = (error: unknown): UnframedError => (error instanceof UnframedError ? error : unframedError("internal", errorText(error)));
 
@@ -61,6 +63,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const artifacts = yield* Artifacts;
     const connections = yield* AgentConnections;
     const selectionHub = yield* SelectionHub;
+    const nodeRuns = yield* NodeRuns;
     const legacy = legacyImportMethods(yield* ProjectDatabase, projects);
     const context = yield* Effect.context<SettingsStore | Projects | Native>();
 
@@ -173,6 +176,18 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
               : catalogue.listImageModels,
       "models.imagePricing": ({ id }) => catalogue.imagePricing(id),
       "run.image": (request) => runs.image(request),
+      "node.run": ({ project, shapeId, downstream, scope, rendered }) => nodeRuns.run({ project, ids: [shapeId], downstream, scope, rendered }),
+      "chain.run": ({ project, shapeIds, rendered }) => nodeRuns.run({ project, ids: shapeIds, rendered }),
+      "node.useVersion": ({ project, shapeId, versionId }) => nodeRuns.useVersion(project, shapeId, versionId),
+      "node.removeVersion": ({ project, shapeId, versionId }) => nodeRuns.removeVersion(project, shapeId, versionId),
+      "node.renders": ({ project, files }) => nodeRuns.renders(project, files),
+      "flow.save": ({ project, shapeIds, name, summary }) =>
+        Effect.gen(function* () {
+          const made = flowContent(project, yield* rooms.read(project), shapeIds, name);
+          if ("error" in made) return yield* unframedError("bad_request", made.error);
+          const saved = yield* presets.save({ name, summary: summary ?? "", content: made.content });
+          return { preset: saved.preset, droppedWires: made.droppedWires };
+        }),
       "run.text": (request) => runs.text(request),
       "text.complete": (request) => runs.complete(request),
       "run.subscribe": ({ project }) => runs.subscribe(project),

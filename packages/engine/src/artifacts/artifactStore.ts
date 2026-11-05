@@ -339,3 +339,39 @@ export const placeRenderOutput = async (
   });
   return { file, bytes };
 };
+
+interface NodePageSidecar {
+  readonly kind: "page";
+  readonly source: "node";
+  readonly title: string;
+  readonly prompt: string;
+  readonly model: string;
+  readonly cost: number | null;
+  readonly recipe: unknown;
+  readonly node: { readonly shapeId: string; readonly versionId: string };
+  readonly chain?: { readonly chainId: string; readonly step: number };
+  readonly batchId: string;
+  readonly runIndex: number;
+  readonly runCount: number;
+  readonly createdAt: string;
+  readonly file: string;
+}
+
+export const writeNodePage = async (folder: string, input: { readonly html: string; readonly slug: string; readonly stamp: string; readonly sidecar: Omit<NodePageSidecar, "file"> }): Promise<{ file: string; bytes: number }> => {
+  const bytes = Buffer.from(input.html, "utf8");
+  const base = `${input.stamp}-page-${input.slug || "page"}`;
+  for (let attempt = 0; attempt < 1000; attempt++) {
+    const file = attempt === 0 ? `${base}.html` : `${base}-${attempt + 1}.html`;
+    if (taken(folder)(file)) continue;
+    try {
+      await writeExclusive(bytes)(join(folder, file));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") continue;
+      throw error;
+    }
+    const sidecar: NodePageSidecar = { ...input.sidecar, file };
+    await writeFile(join(folder, sidecarFileName(file)), `${JSON.stringify(sidecar, null, 2)}\n`);
+    return { file, bytes: bytes.length };
+  }
+  throw new Error("No free file name.");
+};

@@ -148,7 +148,7 @@ export const nodeRequest = (input: NodeRequestInput): NodeRequest => {
     const version = currentVersion(source);
     const kind = source.medium === "image" || source.medium === "video" || source.medium === "page" ? source.medium : "text";
     if (version) return { kind, ...(version.file === undefined ? {} : { file: version.file }), ...(version.text === undefined ? {} : { text: version.text }) };
-    if (assume.has(wire.from)) return { kind, file: `pending:${wire.from}`, text: "" };
+    if (assume.has(wire.from)) return { kind, file: `pending:${wire.from}`, text: `[the result of ${nodeName(canvas, wire.from)}]` };
     const name = nodeName(canvas, wire.from);
     block(blocked("waiting", noResultMessage(name), noResultStatus(name)));
     return undefined;

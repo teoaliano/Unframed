@@ -59,7 +59,9 @@ export const planChain = (canvas: NodeCanvas, selected: ReadonlyArray<string>): 
   for (const [index, id] of steps.entries()) {
     for (const wire of canvas.wires) {
       if (wire.to !== id || members.has(wire.from) || !canvas.nodes.has(wire.from)) continue;
-      if (!hasResult(canvas, wire.from)) return { ok: false, message: stepMessage(index + 1, nodeName(canvas, id), noResultMessage(nodeName(canvas, wire.from))) };
+      if (hasResult(canvas, wire.from)) continue;
+      const message = noResultMessage(nodeName(canvas, wire.from));
+      return { ok: false, message: steps.length === 1 ? message : stepMessage(index + 1, nodeName(canvas, id), message) };
     }
   }
   return { ok: true, steps };

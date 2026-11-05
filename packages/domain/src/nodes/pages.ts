@@ -1,6 +1,9 @@
 import type { WireRole } from "@unframed/contracts";
 import { PAGE_FILES_REFUSAL, PAGE_SEND_REFUSAL } from "./request.ts";
 
+export const NODE_PAGE_SYSTEM =
+  "Answer with one complete, self-contained HTML document and nothing else: start with <!doctype html>, put the style and script inline, and load nothing from the network. Give the document a <title>. Do not wrap it in Markdown or explain it.";
+
 export const PAGE_REJECTED_MESSAGE = "The model did not return an HTML page. The call was made and may have been charged. Run again to retry.";
 
 const FENCE = /^\s*```[a-zA-Z0-9_-]*\s*\n([\s\S]*?)\n?```\s*$/;

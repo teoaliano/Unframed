@@ -29,6 +29,7 @@ import { chatRequestBody, completeText, type ReferencePart, type TextCallOutcome
 import type { SettingsStore } from "../settingsStore.ts";
 import { clearChange, fillFor, isShape, PLACEHOLDER_WIDTH, textPlaceholder, type LandedText, type RunOutcome } from "./placeholders.ts";
 import { fileStamp, writeLoneSidecar } from "./resultFiles.ts";
+import { applyNodeChange, dropVersion, fillVersion, finishRun, nodeSidecarFields, startVersions, type NodeTarget } from "../nodes/versions.ts";
 
 /** What a text run needs from the run service that owns the registry. */
 export interface TextRunDeps {
@@ -131,7 +132,7 @@ export const makeTextRuns = (deps: TextRunDeps) => {
       return { text: outcome.text, cost: outcome.cost };
     });
 
-  const text = (request: TextRunRequest) =>
+  const text = (request: TextRunRequest, into?: NodeTarget) =>
     Effect.gen(function* () {
       const folder = yield* deps.projectFolder(request.project);
       const project = projectSlug(request.project);
@@ -148,6 +149,7 @@ export const makeTextRuns = (deps: TextRunDeps) => {
         const sidecar = resultMetaOf(records.find((record) => record.id === request.of!.shapeId) ?? {})?.sidecar;
         if (typeof sidecar === "string") of = { sidecar, action: request.of.action };
       }
+      if (into !== undefined) return yield* nodeText(request, into, { folder, project, current, model, startedAt, runId, batchId, of });
       const pageId = records.find((record) => record.typeName === "page")?.id ?? "page:page";
       const [at] = placeResults(request.anchor, [PLACEHOLDER_BOX], deps.obstacles(records, request));
       const topIndex = records
@@ -221,5 +223,69 @@ export const makeTextRuns = (deps: TextRunDeps) => {
       return { runId, batchId, placeholders: [shapeId] };
     });
 
-  return { text, complete };
+  const nodeText = (
+    request: TextRunRequest,
+    into: NodeTarget,
+    run: { folder: string; project: string; current: { key: string }; model: string; startedAt: number; runId: string; batchId: string; of: ResultRecipe["of"] },
+  ) =>
+    Effect.gen(function* () {
+      const { folder, project, current, model, startedAt, runId, batchId, of } = run;
+      let versionId: string | undefined;
+      const registered = deps.register(runId, project);
+      const started = yield* rooms
+        .applyWhen(
+          request.project,
+          (get) => {
+            const made = startVersions(get, into.shapeId, { runId, chainId: into.chainId, batchId, count: 1, fingerprint: into.fingerprint, startedAt });
+            versionId = made?.ids[0];
+            return made?.change;
+          },
+          origin(runId),
+        )
+        .pipe(Effect.tapError(() => Effect.sync(registered.forget)));
+      if (started === undefined || versionId === undefined) {
+        registered.forget();
+        return yield* unframedError("not_found", "That node is no longer on the canvas.");
+      }
+      const id = versionId;
+      yield* Effect.promise(() => deps.publish(project, { type: "started", runId, batchId, count: 1 }));
+      const finish = async () => {
+        const outcome = await chatOnce(folder, current.key, model, request.prompt, request.references);
+        const errors: string[] = [];
+        if (outcome.ok) {
+          const recipe: ResultRecipe = {
+            medium: "text",
+            model,
+            params: {},
+            selectionPrompt: request.selectionPrompt,
+            instruction: request.instruction,
+            references: [...request.references],
+            sources: [...request.sources],
+            ...(of === undefined ? {} : { of }),
+            ...nodeSidecarFields(into, id),
+          };
+          const sidecar = await writeSidecar(folder, startedAt, { ...sidecarOf(request.prompt, model, outcome.text, request.references, batchId, outcome.cost, request.chat), recipe, ...nodeSidecarFields(into, id) });
+          const text = outcome.text.replace(/\r\n/g, "\n").trim();
+          registered.settle({ ok: true, landed: { kind: "text", text, sidecar, cost: outcome.cost } });
+          await applyNodeChange(rooms, deps.runPromise, request.project, (get) => fillVersion(get, into.shapeId, id, { text, ...(sidecar === null ? {} : { file: sidecar }) }), runId);
+          await deps.publish(project, { type: "output", runId, runIndex: 1, ok: true, shapeId: into.shapeId, versionId: id, file: sidecar ?? "", cost: outcome.cost });
+        } else {
+          errors.push(outcome.error);
+          registered.settle({ ok: false, error: outcome.error });
+          await applyNodeChange(rooms, deps.runPromise, request.project, (get) => dropVersion(get, into.shapeId, id), runId);
+          logError(`${runId}: output 1 failed: ${outcome.error}`);
+          await deps.publish(project, { type: "output", runId, runIndex: 1, ok: false, error: outcome.error, shapeId: into.shapeId, versionId: id });
+        }
+        await applyNodeChange(rooms, deps.runPromise, request.project, (get) => finishRun(get, into.shapeId, runId, errors), runId);
+        await deps.publish(project, { type: "finished", runId, succeeded: outcome.ok ? 1 : 0, failed: outcome.ok ? 0 : 1, errors, orphaned: 0, shapeId: into.shapeId });
+        into.onFinished?.({ succeeded: outcome.ok ? 1 : 0, errors });
+      };
+      void finish().catch((error: unknown) => {
+        logError(`${runId}: ${errorText(error)}`);
+        into.onFinished?.({ succeeded: 0, errors: [errorText(error)] });
+      });
+      return { runId, batchId, placeholders: [id] };
+    });
+
+  return { text, complete, chatOnce };
 };

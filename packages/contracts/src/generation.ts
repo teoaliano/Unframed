@@ -241,9 +241,10 @@ export const RunEvent = Schema.Union([
     orphaned: Schema.Number,
     shapeId: Schema.optionalKey(Schema.String),
   }),
-  Schema.Struct({ type: Schema.Literal("chain"), chainId: Schema.String, nodes: Schema.Array(Schema.String) }),
+  Schema.Struct({ type: Schema.Literal("chain"), runId: Schema.String, chainId: Schema.String, nodes: Schema.Array(Schema.String) }),
   Schema.Struct({
     type: Schema.Literal("chainFinished"),
+    runId: Schema.String,
     chainId: Schema.String,
     ran: Schema.Number,
     total: Schema.Number,
