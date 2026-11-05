@@ -46,6 +46,7 @@ export interface TurnInput {
   readonly interactionMode: InteractionMode;
   /** The message joins the running turn (spec 08's Steer). */
   readonly steer: boolean;
+  readonly command?: boolean;
 }
 
 export interface TitleInput {

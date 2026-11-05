@@ -9,7 +9,8 @@ import http from "node:http";
 import { join } from "node:path";
 import readline from "node:readline";
 import { unframedToolCatalogue } from "./agent/toolCatalogue.ts";
-import { outsideInitializeResult, outsideToolList } from "./agent/mcp.ts";
+import { outsideInitializeResult, outsideToolList, ROOTS_HEADER } from "./agent/mcp.ts";
+import { FILE_ADD } from "./agent/outsideTools.ts";
 
 type Message = { jsonrpc?: string; id?: string | number | null; method?: string; params?: Record<string, unknown> };
 type Answer = { status: number; headers: http.IncomingHttpHeaders; body: unknown };
@@ -44,7 +45,7 @@ const discover = (): number | undefined => {
   }
 };
 
-const post = (port: number, body: unknown, sessionId: string | undefined): Promise<Answer> =>
+const post = (port: number, body: unknown, sessionId: string | undefined, extra: Record<string, string> = {}): Promise<Answer> =>
   new Promise((resolve, reject) => {
     const text = JSON.stringify(body);
     const req = http.request(
@@ -60,6 +61,7 @@ const post = (port: number, body: unknown, sessionId: string | undefined): Promi
           accept: "application/json, text/event-stream",
           "content-length": Buffer.byteLength(text),
           ...(sessionId === undefined ? {} : { "mcp-session-id": sessionId }),
+          ...extra,
         },
       },
       (res) => {
@@ -88,6 +90,26 @@ const result = (id: Message["id"], value: unknown) => ({ jsonrpc: "2.0", id: id 
 const toolError = (id: Message["id"], text: string) => result(id, { content: [{ type: "text", text: JSON.stringify({ error: text }) }], isError: true });
 
 let sessionId: string | undefined;
+let clientHasRoots = false;
+let rootsAsked = 0;
+const clientAnswers = new Map<string, (answer: Message & { result?: unknown }) => void>();
+
+const askRoots = (): Promise<string[] | undefined> => {
+  if (!clientHasRoots) return Promise.resolve(undefined);
+  const id = `unframed-roots-${++rootsAsked}`;
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      clientAnswers.delete(id);
+      resolve(undefined);
+    }, 5000);
+    clientAnswers.set(id, (answer) => {
+      clearTimeout(timer);
+      const roots = (answer.result as { roots?: Array<{ uri?: unknown }> } | undefined)?.roots;
+      resolve(Array.isArray(roots) ? roots.flatMap((root) => (typeof root?.uri === "string" ? [root.uri] : [])) : undefined);
+    });
+    write({ jsonrpc: "2.0", id, method: "roots/list" });
+  });
+};
 /** The client's `initialize` and `notifications/initialized`, kept while Unframed is closed, replayed when it opens. */
 let keptInitialize: Message | undefined;
 let keptInitialized: Message | undefined;
@@ -115,6 +137,7 @@ const handle = async (message: Message): Promise<unknown | undefined> => {
   }
   if (message.method === "initialize") {
     keptInitialize = message;
+    clientHasRoots = typeof (message.params?.capabilities as { roots?: unknown } | undefined)?.roots === "object";
     if (port !== undefined) {
       const answer = await post(port, message, undefined).catch(() => undefined);
       if (answer?.status === 200) {
@@ -139,7 +162,8 @@ const handle = async (message: Message): Promise<unknown | undefined> => {
     const session = await openSession(port);
     if (session === "refused") return toolError(message.id, REFUSED);
     if (session === "closed") return toolError(message.id, NOT_OPEN);
-    const answer = await post(port, message, sessionId).catch(() => undefined);
+    const roots = message.params?.name === FILE_ADD ? await askRoots() : undefined;
+    const answer = await post(port, message, sessionId, roots === undefined ? {} : { [ROOTS_HEADER]: encodeURIComponent(JSON.stringify(roots)) }).catch(() => undefined);
     if (answer === undefined) return toolError(message.id, NOT_OPEN);
     if (answer.status === 401) return toolError(message.id, REFUSED);
     return answer.body;
@@ -172,14 +196,20 @@ let queue: Promise<void> = Promise.resolve();
 const lines = readline.createInterface({ input: process.stdin });
 lines.on("line", (line) => {
   if (line.trim() === "") return;
+  let message: Message;
+  try {
+    message = JSON.parse(line) as Message;
+  } catch {
+    process.stderr.write(`mcp shim: a line was not JSON\n`);
+    return;
+  }
+  const waiting = message.method === undefined && typeof message.id === "string" ? clientAnswers.get(message.id) : undefined;
+  if (waiting !== undefined) {
+    clientAnswers.delete(String(message.id));
+    waiting(message);
+    return;
+  }
   queue = queue.then(async () => {
-    let message: Message;
-    try {
-      message = JSON.parse(line) as Message;
-    } catch {
-      process.stderr.write(`mcp shim: a line was not JSON\n`);
-      return;
-    }
     const answer = await handle(message).catch((error: unknown) => {
       process.stderr.write(`mcp shim: ${error instanceof Error ? error.message : String(error)}\n`);
       return message.id === undefined || message.id === null ? undefined : result(message.id, {});

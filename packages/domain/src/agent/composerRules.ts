@@ -8,6 +8,7 @@ import type { ElementChip } from "@unframed/contracts";
 import { ATTACHMENT_LIMITS } from "./attachments.ts";
 import type { Chat } from "./chatModel.ts";
 import { IMPLEMENT_PLAN_PROMPT } from "./prompts.ts";
+import { isCompactCommand } from "./turnText.ts";
 
 // ---------------------------------------------------------------------------------------
 // Large paste.
@@ -168,7 +169,6 @@ export const contextMeter = (usage: ContextUsage): ContextMeterView => {
 export const COMPACTION_SUGGESTION_MIN_TOKENS = 200_000;
 /** Claude's one-hour prompt cache plus slack, when the provider does not say its TTL. */
 const CLAUDE_CACHE_FALLBACK_MS = 70 * 60_000;
-const COMPACT_COMMAND = /^\/compact(?:\s|$)/i;
 
 /**
  * A Claude chat whose prompt cache has likely expired re-reads its whole history on the
@@ -189,7 +189,7 @@ export const offersCompactBeforeSend = (input: {
 
 /** Whether this send runs `/compact` first: offered, not switched to Full, and not itself `/compact`. */
 export const compactsBeforeSend = (input: { readonly tokens: number | null; readonly keepFullHistory: boolean; readonly text: string }): boolean =>
-  input.tokens !== null && !input.keepFullHistory && !COMPACT_COMMAND.test(input.text.trim());
+  input.tokens !== null && !input.keepFullHistory && !isCompactCommand(input.text);
 
 // ---------------------------------------------------------------------------------------
 // Resuming a turn (t3code's `useComposerResume`).

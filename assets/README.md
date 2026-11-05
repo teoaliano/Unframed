@@ -43,6 +43,7 @@ Scripted-agent scripts in spec 07's format. Specs 07 and 08 use them all; `fixtu
 - `fixtures/approval-options.json`: a delete outside the project whose ask offers no standing grant and gives a reason, then a command whose ask offers its own answers, one with a warning. Specs 07 and 08.
 - `fixtures/bulk-edit.json`: one `canvas_write` that retitles two motions, then a second turn that expects the change note. Spec 07.
 - `fixtures/canvas-question.json`: a question about the board, answered after `canvas_read`. Specs 07 and 08.
+- `fixtures/compact.json`: a long first turn near 214k tokens, then a `/compact` turn the scripted agent reports as a context compaction with the context left after it, then a reply. Specs 07 and 08.
 - `fixtures/dials.json`: `motion_write` that exposes three parameters. Specs 07 and 09.
 - `fixtures/failure.json`: a 529 retry, then a failed turn with `error_max_turns`. Specs 07 and 08.
 - `fixtures/implement-plan.json`: the first message of a chat started by "Implement in a new chat"; writes the page. Spec 08.
