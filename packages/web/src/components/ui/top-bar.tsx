@@ -19,6 +19,10 @@ export interface TopBarTab {
   /** The activity state a test or a style reads (`data-status`). Defaults to the status, else "none". */
   readonly state?: string | undefined;
   readonly pinned?: boolean | undefined;
+  readonly label?: string | undefined;
+  readonly icon?: ReactNode;
+  readonly context?: string | undefined;
+  readonly editor?: boolean | undefined;
 }
 
 /** A region's element props. The app passes its hook classes, refs and inline offsets here; the catalogue passes none. */
@@ -168,6 +172,7 @@ export const TopBar = ({
   const tabOf = (target: EventTarget): string | undefined =>
     target instanceof Element ? (target.closest<HTMLElement>("[data-tab-item]")?.dataset.tabItem ?? undefined) : undefined;
   const pinnedTab = (name: string) => tabs.find((tab) => tab.name === name)?.pinned === true;
+  const editorTab = (name: string) => tabs.find((tab) => tab.name === name)?.editor === true;
 
   const onListClick = (event: MouseEvent<HTMLDivElement>) => {
     if (!(event.target instanceof Element) || event.target.closest("[data-close]") === null) return;
@@ -261,14 +266,27 @@ export const TopBar = ({
                   data-active={tab.name === active ? "true" : undefined}
                   data-status={tab.state ?? tab.status ?? "none"}
                   data-pinned={tab.pinned === true ? "true" : undefined}
-                  aria-label={tab.pinned === true ? tab.name : undefined}
+                  data-editor-tab={tab.editor === true ? "true" : undefined}
+                  aria-label={tab.pinned === true ? tab.name : tab.context === undefined ? undefined : `${tab.label ?? tab.name}, ${tab.context}`}
                   title={tab.title ?? tab.name}
                   closable={tab.pinned !== true}
-                  closeLabel={`Close ${tab.name}`}
-                  className={tab.pinned === true ? "w-9 min-w-0 gap-0 px-0 [&_[data-slot=tabs-status]]:ms-0.5" : undefined}
+                  closeLabel={`Close ${tab.label ?? tab.name}`}
+                  className={tab.pinned === true ? "w-9 min-w-0 gap-0 px-0 [&_[data-slot=tabs-status]]:ms-0.5" : tab.icon === undefined ? undefined : "gap-1.5"}
                   {...(tab.status === undefined ? {} : { status: tab.status })}
                 >
-                  {tab.pinned === true ? <PinnedMark name={tab.name} /> : <span className="min-w-0 truncate">{tab.name}</span>}
+                  {tab.pinned === true ? (
+                    <PinnedMark name={tab.name} />
+                  ) : (
+                    <>
+                      {tab.icon}
+                      <span className="min-w-0 truncate">{tab.label ?? tab.name}</span>
+                      {tab.context !== undefined && (
+                        <span data-slot="top-bar-tab-context" className="min-w-0 max-w-16 shrink-[2] truncate text-muted-foreground">
+                          {tab.context}
+                        </span>
+                      )}
+                    </>
+                  )}
                 </TabsTab>
               </span>
             ))}
@@ -292,14 +310,14 @@ export const TopBar = ({
           className="min-w-[180px]"
           data-testid="tab-menu"
         >
-          {menu !== undefined && pinnedTab(menu.name) && onUnpin && <MenuItem onClick={() => onUnpin(menu.name)}>Unpin tab</MenuItem>}
-          {menu !== undefined && !pinnedTab(menu.name) && onPin && <MenuItem onClick={() => onPin(menu.name)}>Pin tab</MenuItem>}
-          {(onPin || onUnpin) && <MenuSeparator />}
+          {menu !== undefined && !editorTab(menu.name) && pinnedTab(menu.name) && onUnpin && <MenuItem onClick={() => onUnpin(menu.name)}>Unpin tab</MenuItem>}
+          {menu !== undefined && !editorTab(menu.name) && !pinnedTab(menu.name) && onPin && <MenuItem onClick={() => onPin(menu.name)}>Pin tab</MenuItem>}
+          {menu !== undefined && !editorTab(menu.name) && (onPin || onUnpin) && <MenuSeparator />}
           <MenuItem onClick={() => menu && onClose(menu.name)}>Close</MenuItem>
           <MenuItem onClick={() => onCloseAll()}>Close all tabs</MenuItem>
-          <MenuSeparator />
-          {onRename && <MenuItem onClick={() => menu && onRename(menu.name)}>Rename project</MenuItem>}
-          {onDelete && (
+          {menu !== undefined && !editorTab(menu.name) && (onRename || onDelete) && <MenuSeparator />}
+          {menu !== undefined && !editorTab(menu.name) && onRename && <MenuItem onClick={() => menu && onRename(menu.name)}>Rename project</MenuItem>}
+          {menu !== undefined && !editorTab(menu.name) && onDelete && (
             <MenuItem variant="destructive" onClick={() => menu && onDelete(menu.name)}>
               Delete project
             </MenuItem>

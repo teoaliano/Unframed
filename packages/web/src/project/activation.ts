@@ -1,5 +1,19 @@
 import { UnframedError } from "@unframed/contracts";
-import { closeTab as closeTabRule, moveTab, openTab, pinTab, popClosed, pushClosed, restoreTabs, unpinTab } from "@unframed/domain";
+import {
+  closeTab as closeTabRule,
+  editorTabKey,
+  editorTabsOf,
+  isEditorTab,
+  moveTab,
+  openEditorTab,
+  openTab,
+  pinTab,
+  popClosed,
+  projectOfTab,
+  pushClosed,
+  restoreTabs,
+  unpinTab,
+} from "@unframed/domain";
 import { useSyncExternalStore } from "react";
 import { isConnectionFailure, type EngineConnection } from "../rpc/engine.ts";
 import { showError } from "../toasts.tsx";
@@ -17,9 +31,16 @@ const messageOf = (error: unknown): string =>
 export type BeforeSwitch = () => Promise<void>;
 
 /** The tab state the strip and the canvas read. A new object on every change, so a subscriber can compare by identity. */
+export interface EditorTab {
+  readonly title: string;
+  readonly kind: string;
+}
+
 export interface TabState {
   /** The project whose canvas is mounted, or undefined when no tab is open (the start state). */
   readonly active: string | undefined;
+  readonly editing: string | undefined;
+  readonly editors: ReadonlyMap<string, EditorTab>;
   /** Every open tab, in the order the strip shows them. */
   readonly order: ReadonlyArray<string>;
   readonly pinned: ReadonlyArray<string>;
@@ -35,7 +56,7 @@ export interface TabState {
  * restart). `activate` is the only function that changes the active project.
  */
 export class ProjectActivation {
-  private state: TabState = { active: undefined, order: [], pinned: [], closed: [], loaded: false };
+  private state: TabState = { active: undefined, editing: undefined, editors: new Map(), order: [], pinned: [], closed: [], loaded: false };
   private readonly listeners = new Set<() => void>();
   private beforeSwitch: BeforeSwitch | undefined;
   /** Counts activations, so an initial load that finishes after a switch does not override it. */
@@ -47,6 +68,8 @@ export class ProjectActivation {
   }
 
   activeProject = (): string | undefined => this.state.active;
+
+  selectedTab = (): string | undefined => this.state.editing ?? this.state.active;
 
   tabState = (): TabState => this.state;
 
@@ -66,27 +89,44 @@ export class ProjectActivation {
   }
 
   private persistTabs(): void {
-    const { order, active, pinned } = this.state;
-    this.engine.call("preferences.set", { key: TABS_KEY, value: { order: [...order], active: active ?? null, pinned: [...pinned] } }).catch((error: unknown) => {
+    const { order, active, pinned, editing, editors } = this.state;
+    const open = order.filter(isEditorTab).map((key) => ({ key, title: editors.get(key)?.title ?? "", kind: editors.get(key)?.kind ?? "page" }));
+    const value = { order: [...order], active: active ?? null, pinned: [...pinned], editing: editing ?? null, editors: open };
+    this.engine.call("preferences.set", { key: TABS_KEY, value }).catch((error: unknown) => {
       showError(`Could not save the open tabs: ${messageOf(error)}`);
     });
   }
 
-  async activate(name: string): Promise<void> {
+  async activate(key: string): Promise<void> {
     this.generation++;
-    const order = openTab(this.state.order, name);
+    const name = projectOfTab(key);
+    const editing = isEditorTab(key) ? key : undefined;
+    const projectOrder = openTab(this.state.order, name);
+    const order = editing === undefined ? projectOrder : openEditorTab({ order: projectOrder, pinned: this.state.pinned }, editing);
     if (name === this.state.active) {
-      if (order.length !== this.state.order.length) this.update({ order });
+      if (order.length !== this.state.order.length || editing !== this.state.editing) this.update({ order, editing });
       this.persistTabs();
       return;
     }
     await this.beforeSwitch?.();
-    // Opening a project already open keeps its tab; a new one joins the end (spec 17).
-    this.update({ active: name, order });
+    this.update({ active: name, editing, order });
     this.persistTabs();
     await this.engine.call("preferences.set", { key: ACTIVE_PROJECT_KEY, value: name }).catch((error: unknown) => {
       showError(`Could not open “${name}”: ${messageOf(error)}`);
     });
+  }
+
+  async openEditor(project: string, shape: string, about: EditorTab): Promise<void> {
+    const key = editorTabKey(project, shape);
+    this.describeEditor(key, about);
+    await this.activate(key);
+  }
+
+  describeEditor(key: string, about: EditorTab): void {
+    const known = this.state.editors.get(key);
+    if (known?.title === about.title && known.kind === about.kind) return;
+    this.update({ editors: new Map(this.state.editors).set(key, about) });
+    if (this.state.order.includes(key)) this.persistTabs();
   }
 
   /**
@@ -95,17 +135,21 @@ export class ProjectActivation {
    */
   async closeTab(name: string): Promise<void> {
     if (!this.state.order.includes(name)) return;
-    const wasActive = name === this.state.active;
-    if (wasActive) {
+    const selected = this.selectedTab();
+    const next = closeTabRule(this.state.order, selected, name);
+    const nextProject = next.active === undefined ? undefined : projectOfTab(next.active);
+    const switching = nextProject !== this.state.active;
+    if (switching) {
       this.generation++;
       await this.beforeSwitch?.();
     }
-    const next = closeTabRule(this.state.order, this.state.active, name);
-    const closed = pushClosed(this.state.closed, name);
-    this.update({ order: next.order, active: next.active, pinned: this.state.pinned.filter((each) => each !== name), closed });
+    const gone = isEditorTab(name) ? [name] : [...editorTabsOf(this.state.order, name).toReversed(), name];
+    const closed = gone.reduce((stack, each) => pushClosed(stack, each), this.state.closed);
+    const editing = next.active !== undefined && isEditorTab(next.active) ? next.active : undefined;
+    this.update({ order: next.order, active: nextProject, editing, pinned: this.state.pinned.filter((each) => each !== name), closed });
     this.persistTabs();
-    if (wasActive) {
-      await this.engine.call("preferences.set", { key: ACTIVE_PROJECT_KEY, value: next.active ?? null }).catch(() => undefined);
+    if (switching) {
+      await this.engine.call("preferences.set", { key: ACTIVE_PROJECT_KEY, value: nextProject ?? null }).catch(() => undefined);
     }
   }
 
@@ -115,7 +159,7 @@ export class ProjectActivation {
     this.generation++;
     await this.beforeSwitch?.();
     const closed = [...this.state.order].reverse().reduce((stack, name) => pushClosed(stack, name), this.state.closed);
-    this.update({ order: [], active: undefined, pinned: [], closed });
+    this.update({ order: [], active: undefined, editing: undefined, pinned: [], closed });
     this.persistTabs();
     await this.engine.call("preferences.set", { key: ACTIVE_PROJECT_KEY, value: null }).catch(() => undefined);
   }
@@ -141,20 +185,26 @@ export class ProjectActivation {
     const { name, stack } = popClosed(this.state.closed);
     if (name === undefined) return;
     this.update({ closed: stack });
+    if (isEditorTab(name) && !this.state.order.includes(projectOfTab(name))) {
+      await this.activate(projectOfTab(name));
+    }
     await this.activate(name);
   }
 
   /** A rename keeps the tab's place: the old name becomes the new one everywhere the tabs are kept. */
   renameTab(from: string, to: string): void {
     // The active one is switched by `activate(to)`, which settles the canvas first; only the places change here.
-    const swap = (names: ReadonlyArray<string>) => names.map((name) => (name === from ? to : name));
-    this.update({ order: swap(this.state.order), pinned: swap(this.state.pinned), closed: swap(this.state.closed) });
+    const rename = (name: string) => (name === from ? to : isEditorTab(name) && projectOfTab(name) === from ? `${to}${name.slice(from.length)}` : name);
+    const swap = (names: ReadonlyArray<string>) => names.map(rename);
+    const editors = new Map([...this.state.editors].map(([key, about]) => [rename(key), about] as const));
+    const editing = this.state.editing === undefined ? undefined : rename(this.state.editing);
+    this.update({ order: swap(this.state.order), pinned: swap(this.state.pinned), closed: swap(this.state.closed), editors, editing });
     this.persistTabs();
   }
 
   /** A deleted background project leaves the strip without touching the canvas. */
   forgetTab(name: string): void {
-    const other = (each: string) => each !== name;
+    const other = (each: string) => projectOfTab(each) !== name;
     this.update({ order: this.state.order.filter(other), pinned: this.state.pinned.filter(other), closed: this.state.closed.filter(other) });
     this.persistTabs();
   }
@@ -169,7 +219,7 @@ export class ProjectActivation {
    * is another project in the new folder. The saved tabs are read again against the new folder.
    */
   async reopen(): Promise<void> {
-    this.update({ active: undefined, order: [], pinned: [], closed: [], loaded: false });
+    this.update({ active: undefined, editing: undefined, editors: new Map(), order: [], pinned: [], closed: [], loaded: false });
     await this.initialLoad();
   }
 
@@ -186,7 +236,7 @@ export class ProjectActivation {
       .then((answer) => answer.values)
       .catch(() => ({}) as Record<string, unknown>);
     const remembered = prefs[ACTIVE_PROJECT_KEY];
-    const saved = prefs[TABS_KEY] as { order?: unknown; active?: unknown; pinned?: unknown } | undefined;
+    const saved = prefs[TABS_KEY] as { order?: unknown; active?: unknown; pinned?: unknown; editing?: unknown; editors?: unknown } | undefined;
     let projects: ReadonlyArray<string> | undefined;
     let failure: unknown;
     for (let attempt = 0; projects === undefined; ) {
@@ -208,9 +258,10 @@ export class ProjectActivation {
 
     const savedOrder = Array.isArray(saved?.order) ? saved.order.filter((name): name is string => typeof name === "string") : [];
     const savedPins = Array.isArray(saved?.pinned) ? saved.pinned.filter((name): name is string => typeof name === "string") : [];
-    const restored = restoreTabs({ order: savedOrder, active: typeof saved?.active === "string" ? saved.active : null, pinned: savedPins }, projects);
+    const savedActive = typeof saved?.editing === "string" ? saved.editing : typeof saved?.active === "string" ? saved.active : null;
+    const restored = restoreTabs({ order: savedOrder, active: savedActive, pinned: savedPins }, projects);
     if (restored.active !== undefined) {
-      this.update({ order: restored.order, pinned: restored.pinned, closed: [], loaded: true });
+      this.update({ order: restored.order, pinned: restored.pinned, editors: savedEditors(saved?.editors), closed: [], loaded: true });
       await this.activate(restored.active);
       return;
     }
@@ -231,6 +282,17 @@ export class ProjectActivation {
     await this.activate(target);
   }
 }
+
+const savedEditors = (value: unknown): ReadonlyMap<string, EditorTab> => {
+  const editors = new Map<string, EditorTab>();
+  if (!Array.isArray(value)) return editors;
+  for (const entry of value) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const { key, title, kind } = entry as { key?: unknown; title?: unknown; kind?: unknown };
+    if (typeof key === "string" && isEditorTab(key)) editors.set(key, { title: typeof title === "string" ? title : "", kind: typeof kind === "string" ? kind : "page" });
+  }
+  return editors;
+};
 
 export const useActiveProject = (activation: ProjectActivation): string | undefined =>
   useSyncExternalStore(activation.subscribe, activation.activeProject);

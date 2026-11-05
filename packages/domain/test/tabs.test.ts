@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   CLOSED_TAB_LIMIT,
   closeTab,
+  editorTabKey,
+  editorTabsOf,
+  isEditorTab,
+  openEditorTab,
+  projectOfTab,
+  shapeOfTab,
   finishedAfter,
   moveTab,
   openTab,
@@ -114,5 +120,63 @@ describe("project tabs", () => {
   it("restores the pins that survived, with the pinned tabs first", () => {
     expect(restoreTabs({ order: ["a", "p", "gone"], active: "a", pinned: ["p", "gone", "x"] }, ["a", "p"])).toEqual({ order: ["p", "a"], active: "a", pinned: ["p"] });
     expect(restoreTabs({ order: ["a"], active: "a" }, ["a"])).toEqual({ order: ["a"], active: "a", pinned: [] });
+  });
+});
+
+describe("editor tabs", () => {
+  it("names an editor tab by its project and shape, and tells the two kinds apart", () => {
+    const key = editorTabKey("default", "shape:landing");
+    expect(isEditorTab(key)).toBe(true);
+    expect(isEditorTab("default")).toBe(false);
+    expect(projectOfTab(key)).toBe("default");
+    expect(shapeOfTab(key)).toBe("shape:landing");
+    expect(projectOfTab("beta")).toBe("beta");
+    expect(shapeOfTab("beta")).toBeUndefined();
+  });
+
+  it("opens an editor tab right after its project's tab and the editor tabs already beside it", () => {
+    const a = editorTabKey("p", "shape:a");
+    const b = editorTabKey("p", "shape:b");
+    expect(openEditorTab({ order: ["p", "q"], pinned: [] }, a)).toEqual(["p", a, "q"]);
+    expect(openEditorTab({ order: ["p", a, "q"], pinned: [] }, b)).toEqual(["p", a, b, "q"]);
+    expect(openEditorTab({ order: ["p", a, "q"], pinned: [] }, a)).toEqual(["p", a, "q"]);
+  });
+
+  it("opens a pinned project's editor tab first among the unpinned tabs", () => {
+    const a = editorTabKey("p", "shape:a");
+    expect(openEditorTab({ order: ["p", "r", "q"], pinned: ["p", "r"] }, a)).toEqual(["p", "r", a, "q"]);
+  });
+
+  it("opens nothing for a project that has no tab", () => {
+    expect(openEditorTab({ order: ["q"], pinned: [] }, editorTabKey("p", "shape:a"))).toEqual(["q"]);
+  });
+
+  it("lists a project's editor tabs, and closing a project takes them with it", () => {
+    const a = editorTabKey("p", "shape:a");
+    const c = editorTabKey("q", "shape:c");
+    expect(editorTabsOf(["p", a, "q", c], "p")).toEqual([a]);
+    expect(closeTab(["p", a, "q", c], "p", "p")).toEqual({ order: ["q", c], active: "q" });
+    expect(closeTab(["q", "p", a], "p", "p")).toEqual({ order: ["q"], active: "q" });
+    expect(closeTab(["p", a, "q"], a, "p")).toEqual({ order: ["q"], active: "q" });
+  });
+
+  it("closing the active editor tab lands on its project's tab", () => {
+    const a = editorTabKey("p", "shape:a");
+    expect(closeTab(["q", "p", a, "r"], a, a)).toEqual({ order: ["q", "p", "r"], active: "p" });
+    expect(closeTab(["q", "p", a, "r"], "r", a)).toEqual({ order: ["q", "p", "r"], active: "r" });
+  });
+
+  it("never pins an editor tab", () => {
+    const a = editorTabKey("p", "shape:a");
+    expect(pinTab({ order: ["p", a], pinned: [] }, a)).toEqual({ order: ["p", a], pinned: [] });
+  });
+
+  it("restores an editor tab only with its project's tab", () => {
+    const a = editorTabKey("p", "shape:a");
+    const c = editorTabKey("gone", "shape:c");
+    const d = editorTabKey("q", "shape:d");
+    expect(restoreTabs({ order: ["p", a, c, d], active: a, pinned: [] }, ["p", "q"])).toEqual({ order: ["p", a], active: a, pinned: [] });
+    expect(restoreTabs({ order: ["p", a], active: c, pinned: [] }, ["p"])).toEqual({ order: ["p", a], active: "p", pinned: [] });
+    expect(restoreTabs({ order: [a, "p"], active: "p", pinned: ["p"] }, ["p"])).toEqual({ order: ["p", a], active: "p", pinned: ["p"] });
   });
 });

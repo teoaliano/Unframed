@@ -25,7 +25,8 @@ export const useTabShortcuts = (activation: ProjectActivation): void => {
       if (typing(event.target) || dialogOpen()) return;
       const cmd = mac ? event.metaKey : event.ctrlKey;
       const key = event.key;
-      const { order, active } = activation.tabState();
+      const { order } = activation.tabState();
+      const active = activation.selectedTab();
 
       if (event.ctrlKey && key === "Tab" && order.length > 0) {
         const at = Math.max(0, order.indexOf(active ?? ""));
