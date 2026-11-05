@@ -141,7 +141,7 @@ export const ParametersPanel = ({ shapeId }: { readonly shapeId: TLShapeId }) =>
           </Button>
         </Tip>
       </header>
-      <div className={cn("min-h-0 flex-1 overflow-y-auto overflow-x-hidden", announcement === undefined && "pb-2.5", shown === "dock" && "pb-12")} data-scrolls="true">
+      <div className={cn("min-h-0 flex-1 overflow-y-auto overflow-x-hidden", announcement === undefined && "pb-2.5", shown === "dock" && "pb-16")} data-scrolls="true">
         <ParametersContent shapeId={shapeId} kind={facts.kind} title={title} announcement={announcement} saved={facts.dials} post={post} place="canvas" />
       </div>
       {floating && (
@@ -165,7 +165,7 @@ export const ParametersPanel = ({ shapeId }: { readonly shapeId: TLShapeId }) =>
   if (shown !== "sheet") return panel;
   return (
     <Sheet open onOpenChange={(open) => !open && close()}>
-      <SheetPopup side="right" showCloseButton={false} className="w-[min(88vw,24rem)]">
+      <SheetPopup side="right" showCloseButton={false} className="mb-12 w-[min(88vw,24rem)]">
         {panel}
       </SheetPopup>
     </Sheet>

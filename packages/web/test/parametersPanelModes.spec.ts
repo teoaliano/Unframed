@@ -236,6 +236,9 @@ test("below 1280 px the docked panel opens as a sheet on the right", async ({ pa
   await expect(panel(page)).toHaveAttribute("data-shown", "sheet");
   await expect(page.getByRole("dialog").getByRole("region", { name: "Parameters for Tuned" })).toBeVisible();
   await expect(panel(page).getByRole("slider", { name: "Size" })).toBeVisible();
+  const sheet = (await page.getByRole("dialog").boundingBox())!;
+  const watermark = (await page.locator(".tl-watermark_SEE-LICENSE").boundingBox())!;
+  expect(sheet.y + sheet.height).toBeLessThanOrEqual(watermark.y);
   await page.keyboard.press("Escape");
   await expect(panel(page)).toHaveCount(0);
 });
