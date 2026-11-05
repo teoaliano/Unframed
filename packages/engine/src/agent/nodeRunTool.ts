@@ -134,7 +134,8 @@ export class AgentNodeRuns {
       afterStep: (step, index, outcome) => {
         const key = keys.get(index);
         if (connection !== undefined && key !== undefined) {
-          if (outcome.ok) void this.host.book.settle(connection, key, outcome.cost ?? step.estimate ?? 0);
+          if (outcome.cost !== null) void this.host.book.settle(connection, key, outcome.cost);
+          else if (outcome.ok) void this.host.book.settle(connection, key, step.estimate ?? 0);
           else void this.host.book.release(connection, key);
         }
         void this.host.activity(call.project, call.chatId, outcome.ok

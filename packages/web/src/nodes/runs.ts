@@ -141,15 +141,28 @@ export const runNodes = async (input: {
   readonly downstream?: DownstreamScope | undefined;
 }): Promise<boolean> => {
   const { editor, engine, project, ids, downstream } = input;
-  const order = runOrder(editor, ids, downstream);
+  let order = runOrder(editor, ids, downstream);
   if ("error" in order) {
     showError(order.error);
     return false;
   }
+  const estimates = async (stepIds: ReadonlyArray<string>) => (await Promise.all(stepIds.map((id) => stepEstimate(editor, engine, id)))).filter((step): step is ChainStep => step !== undefined);
+  const sameAs = (a: ReadonlyArray<ChainStep>, b: ReadonlyArray<ChainStep>) => JSON.stringify(a) === JSON.stringify(b);
   try {
     if (order.steps.length > 1) {
-      const steps = (await Promise.all(order.steps.map((id) => stepEstimate(editor, engine, id)))).filter((step): step is ChainStep => step !== undefined);
-      if (steps.filter((step) => step.paid).length >= 2 && !(await confirmChain(steps))) return false;
+      let shown = await estimates(order.steps);
+      while (shown.filter((step) => step.paid).length >= 2) {
+        if (!(await confirmChain(shown))) return false;
+        const again = runOrder(editor, ids, downstream);
+        if ("error" in again) {
+          showError(again.error);
+          return false;
+        }
+        const now = await estimates(again.steps);
+        order = again;
+        if (sameAs(now, shown)) break;
+        shown = now;
+      }
     }
     const rendered = await renderInputs(editor, project, order.steps);
     const steps = [...order.steps];

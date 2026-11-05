@@ -126,10 +126,10 @@ export class SyncSocket implements TLPersistentClientSocket<Message, Message> {
     this.open();
   }
 
-  /** Resolves once tldraw has had the frames it takes to send the store's changes and every push sent has been answered, or after `timeoutMs`. */
   settled(timeoutMs: number): Promise<void> {
     return new Promise((resolve) => {
       const started = Date.now();
+      setTimeout(resolve, timeoutMs);
       const check = () => {
         if (this.pending === 0 || this.ws === null || Date.now() - started >= timeoutMs) return resolve();
         setTimeout(check, 25);

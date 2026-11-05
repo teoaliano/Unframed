@@ -1,7 +1,7 @@
 import { emptyCanvasPoint, openCanvas, roomRecords, shapeOnScreen, toast, waitForRoom } from "./canvas.ts";
 import { expect, test, toolbar } from "./generation.ts";
 import { pngBytes } from "./images.ts";
-import { centreOf, groupShape, nodeCard, nodeShape, promptShape, seedBoard, selectNode, waitForNode, wireShape } from "./nodes.ts";
+import { centreOf, groupShape, nodeCard, nodeRecord, nodeShape, promptShape, seedBoard, selectNode, waitForNode, wireShape } from "./nodes.ts";
 
 const run = async (page: Parameters<typeof selectNode>[0], id: string) => {
   await selectNode(page, id);
@@ -106,3 +106,31 @@ test("a chain asks once for its paid steps, runs in order, and a failed step sto
   expect(generation.requests).toHaveLength(3);
   expect((await roomRecords(engine, "default")).filter((record) => record.type === "node").every((record) => record.props.run === undefined)).toBe(true);
 });
+
+test("a step whose price changes while the chain confirmation is open is asked again at the new price before anything runs", async ({ page, generation }) => {
+  const { engine } = generation;
+  await openCanvas(page, engine);
+  await seedBoard(engine, [
+    nodeShape("a", "201", { medium: "image", instruction: "a fox", params: { quality: "low", resolution: "1K" } }, { x: -440, y: -60 }),
+    nodeShape("b", "202", { medium: "image", instruction: "at night", params: { quality: "low", resolution: "1K" } }, { x: 120, y: -60 }),
+    wireShape("ab", "a", "b", "reference"),
+  ]);
+  await selectNode(page, "a");
+  const other = (await nodeCard(page, "b").boundingBox())!;
+  await page.keyboard.down("Shift");
+  await page.mouse.click(other.x + other.width - 24, other.y + 14);
+  await page.keyboard.up("Shift");
+  await toolbar(page).getByTestId("toolbar-chain-run").click();
+  const dialog = page.getByTestId("chain-confirm");
+  await expect(dialog.getByTestId("chain-step")).toHaveText([/est\. ~\$0\.011/, /est\. ~\$0\.021/]);
+  const b = await nodeRecord(engine, "b");
+  await (await engine.rpc()).call("testCanvas.apply", { project: "default", change: { put: [{ ...b, props: { ...b!.props, runs: 2, instruction: "at dawn" } }], remove: [] }, origin: { kind: "system", id: "test-edit" } });
+  await expect(nodeCard(page, "b").getByTestId("node-instruction")).toHaveText("at dawn");
+  await dialog.getByRole("button", { name: "Run" }).click();
+  await expect(dialog.getByTestId("chain-step")).toHaveText([/est\. ~\$0\.011/, /est\. ~\$0\.042/]);
+  expect(generation.requests).toHaveLength(0);
+  await dialog.getByRole("button", { name: "Run" }).click();
+  await waitForNode(engine, "b", (props) => props.currentVersionId !== null);
+  expect(generation.requests).toHaveLength(3);
+});
+

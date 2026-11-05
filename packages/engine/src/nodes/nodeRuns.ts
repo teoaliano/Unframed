@@ -666,7 +666,13 @@ export const nodeRunsLayer = Layer.effect(
             liveChains.delete(chainId);
             throw unframedError("bad_request", NODE_BUSY(nodeName(canvas, busy)));
           }
-          if (steps.length > 1) await runPromise(runs.publish(input.project, { type: "chain", runId: chainId, chainId, nodes: steps }));
+          try {
+            if (steps.length > 1) await runPromise(runs.publish(input.project, { type: "chain", runId: chainId, chainId, nodes: steps }));
+          } catch (error) {
+            for (const id of steps) await applyNodeChange(rooms, runPromise, input.project, (get) => stopNode(get, id, errorText(error), chainId), chainId);
+            liveChains.delete(chainId);
+            throw error;
+          }
           void execute(input, chainId, steps, planned, folder).catch((error: unknown) => logError(`${chainId}: ${errorText(error)}`));
           return { chainId, nodes: steps };
         },

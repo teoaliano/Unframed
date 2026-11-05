@@ -3,6 +3,7 @@ import { PROJECT } from "./agent.ts";
 import { startGenerating, type Generating } from "./generation.ts";
 import { imageCatalogue, imagePricing } from "./openRouterStub.ts";
 import { chatsIn, outsideLink } from "./outsideCalls.ts";
+import { chatCompletions } from "./textStub.ts";
 
 const MODEL = "openai/image-test";
 const CATALOGUE = imageCatalogue({ data: [{ id: MODEL, name: "Image test", supported_parameters: { resolution: ["1K", "2K"] } }] });
@@ -136,6 +137,31 @@ describe("an agent's chain against the spend limit", () => {
         await new Promise((resolve) => setTimeout(resolve, 25));
       }
       expect(spent).toBeCloseTo(0.2, 5);
+    } finally {
+      await generating.engine.dispose();
+    }
+  });
+
+  it("books a rejected page answer's real cost against the connection, since the call was made", async () => {
+    const chats = chatCompletions(() => ({ kind: "text", text: "Sure! Here is a fragment: <div>hi</div>", cost: 0.002 }));
+    const generating = await startGenerating({ extra: [PRICING, CATALOGUE, chats.handler] });
+    try {
+      const link = await outsideLink(generating as never, "Laptop");
+      const session = await link.open();
+      const made = await link.call(session, "canvas_write", { project: PROJECT, ops: [{ type: "create", id: "new:pg", kind: "node", x: 0, y: 0, props: { medium: "page", instruction: "a page" } }] });
+      const id = made.value.ids["new:pg"];
+      const ran = await link.call(session, "node_run", { project: PROJECT, ids: [id] });
+      expect(ran.isError).toBe(false);
+      for (let tries = 0; (await room(generating)).find((shape) => shape.id === `shape:${id}`)?.props.error === undefined; tries++) {
+        if (tries > 400) throw new Error("the page run did not fail");
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      let spent = 0;
+      for (let tries = 0; tries < 100 && spent === 0; tries++) {
+        spent = (await generating.rpc.call("agentConnections.list")).connections.find((each: { name: string }) => each.name === "Laptop")?.spent ?? 0;
+        if (spent === 0) await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      expect(spent).toBeCloseTo(0.002, 6);
     } finally {
       await generating.engine.dispose();
     }

@@ -56,7 +56,7 @@ test("a loop, an audio source and a second first frame are refused with their se
   expect(await wires(engine)).toHaveLength(1);
 });
 
-test("deleting a source deletes its wires, and Delete removes a selected wire", async ({ page, generation }) => {
+test("deleting a source deletes its wires in the same undo step, and Delete removes a selected wire", async ({ page, generation }) => {
   const { engine } = generation;
   await openCanvas(page, engine);
   await seedBoard(engine, [
@@ -70,6 +70,11 @@ test("deleting a source deletes its wires, and Delete removes a selected wire", 
   await page.keyboard.press("Delete");
   await waitForRoom(engine, "default", (records) => records.filter((record) => record.type === "wire").length === 1);
   expect((await wires(engine))[0]!.id).toBe("shape:w2");
+  await page.keyboard.press("ControlOrMeta+z");
+  await waitForRoom(engine, "default", (records) => records.some((record) => record.id === "shape:fox") && records.filter((record) => record.type === "wire").length === 2);
+  await clickShape(page, "shape:fox");
+  await page.keyboard.press("Delete");
+  await waitForRoom(engine, "default", (records) => records.filter((record) => record.type === "wire").length === 1);
   await selectNode(page, "n");
   await nodeCard(page, "n").getByTestId("node-input").first().click();
   await expect(nodeCard(page, "n")).not.toHaveAttribute("data-node-live", "true");

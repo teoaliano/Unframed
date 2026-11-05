@@ -22,6 +22,18 @@ test("the strip opens projects as tabs; the active tab is the canvas on screen; 
   await expect(page.locator("[data-canvas-project='beta'] .tl-canvas")).toBeVisible();
 });
 
+test("a switch still happens within its two-second cap when the window stops drawing frames, as a hidden or minimized window does", async ({ page, engine }) => {
+  await openCanvas(page, engine, "default");
+  await openInTab(page, engine, "beta");
+  await page.getByRole("tab", { name: "default", exact: true }).click();
+  await expect(page.locator("[data-canvas-project='default'] .tl-canvas")).toBeVisible();
+  await page.evaluate(() => {
+    window.requestAnimationFrame = () => 0;
+  });
+  await page.getByRole("tab", { name: "beta", exact: true }).click();
+  await expect(page.locator("[data-canvas-project='beta']")).toHaveCount(1, { timeout: 4000 });
+});
+
 test("Ctrl+Tab cycles the tabs; Cmd+1 and Cmd+9 jump to a tab and to the last", async ({ page, engine }) => {
   await openCanvas(page, engine, "default");
   await openInTab(page, engine, "beta");
