@@ -1,5 +1,5 @@
 import { NODE_MIN_HEIGHT, NODE_WIDTH, type NodeShapeProps, type NodeVersion } from "@unframed/contracts";
-import { currentVersion, modelPart, nodeStatus, readRef } from "@unframed/domain";
+import { currentVersion, modelPart, nodeProvider, nodeStatus, providerLabel, readRef } from "@unframed/domain";
 import { AppWindow, AudioLines, FileText, Workflow } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo } from "tldraw";
@@ -7,12 +7,11 @@ import { Badge } from "~/components/ui/badge";
 import { fileUrl } from "../canvas/assetStore.ts";
 import { ShapeLabel } from "../canvas/shapes/ShapeLabel.tsx";
 import { useCanvasProject, useEngine } from "../context.ts";
-import { loadLastUsed } from "../generate/lastUsed.ts";
-import { mediumDefinition } from "../generate/mediumRegistry.ts";
 import { noteRender } from "../fps/renders.ts";
 import { type NodeShape } from "./facts.ts";
 import { nodeStatusOf } from "./graph.ts";
 import { NodeEditor } from "./NodeEditor.tsx";
+import { nodeStartValues } from "./nodeTray.ts";
 import { newNodeProps, nodeFrames, nodeModel } from "./operations.ts";
 
 const versionProps = T.object({
@@ -100,23 +99,18 @@ const useFreshValues = (shape: NodeShape) => {
     if (!fresh) return;
     let live = true;
     void (async () => {
-      const stored = await loadLastUsed(engine, "image");
-      const list = await engine.call("models.list", { medium: "image" }).catch(() => undefined);
+      const keys = await engine.call("settings.get").catch(() => undefined);
+      const values = await nodeStartValues(engine, keys, "image");
       if (!live) return;
       const now = editor.getShape(shape.id);
       if (!now || now.type !== "node") return;
-      const definition = mediumDefinition("image");
-      const model = stored?.model !== undefined && list?.models.some((each) => each.id === stored.model) ? stored.model : "";
-      const entry = list?.models.find((each) => each.id === (model || list.default));
-      const params = definition ? (stored ? definition.keep(stored.props, definition.params(entry, stored.props)) : definition.defaults(definition.params(entry))) : {};
-      const { runs, ...rest } = params as Record<string, string | number | boolean>;
       const { fresh: _fresh, ...unframed } = (now.meta.unframed as Record<string, unknown> | undefined) ?? {};
       editor.run(
         () =>
           editor.updateShape<NodeShape>({
             id: shape.id,
             type: "node",
-            props: { ...(now as NodeShape).props, model, params: rest, ...(typeof runs === "number" && runs > 1 ? { runs } : {}) },
+            props: { ...(now as NodeShape).props, model: values.model, params: values.params, ...(values.runs === undefined ? {} : { runs: values.runs }), ...(values.provider === undefined ? {} : { provider: values.provider }) },
             meta: { ...now.meta, unframed: unframed as never },
           }),
         { history: "ignore" },
@@ -159,6 +153,11 @@ const NodeCard = ({ shape }: { readonly shape: NodeShape }) => {
           <Badge variant="outline" data-testid="node-model">
             <span className="max-w-44 truncate">{modelPart(nodeModel(props)) || "Default model"}</span>
           </Badge>
+          {providerLabel(nodeProvider(props)).map((label) => (
+            <Badge key={label} variant="outline" data-testid="node-provider">
+              {label}
+            </Badge>
+          ))}
           {props.versions.length > 1 && <span className="ml-auto text-2xs text-muted-foreground tabular-nums" data-testid="node-version-count">{`${props.versions.length} versions`}</span>}
         </div>
         <StatusLine shape={shape} />

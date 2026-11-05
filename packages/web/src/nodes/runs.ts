@@ -4,6 +4,10 @@ import {
   isPaidMedium,
   nodeCatalogueOf,
   nodeImageEstimate,
+  nodeListEstimate,
+  nodeProvider,
+  providerLabel,
+  GENERATION_PROVIDERS,
   estimateVideo,
   formatEstimate,
   modelPart,
@@ -17,6 +21,7 @@ import {
 } from "@unframed/domain";
 import { atom, type Editor } from "tldraw";
 import { loadCatalogue } from "../generate/catalogue.ts";
+import { nodeCatalogueProvider } from "./nodeTray.ts";
 import { referencesFor } from "../generate/render.ts";
 import type { EngineConnection } from "../rpc/engine.ts";
 import { showError } from "../toasts.tsx";
@@ -49,10 +54,12 @@ export const stepEstimate = async (editor: Editor, engine: EngineConnection, id:
   const canvas = nodeCanvas(editor);
   const node = canvas.nodes.get(id);
   if (!node) return undefined;
-  const catalogue = await loadCatalogue(engine, nodeCatalogueOf(node.medium)).catch(() => undefined);
+  const provider = nodeProvider(node);
+  const catalogue = await loadCatalogue(engine, nodeCatalogueOf(node.medium), nodeCatalogueProvider(node.medium, provider)).catch(() => undefined);
   const model = node.model !== "" ? node.model : (catalogue?.default ?? nodeModel(node));
   const entry = catalogue?.models.find((each) => each.id === model);
-  const step = { id, name: nodeName(canvas, id), model: modelPart(model), paid: isPaidMedium(node.medium) };
+  const step = { id, name: nodeName(canvas, id), model: [modelPart(model), ...providerLabel(provider)].join(" · "), paid: isPaidMedium(node.medium) };
+  if (GENERATION_PROVIDERS[provider].listPriced) return { ...step, estimate: node.medium === "image" ? nodeListEstimate({ entry, runs: node.runs }) : null };
   if (node.medium === "image") {
     const answer = await imagePricing(engine, model);
     if (!answer) return { ...step, estimate: null };

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   inputFingerprint,
+  nodeFactsOf,
+  nodeListEstimate,
+  nodeProvider,
   nodeStatus,
   NOT_RUN_LINE,
   OUT_OF_DATE_LINE,
@@ -40,6 +43,7 @@ describe("input fingerprint", () => {
     ["the wire order", (c: ReturnType<typeof ready>) => board({ shapes: c.shapes, nodes: [{ facts: c.facts }], wires: c.wires.map((w) => (w.id === "wp" ? { ...w, z: 99999 } : w)) })],
     ["the instruction", (c: ReturnType<typeof ready>) => board({ shapes: c.shapes, nodes: [{ facts: { ...c.facts, instruction: "brighter" } }], wires: c.wires })],
     ["the model", (c: ReturnType<typeof ready>) => board({ shapes: c.shapes, nodes: [{ facts: { ...c.facts, model: "other" } }], wires: c.wires })],
+    ["the provider", (c: ReturnType<typeof ready>) => board({ shapes: c.shapes, nodes: [{ facts: { ...c.facts, provider: "vercel" as const } }], wires: c.wires })],
     ["a param", (c: ReturnType<typeof ready>) => board({ shapes: c.shapes, nodes: [{ facts: { ...c.facts, params: { aspect_ratio: "16:9" } } }], wires: c.wires })],
   ])("changes with %s", (_case, change) => {
     const c = ready();
@@ -120,5 +124,40 @@ describe("node status", () => {
     expect(nodeStatus({ node: canvas.nodes.get("n")!, canvas })).toEqual({ state: "waiting", line: "Waiting for @up, which has no result yet." });
     const motion = board({ shapes: [artifact("mo", "motion", {}, "m.html")], nodes: [{ facts: node("n", "video", { instruction: "x" }) }], wires: [wire("w", "mo", "n", "reference")] });
     expect(nodeStatus({ node: motion.nodes.get("n")!, canvas: motion })).toEqual({ state: "waiting", line: "Render @mo first. A motion is an input once it has a render." });
+  });
+});
+
+describe("a node's provider", () => {
+  it("is written only when it is not OpenRouter, and reads as OpenRouter when absent", () => {
+    expect(nodeFactsOf({ id: "n", typeName: "shape", type: "node", props: { medium: "image", provider: "openrouter" } }).provider).toBeUndefined();
+    expect(nodeFactsOf({ id: "n", typeName: "shape", type: "node", props: { medium: "image", provider: "vercel" } }).provider).toBe("vercel");
+    expect(nodeFactsOf({ id: "n", typeName: "shape", type: "node", props: { medium: "image", provider: "other" } }).provider).toBeUndefined();
+  });
+
+  it.each([
+    ["image", "vercel", "vercel"],
+    ["text", "vercel", "vercel"],
+    ["image", undefined, "openrouter"],
+    ["video", "vercel", "openrouter"],
+    ["page", "vercel", "openrouter"],
+    ["audio", "vercel", "openrouter"],
+  ] as const)("a %s node set to %s runs through %s", (medium, provider, expected) => {
+    expect(nodeProvider({ ...node("n", medium), ...(provider === undefined ? {} : { provider }) })).toBe(expected);
+  });
+
+  it("leaves an OpenRouter node's fingerprint as it was before providers", () => {
+    const { facts, canvas } = ready();
+    expect(inputFingerprint({ ...facts, provider: undefined }, canvas)).toBe(inputFingerprint(facts, canvas));
+  });
+
+  it.each([
+    [{ image: "0.04" }, 3, 0.12],
+    [{ image: 0.04 }, undefined, 0.04],
+    [{ input: "0.000001", output: "0.000002" }, 1, null],
+    [undefined, 1, null],
+  ])("estimates a list-priced image node from its flat price %j × %s runs", (pricing, runs, expected) => {
+    const estimate = nodeListEstimate({ entry: pricing === undefined ? undefined : ({ id: "m", name: "m", created: null, params: null, pricing } as never), runs });
+    if (expected === null) expect(estimate).toBeNull();
+    else expect(estimate).toBeCloseTo(expected, 10);
   });
 });

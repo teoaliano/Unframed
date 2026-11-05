@@ -1,6 +1,6 @@
 # 22 · Vercel AI Gateway
 
-Depends on: 01 to 15 (read 00-index first). Spec 15 made room for a second provider: this spec is one more row of its provider-key table. Spec 16 is not a dependency: a node's run uses the same run requests, so it inherits the provider field when it is built.
+Depends on: 01 to 15 (read 00-index first). Spec 15 made room for a second provider: this spec is one more row of its provider-key table. Spec 16 is not a dependency. Nodes, built after this spec, carry the provider too: an image or text node has its own provider switch, and its runs, estimates and `node_run` steps follow it (spec 16, The node, Provider).
 
 ## Problem Statement
 

@@ -30,6 +30,11 @@ import {
   NO_KEY_MESSAGE,
   nodeCatalogueOf,
   nodeImageEstimate,
+  nodeListEstimate,
+  nodeProvider,
+  GENERATION_PROVIDERS,
+  providerField,
+  providerKeysOf,
   type NodeCatalogue,
   NO_CHROME_RENDER_MESSAGE,
   NODE_PAGE_SYSTEM,
@@ -70,6 +75,7 @@ import { MediaStore } from "../media/mediaStore.ts";
 import { Catalogue } from "../openRouter/catalogue.ts";
 import { chatRequestBody, completeText, type ReferencePart } from "../openRouter/text.ts";
 import { VideoCatalogue } from "../openRouter/videoCatalogue.ts";
+import { providerCatalogues } from "../runs/providers.ts";
 import { fileStamp, mimeForFile, writeLoneSidecar, writeResultFile } from "../runs/resultFiles.ts";
 import { Runs } from "../runs/runs.ts";
 import { shapeBoxes } from "../runs/shapeBounds.ts";
@@ -182,6 +188,11 @@ export const nodeRunsLayer = Layer.effect(
       return { records, canvas: nodeCanvasOf(records as unknown as CanvasRecord[], shapes, renders), folder };
     };
 
+    const catalogues = providerCatalogues({
+      vercelOrigin: config.vercelOrigin,
+      openRouter: (medium) => runPromise(medium === "image" ? catalogue.listImageModels : catalogue.listTextModels),
+    });
+
     const LISTS: Record<NodeCatalogue, () => Promise<ReadonlyArray<ModelEntry>>> = {
       image: async () => (await runPromise(catalogue.listImageModels)).models,
       video: async () => (await runPromise(videoCatalogue.list)).models,
@@ -189,15 +200,24 @@ export const nodeRunsLayer = Layer.effect(
       audio: async () => [],
     };
 
-    const models = (medium: NodeFacts["medium"]): Promise<ReadonlyArray<ModelEntry>> => LISTS[nodeCatalogueOf(medium)]().catch(() => []);
+    const models = async (node: NodeFacts): Promise<ReadonlyArray<ModelEntry>> => {
+      const provider = nodeProvider(node);
+      const list = provider === "openrouter" ? LISTS[nodeCatalogueOf(node.medium)]() : runPromise(settings.read).then((current) => catalogues[provider](current, node.medium as "image" | "text")).then((answer) => answer.models);
+      return list.catch(() => []);
+    };
 
     const DEFAULTS: Record<NodeCatalogue, "imageModel" | "videoModel" | "textModel" | "audioModel"> = { image: "imageModel", video: "videoModel", text: "textModel", audio: "audioModel" };
 
-    const modelOf = async (node: NodeFacts): Promise<string> => (node.model !== "" ? node.model : (await runPromise(settings.read))[DEFAULTS[nodeCatalogueOf(node.medium)]]);
+    const modelOf = async (node: NodeFacts): Promise<string> => {
+      if (node.model !== "") return node.model;
+      const current = await runPromise(settings.read);
+      const provider = nodeProvider(node);
+      return provider === "openrouter" ? current[DEFAULTS[nodeCatalogueOf(node.medium)]] : GENERATION_PROVIDERS[provider].defaultModel(current, node.medium as "image" | "text");
+    };
 
     const entryOf = async (node: NodeFacts): Promise<ModelEntry | undefined> => {
       const model = await modelOf(node);
-      return (await models(node.medium)).find((each) => each.id === model);
+      return (await models(node)).find((each) => each.id === model);
     };
 
     const framesFor = async (canvas: NodeCanvas): Promise<(id: string) => ReadonlyArray<string>> => {
@@ -221,6 +241,8 @@ export const nodeRunsLayer = Layer.effect(
     const compose = async (canvas: NodeCanvas, id: string, assume: ReadonlySet<string>, agent: boolean, rendered: RenderedInputs): Promise<Composed | { error: string }> => {
       const node = canvas.nodes.get(id);
       if (!node) return { error: NODE_GONE };
+      const provider = nodeProvider(node);
+      if (provider !== "openrouter" && !GENERATION_PROVIDERS[provider].hasKey(providerKeysOf(await runPromise(settings.read)))) return { error: GENERATION_PROVIDERS[provider].noKeyMessage };
       const model = await modelOf(node);
       const entry = await entryOf(node);
       const referenceCap = node.medium === "image" ? modelParams(entry).referenceCap : undefined;
@@ -332,6 +354,7 @@ export const nodeRunsLayer = Layer.effect(
 
     const estimateOf = async (composed: Composed): Promise<number | null> => {
       const { node } = composed;
+      if (nodeProvider(node) !== "openrouter") return node.medium === "image" ? nodeListEstimate({ entry: composed.entry, runs: node.runs }) : null;
       if (node.medium === "image") {
         const pricing = await runPromise(catalogue.imagePricing(composed.model)).catch(() => undefined);
         if (!pricing) return null;
@@ -484,11 +507,11 @@ export const nodeRunsLayer = Layer.effect(
       image: async ({ project, composed, prompt, selectionPrompt, references, into, input, box }) => {
         const params = Object.fromEntries(Object.entries(composed.node.params).filter(([key]) => IMAGE_PARAMS.has(key)).map(([key, value]) => [key, String(value)]));
         const outputs = Array.from({ length: Math.min(10, Math.max(1, composed.node.runs ?? 1)) }, () => ({ prompt, references: [...references] }));
-        const request = { project, model: composed.model, params, selectionPrompt, instruction: composed.instruction, outputs, sources: [...composed.sources], anchor: box, ...chatOf(input) };
+        const request = { project, model: composed.model, params, selectionPrompt, instruction: composed.instruction, outputs, sources: [...composed.sources], anchor: box, ...chatOf(input), ...providerField(nodeProvider(composed.node)) };
         return (await runPromise(runs.image(request, into))).runId;
       },
       text: async ({ project, composed, prompt, selectionPrompt, references, into, input, box }) => {
-        const request = { project, model: composed.model, selectionPrompt, instruction: composed.instruction, prompt, references: [...references], sources: [...composed.sources], anchor: box, ...chatOf(input) };
+        const request = { project, model: composed.model, selectionPrompt, instruction: composed.instruction, prompt, references: [...references], sources: [...composed.sources], anchor: box, ...chatOf(input), ...providerField(nodeProvider(composed.node)) };
         return (await runPromise(runs.text(request, into))).runId;
       },
       audio: async ({ project, composed, prompt, selectionPrompt, into, box }) => {

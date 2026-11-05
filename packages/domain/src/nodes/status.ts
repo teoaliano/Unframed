@@ -2,6 +2,8 @@ import { membersOf, type CanvasShape } from "../canvasShapes.ts";
 import { markOwners } from "../composition.ts";
 import { resolveReferences } from "../references.ts";
 import { currentVersion, wiresInto, type NodeCanvas, type NodeFacts } from "./model.ts";
+import { providerField } from "../generationProviders.ts";
+import { nodeProvider } from "./catalogue.ts";
 import { nodeRequest } from "./request.ts";
 
 export const stableHash = (text: string): string => {
@@ -53,7 +55,7 @@ export const inputFingerprint = (node: NodeFacts, canvas: NodeCanvas): string =>
   };
   const wires = wiresInto(canvas, node.id).map((wire) => ({ role: wire.role, files: wire.files ?? null, from: wire.from, content: content(byId.get(wire.from)) }));
   return stableHash(
-    JSON.stringify({ medium: node.medium, model: node.model, params: sortedParams(node.params), instruction: resolved(node.instruction), wires }),
+    JSON.stringify({ medium: node.medium, model: node.model, params: sortedParams(node.params), instruction: resolved(node.instruction), wires, ...providerField(nodeProvider(node)) }),
   );
 };
 

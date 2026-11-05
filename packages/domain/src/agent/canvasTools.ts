@@ -13,6 +13,8 @@ import { cappedArtifactScale, scaledArtifactProps } from "../artifacts/artifactR
 import { currentVersion, nodeCanvasOf } from "../nodes/model.ts";
 import { nodeStatus } from "../nodes/status.ts";
 import { wireRefusal } from "../nodes/wires.ts";
+import { GENERATION_PROVIDERS, isGenerationProvider, providerField, providerServesMessage } from "../generationProviders.ts";
+import { VERCEL_BAD_PROVIDER } from "../vercel.ts";
 import { NODE_DEFAULT_SIZE, NODE_MEDIA, NODE_MIN_HEIGHT, NODE_WIDTH, WIRE_ROLES } from "@unframed/contracts";
 
 export interface CanvasRecord {
@@ -254,6 +256,7 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
         const status = nodeStatus({ node, canvas: nodeCanvas });
         entry.medium = node.medium;
         entry.model = node.model;
+        if (node.provider !== undefined) entry.provider = node.provider;
         entry.params = node.params;
         if (node.runs !== undefined) entry.runs = node.runs;
         entry.instruction = node.instruction;
@@ -684,6 +687,8 @@ const create = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
   batch.put(record);
 };
 
+export const PAGE_NODE_PROVIDER = "A page node runs through OpenRouter.";
+
 const nodeSettings = (op: string, medium: string, props: Record<string, unknown>): Record<string, unknown> => {
   const settings: Record<string, unknown> = { medium, model: "", params: {}, instruction: "" };
   if (props.model !== undefined) {
@@ -703,6 +708,13 @@ const nodeSettings = (op: string, medium: string, props: Record<string, unknown>
     if (medium !== "image") refuse(`${op}: only an image node takes runs`);
     if (!Number.isInteger(props.runs) || (props.runs as number) < 1 || (props.runs as number) > 10) refuse(`${op}: runs is a whole number from 1 to 10`);
     settings.runs = props.runs;
+  }
+  if (props.provider !== undefined && props.provider !== null) {
+    const provider = props.provider;
+    if (!isGenerationProvider(provider)) return refuse(`${op}: ${VERCEL_BAD_PROVIDER}`);
+    if (medium === "page" && provider !== "openrouter") refuse(`${op}: ${PAGE_NODE_PROVIDER}`);
+    if (medium !== "page" && !GENERATION_PROVIDERS[provider].media.includes(medium as never)) refuse(`${op}: ${providerServesMessage(provider, medium as never)}`);
+    Object.assign(settings, providerField(provider));
   }
   return settings;
 };
@@ -740,14 +752,19 @@ const update = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
     for (const field of ["tag", "file"]) if (field in patch) refuse(`update: ${field} is written by component_write`);
   }
   if (kind === "node") {
-    const allowed = new Set(["medium", "model", "params", "runs", "instruction", "w", "h"]);
-    for (const key of Object.keys(patch)) if (!allowed.has(key)) refuse(`update: a node takes medium, model, params, runs and instruction, not ${key}`);
+    const allowed = new Set(["medium", "model", "params", "runs", "instruction", "provider", "w", "h"]);
+    for (const key of Object.keys(patch)) if (!allowed.has(key)) refuse(`update: a node takes medium, model, provider, params, runs and instruction, not ${key}`);
     const medium = typeof patch.medium === "string" ? patch.medium : String(props.medium);
     if (!(NODE_MEDIA as ReadonlyArray<string>).includes(medium)) refuse(`update: a node's props.medium is one of ${NODE_MEDIA.join(", ")}`);
     const settings = nodeSettings("update", medium, { ...patch, ...(patch.runs === undefined && medium !== "image" ? {} : {}) });
     const next: Record<string, unknown> = { ...props, medium };
     for (const key of ["model", "params", "instruction", "runs"]) if (key in patch && patch[key] !== null) next[key] = settings[key];
     if (patch.runs === null || medium !== "image") delete next.runs;
+    if ("provider" in patch) {
+      delete next.provider;
+      Object.assign(next, providerField(settings.provider as never));
+    }
+    if (medium !== "image" && medium !== "text") delete next.provider;
     if (numeric(patch.w)) next.w = Math.min(NODE_WIDTH.max, Math.max(NODE_WIDTH.min, patch.w));
     if (numeric(patch.h)) next.h = Math.max(NODE_MIN_HEIGHT, patch.h);
     delete next.error;

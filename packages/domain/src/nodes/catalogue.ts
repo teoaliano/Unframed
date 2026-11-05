@@ -1,11 +1,21 @@
-import type { NodeMedium } from "@unframed/contracts";
+import type { GenerationProvider, ModelEntry, NodeMedium } from "@unframed/contracts";
+import { providerOf } from "../generationProviders.ts";
+import { vercelListPrice } from "../vercel.ts";
 import { estimateImageRun, type Sku } from "../estimate.ts";
 import { downstreamRun, planChain, type ChainPlan, type DownstreamScope } from "./chain.ts";
-import type { NodeCanvas } from "./model.ts";
+import type { NodeCanvas, NodeFacts } from "./model.ts";
 
 export type NodeCatalogue = "image" | "video" | "text" | "audio";
 
 export const nodeCatalogueOf = (medium: NodeMedium): NodeCatalogue => (medium === "page" ? "text" : medium);
+
+export const nodeProvider = (node: Pick<NodeFacts, "medium" | "provider">): GenerationProvider =>
+  node.medium === "image" || node.medium === "text" ? providerOf(node.provider) : "openrouter";
+
+export const nodeListEstimate = (input: { readonly entry: Pick<ModelEntry, "pricing"> | undefined; readonly runs: number | undefined }): number | null => {
+  const each = vercelListPrice({ entry: input.entry });
+  return each === null ? null : each * (input.runs ?? 1);
+};
 
 export const isPaidMedium = (medium: NodeMedium): boolean => medium !== "audio";
 

@@ -1,13 +1,17 @@
 import { NODE_DEFAULT_SIZE, type NodeMedium, type NodeShapeProps, type WireRole } from "@unframed/contracts";
-import { defaultRole, nodeRequest, sourceOf, wireRefusal, WIRE_TARGET_REFUSAL, nodeCatalogueOf, frameImagesOf } from "@unframed/domain";
+import { defaultRole, nodeRequest, sourceOf, wireRefusal, WIRE_TARGET_REFUSAL, nodeCatalogueOf, frameImagesOf, nodeProvider } from "@unframed/domain";
 import { createShapeId, getIndexBetween, type Editor, type IndexKey, type TLShapeId } from "tldraw";
 import { knownCatalogue } from "../generate/catalogue.ts";
 import { showError } from "../toasts.tsx";
 import {isNodeShape, isWireShape, nodeCanvas, nodeCatalogues, type NodeShape, type WireShape } from "./facts.ts";
 
-export const nodeModel = (props: Pick<NodeShapeProps, "medium" | "model">): string => props.model !== "" ? props.model : (knownCatalogue(nodeCatalogueOf(props.medium))?.default ?? "");
+type NodeModelFacts = Pick<NodeShapeProps, "medium" | "model"> & { readonly provider?: NodeShapeProps["provider"] | undefined };
 
-export const nodeEntry = (props: Pick<NodeShapeProps, "medium" | "model">) => knownCatalogue(nodeCatalogueOf(props.medium))?.models.find((entry) => entry.id === nodeModel(props));
+const nodeList = (props: Omit<NodeModelFacts, "model">) => knownCatalogue(nodeCatalogueOf(props.medium), nodeProvider(props));
+
+export const nodeModel = (props: NodeModelFacts): string => (props.model !== "" ? props.model : (nodeList(props)?.default ?? ""));
+
+export const nodeEntry = (props: NodeModelFacts) => nodeList(props)?.models.find((entry) => entry.id === nodeModel(props));
 
 let framesEditor: Editor | undefined;
 export const bindNodeCatalogues = (editor: Editor) => {
@@ -89,7 +93,7 @@ export const moveWire = (editor: Editor, wireId: TLShapeId, before: TLShapeId | 
   editor.updateShape<WireShape>({ id: wireId, type: "wire", index });
 };
 
-type NodePatch = Partial<Pick<NodeShapeProps, "medium" | "model" | "params" | "instruction" | "currentVersionId">> & { readonly runs?: number | undefined };
+type NodePatch = Partial<Pick<NodeShapeProps, "medium" | "model" | "params" | "instruction" | "currentVersionId">> & { readonly runs?: number | undefined; readonly provider?: NodeShapeProps["provider"] | undefined };
 
 export const updateNode = (editor: Editor, id: TLShapeId, patch: NodePatch, mark = true): void => {
   const shape = editor.getShape(id);
@@ -97,7 +101,8 @@ export const updateNode = (editor: Editor, id: TLShapeId, patch: NodePatch, mark
   if (mark) editor.markHistoryStoppingPoint("node settings");
   const props = { ...shape.props, ...patch } as NodeShapeProps;
   if (patch.runs === undefined && "runs" in patch) delete props.runs;
-  editor.updateShape<NodeShape>({ id, type: "node", props });
+  if (patch.provider === undefined && "provider" in patch) delete props.provider;
+  editor.store.update(id, (record) => ({ ...record, props }) as typeof record);
 };
 
 export const newNodeProps = (medium: NodeMedium, values: { model?: string; params?: Record<string, string | number | boolean>; runs?: number }): NodeShapeProps => ({

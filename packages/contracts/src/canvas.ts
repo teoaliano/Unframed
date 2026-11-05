@@ -11,6 +11,7 @@ import {
   type TLSchema,
 } from "@tldraw/tlschema";
 import { T } from "@tldraw/validate";
+import type { GenerationProvider } from "./generation.ts";
 import type { Kit } from "./kits.ts";
 
 
@@ -192,6 +193,7 @@ export interface NodeShapeProps {
   h: number;
   medium: NodeMedium;
   model: string;
+  provider?: GenerationProvider;
   params: Record<string, string | number | boolean>;
   runs?: number;
   instruction: string;
@@ -237,6 +239,7 @@ const nodeProps = {
   h: T.nonZeroNumber,
   medium: T.literalEnum(...NODE_MEDIA),
   model: T.string,
+  provider: T.literalEnum("openrouter", "vercel").optional(),
   params: T.dict(T.string, T.jsonValue).check((params) => {
     for (const [key, value] of Object.entries(params)) {
       if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") throw new T.ValidationError(`Expected ${key} to be a string, number or boolean`);

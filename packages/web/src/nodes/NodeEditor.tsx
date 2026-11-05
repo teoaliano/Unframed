@@ -1,5 +1,17 @@
-import { NODE_MEDIA, type NodeMedium, type NodeShapeProps, type NodeVersion } from "@unframed/contracts";
-import { currentVersion, nodeCatalogueOf, nodeName, nodeRequest, shapeName, type Composition } from "@unframed/domain";
+import { NODE_MEDIA, type GenerationProvider, type NodeMedium, type NodeShapeProps, type NodeVersion } from "@unframed/contracts";
+import {
+  currentVersion,
+  GENERATION_PROVIDER_IDS,
+  GENERATION_PROVIDERS,
+  generationProviders,
+  nodeCatalogueOf,
+  nodeName,
+  nodeProvider,
+  nodeRequest,
+  shapeName,
+  VERCEL_VIDEO_BLOCKER,
+  type Composition,
+} from "@unframed/domain";
 import { ChevronDown, GripVertical, Play } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import { useEditor, useValue, type TLShapeId } from "tldraw";
@@ -16,12 +28,12 @@ import { ModelDialog } from "../generate/composer/ModelDialog.tsx";
 import { PropTray } from "../generate/composer/PropTray.tsx";
 import { NoKeyLine, StatusBand, StatusLine } from "../generate/composer/StatusLine.tsx";
 import { canvasShapes } from "../generate/facts.ts";
-import { loadLastUsed, saveLastUsed } from "../generate/lastUsed.ts";
 import { mediumDefinition, type PropValue, type RunSource } from "../generate/mediumRegistry.ts";
 import { nodeRunsProp, RUNS_KEY } from "../generate/runsProp.tsx";
 import { type NodeShape } from "./facts.ts";
 import { downstreamCounts, nodeRequestOf, nodeStatusOf, nodeView } from "./graph.ts";
 import { moveWire, nodeFrames, updateNode } from "./operations.ts";
+import { isRoutedNode, nodeCatalogueProvider, nodeStartValues, rememberNode, splitTray } from "./nodeTray.ts";
 import { runNodes } from "./runs.ts";
 import { VersionsStrip } from "./VersionsStrip.tsx";
 
@@ -33,10 +45,24 @@ const definitionOf = (medium: NodeMedium) => mediumDefinition(nodeCatalogueOf(me
 
 const trayProps = (props: NodeShapeProps): Record<string, PropValue> => ({ ...props.params, ...(props.medium === "image" && props.runs !== undefined ? { [RUNS_KEY]: props.runs } : {}) });
 
-const splitTray = (medium: NodeMedium, tray: Record<string, PropValue>): Pick<NodeShapeProps, "params" | "runs"> => {
-  const { [RUNS_KEY]: runs, ...params } = tray;
-  return { params, ...(medium === "image" && typeof runs === "number" && runs > 1 ? { runs } : {}) } as Pick<NodeShapeProps, "params" | "runs">;
-};
+const ProviderSwitch = ({ provider, onChange }: { readonly provider: GenerationProvider; readonly onChange: (provider: GenerationProvider) => void }) => (
+  <ToggleGroup
+    role="radiogroup"
+    aria-label="Provider"
+    size="sm"
+    value={[provider]}
+    onValueChange={(next) => {
+      const [picked] = next as GenerationProvider[];
+      if (picked !== undefined) onChange(picked);
+    }}
+  >
+    {GENERATION_PROVIDER_IDS.map((each) => (
+      <Toggle key={each} value={each} role="radio" aria-checked={each === provider}>
+        {GENERATION_PROVIDERS[each].label}
+      </Toggle>
+    ))}
+  </ToggleGroup>
+);
 
 const InputList = ({ shape }: { readonly shape: NodeShape }) => {
   const editor = useEditor();
@@ -152,12 +178,16 @@ export const NodeEditor = ({ shape }: { readonly shape: NodeShape }) => {
   const project = useCanvasProject();
   const props = shape.props;
   const definition = definitionOf(props.medium);
-  const catalogue = useCatalogue(engine, nodeCatalogueOf(props.medium), undefined);
+  const provider = nodeProvider(props);
+  const routed = isRoutedNode(props.medium);
+  const keys = settings ?? { hasKey: true, hasVercelKey: false };
+  const offered = routed ? generationProviders(keys, props.medium as "image" | "text") : [];
+  const catalogue = useCatalogue(engine, nodeCatalogueOf(props.medium), nodeCatalogueProvider(props.medium, provider));
   const model = props.model !== "" ? props.model : catalogue?.default;
   const entry = catalogue?.models.find((each) => each.id === model);
   const tray = useMemo(() => trayProps(props), [props]);
   const params = useMemo(() => definition.params(entry, tray), [definition, entry, tray]);
-  const pricing = usePricing(engine, definition, model);
+  const pricing = usePricing(engine, definition, GENERATION_PROVIDERS[provider].listPriced ? undefined : model);
   const [dialogOpen, setDialogOpen] = useState(false);
   const box = useRef<{ readonly element: () => HTMLElement | null }>(null);
   const marked = useRef(false);
@@ -187,30 +217,32 @@ export const NodeEditor = ({ shape }: { readonly shape: NodeShape }) => {
     };
     return { kind: "selection", composition, selected: [], shapes: canvasShapes(editor), instruction: "" };
   }, [request, editor]);
-  const estimate = definition.estimate({ pricing, props: tray, source, entry });
-  const needsKey = props.medium === "audio" ? settings?.hasElevenLabsKey === false : settings?.hasKey === false;
+  const estimate = definition.estimate({ pricing, props: tray, source, entry, provider });
+  const needsKey =
+    settings === undefined ? false : props.medium === "audio" ? !settings.hasElevenLabsKey : !GENERATION_PROVIDERS[provider].hasKey(settings);
+  const keyMessage = props.medium === "audio" ? undefined : props.medium === "video" && settings?.hasVercelKey === true ? VERCEL_VIDEO_BLOCKER : GENERATION_PROVIDERS[provider].noKeyMessage;
   const refused = request !== undefined && !request.ok && request.kind === "refused" ? request.message : undefined;
 
   const setTray = useCallback(
     (next: Record<string, PropValue>, picked?: string) => {
       const split = splitTray(props.medium, next);
       updateNode(editor, shape.id, { ...split, ...(picked === undefined ? {} : { model: picked }), runs: split.runs });
-      void saveLastUsed(engine, definition.medium, { ...(picked !== undefined ? { model: picked } : props.model !== "" ? { model: props.model } : {}), props: next });
+      void rememberNode(engine, props.medium, { model: picked ?? props.model, picked: true, provider: nodeCatalogueProvider(props.medium, props.provider), tray: next });
     },
-    [editor, engine, shape.id, props.medium, props.model, definition.medium],
+    [editor, engine, shape.id, props.medium, props.model, props.provider],
   );
 
   const switchMedium = async (medium: NodeMedium) => {
     if (medium === props.medium) return;
-    const next = definitionOf(medium);
-    const stored = await loadLastUsed(engine, next.medium);
-    const list = await engine.call("models.list", { medium: nodeCatalogueOf(medium) }).catch(() => undefined);
-    const known = stored?.model !== undefined && list?.models.some((each) => each.id === stored.model) ? stored.model : undefined;
-    const chosen = list?.models.find((each) => each.id === (known ?? list.default));
-    const nextParams = next.params(chosen, stored?.props);
-    const values = stored ? next.keep(stored.props, nextParams) : next.defaults(nextParams);
-    const split = splitTray(medium, values as Record<string, PropValue>);
-    updateNode(editor, shape.id, { medium, model: known ?? "", params: split.params, runs: split.runs });
+    const values = await nodeStartValues(engine, settings, medium);
+    updateNode(editor, shape.id, { medium, model: values.model, params: values.params, runs: values.runs, provider: values.provider });
+  };
+
+  const switchProvider = async (next: GenerationProvider) => {
+    if (next === provider) return;
+    const values = await nodeStartValues(engine, settings, props.medium, { provider: next, model: props.model, tray });
+    updateNode(editor, shape.id, { model: values.model, params: values.params, runs: props.runs, provider: values.provider });
+    void rememberNode(engine, props.medium, { model: values.model, picked: values.model !== "", provider: values.provider, tray: trayProps({ ...props, params: values.params }) });
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -267,11 +299,17 @@ export const NodeEditor = ({ shape }: { readonly shape: NodeShape }) => {
       {(refused !== undefined || needsKey) && status !== "waiting" && (
         <StatusBand>
           {refused !== undefined && <StatusLine kind="blocked">{refused}</StatusLine>}
-          {needsKey && <NoKeyLine />}
+          {needsKey && <NoKeyLine message={keyMessage} />}
         </StatusBand>
       )}
       <PropTray
-        lead={definition.Lead ? <definition.Lead props={tray} onChange={(next) => setTray(next)} onMenuOpen={onMenuOpen} /> : undefined}
+        lead={
+          routed && (offered.length > 1 || (offered.length === 1 && offered[0] !== provider)) ? (
+            <ProviderSwitch provider={provider} onChange={(next) => void switchProvider(next)} />
+          ) : definition.Lead ? (
+            <definition.Lead props={tray} onChange={(next) => setTray(next)} onMenuOpen={onMenuOpen} />
+          ) : undefined
+        }
         model={model}
         catalogueReady={catalogue !== undefined && catalogue.models.length > 0}
         params={params}
@@ -288,8 +326,8 @@ export const NodeEditor = ({ shape }: { readonly shape: NodeShape }) => {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         title={props.medium === "page" ? "Page models" : definition.dialogTitle}
-        browseUrl={definition.browseUrl}
-        browseLabel={definition.browseLabel ?? "Browse on OpenRouter"}
+        browseUrl={routed ? GENERATION_PROVIDERS[provider].browse[props.medium as "image" | "text"] : definition.browseUrl}
+        browseLabel={routed ? GENERATION_PROVIDERS[provider].browseLabel : (definition.browseLabel ?? "Browse on OpenRouter")}
         columns={definition.modelColumns ?? "openrouter"}
         models={catalogue?.models ?? []}
         current={model}

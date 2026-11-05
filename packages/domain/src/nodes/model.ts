@@ -1,4 +1,5 @@
-import type { NodeMedium, NodeRunMarker, NodeVersion, WireRole } from "@unframed/contracts";
+import type { GenerationProvider, NodeMedium, NodeRunMarker, NodeVersion, WireRole } from "@unframed/contracts";
+import { providerField } from "../generationProviders.ts";
 import { readingOrder, type CanvasShape } from "../canvasShapes.ts";
 import { plainText } from "../refs.ts";
 import { storedPageBoxes } from "../storedBoxes.ts";
@@ -8,6 +9,7 @@ export interface NodeFacts {
   readonly ref?: string | undefined;
   readonly medium: NodeMedium;
   readonly model: string;
+  readonly provider?: GenerationProvider | undefined;
   readonly params: Readonly<Record<string, string | number | boolean>>;
   readonly runs?: number | undefined;
   readonly instruction: string;
@@ -56,6 +58,7 @@ export const nodeFactsOf = (record: RecordLike, ref?: string): NodeFacts => {
     ...(ref === undefined ? {} : { ref }),
     medium: (props.medium as NodeMedium) ?? "image",
     model: typeof props.model === "string" ? props.model : "",
+    ...providerField(props.provider as GenerationProvider | undefined),
     params: obj(props.params) as Record<string, string | number | boolean>,
     ...(typeof props.runs === "number" ? { runs: props.runs } : {}),
     instruction: typeof props.instruction === "string" ? props.instruction : "",

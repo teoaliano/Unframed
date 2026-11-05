@@ -8,6 +8,7 @@ import { expect, startHostedEngine, test } from "./fixtures.ts";
 import { CATALOGUE, clickShape, composer, KEY, openComposer, PRICING, sendRun, toolbar } from "./generation.ts";
 import { pngBytes } from "./images.ts";
 import { openSettings, settingsButton, settingsDialog } from "./settings.ts";
+import { nodeCard, nodeRecord, nodeShape, promptShape, seedBoard, selectNode, wireShape } from "./nodes.ts";
 
 const block = (dialog: Locator) => dialog.locator("section[aria-label='Vercel AI Gateway']");
 
@@ -296,4 +297,68 @@ test.describe("catalogue calls", () => {
       await engine.dispose();
     }
   });
+});
+
+test("a node with both keys: its own provider switch, Vercel's default model and list price, the run through Vercel, and back to OpenRouter", async ({ page }) => {
+  const { engine, vercel, images } = await start();
+  try {
+    await openCanvas(page, engine);
+    await seedBoard(engine, [promptShape("fox", "201", "a lone red fox", { x: -440, y: 0 }), nodeShape("n", "202", { medium: "image" }, { x: 120, y: -60 }), wireShape("w", "fox", "n", "prompt")]);
+    await selectNode(page, "n");
+    const card = nodeCard(page, "n");
+    const switcher = card.getByRole("radiogroup", { name: "Provider" });
+    await expect(switcher.getByRole("radio")).toHaveText(["OpenRouter", "Vercel"]);
+    await expect(switcher.getByRole("radio", { name: "OpenRouter" })).toHaveAttribute("aria-checked", "true");
+    await expect(card.getByTestId("model-chip")).toHaveText("gpt-image-2");
+
+    await switcher.getByRole("radio", { name: "Vercel" }).click();
+    await expect(switcher.getByRole("radio", { name: "Vercel" })).toHaveAttribute("aria-checked", "true");
+    await expect(card.getByTestId("model-chip")).toHaveText("flux-kontext-pro");
+    await expect(card.getByTestId("node-estimate")).toHaveText("est. ~$0.040");
+    await expect(card.getByTestId("node-model")).toHaveText("flux-kontext-pro");
+    await expect(card.getByTestId("node-provider")).toHaveText("Vercel");
+    await expect.poll(async () => (await nodeRecord(engine, "n"))?.props.provider).toBe("vercel");
+    await card.getByTestId("model-chip").click();
+    await expect(page.getByRole("dialog").getByRole("link", { name: "Browse on Vercel" })).toHaveAttribute("href", "https://vercel.com/ai-gateway/models?type=image");
+    await page.keyboard.press("Escape");
+
+    await card.getByTestId("node-run").click();
+    await expect.poll(async () => (await nodeRecord(engine, "n"))?.props.versions.filter((version: any) => version.status === "done" && version.file).length).toBe(1);
+    expect(vercel.calls.some((call) => call.path === "/v1/images/generations" && call.body.model === "bfl/flux-kontext-pro")).toBe(true);
+    expect(images).toHaveLength(0);
+
+    await switcher.getByRole("radio", { name: "OpenRouter" }).click();
+    await expect(card.getByTestId("model-chip")).toHaveText("gpt-image-2");
+    await expect(card.getByTestId("node-provider")).toHaveCount(0);
+    await expect.poll(async () => (await nodeRecord(engine, "n"))?.props).not.toHaveProperty("provider");
+  } finally {
+    await engine.dispose();
+  }
+});
+
+test("a chain of Vercel nodes is priced from Vercel's catalogue in the toolbar and the confirmation", async ({ page }) => {
+  const { engine, vercel, images } = await start();
+  try {
+    await openCanvas(page, engine);
+    await seedBoard(engine, [
+      nodeShape("a", "201", { medium: "image", provider: "vercel", instruction: "a fox" }, { x: -440, y: -60 }),
+      nodeShape("b", "202", { medium: "image", provider: "vercel", model: "bfl/flux-2-pro", runs: 2, instruction: "at night" }, { x: 120, y: -60 }),
+      wireShape("ab", "a", "b", "reference"),
+    ]);
+    await selectNode(page, "a");
+    const other = (await nodeCard(page, "b").boundingBox())!;
+    await page.keyboard.down("Shift");
+    await page.mouse.click(other.x + other.width - 24, other.y + 14);
+    await page.keyboard.up("Shift");
+    await expect(toolbar(page).getByTestId("toolbar-chain-run")).toHaveText("Run chain · 2 nodes · ~$0.10");
+    await toolbar(page).getByTestId("toolbar-chain-run").click();
+    const dialog = page.getByTestId("chain-confirm");
+    await expect(dialog.getByTestId("chain-step")).toHaveText([/1@201 · flux-kontext-pro · Vercelest\. ~\$0\.040/, /2@202 · flux-2-pro · Vercelest\. ~\$0\.060/]);
+    await dialog.getByRole("button", { name: "Run" }).click();
+    await expect.poll(async () => (await nodeRecord(engine, "b"))?.props.currentVersionId ?? null).not.toBeNull();
+    expect(vercel.calls.filter((call) => call.path === "/v1/images/generations" || call.path === "/v1/images/edits").map((call) => call.body.model)).toEqual(["bfl/flux-kontext-pro", "bfl/flux-2-pro", "bfl/flux-2-pro"]);
+    expect(images).toHaveLength(0);
+  } finally {
+    await engine.dispose();
+  }
 });
