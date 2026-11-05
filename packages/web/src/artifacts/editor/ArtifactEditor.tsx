@@ -546,9 +546,9 @@ export const ArtifactEditor = ({
     : "grid-cols-[360px_minmax(0,1fr)_320px]";
   const parametersBody = (
     <>
-      <ColumnHeader>
-        <Tabs value={shownPanel} onValueChange={(next) => setPanel(String(next) as Panel)} className="h-12 min-w-0">
-          <TabsList variant="underline" aria-label="Editor panels">
+      <ColumnHeader className="px-0">
+        <Tabs value={shownPanel} onValueChange={(next) => setPanel(String(next) as Panel)} className="h-full min-w-0">
+          <TabsList variant="underline" fill aria-label="Editor panels">
             <TabsTab value="design">Design</TabsTab>
             <TabsTab value="layers">Layers</TabsTab>
             {!component && (
@@ -623,7 +623,7 @@ export const ArtifactEditor = ({
       ref={grid}
       data-testid="artifact-editor"
       className={cn(
-        "pointer-events-auto absolute inset-0 z-[700] box-border grid gap-3 bg-background p-3 font-sans text-foreground",
+        "pointer-events-auto absolute inset-x-0 top-9 bottom-0 z-[700] box-border grid gap-3 bg-background p-3 font-sans text-foreground",
         timeline
           ? "grid-rows-[minmax(0,1fr)_auto]"
           : "grid-rows-[minmax(0,1fr)]",

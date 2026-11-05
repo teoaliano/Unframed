@@ -63,7 +63,7 @@ Use these words, and only these, for these things.
 - **Composer**: the one input component. It has a **Generate tray** and an **Agent tray**.
 - **Chat**: one conversation with the agent. It is made of **turns**. A chat has **tags**: the artifacts it has touched.
 - **Artifact**: a page or a motion.
-- **Editor**: the full-screen view of one artifact: chat on the left, the artifact in the centre, **dials** (DialKit parameters) on the right.
+- **Editor**: the view of one artifact that takes the canvas's place below the top bar: chat on the left, the artifact in the centre, **dials** (DialKit parameters) on the right.
 - **Render job**: a durable record of a paid video generation that outlives the browser tab.
 - **Preview origin**: the second loopback HTTP server that serves artifact files and nothing else, on a fixed port (18787) unless something else holds it.
 - **Live viewer**: the small page "Open in a new tab" opens. It shows a page or motion's newest version with its current dials, and follows both while the app is open (spec 09).

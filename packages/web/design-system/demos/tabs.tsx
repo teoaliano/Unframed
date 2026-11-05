@@ -28,6 +28,22 @@ export default function TabsDemo() {
         ))}
       </Section>
 
+      <Section title="Fill">
+        <Row label="underline, fill">
+          <div className="flex h-12 w-80 items-stretch border-b">
+            <Tabs defaultValue="image" className="h-full">
+              <TabsList variant="underline" fill aria-label="Filled tabs">
+                {OPTIONS.map((option) => (
+                  <TabsTab key={option} value={option.toLowerCase()}>
+                    {option}
+                  </TabsTab>
+                ))}
+              </TabsList>
+            </Tabs>
+          </div>
+        </Row>
+      </Section>
+
       <Section title="Sizes">
         {SIZES.map((size) => (
           <Row key={size} label={size}>

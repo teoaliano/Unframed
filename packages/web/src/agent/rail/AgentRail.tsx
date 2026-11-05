@@ -1,6 +1,6 @@
 import { clearAllChats, clearedNotice, resetMoment, usageLimitHit, visibleChats, nextActive } from "@unframed/domain";
 import { BrushCleaning, CircleAlert, Gauge, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
-import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useMaybeEditor, useValue } from "tldraw";
 import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";
@@ -65,51 +65,6 @@ const RAIL_CLASS =
 
 /** The editor's left column, or the Sheet: the same rail in place, with no surface or motion of its own. */
 const EMBEDDED_CLASS = "relative box-border flex size-full min-h-0 flex-col font-sans text-foreground";
-
-/** Where theme.css puts the top-left card when no shell has moved it. */
-const CARD_HOME = 8;
-
-/**
- * The top-left chrome card's box (spec 02), measured again whenever it could move: its size
- * changes, the window resizes, or a stylesheet or the card's own attributes change, which is
- * how a shell's injected CSS (spec 01) moves it.
- */
-const useCardBox = (): DOMRect | undefined => {
-  const [box, setBox] = useState<DOMRect>();
-  useLayoutEffect(() => {
-    const card = document.querySelector<HTMLElement>(".unframed-chrome-left");
-    if (!card) return;
-    const measure = () => {
-      const next = card.getBoundingClientRect();
-      setBox((current) => (current && current.left === next.left && current.top === next.top && current.width === next.width && current.height === next.height ? current : next));
-    };
-    measure();
-    const resize = new ResizeObserver(measure);
-    resize.observe(card);
-    const styles = new MutationObserver(measure);
-    styles.observe(document.head, { childList: true, subtree: true, characterData: true });
-    styles.observe(card, { attributes: true });
-    window.addEventListener("resize", measure);
-    return () => {
-      resize.disconnect();
-      styles.disconnect();
-      window.removeEventListener("resize", measure);
-    };
-  }, []);
-  return box;
-};
-
-/**
- * In the editor the card stays under the editor (spec 09), but a shell that moved it from
- * its home made that room for its window buttons, which would sit on this rail's header.
- * The header moves by the same offsets: right by as much as the card moved right, so the
- * buttons sit inline beside it, and down only by as much as the card moved down.
- */
-const useShellOffset = (): { readonly left: number; readonly top: number } => {
-  const box = useCardBox();
-  if (!box) return { left: 0, top: 0 };
-  return { left: Math.max(0, Math.round(box.left - CARD_HOME)), top: Math.max(0, Math.round(box.top - CARD_HOME)) };
-};
 
 /**
  * The chat rail (spec 08): the project's chats as folder tabs filtered by the selected
@@ -219,8 +174,6 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
   }, [editor]);
 
   const newChat = () => client.setUi({ chosen: NEW_CHAT, pinned: null });
-  const shell = useShellOffset();
-  const offset = embedded ? shell : { left: 0, top: 0 };
 
   return (
     <aside
@@ -263,8 +216,7 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
         if (!target.closest("input, textarea, [contenteditable='true']")) event.preventDefault();
       }}
     >
-      {offset.top > 0 && <div className="shrink-0" style={{ height: offset.top }} data-testid="rail-shell-space" />}
-      <header className="flex h-12 shrink-0 items-center gap-1 pr-2 pl-3.5" style={offset.left > 0 ? { paddingLeft: 14 + offset.left } : undefined}>
+      <header className="flex h-12 shrink-0 items-center gap-1 pr-2 pl-3.5">
         <Sparkles aria-hidden className="size-4 shrink-0 text-foreground" />
         <h2 className="m-0 ml-1 flex-1 text-sm font-medium">Agent</h2>
         <Tip label="Search chats">
