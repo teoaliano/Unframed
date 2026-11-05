@@ -106,7 +106,7 @@ const NO_DRAG_CONTROLS = "[&_button]:[-webkit-app-region:no-drag]";
 const NO_DRAG_TAB_CONTROLS = "[&_[data-tab-item]]:[-webkit-app-region:no-drag] [&_[data-slot=tabs-tab]]:[-webkit-app-region:no-drag] [&_[data-close]]:[-webkit-app-region:no-drag]";
 
 const TAB_ITEM =
-  "relative inline-flex shrink-0 rounded-md after:pointer-events-none after:absolute after:inset-y-0 after:-end-2 after:w-px after:bg-border data-dragging:z-10 data-dragging:bg-background data-dragging:shadow-md/10 data-dragging:after:hidden data-dragging:[&_[data-slot=tabs-tab]]:cursor-grabbing";
+  "relative inline-flex shrink-0 rounded-md after:pointer-events-none after:absolute after:inset-y-0 after:-end-2 after:w-px after:bg-border data-last:after:end-0 data-dragging:z-10 data-dragging:bg-popover data-dragging:shadow-md/10 data-dragging:ring-1 data-dragging:ring-border data-dragging:after:hidden data-dragging:[&_[data-slot=tabs-tab]]:cursor-grabbing";
 
 const PinnedMark = ({ name }: { readonly name: string }) => (
   <span
@@ -253,8 +253,8 @@ export const TopBar = ({
             onContextMenu={onListContext}
             onPointerDown={reorder.onPointerDown}
           >
-            {tabs.map((tab) => (
-              <span key={tab.name} data-tab-item={tab.name} className={TAB_ITEM}>
+            {tabs.map((tab, index) => (
+              <span key={tab.name} data-tab-item={tab.name} data-last={index === tabs.length - 1 ? "" : undefined} className={TAB_ITEM}>
                 <TabsTab
                   value={tab.name}
                   data-project={tab.name}
@@ -265,7 +265,7 @@ export const TopBar = ({
                   title={tab.title ?? tab.name}
                   closable={tab.pinned !== true}
                   closeLabel={`Close ${tab.name}`}
-                  className={tab.pinned === true ? "w-9 min-w-0 px-0" : undefined}
+                  className={tab.pinned === true ? "w-9 min-w-0 gap-0 px-0 [&_[data-slot=tabs-status]]:ms-0.5" : undefined}
                   {...(tab.status === undefined ? {} : { status: tab.status })}
                 >
                   {tab.pinned === true ? <PinnedMark name={tab.name} /> : <span className="min-w-0 truncate">{tab.name}</span>}
