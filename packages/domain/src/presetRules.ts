@@ -33,7 +33,7 @@ export interface PresetContent {
   readonly [key: string]: unknown;
 }
 
-type PresetKind = "recipe" | "group";
+type PresetKind = "recipe" | "group" | "flow";
 type PresetSource = "user" | "system";
 
 export interface Preset {

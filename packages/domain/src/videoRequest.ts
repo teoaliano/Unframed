@@ -74,6 +74,8 @@ const defaultUrl = (slot: Slot): string => {
       return `project-file:${slot.source.file}`;
     case "sketch":
       return "sketch";
+    case "page":
+      return `project-file:${slot.source.file}`;
   }
 };
 

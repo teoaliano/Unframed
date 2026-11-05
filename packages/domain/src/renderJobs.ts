@@ -34,6 +34,8 @@ export interface RenderJob {
   /** Spec 03's recipe schema. */
   readonly recipe?: unknown;
   readonly forgotten?: true;
+  /** Spec 16: the node and version this render fills, when it is a node's. */
+  readonly target?: { readonly shapeId: string; readonly versionId: string; readonly chainId: string | null; readonly step?: number };
 }
 
 /** A change to one record. A key set to undefined is removed from the written file. */

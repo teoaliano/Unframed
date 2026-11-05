@@ -159,8 +159,117 @@ const audioMigrations = () => {
   return createShapePropsMigrationSequence({ sequence: [{ id: ids.Initial, up: (props) => props }] });
 };
 
+export const NODE_MEDIA = ["image", "video", "text", "audio", "page"] as const;
+export type NodeMedium = (typeof NODE_MEDIA)[number];
+
+export const WIRE_ROLES = ["prompt", "reference", "first", "last", "both"] as const;
+export type WireRole = (typeof WIRE_ROLES)[number];
+
+export interface NodeVersion {
+  id: string;
+  runId: string;
+  chainId: string | null;
+  batchId: string;
+  runIndex: number;
+  status: "running" | "done";
+  file?: string;
+  fileName?: string;
+  text?: string;
+  fingerprint: string;
+  createdAt: string;
+  error?: string;
+  durable?: boolean;
+}
+
+export interface NodeRunMarker {
+  runId: string;
+  chainId: string | null;
+  startedAt: number;
+}
+
+export interface NodeShapeProps {
+  w: number;
+  h: number;
+  medium: NodeMedium;
+  model: string;
+  params: Record<string, string | number | boolean>;
+  runs?: number;
+  instruction: string;
+  versions: NodeVersion[];
+  currentVersionId: string | null;
+  run?: NodeRunMarker;
+  error?: string;
+}
+
+export interface WireShapeProps {
+  from: string;
+  to: string;
+  role: WireRole;
+  files?: "entry" | "linked";
+}
+
+export const NODE_DEFAULT_SIZE = { w: 380, h: 360 } as const;
+export const NODE_WIDTH = { min: 320, max: 640 } as const;
+export const NODE_MIN_HEIGHT = 240;
+
+const shapeIdProp = T.string.check((id) => {
+  if (!id.startsWith("shape:") || id.length <= "shape:".length) throw new T.ValidationError(`Expected a shape id, got ${JSON.stringify(id)}`);
+});
+
+const versionProp = T.object({
+  id: T.string,
+  runId: T.string,
+  chainId: T.string.nullable(),
+  batchId: T.string,
+  runIndex: T.number,
+  status: T.literalEnum("running", "done"),
+  file: bareFileOrEmpty.optional(),
+  fileName: T.string.optional(),
+  text: T.string.optional(),
+  fingerprint: T.string,
+  createdAt: T.string,
+  error: T.string.optional(),
+  durable: T.boolean.optional(),
+});
+
+const nodeProps = {
+  w: T.nonZeroNumber,
+  h: T.nonZeroNumber,
+  medium: T.literalEnum(...NODE_MEDIA),
+  model: T.string,
+  params: T.dict(T.string, T.jsonValue).check((params) => {
+    for (const [key, value] of Object.entries(params)) {
+      if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") throw new T.ValidationError(`Expected ${key} to be a string, number or boolean`);
+    }
+  }),
+  runs: T.number
+    .check((runs) => {
+      if (!Number.isInteger(runs) || runs < 1 || runs > 10) throw new T.ValidationError(`Expected runs from 1 to 10, got ${runs}`);
+    })
+    .optional(),
+  instruction: T.string,
+  versions: T.arrayOf(versionProp),
+  currentVersionId: T.string.nullable(),
+  run: T.object({ runId: T.string, chainId: T.string.nullable(), startedAt: T.number }).optional(),
+  error: T.string.optional(),
+};
+
+const wireProps = {
+  from: shapeIdProp,
+  to: shapeIdProp,
+  role: T.literalEnum(...WIRE_ROLES),
+  files: T.literalEnum("entry", "linked").optional(),
+};
+
+const firstMigration = (kind: string) => {
+  const ids = createShapePropsMigrationIds(kind, { Initial: 1 });
+  return createShapePropsMigrationSequence({ sequence: [{ id: ids.Initial, up: (props) => props }] });
+};
+
 declare module "@tldraw/tlschema" {
   interface TLGlobalShapePropsMap {
+    node: NodeShapeProps;
+    wire: WireShapeProps;
     audio: AudioShapeProps;
     page: ArtifactShapeProps;
     motion: ArtifactShapeProps;
@@ -168,7 +277,7 @@ declare module "@tldraw/tlschema" {
   }
 }
 
-type UnframedKind = "prompt" | "image" | "video" | "audio" | "group" | "page" | "motion" | "component";
+type UnframedKind = "prompt" | "image" | "video" | "audio" | "group" | "page" | "motion" | "component" | "node" | "wire";
 
 export const kindOfShapeType = (type: string): UnframedKind | "mark" => {
   switch (type) {
@@ -180,6 +289,8 @@ export const kindOfShapeType = (type: string): UnframedKind | "mark" => {
     case "page":
     case "motion":
     case "component":
+    case "node":
+    case "wire":
       return type;
     case "frame":
       return "group";
@@ -220,6 +331,8 @@ const buildSchema = (refusalOf?: (kit: Kit) => string | null): TLSchema => {
       video: { ...keptShapes.video, meta: refMeta },
       frame: { ...keptShapes.frame, meta: unframedMeta },
       audio: { props: audioProps, meta: refMeta, migrations: audioMigrations() },
+      node: { props: nodeProps, meta: refMeta, migrations: firstMigration("node") },
+      wire: { props: wireProps, meta: unframedMeta, migrations: firstMigration("wire") },
       page: { props: artifactProps, meta: refMeta, migrations: artifactMigrations("page") },
       motion: { props: artifactProps, meta: refMeta, migrations: artifactMigrations("motion") },
       component: {

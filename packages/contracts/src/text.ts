@@ -2,6 +2,7 @@
  * Spec 05's text calls: a text run, which lands its answer on the canvas as a text result,
  * and a text completion, which lands nothing (Free's repair call).
  */
+import type { ChainRef, NodeRef } from "./generation.ts";
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import { UnframedError } from "./errors.ts";
@@ -72,4 +73,6 @@ export interface TextSidecar {
   readonly cost: number | null;
   readonly createdAt: string;
   readonly recipe?: ResultRecipe;
+  readonly node?: NodeRef;
+  readonly chain?: ChainRef;
 }

@@ -38,6 +38,8 @@ export const shapeKind = (type: string | undefined): ShapeKind => {
     case "page":
     case "motion":
     case "component":
+    case "node":
+    case "wire":
       return type;
     case "frame":
       return "group";
@@ -129,6 +131,7 @@ export const canvasShapesOf = (records: ReadonlyArray<CanvasRecord>, boxes: Read
       ...(kind === "prompt" && obj(unframed.result).medium === "text" ? { textResult: true } : {}),
       ...(media.file === undefined ? {} : { file: media.file }),
       ...(media.url === undefined ? {} : { link: media.url }),
+      ...((kind === "page" || kind === "motion") && typeof obj(shape.props).file === "string" && obj(shape.props).file !== "" ? { file: obj(shape.props).file as string } : {}),
     };
   });
 };
