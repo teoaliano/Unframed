@@ -21,6 +21,7 @@ import type { Editor, TLShapeId } from "tldraw";
 import type { EngineConnection } from "../../rpc/engine.ts";
 import { messageOf } from "../../agent/store.ts";
 import { expandShorthand } from "./expandShorthand.ts";
+import { keepLateSave } from "./lateSaves.ts";
 import { showError, showNotice } from "../../toasts.tsx";
 import type { EditMessage } from "../ArtifactFrame.tsx";
 import type { LiveTween } from "../timeline/rows.ts";
@@ -221,7 +222,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     [post],
   );
 
-  const commit = useCallback(async () => {
+  const commitBurst = useCallback(async () => {
     window.clearTimeout(timerRef.current);
     timerRef.current = undefined;
     const base = baseRef.current;
@@ -256,6 +257,10 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     }
     try {
       const answer = await send(base, edits);
+      if (editor.isDisposed) {
+        keepLateSave({ project, shapeId, kind, from: base, to: answer.file, held: dials.length > 0 ? { ...inFlight.current } : undefined });
+        return;
+      }
       if (fileRef.current !== base) {
         dropped();
         showNotice(conflictSentence(kind, await conflictReason(base)), "warning");
@@ -279,6 +284,14 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       else showError(messageOf(error));
     }
   }, [editor, engine, kind, post, project, shapeId]);
+
+  const flights = useRef(new Set<Promise<void>>());
+  const commit = useCallback((): Promise<void> => {
+    const run = commitBurst().catch(() => undefined);
+    flights.current.add(run);
+    void run.finally(() => flights.current.delete(run));
+    return Promise.all([...flights.current]).then(() => undefined);
+  }, [commitBurst]);
 
   const send = async (base: string, edits: SourceEdit[]): Promise<{ file: string }> => {
     for (let attempt = 0; ; attempt++) {

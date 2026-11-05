@@ -25,6 +25,7 @@ export const ACTIVE_PROJECT_KEY = "project.active";
 /** The saved tabs (spec 17): the order and the active tab. It replaces `project.active` as the place a restart reads from. */
 export const TABS_KEY = "project.tabs";
 const LIST_RETRY_MS = 1000;
+export const SETTLE_BEFORE_SWITCH_MS = 2000;
 export const DEFAULT_PROJECT = "default";
 
 const messageOf = (error: unknown): string =>
@@ -104,7 +105,21 @@ export class ProjectActivation {
   }
 
   private async leaveEditor(next: string | undefined): Promise<void> {
-    if (this.state.editing !== undefined && next !== this.state.editing) await this.beforeLeave?.();
+    if (this.state.editing !== undefined && next !== this.state.editing) await this.commitEditor();
+  }
+
+  private commitEditor(): Promise<void> {
+    const hook = this.beforeLeave;
+    if (hook === undefined) return Promise.resolve();
+    return new Promise((resolve) => {
+      const timer = setTimeout(resolve, SETTLE_BEFORE_SWITCH_MS);
+      hook()
+        .catch(() => undefined)
+        .finally(() => {
+          clearTimeout(timer);
+          resolve();
+        });
+    });
   }
 
   private update(next: Partial<Omit<TabState, "loaded">> & { loaded?: boolean }): void {
@@ -122,19 +137,24 @@ export class ProjectActivation {
   }
 
   async activate(key: string): Promise<void> {
-    this.generation++;
+    const started = ++this.generation;
     const name = projectOfTab(key);
     const editing = isEditorTab(key) ? key : undefined;
     await this.leaveEditor(editing);
-    const projectOrder = openTab(this.state.order, name);
-    const order = editing === undefined ? projectOrder : openEditorTab({ order: projectOrder, pinned: this.state.pinned }, editing);
+    if (this.generation !== started) return;
+    const order = () => {
+      const projectOrder = openTab(this.state.order, name);
+      return editing === undefined ? projectOrder : openEditorTab({ order: projectOrder, pinned: this.state.pinned }, editing);
+    };
     if (name === this.state.active) {
-      if (order.length !== this.state.order.length || editing !== this.state.editing) this.update({ order, editing });
+      const next = order();
+      if (next.length !== this.state.order.length || editing !== this.state.editing) this.update({ order: next, editing });
       this.persistTabs();
       return;
     }
     await this.beforeSwitch?.();
-    this.update({ active: name, editing, order });
+    if (this.generation !== started) return;
+    this.update({ active: name, editing, order: order() });
     this.persistTabs();
     await this.engine.call("preferences.set", { key: ACTIVE_PROJECT_KEY, value: name }).catch((error: unknown) => {
       showError(`Could not open “${name}”: ${messageOf(error)}`);
@@ -160,15 +180,20 @@ export class ProjectActivation {
    */
   async closeTab(name: string, options: { readonly remember?: boolean } = {}): Promise<void> {
     if (!this.state.order.includes(name)) return;
-    const selected = this.selectedTab();
-    const next = closeTabRule(this.state.order, selected, name);
+    const planned = closeTabRule(this.state.order, this.selectedTab(), name);
+    const changesSelection = planned.active !== this.selectedTab();
+    const started = changesSelection ? ++this.generation : this.generation;
+    if (changesSelection) {
+      await this.leaveEditor(planned.active !== undefined && isEditorTab(planned.active) ? planned.active : undefined);
+      if (this.generation !== started || !this.state.order.includes(name)) return;
+    }
+    const next = closeTabRule(this.state.order, this.selectedTab(), name);
     const nextProject = next.active === undefined ? undefined : projectOfTab(next.active);
     const editing = next.active !== undefined && isEditorTab(next.active) ? next.active : undefined;
-    await this.leaveEditor(editing);
     const switching = nextProject !== this.state.active;
     if (switching) {
-      this.generation++;
       await this.beforeSwitch?.();
+      if (this.generation !== started || !this.state.order.includes(name)) return;
     }
     const entry: ClosedTab = { key: name, editors: isEditorTab(name) ? [] : editorTabsOf(this.state.order, name) };
     const closed = options.remember === false ? this.state.closed : pushClosed(this.state.closed, entry, sameClosed);
@@ -181,9 +206,11 @@ export class ProjectActivation {
 
   async closeAllTabs(): Promise<void> {
     if (this.state.order.length === 0) return;
+    const started = ++this.generation;
     await this.leaveEditor(undefined);
-    this.generation++;
+    if (this.generation !== started) return;
     await this.beforeSwitch?.();
+    if (this.generation !== started) return;
     const projects = this.state.order.filter((key) => !isEditorTab(key));
     const closed = [...projects].reverse().reduce((stack, name) => pushClosed(stack, { key: name, editors: editorTabsOf(this.state.order, name) }, sameClosed), this.state.closed);
     this.update({ order: [], active: undefined, editing: undefined, pinned: [], closed });
@@ -243,8 +270,9 @@ export class ProjectActivation {
   }
 
   /** Lets the open canvas's pending edits reach the engine, before a change that closes its room. */
-  settle(): Promise<void> {
-    return this.beforeSwitch?.() ?? Promise.resolve();
+  async settle(): Promise<void> {
+    await this.commitEditor();
+    await this.beforeSwitch?.();
   }
 
   /**

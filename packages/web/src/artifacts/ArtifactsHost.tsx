@@ -13,6 +13,7 @@ import { RenderButton } from "./render.tsx";
 import { artifactsOf, installFrameHold, installTuningWatch, previewPort } from "./state.ts";
 import { installImageDrop } from "./imageDrop.tsx";
 import { watchComponentPins } from "./componentPins.ts";
+import { applyLateSaves } from "./editor/lateSaves.ts";
 import { watchFileChanges, watchSnapshots } from "./snapshots.ts";
 import { ScaleMenu } from "./ScaleMenu.tsx";
 
@@ -98,6 +99,7 @@ export const ArtifactsHost = () => {
 
   useEffect(() => {
     artifactsOf(editor).project.set(project);
+    applyLateSaves(editor, project);
     const stops = [
       installFrameHold(editor),
       installImageDrop(editor, engine, project),

@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { centre, openCanvas, shapeOnScreen } from "./canvas.ts";
+import { centre, openCanvas, roomShapes, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 import { putRecords } from "./media.ts";
 import { artifactShape, filledArtifact } from "./artifacts.ts";
@@ -254,3 +254,113 @@ for (const way of ["the project's tab", "Cmd+W", "another project's tab"] as con
     await expect.poll(() => fileOf(agent), { timeout: 1200 }).not.toBe(before);
   });
 }
+
+const holdEdits = async (page: Page, mode: "answer" | "request") => {
+  const held: Array<() => void> = [];
+  const sent: string[] = [];
+  await page.routeWebSocket("**/ws", (socket) => {
+    const server = socket.connectToServer();
+    const edits = new Set<string>();
+    socket.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (frame._tag === "Request" && frame.tag === "artifact.edit" && (frame.payload?.edits?.length ?? 0) > 0) {
+        sent.push(frame.id);
+        if (mode === "request") {
+          held.push(() => server.send(message));
+          return;
+        }
+        edits.add(frame.id);
+      }
+      server.send(message);
+    });
+    server.onMessage((message) => {
+      const frame = JSON.parse(String(message));
+      if (frame._tag === "Exit" && edits.has(frame.requestId)) {
+        held.push(() => socket.send(message));
+        return;
+      }
+      socket.send(message);
+    });
+  });
+  return { sent, release: () => held.splice(0).forEach((send) => send()) };
+};
+
+const editedBoard = async (page: Page, agent: Parameters<typeof openCanvas>[1], projects: ReadonlyArray<string>) => {
+  await openCanvas(page, agent);
+  await filledArtifact(agent, { id: "shape:landing", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 400, h: 260 }, title: "Landing", html: BURST_PAGE });
+  await expect(shapeOnScreen(page, "shape:landing")).toBeVisible();
+  for (const name of projects) await newProject(page, agent, name);
+  await page.getByRole("tab", { name: "default", exact: true }).click();
+  await expect(shapeOnScreen(page, "shape:landing")).toBeVisible();
+  await open(page, "shape:landing", "Landing");
+  const before = await preparedFile(agent);
+  await editHeading(page, "44");
+  return before;
+};
+
+test("leaving for another project while the timed save is in flight waits for it, and the shape points at the saved version", async ({ page, agent }) => {
+  const hold = await holdEdits(page, "answer");
+  const before = await editedBoard(page, agent, ["beta"]);
+  await expect.poll(() => hold.sent.length, { timeout: 4000 }).toBe(1);
+  await page.getByRole("tab", { name: "beta", exact: true }).click();
+  await page.waitForTimeout(600);
+  await expect(page.locator('[data-canvas-project="default"]')).toHaveCount(1);
+  hold.release();
+  await expect(page.locator('[data-canvas-project="beta"] .tl-canvas')).toBeVisible();
+  await expect.poll(() => fileOf(agent), { timeout: 4000 }).not.toBe(before);
+});
+
+test("a save the engine does not answer holds a switch at most two seconds, and lands when the project opens again", async ({ page, agent }) => {
+  const hold = await holdEdits(page, "request");
+  const before = await editedBoard(page, agent, ["beta"]);
+  await page.getByRole("tab", { name: "beta", exact: true }).click();
+  await expect(page.locator('[data-canvas-project="beta"] .tl-canvas')).toBeVisible({ timeout: 6000 });
+  expect(hold.sent.length).toBe(1);
+  hold.release();
+  await page.waitForTimeout(1000);
+  expect(await fileOf(agent)).toBe(before);
+  await page.getByRole("tab", { name: "default", exact: true }).click();
+  await expect.poll(() => fileOf(agent), { timeout: 6000 }).not.toBe(before);
+});
+
+test("clicking one project and then another while the editor saves ends on the last one clicked", async ({ page, agent }) => {
+  const hold = await holdEdits(page, "answer");
+  await editedBoard(page, agent, ["beta", "gamma"]);
+  await expect.poll(() => hold.sent.length, { timeout: 4000 }).toBe(1);
+  await page.getByRole("tab", { name: "beta", exact: true }).click();
+  await page.getByRole("tab", { name: "gamma", exact: true }).click();
+  await page.waitForTimeout(300);
+  hold.release();
+  await expect(page.locator('[data-canvas-project="gamma"] .tl-canvas')).toBeVisible();
+  await page.waitForTimeout(1500);
+  await expect(page.locator("[data-canvas-project]")).toHaveAttribute("data-canvas-project", "gamma");
+  await expect(selected(page)).toHaveText("gamma");
+});
+
+test("clicking another project and then back on the open editor tab while it saves stays in the editor", async ({ page, agent }) => {
+  const hold = await holdEdits(page, "answer");
+  await editedBoard(page, agent, ["beta"]);
+  await expect.poll(() => hold.sent.length, { timeout: 4000 }).toBe(1);
+  await page.getByRole("tab", { name: "beta", exact: true }).click();
+  await editorTab(page, "Landing").click();
+  await page.waitForTimeout(300);
+  hold.release();
+  await page.waitForTimeout(2500);
+  await expect(page.locator("[data-canvas-project]")).toHaveAttribute("data-canvas-project", "default");
+  await expect(page.getByRole("region", { name: "Editing Landing" })).toBeVisible();
+  await expect(selected(page)).toHaveAccessibleName("Landing, default");
+});
+
+test("renaming a project with unsaved edits in its editor tab saves them under the new name", async ({ page, agent }) => {
+  const before = await editedBoard(page, agent, []);
+  await page.getByRole("tab", { name: "default", exact: true }).click({ button: "right" });
+  await page.getByTestId("tab-menu").getByRole("menuitem", { name: "Rename project" }).click();
+  const dialog = page.getByRole("dialog", { name: "Rename project" });
+  await dialog.getByLabel("Project name").fill("renamed");
+  await dialog.getByLabel("Project name").press("Enter");
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('[data-canvas-project="renamed"] .tl-canvas')).toBeVisible();
+  const fileIn = async () => (await roomShapes(agent, "renamed", "page")).find((record) => record.id === "shape:landing")?.props?.file;
+  await expect.poll(fileIn, { timeout: 6000 }).not.toBe(before);
+  await expect(page.locator("[data-slot='toast-title']")).toHaveCount(0);
+});

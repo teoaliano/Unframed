@@ -255,6 +255,7 @@ export const ProjectMenu = () => {
     if (target === undefined || busy) return;
     setBusy(true);
     try {
+      if (target.project === active) await activation.settle();
       await engine.call("projects.delete", { name: target.project, ...(confirmRenders ? { confirmRenders: true } : {}) });
       await deleted(target.project);
     } catch (error) {
