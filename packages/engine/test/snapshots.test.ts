@@ -138,6 +138,47 @@ describe("artifact snapshots", () => {
     expect(await snapshotFiles(reopened)).toEqual(["1-landing.html-480x320-none-none.png", "2-other.html-480x320-none-none.png"]);
   });
 
+  it("renders again when the page's own file or a file it loads changes on disk, and not for an unrelated file", async () => {
+    const agent = await startSnapshotting();
+    await writeFile(join(agent.folder, "3-app.html"), `<!doctype html><link rel="stylesheet" href="./app.css"><script src="app.js?v=2"></script>`);
+    await writeFile(join(agent.folder, "app.js"), "document.body.textContent = 'v1';");
+    await writeFile(join(agent.folder, "app.css"), "body { color: red }");
+    const stream = agent.rpc.subscribe("artifact.snapshots", { project: "board" });
+    await seed(agent, [pageShape("pg1", "100", { file: "3-app.html" })]);
+    await until(async () => stream.values.length === 1, "the first snapshot");
+
+    await writeFile(join(agent.folder, "app.js"), "document.body.textContent = 'v2';");
+    await until(async () => stream.values.length === 2, "the snapshot after the script changed");
+    expect(stream.values[1]).toMatchObject({ file: "3-app.html", w: 480, h: 320 });
+    expect((stream.values[1] as any).at).toBeGreaterThan((stream.values[0] as any).at);
+
+    await writeFile(join(agent.folder, "app.css"), "body { color: blue }");
+    await until(async () => stream.values.length === 3, "the snapshot after the stylesheet changed");
+
+    await writeFile(join(agent.folder, "3-app.html"), `<!doctype html><h1>edited in place</h1>`);
+    await until(async () => stream.values.length === 4, "the snapshot after the page itself changed");
+
+    await writeFile(join(agent.folder, "unrelated.js"), "1");
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    expect(stream.values).toHaveLength(4);
+  });
+
+  it("renders again, on opening a project, a snapshot older than its page or a file the page loads", async () => {
+    const agent = await startSnapshotting();
+    await writeFile(join(agent.folder, "3-app.html"), `<!doctype html><script src="./app.js"></script>`);
+    await writeFile(join(agent.folder, "app.js"), "document.body.textContent = 'v1';");
+    const stream = agent.rpc.subscribe("artifact.snapshots", { project: "board" });
+    await seed(agent, [pageShape("pg1", "100", { file: "3-app.html" })]);
+    await until(async () => stream.values.length === 1, "the first snapshot");
+    const first = await snapshot(agent, "3-app.html-480x320-none-none.png");
+    await agent.engine.stop();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await writeFile(join(agent.folder, "app.js"), "document.body.textContent = 'v2';");
+    const reopened = await startAgentEngine({ dataDir: agent.engine.dataDir, env: { UNFRAMED_TEST_RENDERER: "ok" } });
+    await reopened.rpc.call("testCanvas.read", { project: "board" });
+    await until(async () => (await snapshot(reopened, "3-app.html-480x320-none-none.png")).startedAt > first.startedAt, "a fresh snapshot after the open");
+  });
+
   it("makes no snapshot on a machine with no Chromium", async () => {
     const agent = await startSnapshotting("no-chrome");
     const stream = agent.rpc.subscribe("artifact.snapshots", { project: "board" });

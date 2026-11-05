@@ -31,6 +31,7 @@ import { LivePointers } from "./livePointers.ts";
 import { ComponentPins, type PinsItem } from "./componentPins.ts";
 import { copyComponentSheet, ComponentCopyRefused } from "./componentCopy.ts";
 import { componentUpdatesOf } from "./componentUpdates.ts";
+import { watchFolder } from "./folderWatch.ts";
 import { chromeSnapshotRenderer, Snapshots, stubSnapshotRenderer, type SnapshotRenderer } from "./snapshots.ts";
 import { SettingsStore } from "../settingsStore.ts";
 import { Shutdown } from "../shutdown.ts";
@@ -103,7 +104,25 @@ export const artifactsLayer = Layer.effect(
     });
     yield* rooms.afterOpen((project, room) => {
       snapshots.opened(project, room.read(), kitOf(room.read()));
-      void run(openProjects.register(project, "artifact snapshots", Effect.sync(() => snapshots.forget(project))));
+      void media.folder(project).then((folder) => {
+        const unwatch =
+          folder === undefined || snapshotRenderer === undefined
+            ? () => undefined
+            : watchFolder(folder, (names) => {
+                const records = room.read();
+                void snapshots.changed(project, names, records, kitOf(records)).catch((error: unknown) => logError(`snapshots after a file change in ${project}: ${errorText(error)}`));
+              });
+        void run(
+          openProjects.register(
+            project,
+            "artifact snapshots",
+            Effect.sync(() => {
+              unwatch();
+              snapshots.forget(project);
+            }),
+          ),
+        );
+      });
     });
     yield* rooms.afterCommit((project, change, room) => {
       const kit = kitOf(room.read());

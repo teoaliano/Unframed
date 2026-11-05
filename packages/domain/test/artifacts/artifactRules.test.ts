@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addParameterInstruction,
   artifactFileName,
+  artifactReferences,
   artifactTitle,
   artifactUrl,
   BRIDGE_TAG,
@@ -254,5 +255,22 @@ describe("the tokens tag (spec 19)", () => {
   it("is added on its own to a document that has the other tags", () => {
     const html = '<head><script src="./unframed-dials.js"></script></head>';
     expect(injectTags(html, "page")).toBe(`<head>${TOKENS}\n<script src="./unframed-dials.js"></script></head>`);
+  });
+});
+
+describe("the files an artifact loads", () => {
+  it("names every local file a src or href points at, without its query, hash or ./, once each", () => {
+    const html = `<link rel="stylesheet" href="./app.css?v=3"><script src="app.js?v=30"></script><img src='img/hero%20one.png#x'><script src="app.js"></script>`;
+    expect(artifactReferences(html)).toEqual(["app.css", "app.js", "img/hero one.png"]);
+  });
+
+  it("names a module a script imports, and a stylesheet's import or url", () => {
+    const html = `<script type="module">import { a } from "./lib.js"; import "./side.js";</script><style>@import "theme.css"; body { background: url('./bg.png') }</style>`;
+    expect(artifactReferences(html)).toEqual(["lib.js", "side.js", "theme.css", "bg.png"]);
+  });
+
+  it("leaves out absolute, rooted, data and parent paths and anchors", () => {
+    const html = `<a href="#top"></a><script src="https://cdn.example/x.js"></script><img src="data:image/png;base64,AA"><script src="/abs.js"></script><script src="../up.js"></script><a href="mailto:a@b.c"></a><script src="//cdn/x.js"></script>`;
+    expect(artifactReferences(html)).toEqual([]);
   });
 });

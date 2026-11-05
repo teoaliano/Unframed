@@ -168,6 +168,38 @@ export const farOffscreen = (box: PlacementBox, viewport: PlacementBox): boolean
 export const snapshotFits = (snapshot: { readonly w: number; readonly h: number }, shape: { readonly w: number; readonly h: number }): boolean =>
   Math.abs(shape.w - snapshot.w) <= snapshot.w * 0.1 && Math.abs(shape.h - snapshot.h) <= snapshot.h * 0.1;
 
+const REFERENCE_PATTERNS = [
+  /\b(?:src|href)\s*=\s*["']([^"']+)["']/gi,
+  /\bimport\s*(?:[^"';]*?\bfrom\s*)?["']([^"']+)["']/g,
+  /@import\s+(?:url\(\s*)?["']([^"']+)["']/gi,
+  /\burl\(\s*["']?([^"')]+)["']?\s*\)/gi,
+];
+
+const localPath = (raw: string): string | undefined => {
+  const bare = raw.trim().replace(/[?#].*$/, "");
+  if (bare === "" || bare.startsWith("/") || /^[a-z][a-z0-9+.-]*:/i.test(bare)) return undefined;
+  let path: string;
+  try {
+    path = decodeURIComponent(bare);
+  } catch {
+    path = bare;
+  }
+  const parts = path.split("/").filter((part) => part !== "" && part !== ".");
+  if (parts.length === 0 || parts.includes("..")) return undefined;
+  return parts.join("/");
+};
+
+export const artifactReferences = (html: string): string[] => {
+  const found = new Set<string>();
+  for (const pattern of REFERENCE_PATTERNS) {
+    for (const match of html.matchAll(pattern)) {
+      const path = localPath(match[1]!);
+      if (path !== undefined) found.add(path);
+    }
+  }
+  return [...found];
+};
+
 export const snapshotSeekSeconds = (duration: number): number => (Number.isFinite(duration) && duration > 0 && duration < 1 ? duration / 2 : 1);
 
 type SnapshotKit = { readonly mode: string | null; readonly kit: string | null };

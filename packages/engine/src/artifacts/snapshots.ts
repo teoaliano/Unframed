@@ -2,7 +2,7 @@ import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promi
 import { join } from "node:path";
 import { crc32, deflateSync } from "node:zlib";
 import type { ArtifactSnapshot } from "@unframed/contracts";
-import { artifactUrl, isArtifactKind, kitStamp, parseSnapshotFileName, type ArtifactKind, snapshotFileName, snapshotFits, snapshotSeekSeconds, type Kit } from "@unframed/domain";
+import { artifactReferences, artifactUrl, isArtifactKind, kitStamp, parseSnapshotFileName, type ArtifactKind, snapshotFileName, snapshotFits, snapshotSeekSeconds, type Kit } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import { errorText, logError } from "../log.ts";
 import { ensurePinnedComponents } from "./artifactStore.ts";
@@ -111,6 +111,8 @@ export class Snapshots {
   private readonly seen = new Map<string, Seen>();
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly fresh = new Set<string>();
+  private readonly renderedAt = new Map<string, number>();
+  private readonly references = new Map<string, { readonly mtime: number; readonly names: ReadonlyArray<string> }>();
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(deps: SnapshotDeps) {
@@ -129,6 +131,43 @@ export class Snapshots {
     for (const record of records) if (isArtifact(record)) this.consider(project, record, kit, true);
   }
 
+  async changed(project: string, names: ReadonlyArray<string>, records: ReadonlyArray<TLRecord>, kit: Kit | null): Promise<void> {
+    if (this.deps.renderer === undefined || names.length === 0) return;
+    const folder = await this.deps.folder(project);
+    if (folder === undefined) return;
+    const touched = new Set(names);
+    for (const record of records) {
+      if (!isArtifact(record) || record.props.file === "") continue;
+      const key = `${project} ${record.id}`;
+      if (this.timers.has(key)) continue;
+      const loads = [record.props.file, ...(await this.loadsOf(folder, record.props.file))].filter((name) => touched.has(name));
+      if (loads.length === 0) continue;
+      const newest = await this.newestChange(folder, loads);
+      if (newest <= (this.renderedAt.get(key) ?? -Infinity)) continue;
+      this.schedule(project, record, kit, false);
+    }
+  }
+
+  private async loadsOf(folder: string, file: string): Promise<ReadonlyArray<string>> {
+    const path = join(folder, file);
+    const info = await stat(path).catch(() => undefined);
+    if (!info?.isFile()) return [];
+    const known = this.references.get(path);
+    if (known?.mtime === info.mtimeMs) return known.names;
+    const names = artifactReferences(await readFile(path, "utf8").catch(() => ""));
+    this.references.set(path, { mtime: info.mtimeMs, names });
+    return names;
+  }
+
+  private async newestChange(folder: string, names: ReadonlyArray<string>): Promise<number> {
+    let newest = -Infinity;
+    for (const name of names) {
+      const info = await stat(join(folder, name)).catch(() => undefined);
+      if (info?.isFile()) newest = Math.max(newest, info.mtimeMs);
+    }
+    return newest;
+  }
+
   forget(project: string): void {
     for (const [key, timer] of this.timers) {
       if (!key.startsWith(`${project} `)) continue;
@@ -136,6 +175,7 @@ export class Snapshots {
       this.timers.delete(key);
     }
     for (const key of [...this.seen.keys()]) if (key.startsWith(`${project} `)) this.seen.delete(key);
+    for (const key of [...this.renderedAt.keys()]) if (key.startsWith(`${project} `)) this.renderedAt.delete(key);
   }
 
   private consider(project: string, shape: ArtifactRecord, kit: Kit | null, fromKit = false): void {
@@ -148,6 +188,11 @@ export class Snapshots {
     else if (last.file === now.file && last.dials === now.dials && last.mode === now.mode && last.kit === now.kit && snapshotFits(last, now)) return;
     else this.fresh.delete(key);
     this.seen.set(key, now);
+    this.schedule(project, shape, kit, fromKit);
+  }
+
+  private schedule(project: string, shape: ArtifactRecord, kit: Kit | null, fromKit: boolean): void {
+    const key = `${project} ${shape.id}`;
     clearTimeout(this.timers.get(key));
     const timer = setTimeout(() => {
       this.timers.delete(key);
@@ -182,11 +227,24 @@ export class Snapshots {
     const size = { w: shape.props.w, h: shape.props.h };
     if (onlyIfTokens && !(await readFile(join(folder, shape.props.file), "utf8").catch(() => "")).includes("unframed-tokens.js")) return;
     await ensurePinnedComponents(folder, shape.props.file);
+    const startedAt = Date.now();
     if (this.fresh.delete(key)) {
       const want = this.seen.get(key);
-      const cached = (await this.list(project)).some((snapshot) => snapshot.file === shape.props.file && snapshotFits(snapshot, size) && (snapshot.mode ?? null) === (want?.mode ?? null) && (snapshot.kit ?? null) === (want?.kit ?? null));
-      if (cached) return;
+      const changedAt = await this.newestChange(folder, [shape.props.file, ...(await this.loadsOf(folder, shape.props.file))]);
+      const cached = (await this.list(project)).some(
+        (snapshot) =>
+          snapshot.file === shape.props.file &&
+          snapshotFits(snapshot, size) &&
+          (snapshot.mode ?? null) === (want?.mode ?? null) &&
+          (snapshot.kit ?? null) === (want?.kit ?? null) &&
+          snapshot.at >= Math.floor(changedAt),
+      );
+      if (cached) {
+        this.renderedAt.set(key, startedAt);
+        return;
+      }
     }
+    this.renderedAt.set(key, startedAt);
     const picture = await renderer({
       project,
       kind: shape.type,
