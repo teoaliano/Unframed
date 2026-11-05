@@ -97,6 +97,10 @@ const barFill = (width: number, squareStart: boolean) => (squareStart ? `M0 0V${
 const barStroke = (width: number, squareStart: boolean) =>
   squareStart ? `M0 ${BAR_HEIGHT}${barEnd(width)}` : barFill(width, false).replace(/Z$/, "");
 
+const DRAG = "[-webkit-app-region:drag]";
+const NO_DRAG_CONTROLS = "[&_button]:[-webkit-app-region:no-drag]";
+const NO_DRAG_TABS = "[&_[data-slot=tabs-tab]]:[-webkit-app-region:no-drag] [&_[data-close]]:[-webkit-app-region:no-drag]";
+
 const WindowDots = () => (
   <span className="flex h-full items-center gap-2 ps-3">
     <span className="size-3 rounded-full bg-muted-foreground/40" />
@@ -213,33 +217,34 @@ export const TopBar = ({
 
   const positioned = layout === "flow" ? "relative " : "";
   const settingsNode = (
-    <div data-slot="top-bar-settings" className="flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full">
+    <div data-slot="top-bar-settings" className={cn("flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full", NO_DRAG_CONTROLS)}>
       {settings}
     </div>
   );
   const region = (base: string, custom: TopBarRegion | undefined): TopBarRegion => ({ ...custom, className: cn(base, custom?.className) });
   const controlsSpace = (width: string, style?: CSSProperties) =>
     controls === "none" ? null : (
-      <div data-slot="top-bar-controls" aria-hidden className={cn("h-9 shrink-0", width)} style={style}>
+      <div data-slot="top-bar-controls" aria-hidden className={cn("h-9 shrink-0 [-webkit-app-region:drag]!", width)} style={style}>
         {controls === "stand-ins" && <WindowDots />}
       </div>
     );
 
   return (
-    <div data-slot="top-bar" data-platform={platform} ref={rootRef} {...region("relative box-border flex h-9 w-full min-w-0 items-stretch", regions.frame)}>
+    <div data-slot="top-bar" data-platform={platform} ref={rootRef} {...region(`relative box-border flex h-9 w-full min-w-0 items-stretch ${DRAG}`, regions.frame)}>
       <div data-slot="top-bar-body" ref={bodyRef} aria-hidden className="absolute inset-y-0 left-0 right-0">
         <svg className="pointer-events-none absolute inset-0 overflow-visible" width={bodyWidth} height={BAR_HEIGHT}>
           <path d={barFill(bodyWidth, squareStart)} className="fill-background stroke-none" />
           <path d={barStroke(bodyWidth, squareStart)} className="fill-none stroke-border" />
         </svg>
       </div>
-      <div data-slot="top-bar-start" {...region(`${positioned}flex h-9 shrink-0 items-center`, regions.start)}>
+      <div data-slot="top-bar-start" {...region(`${positioned}flex h-9 shrink-0 items-center ${DRAG}`, regions.start)}>
         {!windows && controlsSpace("", { width: LIGHTS_ZONE })}
         {windows && <span className="flex shrink-0 items-center ps-3">{settingsNode}</span>}
-        {/* The logo sits 15 px into the bar, clear of the end curve. */}
-        <span className={cn("flex shrink-0 items-center ps-[15px] pe-2", windows && "ms-[9px]")}>{logo}</span>
+        <span data-slot="top-bar-logo" className={cn("flex shrink-0 items-center ps-[15px] pe-2 [-webkit-app-region:drag]!", windows && "ms-[9px]")}>
+          {logo}
+        </span>
       </div>
-      <div data-slot="top-bar-tabs" {...region(`${positioned}flex h-9 min-w-0 shrink items-stretch`, regions.tabs)}>
+      <div data-slot="top-bar-tabs" {...region(`${positioned}flex h-9 min-w-0 shrink items-stretch ${DRAG}`, regions.tabs)}>
         <Tabs className="h-9 w-fit min-w-0 shrink" value={active ?? null} onValueChange={(name) => onActivate(String(name))}>
           <TabsList
             ref={scroller}
@@ -247,7 +252,7 @@ export const TopBar = ({
             variant="underline"
             size="sm"
             overflow="truncate"
-            className="h-full min-w-0 max-w-full"
+            className={cn("h-full min-w-0 max-w-full", NO_DRAG_TABS)}
             onClick={onListClick}
             onAuxClick={onListAux}
             onContextMenu={onListContext}
@@ -275,12 +280,12 @@ export const TopBar = ({
             ))}
           </TabsList>
         </Tabs>
-        <div data-slot="top-bar-new" className="flex h-9 shrink-0 items-center ps-1">
+        <div data-slot="top-bar-new" className={cn("flex h-9 shrink-0 items-center ps-1", NO_DRAG_CONTROLS)}>
           {newProject}
         </div>
       </div>
-      <div data-slot="top-bar-drag" className={`${positioned}h-9 min-w-8 flex-1`} />
-      <div data-slot="top-bar-end" {...region(`${positioned}flex h-9 shrink-0 items-center`, regions.end)}>
+      <div data-slot="top-bar-drag" className={`${positioned}h-9 min-w-8 flex-1 ${DRAG}`} />
+      <div data-slot="top-bar-end" {...region(`${positioned}flex h-9 shrink-0 items-center ${DRAG}`, regions.end)}>
         {!windows && <span className="flex h-9 items-center pe-3">{settingsNode}</span>}
         {windows && controlsSpace("w-39")}
       </div>
