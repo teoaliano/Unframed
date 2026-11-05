@@ -123,15 +123,35 @@ const componentTag = T.string.check((tag) => {
   }
 });
 
+export interface AudioShapeProps {
+  w: number;
+  h: number;
+  file: string;
+  fileName: string;
+}
+
+export const AUDIO_HEIGHT = 64;
+export const AUDIO_DEFAULT_SIZE = { w: 320, h: AUDIO_HEIGHT } as const;
+export const AUDIO_EMPTY_SIZE = { w: 240, h: AUDIO_HEIGHT } as const;
+export const AUDIO_WIDTH = { min: 200, max: 640 } as const;
+
+const audioProps = { w: T.nonZeroNumber, h: T.nonZeroNumber, file: bareFileOrEmpty, fileName: T.string };
+
+const audioMigrations = () => {
+  const ids = createShapePropsMigrationIds("audio", { Initial: 1 });
+  return createShapePropsMigrationSequence({ sequence: [{ id: ids.Initial, up: (props) => props }] });
+};
+
 declare module "@tldraw/tlschema" {
   interface TLGlobalShapePropsMap {
+    audio: AudioShapeProps;
     page: ArtifactShapeProps;
     motion: ArtifactShapeProps;
     component: ComponentShapeProps;
   }
 }
 
-type UnframedKind = "prompt" | "image" | "video" | "group" | "page" | "motion" | "component";
+type UnframedKind = "prompt" | "image" | "video" | "audio" | "group" | "page" | "motion" | "component";
 
 export const kindOfShapeType = (type: string): UnframedKind | "mark" => {
   switch (type) {
@@ -139,6 +159,7 @@ export const kindOfShapeType = (type: string): UnframedKind | "mark" => {
       return "prompt";
     case "image":
     case "video":
+    case "audio":
     case "page":
     case "motion":
     case "component":
@@ -181,6 +202,7 @@ const buildSchema = (refusalOf?: (kit: Kit) => string | null): TLSchema => {
       image: { ...keptShapes.image, meta: refMeta },
       video: { ...keptShapes.video, meta: refMeta },
       frame: { ...keptShapes.frame, meta: unframedMeta },
+      audio: { props: audioProps, meta: refMeta, migrations: audioMigrations() },
       page: { props: artifactProps, meta: refMeta, migrations: artifactMigrations("page") },
       motion: { props: artifactProps, meta: refMeta, migrations: artifactMigrations("motion") },
       component: {

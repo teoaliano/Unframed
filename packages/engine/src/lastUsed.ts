@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import { errorText, logError } from "./log.ts";
 import type { PreferencesStore } from "./preferencesStore.ts";
 
-const MEDIUM_OF_FIELD = { imageModel: "image", textModel: "text", videoModel: "video" } as const;
+const MEDIUM_OF_FIELD = { imageModel: "image", textModel: "text", videoModel: "video", audioModel: "audio" } as const;
 
 /**
  * The step spec 03 adds to `settings.update`, after the change is applied: a new default

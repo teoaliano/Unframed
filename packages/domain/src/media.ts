@@ -36,7 +36,7 @@ export const boardMediaType = (name: string): string | undefined => {
   const ext = nameExtension(name);
   if (ext === undefined) return undefined;
   const mime = ext === "jpeg" ? "image/jpeg" : Object.keys(EXTENSIONS).find((type) => EXTENSIONS[type] === ext);
-  return mime !== undefined && (mime.startsWith("image/") || mime.startsWith("video/")) ? mime : undefined;
+  return mime !== undefined && (mime.startsWith("image/") || mime.startsWith("video/") || mime.startsWith("audio/")) ? mime : undefined;
 };
 
 const essence = (mime: string): string => mime.split(";")[0]!.trim().toLowerCase();

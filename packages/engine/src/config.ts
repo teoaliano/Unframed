@@ -18,6 +18,7 @@ const shimEntryPath = (): string => {
 export type TestRenderer = "ok" | "fail" | "no-chrome";
 
 export const OPENROUTER_ORIGIN = "https://openrouter.ai";
+export const ELEVENLABS_ORIGIN = "https://api.elevenlabs.io";
 
 /**
  * What the process was started with: the install layout, the hosting variables and the
@@ -40,6 +41,8 @@ export interface EngineConfig {
   readonly clientDist: string | undefined;
   /** Every OpenRouter URL the engine builds starts with this. */
   readonly openRouterOrigin: string;
+  /** Every ElevenLabs URL the engine builds starts with this (spec 15). */
+  readonly elevenLabsOrigin: string;
   readonly oauthBounce: string | undefined;
   readonly chromePath: string | undefined;
   readonly agentDebug: boolean;
@@ -90,6 +93,13 @@ export const loadConfig = (
     if (accepted === undefined) warnings.push(`test origin ignored: ${testOrigin} is not a loopback origin`);
     else openRouterOrigin = accepted;
   }
+  const elevenLabsTestOrigin = nonEmpty(env.UNFRAMED_TEST_ELEVENLABS_ORIGIN);
+  let elevenLabsOrigin = ELEVENLABS_ORIGIN;
+  if (elevenLabsTestOrigin !== undefined) {
+    const accepted = acceptTestOrigin(elevenLabsTestOrigin);
+    if (accepted === undefined) warnings.push(`test origin ignored: ${elevenLabsTestOrigin} is not a loopback origin`);
+    else elevenLabsOrigin = accepted;
+  }
   const nativeLogPath = nonEmpty(env.UNFRAMED_TEST_NATIVE_LOG);
   const shutdownHook = nonEmpty(env.UNFRAMED_TEST_SHUTDOWN_HOOK_MS);
   const tunnel = nonEmpty(env.UNFRAMED_TEST_TUNNEL);
@@ -108,6 +118,7 @@ export const loadConfig = (
       runAsNode: env.ELECTRON_RUN_AS_NODE === "1",
       clientDist: clientDist === undefined ? undefined : resolve(clientDist),
       openRouterOrigin,
+      elevenLabsOrigin,
       oauthBounce: nonEmpty(env.UNFRAMED_OAUTH_BOUNCE),
       chromePath: nonEmpty(env.UNFRAMED_CHROME_PATH),
       agentDebug: nonEmpty(env.UNFRAMED_AGENT_DEBUG) !== undefined,

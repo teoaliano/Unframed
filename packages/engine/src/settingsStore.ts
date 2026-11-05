@@ -56,6 +56,9 @@ export const toView = (settings: EffectiveSettings, dataDir: string, previewPort
   imageModel: settings.imageModel,
   textModel: settings.textModel,
   videoModel: settings.videoModel,
+  hasElevenLabsKey: settings.elevenLabsKey !== "",
+  elevenLabsKeyHint: keyHint(settings.elevenLabsKey),
+  audioModel: settings.audioModel,
   outputDir: resolveOutputDir(settings.outputDir, dataDir),
   claudePath: settings.claudePath,
   codexPath: settings.codexPath,
@@ -87,7 +90,7 @@ export const settingsStoreLayer = (options: {
           for (const [variable, value] of Object.entries(changes)) {
             const field = SETTING_OF_VARIABLE[variable];
             if (field === undefined || (field === "outputDir" && writeOptions.holdOutputDir === true)) continue;
-            next[field] = field === "key" && value === null ? "" : fromFile[field];
+            next[field] = (field === "key" || field === "elevenLabsKey") && value === null ? "" : fromFile[field];
           }
           live = next as unknown as EffectiveSettings;
           return live;

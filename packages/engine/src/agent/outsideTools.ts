@@ -24,7 +24,7 @@ export const notAFile = (path: string) => `${path} is not a file.`;
 export const tooLarge = (path: string, bytes: number) =>
   `${basename(path)} is ${(bytes / 1_048_576).toFixed(1)} MB; file_add copies files up to ${FILE_ADD_LIMIT / 1_048_576} MB.`;
 export const unsupported = (path: string) =>
-  `${basename(path)} is not a file the board can show. file_add takes PNG, JPEG, GIF, WebP and AVIF images and MP4, MOV and WebM videos.`;
+  `${basename(path)} is not a file the board can show. file_add takes PNG, JPEG, GIF, WebP and AVIF images, MP4, MOV and WebM videos, and MP3, WAV and M4A audio.`;
 const CHANGED = (path: string) => `${path} changed while Unframed was reading it. Try again.`;
 
 export interface OutsideToolDeps {
@@ -120,7 +120,7 @@ const copyIn = async (deps: OutsideToolDeps, binding: McpBinding, asked: string)
       if (error instanceof TooLarge) return refusal(tooLarge(asked, error.bytes));
       throw error;
     }
-    const kind = mime.startsWith("video/") ? "video" : "image";
+    const kind = mime.startsWith("video/") ? "video" : mime.startsWith("audio/") ? "audio" : "image";
     return { value: { file: saved.file, fileName: originalName, kind, mime, bytes: saved.bytes, place: `canvas_write create with kind "${kind}" and props.file "${saved.file}"` } };
   } finally {
     await handle.close().catch(() => undefined);

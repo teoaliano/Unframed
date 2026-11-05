@@ -16,6 +16,8 @@ import { MediaStore } from "../media/mediaStore.ts";
 import { clearStoredModels } from "../lastUsed.ts";
 import { Native } from "../native.ts";
 import { Catalogue } from "../openRouter/catalogue.ts";
+import { ElevenLabsError, listAudioModels, listVoices, subscriptionStatus } from "../elevenLabs/client.ts";
+import { ELEVENLABS_NO_KEY } from "@unframed/domain";
 import { VideoCatalogue } from "../openRouter/videoCatalogue.ts";
 import { Runs } from "../runs/runs.ts";
 import { RenderJobs } from "../video/renderJobs.ts";
@@ -79,6 +81,24 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
         ),
       "settings.subscribe": () => settings.subscribe,
       "settings.removeKey": () => lifecycle.removeKey,
+      "settings.removeElevenLabsKey": () => lifecycle.removeElevenLabsKey,
+      "elevenlabs.status": () =>
+        Effect.flatMap(settings.read, (current) =>
+          Effect.tryPromise({
+            try: () => subscriptionStatus(config.elevenLabsOrigin, current.elevenLabsKey),
+            catch: (error) => unframedError("upstream", errorText(error)),
+          }),
+        ),
+      "voices.list": (input) =>
+        Effect.flatMap(settings.read, (current) =>
+          current.elevenLabsKey === ""
+            ? Effect.fail(unframedError("unavailable", ELEVENLABS_NO_KEY))
+            : Effect.tryPromise({
+                try: () => listVoices(config.elevenLabsOrigin, current.elevenLabsKey, input),
+                catch: (error) => unframedError("upstream", error instanceof ElevenLabsError ? error.message : errorText(error)),
+              }),
+        ),
+      "run.audio": (request) => runs.audio(request),
       "oauth.start": () => oauth.start,
       "oauth.pending": () => oauth.pending,
       "oauth.cancel": () => lifecycle.cancelConnection,
@@ -144,7 +164,13 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "preferences.set": ({ key, value }) => Effect.as(preferences.set(key, value), {}),
       "preferences.subscribe": ({ keys }) => preferences.subscribe(keys),
       "models.list": ({ medium }) =>
-        medium === "video" ? videoCatalogue.list : medium === "text" ? catalogue.listTextModels : catalogue.listImageModels,
+        medium === "audio"
+          ? Effect.flatMap(settings.read, (current) => Effect.promise(() => listAudioModels(config.elevenLabsOrigin, current.elevenLabsKey, current.audioModel)))
+          : medium === "video"
+            ? videoCatalogue.list
+            : medium === "text"
+              ? catalogue.listTextModels
+              : catalogue.listImageModels,
       "models.imagePricing": ({ id }) => catalogue.imagePricing(id),
       "run.image": (request) => runs.image(request),
       "run.text": (request) => runs.text(request),

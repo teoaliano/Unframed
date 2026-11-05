@@ -16,6 +16,7 @@ import {
   type TextCompleteAnswer,
   type TextCompleteRequest,
   type TextRunRequest,
+  type AudioRunRequest,
 } from "@unframed/contracts";
 import { imageDimensions, NO_KEY_MESSAGE, nextRef, placeResults, projectSlug, sidecarFileName, type Box } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
@@ -40,12 +41,14 @@ import {
   PLACEHOLDER_WIDTH,
   placeholderHeight,
   type Landed,
+  type LandedAudio,
   type LandedClip,
   type LandedText,
   type RunOutcome,
   type Shape,
 } from "./placeholders.ts";
 import { makeTextRuns } from "./textRuns.ts";
+import { makeAudioRuns } from "./audioRuns.ts";
 import { extensionFor, mimeForFile, referenceName, resultBase, writeLoneSidecar, writeResultFile, writeSidecar } from "./resultFiles.ts";
 import { shapePageBoxes } from "./shapeBounds.ts";
 import { readResultSidecar } from "./sidecars.ts";
@@ -67,6 +70,8 @@ export class Runs extends Context.Service<
     readonly image: (request: ImageRunRequest) => Effect.Effect<{ runId: string; batchId: string; placeholders: string[] }, UnframedError>;
     /** Spec 05: answers once the run's empty text result is in the room; the answer fills it later. */
     readonly text: (request: TextRunRequest) => Effect.Effect<{ runId: string; batchId: string; placeholders: string[] }, UnframedError>;
+    /** Spec 15: answers once the run's empty audio shape is in the room; ElevenLabs' answer fills it later. */
+    readonly audio: (request: AudioRunRequest) => Effect.Effect<{ runId: string; batchId: string; placeholders: string[] }, UnframedError>;
     /** Spec 05: one text call that lands nothing. */
     readonly complete: (request: TextCompleteRequest) => Effect.Effect<TextCompleteAnswer, UnframedError>;
     readonly subscribe: (project: string) => Stream.Stream<RunEvent>;
@@ -83,7 +88,7 @@ export class Runs extends Context.Service<
   }
 >()("unframed/engine/Runs") {}
 
-type Outcome = RunOutcome<Landed | LandedText | LandedClip>;
+type Outcome = RunOutcome<Landed | LandedText | LandedClip | LandedAudio>;
 
 interface RunRecord {
   live: boolean;
@@ -199,7 +204,7 @@ export const runsLayer = Layer.effect(
       const run: RunRecord = { live: true, project: projectSlug(project), outputs: new Map() };
       remember(runId, run);
       return {
-        settle: (outcome: RunOutcome<Landed | LandedText | LandedClip>) => {
+        settle: (outcome: Outcome) => {
           run.outputs.set(1, outcome);
           run.live = false;
         },
@@ -214,6 +219,18 @@ export const runsLayer = Layer.effect(
       projectFolder,
       validateReferences,
       inline,
+      register: (runId, project) => track(runId, project),
+      publish,
+      runPromise,
+      obstacles,
+      emptyPromptMessage: EMPTY_PROMPT_MESSAGE,
+    });
+
+    const audios = makeAudioRuns({
+      settings,
+      rooms,
+      elevenLabsOrigin: config.elevenLabsOrigin,
+      projectFolder,
       register: (runId, project) => track(runId, project),
       publish,
       runPromise,
@@ -467,6 +484,6 @@ export const runsLayer = Layer.effect(
         return [...registry.values()].filter((run) => run.live && (slug === undefined || run.project === slug)).length;
       });
 
-    return Runs.of({ image, text: texts.text, complete: texts.complete, subscribe, recipe, copyRecipe, liveRuns, track });
+    return Runs.of({ image, text: texts.text, audio: audios.audio, complete: texts.complete, subscribe, recipe, copyRecipe, liveRuns, track });
   }),
 );
