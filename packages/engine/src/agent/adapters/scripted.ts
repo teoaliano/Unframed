@@ -3,6 +3,7 @@ import { basename, join } from "node:path";
 import {
   checkCanvasTools,
   classifyToolItem,
+  isCompactCommand,
   parseScript,
   pickScript,
   preambleMismatch,
@@ -110,6 +111,12 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
       const check = checkCanvasTools(context.registeredTools(), tools);
       emit(chatId, { type: "session.configured", payload: { tools, foreign: check.foreign, grantedDirectories: session.granted } });
       if (check.failure) return fail(check.failure);
+    }
+
+    if (input.command && isCompactCommand(input.text)) {
+      const itemId = `compaction-${++items}`;
+      emit(chatId, { type: "item.started", ...turn, itemId, payload: { itemType: "context_compaction", status: "inProgress", title: "Compacting context" } });
+      emit(chatId, { type: "item.completed", ...turn, itemId, payload: { itemType: "context_compaction", status: "completed", title: "Context compacted" } });
     }
 
     for (const retry of step.retries ?? []) {

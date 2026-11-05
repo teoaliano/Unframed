@@ -47,10 +47,14 @@ export const startSettingsEngine = async (options: EngineOptions & { readonly ke
 
 export const settingsDialog = (page: Page): Locator => page.getByTestId("settings-dialog");
 
-/** The chrome's settings entry, in either of its two looks. */
-export const settingsButton = (page: Page): Locator => page.getByRole("button", { name: /^(Settings|Add your API key)$/ });
+export const settingsButton = (page: Page): Locator => page.getByRole("button", { name: "Settings", exact: true });
 
-/** Opens the app and waits for the canvas; a keyless app has opened its dialog by then. */
+export const showSection = async (dialog: Locator, name: "Generation" | "Agents" | "Connections" | "General"): Promise<void> => {
+  const tab = dialog.getByRole("tab", { name, exact: true });
+  await tab.click();
+  await expect(tab).toHaveAttribute("aria-selected", "true");
+};
+
 export const openApp = async (page: Page, engine: TestEngine): Promise<void> => {
   await openCanvas(page, engine);
 };

@@ -7,7 +7,7 @@ import { gate } from "../../engine/test/openRouterStub.ts";
 import { expect, test } from "./fixtures.ts";
 import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
 import { platformOf } from "./platform.ts";
-import { IMAGE_MODELS, KEY, openApp, openSettings, settingsDialog, startSettingsEngine, TEXT_MODELS, VIDEO_MODELS } from "./settings.ts";
+import { IMAGE_MODELS, KEY, openApp, openSettings, settingsDialog, showSection, startSettingsEngine, TEXT_MODELS, VIDEO_MODELS } from "./settings.ts";
 
 test("with a key: the title, the OpenRouter heading, the spend, cap and remaining line and a 30-hour expiry note", async ({ page }) => {
   const { engine, oauth } = await startSettingsEngine();
@@ -43,7 +43,9 @@ test("a revoked key says so and offers Reconnect, which hides while a connection
     await openApp(page, engine);
     const dialog = await openSettings(page);
     await expect(dialog.getByTestId("key-status")).toHaveText("This key no longer works at OpenRouter. It may have been deleted or disabled there.");
+    await showSection(dialog, "General");
     await dialog.getByLabel("Output folder").fill("./typed-but-not-saved");
+    await showSection(dialog, "Generation");
     await dialog.getByLabel("API key").fill("sk-or-v1-half-typed-key");
     await dialog.getByRole("button", { name: "Reconnect OpenRouter" }).click();
     await expect(dialog.getByTestId("settings-waiting")).toBeVisible();
@@ -57,8 +59,9 @@ test("a revoked key says so and offers Reconnect, which hides while a connection
     // A reconnect keeps the dialog and what was typed into the other fields.
     await expect(dialog.getByTestId("settings-waiting")).toHaveCount(0, { timeout: 10_000 });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByLabel("Output folder")).toHaveValue("./typed-but-not-saved");
     await expect(dialog.getByTestId("key-status")).toHaveText("Connected to OpenRouter. $7.44 spent with this key, of a $10.00 cap, $2.56 still available.");
+    await showSection(dialog, "General");
+    await expect(dialog.getByLabel("Output folder")).toHaveValue("./typed-but-not-saved");
   } finally {
     await engine.dispose();
   }
@@ -85,7 +88,9 @@ test("Remove key asks twice, typing cancels the confirm, and the removal says wh
     await expect(dialog.getByTestId("key-warning")).toHaveText("Key removed. Generate is disabled until you add one.");
     await expect(dialog.getByLabel("API key")).toHaveValue("");
     await expect(dialog.getByRole("alert")).toHaveText(/^The key was removed, but renders already in progress could not be stopped: The job store at .+ is not valid JSON: .+/);
-    await expect(dialog.getByRole("heading", { name: "Connect OpenRouter to start" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Connect OpenRouter" })).toBeVisible();
+    await expect(dialog.locator("[data-slot='dialog-title']")).toHaveText("Settings");
+    await expect(dialog.getByTestId("models-need-key")).toHaveText("Connect OpenRouter to choose the models Generate starts on.");
     expect(await readFile(join(engine.dataDir, ".env"), "utf8")).toBe("");
     expect((await (await engine.rpc()).call("settings.get")).hasKey).toBe(false);
   } finally {
@@ -139,6 +144,7 @@ test("Browse fills the output folder field with the picked path, and a cancel le
   try {
     await openApp(page, engine);
     const dialog = await openSettings(page);
+    await showSection(dialog, "General");
     const field = dialog.getByLabel("Output folder");
     await expect(field).toHaveValue(join(engine.dataDir, "output"));
     await expect(field).toHaveAttribute("placeholder", "./output");
@@ -152,6 +158,7 @@ test("Browse fills the output folder field with the picked path, and a cancel le
   try {
     await openApp(page, cancelled.engine);
     const dialog = await openSettings(page);
+    await showSection(dialog, "General");
     await dialog.getByLabel("Output folder").fill("./typed");
     await dialog.getByRole("button", { name: "Browse…" }).click();
     await expect.poll(async () => (await cancelled.engine.nativeLog()).length).toBe(1);
@@ -164,6 +171,7 @@ test("Browse fills the output folder field with the picked path, and a cancel le
   try {
     await openApp(page, none.engine);
     const dialog = await openSettings(page);
+    await showSection(dialog, "General");
     await dialog.getByRole("button", { name: "Browse…" }).click();
     await expect(dialog.getByRole("alert")).toHaveText("No folder picker available here. Type the path instead.");
   } finally {
@@ -184,6 +192,7 @@ test("Local agents: a status and dot per provider, Check again refreshes, and a 
   try {
     await openApp(page, engine);
     const dialog = await openSettings(page);
+    await showSection(dialog, "Agents");
     const agents = dialog.getByRole("region", { name: "Local agents" });
     await expect(agents.getByText("Claude Code or Codex installed and signed in on this Mac lets the agent run on your own plan. Nothing here is sent to OpenRouter.")).toBeVisible();
     const claude = agents.locator("[data-provider='Claude']");
@@ -221,6 +230,7 @@ test("Follow-up behavior shows Queue by default, saves Steer at once without Sav
   try {
     await openApp(page, first.engine);
     const dialog = await openSettings(page);
+    await showSection(dialog, "Agents");
     const select = dialog.getByRole("combobox", { name: "Follow-up behavior" });
     await expect(select).toHaveText("Queue");
     await select.click();
@@ -239,6 +249,7 @@ test("Follow-up behavior shows Queue by default, saves Steer at once without Sav
   try {
     await openApp(page, second.engine);
     const dialog = await openSettings(page);
+    await showSection(dialog, "Agents");
     await expect(dialog.getByRole("combobox", { name: "Follow-up behavior" })).toHaveText("Steer");
   } finally {
     await second.engine.dispose();
@@ -250,6 +261,7 @@ test("Send shortcut sits next to Follow-up behavior: Enter by default, t3code's 
   try {
     await openApp(page, engine);
     const dialog = await openSettings(page);
+    await showSection(dialog, "Agents");
     const { mac } = await platformOf(page);
     const chord = mac ? "⌘Enter" : "Ctrl+Enter";
     const agents = dialog.getByRole("region", { name: "Local agents" });
@@ -274,6 +286,7 @@ test("Plan mode (legacy) is off by default and saves at once without Save, as t3
   try {
     await openApp(page, engine);
     const dialog = await openSettings(page);
+    await showSection(dialog, "Agents");
     const toggle = dialog.getByRole("switch", { name: "Plan mode (legacy)" });
     await expect(toggle).toHaveAttribute("aria-checked", "false");
     await expect(dialog.getByText("Restore Build/Plan, /plan, /default, and Shift+Tab. Off uses build mode.")).toBeVisible();
@@ -287,14 +300,16 @@ test("Plan mode (legacy) is off by default and saves at once without Save, as t3
 
 const MENU_GLASS = "color-mix(in srgb, var(--popover) 18%, color-mix(in srgb, var(--popover) var(--glass-opacity), transparent))";
 
-test("the settings dialog is the kit's dialog at 480 px, with kit fields, comboboxes, select, buttons and banners, in both schemes", async ({ page }) => {
+test("the settings dialog is the kit's dialog at 760 px with a sidebar of sections, with kit fields, comboboxes, select, buttons and banners, in both schemes", async ({ page }) => {
   const { engine } = await startSettingsEngine({ env: { UNFRAMED_TEST_PICK_FOLDER: "none" } });
   try {
     await openApp(page, engine);
     const dialog = await openSettings(page);
     await expectSlot(dialog, "dialog-popup");
     // The layout width: the box scales while the dialog animates in.
-    expect(await dialog.evaluate((element) => (element as HTMLElement).offsetWidth)).toBe(480);
+    expect(await dialog.evaluate((element) => (element as HTMLElement).offsetWidth)).toBe(760);
+    await expect(dialog.getByRole("tablist", { name: "Settings sections" }).getByRole("tab")).toHaveText(["Generation", "Agents", "Connections", "General"]);
+    for (const tab of await dialog.getByRole("tab").all()) await expectSlot(tab, "tabs-tab");
     const title = dialog.locator("[data-slot='dialog-title']");
     await expect(title).toHaveText("Settings");
     expect(await styleOf(title, "font-size")).toBe("20px");
@@ -305,8 +320,10 @@ test("the settings dialog is the kit's dialog at 480 px, with kit fields, combob
     await expectSlot(dialog.getByLabel("API key"), "input");
     await expectSlot(dialog.getByRole("button", { name: "Remove key" }), "button");
     for (const label of ["Image", "Text", "Video"]) await expectSlot(dialog.getByRole("combobox", { name: label, exact: true }), "combobox-trigger");
+    await showSection(dialog, "General");
     await expectSlot(dialog.getByLabel("Output folder"), "input");
     await expectSlot(dialog.getByRole("button", { name: "Browse…" }), "button");
+    await showSection(dialog, "Agents");
     const agents = dialog.getByRole("region", { name: "Local agents" });
     await expectSlot(agents.getByRole("button", { name: "Check again" }), "button");
     await expectSlot(dialog.getByLabel("Claude command or path"), "input");
@@ -316,6 +333,7 @@ test("the settings dialog is the kit's dialog at 480 px, with kit fields, combob
     const save = dialog.getByRole("button", { name: "Save" });
     await expectSlot(save, "button");
 
+    await showSection(dialog, "Generation");
     await page.mouse.move(4, 700);
     await inBothSchemes(page, async () => {
       await expectToken(save, "background-color", "--primary");
@@ -334,18 +352,60 @@ test("the settings dialog is the kit's dialog at 480 px, with kit fields, combob
     });
 
     // The error banner is the kit's error Alert, the saved one its success Alert.
+    await showSection(dialog, "General");
     await dialog.getByRole("button", { name: "Browse…" }).click();
     const failure = dialog.getByRole("alert");
     await expect(failure).toHaveText("No folder picker available here. Type the path instead.");
     await expectSlot(failure, "alert");
     await expect(failure).toHaveAttribute("data-variant", "error");
-    await dialog.getByLabel("Claude config folder (optional)").fill("/tmp/claude-config");
+    await showSection(dialog, "Agents");
     await expect(failure).toHaveCount(0);
+    await dialog.getByLabel("Claude config folder (optional)").fill("/tmp/claude-config");
     await save.click();
     const saved = dialog.getByRole("status").filter({ hasText: "Saved to .env" });
     await expect(saved).toContainText("Applied right away, no restart needed.");
     await expectSlot(saved, "alert");
     await expect(saved).toHaveAttribute("data-variant", "success");
+  } finally {
+    await engine.dispose();
+  }
+});
+
+test("unsaved changes mark their sections in the sidebar, Save shows on any section, and Close or Escape asks before dropping them", async ({ page }) => {
+  const { engine } = await startSettingsEngine();
+  try {
+    await openApp(page, engine);
+    const dialog = await openSettings(page);
+    await expect(dialog.getByTestId("unsaved-mark")).toHaveCount(0);
+    await dialog.getByLabel("API key").fill("sk-or-v1-typed-but-not-saved-1234");
+    await showSection(dialog, "General");
+    await dialog.getByLabel("Output folder").fill("./elsewhere");
+    await showSection(dialog, "Connections");
+    await expect(dialog.getByRole("tab", { name: "Generation", exact: true })).toHaveAccessibleDescription("Unsaved changes");
+    await expect(dialog.getByRole("tab", { name: "Generation", exact: true }).getByTestId("unsaved-mark")).toBeVisible();
+    await expect(dialog.getByRole("tab", { name: "General", exact: true }).getByTestId("unsaved-mark")).toBeVisible();
+    await expect(dialog.getByRole("tab", { name: "Agents", exact: true }).getByTestId("unsaved-mark")).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Save" })).toBeVisible();
+
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    const confirm = page.getByRole("alertdialog", { name: "Discard unsaved changes?" });
+    await expect(confirm).toContainText("Generation and General have changes you have not saved. Closing drops them.");
+    await confirm.getByRole("button", { name: "Cancel" }).click();
+    await expect(confirm).toHaveCount(0);
+    await expect(dialog).toBeVisible();
+    await showSection(dialog, "General");
+    await expect(dialog.getByLabel("Output folder")).toHaveValue("./elsewhere");
+
+    await page.keyboard.press("Escape");
+    await expect(confirm).toBeVisible();
+    await confirm.getByRole("button", { name: "Discard changes" }).click();
+    await expect(dialog).toBeHidden();
+    expect(await readFile(join(engine.dataDir, ".env"), "utf8")).toBe(`OPENROUTER_API_KEY=${KEY}\n`);
+
+    await openSettings(page);
+    await expect(dialog.getByTestId("unsaved-mark")).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(dialog).toBeHidden();
   } finally {
     await engine.dispose();
   }

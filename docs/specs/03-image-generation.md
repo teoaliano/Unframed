@@ -179,7 +179,7 @@ Shown under the box, above the tray, as status lines. A line that disables send 
 - Over the cap (image slots, including composites and the sketch, above the model's `input_references` maximum): `5 images are selected, but this model takes at most 4. Deselect the rest, or pick a model that takes more.` When the cap is 1: `... but this model takes only one. ...`. When images are named by `@`, the count and the fix name both sources: all named, `2 images are named with @, but this model takes only one. Take out an @ name, or pick a model that takes more.`; mixed, `6 images go with this run (4 selected, 2 named with @), but this model takes at most 5. Deselect some, take out an @ name, or pick a model that takes more.` The sketch counts as selected.
 - Empty prompt (no parts and no instruction): send is disabled and the tray reads `Nothing says what to make. Select a prompt, or type an instruction.`
 - Composition error (a cycle): send is disabled and the error line shows the message.
-- No key (from the engine's health, spec 01): send is disabled and the tray reads `No OpenRouter key yet. Add one with the key icon in the top right (it becomes a settings gear once saved).`
+- No key (from the engine's health, spec 01): send is disabled and the tray reads `Generating needs OpenRouter. Connect it in Settings, under Generation.` The line carries an outline button `Open Settings`, which opens Settings on its Generation section (spec 10). A recipe group's Generate (spec 06) pressed without a key shows the same sentence as an error toast with the same `Open Settings` action.
 
 ### Toolbar states
 
@@ -314,7 +314,7 @@ A run an agent starts (spec 14's `generate`, from an in-app chat or an outside c
 
 Validation before acknowledgement, each failing the call with its message and writing nothing:
 
-- No key: `No OpenRouter key yet. Add one with the key icon in the top right (it becomes a settings gear once saved).`
+- No key: `Generating needs OpenRouter. Connect it in Settings, under Generation.`
 - Every output prompt empty after trimming: `Prompt is empty. Select a prompt, or type an instruction.`
 - 0 or more than 10 outputs: `A run makes between 1 and 10 images.`
 - A reference file (basename only; any path is stripped) not in the project folder: `Reference file not found in this project: <file>`

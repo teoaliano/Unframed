@@ -1,9 +1,10 @@
 "use client";
 
-import type { ComponentPropsWithRef, CSSProperties, DragEvent, MouseEvent, ReactNode } from "react";
+import type { ComponentPropsWithRef, CSSProperties, MouseEvent, ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { Menu, MenuItem, MenuPopup, MenuSeparator } from "~/components/ui/menu";
+import { useTabReorder } from "~/components/ui/tab-reorder";
 import { Tabs, TabsList, TabsTab } from "~/components/ui/tabs";
 import { cn } from "~/lib/utils";
 
@@ -17,6 +18,7 @@ export interface TopBarTab {
   readonly title?: string | undefined;
   /** The activity state a test or a style reads (`data-status`). Defaults to the status, else "none". */
   readonly state?: string | undefined;
+  readonly pinned?: boolean | undefined;
 }
 
 /** A region's element props. The app passes its hook classes, refs and inline offsets here; the catalogue passes none. */
@@ -38,6 +40,8 @@ export interface TopBarProps {
   readonly onDelete?: (name: string) => void;
   /** Moves a dragged tab to position `to` in the order. */
   readonly onMove?: (name: string, to: number) => void;
+  readonly onPin?: (name: string) => void;
+  readonly onUnpin?: (name: string) => void;
   readonly regions?: {
     /** The bar behind the three regions. */
     readonly frame?: TopBarRegion;
@@ -97,6 +101,22 @@ const barFill = (width: number, squareStart: boolean) => (squareStart ? `M0 0V${
 const barStroke = (width: number, squareStart: boolean) =>
   squareStart ? `M0 ${TOP_BAR_HEIGHT}${barEnd(width)}` : barFill(width, false).replace(/Z$/, "");
 
+const DRAG = "[-webkit-app-region:drag]";
+const NO_DRAG_CONTROLS = "[&_button]:[-webkit-app-region:no-drag]";
+const NO_DRAG_TAB_CONTROLS = "[&_[data-tab-item]]:[-webkit-app-region:no-drag] [&_[data-slot=tabs-tab]]:[-webkit-app-region:no-drag] [&_[data-close]]:[-webkit-app-region:no-drag]";
+
+const TAB_ITEM =
+  "relative inline-flex shrink-0 rounded-md after:pointer-events-none after:absolute after:inset-y-0 after:-end-2 after:w-px after:bg-border data-last:after:end-0 data-dragging:z-10 data-dragging:bg-popover data-dragging:shadow-md/10 data-dragging:ring-1 data-dragging:ring-border data-dragging:after:hidden data-dragging:[&_[data-slot=tabs-tab]]:cursor-grabbing";
+
+const PinnedMark = ({ name }: { readonly name: string }) => (
+  <span
+    aria-hidden
+    data-slot="top-bar-mark"
+    data-letter={(name.match(/[\p{L}\p{N}]/u)?.[0] ?? "?").toUpperCase()}
+    className="flex size-4 items-center justify-center rounded-[4px] border bg-muted text-[10px] leading-none font-semibold text-foreground before:content-[attr(data-letter)]"
+  />
+);
+
 const WindowDots = () => (
   <span className="flex h-full items-center gap-2 ps-3">
     <span className="size-3 rounded-full bg-muted-foreground/40" />
@@ -123,6 +143,8 @@ export const TopBar = ({
   onRename,
   onDelete,
   onMove,
+  onPin,
+  onUnpin,
   regions = {},
   layout = "flow",
   controls = "stand-ins",
@@ -131,10 +153,11 @@ export const TopBar = ({
   const scroller = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const [dragging, setDragging] = useState<string>();
   const [menu, setMenu] = useState<{ readonly name: string; readonly x: number; readonly y: number }>();
   const [bodyWidth, setBodyWidth] = useState(0);
   const names = tabs.map((tab) => tab.name);
+  const pinned = tabs.filter((tab) => tab.pinned === true).map((tab) => tab.name);
+  const reorder = useTabReorder({ list: scroller, names, pinned, onMove });
   const windows = platform === "windows";
 
   useEffect(() => {
@@ -142,16 +165,10 @@ export const TopBar = ({
     scroller.current?.querySelector<HTMLElement>(`[data-project="${CSS.escape(active)}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [active]);
 
-  /** The tab an event landed on. A tab's close button sits beside the tab, in the same group. */
-  const tabOf = (target: EventTarget): string | undefined => {
-    if (!(target instanceof Element)) return undefined;
-    const group = target.closest("[data-slot='tabs-tab-group']");
-    const tab = group === null ? target.closest<HTMLElement>("[data-project]") : group.querySelector<HTMLElement>("[data-project]");
-    return tab?.dataset.project;
-  };
+  const tabOf = (target: EventTarget): string | undefined =>
+    target instanceof Element ? (target.closest<HTMLElement>("[data-tab-item]")?.dataset.tabItem ?? undefined) : undefined;
+  const pinnedTab = (name: string) => tabs.find((tab) => tab.name === name)?.pinned === true;
 
-  // Close, drag, middle-click and the right-click menu sit on the list, not on each tab: a handler per tab adds
-  // listeners the budget counts (spec 17).
   const onListClick = (event: MouseEvent<HTMLDivElement>) => {
     if (!(event.target instanceof Element) || event.target.closest("[data-close]") === null) return;
     const name = tabOf(event.target);
@@ -159,7 +176,7 @@ export const TopBar = ({
   };
   const onListAux = (event: MouseEvent<HTMLDivElement>) => {
     const name = tabOf(event.target);
-    if (name !== undefined && event.button === 1) onClose(name);
+    if (name !== undefined && event.button === 1 && !pinnedTab(name)) onClose(name);
   };
   const onListContext = (event: MouseEvent<HTMLDivElement>) => {
     const name = tabOf(event.target);
@@ -167,24 +184,6 @@ export const TopBar = ({
     event.preventDefault();
     setMenu({ name, x: event.clientX, y: event.clientY });
   };
-  const onListDragStart = (event: DragEvent<HTMLDivElement>) => {
-    const name = tabOf(event.target);
-    if (name === undefined) return;
-    event.dataTransfer.setData("text/plain", name);
-    event.dataTransfer.effectAllowed = "move";
-    setDragging(name);
-  };
-  const onListDragOver = (event: DragEvent<HTMLDivElement>) => {
-    const name = tabOf(event.target);
-    if (name !== undefined && dragging !== undefined && dragging !== name) event.preventDefault();
-  };
-  const onListDrop = (event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const name = tabOf(event.target);
-    if (name !== undefined && dragging !== undefined && dragging !== name) onMove?.(dragging, names.indexOf(name));
-    setDragging(undefined);
-  };
-
   // The bar's body is its fill and outline. On macOS it starts at the lights' zone and stops 12 px before Settings; on
   // Windows it starts 12 px after Settings and stops before the caption buttons. Settings is the edge that moves, so the
   // body is measured from it, and its width is kept for the outline's path.
@@ -213,33 +212,34 @@ export const TopBar = ({
 
   const positioned = layout === "flow" ? "relative " : "";
   const settingsNode = (
-    <div data-slot="top-bar-settings" className="flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full">
+    <div data-slot="top-bar-settings" className={cn("flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full", NO_DRAG_CONTROLS)}>
       {settings}
     </div>
   );
   const region = (base: string, custom: TopBarRegion | undefined): TopBarRegion => ({ ...custom, className: cn(base, custom?.className) });
   const controlsSpace = (width: string, style?: CSSProperties) =>
     controls === "none" ? null : (
-      <div data-slot="top-bar-controls" aria-hidden className={cn("h-9 shrink-0", width)} style={style}>
+      <div data-slot="top-bar-controls" aria-hidden className={cn("h-9 shrink-0 [-webkit-app-region:drag]!", width)} style={style}>
         {controls === "stand-ins" && <WindowDots />}
       </div>
     );
 
   return (
-    <div data-slot="top-bar" data-platform={platform} ref={rootRef} {...region("relative box-border flex h-9 w-full min-w-0 items-stretch", regions.frame)}>
+    <div data-slot="top-bar" data-platform={platform} ref={rootRef} {...region(`relative box-border flex h-9 w-full min-w-0 items-stretch ${DRAG}`, regions.frame)}>
       <div data-slot="top-bar-body" ref={bodyRef} aria-hidden className="absolute inset-y-0 left-0 right-0">
         <svg className="pointer-events-none absolute inset-0 overflow-visible" width={bodyWidth} height={TOP_BAR_HEIGHT}>
           <path d={barFill(bodyWidth, squareStart)} className="fill-background stroke-none" />
           <path d={barStroke(bodyWidth, squareStart)} className="fill-none stroke-border" />
         </svg>
       </div>
-      <div data-slot="top-bar-start" {...region(`${positioned}flex h-9 shrink-0 items-center`, regions.start)}>
+      <div data-slot="top-bar-start" {...region(`${positioned}flex h-9 shrink-0 items-center ${DRAG}`, regions.start)}>
         {!windows && controlsSpace("", { width: LIGHTS_ZONE })}
         {windows && <span className="flex shrink-0 items-center ps-3">{settingsNode}</span>}
-        {/* The logo sits 15 px into the bar, clear of the end curve. */}
-        <span className={cn("flex shrink-0 items-center ps-[15px] pe-2", windows && "ms-[9px]")}>{logo}</span>
+        <span data-slot="top-bar-logo" className={cn("flex shrink-0 items-center ps-[15px] pe-2 [-webkit-app-region:drag]!", windows && "ms-[9px]")}>
+          {logo}
+        </span>
       </div>
-      <div data-slot="top-bar-tabs" {...region(`${positioned}flex h-9 min-w-0 shrink items-stretch`, regions.tabs)}>
+      <div data-slot="top-bar-tabs" {...region(`${positioned}flex h-9 min-w-0 shrink items-stretch ${DRAG}`, regions.tabs)}>
         <Tabs className="h-9 w-fit min-w-0 shrink" value={active ?? null} onValueChange={(name) => onActivate(String(name))}>
           <TabsList
             ref={scroller}
@@ -247,40 +247,39 @@ export const TopBar = ({
             variant="underline"
             size="sm"
             overflow="truncate"
-            className="h-full min-w-0 max-w-full"
+            className={cn("h-full min-w-0 max-w-full data-reordering:[&_[data-slot=tabs-indicator]]:opacity-0", NO_DRAG_TAB_CONTROLS)}
             onClick={onListClick}
             onAuxClick={onListAux}
             onContextMenu={onListContext}
-            onDragStart={onListDragStart}
-            onDragOver={onListDragOver}
-            onDrop={onListDrop}
-            onDragEnd={() => setDragging(undefined)}
+            onPointerDown={reorder.onPointerDown}
           >
-            {tabs.map((tab) => (
-              <TabsTab
-                key={tab.name}
-                value={tab.name}
-                data-project={tab.name}
-                data-active={tab.name === active ? "true" : undefined}
-                data-status={tab.state ?? tab.status ?? "none"}
-                title={tab.title ?? tab.name}
-                draggable
-                divider
-                closable
-                closeLabel={`Close ${tab.name}`}
-                {...(tab.status === undefined ? {} : { status: tab.status })}
-              >
-                <span className="min-w-0 truncate">{tab.name}</span>
-              </TabsTab>
+            {tabs.map((tab, index) => (
+              <span key={tab.name} data-tab-item={tab.name} data-last={index === tabs.length - 1 ? "" : undefined} className={TAB_ITEM}>
+                <TabsTab
+                  value={tab.name}
+                  data-project={tab.name}
+                  data-active={tab.name === active ? "true" : undefined}
+                  data-status={tab.state ?? tab.status ?? "none"}
+                  data-pinned={tab.pinned === true ? "true" : undefined}
+                  aria-label={tab.pinned === true ? tab.name : undefined}
+                  title={tab.title ?? tab.name}
+                  closable={tab.pinned !== true}
+                  closeLabel={`Close ${tab.name}`}
+                  className={tab.pinned === true ? "w-9 min-w-0 gap-0 px-0 [&_[data-slot=tabs-status]]:ms-0.5" : undefined}
+                  {...(tab.status === undefined ? {} : { status: tab.status })}
+                >
+                  {tab.pinned === true ? <PinnedMark name={tab.name} /> : <span className="min-w-0 truncate">{tab.name}</span>}
+                </TabsTab>
+              </span>
             ))}
           </TabsList>
         </Tabs>
-        <div data-slot="top-bar-new" className="flex h-9 shrink-0 items-center ps-1">
+        <div data-slot="top-bar-new" className={cn("flex h-9 shrink-0 items-center ps-1", NO_DRAG_CONTROLS)}>
           {newProject}
         </div>
       </div>
-      <div data-slot="top-bar-drag" className={`${positioned}h-9 min-w-8 flex-1`} />
-      <div data-slot="top-bar-end" {...region(`${positioned}flex h-9 shrink-0 items-center`, regions.end)}>
+      <div data-slot="top-bar-drag" className={`${positioned}h-9 min-w-8 flex-1 ${DRAG}`} />
+      <div data-slot="top-bar-end" {...region(`${positioned}flex h-9 shrink-0 items-center ${DRAG}`, regions.end)}>
         {!windows && <span className="flex h-9 items-center pe-3">{settingsNode}</span>}
         {windows && controlsSpace("w-39")}
       </div>
@@ -293,6 +292,9 @@ export const TopBar = ({
           className="min-w-[180px]"
           data-testid="tab-menu"
         >
+          {menu !== undefined && pinnedTab(menu.name) && onUnpin && <MenuItem onClick={() => onUnpin(menu.name)}>Unpin tab</MenuItem>}
+          {menu !== undefined && !pinnedTab(menu.name) && onPin && <MenuItem onClick={() => onPin(menu.name)}>Pin tab</MenuItem>}
+          {(onPin || onUnpin) && <MenuSeparator />}
           <MenuItem onClick={() => menu && onClose(menu.name)}>Close</MenuItem>
           <MenuItem onClick={() => onCloseAll()}>Close all tabs</MenuItem>
           <MenuSeparator />

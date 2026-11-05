@@ -6,6 +6,11 @@ import { startAgentEngine, UNFRAMED_TOOLS } from "./agent.ts";
 import { fakeCodexAppServer, fakeCodexMessages, fakeShell } from "./agentFakes.ts";
 import { makeTempDir } from "./harness.ts";
 
+const sessionMessages = (log: any[]): any[] => {
+  const start = log.find((entry) => entry.start === true && entry.token !== null);
+  return log.filter((entry) => entry.pid === start.pid && entry.message).map((entry) => entry.message);
+};
+
 describe("Codex runs a chat", () => {
   it("starts a thread in the project folder with the mode's policies and the MCP arguments, streams a reply, raises an approval, and resumes by thread id", async () => {
     const dir = await makeTempDir("unframed-codex-");
@@ -35,11 +40,11 @@ describe("Codex runs a chat", () => {
     expect(chat.activities.find((activity) => activity.kind === "session.configured")?.payload).toMatchObject({ tools: UNFRAMED_TOOLS.map((name) => `mcp__unframed__${name}`) });
 
     const log = await fakeCodexMessages(messages);
-    const start = log.find((entry) => entry.start === true);
+    const start = log.find((entry) => entry.start === true && entry.token !== null);
     expect(start.argv).toEqual(["app-server", "-c", `mcp_servers.unframed.url=http://127.0.0.1:${agent.engine.port}/mcp`, "-c", 'mcp_servers.unframed.bearer_token_env_var="UNFRAMED_MCP_TOKEN"', "-c", "mcp_servers.unframed-app.enabled=false"]);
     expect(start.token).toMatch(/^[0-9a-f]{64}$/);
     expect(start.cwd).toBe(realpathSync(agent.folder));
-    const sent = log.flatMap((entry) => (entry.message ? [entry.message] : []));
+    const sent = sessionMessages(log);
     expect(sent[0]).toMatchObject({ method: "initialize", params: { clientInfo: { name: "unframed", title: "Unframed" }, capabilities: { experimentalApi: true } } });
     expect(sent[0]).not.toHaveProperty("jsonrpc");
     const { version } = JSON.parse(readFileSync(join(import.meta.dirname, "../package.json"), "utf8"));
@@ -86,7 +91,7 @@ describe("Codex runs a chat", () => {
     await agent.send(chatId, "crash now");
     const chat = await agent.settled(chatId, 1);
     expect(chat.latestTurn?.state).toBe("error");
-    const { token, argv } = (await fakeCodexMessages(messages)).find((entry) => entry.start === true);
+    const { token, argv } = (await fakeCodexMessages(messages)).find((entry) => entry.start === true && entry.token !== null);
     const url = String(argv[2]).slice("mcp_servers.unframed.url=".length);
     const listed = await agent.engine.request(new URL(url).pathname, {
       method: "POST",
@@ -116,5 +121,47 @@ describe("Codex runs a chat", () => {
     const chat = await agent.settled(chatId, 1);
     expect(chat.latestTurn?.state).toBe("error");
     expect(chat.session?.lastError).toBe("The agent session started without the canvas tools (mcp__unframed__motion_read). This is a bug in Unframed, not your setup.");
+  });
+
+  it("compacts on /compact with Codex's own thread/compact/start, not as a prompt", async () => {
+    const dir = await makeTempDir("unframed-codex-");
+    const codex = await fakeCodexAppServer(join(dir, "bin"));
+    const shell = await fakeShell(join(dir, "shell"));
+    const messages = join(dir, "messages.log");
+    const agent = await startAgentEngine({
+      dotenv: `CODEX_PATH=${codex}\nCLAUDE_PATH=${join(dir, "none")}\n`,
+      env: { UNFRAMED_TEST_AGENT_SCRIPT: undefined, SHELL: shell, FAKE_SHELL_PATH: "", FAKE_CODEX_MESSAGES: messages, FAKE_CODEX_THREADS: join(dir, "threads.log") },
+    });
+    const chatId = await agent.createChat({ modelSelection: { provider: "codex", model: "gpt-6", traits: {} } });
+    await agent.send(chatId, "clean the build folder");
+    const parked = await (await agent.watch(chatId)).until((chat) => openRequests(chat, "approval").length === 1, "the approval");
+    const request = openRequests(parked, "approval")[0]!.payload as { requestId: string };
+    await agent.dispatch({ type: "thread.approval.respond", threadId: chatId, requestId: request.requestId, decision: "accept" });
+    await agent.settled(chatId, 1);
+    await agent.send(chatId, "/compact keep the API notes");
+    const chat = await agent.settled(chatId, 2);
+    expect(chat.latestTurn?.state).toBe("completed");
+    const sent = sessionMessages(await fakeCodexMessages(messages));
+    const compact = sent.find((message) => message.method === "thread/compact/start");
+    expect(compact.params).toEqual({ threadId: sent.find((message) => message.method === "turn/start").params.threadId });
+    expect(sent.filter((message) => message.method === "turn/start")).toHaveLength(1);
+    const compaction = chat.activities.filter((activity) => (activity.payload as { itemType?: string }).itemType === "context_compaction");
+    expect(compaction.map((activity) => activity.kind)).toEqual(["tool.started", "tool.completed"]);
+  });
+
+  it("fails the compaction row and the turn when Codex refuses thread/compact/start", async () => {
+    const dir = await makeTempDir("unframed-codex-");
+    const codex = await fakeCodexAppServer(join(dir, "bin"));
+    const shell = await fakeShell(join(dir, "shell"));
+    const agent = await startAgentEngine({
+      dotenv: `CODEX_PATH=${codex}\nCLAUDE_PATH=${join(dir, "none")}\n`,
+      env: { UNFRAMED_TEST_AGENT_SCRIPT: undefined, SHELL: shell, FAKE_SHELL_PATH: "", FAKE_CODEX_MESSAGES: join(dir, "messages.log"), FAKE_CODEX_THREADS: join(dir, "threads.log"), FAKE_CODEX_COMPACT_FAIL: "thread has no turns to compact" },
+    });
+    const chatId = await agent.createChat({ modelSelection: { provider: "codex", model: "gpt-6", traits: {} } });
+    await agent.send(chatId, "/compact");
+    const chat = await agent.settled(chatId, 1);
+    expect(chat.latestTurn?.state).toBe("error");
+    const rows = chat.activities.filter((activity) => (activity.payload as { itemType?: string }).itemType === "context_compaction");
+    expect(rows.at(-1)).toMatchObject({ kind: "tool.completed", payload: { status: "failed", detail: "thread has no turns to compact" } });
   });
 });

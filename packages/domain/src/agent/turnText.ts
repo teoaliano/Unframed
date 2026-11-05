@@ -150,6 +150,19 @@ export const buildPreamble = (parts: {
     .filter((part): part is string => part !== undefined && part !== "")
     .join("\n\n");
 
+const COMPACT_COMMAND = /^\/compact(?:\s|$)/i;
+
+export const isCompactCommand = (text: string): boolean => COMPACT_COMMAND.test(text.trim());
+
+export const isProviderCommand = (text: string, attachments: number, commands: ReadonlyArray<string> | undefined): boolean => {
+  if (attachments !== 0) return false;
+  const trimmed = text.trimStart();
+  if (commands === undefined) return /^\/[A-Za-z0-9]/.test(trimmed);
+  if (isCompactCommand(trimmed)) return true;
+  const name = /^\/(\S+)/.exec(trimmed)?.[1]?.toLowerCase();
+  return name !== undefined && commands.some((command) => command.toLowerCase() === name);
+};
+
 export const modelMessage = (preamble: string, text: string): string => (preamble === "" ? text : text === "" ? preamble : `${preamble}\n\n${text}`);
 
 export const agentShapeId = (id: string): string => (id.startsWith("shape:") ? id.slice("shape:".length) : id);

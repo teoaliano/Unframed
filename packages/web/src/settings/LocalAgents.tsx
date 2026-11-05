@@ -96,7 +96,7 @@ export const LocalAgents = (props: LocalAgentsProps) => {
   const followUpId = useId();
   const planModeId = useId();
   return (
-    <section className="flex flex-col gap-3 border-t pt-4" aria-label="Local agents">
+    <section className="flex flex-col gap-3" aria-label="Local agents">
       <SectionHeading
         end={
           <Button variant="ghost" size="xs" aria-busy={props.checking || undefined} disabled={props.checking} onClick={props.onCheckAgain}>

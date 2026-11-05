@@ -6,7 +6,6 @@ import {
   estimateVideo,
   formatVideoEstimate,
   keepVideoProps,
-  NO_KEY_MESSAGE,
   recipeParams,
   renderLanding,
   resetVideoProps,
@@ -153,9 +152,8 @@ export const videoMedium: MediumDefinition = {
     const blockers: string[] = [];
     if (error !== undefined) blockers.push(error);
     else if (plan.request.prompt.trim() === "") blockers.push(NOTHING_TO_MAKE);
-    if (!hasKey) blockers.push(NO_KEY_MESSAGE);
     const warnings = videoStatusLines({ counts: plan.counts, entry, shareLocalVideos: props.shareLocalVideos }).flatMap((line) => (line.kind === "warning" ? [line.text] : []));
-    return { warnings, blockers };
+    return { warnings, blockers, needsKey: !hasKey };
   },
   sendLabel: () => "Generate",
   sendingLabel: "Starting…",

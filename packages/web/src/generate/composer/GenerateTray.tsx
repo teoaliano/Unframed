@@ -22,7 +22,7 @@ import { trayView } from "../trayView.ts";
 import { InstructionEditor } from "./InstructionEditor.tsx";
 import { ModelDialog } from "./ModelDialog.tsx";
 import { PropTray } from "./PropTray.tsx";
-import { StatusBand, StatusLine } from "./StatusLine.tsx";
+import { NoKeyLine, StatusBand, StatusLine } from "./StatusLine.tsx";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
@@ -209,7 +209,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
       : { kind: "selection", composition, selected: editor.getSelectedShapeIds(), shapes, instruction });
   const status = definition.status({ source, hasKey: settings?.hasKey ?? true, props: values?.props, entry });
   const estimate = values ? definition.estimate({ pricing, props: values.props, source, entry }) : undefined;
-  const blocked = status.blockers.length > 0 || values === undefined;
+  const blocked = status.blockers.length > 0 || status.needsKey === true || values === undefined;
 
   const onMentionMenu = useCallback((open: boolean) => onMenuOpen("mention", open), [onMenuOpen]);
   const onTrayMenu = useCallback((open: boolean, close: () => void) => onMenuOpen("tray", open, close), [onMenuOpen]);
@@ -329,7 +329,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
       </div>
       {definition.Status && values ? (
         <definition.Status status={status} failure={failure} values={values} source={source} entry={entry} setProps={(props) => setValues({ ...values, props })} />
-      ) : (status.warnings.length > 0 || status.blockers.length > 0 || failure !== undefined) && (
+      ) : (status.warnings.length > 0 || status.blockers.length > 0 || status.needsKey === true || failure !== undefined) && (
         <StatusBand>
           {status.warnings.map((line) => (
             <StatusLine key={line} kind="warning">
@@ -341,6 +341,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
               {line}
             </StatusLine>
           ))}
+          {status.needsKey === true && <NoKeyLine />}
           {failure !== undefined && <StatusLine kind="error">{failure}</StatusLine>}
         </StatusBand>
       )}

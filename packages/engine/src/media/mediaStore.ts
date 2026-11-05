@@ -53,7 +53,7 @@ export class MediaStore extends Context.Service<
   {
     readonly save: (
       project: string,
-      input: { originalName: string; mime: string; body: AsyncIterable<Buffer>; rendered?: RenderedSidecar | undefined; source?: MediaSidecar["source"] },
+      input: { originalName: string; mime: string; body: AsyncIterable<Buffer>; rendered?: RenderedSidecar | undefined; source?: MediaSidecar["source"]; of?: string; chat?: string },
     ) => Promise<SavedFile>;
     readonly savePreview: (project: string, file: string, size: PreviewSize, body: AsyncIterable<Buffer>) => Promise<{ bytes: number }>;
     readonly copy: (project: string, file: string, from?: string, ofProject?: string) => Effect.Effect<string, UnframedError>;
@@ -142,13 +142,19 @@ export const mediaStoreLayer = Layer.effect(
         await rm(temp, { force: true });
         throw new SaveRefused(400, EMPTY_BODY_MESSAGE);
       }
+      let renamed: string | undefined;
       try {
         const file = mediaFileName({ originalName, mime, now: Date.now(), exists: taken(dir) });
         renameSync(temp, join(dir, file));
+        renamed = file;
         writeFileSync(join(dir, sidecarFileName(file)), sidecarText(sidecar(bytes)));
         return { file, bytes };
       } catch (error) {
         await rm(temp, { force: true });
+        if (renamed !== undefined) {
+          await rm(join(dir, renamed), { force: true });
+          await rm(join(dir, sidecarFileName(renamed)), { force: true });
+        }
         throw error;
       }
     };
@@ -171,7 +177,7 @@ export const mediaStoreLayer = Layer.effect(
 
     const save = async (
       project: string,
-      input: { originalName: string; mime: string; body: AsyncIterable<Buffer>; rendered?: RenderedSidecar | undefined; source?: MediaSidecar["source"] },
+      input: { originalName: string; mime: string; body: AsyncIterable<Buffer>; rendered?: RenderedSidecar | undefined; source?: MediaSidecar["source"]; of?: string; chat?: string },
     ) => {
       const dir = await folder(project);
       if (dir === undefined) throw new SaveRefused(404, `There is no project named "${projectSlug(project)}".`);
@@ -184,6 +190,8 @@ export const mediaStoreLayer = Layer.effect(
           mime,
           bytes,
           at: new Date().toISOString(),
+          ...(input.of === undefined ? {} : { of: input.of }),
+          ...(input.chat === undefined ? {} : { chat: input.chat }),
           ...input.rendered,
         }));
         return { file, fileName: input.originalName, bytes, mime };

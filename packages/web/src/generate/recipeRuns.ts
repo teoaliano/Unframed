@@ -5,7 +5,7 @@
  * counts what has settled from spec 03's run events.
  */
 import { runMarkerOf, type ModelEntry } from "@unframed/contracts";
-import { composeSelection, trayFromRecipe, type GroupRecipe } from "@unframed/domain";
+import { composeSelection, NO_KEY_MESSAGE, trayFromRecipe, type GroupRecipe } from "@unframed/domain";
 import { atom, type Atom, type Editor, type TLShapeId } from "tldraw";
 import type { EngineConnection } from "../rpc/engine.ts";
 import { loadCatalogue } from "./catalogue.ts";
@@ -102,6 +102,12 @@ export const recipeProps = (definition: MediumDefinition, recipe: GroupRecipe, e
  * Runs `recipe` over the selection at once. A Free recipe stops at the final prompt
  * dialog, so nothing is spent until it is confirmed there.
  */
+export class NoKeyError extends Error {
+  constructor() {
+    super(NO_KEY_MESSAGE);
+  }
+}
+
 export const runGroupRecipe = async (input: {
   readonly editor: Editor;
   readonly engine: EngineConnection;
@@ -125,8 +131,10 @@ export const runGroupRecipe = async (input: {
   const shapes = canvasShapes(editor);
   const composition = composeSelection({ shapes, selected, instruction: "", medium: recipe.medium, referenceCap: definition.params(entry, values.props).referenceCap });
   const source: RunSource = { kind: "selection", composition, selected, shapes, instruction: "" };
-  const [blocker] = definition.status({ source, hasKey: input.hasKey, props: values.props, entry }).blockers;
+  const status = definition.status({ source, hasKey: input.hasKey, props: values.props, entry });
+  const [blocker] = status.blockers;
   if (blocker !== undefined) throw new Error(blocker);
+  if (status.needsKey === true) throw new NoKeyError();
   const outcome = await definition.send({ editor, engine, project, values, source, remember: false });
   const staged = outcome === "stay" ? stagedFree(editor).get()?.batchId : undefined;
   const run: RecipeRun | undefined =

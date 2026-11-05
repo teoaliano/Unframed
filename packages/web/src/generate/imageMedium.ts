@@ -7,7 +7,6 @@ import {
   keepSupported,
   MODEL_DRIVEN_PROPS,
   modelParams,
-  NO_KEY_MESSAGE,
   resetProps,
 } from "@unframed/domain";
 import type { TLShapeId } from "tldraw";
@@ -127,8 +126,7 @@ export const imageMedium: MediumDefinition = {
       if (plan.error !== undefined) blockers.push(plan.error);
       else if (plan.prompt.trim() === "") blockers.push(NOTHING_TO_MAKE);
     }
-    if (!hasKey) blockers.push(NO_KEY_MESSAGE);
-    return { warnings: source.kind === "selection" ? [...source.composition.warnings] : [], blockers };
+    return { warnings: source.kind === "selection" ? [...source.composition.warnings] : [], blockers, needsKey: !hasKey };
   },
   sendLabel: (values) => {
     const runs = runsOf(values.props);

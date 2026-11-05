@@ -59,7 +59,7 @@ describe("run.image validation", () => {
     await rpc.call("projects.create", { name: "board" });
     await expect(rpc.call("run.image", runRequest({ outputs: [] }))).rejects.toMatchObject({
       code: "unavailable",
-      message: "No OpenRouter key yet. Add one with the key icon in the top right (it becomes a settings gear once saved).",
+      message: "Generating needs OpenRouter. Connect it in Settings, under Generation.",
     });
     expect((await rpc.call("testCanvas.read", { project: "board" })).records.filter((record: any) => record.typeName === "shape")).toHaveLength(2);
   });

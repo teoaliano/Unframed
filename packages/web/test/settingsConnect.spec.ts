@@ -5,7 +5,7 @@ import { CONNECTED_KEY, liveKey } from "../../engine/test/oauthStub.ts";
 import { gate } from "../../engine/test/openRouterStub.ts";
 import { toast } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
-import { IMAGE_MODELS, openApp, settingsButton, settingsDialog, startSettingsEngine } from "./settings.ts";
+import { IMAGE_MODELS, openApp, openSettings, settingsButton, settingsDialog, startSettingsEngine } from "./settings.ts";
 
 /** Holds every exchange at the stub until released. */
 const holdExchanges = (oauth: Awaited<ReturnType<typeof startSettingsEngine>>["oauth"]) => {
@@ -22,7 +22,7 @@ test("Connect opens a tab on the consent page that redirects to the engine; the 
   try {
     const release = holdExchanges(oauth);
     await openApp(page, engine);
-    const dialog = settingsDialog(page);
+    const dialog = await openSettings(page);
     const popup = page.waitForEvent("popup");
     await dialog.getByRole("button", { name: "Connect OpenRouter" }).click();
     const tab = await popup;
@@ -55,7 +55,7 @@ test("a free-tier account keeps the dialog open with the Credits line and the lo
   try {
     oauth.keyStatus(() => liveKey({ is_free_tier: true, usage: 0, limit: null, limit_remaining: null }));
     await openApp(page, engine);
-    const dialog = settingsDialog(page);
+    const dialog = await openSettings(page);
     await dialog.getByRole("button", { name: "Connect OpenRouter" }).click();
     await expect(toast(page, "Connected to OpenRouter.")).toBeVisible();
     await expect(dialog.getByRole("heading", { name: "Settings", exact: true })).toBeVisible();
@@ -75,7 +75,7 @@ test("a refused exchange shows its reason in the banner, and a new Connect clear
   try {
     oauth.exchange(() => ({ kind: "status", status: 403, body: { error: { message: "This code was already used" } } }));
     await openApp(page, engine);
-    const dialog = settingsDialog(page);
+    const dialog = await openSettings(page);
     await dialog.getByRole("button", { name: "Connect OpenRouter" }).click();
     await expect(dialog.getByRole("alert")).toHaveText("This code was already used");
     await expect(dialog.getByRole("button", { name: "Connect OpenRouter" })).toBeVisible();
@@ -98,7 +98,7 @@ test("a refused exchange with the dialog closed is a toast", async ({ page }) =>
       return { kind: "status", status: 403, body: { error: { message: "Invalid code or code_verifier" } } };
     });
     await openApp(page, engine);
-    const dialog = settingsDialog(page);
+    const dialog = await openSettings(page);
     await dialog.getByRole("button", { name: "Connect OpenRouter" }).click();
     await expect(dialog.getByTestId("settings-waiting")).toBeVisible();
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
@@ -122,7 +122,7 @@ test("Cancel returns to the Connect state, and a Connect straight after still co
       return { kind: "key", key: "sk-or-v1-late-approval-00001111" };
     });
     await openApp(page, engine);
-    const dialog = settingsDialog(page);
+    const dialog = await openSettings(page);
     const firstTab = page.waitForEvent("popup");
     await dialog.getByRole("button", { name: "Connect OpenRouter" }).click();
     await expect(dialog.getByTestId("settings-waiting")).toBeVisible();
@@ -148,7 +148,7 @@ test("the poll gives up after ten minutes", async ({ page }) => {
   try {
     holdExchanges(oauth);
     await openApp(page, engine);
-    const dialog = settingsDialog(page);
+    const dialog = await openSettings(page);
     const popup = page.waitForEvent("popup");
     await dialog.getByRole("button", { name: "Connect OpenRouter" }).click();
     // The waiting block shows while the engine starts the attempt; the poll's clock starts once
@@ -171,7 +171,7 @@ test("the poll reports a lost connection when the engine restarts mid-wait", asy
   try {
     holdExchanges(first.oauth);
     await openApp(page, first.engine);
-    const dialog = settingsDialog(page);
+    const dialog = await openSettings(page);
     await dialog.getByRole("button", { name: "Connect OpenRouter" }).click();
     await expect(dialog.getByTestId("settings-waiting")).toBeVisible();
     const port = first.engine.port;
