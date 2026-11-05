@@ -1,5 +1,5 @@
 import { addablePropValue, modelPart, type ModelParams } from "@unframed/domain";
-import { useLayoutEffect, useState, type ComponentProps } from "react";
+import { useLayoutEffect, useState, type ComponentProps, type ReactNode } from "react";
 import { Button } from "~/components/ui/button";
 import {
   Menu,
@@ -16,6 +16,7 @@ import { Tip } from "../../chrome/ui.tsx";
 import type { PropValue, TrayPropDefinition, TrayProps } from "../mediumRegistry.ts";
 
 export interface PropTrayProps {
+  readonly lead?: ReactNode;
   readonly model: string | undefined;
   readonly catalogueReady: boolean;
   readonly params: ModelParams;
@@ -37,7 +38,8 @@ export const TrayChip = (props: ComponentProps<typeof Button>) => <Button varian
  * The tray below the box: the model chip, one chip per prop that will be sent, and
  * "+ add prop". A prop comes off the way it went on: from its own menu.
  */
-export const PropTray = ({ model, catalogueReady, params, extra = [], props, onModelClick, onChange, onMenuOpen, addable: addableValue }: PropTrayProps) => {
+export const PropTray = ({ lead, model, catalogueReady, params, extra: declared = [], props, onModelClick, onChange, onMenuOpen, addable: addableValue }: PropTrayProps) => {
+  const extra = declared.filter((prop) => prop.offered === undefined || prop.offered(params));
   const [openProp, setOpenProp] = useState<string>();
   const [addOpen, setAddOpen] = useState(false);
   const inTray = params.props.filter((prop) => props[prop.key] !== undefined);
@@ -61,6 +63,7 @@ export const PropTray = ({ model, catalogueReady, params, extra = [], props, onM
   return (
     <div className="flex items-center justify-between gap-2 px-0.5 pt-0.5" data-testid="composer-tray">
       <div className="flex min-w-0 flex-wrap items-center gap-1">
+        {lead}
         <Tip label={model ?? "Loading models…"} side="top">
           <TrayChip data-testid="model-chip" disabled={!catalogueReady} onClick={onModelClick}>
             {catalogueReady && model !== undefined ? modelPart(model) : "Loading models…"}
@@ -103,7 +106,7 @@ export const PropTray = ({ model, catalogueReady, params, extra = [], props, onM
           </Menu>
         ))}
         {extraInTray.map((prop) => (
-          <prop.Chip key={prop.key} props={props} onChange={onChange} open={openProp === prop.key} onOpenChange={(open) => setOpen(open ? prop.key : undefined)} />
+          <prop.Chip key={prop.key} props={props} params={params} onChange={onChange} open={openProp === prop.key} onOpenChange={(open) => setOpen(open ? prop.key : undefined)} />
         ))}
       </div>
       {addable.length + extraAddable.length > 0 && (

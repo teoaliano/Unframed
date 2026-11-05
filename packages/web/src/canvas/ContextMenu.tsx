@@ -55,11 +55,12 @@ const menuShape = (editor: Editor, shape: TLShape): MenuShape => {
   const ref = readRef(shape);
   const parent = editor.getShape(shape.parentId as TLShapeId);
   const artifactFile = isArtifactKind(shape.type) ? (shape.props as { file?: string }).file : undefined;
+  const audioFile = shape.type === "audio" ? (shape.props as { file?: string }).file : undefined;
   return {
     id: shape.id,
     type: shape.type,
     ...(ref !== undefined ? { ref } : {}),
-    ...(marker?.kind === "project-file" ? { file: marker.file } : artifactFile ? { file: artifactFile } : {}),
+    ...(marker?.kind === "project-file" ? { file: marker.file } : artifactFile ? { file: artifactFile } : audioFile ? { file: audioFile } : {}),
     ...(marker?.kind === "link" ? { link: true } : {}),
     ...(isTextResult(shape) ? { textResult: true } : {}),
     ...(parent?.type === "frame" ? { parent: parent.id } : {}),

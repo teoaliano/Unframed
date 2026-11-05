@@ -1,9 +1,14 @@
+import { ELEVENLABS_MODEL_ID } from "./elevenLabsIds.ts";
+import { OPENROUTER_KEY, PROVIDER_KEYS } from "./providerKeys.ts";
+
 /** The editable settings, as the web names them. */
 export interface SettingsPatchInput {
   readonly key?: string;
   readonly imageModel?: string;
   readonly textModel?: string;
   readonly videoModel?: string;
+  readonly elevenLabsKey?: string;
+  readonly audioModel?: string;
   readonly outputDir?: string;
   readonly claudePath?: string;
   readonly codexPath?: string;
@@ -13,10 +18,7 @@ export interface SettingsPatchInput {
 type Field = keyof SettingsPatchInput;
 
 const MODEL = /^[\w.-]+\/[\w.:-]+$/;
-const OPENROUTER_KEY = /^sk-or-[\w.-]{8,200}$/;
-
-/** The one key validator: a pasted key and a key OpenRouter returns (spec 10) pass the same check. */
-export const isOpenRouterKey = (value: string): boolean => OPENROUTER_KEY.test(value);
+export const isOpenRouterKey = (value: string): boolean => OPENROUTER_KEY.pattern.test(value);
 const COMMAND = /^[^\n\r"'#;&|$`<>(){}\s][^\n\r"'#;&|$`<>(){}]{0,399}$/;
 const MODEL_MESSAGE = 'That does not look like a model slug. Expected something like "openai/gpt-image-2".';
 const COMMAND_MESSAGE = "That does not look like a command name or a path to one.";
@@ -29,16 +31,17 @@ const FIELDS: ReadonlyArray<{
   readonly message: string;
   readonly clearable: boolean;
 }> = [
-  {
-    field: "key",
-    variable: "OPENROUTER_API_KEY",
-    pattern: OPENROUTER_KEY,
-    message: 'That does not look like an OpenRouter key. Keys start with "sk-or-".',
-    clearable: false,
-  },
+  ...PROVIDER_KEYS.map(({ field, variable, pattern, message }) => ({ field, variable, pattern, message, clearable: false })),
   { field: "imageModel", variable: "OPENROUTER_IMAGE_MODEL", pattern: MODEL, message: MODEL_MESSAGE, clearable: false },
   { field: "textModel", variable: "OPENROUTER_TEXT_MODEL", pattern: MODEL, message: MODEL_MESSAGE, clearable: false },
   { field: "videoModel", variable: "OPENROUTER_VIDEO_MODEL", pattern: MODEL, message: MODEL_MESSAGE, clearable: false },
+  {
+    field: "audioModel",
+    variable: "ELEVENLABS_AUDIO_MODEL",
+    pattern: ELEVENLABS_MODEL_ID,
+    message: 'That does not look like an ElevenLabs model id. Expected something like "eleven_v4".',
+    clearable: false,
+  },
   {
     field: "outputDir",
     variable: "OUTPUT_DIR",

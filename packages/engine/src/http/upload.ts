@@ -1,6 +1,6 @@
 import type http from "node:http";
 import { isBareFileName } from "@unframed/contracts";
-import { PREVIEW_SIZES, UPLOAD_BODY_LIMIT, type PreviewSize, type RenderedSidecar } from "@unframed/domain";
+import { AUDIO_FILE_LIMIT, AUDIO_TOO_LARGE_MESSAGE, dropKind, PREVIEW_SIZES, unplayableAudioMessage, UPLOAD_BODY_LIMIT, type PreviewSize, type RenderedSidecar } from "@unframed/domain";
 import { SaveRefused, type MediaStore } from "../media/mediaStore.ts";
 import type { Route } from "./api.ts";
 import { sendError, sendJson } from "./respond.ts";
@@ -42,6 +42,15 @@ const renderedSidecar = (params: URLSearchParams): RenderedSidecar | undefined |
  * existing project file, the bytes are that file's WebP display preview instead, kept in
  * the regenerable cache folder with no sidecar. Plain HTTP because it carries raw bytes.
  */
+async function* capped(body: AsyncIterable<Buffer>, limit: number, message: string): AsyncIterable<Buffer> {
+  let read = 0;
+  for await (const chunk of body) {
+    read += chunk.length;
+    if (read > limit) throw new SaveRefused(413, message);
+    yield chunk;
+  }
+}
+
 export const uploadRoute =
   (media: MediaStore["Service"]): Route =>
   async (req: http.IncomingMessage, res: http.ServerResponse, url: URL) => {
@@ -75,13 +84,23 @@ export const uploadRoute =
         sendJson(res, 200, { file: name, preview: size, bytes: saved.bytes });
         return true;
       }
+      const sound = dropKind({ type: mime, name });
+      if (sound === "unplayable-audio") {
+        req.resume();
+        sendError(res, 415, unplayableAudioMessage(name));
+        return true;
+      }
+      if (sound === "audio" && declared !== undefined && declared > AUDIO_FILE_LIMIT) {
+        sendJson(res, 413, { error: AUDIO_TOO_LARGE_MESSAGE }, { connection: "close" });
+        return true;
+      }
       const rendered = renderedSidecar(url.searchParams);
       if (rendered === "refused") {
         req.resume();
         sendError(res, 400, NOT_RENDERED);
         return true;
       }
-      sendJson(res, 200, await media.save(project, { originalName: name, mime, body: req, rendered }));
+      sendJson(res, 200, await media.save(project, { originalName: name, mime, body: sound === "audio" ? capped(req, AUDIO_FILE_LIMIT, AUDIO_TOO_LARGE_MESSAGE) : req, rendered }));
     } catch (error) {
       if (!(error instanceof SaveRefused)) throw error;
       if (req.readableEnded) sendError(res, error.status, error.message);

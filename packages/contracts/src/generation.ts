@@ -5,7 +5,7 @@
  */
 import * as Schema from "effect/Schema";
 
-export const Medium = Schema.Literals(["image", "video", "text"]);
+export const Medium = Schema.Literals(["image", "video", "text", "audio"]);
 export type Medium = typeof Medium.Type;
 
 /** What a run sent, exactly: a project file (a composite names the canvas image it came from), or an https link. */
@@ -89,6 +89,7 @@ export const ResultMeta = Schema.Struct({
   batchExtraCost: Schema.optionalKey(Schema.Number),
   /** Spec 11 only: an imported result's approximate recipe. */
   recipe: Schema.optionalKey(ResultRecipe),
+  credits: Schema.optionalKey(Schema.NullOr(Schema.Number)),
 });
 export type ResultMeta = typeof ResultMeta.Type;
 
@@ -137,9 +138,9 @@ export const ModelEntry = Schema.Struct({
 });
 export type ModelEntry = typeof ModelEntry.Type;
 
-export const ModelsListRequest = Schema.Struct({ medium: Schema.Literals(["image", "video", "text"]) });
+export const ModelsListRequest = Schema.Struct({ medium: Schema.Literals(["image", "video", "text", "audio"]) });
 
-export const ModelsListAnswer = Schema.Struct({ models: Schema.Array(ModelEntry), default: Schema.String });
+export const ModelsListAnswer = Schema.Struct({ models: Schema.Array(ModelEntry), default: Schema.String, problem: Schema.optionalKey(Schema.String) });
 export type ModelsListAnswer = typeof ModelsListAnswer.Type;
 
 /** One billing line of an endpoint's pricing. */
@@ -215,6 +216,7 @@ export const RunEvent = Schema.Union([
     shapeId: Schema.String,
     file: Schema.String,
     cost: Schema.NullOr(Schema.Number),
+    credits: Schema.optionalKey(Schema.NullOr(Schema.Number)),
   }),
   Schema.Struct({ type: Schema.Literal("output"), runId: Schema.String, runIndex: Schema.Number, ok: Schema.Literal(false), error: Schema.String }),
   Schema.Struct({

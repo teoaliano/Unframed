@@ -104,10 +104,10 @@ What carries over from the issue and what changes:
 | --- | --- | --- | --- |
 | Audio params | domain | `audioParams(entry)` returns the props the model declares and their ranges or values; `audioDefaults(params)`, `audioReset(props, params)`, `audioKeep(props, params)` | new |
 | Audio request | domain | `audioRequest({ composition, props, voice, model })` returns `{ text, voiceId, query: { output_format }, body: { text, model_id, voice_settings?, seed?, language_code? } }` and the roles for the selection's media | new; deep: the tray, the badges and the engine payload all come from it |
-| Audio status | domain | `audioStatus({ composition, props, voice, entry, hasKey })` returns spec 03's `TrayStatus` | new |
-| ElevenLabs answers | domain | `creditsFrom(headerValue)`, `elevenLabsMessage(status, body)`, `audioExtension(format)`, `audioLine({ model, durationMs, credits })` | new |
+| Audio status | domain | `audioStatus({ text, error, media, voice, model, params, hasKey })` returns the band's blockers and warnings (the web adds spec 03's `TrayStatus` shape); it takes the spoken text rather than a composition so recipe mode, which has none, uses the same rule | new |
+| ElevenLabs answers | domain | `creditsFrom(headerValue)`, `elevenLabsMessage(body)`, `audioExtension(format)`, `audioLine({ model, durationMs, credits })` | new |
 | ElevenLabs status copy | domain | turns an `ElevenLabsStatus` into the Settings lines | new, beside spec 10's key status copy |
-| Settings rules | domain | the two new `.env` variables, their validators and normalising | extended (spec 01) |
+| Settings rules | domain | the two new `.env` variables, their validators and normalising; each provider key (OpenRouter's and ElevenLabs') is one row of `PROVIDER_KEYS` (variable, patch field, hint, test origin, remove action and its lines), which the config, the settings store, the patch rules and the Settings dialog all read, so a third provider is one more row | extended (spec 01) |
 | Media naming and drop kinds | domain | the extension table gains audio types; the drop kind gains `audio`; the allowed-member rule refuses audio | extended (spec 02) |
 | Menu rules | domain | Reveal on a filled audio shape | extended (spec 02) |
 | Recipe rules | domain | `recipeChip` for an audio recipe | extended (spec 06) |
@@ -133,7 +133,7 @@ What carries over from the issue and what changes:
 - **Filled.** The same card, holding one row: a Play or Pause button (the kit's ghost icon Button, labels "Play" and "Pause"), then a column with the title in `text-xs` (a result's spoken text with whitespace collapsed, first 40 characters, ellipsised; otherwise `fileName`, else `file`) above a position slider (the native range input in the highlight colour, label "Position", step 0.01 s) and the readout `m:ss / m:ss` in tabular numerals, muted. The audio element preloads metadata only and never autoplays.
 - **Controls are controls.** A press on the button or the slider never starts a shape drag or a selection; a press anywhere else on the card drags the shape. This is spec 02's rule for the video transport.
 - **One at a time.** Starting playback on one audio shape pauses every other audio shape playing in the tab.
-- **Remove.** A selected filled audio shape shows spec 02's remove button at its top-right corner (label "Remove <file name>"). It clears `file` and `fileName`; the file stays on disk.
+- **Remove.** A selected filled audio shape shows spec 02's remove button at its top-right corner (label "Remove <file name>"). It clears `file` and `fileName`; the file stays on disk. On an audio result it behaves exactly as Remove on an image or video result (spec 02): only the file goes, the result meta stays, so the card shows its empty state and Regenerate still reopens its recipe. The title row keeps 28 px clear on its right, so a long title ellipsises before the button, selected or focused.
 - **Placeholder.** While it carries a run marker: the filled card's frame with spec 12's spinner and `Generating…` in place of the controls.
 - **Label.** Filled or empty, the label above the card reads "Audio" until the shape is named, then `@<name>` (spec 06). It follows spec 02's `labelLevel` like every other label.
 - **Not groupable.** An audio shape is not a member a group may hold: spec 02's allowed-member rule refuses it, as it refuses pages and motions. A selected audio shape is left out of `Cmd-G`'s wrap and stays on the page when dragged over a group. Groups and presets that hold audio are a later spec (Out of Scope).
@@ -144,9 +144,10 @@ What carries over from the issue and what changes:
 
 ### Bringing sound files in
 
-- **Upload naming.** Spec 02's extension table gains `audio/mpeg` mp3, `audio/mp3` mp3, `audio/wav` wav, `audio/x-wav` wav, `audio/wave` wav, `audio/mp4` m4a, `audio/x-m4a` m4a. Spec 01's file route already serves `.mp3`, `.wav` and `.m4a` with their audio types and byte ranges, and spec 09's preview origin already serves mp3 and wav. Neither changes.
-- **Drop.** A file whose type starts with `audio/`, or whose name ends `.mp3`, `.wav` or `.m4a` (case-insensitive), becomes an audio shape at the drop point, after its upload answers, with spec 02's 24 px offset for several files and spec 02's failure toast. A sound file dropped onto an audio shape replaces its file. There is no audio size cap beyond spec 02's 500 MB upload body.
-- **System paste.** A pasted sound file is uploaded and becomes an audio shape at the pointer, or fills every selected audio shape. A pasted file with no name is named `pasted-audio.<ext>` from its type (`mp3` when unknown).
+- **Upload naming.** Spec 02's extension table gains `audio/mpeg` mp3, `audio/mp3` mp3, `audio/wav` wav, `audio/x-wav` wav, `audio/wave` wav, `audio/mp4` m4a, `audio/x-m4a` m4a. Spec 01's file route already serves `.mp3`, `.wav` and `.m4a` with their audio types and byte ranges, and spec 09's preview origin already serves mp3 and wav. These three are the one audio whitelist (`AUDIO_SERVED_TYPES` in domain): the file route's types, spec 14's `file_add`, drop, paste and Choose file all read it, so the board never holds a sound file it cannot play.
+- **Refusals.** A sound file outside the whitelist (an `audio/*` type not in the extension table, such as `audio/ogg` or `audio/flac`, or a name ending `.ogg`, `.oga`, `.opus`, `.flac`, `.aac`, `.aif`, `.aiff`, `.wma`, `.weba` or `.caf`) is refused before upload with the toast `<file name> is not a sound file the board can play. Use MP3, WAV or M4A.` (`That sound file` when it has no name). A sound file over 25 MB (26,214,400 bytes, the video and `file_add` limit) is refused with `Sound file is too large. Keep it under 25MB.` Both apply to drop, drop onto an audio shape, paste and Choose file, whose picker offers only the three types. The upload route enforces the same rule for anything it is sent: a sound type or name outside the whitelist answers 415 with the first sentence and writes nothing, and a sound upload over 25 MB, by its declared length or by the bytes read, answers 413 with the second and leaves nothing behind. The whitelist is one table of extension to types in domain; the type-to-extension direction and the served types both derive from it.
+- **Drop.** A file whose type is one of the audio types in the extension table, or whose name ends `.mp3`, `.wav` or `.m4a` (case-insensitive), becomes an audio shape at the drop point, after its upload answers, with spec 02's 24 px offset for several files and spec 02's failure toast. A sound file dropped onto an audio shape replaces its file.
+- **System paste.** A pasted sound file is uploaded and becomes an audio shape at the pointer, or fills every selected audio shape. A pasted file with no name is named `pasted-audio.<ext>` from its type.
 
 ### Audio in other media's runs
 
@@ -181,10 +182,12 @@ Registered into spec 03's medium registry with label `audio`, catalogue `audio`,
 | Prop | Key | Offered when | Control | Default |
 | --- | --- | --- | --- | --- |
 | Similarity | `similarity_boost` | always | range 0 to 1, step 0.05 | unset (ElevenLabs uses 0.75) |
-| Speaker boost | `use_speaker_boost` | the model's `can_use_speaker_boost` is true | the kit's Switch | unset (ElevenLabs uses on) |
+| Speaker boost | `use_speaker_boost` | the model's `can_use_speaker_boost` is true | the kit's Switch, shown on while unset because ElevenLabs' default is on | unset (ElevenLabs uses on) |
 | Format | `output_format` | always | the kit's Select of the formats below | unset (`mp3_44100_128`) |
 | Seed | `seed` | always | the kit's NumberField, whole numbers 0 to 4294967295 | unset |
 | Language | `language_code` | the model declares at least one language | the kit's Combobox of the model's languages, `name (language_id)` | unset |
+
+  Each row's `Reset` stays enabled when the prop is unset (it does nothing then), so the keyboard never drops out of the popover after a reset.
 
   Formats offered: `mp3_44100_128`, `mp3_44100_192`, `mp3_44100_96`, `mp3_44100_64`, `mp3_22050_32`, `wav_44100`, `wav_48000`, `wav_24000`, `wav_16000`. ElevenLabs also offers PCM, Opus, μ-law and A-law, which make files a browser cannot play from disk without a container, so they are not offered. Some formats need a higher ElevenLabs plan; a refusal arrives as an upstream error with ElevenLabs' message. WAV stays offered on every model, Eleven v4 included, until a paid probe shows v4 refuses it: third-party listings of v4 name MP3, PCM, Opus, μ-law and A-law, while the speech endpoint lists `wav_*`. Meanwhile a refusal reaches the person as ElevenLabs' own message.
 
@@ -265,7 +268,7 @@ Run events are spec 03's `run.subscribe` events. An audio `output` event carries
 
 Every call goes to `https://api.elevenlabs.io` (the origin replaced by `UNFRAMED_TEST_ELEVENLABS_ORIGIN` when set, below) with the header `xi-api-key: <key>`. Every call has a 30 second timeout except speech, which has 120 seconds.
 
-- **Models.** `GET /v1/models`. Keep entries whose `can_do_text_to_speech` is true; map `model_id` to `id`, `name` (else the id), `can_use_style`, `can_use_speaker_boost` (false when absent), `languages[]` as `{ id: language_id, name }`, `maximum_text_length_per_request` (else null). Keep ElevenLabs' order. Append the default audio model as `{ id, name: id, params: null }` when missing. Without a key, or on any failure, answer only the default row. A row with `params: null` means "unknown": the tray then offers only the props offered always, and never removes a stored Style or Speaker boost (spec 04's healing rule).
+- **Models.** `GET /v1/models`. Keep entries whose `can_do_text_to_speech` is true; map `model_id` to `id`, `name` (else the id), `can_use_style`, `can_use_speaker_boost` (false when absent), `languages[]` as `{ id: language_id, name }`, `maximum_text_length_per_request` (else null). Keep ElevenLabs' order. Append the default audio model as `{ id, name: id, params: null }` when missing. Without a key, answer only the default row. On a failure, answer only the default row and `problem`, a line Settings shows under the Audio select: `ElevenLabs refused the key, so only the default audio model is listed.` (401), `Could not reach ElevenLabs (<reason>), so only the default audio model is listed.`, or `ElevenLabs answered <status>, so only the default audio model is listed.` `ModelsListAnswer` gains the optional `problem`. A row with `params: null` means "unknown": the tray then offers only the props offered always, and never removes a stored Style or Speaker boost (spec 04's healing rule).
 - **Voices.** `GET /v2/voices?page_size=100` plus `search` and `next_page_token` when given. Map each voice's `voice_id`, `name`, `category`, `labels` (string values only), `preview_url`. `nextPageToken` is `next_page_token` when `has_more` is true, else null.
 - **Speech.** `POST /v1/text-to-speech/<voice id>?output_format=<format>` with `Content-Type: application/json` and the body `{ text, model_id, voice_settings?, seed?, language_code? }`. `voice_settings` holds exactly the delivery and similarity keys the request sets, and is absent when it sets none, so the voice's own saved settings apply. `seed` and `language_code` are sent only when set. `output_format` defaults to `mp3_44100_128`. The answer body is the audio bytes. The credits are the `character-cost` response header read as a finite number at or above zero, else null. The header is treated as credits (after the model's rate), not raw characters; that is unconfirmed until the person's paid Flash call (Further Notes). The `request-id` header, when present, is kept for the sidecar.
 - **Subscription.** `GET /v1/user/subscription`, for Settings only: `tier`, `character_count`, `character_limit`, `next_character_count_reset_unix`.
@@ -287,7 +290,9 @@ Then, as spec 03's run: write one audio placeholder at the place spec 03's resul
 
 Response handling, each failure becoming the output's `error`, deleting the placeholder, and reaching the tab as spec 03's run report toast (`0 of 1 succeeded. <message>`):
 
-- The fetch throws or times out: `Could not reach ElevenLabs: <message>`
+- The fetch throws: `Could not reach ElevenLabs: <message>`
+- No answer within the 120 seconds: `ElevenLabs did not answer within 120 seconds. The line may still have been made and charged. Check your ElevenLabs usage.`
+- The answer stops arriving before the 120 seconds are up: `ElevenLabs stopped sending the line before 120 seconds were up. The line may still have been made and charged. Check your ElevenLabs usage.`
 - Reading the body fails: `Lost the connection while reading ElevenLabs' answer: <message>. The line may still have been made and charged. Check your ElevenLabs usage.`
 - 401: `ElevenLabs refused the key: <upstream message>. Check the key in Settings.`
 - 402, or any status whose `detail.code` or `detail.status` is `insufficient_credits` or `quota_exceeded`: `ElevenLabs has no credits left for this: either the account's quota for this period is used up, or this key has hit its own credit limit. Check your plan and the key's limit at elevenlabs.io. (<upstream message>)`
@@ -500,6 +505,8 @@ The issue's split is kept: the settings that change how a line sounds (Stability
 
 ### To confirm with a paid call
 
+Both items below are still open. The build follows the best current assumption for each, against the stub only: no paid call has been made.
+
 - The `character-cost` header is treated as credits after the model's rate. ElevenLabs' docs call it the generation's "character costs" without saying which; the person's paid call with a Flash model (which bills half) and a known text confirms it. If it turns out to be raw characters, the result line and sidecar multiply by the model's rate instead.
 - WAV on Eleven v4: kept until the person's paid probe shows v4 refuses it.
 
@@ -527,4 +534,5 @@ The result toolbar follows the decision made for #101, built in its own pull req
 ### Assets this spec needs
 
 - `assets/prompts/tool-descriptions.md`: the `canvas_write` Kinds sentence and `rename` op above, replacing the current ones.
-- `assets/prompts/agent-system.md`: audio in the sentence on refs. No other model-facing text.
+- `assets/prompts/agent-system.md`: audio in the sentence on refs.
+- `assets/prompts/outside-agent.md`: the `file_add` description (its fourth block) and the instructions' file sentence name sound files and MP3, WAV and M4A, since `file_add` takes audio (spec 14). No other model-facing text.

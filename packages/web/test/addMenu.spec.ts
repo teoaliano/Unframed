@@ -19,7 +19,7 @@ test("the add button opens Inputs and Artifacts, 152 px wide, above the bottom b
   await button.click();
   const popup = page.getByRole("menu");
   await expect(popup.getByRole("group")).toHaveText([/^Inputs/, /^Artifacts/]);
-  await expect(popup.getByRole("menuitem")).toHaveText(["Prompt", "Image", "Video", "Group", "Page", "Motion"]);
+  await expect(popup.getByRole("menuitem")).toHaveText(["Prompt", "Image", "Video", "Audio", "Group", "Page", "Motion"]);
   for (const icon of ["align-left", "image", "square-play", "group", "app-window", "clapperboard"]) await expect(popup.locator(`svg.lucide-${icon}`)).toHaveCount(1);
   // Measured once the opening scale has settled.
   await expect.poll(async () => (await popup.boundingBox())?.width).toBe(152);

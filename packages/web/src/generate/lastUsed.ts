@@ -8,6 +8,7 @@ export interface LastUsed {
   readonly props: Readonly<Record<string, PropValue>>;
   /** Spec 04: the share consent, stored beside the props; the tray holds it as one of them. */
   readonly shareLocalVideos?: boolean;
+  readonly voice?: { readonly id: string; readonly name: string };
 }
 
 const keyOf = (medium: Medium) => `lastUsed.${medium}`;
@@ -15,12 +16,17 @@ const keyOf = (medium: Medium) => `lastUsed.${medium}`;
 /** A stored value, or `undefined` for a missing or unreadable one. */
 const readLastUsed = (value: unknown): LastUsed | undefined => {
   if (typeof value !== "object" || value === null) return undefined;
-  const { model, props, shareLocalVideos } = value as { model?: unknown; props?: unknown; shareLocalVideos?: unknown };
+  const { model, props, shareLocalVideos, voice } = value as { model?: unknown; props?: unknown; shareLocalVideos?: unknown; voice?: unknown };
   const kept: Record<string, PropValue> = {};
   if (typeof props === "object" && props !== null) {
     for (const [key, each] of Object.entries(props)) if (typeof each === "string" || typeof each === "number" || typeof each === "boolean") kept[key] = each;
   }
   if (typeof shareLocalVideos === "boolean") kept.shareLocalVideos = shareLocalVideos;
+  const { id, name } = (typeof voice === "object" && voice !== null ? voice : {}) as { id?: unknown; name?: unknown };
+  if (typeof id === "string" && id !== "") {
+    kept.voice_id = id;
+    kept.voice_name = typeof name === "string" && name !== "" ? name : id;
+  }
   return { ...(typeof model === "string" && model !== "" ? { model } : {}), props: kept };
 };
 

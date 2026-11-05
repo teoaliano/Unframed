@@ -8,6 +8,7 @@ import "./canvas.css";
 import "../generate/imageMedium.ts";
 import "../generate/videoMedium.ts";
 import "../generate/textMedium.ts";
+import "../generate/audioMedium.tsx";
 import { DotGrid } from "../chrome/DotGrid.tsx";
 import { installLabelActivity, installLabelLevel } from "../chrome/labelLevel.ts";
 import { OVERLAY_UTILS } from "../chrome/selectionLook.ts";
@@ -29,6 +30,7 @@ import { installRefMinting, RefMinter } from "./refs.ts";
 import { installRename } from "./rename.ts";
 import { watchRunProgress } from "../generate/recipeRuns.ts";
 import { ComponentShapeUtil, MotionShapeUtil, PageShapeUtil } from "./shapes/artifact.tsx";
+import { AudioShapeUtil } from "./shapes/audio.tsx";
 import { GroupShapeUtil } from "./shapes/group.tsx";
 import { ImageMediaUtil, VideoMediaUtil } from "./shapes/media.tsx";
 import { PromptShapeUtil } from "./shapes/prompt.tsx";
@@ -38,7 +40,7 @@ import { TLDRAW_ASSET_URLS, TLDRAW_CHROME, TLDRAW_OPTIONS } from "./tldrawChrome
 
 const SETTLE_BEFORE_SWITCH_MS = 2000;
 
-const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil, ComponentShapeUtil];
+const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, AudioShapeUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil, ComponentShapeUtil];
 
 const COMPONENTS: TLComponents = {
   ...TLDRAW_CHROME,

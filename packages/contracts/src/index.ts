@@ -6,6 +6,7 @@ export * from "./canvas.ts";
 export * from "./generation.ts";
 export * from "./video.ts";
 export * from "./text.ts";
+export * from "./audio.ts";
 export * from "./library.ts";
 export * from "./agent.ts";
 export * from "./openRouterKey.ts";

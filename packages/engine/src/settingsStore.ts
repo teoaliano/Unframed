@@ -1,5 +1,5 @@
 import type { Settings } from "@unframed/contracts";
-import { effectiveSettings, keyHint, SETTING_OF_VARIABLE, type EffectiveSettings } from "@unframed/domain";
+import { effectiveSettings, PROVIDER_KEYS, providerKeyView, SETTING_OF_VARIABLE, type EffectiveSettings } from "@unframed/domain";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -50,12 +50,14 @@ export class SettingsStore extends Context.Service<
   }
 >()("unframed/engine/SettingsStore") {}
 
+const KEY_FIELDS: ReadonlySet<string> = new Set(PROVIDER_KEYS.map((provider) => provider.field));
+
 export const toView = (settings: EffectiveSettings, dataDir: string, previewPort: number): Settings => ({
-  hasKey: settings.key !== "",
-  keyHint: keyHint(settings.key),
+  ...providerKeyView(settings),
   imageModel: settings.imageModel,
   textModel: settings.textModel,
   videoModel: settings.videoModel,
+  audioModel: settings.audioModel,
   outputDir: resolveOutputDir(settings.outputDir, dataDir),
   claudePath: settings.claudePath,
   codexPath: settings.codexPath,
@@ -87,7 +89,7 @@ export const settingsStoreLayer = (options: {
           for (const [variable, value] of Object.entries(changes)) {
             const field = SETTING_OF_VARIABLE[variable];
             if (field === undefined || (field === "outputDir" && writeOptions.holdOutputDir === true)) continue;
-            next[field] = field === "key" && value === null ? "" : fromFile[field];
+            next[field] = KEY_FIELDS.has(field) && value === null ? "" : fromFile[field];
           }
           live = next as unknown as EffectiveSettings;
           return live;

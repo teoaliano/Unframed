@@ -149,6 +149,11 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
 
   // The one recipe group the selection held when the composer opened (spec 06): its recipe is the tray's start.
   const [standing] = useState(() => (recipe ? undefined : appliedRecipe(editor)?.recipe));
+  const audioOnly = settings !== undefined && !settings.hasKey && settings.hasElevenLabsKey;
+  const [openedOn] = useState(() => composerState(editor).get().medium);
+  useEffect(() => {
+    if (audioOnly && !recipe && !standing && openedOn !== "audio" && mediumDefinition("audio")) setMedium(editor, "audio");
+  }, [editor, audioOnly, recipe, standing, openedOn]);
   useEffect(() => {
     if (standing && composerState(editor).get().medium !== standing.medium) setMedium(editor, standing.medium);
   }, [editor, standing]);
@@ -207,7 +212,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
     (recipe
       ? { kind: "recipe", recipe, instruction: resolved?.ok ? resolved.text.trim() : "", error: resolved?.ok === false ? resolved.error : undefined }
       : { kind: "selection", composition, selected: editor.getSelectedShapeIds(), shapes, instruction });
-  const status = definition.status({ source, hasKey: settings?.hasKey ?? true, props: values?.props, entry });
+  const status = definition.status({ source, hasKey: settings?.hasKey ?? true, hasElevenLabsKey: settings?.hasElevenLabsKey ?? true, props: values?.props, entry, model: values?.model });
   const estimate = values ? definition.estimate({ pricing, props: values.props, source, entry }) : undefined;
   const blocked = status.blockers.length > 0 || status.needsKey === true || values === undefined;
 
@@ -327,6 +332,11 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
           </MessageAction>
         </div>
       </div>
+      {definition.hint !== undefined && (
+        <p className="m-0 px-0.5 text-xs text-muted-foreground" data-testid="medium-hint">
+          {definition.hint}
+        </p>
+      )}
       {definition.Status && values ? (
         <definition.Status status={status} failure={failure} values={values} source={source} entry={entry} setProps={(props) => setValues({ ...values, props })} />
       ) : (status.warnings.length > 0 || status.blockers.length > 0 || status.needsKey === true || failure !== undefined) && (
@@ -346,6 +356,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
         </StatusBand>
       )}
       <PropTray
+        lead={definition.Lead && values ? <definition.Lead props={values.props} onChange={(props) => setValues({ ...values, props })} onMenuOpen={onMenuOpen} /> : undefined}
         model={values?.model}
         catalogueReady={catalogue !== undefined && catalogue.models.length > 0 && values !== undefined}
         params={params}
@@ -368,6 +379,8 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
         }}
         title={definition.dialogTitle}
         browseUrl={definition.browseUrl}
+        browseLabel={definition.browseLabel ?? "Browse on OpenRouter"}
+        columns={definition.modelColumns ?? "openrouter"}
         models={catalogue?.models ?? []}
         current={values?.model}
         finalFocus={() => box.current?.element() ?? null}

@@ -40,6 +40,7 @@ export interface EngineOptions {
   openRouterStub?: boolean;
   /** How the stub answers, from the start. */
   stub?: StubHandler;
+  elevenLabs?: StubHandler | true;
 }
 
 export interface Exited {
@@ -64,6 +65,7 @@ export interface TestEngine {
   /** The origin a same-machine browser would use. */
   readonly origin: string;
   readonly stub: OpenRouterStub | undefined;
+  readonly elevenLabs: OpenRouterStub | undefined;
   stdout(): string;
   stderr(): string;
   /** Every IPC message received so far. */
@@ -239,11 +241,12 @@ export const startEngine = async (options: EngineOptions = {}): Promise<TestEngi
   const nativeLogPath = join(dataDir, ".native-log.jsonl");
   if (options.dotenv !== undefined) await writeFile(join(dataDir, ".env"), options.dotenv);
   const stub = options.openRouterStub === false ? undefined : await startOpenRouterStub(options.stub);
+  const elevenLabs = options.elevenLabs === undefined ? undefined : await startOpenRouterStub(options.elevenLabs === true ? undefined : options.elevenLabs);
 
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(process.env)) {
     if (value === undefined) continue;
-    if (name.startsWith("UNFRAMED_") || name.startsWith("OPENROUTER_") || name === "OUTPUT_DIR") continue;
+    if (name.startsWith("UNFRAMED_") || name.startsWith("OPENROUTER_") || name.startsWith("ELEVENLABS_") || name === "OUTPUT_DIR") continue;
     if (name === "PORT" || name === "CLAUDE_PATH" || name === "CODEX_PATH" || name === "CLAUDE_CONFIG_DIR") continue;
     if (name.startsWith("VITEST") || name === "NODE_OPTIONS") continue;
     env[name] = value;
@@ -256,6 +259,7 @@ export const startEngine = async (options: EngineOptions = {}): Promise<TestEngi
     UNFRAMED_TEST_NATIVE_LOG: nativeLogPath,
   });
   if (stub) env.UNFRAMED_TEST_OPENROUTER_ORIGIN = stub.origin;
+  if (elevenLabs) env.UNFRAMED_TEST_ELEVENLABS_ORIGIN = elevenLabs.origin;
   if (options.clientDist !== undefined) env.UNFRAMED_CLIENT_DIST = options.clientDist;
   for (const [name, value] of Object.entries(options.env ?? {})) {
     if (value === undefined) delete env[name];
@@ -329,6 +333,7 @@ export const startEngine = async (options: EngineOptions = {}): Promise<TestEngi
       return `http://localhost:${port}`;
     },
     stub,
+    elevenLabs,
     stdout: () => stdout,
     stderr: () => stderr,
     messages,
@@ -369,6 +374,7 @@ export const startEngine = async (options: EngineOptions = {}): Promise<TestEngi
         await exited;
       }
       await stub?.close();
+      await elevenLabs?.close();
       if (ownsDataDir) await rm(dataDir, { recursive: true, force: true });
     },
   };

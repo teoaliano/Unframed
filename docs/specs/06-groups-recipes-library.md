@@ -217,7 +217,7 @@ The view choice is stored in spec 01's preferences store under `library.view` as
 
 Card view: a grid of cards, each on `--card` with the kit's border and `rounded-xl` radius. Each card: the name (medium weight), the summary, the needs line when present (supporting ink), then a row of chips, then a footer strip under a divider holding "Add" (Button `outline` at `xs` size, as in list view). A user preset has a delete icon button in the top-right corner. List view: dense divided rows; the name and its chips on one line, the summary below clamped to three lines with the full text in a native tooltip, then "Add" and the delete button at the row's end.
 
-Chips (label = the value capitalised, each with an icon and a hue; each is the kit's Badge `label`, tinted from `--label` set to the Tailwind palette colour of its hue at 500): type `Recipe` (Workflow icon, purple) or `Group` (Group icon, blue); medium `Image` (Image icon, teal), `Video` (SquarePlay icon, orange), `Text` (Type icon, cyan), shown only for recipes; source `Custom` (UserRound icon, green) for user presets or `System` (Package icon, pink).
+Chips (label = the value capitalised, each with an icon and a hue; each is the kit's Badge `label`, tinted from `--label` set to the Tailwind palette colour of its hue at 500): type `Recipe` (Workflow icon, purple) or `Group` (Group icon, blue); medium `Image` (Image icon, teal), `Video` (SquarePlay icon, orange), `Text` (Type icon, cyan), `Audio` (AudioLines icon, yellow, spec 15), shown only for recipes; source `Custom` (UserRound icon, green) for user presets or `System` (Package icon, pink).
 
 Delete: an icon button (Button `ghost-destructive`) with accessible label "Delete <name>" and tooltip "Delete from your library", only on user presets. It opens an alert, the kit's AlertDialog: title "Delete preset?", body "This removes “<name>” from your library. Shapes already on the canvas are untouched. This can't be undone.", action "Delete preset" (Button `destructive`) beside "Cancel". A failed delete toasts "Could not delete that preset. Is the local server running?".
 
@@ -281,7 +281,7 @@ Prior art: the old app pinned exactly these rules (wrap, rename rewrite, fragmen
 7. Toolbar hint reads `@<name>` for one selected group; the composer's sources band shows one `@<name>` chip. Seam: browser.
 8. The `@` mention menu and "Copy @id" include groups. Seam: browser.
 9. `recipeFromTray` and `trayFromRecipe` round-trip spec 03's `GroupRecipe` for every medium, and never carry an instruction. Seam: domain.
-10. `recipeChip` formats model, size or ratio, duration and resolution, runs (`×N`, `Free`). Seam: domain.
+10. `recipeChip` formats model, size or ratio, duration and resolution, runs (`×N`, `Free`); an audio recipe reads the model then the voice name (spec 15). Seam: domain.
 11. "Save as recipe" in the composer stores the tray on the group as one undo step and the chip appears. Seam: browser.
 12. Composer opens with the tray set from the recipe when one recipe group is selected; with two, last-used values. Seam: browser.
 13. Composer recipe line shows "Recipe of @name" when matching and "Update recipe" when the tray differs; editing the tray alone never changes the group. Seam: browser.
