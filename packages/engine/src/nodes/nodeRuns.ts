@@ -484,9 +484,11 @@ export const nodeRunsLayer = Layer.effect(
 
       return new Promise<StepOutcome>((resolve) => {
         let settled = false;
+        let live: string | undefined;
         const done = (outcome: StepOutcome) => {
           if (settled) return;
           settled = true;
+          if (live !== undefined) liveRuns.delete(live);
           resolve(outcome);
         };
         const into: NodeTarget = { ...target, onFinished: ({ succeeded, errors }) => done(succeeded > 0 ? { ok: true } : { ok: false, error: errors.join("; ") || "The run did not land." }) };
@@ -558,6 +560,8 @@ export const nodeRunsLayer = Layer.effect(
         };
         started().then(
           (runId) => {
+            if (settled) return;
+            live = runId;
             liveRuns.add(runId);
           },
           (error: unknown) => done({ ok: false, error: error instanceof UnframedError ? error.message : errorText(error) }),
