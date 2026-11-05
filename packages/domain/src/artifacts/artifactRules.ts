@@ -1,5 +1,5 @@
 import { projectSlug } from "../slug.ts";
-import { ADD_PARAMETER_TEMPLATE } from "./prompts.ts";
+import { ADD_PARAMETER_TEMPLATE, APPLY_PARAMETERS_TEMPLATE } from "./prompts.ts";
 
 export type ArtifactKind = "page" | "motion" | "component";
 
@@ -122,6 +122,21 @@ export const addParameterInstruction = (input: { readonly wanted: string; readon
     .replace("<kind>", input.kind)
     .replace("<title>", () => input.title);
 };
+
+const parameterPaths = (values: Readonly<Record<string, unknown>>, prefix: string, into: Record<string, unknown>): Record<string, unknown> => {
+  for (const [key, value] of Object.entries(values)) {
+    const path = prefix === "" ? key : `${prefix}.${key}`;
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) parameterPaths(value as Record<string, unknown>, path, into);
+    else into[path] = value;
+  }
+  return into;
+};
+
+export const applyParametersInstruction = (input: { readonly name: string; readonly kind: ArtifactKind; readonly title: string; readonly values: Readonly<Record<string, unknown>> }): string =>
+  APPLY_PARAMETERS_TEMPLATE.replace("<name>", () => input.name)
+    .replace("<kind>", input.kind)
+    .replace("<title>", () => input.title)
+    .replace("<values>", () => JSON.stringify(parameterPaths(input.values, "", {}), null, 2));
 
 export const compositionSize = (html: string): { w: number; h: number } => {
   const root = /<[a-z][^>]*\bdata-composition-id\s*=[^>]*>/i.exec(html)?.[0] ?? /<[a-z][^>]*\bid\s*=\s*["']?root\b[^>]*>/i.exec(html)?.[0];
