@@ -41,8 +41,7 @@ export const useTabShortcuts = (activation: ProjectActivation): void => {
         const focused = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.project : undefined;
         if (focused === undefined) return;
         event.preventDefault();
-        const at = order.indexOf(focused);
-        activation.moveTab(focused, at + (key === "ArrowLeft" ? -1 : 1));
+        activation.stepTab(focused, key === "ArrowLeft" ? -1 : 1);
         return;
       }
 

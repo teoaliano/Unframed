@@ -2,7 +2,7 @@ export const PANEL_WIDTH = 320;
 export const PANEL_MIN_WIDTH = 280;
 export const PANEL_MAX_WIDTH = 640;
 export const PANEL_MIN_HEIGHT = 160;
-const PANEL_MARGIN = 8;
+export const PANEL_MARGIN = 8;
 
 export type PanelMode = "float" | "dock";
 

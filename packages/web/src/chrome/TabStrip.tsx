@@ -1,6 +1,6 @@
 import type { ProjectActivity } from "@unframed/contracts";
 import { isEditorTab, projectOfTab, statusOf, type TabActivity, type TabStatus } from "@unframed/domain";
-import { AppWindow, Clapperboard, Component } from "lucide-react";
+import { KIND_LOOK } from "../artifacts/kinds.ts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { TopBar, type TopBarRegion, type TopBarStatus, type TopBarTab } from "~/components/ui/top-bar";
 import { useEngine, useActivation } from "../context.ts";
@@ -58,8 +58,6 @@ export const useFinishedMarks = (activity: ReadonlyMap<string, TabActivity>, act
   return marks;
 };
 
-const KIND_WORD: Record<string, string> = { page: "Page", motion: "Motion", component: "Component" };
-
 const STATUS_LABEL: Record<TabStatus, string> = {
   "needs-you": "Waiting for you in a chat",
   running: "Working",
@@ -106,14 +104,15 @@ export const TabStrip = ({
       const kind = about?.kind ?? "page";
       const label = about?.title === undefined || about.title === "" ? "Untitled" : about.title;
       const project = projectOfTab(name);
-      const Icon = kind === "motion" ? Clapperboard : kind === "component" ? Component : AppWindow;
+      const { Icon, word } = KIND_LOOK[kind];
       return {
         name,
-        editor: true,
+        variant: "secondary",
+        attachedTo: project,
         label,
         context: project,
         icon: <Icon aria-hidden data-kind={kind} className="size-3.5 shrink-0 text-muted-foreground" />,
-        title: `${label} · ${KIND_WORD[kind] ?? "Page"} in ${project}`,
+        title: `${label} · ${word} in ${project}`,
       };
     }
     const status = statusOf(activity.get(name), marks.has(name));

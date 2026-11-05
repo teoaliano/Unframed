@@ -3,6 +3,10 @@ import {
   CLOSED_TAB_LIMIT,
   closeTab,
   editorTabKey,
+  groupTabs,
+  parseTabKey,
+  renameTabKey,
+  stepTab,
   editorTabsOf,
   isEditorTab,
   openEditorTab,
@@ -178,5 +182,49 @@ describe("editor tabs", () => {
     expect(restoreTabs({ order: ["p", a, c, d], active: a, pinned: [] }, ["p", "q"])).toEqual({ order: ["p", a], active: a, pinned: [] });
     expect(restoreTabs({ order: ["p", a], active: c, pinned: [] }, ["p"])).toEqual({ order: ["p", a], active: "p", pinned: [] });
     expect(restoreTabs({ order: [a, "p"], active: "p", pinned: ["p"] }, ["p"])).toEqual({ order: ["p", a], active: "p", pinned: ["p"] });
+  });
+});
+
+describe("editor tabs stay with their project", () => {
+  const a = editorTabKey("p", "shape:a");
+  const b = editorTabKey("p", "shape:b");
+  const c = editorTabKey("q", "shape:c");
+
+  it("parses, builds and renames a tab key", () => {
+    expect(parseTabKey(a)).toEqual({ project: "p", shape: "shape:a" });
+    expect(parseTabKey("p")).toEqual({ project: "p" });
+    expect(renameTabKey(a, "p", "z")).toBe(editorTabKey("z", "shape:a"));
+    expect(renameTabKey("p", "p", "z")).toBe("z");
+    expect(renameTabKey(c, "p", "z")).toBe(c);
+  });
+
+  it("groups each project's editor tabs right after it, a pinned project's after the pins", () => {
+    expect(groupTabs({ order: [a, "q", c, "p", b], pinned: [] })).toEqual({ order: ["q", c, "p", a, b], pinned: [] });
+    expect(groupTabs({ order: ["q", "p", a, c], pinned: ["p"] })).toEqual({ order: ["p", a, "q", c], pinned: ["p"] });
+  });
+
+  it("moves a project with its editor tabs, landing on a project boundary", () => {
+    expect(moveTab({ order: ["p", a, b, "q", c, "r"], pinned: [] }, "p", 2).order).toEqual(["q", c, "p", a, b, "r"]);
+    expect(moveTab({ order: ["p", a, b, "q", c, "r"], pinned: [] }, "r", 0).order).toEqual(["r", "p", a, b, "q", c]);
+    expect(moveTab({ order: ["p", a, b, "q", c, "r"], pinned: [] }, "q", 1).order).toEqual(["q", c, "p", a, b, "r"]);
+  });
+
+  it("moves an editor tab only among its project's editor tabs", () => {
+    expect(moveTab({ order: ["p", a, b, "q", c], pinned: [] }, a, 2).order).toEqual(["p", b, a, "q", c]);
+    expect(moveTab({ order: ["p", a, b, "q", c], pinned: [] }, a, 4).order).toEqual(["p", b, a, "q", c]);
+    expect(moveTab({ order: ["p", a, b, "q", c], pinned: [] }, c, 0).order).toEqual(["p", a, b, "q", c]);
+  });
+
+  it("steps a project past a whole neighbouring group, and an editor tab within its group", () => {
+    expect(stepTab({ order: ["p", a, "q", c, "r"], pinned: [] }, "p", 1).order).toEqual(["q", c, "p", a, "r"]);
+    expect(stepTab({ order: ["p", a, "q", c, "r"], pinned: [] }, "r", -1).order).toEqual(["p", a, "r", "q", c]);
+    expect(stepTab({ order: ["p", a, b], pinned: [] }, b, -1).order).toEqual(["p", b, a]);
+    expect(stepTab({ order: ["p", a, b], pinned: [] }, a, -1).order).toEqual(["p", a, b]);
+  });
+
+  it("keeps closed entries of any shape, matched by the given rule", () => {
+    const same = (x: { key: string }, y: { key: string }) => x.key === y.key;
+    const stack = pushClosed(pushClosed([], { key: "p", editors: [a] }, same), { key: "q", editors: [] }, same);
+    expect(pushClosed(stack, { key: "p", editors: [] }, same)).toEqual([{ key: "p", editors: [] }, { key: "q", editors: [] }]);
   });
 });
