@@ -138,6 +138,12 @@ test("the arrows, Shift+arrows and J, K and L act after a press on the ruler or 
   await page.keyboard.press("l");
   await expect.poll(frameNumber).toBeGreaterThan(focused + 1);
   await page.keyboard.press("k");
+  const settled = async (): Promise<number | undefined> => {
+    const before = await frameNumber();
+    await page.waitForTimeout(150);
+    return (await frameNumber()) === before ? before : undefined;
+  };
+  await expect.poll(settled).not.toBeUndefined();
   const stopped = await frameNumber();
   await page.waitForTimeout(400);
   expect(await frameNumber()).toBe(stopped);

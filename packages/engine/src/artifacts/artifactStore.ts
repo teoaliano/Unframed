@@ -81,6 +81,10 @@ export const ensureLiveViewer = (folder: string): Promise<void> => ensure(folder
 
 export const ensureLibrary = (folder: string): Promise<void> => ensure(folder, LIBRARY);
 
+const ENGINE_FILES = new Set([...LIBRARY, COMPONENT_HELPER, ...LIVE_FILES].map((file) => file.name));
+
+export const isEngineFile = (name: string): boolean => ENGINE_FILES.has(name) || name.endsWith(".component.js");
+
 interface AgentSidecar {
   readonly source: "agent";
   readonly kind: ArtifactKind;

@@ -21,7 +21,7 @@ import {
   TurnDiff,
   TurnDiffInput,
 } from "./agent.ts";
-import { ArtifactOpenLive, ArtifactSnapshots, ComponentCopy, ComponentPinsSubscribe, ComponentUpdates, MotionRenderStart, MotionRenderStatus, MotionTimelineRpc, MotionUpload } from "./artifacts.ts";
+import { ArtifactFileChanges, ArtifactOpenLive, ArtifactSnapshots, ComponentCopy, ComponentPinsSubscribe, ComponentUpdates, MotionRenderStart, MotionRenderStatus, MotionTimelineRpc, MotionUpload } from "./artifacts.ts";
 import { KitExportFile, KitUsage } from "./kits.ts";
 import { KitSaveToLibrary, KitUpdateInLibrary } from "./library.ts";
 import { LegacyImportMarkSeen, LegacyImportReport, LegacyImportRetry, LegacyImportStatus } from "./legacy.ts";
@@ -337,6 +337,7 @@ export const UnframedRpcs = RpcGroup.make(
   MotionRenderStatus,
   MotionTimelineRpc,
   ArtifactSnapshots,
+  ArtifactFileChanges,
   ArtifactOpenLive,
   ComponentPinsSubscribe,
   ComponentUpdates,
