@@ -1,5 +1,5 @@
 import { resultMetaOf, runMarkerOf } from "@unframed/contracts";
-import { formatCost, plainText } from "@unframed/domain";
+import { costText, plainText, providerLabel } from "@unframed/domain";
 import {
   createComputedCache,
   getDisplayValues,
@@ -134,7 +134,7 @@ const PromptShape = ({ shape, util }: { readonly shape: TLTextShape; readonly ut
   // A text result (spec 05) carries its cost on its line; its placeholder says the run is in flight.
   const result = resultMetaOf(shape);
   const running = empty && runMarkerOf(shape) !== undefined;
-  const cost = result?.medium === "text" && result.cost !== null ? `${formatCost(result.cost)} · ` : "";
+  const cost = result?.medium === "text" && result.cost !== null ? `${[costText(result.cost, result.listPrice), ...providerLabel(result.provider)].join(" · ")} · ` : "";
   const hintStyle = { fontFamily: dv.fontFamily, fontSize: dv.fontSize, lineHeight: dv.lineHeight, width, height };
   return (
     <div className="relative" data-testid="prompt" style={{ width, height, transform: `scale(${shape.props.scale})`, transformOrigin: "top left" }}>

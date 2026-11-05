@@ -1,7 +1,7 @@
 import { UnframedError, type ProviderStatuses, type Settings, type SettingsPatch } from "@unframed/contracts";
-import { ELEVENLABS_KEY, elevenLabsStatusCopy, keyStatusCopy, OPENROUTER_KEY, sendShortcutOf, type SendShortcut } from "@unframed/domain";
+import { ELEVENLABS_KEY, elevenLabsStatusCopy, GENERATION_PROVIDERS, VERCEL_KEY_SAVED_MESSAGE, vercelCreditsCopy, keyStatusCopy, OPENROUTER_KEY, sendShortcutOf, VERCEL_KEY, type SendShortcut } from "@unframed/domain";
 import { Bot, CircleAlert, CircleCheck, FolderOpen, Plug, SlidersHorizontal, Sparkles, type LucideIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
@@ -24,8 +24,8 @@ export const ELEVENLABS_KEY_SAVED_MESSAGE = "ElevenLabs key saved. Audio is read
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
-type Medium = "image" | "text" | "video" | "audio";
-const MEDIA: ReadonlyArray<{ readonly medium: Medium; readonly label: string; readonly field: "imageModel" | "textModel" | "videoModel" }> = [
+type Medium = "image" | "text" | "video" | "audio" | "vercelImage" | "vercelText";
+const MEDIA: ReadonlyArray<{ readonly medium: "image" | "text" | "video"; readonly label: string; readonly field: "imageModel" | "textModel" | "videoModel" }> = [
   { medium: "image", label: "Image", field: "imageModel" },
   { medium: "text", label: "Text", field: "textModel" },
   { medium: "video", label: "Video", field: "videoModel" },
@@ -33,6 +33,9 @@ const MEDIA: ReadonlyArray<{ readonly medium: Medium; readonly label: string; re
 
 interface Draft {
   readonly key: string;
+  readonly vercelKey: string;
+  readonly vercelImageModel: string;
+  readonly vercelTextModel: string;
   readonly elevenLabsKey: string;
   readonly audioModel: string;
   readonly imageModel: string;
@@ -46,6 +49,9 @@ interface Draft {
 
 const draftOf = (settings: Settings | undefined): Draft => ({
   key: "",
+  vercelKey: "",
+  vercelImageModel: settings?.vercelImageModel ?? "",
+  vercelTextModel: settings?.vercelTextModel ?? "",
   elevenLabsKey: "",
   audioModel: settings?.audioModel ?? "",
   imageModel: settings?.imageModel ?? "",
@@ -71,6 +77,9 @@ const SECTION_OF_FIELD: Record<keyof SettingsPatch, SettingsSection> = {
   videoModel: "generation",
   elevenLabsKey: "generation",
   audioModel: "generation",
+  vercelKey: "generation",
+  vercelImageModel: "generation",
+  vercelTextModel: "generation",
   outputDir: "general",
   claudePath: "agents",
   codexPath: "agents",
@@ -90,13 +99,21 @@ const patchOf = (draft: Draft, settings: Settings): SettingsPatch => {
   const patch: { -readonly [K in keyof SettingsPatch]: SettingsPatch[K] } = {};
   if (draft.key.trim() !== "") patch.key = draft.key.trim();
   if (draft.elevenLabsKey.trim() !== "") patch.elevenLabsKey = draft.elevenLabsKey.trim();
-  for (const field of ["imageModel", "textModel", "videoModel", "audioModel", "outputDir"] as const) {
+  if (draft.vercelKey.trim() !== "") patch.vercelKey = draft.vercelKey.trim();
+  for (const field of ["imageModel", "textModel", "videoModel", "audioModel", "vercelImageModel", "vercelTextModel", "outputDir"] as const) {
     const value = draft[field].trim();
     if (value !== "" && value !== settings[field]) patch[field] = value;
   }
   for (const field of ["claudePath", "codexPath", "claudeConfigDir"] as const) if (draft[field] !== settings[field]) patch[field] = draft[field];
   return patch;
 };
+
+const ModelGroup = ({ title, children }: { readonly title: string; readonly children: ReactNode }) => (
+  <div className="flex flex-col gap-3" role="group" aria-label={`${title} default models`}>
+    <p className="m-0 text-xs font-medium text-muted-foreground">{title}</p>
+    {children}
+  </div>
+);
 
 export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const engine = useEngine();
@@ -132,6 +149,8 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
     if (ui.current().settings?.hasKey) void ui.fetchKeyStatus();
     if (ui.current().settings?.hasElevenLabsKey) void ui.fetchElevenLabsStatus();
     else ui.clearElevenLabsStatus();
+    if (ui.current().settings?.hasVercelKey) void ui.fetchVercelStatus();
+    else ui.clearVercelStatus();
   }, [open, ui]);
 
   // A Connect click, and a reconnect that landed, clear the key draft and the banner.
@@ -155,6 +174,24 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   };
 
   const keyed = open && settings?.hasKey === true;
+  const vercelKeyed = open && settings?.hasVercelKey === true;
+  const vercelKeyHint = settings?.vercelKeyHint ?? "";
+  useEffect(() => {
+    if (!vercelKeyed) return;
+    let live = true;
+    for (const [medium, field] of [
+      ["image", "vercelImage"],
+      ["text", "vercelText"],
+    ] as const) {
+      engine.call("models.list", { medium, provider: "vercel" }).then(
+        (answer) => live && setCatalogues((current) => ({ ...current, [field]: answer.models.map((model) => model.id) })),
+        () => undefined,
+      );
+    }
+    return () => {
+      live = false;
+    };
+  }, [vercelKeyed, vercelKeyHint, engine]);
   const elevenKeyed = open && settings?.hasElevenLabsKey === true;
   const elevenLabsKeyHint = settings?.elevenLabsKeyHint ?? "";
   const [elevenLabsSaves, setElevenLabsSaves] = useState(0);
@@ -214,6 +251,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
     if (Object.keys(patch).length === 0) return ui.close();
     const hadKey = settings.hasKey;
     const hadElevenLabsKey = settings.hasElevenLabsKey;
+    const hadVercelKey = settings.hasVercelKey;
     setSaving(true);
     try {
       const next = await engine.call("settings.update", patch);
@@ -225,12 +263,22 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
         ui.close();
         return;
       }
-      if (!hadKey && !hadElevenLabsKey && patch.elevenLabsKey !== undefined) {
+      if (!hadKey && !hadElevenLabsKey && !hadVercelKey && patch.vercelKey !== undefined) {
+        showNotice(VERCEL_KEY_SAVED_MESSAGE, "info");
+        ui.close();
+        return;
+      }
+      if (!hadKey && !hadElevenLabsKey && !hadVercelKey && patch.elevenLabsKey !== undefined) {
         showNotice(ELEVENLABS_KEY_SAVED_MESSAGE, "info");
         ui.close();
         return;
       }
-      setDraft((current) => ({ ...current, key: "", elevenLabsKey: "" }));
+      setDraft((current) => ({ ...current, key: "", elevenLabsKey: "", vercelKey: "" }));
+      if (patch.vercelKey !== undefined) {
+        ui.clearVercelStatus();
+        vercelRemoval.reset();
+        void ui.fetchVercelStatus();
+      }
       if (patch.elevenLabsKey !== undefined) {
         setElevenLabsSaves((count) => count + 1);
         ui.clearElevenLabsStatus();
@@ -283,8 +331,19 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
     },
     (message) => setBanner({ kind: "error", message }),
   );
+  const vercelRemoval = useKeyRemoval(
+    VERCEL_KEY,
+    async () => {
+      const answer = await engine.call(VERCEL_KEY.removeMethod);
+      ui.setSettings(answer.settings);
+      ui.clearVercelStatus();
+      setDraft((current) => ({ ...current, vercelKey: "" }));
+    },
+    (message) => setBanner({ kind: "error", message }),
+  );
   resetRemovals.current = () => {
     openRouterRemoval.reset();
+    vercelRemoval.reset();
     elevenLabsRemoval.reset();
   };
 
@@ -305,8 +364,12 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const showsKeySection = hasKey || revealed;
   const hasElevenLabsKey = settings?.hasElevenLabsKey === true;
   const elevenLabsCopy = elevenLabsStatusCopy({ hasKey: hasElevenLabsKey, keyHint: settings?.elevenLabsKeyHint ?? "", status: state.elevenLabsStatus });
+  const hasVercelKey = settings?.hasVercelKey === true;
+  const vercelCopy = vercelCreditsCopy({ hasKey: hasVercelKey, keyHint: vercelKeyHint, status: state.vercelStatus });
   const saves =
-    section === "agents" || section === "general" || (section === "generation" && (showsKeySection || hasElevenLabsKey || draft.elevenLabsKey.trim() !== ""));
+    section === "agents" ||
+    section === "general" ||
+    (section === "generation" && (showsKeySection || hasElevenLabsKey || hasVercelKey || draft.elevenLabsKey.trim() !== "" || draft.vercelKey.trim() !== ""));
 
   const generation = (
     <>
@@ -387,11 +450,41 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
         )}
       </section>
 
+      <section className="flex flex-col gap-3 border-t pt-4" aria-label="Vercel AI Gateway">
+        <SectionHeading>Vercel AI Gateway</SectionHeading>
+        {!hasKey && (
+          <p className="m-0 text-xs text-muted-foreground" data-testid="vercel-instead">
+            No OpenRouter account? Images and text can run through the Vercel AI Gateway instead. Video still needs OpenRouter.
+          </p>
+        )}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <Input
+              type="password"
+              aria-label="Vercel AI Gateway API key"
+              placeholder="vck_…"
+              spellCheck={false}
+              autoComplete="off"
+              value={draft.vercelKey}
+              onChange={(event) => {
+                edit({ vercelKey: event.target.value });
+                vercelRemoval.typed();
+              }}
+            />
+            {hasVercelKey && <RemoveKeyButton removal={vercelRemoval} />}
+          </div>
+          <p className="m-0 text-xs text-muted-foreground" data-testid="vercel-status">
+            {vercelCopy}
+          </p>
+          <KeyWarning removal={vercelRemoval} testId="vercel-warning" />
+        </div>
+      </section>
+
       <section className="flex flex-col gap-3 border-t pt-4" aria-label="ElevenLabs">
         <SectionHeading>ElevenLabs</SectionHeading>
-        {!hasKey && (
+        {!hasKey && !hasVercelKey && (
           <p className="m-0 text-xs text-muted-foreground" data-testid="elevenlabs-only-audio">
-            Only want audio? Paste an ElevenLabs key here. Images, video and text still need OpenRouter.
+            Only want audio? Paste an ElevenLabs key here. Images and text need OpenRouter or the Vercel AI Gateway, and video needs OpenRouter.
           </p>
         )}
         <div className="flex flex-col gap-2">
@@ -419,22 +512,35 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
 
       <section className="flex flex-col gap-3 border-t pt-4" aria-label="Default models">
         <SectionHeading>Default models</SectionHeading>
-        {(hasKey || hasElevenLabsKey) && settings !== undefined ? (
+        {(hasKey || hasVercelKey || hasElevenLabsKey) && settings !== undefined ? (
           <>
-            {hasKey &&
-              MEDIA.map(({ medium, label, field }) => (
-                <ModelSelect key={medium} label={label} value={draft[field]} models={catalogues[medium]} onChange={(value) => edit({ [field]: value })} />
-              ))}
-            {hasElevenLabsKey && <ModelSelect label="Audio" value={draft.audioModel} models={catalogues.audio} onChange={(value) => edit({ audioModel: value })} />}
-            {hasElevenLabsKey && audioModelsProblem !== undefined && (
-              <p className="m-0 text-xs text-muted-foreground" data-testid="audio-models-problem">
-                {audioModelsProblem}
-              </p>
+            {hasKey && (
+              <ModelGroup title={GENERATION_PROVIDERS.openrouter.title}>
+                {MEDIA.map(({ medium, label, field }) => (
+                  <ModelSelect key={medium} label={label} value={draft[field]} models={catalogues[medium]} onChange={(value) => edit({ [field]: value })} />
+                ))}
+              </ModelGroup>
+            )}
+            {hasVercelKey && (
+              <ModelGroup title={GENERATION_PROVIDERS.vercel.title}>
+                <ModelSelect label="Image" name="Vercel image" value={draft.vercelImageModel} models={catalogues.vercelImage} onChange={(value) => edit({ vercelImageModel: value })} />
+                <ModelSelect label="Text" name="Vercel text" value={draft.vercelTextModel} models={catalogues.vercelText} onChange={(value) => edit({ vercelTextModel: value })} />
+              </ModelGroup>
+            )}
+            {hasElevenLabsKey && (
+              <ModelGroup title="ElevenLabs">
+                <ModelSelect label="Audio" value={draft.audioModel} models={catalogues.audio} onChange={(value) => edit({ audioModel: value })} />
+                {audioModelsProblem !== undefined && (
+                  <p className="m-0 text-xs text-muted-foreground" data-testid="audio-models-problem">
+                    {audioModelsProblem}
+                  </p>
+                )}
+              </ModelGroup>
             )}
           </>
         ) : (
           <p className="m-0 text-xs text-muted-foreground" data-testid="models-need-key">
-            Connect OpenRouter to choose the models Generate starts on.
+            Connect OpenRouter or paste a Vercel AI Gateway key to choose the models Generate starts on.
           </p>
         )}
       </section>

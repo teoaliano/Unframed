@@ -7,6 +7,9 @@ export interface SettingsPatchInput {
   readonly imageModel?: string;
   readonly textModel?: string;
   readonly videoModel?: string;
+  readonly vercelKey?: string;
+  readonly vercelImageModel?: string;
+  readonly vercelTextModel?: string;
   readonly elevenLabsKey?: string;
   readonly audioModel?: string;
   readonly outputDir?: string;
@@ -35,6 +38,8 @@ const FIELDS: ReadonlyArray<{
   { field: "imageModel", variable: "OPENROUTER_IMAGE_MODEL", pattern: MODEL, message: MODEL_MESSAGE, clearable: false },
   { field: "textModel", variable: "OPENROUTER_TEXT_MODEL", pattern: MODEL, message: MODEL_MESSAGE, clearable: false },
   { field: "videoModel", variable: "OPENROUTER_VIDEO_MODEL", pattern: MODEL, message: MODEL_MESSAGE, clearable: false },
+  { field: "vercelImageModel", variable: "AI_GATEWAY_IMAGE_MODEL", pattern: MODEL, message: MODEL_MESSAGE, clearable: false },
+  { field: "vercelTextModel", variable: "AI_GATEWAY_TEXT_MODEL", pattern: MODEL, message: MODEL_MESSAGE, clearable: false },
   {
     field: "audioModel",
     variable: "ELEVENLABS_AUDIO_MODEL",

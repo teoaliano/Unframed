@@ -3,6 +3,10 @@ import {
   defaultProps,
   estimateImageRun,
   formatEstimate,
+  GENERATION_PROVIDERS,
+  providerField,
+  providerOf,
+  vercelListPrice,
   joinPromptParts,
   keepSupported,
   MODEL_DRIVEN_PROPS,
@@ -14,7 +18,7 @@ import type { Payload } from "../rpc/engine.ts";
 import { anchorOf, pageBox } from "./facts.ts";
 import { FinalPromptOverlay } from "./composer/FinalPromptDialog.tsx";
 import { freeBlockers, mintBatchId, sendFree } from "./free.ts";
-import { saveLastUsed } from "./lastUsed.ts";
+import { rememberTray } from "./lastUsed.ts";
 import { registerMedium, type MediumDefinition, type PropValue, type RunSource, type SendInput, type SendOutcome, type TrayProps } from "./mediumRegistry.ts";
 import { referencesFor } from "./render.ts";
 import { runsOf, runsProp } from "./runsProp.tsx";
@@ -51,7 +55,7 @@ const send = async (input: SendInput): Promise<SendOutcome> => {
   const { editor, engine, project, values, source } = input;
   const runs = runsOf(values.props);
   const remember = () => {
-    if (input.remember !== false) void saveLastUsed(engine, "image", { ...(values.picked && values.model !== undefined ? { model: values.model } : {}), props: { ...values.props } });
+    if (input.remember !== false) void rememberTray(engine, "image", values, { ...values.props });
   };
   if (runs === "free") {
     const outcome = await sendFree(input, imageParams(values.props));
@@ -67,6 +71,7 @@ const send = async (input: SendInput): Promise<SendOutcome> => {
     params: imageParams(values.props),
     selectionPrompt: plan.selectionPrompt,
     instruction: plan.instruction,
+    ...providerField(values.provider),
   };
   // A fixed count sends that many identical outputs as one batch.
   const outputs = (references: RecipeRef[]) => Array.from({ length: runs }, () => ({ prompt: plan.prompt, references }));
@@ -105,7 +110,13 @@ export const imageMedium: MediumDefinition = {
   reset: (props, params) => resetProps(props, params) as Record<string, PropValue>,
   keep: (props, params) => keepSupported(props, params) as Record<string, PropValue>,
   pricing: (engine, id) => engine.call("models.imagePricing", { id }),
-  estimate: ({ pricing, props, source }) => {
+  estimate: ({ pricing, props, source, entry, provider }) => {
+    if (GENERATION_PROVIDERS[providerOf(provider)].listPriced) {
+      const each = vercelListPrice({ entry });
+      if (each === null) return undefined;
+      const runs = runsOf(props);
+      return runs === "free" ? `${formatEstimate(each)} / image` : formatEstimate(each * runs);
+    }
     const answer = pricing as ImagePricingAnswer | undefined;
     if (!answer) return undefined;
     const chosen = {

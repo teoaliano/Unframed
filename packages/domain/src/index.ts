@@ -69,6 +69,8 @@ export * from "./keyStatusCopy.ts";
 export * from "./elevenLabsStatusCopy.ts";
 export * from "./audio.ts";
 export * from "./providerKeys.ts";
+export * from "./vercel.ts";
+export * from "./generationProviders.ts";
 export * from "./elevenLabsIds.ts";
 export * from "./fieldOf.ts";
 export * from "./jobLifecycle.ts";
