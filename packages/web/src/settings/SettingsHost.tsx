@@ -14,8 +14,15 @@ import { SettingsUi, useSettingsUi } from "./settingsUi.ts";
 const SettingsButton = ({ ui }: { readonly ui: SettingsUi }) => {
   const { settings } = useSettingsUi(ui);
   const hint = settings?.hasKey === true ? settings.keyHint : "";
+  const elevenLabsHint = settings?.hasElevenLabsKey === true ? settings.elevenLabsKeyHint : "";
+  const label =
+    settings?.hasKey === true
+      ? `Settings: ${hint === "" ? "" : `key …${hint}, `}default models, output folder`
+      : settings?.hasElevenLabsKey === true
+        ? `Settings: ${elevenLabsHint === "" ? "" : `ElevenLabs key …${elevenLabsHint}, `}default models, output folder`
+        : "Settings";
   return (
-    <Tip label={settings?.hasKey === true ? `Settings: ${hint === "" ? "" : `key …${hint}, `}default models, output folder` : "Settings"}>
+    <Tip label={label}>
       <Button variant="ghost" size="icon-xs" aria-label="Settings" onClick={() => ui.open()}>
         <Gear aria-hidden />
       </Button>

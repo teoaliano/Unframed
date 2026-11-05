@@ -42,7 +42,7 @@ import { runMarkerOf } from "@unframed/contracts";
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 /** Keeps a press on a control inside a shape from starting a canvas drag or selection. */
-const controlEvents = (editor: Editor) => ({
+export const controlEvents = (editor: Editor) => ({
   onPointerDown: (event: SyntheticEvent) => editor.markEventAsHandled(event),
   onPointerUp: (event: SyntheticEvent) => editor.markEventAsHandled(event),
   onPointerMove: (event: SyntheticEvent) => editor.markEventAsHandled(event),

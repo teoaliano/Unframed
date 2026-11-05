@@ -1,12 +1,13 @@
 import type { AddAction } from "@unframed/domain";
 import { createShapeId, startEditingShapeWithRichText, type Editor, type TLShapeId, type VecLike } from "tldraw";
 
-export type AddKind = "prompt" | "image" | "video" | "group" | "page" | "motion";
+export type AddKind = "prompt" | "image" | "video" | "audio" | "group" | "page" | "motion";
 
-const SHAPE_TYPE: Record<AddKind, "text" | "image" | "video" | "frame" | "page" | "motion"> = {
+const SHAPE_TYPE: Record<AddKind, "text" | "image" | "video" | "audio" | "frame" | "page" | "motion"> = {
   prompt: "text",
   image: "image",
   video: "video",
+  audio: "audio",
   group: "frame",
   page: "page",
   motion: "motion",

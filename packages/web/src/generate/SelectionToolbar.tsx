@@ -1,5 +1,6 @@
 import { resultMetaOf, UnframedError } from "@unframed/contracts";
-import { composeSelection, labelLevel, readRef, resultLine, toolbarState, type ToolbarState } from "@unframed/domain";
+import { audioLine, composeSelection, labelLevel, readRef, resultLine, toolbarState, type ToolbarState } from "@unframed/domain";
+import { audioDurationOf } from "../canvas/shapes/audio.tsx";
 import { renamingShape } from "../canvas/rename.ts";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useEditor, useValue, type Editor, type TLShapeId } from "tldraw";
@@ -195,6 +196,10 @@ const ResultBar = ({ state, onGenerate, agent }: { state: Extract<ToolbarState, 
       const shape = editor.getShape(shapeId);
       const result = shape ? resultMetaOf(shape) : undefined;
       if (!shape || !result) return undefined;
+      if (result.medium === "audio") {
+        const seconds = audioDurationOf(shape.id);
+        return audioLine({ model: result.model, durationMs: seconds === undefined ? undefined : seconds * 1000, credits: result.credits });
+      }
       const asset = assetOf(editor, shape)?.props as { w?: number; h?: number } | undefined;
       return resultLine({ model: result.model, width: asset?.w, height: asset?.h, cost: result.cost });
     },
@@ -262,7 +267,7 @@ const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "rec
     if (busy || !recipe) return;
     setBusy(true);
     try {
-      await runGroupRecipe({ editor, engine, project, groupId, recipe, hasKey: settings?.hasKey ?? true });
+      await runGroupRecipe({ editor, engine, project, groupId, recipe, hasKey: settings?.hasKey ?? true, hasElevenLabsKey: settings?.hasElevenLabsKey ?? true });
     } catch (error) {
       if (error instanceof NoKeyError) showErrorAction(error.message, "Open Settings", () => openSettings("generation"));
       else showError(messageOf(error));
