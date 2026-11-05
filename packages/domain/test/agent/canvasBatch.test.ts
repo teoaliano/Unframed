@@ -237,6 +237,18 @@ describe("canvas_write batches", () => {
     expect(error([{ type: "rename", id: "p1", name: "42" }], [prompt("p1", "100", "a fox")])).toBe("rename: A name needs a letter.");
   });
 
+  it("scales a page or motion on the canvas keeping its layout size, null putting it back to 100 %, and refuses a scale outside 10 % to 400 %", () => {
+    const half = prepareBatch([{ type: "update", id: "m1", props: { scale: 0.5 } }], context([motion("m1", "Intro")]));
+    if (!half.ok) throw new Error(half.error);
+    expect(half.put[0]!.props).toMatchObject({ w: 320, h: 180, scale: 0.5 });
+    const scaled = { ...motion("m1", "Intro"), props: { ...motion("m1", "Intro").props, w: 320, h: 180, scale: 0.5 } };
+    const back = prepareBatch([{ type: "update", id: "m1", props: { scale: null } }], context([scaled]));
+    if (!back.ok) throw new Error(back.error);
+    expect(back.put[0]!.props).toMatchObject({ w: 640, h: 360 });
+    expect(back.put[0]!.props).not.toHaveProperty("scale");
+    expect(error([{ type: "update", id: "m1", props: { scale: 9 } }], [motion("m1", "Intro")])).toBe("update: scale must be a number from 0.1 to 4");
+  });
+
   it("keeps media's aspect on resize", () => {
     const image: CanvasRecord = { id: "shape:i1", typeName: "shape", type: "image", x: 0, y: 0, parentId: PAGE, index: "a1", props: { w: 200, h: 100 }, meta: { ref: "100" } };
     const result = prepareBatch([{ type: "resize", id: "i1", w: 400, h: 400 }], context([image]));

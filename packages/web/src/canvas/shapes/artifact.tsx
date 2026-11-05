@@ -1,7 +1,7 @@
 import type { ArtifactShapeProps } from "@unframed/contracts";
-import { artifactTitle, readRef, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
+import { artifactLayoutSize, artifactScale, artifactTitle, readRef, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
 import { AppWindow, Clapperboard, Component } from "lucide-react";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, type ReactNode } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape, type TLShapeId } from "tldraw";
 import { ArtifactFrame, type ArtifactFrameProps, type EditMessage } from "../../artifacts/ArtifactFrame.tsx";
 import { DropOutline, onFrameEdit } from "../../artifacts/imageDrop.tsx";
@@ -32,6 +32,7 @@ const artifactProps: RecordProps<TLShape<"page"> | TLShape<"motion">> = {
   fileName: T.string,
   dials: T.dict(T.string, T.jsonValue).optional(),
   mode: T.string.optional(),
+  scale: T.number.optional(),
 };
 
 const componentProps: RecordProps<TLShape<"component">> = { w: T.nonZeroNumber, h: T.nonZeroNumber, file: T.string, title: T.string, fileName: T.string, tag: T.string };
@@ -74,6 +75,12 @@ const Still = ({ shape, title }: { readonly shape: ArtifactShape; readonly title
     </div>
   );
 };
+
+const Scaled = ({ scale, layout, children }: { readonly scale: number; readonly layout: { w: number; h: number }; readonly children: ReactNode }) => (
+  <div data-artifact-scale={scale} className="relative origin-top-left" style={{ width: layout.w, height: layout.h, transform: scale === 1 ? undefined : `scale(${scale})` }}>
+    {children}
+  </div>
+);
 
 const CanvasFrame = ({ shapeId, ...props }: Omit<ArtifactFrameProps, "onAnnounce" | "onReady"> & { readonly shapeId: string }) => {
   const editor = useEditor();
@@ -119,17 +126,21 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
   const kit = useValue("project kit", () => kitOf(editor), [editor]);
   const title = artifactTitle(props);
   const name = nameOf(shape);
+  const scale = kind === "component" ? 1 : artifactScale(props);
+  const layout = artifactLayoutSize({ w: props.w, h: props.h, scale });
   const updates = useValue("component updates", () => updateTagsOf(editor, project, props.file).join(","), [editor, project, props.file]);
   return (
     <>
       <HTMLContainer id={shape.id} data-testid="artifact-card" data-artifact-kind={kind} data-live={live ? "true" : undefined} style={{ width: props.w, height: props.h }}>
         <ShapeLabel shapeId={shape.id} kind={kind} name={readRef(shape)} width={props.w} text={name !== undefined ? `@${name}` : title} end={kind !== "component" && updates !== "" ? <UpdatesBadge shapeId={shape.id} /> : undefined} />
         {live && port !== undefined ? (
-          <CanvasFrame key={props.file} shapeId={shape.id} project={project} kind={kind} file={props.file} previewPort={port} dials={props.dials} kit={kit} mode={props.mode} interactive={interactive} lazy />
+          <Scaled scale={scale} layout={layout}>
+            <CanvasFrame key={props.file} shapeId={shape.id} project={project} kind={kind} file={props.file} previewPort={port} dials={props.dials} kit={kit} mode={props.mode} interactive={interactive} lazy />
+          </Scaled>
         ) : (
           <Still shape={shape} title={title} />
         )}
-        {live && <DropOutline shapeId={shape.id} />}
+        {live && <DropOutline shapeId={shape.id} scale={scale} />}
       </HTMLContainer>
       {kind === "motion" && <RenderRow shape={shape} />}
       <ProblemLine shapeId={shape.id} offset={props.h + (kind === "motion" ? RENDER_ROW_HEIGHT : 0)} width={props.w} />

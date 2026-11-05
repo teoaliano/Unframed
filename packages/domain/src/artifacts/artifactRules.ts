@@ -1,3 +1,4 @@
+import { isArtifactScale } from "@unframed/contracts";
 import { projectSlug } from "../slug.ts";
 import { ADD_PARAMETER_TEMPLATE } from "./prompts.ts";
 
@@ -167,6 +168,22 @@ export const farOffscreen = (box: PlacementBox, viewport: PlacementBox): boolean
 
 export const snapshotFits = (snapshot: { readonly w: number; readonly h: number }, shape: { readonly w: number; readonly h: number }): boolean =>
   Math.abs(shape.w - snapshot.w) <= snapshot.w * 0.1 && Math.abs(shape.h - snapshot.h) <= snapshot.h * 0.1;
+
+export const ARTIFACT_SCALES = [0.25, 0.5, 0.75, 1, 1.5, 2] as const;
+export const artifactScale = (props: { readonly scale?: unknown }): number => (isArtifactScale(props.scale) ? props.scale : 1);
+
+export const artifactLayoutSize = (props: { readonly w: number; readonly h: number; readonly scale?: unknown }): { w: number; h: number } => {
+  const scale = artifactScale(props);
+  return { w: props.w / scale, h: props.h / scale };
+};
+
+export const rescaledArtifact = (
+  props: { readonly w: number; readonly h: number; readonly scale?: unknown },
+  next: number,
+): { w: number; h: number; scale: number | undefined } => {
+  const layout = artifactLayoutSize(props);
+  return { w: layout.w * next, h: layout.h * next, scale: next === 1 ? undefined : next };
+};
 
 const REFERENCE_PATTERNS = [
   /\b(?:src|href)\s*=\s*["']([^"']+)["']/gi,

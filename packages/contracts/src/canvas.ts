@@ -84,7 +84,18 @@ export interface ArtifactShapeProps {
   dials?: Record<string, unknown>;
   mode?: string;
   lockedElements?: string[];
+  scale?: number;
 }
+
+export const ARTIFACT_SCALE_MIN = 0.1;
+export const ARTIFACT_SCALE_MAX = 4;
+
+export const isArtifactScale = (scale: unknown): scale is number =>
+  typeof scale === "number" && Number.isFinite(scale) && scale >= ARTIFACT_SCALE_MIN && scale <= ARTIFACT_SCALE_MAX;
+
+const artifactScaleProp = T.number.check((scale) => {
+  if (!isArtifactScale(scale)) throw new T.ValidationError(`Expected a scale from ${ARTIFACT_SCALE_MIN} to ${ARTIFACT_SCALE_MAX}, got ${JSON.stringify(scale)}`);
+});
 
 const artifactProps = {
   w: T.nonZeroNumber,
@@ -95,11 +106,17 @@ const artifactProps = {
   dials: T.dict(T.string, T.jsonValue).optional(),
   mode: T.string.optional(),
   lockedElements: T.arrayOf(T.string).optional(),
+  scale: artifactScaleProp.optional(),
 };
 
 const artifactMigrations = (kind: ArtifactType) => {
-  const ids = createShapePropsMigrationIds(kind, { AddLockedElements: 1 });
-  return createShapePropsMigrationSequence({ sequence: [{ id: ids.AddLockedElements, up: (props) => props }] });
+  const ids = createShapePropsMigrationIds(kind, { AddLockedElements: 1, AddScale: 2 });
+  return createShapePropsMigrationSequence({
+    sequence: [
+      { id: ids.AddLockedElements, up: (props) => props },
+      { id: ids.AddScale, up: (props) => props },
+    ],
+  });
 };
 
 export const ARTIFACT_TYPES = ["page", "motion"] as const;

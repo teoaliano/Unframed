@@ -2,7 +2,7 @@ import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promi
 import { join } from "node:path";
 import { crc32, deflateSync } from "node:zlib";
 import type { ArtifactSnapshot } from "@unframed/contracts";
-import { artifactReferences, artifactUrl, isArtifactKind, kitStamp, parseSnapshotFileName, type ArtifactKind, snapshotFileName, snapshotFits, snapshotSeekSeconds, type Kit } from "@unframed/domain";
+import { artifactLayoutSize, artifactReferences, artifactUrl, isArtifactKind, kitStamp, parseSnapshotFileName, type ArtifactKind, snapshotFileName, snapshotFits, snapshotSeekSeconds, type Kit } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import { errorText, logError } from "../log.ts";
 import { ensurePinnedComponents } from "./artifactStore.ts";
@@ -93,7 +93,7 @@ interface Seen {
   readonly kit: string | null;
 }
 
-type ArtifactRecord = TLRecord & { type: ArtifactKind; props: { w: number; h: number; file: string; dials?: Record<string, unknown>; mode?: string } };
+type ArtifactRecord = TLRecord & { type: ArtifactKind; props: { w: number; h: number; scale?: number; file: string; dials?: Record<string, unknown>; mode?: string } };
 
 const isArtifact = (record: TLRecord | undefined): record is ArtifactRecord =>
   record?.typeName === "shape" && isArtifactKind(record.type) && typeof (record.props as { file?: unknown }).file === "string";
@@ -182,7 +182,8 @@ export class Snapshots {
     if (this.deps.renderer === undefined || shape.props.file === "") return;
     const key = `${project} ${shape.id}`;
     const mode = kit === null ? null : (typeof shape.props.mode === "string" && kit.modes.includes(shape.props.mode) ? shape.props.mode : kit.modes[0]!);
-    const now: Seen = { file: shape.props.file, w: shape.props.w, h: shape.props.h, dials: JSON.stringify(shape.props.dials ?? null), mode, kit: kit === null ? null : kitStamp(kit) };
+    const layout = artifactLayoutSize(shape.props);
+    const now: Seen = { file: shape.props.file, w: layout.w, h: layout.h, dials: JSON.stringify(shape.props.dials ?? null), mode, kit: kit === null ? null : kitStamp(kit) };
     const last = this.seen.get(key);
     if (last === undefined) this.fresh.add(key);
     else if (last.file === now.file && last.dials === now.dials && last.mode === now.mode && last.kit === now.kit && snapshotFits(last, now)) return;
@@ -224,7 +225,7 @@ export class Snapshots {
     if (!isArtifact(shape) || shape.props.file === "") return;
     const folder = await this.deps.folder(project);
     if (folder === undefined) return;
-    const size = { w: shape.props.w, h: shape.props.h };
+    const size = artifactLayoutSize(shape.props);
     if (onlyIfTokens && !(await readFile(join(folder, shape.props.file), "utf8").catch(() => "")).includes("unframed-tokens.js")) return;
     await ensurePinnedComponents(folder, shape.props.file);
     const startedAt = Date.now();

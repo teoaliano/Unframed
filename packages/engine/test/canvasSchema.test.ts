@@ -74,6 +74,17 @@ describe("the canvas schema in the room", () => {
     expect(await stored(engine, "shape:locked-bad")).toBeUndefined();
   });
 
+  it("keeps a page's scale on the canvas, reads a page without one as unscaled, and refuses a scale outside 10 % to 400 %", async () => {
+    expect(await pushOne(engine, pageShape("scaled", "109", { file: "1-x.html", scale: 0.5 }))).toBe("committed");
+    expect(await stored(engine, "shape:scaled")).toMatchObject({ props: { scale: 0.5 } });
+    expect(await pushOne(engine, pageShape("unscaled", "110", { file: "1-x.html" }))).toBe("committed");
+    expect((await stored(engine, "shape:unscaled"))?.props).not.toHaveProperty("scale");
+    for (const [id, scale] of [["tiny", 0.01], ["huge", 8], ["word", "half"]] as const) {
+      expect(await pushOne(engine, pageShape(id, "111", { scale }))).toEqual({ closed: "INVALID_RECORD" });
+      expect(await stored(engine, `shape:${id}`)).toBeUndefined();
+    }
+  });
+
   it("refuses a prompt with no ref, a page whose file is a path, a meta field outside meta.unframed and an embed", async () => {
     const withoutRef = { ...promptShape("no-ref", "1", "x"), meta: {} } as TLRecord;
     const pathFile = pageShape("bad-file", "104", { file: "../escape.html" });

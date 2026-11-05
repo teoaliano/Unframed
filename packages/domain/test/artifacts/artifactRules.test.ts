@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   addParameterInstruction,
   artifactFileName,
+  artifactLayoutSize,
   artifactReferences,
+  artifactScale,
+  ARTIFACT_SCALES,
+  rescaledArtifact,
   artifactTitle,
   artifactUrl,
   BRIDGE_TAG,
@@ -272,5 +276,29 @@ describe("the files an artifact loads", () => {
   it("leaves out absolute, rooted, data and parent paths and anchors", () => {
     const html = `<a href="#top"></a><script src="https://cdn.example/x.js"></script><img src="data:image/png;base64,AA"><script src="/abs.js"></script><script src="../up.js"></script><a href="mailto:a@b.c"></a><script src="//cdn/x.js"></script>`;
     expect(artifactReferences(html)).toEqual([]);
+  });
+});
+
+describe("an artifact's scale on the canvas", () => {
+  it("reads 1 for a shape without one, or with one outside 10 % to 400 %", () => {
+    expect(artifactScale({})).toBe(1);
+    expect(artifactScale({ scale: 0.5 })).toBe(0.5);
+    for (const scale of [0, -1, 0.05, 5, Number.NaN, "2"]) expect(artifactScale({ scale })).toBe(1);
+  });
+
+  it("offers 25 % to 200 %", () => {
+    expect(ARTIFACT_SCALES).toEqual([0.25, 0.5, 0.75, 1, 1.5, 2]);
+  });
+
+  it("lays the artifact out at its size on the canvas divided by its scale", () => {
+    expect(artifactLayoutSize({ w: 720, h: 450, scale: 0.5 })).toEqual({ w: 1440, h: 900 });
+    expect(artifactLayoutSize({ w: 480, h: 320 })).toEqual({ w: 480, h: 320 });
+    expect(artifactLayoutSize({ w: 960, h: 640, scale: 2 })).toEqual({ w: 480, h: 320 });
+  });
+
+  it("rescales by keeping the layout size and changing the size on the canvas, and leaves the prop out at 100 %", () => {
+    expect(rescaledArtifact({ w: 1440, h: 900 }, 0.25)).toEqual({ w: 360, h: 225, scale: 0.25 });
+    expect(rescaledArtifact({ w: 360, h: 225, scale: 0.25 }, 1.5)).toEqual({ w: 2160, h: 1350, scale: 1.5 });
+    expect(rescaledArtifact({ w: 720, h: 450, scale: 0.5 }, 1)).toEqual({ w: 1440, h: 900, scale: undefined });
   });
 });

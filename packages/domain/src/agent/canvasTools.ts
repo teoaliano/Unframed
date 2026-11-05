@@ -8,6 +8,8 @@ import type { ComponentDeclaration } from "../components/sheet.ts";
 import type { Pin } from "../components/pins.ts";
 import { nameRefusal, slugName, uniqueName } from "../groupRules.ts";
 import { agentShapeId, roomShapeId } from "./turnText.ts";
+import { ARTIFACT_SCALE_MAX, ARTIFACT_SCALE_MIN, isArtifactScale } from "@unframed/contracts";
+import { rescaledArtifact } from "../artifacts/artifactRules.ts";
 
 export interface CanvasRecord {
   readonly id: string;
@@ -204,6 +206,7 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
         const pinned = input.pins?.get(record.id) ?? [];
         if (pinned.length > 0) entry.components = pinned.map((pin) => ({ tag: pin.tag, sheet: pin.sheet, current: currentSheets.get(pin.tag) === undefined || currentSheets.get(pin.tag) === pin.sheet }));
         if (typeof props.mode === "string") entry.mode = props.mode;
+        if (isArtifactScale(props.scale) && props.scale !== 1) entry.scale = props.scale;
         if (Array.isArray(props.lockedElements) && props.lockedElements.length > 0) entry.lockedElements = props.lockedElements;
         break;
       }
@@ -646,6 +649,14 @@ const update = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
   }
   if ((kind === "page" || kind === "motion") && typeof patch.mode === "string" && !(ctx.modes ?? []).includes(patch.mode)) {
     refuse(`there is no mode ${patch.mode} in the kit`);
+  }
+  if ((kind === "page" || kind === "motion") && "scale" in patch) {
+    const next = patch.scale === null ? 1 : patch.scale;
+    if (!isArtifactScale(next)) refuse(`update: scale must be a number from ${ARTIFACT_SCALE_MIN} to ${ARTIFACT_SCALE_MAX}`);
+    if (!("w" in patch) && !("h" in patch) && numeric(props.w) && numeric(props.h)) {
+      const sized = rescaledArtifact({ w: props.w as number, h: props.h as number, scale: props.scale }, next as number);
+      return applyPatch(batch, shape, props, { ...patch, w: sized.w, h: sized.h, scale: sized.scale ?? null });
+    }
   }
   applyPatch(batch, shape, props, patch);
 };

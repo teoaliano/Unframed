@@ -12,6 +12,7 @@ import { artifactsOf, installFrameHold, installTuningWatch, previewPort } from "
 import { installImageDrop } from "./imageDrop.tsx";
 import { watchComponentPins } from "./componentPins.ts";
 import { watchSnapshots } from "./snapshots.ts";
+import { ScaleMenu } from "./ScaleMenu.tsx";
 
 const ArtifactEditor = lazy(() => import("./editor/ArtifactEditor.tsx").then((module) => ({ default: module.ArtifactEditor })));
 const ParametersPanel = lazy(() => import("./ParametersPanel.tsx").then((module) => ({ default: module.ParametersPanel })));
@@ -61,6 +62,7 @@ export const ArtifactsHost = () => {
       registerSlot("openArtifact", openArtifactEditor),
       registerSlot("renderButton", RenderButton),
       registerSlot("parametersButton", ParametersButton),
+      registerSlot("scaleButton", ScaleMenu),
       registerSlot("kitModeButton", ({ shapeId }: { readonly shapeId: TLShapeId }) => <KitModePicker shapeId={shapeId} variant="toolbar" />),
       installTuningWatch(editor),
     ];

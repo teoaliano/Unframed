@@ -179,6 +179,19 @@ describe("artifact snapshots", () => {
     await until(async () => (await snapshot(reopened, "3-app.html-480x320-none-none.png")).startedAt > first.startedAt, "a fresh snapshot after the open");
   });
 
+  it("renders a scaled artifact at its layout size, and not again when only its scale changes", async () => {
+    const agent = await startSnapshotting();
+    const stream = agent.rpc.subscribe("artifact.snapshots", { project: "board" });
+    await seed(agent, [pageShape("pg1", "100", { file: "1-landing.html", w: 720, h: 450, scale: 0.5 })]);
+    await until(async () => stream.values.length === 1, "the first snapshot");
+    expect(stream.values[0]).toMatchObject({ file: "1-landing.html", w: 1440, h: 900 });
+    expect(await snapshot(agent, "1-landing.html-1440x900-none-none.png")).toMatchObject({ w: 1440, h: 900 });
+
+    await update(agent, "pg1", { w: 360, h: 225, scale: 0.25 });
+    await new Promise((resolve) => setTimeout(resolve, 1800));
+    expect(stream.values).toHaveLength(1);
+  });
+
   it("makes no snapshot on a machine with no Chromium", async () => {
     const agent = await startSnapshotting("no-chrome");
     const stream = agent.rpc.subscribe("artifact.snapshots", { project: "board" });
