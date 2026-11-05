@@ -32,7 +32,7 @@ export const ChainConfirm = () => {
             </li>
           ))}
         </ol>
-        {total.label !== undefined && <p className="mx-6 my-0 text-right text-xs text-muted-foreground tabular-nums">{`In all ${total.label}`}</p>}
+        {total.label !== undefined && <p className="mx-6 mt-1 mb-4 border-t pt-2 text-right text-xs text-muted-foreground tabular-nums" data-testid="chain-total">{`In all ${total.label}`}</p>}
         <AlertDialogFooter>
           <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
           <Button onClick={() => pending.answer(true)}>Run</Button>

@@ -3,14 +3,25 @@ import { defaultRole, nodeRequest, sourceOf, wireRefusal, WIRE_TARGET_REFUSAL } 
 import { createShapeId, getIndexBetween, type Editor, type IndexKey, type TLShapeId } from "tldraw";
 import { knownCatalogue } from "../generate/catalogue.ts";
 import { showError } from "../toasts.tsx";
-import { catalogueOf, framesOf, isNodeShape, isWireShape, nodeCanvas, type NodeShape, type WireShape } from "./facts.ts";
+import { catalogueOf, framesOf, isNodeShape, isWireShape, nodeCanvas, nodeCatalogues, type NodeShape, type WireShape } from "./facts.ts";
 
 /** The model a node runs: its own, else the medium's default from the session's catalogue. */
 export const nodeModel = (props: Pick<NodeShapeProps, "medium" | "model">): string => props.model !== "" ? props.model : (knownCatalogue(catalogueOf(props.medium))?.default ?? "");
 
 export const nodeEntry = (props: Pick<NodeShapeProps, "medium" | "model">) => knownCatalogue(catalogueOf(props.medium))?.models.find((entry) => entry.id === nodeModel(props));
 
-export const nodeFrames = (props: Pick<NodeShapeProps, "medium" | "model">): string[] => (props.medium === "video" ? framesOf(nodeEntry(props)) : []);
+let framesEditor: Editor | undefined;
+export const bindNodeCatalogues = (editor: Editor) => {
+  framesEditor = editor;
+};
+
+export const nodeFrames = (props: Pick<NodeShapeProps, "medium" | "model">): string[] => {
+  if (props.medium !== "video") return [];
+  const listed = framesEditor === undefined ? undefined : nodeCatalogues(framesEditor).get().video;
+  const model = nodeModel(props);
+  const entry = listed?.find((each) => each.id === model) ?? nodeEntry(props);
+  return framesOf(entry);
+};
 
 /** The roles each wire into a node shows, from the one function that also builds its run. */
 export const nodeRoles = (editor: Editor, nodeId: string): Readonly<Record<string, string>> => {

@@ -1,4 +1,4 @@
-import type { Editor, TLPageId, TLShape, TLShapeId } from "tldraw";
+import { getIndexAbove, getIndicesAbove, type Editor, type IndexKey, type TLPageId, type TLShape, type TLShapeId } from "tldraw";
 import { isNodeShape, isWireShape, type NodeShape, type WireShape } from "./facts.ts";
 
 const RUN_OWNED = ["versions", "run"] as const;
@@ -13,6 +13,32 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
  */
 export const installNodeSideEffects = (editor: Editor): (() => void) => {
   const pageId = (): TLPageId => editor.getCurrentPageId();
+  let issued: IndexKey | undefined;
+  const raising: TLShapeId[] = [];
+  const raise = (id: TLShapeId) => {
+    raising.push(id);
+    if (raising.length > 1) return;
+    queueMicrotask(() => {
+      const page = pageId();
+      const wires = raising.splice(0).flatMap((each) => {
+        const wire = editor.getShape(each);
+        return wire ? [wire] : [];
+      });
+      const others = editor.getSortedChildIdsForParent(page).filter((each) => !wires.some((wire) => wire.id === each));
+      const highest = others.length === 0 ? null : editor.getShape(others.at(-1)!)!.index;
+      if (wires.every((wire) => highest === null || wire.index > highest)) return;
+      const indices = getIndicesAbove(highest, wires.length);
+      const ordered = [...wires].sort((a, b) => (a.index < b.index ? -1 : a.index > b.index ? 1 : 0));
+      editor.run(() => editor.updateShapes(ordered.map((wire, at) => ({ id: wire.id, type: "wire", index: indices[at]! }))), { history: "ignore" });
+    });
+  };
+  const topIndex = (page: TLPageId): IndexKey => {
+    const highest = editor.getHighestIndexForParent(page);
+    const next = issued !== undefined && issued >= highest ? getIndexAbove(issued) : highest;
+    issued = next;
+    queueMicrotask(() => (issued = undefined));
+    return next;
+  };
   const stops = [
     editor.sideEffects.registerBeforeChangeHandler("shape", (previous: TLShape, next: TLShape, source) => {
       if (isWireShape(next)) {
@@ -36,10 +62,13 @@ export const installNodeSideEffects = (editor: Editor): (() => void) => {
     }),
     editor.sideEffects.registerBeforeCreateHandler("shape", (shape: TLShape) => {
       if (!isWireShape(shape)) return shape;
-      return { ...shape, parentId: pageId(), x: 0, y: 0, rotation: 0 } as WireShape;
+      const page = pageId();
+      if (shape.parentId === page && shape.x === 0 && shape.y === 0) return shape;
+      return { ...shape, parentId: page, x: 0, y: 0, rotation: 0, index: topIndex(page) } as WireShape;
     }),
     editor.sideEffects.registerAfterCreateHandler("shape", (shape: TLShape, source) => {
       if (source !== "user" || !isWireShape(shape)) return;
+      raise(shape.id);
       const { from, to } = shape.props;
       const ends = editor.getShape(from as TLShapeId) !== undefined && isNodeShape(editor.getShape(to as TLShapeId));
       const twin = editor.getCurrentPageShapes().some((other) => other.id !== shape.id && isWireShape(other) && other.props.from === from && other.props.to === to);

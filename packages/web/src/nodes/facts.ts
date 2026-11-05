@@ -59,6 +59,38 @@ export const watchMotionRenders = (editor: Editor, engine: EngineConnection, pro
   };
 };
 
+const catalogueAtoms = new WeakMap<Editor, Atom<Readonly<Partial<Record<"image" | "video" | "text" | "audio", ReadonlyArray<ModelEntry>>>>>>();
+
+/** The catalogues the nodes on the canvas read their models' traits from (a video model's frames), as they arrive. */
+export const nodeCatalogues = (editor: Editor) => {
+  let found = catalogueAtoms.get(editor);
+  if (!found) {
+    found = atom("node catalogues", {});
+    catalogueAtoms.set(editor, found);
+  }
+  return found;
+};
+
+/** Loads the catalogue of every medium a node on the canvas uses, once each. */
+export const watchNodeCatalogues = (editor: Editor, engine: EngineConnection): (() => void) => {
+  const asked = new Set<string>();
+  const check = () => {
+    for (const shape of editor.getCurrentPageShapes()) {
+      if (shape.type !== "node") continue;
+      const medium = catalogueOf((shape.props as { medium: NodeMedium }).medium);
+      if (asked.has(medium)) continue;
+      asked.add(medium);
+      void engine.call("models.list", { medium }).then(
+        (answer) => nodeCatalogues(editor).update((current) => ({ ...current, [medium]: answer.models })),
+        () => asked.delete(medium),
+      );
+    }
+  };
+  const stop = editor.store.listen(check, { scope: "document", source: "all" });
+  check();
+  return stop;
+};
+
 export const isNodeShape = (shape: TLShape | undefined): shape is NodeShape => shape?.type === "node";
 export const isWireShape = (shape: TLShape | undefined): shape is WireShape => shape?.type === "wire";
 

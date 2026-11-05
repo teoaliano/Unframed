@@ -23,12 +23,25 @@ interface Ends {
   readonly end: Vec;
 }
 
-/** Where a wire runs: from the right edge of its source to the left edge of its node, in page space. */
-const endsOf = (editor: Editor, props: WireShapeProps): Ends | undefined => {
+const INSET = 48;
+
+/**
+ * Where a wire runs: from the right edge of its source to the left edge of its node, in page
+ * space. The wires into a node land down its left edge in the order of its input list.
+ */
+const endsOf = (editor: Editor, wire: WireShape): Ends | undefined => {
+  const { props } = wire;
   const from = editor.getShapePageBounds(props.from as TLShapeId);
   const to = editor.getShapePageBounds(props.to as TLShapeId);
   if (!from || !to) return undefined;
-  return { start: new Vec(from.maxX, from.midY), end: new Vec(to.minX, to.midY) };
+  const siblings = editor
+    .getCurrentPageShapesSorted()
+    .filter((shape) => shape.type === "wire" && (shape.props as WireShapeProps).to === props.to)
+    .map((shape) => shape.id);
+  const at = Math.max(0, siblings.indexOf(wire.id));
+  const span = Math.max(0, to.h - INSET * 2);
+  const y = siblings.length <= 1 ? to.midY : to.minY + INSET + (span * at) / (siblings.length - 1);
+  return { start: new Vec(from.maxX, from.midY), end: new Vec(to.minX, Math.min(to.maxY - INSET / 2, y)) };
 };
 
 const control = (ends: Ends) => {
@@ -135,14 +148,14 @@ const RoleChip = ({ wire, at }: { readonly wire: WireShape; readonly at: Vec }) 
 const Wire = ({ wire }: { readonly wire: WireShape }) => {
   noteRender(wire.id);
   const editor = useEditor();
-  const ends = useValue("wire ends", () => endsOf(editor, wire.props), [editor, wire.props.from, wire.props.to]);
+  const ends = useValue("wire ends", () => endsOf(editor, editor.getShape(wire.id) as WireShape ?? wire), [editor, wire.id]);
   const selected = useValue("wire selected", () => editor.getSelectedShapeIds().includes(wire.id), [editor, wire.id]);
   if (!ends) return null;
   return (
     <>
       <SVGContainer data-testid="wire" data-wire-id={wire.id}>
-        <path d={pathOf(ends)} fill="none" className={selected ? "stroke-ring" : "stroke-border"} strokeWidth={selected ? 2.5 : 2} strokeLinecap="round" />
-        <circle cx={ends.end.x} cy={ends.end.y} r={3.5} className={selected ? "fill-ring" : "fill-border"} />
+        <path d={pathOf(ends)} fill="none" className={selected ? "stroke-ring" : "stroke-muted-foreground/48"} strokeWidth={selected ? 2.5 : 2} strokeLinecap="round" />
+        <circle cx={ends.end.x} cy={ends.end.y} r={3.5} className={selected ? "fill-ring" : "fill-muted-foreground/64"} />
       </SVGContainer>
       <RoleChip wire={wire} at={pointAt(ends, 0.5)} />
     </>
@@ -186,7 +199,7 @@ export class WireShapeUtil extends ShapeUtil<WireShape> {
   }
 
   override getGeometry(shape: WireShape) {
-    const ends = endsOf(this.editor, shape.props);
+    const ends = endsOf(this.editor, shape);
     if (!ends) return new Polyline2d({ points: [new Vec(0, 0), new Vec(1, 0)] });
     return new Polyline2d({ points: Array.from({ length: SAMPLES + 1 }, (_, index) => pointAt(ends, index / SAMPLES)) });
   }
@@ -204,7 +217,7 @@ export class WireShapeUtil extends ShapeUtil<WireShape> {
   }
 
   override getIndicatorPath(shape: WireShape) {
-    const ends = endsOf(this.editor, shape.props);
+    const ends = endsOf(this.editor, shape);
     return new Path2D(ends ? pathOf(ends) : "");
   }
 }
