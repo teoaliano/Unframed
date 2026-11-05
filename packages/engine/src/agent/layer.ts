@@ -28,7 +28,8 @@ import * as Fiber from "effect/Fiber";
 import * as Stream from "effect/Stream";
 import { PreferencesStore } from "../preferencesStore.ts";
 import { Projects } from "../projects.ts";
-import { listGatewayModels } from "../gateway/client.ts";
+import { GENERATION_PROVIDERS, providerKeysOf } from "@unframed/domain";
+import { providerCatalogues } from "../runs/providers.ts";
 import { AgentRuntime, DispatchError } from "./runtime.ts";
 import { ArtifactTools } from "../artifacts/artifactTools.ts";
 import { ComponentTools } from "../artifacts/componentTools.ts";
@@ -105,6 +106,10 @@ export const agentsLayer = Layer.effect(
     const videoCatalogue = yield* VideoCatalogue;
     const renderJobs = yield* RenderJobs;
     const media = yield* MediaStore;
+    const catalogues = providerCatalogues({
+      vercelOrigin: config.vercelOrigin,
+      openRouter: (medium) => run(medium === "image" ? catalogue.listImageModels : catalogue.listTextModels),
+    });
     const runtime = new AgentRuntime({
       dataDir: config.dataDir,
       selection,
@@ -113,13 +118,10 @@ export const agentsLayer = Layer.effect(
         runText: (request) => run(runs.text(request)),
         pricing: (model) => run(catalogue.imagePricing(model)),
         models: (kind, provider) =>
-          (provider === "vercel"
-            ? run(settings.read).then((current) => listGatewayModels(config.vercelOrigin, "image", current.gatewayImageModel, current.vercelKey !== ""))
-            : run(kind === "video" ? videoCatalogue.list : catalogue.listImageModels)
-          ).then((answer) => answer.models),
+          (kind === "video" ? run(videoCatalogue.list) : run(settings.read).then((current) => catalogues[provider](current, "image"))).then((answer) => answer.models),
         defaultModel: (kind, provider) =>
-          run(settings.read).then((current) => (kind === "video" ? current.videoModel : provider === "vercel" ? current.gatewayImageModel : current.imageModel)),
-        providerKeys: () => run(settings.read).then((current) => ({ hasKey: current.key !== "", hasVercelKey: current.vercelKey !== "" })),
+          run(settings.read).then((current) => (kind === "video" ? current.videoModel : GENERATION_PROVIDERS[provider].defaultModel(current, "image"))),
+        providerKeys: () => run(settings.read).then(providerKeysOf),
         startVideo: (request) => run(renderJobs.start(request)),
         onVideoFinished: (jobId, handler) => renderJobs.onFinished(jobId, handler),
         track: (project, handler) => {

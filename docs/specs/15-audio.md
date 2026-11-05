@@ -388,7 +388,7 @@ Spec 10's dialog gains an ElevenLabs block in its **Generation** section, after 
 
 Spec 10 no longer opens the dialog on its own and its settings button is always the gear, so a second key changes neither. The gear's tooltip names the keys that exist: spec 10's `Settings: key …<hint>, default models, output folder` with an OpenRouter key; `Settings: ElevenLabs key …<hint>, default models, output folder` with only an ElevenLabs key; `Settings` with neither. Agents, Connections and General do not depend on either key.
 
-Default models (in Generation) holds spec 10's `Image`, `Text` and `Video` selects with an OpenRouter key, and a fourth searchable select, `Audio`, listing the audio catalogue's model ids, with an ElevenLabs key. With only an ElevenLabs key it holds `Audio` alone; with neither key it holds spec 10's line that the models need a key.
+Default models (in Generation) holds spec 10's `Image`, `Text` and `Video` selects with an OpenRouter key, and a fourth searchable select, `Audio`, listing the audio catalogue's model ids, with an ElevenLabs key; spec 22 groups them by provider, `Audio` under an `ElevenLabs` sub-heading. With only an ElevenLabs key it holds `Audio` alone; with neither key it holds spec 10's line that the models need a key.
 
 ### The agent
 

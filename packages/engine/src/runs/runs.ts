@@ -17,10 +17,9 @@ import {
   type TextCompleteRequest,
   type TextRunRequest,
   type AudioRunRequest,
-  type CostBasis,
 } from "@unframed/contracts";
-import { GATEWAY_NO_KEY_MESSAGE, imageDimensions, NO_KEY_MESSAGE, nextRef, placeResults, projectSlug, sidecarFileName, type Box } from "@unframed/domain";
-import { gatewayCost, gatewayImage } from "../gateway/client.ts";
+import { imageDimensions, nextRef, placeResults, projectSlug, providerField, providerOf, sidecarFileName, type Box } from "@unframed/domain";
+import { runProviders, type Priced } from "./providers.ts";
 import type { TLRecord } from "@tldraw/tlschema";
 import { getIndicesAbove, type IndexKey } from "@tldraw/utils";
 import * as Context from "effect/Context";
@@ -31,12 +30,12 @@ import * as Stream from "effect/Stream";
 import { CanvasRooms, type ChangeOrigin, type RoomAccess } from "../canvas/rooms.ts";
 import { errorText, logError, logInfo } from "../log.ts";
 import { MediaStore } from "../media/mediaStore.ts";
-import { generateImage, imageRequestBody } from "../openRouter/images.ts";
 import type { ReferencePart } from "../openRouter/text.ts";
 import { Config } from "../services.ts";
 import { SettingsStore } from "../settingsStore.ts";
 import {
   clearChange,
+  costChange,
   fillFor,
   imagePlaceholder,
   isShape,
@@ -53,7 +52,7 @@ import { makeTextRuns } from "./textRuns.ts";
 import { makeAudioRuns } from "./audioRuns.ts";
 import { extensionFor, mimeForFile, referenceName, resultBase, writeLoneSidecar, writeResultFile, writeSidecar } from "./resultFiles.ts";
 import { shapePageBoxes } from "./shapeBounds.ts";
-import { readResultSidecar } from "./sidecars.ts";
+import { patchSidecarCost, readResultSidecar } from "./sidecars.ts";
 
 export const EMPTY_PROMPT_MESSAGE = "Prompt is empty. Select a prompt, or type an instruction.";
 export const OUTPUT_COUNT_MESSAGE = "A run makes between 1 and 10 images.";
@@ -168,9 +167,8 @@ export const runsLayer = Layer.effect(
 
     const validate = (request: ImageRunRequest, folder: string) =>
       Effect.gen(function* () {
-        const keys = yield* settings.read;
-        if (request.provider === "vercel" ? keys.vercelKey === "" : keys.key === "")
-          return yield* unframedError("unavailable", request.provider === "vercel" ? GATEWAY_NO_KEY_MESSAGE : NO_KEY_MESSAGE);
+        const provider = providers[providerOf(request.provider)];
+        if (provider.key(yield* settings.read) === "") return yield* unframedError("unavailable", provider.noKeyMessage);
         if (request.outputs.length < 1 || request.outputs.length > MAX_OUTPUTS) return yield* unframedError("bad_request", OUTPUT_COUNT_MESSAGE);
         if (request.outputs.every((output) => output.prompt.trim() === "")) return yield* unframedError("bad_request", EMPTY_PROMPT_MESSAGE);
         yield* validateReferences(request.outputs.flatMap((output) => output.references), folder);
@@ -215,12 +213,24 @@ export const runsLayer = Layer.effect(
       };
     };
 
+    const patchCost = async (projectName: string, folder: string, shapeId: string, sidecar: string, priced: Priced, runId: string) => {
+      await patchSidecarCost(folder, sidecar, priced).catch((error: unknown) => logError(`${runId}: could not record the cost in ${sidecar}: ${errorText(error)}`));
+      const change = await runPromise(
+        Effect.map(rooms.read(projectName), (now) => {
+          const shape = now.find((record) => record.id === shapeId);
+          return isShape(shape) ? costChange(shape, sidecar, priced.cost, priced.costBasis === "list-price") : undefined;
+        }),
+      ).catch(() => undefined);
+      if (change) await runPromise(rooms.apply(projectName, change, runOrigin(runId))).catch((error: unknown) => logError(`${runId}: could not record the cost on the canvas: ${errorText(error)}`));
+    };
+
+    const providers = runProviders(config);
+
     const texts = makeTextRuns({
       settings,
       rooms,
-      openRouterOrigin: config.openRouterOrigin,
-      vercelOrigin: config.vercelOrigin,
-      gatewayLookupMs: config.gatewayLookupMs,
+      providers,
+      patchCost,
       projectFolder,
       validateReferences,
       inline,
@@ -249,9 +259,8 @@ export const runsLayer = Layer.effect(
         const project = projectSlug(request.project);
         yield* validate(request, folder);
         const current = yield* settings.read;
-        const provider = request.provider;
-        const gateway = provider === "vercel";
-        const model = request.model ?? (gateway ? current.gatewayImageModel : current.imageModel);
+        const provider = providers[providerOf(request.provider)];
+        const model = request.model ?? provider.defaultModel(current, "image");
         const startedAt = Date.now();
         const runId = `run-${startedAt}-${randomUUID().slice(0, 8)}`;
         const batchId = request.batchId ?? `b-${startedAt}`;
@@ -298,7 +307,7 @@ export const runsLayer = Layer.effect(
               cost: null,
               sources: [...request.sources],
               ...(request.batchExtraCost === undefined ? {} : { batchExtraCost: request.batchExtraCost }),
-              ...(gateway ? { provider: "vercel" as const } : {}),
+              ...providerField(provider.id),
             },
           });
         });
@@ -310,7 +319,7 @@ export const runsLayer = Layer.effect(
         );
         yield* PubSub.publish(events, { project, event: { type: "started", runId, batchId, count: runCount } });
 
-        const land = async (index: number, bytes: Buffer, mediaType: string | undefined, cost: number | null, costBasis?: CostBasis): Promise<Landed> => {
+        const land = async (index: number, bytes: Buffer, mediaType: string | undefined, cost: number | null): Promise<Landed> => {
           const output = request.outputs[index]!;
           const runIndex = index + 1;
           const ext = extensionFor(mediaType, request.params.output_format);
@@ -349,11 +358,11 @@ export const runsLayer = Layer.effect(
               references: [...references],
               sources: [...request.sources],
               ...(of === undefined ? {} : { of }),
-              ...(gateway ? { provider: "vercel" as const } : {}),
+              ...providerField(provider.id),
             },
             ...(output.free === undefined ? {} : { free: output.free }),
             ...(request.chat === undefined ? {} : { chat: request.chat }),
-            ...(gateway ? { provider: "vercel" as const, ...(costBasis === undefined ? {} : { costBasis }) } : {}),
+            ...providerField(provider.id),
           };
           await writeSidecar(folder, base, sidecar).catch((error: unknown) => logError(`could not write the sidecar of ${file}: ${errorText(error)}`));
           logInfo(`generated → ${join(folder, file)}${cost === null ? "" : `  ($${cost.toFixed(4)})`}`);
@@ -362,7 +371,6 @@ export const runsLayer = Layer.effect(
             file,
             sidecar: `${base}.json`,
             cost,
-            ...(costBasis === "list-price" ? { listPrice: true as const } : {}),
             width: dimensions?.w,
             height: dimensions?.h,
             mime: mediaType?.split(";")[0]?.trim() || mimeForFile(file),
@@ -375,20 +383,12 @@ export const runsLayer = Layer.effect(
           const runIndex = index + 1;
           const shapeId = placeholders[index]!.id;
           let outcome: RunOutcome<Landed>;
+          let later: (() => Promise<Priced>) | undefined;
           try {
-            if (gateway) {
-              const images = (await inline(folder, output.references)).flatMap((part) => (part.type === "image_url" ? [part.image_url.url] : []));
-              const answer = await gatewayImage(config.vercelOrigin, current.vercelKey, { model, prompt: output.prompt, images });
-              if (answer.ok) {
-                const priced = await gatewayCost({ origin: config.vercelOrigin, key: current.vercelKey, id: answer.id, medium: "image", model, waitMs: config.gatewayLookupMs });
-                outcome = { ok: true, landed: await land(index, answer.bytes, undefined, priced.cost, priced.costBasis) };
-              } else outcome = { ok: false, error: answer.error };
-            } else {
-              const body = imageRequestBody(model, output.prompt, request.params);
-              if (output.references.length > 0) body.input_references = await inline(folder, output.references);
-              const answer = await generateImage(config.openRouterOrigin, current.key, body);
-              outcome = answer.ok ? { ok: true, landed: await land(index, answer.bytes, answer.mediaType, answer.cost) } : { ok: false, error: answer.error };
-            }
+            const references = output.references.length > 0 ? await inline(folder, output.references) : [];
+            const answer = await provider.image(provider.key(current), { model, prompt: output.prompt, params: request.params, references });
+            later = answer.ok ? answer.later : undefined;
+            outcome = answer.ok ? { ok: true, landed: await land(index, answer.bytes, answer.mediaType, answer.cost) } : { ok: false, error: answer.error };
           } catch (error) {
             outcome = { ok: false, error: errorText(error) };
           }
@@ -408,7 +408,14 @@ export const runsLayer = Layer.effect(
           if (outcome.ok) {
             const orphaned = change === undefined;
             if (orphaned) logInfo(`${runId}: output ${runIndex} landed after its placeholder was deleted → ${join(folder, outcome.landed.file)}`);
-            await publish(project, { type: "output", runId, runIndex, ok: true, shapeId, file: outcome.landed.file, cost: outcome.landed.cost });
+            let landed = outcome.landed;
+            if (later) {
+              const priced = await later().catch((): Priced => ({ cost: null }));
+              landed = { ...landed, cost: priced.cost, ...(priced.costBasis === "list-price" ? { listPrice: true as const } : {}) };
+              run.outputs.set(runIndex, { ok: true, landed });
+              await patchCost(request.project, folder, shapeId, landed.sidecar, priced, runId);
+            }
+            await publish(project, { type: "output", runId, runIndex, ok: true, shapeId, file: landed.file, cost: landed.cost });
             return { ok: true, orphaned };
           }
           logError(`${runId}: output ${runIndex} failed: ${outcome.error}`);

@@ -1,7 +1,7 @@
 import { UnframedError, type ProviderStatuses, type Settings, type SettingsPatch } from "@unframed/contracts";
-import { ELEVENLABS_KEY, elevenLabsStatusCopy, GATEWAY_KEY_SAVED_MESSAGE, gatewayCreditsCopy, keyStatusCopy, OPENROUTER_KEY, sendShortcutOf, VERCEL_KEY, type SendShortcut } from "@unframed/domain";
+import { ELEVENLABS_KEY, elevenLabsStatusCopy, GENERATION_PROVIDERS, VERCEL_KEY_SAVED_MESSAGE, vercelCreditsCopy, keyStatusCopy, OPENROUTER_KEY, sendShortcutOf, VERCEL_KEY, type SendShortcut } from "@unframed/domain";
 import { Bot, CircleAlert, CircleCheck, FolderOpen, Plug, SlidersHorizontal, Sparkles, type LucideIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
@@ -24,7 +24,7 @@ export const ELEVENLABS_KEY_SAVED_MESSAGE = "ElevenLabs key saved. Audio is read
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
-type Medium = "image" | "text" | "video" | "audio" | "gatewayImage" | "gatewayText";
+type Medium = "image" | "text" | "video" | "audio" | "vercelImage" | "vercelText";
 const MEDIA: ReadonlyArray<{ readonly medium: "image" | "text" | "video"; readonly label: string; readonly field: "imageModel" | "textModel" | "videoModel" }> = [
   { medium: "image", label: "Image", field: "imageModel" },
   { medium: "text", label: "Text", field: "textModel" },
@@ -34,8 +34,8 @@ const MEDIA: ReadonlyArray<{ readonly medium: "image" | "text" | "video"; readon
 interface Draft {
   readonly key: string;
   readonly vercelKey: string;
-  readonly gatewayImageModel: string;
-  readonly gatewayTextModel: string;
+  readonly vercelImageModel: string;
+  readonly vercelTextModel: string;
   readonly elevenLabsKey: string;
   readonly audioModel: string;
   readonly imageModel: string;
@@ -50,8 +50,8 @@ interface Draft {
 const draftOf = (settings: Settings | undefined): Draft => ({
   key: "",
   vercelKey: "",
-  gatewayImageModel: settings?.gatewayImageModel ?? "",
-  gatewayTextModel: settings?.gatewayTextModel ?? "",
+  vercelImageModel: settings?.vercelImageModel ?? "",
+  vercelTextModel: settings?.vercelTextModel ?? "",
   elevenLabsKey: "",
   audioModel: settings?.audioModel ?? "",
   imageModel: settings?.imageModel ?? "",
@@ -78,8 +78,8 @@ const SECTION_OF_FIELD: Record<keyof SettingsPatch, SettingsSection> = {
   elevenLabsKey: "generation",
   audioModel: "generation",
   vercelKey: "generation",
-  gatewayImageModel: "generation",
-  gatewayTextModel: "generation",
+  vercelImageModel: "generation",
+  vercelTextModel: "generation",
   outputDir: "general",
   claudePath: "agents",
   codexPath: "agents",
@@ -100,13 +100,20 @@ const patchOf = (draft: Draft, settings: Settings): SettingsPatch => {
   if (draft.key.trim() !== "") patch.key = draft.key.trim();
   if (draft.elevenLabsKey.trim() !== "") patch.elevenLabsKey = draft.elevenLabsKey.trim();
   if (draft.vercelKey.trim() !== "") patch.vercelKey = draft.vercelKey.trim();
-  for (const field of ["imageModel", "textModel", "videoModel", "audioModel", "gatewayImageModel", "gatewayTextModel", "outputDir"] as const) {
+  for (const field of ["imageModel", "textModel", "videoModel", "audioModel", "vercelImageModel", "vercelTextModel", "outputDir"] as const) {
     const value = draft[field].trim();
     if (value !== "" && value !== settings[field]) patch[field] = value;
   }
   for (const field of ["claudePath", "codexPath", "claudeConfigDir"] as const) if (draft[field] !== settings[field]) patch[field] = draft[field];
   return patch;
 };
+
+const ModelGroup = ({ title, children }: { readonly title: string; readonly children: ReactNode }) => (
+  <div className="flex flex-col gap-3" role="group" aria-label={`${title} default models`}>
+    <p className="m-0 text-xs font-medium text-muted-foreground">{title}</p>
+    {children}
+  </div>
+);
 
 export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const engine = useEngine();
@@ -173,8 +180,8 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
     if (!vercelKeyed) return;
     let live = true;
     for (const [medium, field] of [
-      ["image", "gatewayImage"],
-      ["text", "gatewayText"],
+      ["image", "vercelImage"],
+      ["text", "vercelText"],
     ] as const) {
       engine.call("models.list", { medium, provider: "vercel" }).then(
         (answer) => live && setCatalogues((current) => ({ ...current, [field]: answer.models.map((model) => model.id) })),
@@ -257,7 +264,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
         return;
       }
       if (!hadKey && !hadElevenLabsKey && !hadVercelKey && patch.vercelKey !== undefined) {
-        showNotice(GATEWAY_KEY_SAVED_MESSAGE, "info");
+        showNotice(VERCEL_KEY_SAVED_MESSAGE, "info");
         ui.close();
         return;
       }
@@ -358,7 +365,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const hasElevenLabsKey = settings?.hasElevenLabsKey === true;
   const elevenLabsCopy = elevenLabsStatusCopy({ hasKey: hasElevenLabsKey, keyHint: settings?.elevenLabsKeyHint ?? "", status: state.elevenLabsStatus });
   const hasVercelKey = settings?.hasVercelKey === true;
-  const vercelCopy = gatewayCreditsCopy({ hasKey: hasVercelKey, keyHint: vercelKeyHint, status: state.vercelStatus });
+  const vercelCopy = vercelCreditsCopy({ hasKey: hasVercelKey, keyHint: vercelKeyHint, status: state.vercelStatus });
   const saves =
     section === "agents" ||
     section === "general" ||
@@ -507,21 +514,28 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
         <SectionHeading>Default models</SectionHeading>
         {(hasKey || hasVercelKey || hasElevenLabsKey) && settings !== undefined ? (
           <>
-            {hasKey &&
-              MEDIA.map(({ medium, label, field }) => (
-                <ModelSelect key={medium} label={label} value={draft[field]} models={catalogues[medium]} onChange={(value) => edit({ [field]: value })} />
-              ))}
-            {hasVercelKey && (
-              <>
-                <ModelSelect label="Image · Vercel" value={draft.gatewayImageModel} models={catalogues.gatewayImage} onChange={(value) => edit({ gatewayImageModel: value })} />
-                <ModelSelect label="Text · Vercel" value={draft.gatewayTextModel} models={catalogues.gatewayText} onChange={(value) => edit({ gatewayTextModel: value })} />
-              </>
+            {hasKey && (
+              <ModelGroup title={GENERATION_PROVIDERS.openrouter.title}>
+                {MEDIA.map(({ medium, label, field }) => (
+                  <ModelSelect key={medium} label={label} value={draft[field]} models={catalogues[medium]} onChange={(value) => edit({ [field]: value })} />
+                ))}
+              </ModelGroup>
             )}
-            {hasElevenLabsKey && <ModelSelect label="Audio" value={draft.audioModel} models={catalogues.audio} onChange={(value) => edit({ audioModel: value })} />}
-            {hasElevenLabsKey && audioModelsProblem !== undefined && (
-              <p className="m-0 text-xs text-muted-foreground" data-testid="audio-models-problem">
-                {audioModelsProblem}
-              </p>
+            {hasVercelKey && (
+              <ModelGroup title={GENERATION_PROVIDERS.vercel.title}>
+                <ModelSelect label="Image" name="Vercel image" value={draft.vercelImageModel} models={catalogues.vercelImage} onChange={(value) => edit({ vercelImageModel: value })} />
+                <ModelSelect label="Text" name="Vercel text" value={draft.vercelTextModel} models={catalogues.vercelText} onChange={(value) => edit({ vercelTextModel: value })} />
+              </ModelGroup>
+            )}
+            {hasElevenLabsKey && (
+              <ModelGroup title="ElevenLabs">
+                <ModelSelect label="Audio" value={draft.audioModel} models={catalogues.audio} onChange={(value) => edit({ audioModel: value })} />
+                {audioModelsProblem !== undefined && (
+                  <p className="m-0 text-xs text-muted-foreground" data-testid="audio-models-problem">
+                    {audioModelsProblem}
+                  </p>
+                )}
+              </ModelGroup>
             )}
           </>
         ) : (

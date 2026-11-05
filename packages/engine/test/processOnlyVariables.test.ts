@@ -37,7 +37,7 @@ describe("hosting and test variables come from the process environment only", ()
       "OPENROUTER_TEXT_MODEL=google/gemini-3.5-flash-lite",
       "OPENROUTER_VIDEO_MODEL=bytedance/seedance-2.0",
       "AI_GATEWAY_API_KEY=",
-      "AI_GATEWAY_IMAGE_MODEL=openai/gpt-image-2",
+      "AI_GATEWAY_IMAGE_MODEL=bfl/flux-kontext-pro",
       "AI_GATEWAY_TEXT_MODEL=google/gemini-3.5-flash-lite",
       "ELEVENLABS_API_KEY=",
       "ELEVENLABS_AUDIO_MODEL=eleven_v4",

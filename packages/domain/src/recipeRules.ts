@@ -2,6 +2,8 @@
  * Recipe groups (spec 06): a group's standing settings, spec 03's `GroupRecipe`, as the
  * composer's tray and the group's label speak it.
  */
+import type { GenerationProvider } from "@unframed/contracts";
+import { isGenerationProvider, providerField, providerLabel, providerOf } from "./generationProviders.ts";
 import { readRunsValue, type RunsValue } from "./runsValue.ts";
 import { modelPart } from "./toolbar.ts";
 
@@ -15,8 +17,7 @@ export interface GroupRecipe {
   readonly params: Readonly<Record<string, RecipeValue>>;
   /** 1 to 10, or Free; always 1 for video and text. */
   readonly runs: RunsValue;
-  /** Spec 22: kept only as `vercel`; absent is OpenRouter. */
-  readonly provider?: "openrouter" | "vercel";
+  readonly provider?: GenerationProvider;
 }
 
 /** What the Generate tray holds for one medium: its model and props, Runs among them for image. */
@@ -24,7 +25,7 @@ export interface RecipeTray {
   readonly medium: RecipeMedium;
   readonly model: string;
   readonly props: Readonly<Record<string, RecipeValue>>;
-  readonly provider?: "openrouter" | "vercel";
+  readonly provider?: GenerationProvider;
 }
 
 const RUNS = "runs";
@@ -49,7 +50,7 @@ const runsFor = (medium: RecipeMedium, value: unknown): RunsValue => (medium ===
 /** The tray as a group's recipe: the params are the tray's props, Runs is the recipe's runs. */
 export const recipeFromTray = (tray: RecipeTray): GroupRecipe => {
   const runs = runsFor(tray.medium, tray.props[RUNS]);
-  return { medium: tray.medium, model: tray.model, params: normalParams(tray.props, runs), runs, ...(tray.provider === "vercel" ? { provider: "vercel" as const } : {}) };
+  return { medium: tray.medium, model: tray.model, params: normalParams(tray.props, runs), runs, ...providerField(tray.provider) };
 };
 
 /** A recipe as the tray holds it: its params, and Runs when it is not 1. */
@@ -57,7 +58,7 @@ export const trayFromRecipe = (recipe: GroupRecipe): RecipeTray => ({
   medium: recipe.medium,
   model: recipe.model,
   props: { ...normalParams(recipe.params, recipe.runs), ...(recipe.medium === "image" && recipe.runs !== 1 ? { [RUNS]: recipe.runs } : {}) },
-  ...(recipe.provider === "vercel" ? { provider: "vercel" as const } : {}),
+  ...providerField(recipe.provider),
 });
 
 /** A stored `meta.unframed.recipe` as a recipe, or `undefined` when it is not one. Anything but the four fields is dropped. */
@@ -69,13 +70,13 @@ export const readGroupRecipe = (value: unknown): GroupRecipe | undefined => {
   if (typeof params === "object" && params !== null && !Array.isArray(params)) {
     for (const [key, each] of Object.entries(params)) if (isValue(each)) kept[key] = each;
   }
-  return { medium: medium as RecipeMedium, model, params: kept, runs: runsFor(medium as RecipeMedium, runs), ...(provider === "vercel" ? { provider: "vercel" as const } : {}) };
+  return { medium: medium as RecipeMedium, model, params: kept, runs: runsFor(medium as RecipeMedium, runs), ...providerField(isGenerationProvider(provider) ? provider : undefined) };
 };
 
 /** Whether two recipes would make the same run: same medium, model, runs and params, in any order. */
 export const recipeEquals = (a: GroupRecipe, b: GroupRecipe): boolean => {
   if (a.medium !== b.medium || a.model !== b.model || a.runs !== b.runs) return false;
-  if ((a.provider === "vercel") !== (b.provider === "vercel")) return false;
+  if (providerOf(a.provider) !== providerOf(b.provider)) return false;
   const left = normalParams(a.params, a.runs);
   const right = normalParams(b.params, b.runs);
   const keys = Object.keys(left);
@@ -108,6 +109,6 @@ export const recipeChip = (recipe: GroupRecipe): string => {
   }
   if (recipe.runs === "free") parts.push("Free");
   else if (recipe.runs > 1) parts.push(`×${recipe.runs}`);
-  if (recipe.provider === "vercel") parts.push("Vercel");
+  parts.push(...providerLabel(recipe.provider));
   return parts.filter((part): part is string => part !== undefined).join(" · ");
 };

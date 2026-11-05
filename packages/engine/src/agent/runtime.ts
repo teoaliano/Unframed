@@ -63,8 +63,8 @@ interface GenerationRuns {
   readonly runImage: (request: ImageRunRequest) => Promise<{ runId: string; batchId: string; placeholders: string[] }>;
   readonly runText: (request: TextRunRequest) => Promise<{ runId: string; batchId: string; placeholders: string[] }>;
   readonly pricing: (model: string) => Promise<ImagePricingAnswer>;
-  readonly models: (kind: "image" | "video", provider?: GenerationProvider) => Promise<ReadonlyArray<ModelEntry>>;
-  readonly defaultModel: (kind: "image" | "video", provider?: GenerationProvider) => Promise<string>;
+  readonly models: (kind: "image" | "video", provider: GenerationProvider) => Promise<ReadonlyArray<ModelEntry>>;
+  readonly defaultModel: (kind: "image" | "video", provider: GenerationProvider) => Promise<string>;
   readonly providerKeys: () => Promise<{ readonly hasKey: boolean; readonly hasVercelKey: boolean }>;
   readonly startVideo: (request: VideoStartRequest) => Promise<{ jobId: string; status: string; shapeId: string }>;
   readonly onVideoFinished: (jobId: string, handler: (outcome: { ok: boolean; cost: number | null }) => void) => () => void;

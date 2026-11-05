@@ -272,7 +272,7 @@ const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "rec
     if (busy || !recipe) return;
     setBusy(true);
     try {
-      await runGroupRecipe({ editor, engine, project, groupId, recipe, hasKey: settings?.hasKey ?? true, hasVercelKey: settings?.hasVercelKey ?? false, hasElevenLabsKey: settings?.hasElevenLabsKey ?? true });
+      await runGroupRecipe({ editor, engine, project, groupId, recipe, keys: settings ?? { hasKey: true, hasVercelKey: false }, hasElevenLabsKey: settings?.hasElevenLabsKey ?? true });
     } catch (error) {
       if (error instanceof NoKeyError) showErrorAction(error.message, "Open Settings", () => openSettings("generation"));
       else showError(messageOf(error));

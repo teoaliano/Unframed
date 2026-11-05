@@ -145,8 +145,9 @@ Spec 03's selection to request already expands a selected group in place (one sl
 - image: the exact size when set, as `1024²` when width equals height and `1024×1536` otherwise; else the aspect ratio (`2:3`);
 - video: the duration as `5s`, then the resolution (`720p`);
 - text: nothing beyond the model;
-- runs: `×N` when N is more than 1 (`×3`), `Free` for Free, nothing for 1.
-Example: `gpt-image-2 · 1024² · ×3`. Clicking the chip opens the composer on the recipe.
+- runs: `×N` when N is more than 1 (`×3`), `Free` for Free, nothing for 1;
+- provider (spec 22): `Vercel` last for a recipe that runs through the Vercel AI Gateway, nothing for OpenRouter.
+Example: `gpt-image-2 · 1024² · ×3`, or `flux-2-pro · Vercel`. The recipe's `provider` is saved by Save as recipe and Update recipe, compared by `recipeEquals` (absent and `openrouter` are the same), and kept in library presets with the rest of the recipe. Clicking the chip opens the composer on the recipe.
 
 **When a recipe applies.** When the selection contains exactly one recipe group, whatever else is selected. Other selected shapes join the run as sources in the usual order. With two or more recipe groups selected, no recipe applies and the composer opens on last-used values.
 

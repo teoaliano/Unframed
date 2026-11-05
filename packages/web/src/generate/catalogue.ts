@@ -1,4 +1,5 @@
 import type { GenerationProvider, ModelsListAnswer } from "@unframed/contracts";
+import { DEFAULT_PROVIDER, GENERATION_PROVIDERS, providerField, providerOf } from "@unframed/domain";
 import { useEffect, useState } from "react";
 import type { EngineConnection, Payload } from "../rpc/engine.ts";
 import type { MediumDefinition } from "./mediumRegistry.ts";
@@ -7,15 +8,19 @@ type Catalogue = Payload<"models.list">["medium"];
 
 const lists = new Map<string, ModelsListAnswer>();
 
-/** Spec 22: a catalogue per medium and provider; video and audio have one each. */
-const keyOf = (medium: Catalogue, provider: GenerationProvider | undefined) => (provider === "vercel" && (medium === "image" || medium === "text") ? `${medium}:vercel` : medium);
+const routedProvider = (medium: Catalogue, provider: GenerationProvider | undefined) =>
+  providerOf(provider) !== DEFAULT_PROVIDER && provider !== undefined && GENERATION_PROVIDERS[provider].media.includes(medium) ? provider : undefined;
 
-const request = (medium: Catalogue, provider: GenerationProvider | undefined): Payload<"models.list"> =>
-  keyOf(medium, provider) === medium ? { medium } : { medium, provider: "vercel" };
+const keyOf = (medium: Catalogue, provider: GenerationProvider | undefined) => {
+  const routed = routedProvider(medium, provider);
+  return routed === undefined ? medium : `${medium}:${routed}`;
+};
+
+const request = (medium: Catalogue, provider: GenerationProvider | undefined): Payload<"models.list"> => ({ medium, ...providerField(routedProvider(medium, provider)) });
 
 /**
  * A catalogue: fetched each time a tray opens, with the last answer shown meanwhile.
- * `undefined` until the first answer of the session arrives, or while `provider` is not known yet.
+ * `undefined` until the first answer of the session arrives.
  */
 export const useCatalogue = (engine: EngineConnection, medium: Catalogue, provider: GenerationProvider | undefined, ready = true): ModelsListAnswer | undefined => {
   const key = keyOf(medium, provider);
@@ -35,7 +40,6 @@ export const useCatalogue = (engine: EngineConnection, medium: Catalogue, provid
     };
   }, [engine, medium, provider, key, ready]);
   if (!ready) return undefined;
-  // Another catalogue's answer is never this one's, even for the render before the switch lands.
   return answer.key === key ? answer.list : lists.get(key);
 };
 

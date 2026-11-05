@@ -3,7 +3,10 @@ import {
   defaultProps,
   estimateImageRun,
   formatEstimate,
-  gatewayListPrice,
+  GENERATION_PROVIDERS,
+  providerField,
+  providerOf,
+  vercelListPrice,
   joinPromptParts,
   keepSupported,
   MODEL_DRIVEN_PROPS,
@@ -55,7 +58,7 @@ const send = async (input: SendInput): Promise<SendOutcome> => {
     if (input.remember !== false) void rememberTray(engine, "image", values, { ...values.props });
   };
   if (runs === "free") {
-    const outcome = await sendFree(input, values.provider === "vercel" ? {} : imageParams(values.props));
+    const outcome = await sendFree(input, imageParams(values.props));
     remember();
     return outcome;
   }
@@ -65,10 +68,10 @@ const send = async (input: SendInput): Promise<SendOutcome> => {
     project,
     batchId: mintBatchId(),
     ...(values.model === undefined ? {} : { model: values.model }),
-    params: values.provider === "vercel" ? {} : imageParams(values.props),
+    params: imageParams(values.props),
     selectionPrompt: plan.selectionPrompt,
     instruction: plan.instruction,
-    ...(values.provider === "vercel" ? { provider: "vercel" as const } : {}),
+    ...providerField(values.provider),
   };
   // A fixed count sends that many identical outputs as one batch.
   const outputs = (references: RecipeRef[]) => Array.from({ length: runs }, () => ({ prompt: plan.prompt, references }));
@@ -108,8 +111,8 @@ export const imageMedium: MediumDefinition = {
   keep: (props, params) => keepSupported(props, params) as Record<string, PropValue>,
   pricing: (engine, id) => engine.call("models.imagePricing", { id }),
   estimate: ({ pricing, props, source, entry, provider }) => {
-    if (provider === "vercel") {
-      const each = gatewayListPrice({ entry });
+    if (GENERATION_PROVIDERS[providerOf(provider)].listPriced) {
+      const each = vercelListPrice({ entry });
       if (each === null) return undefined;
       const runs = runsOf(props);
       return runs === "free" ? `${formatEstimate(each)} / image` : formatEstimate(each * runs);

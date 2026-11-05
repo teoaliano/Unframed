@@ -74,6 +74,6 @@ export interface TextSidecar {
   readonly cost: number | null;
   readonly createdAt: string;
   readonly recipe?: ResultRecipe;
-  readonly provider?: "vercel";
+  readonly provider?: GenerationProvider;
   readonly costBasis?: CostBasis;
 }

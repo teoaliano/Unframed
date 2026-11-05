@@ -17,4 +17,4 @@ export * from "./legacy.ts";
 export * from "./agentConnections.ts";
 export * from "./selection.ts";
 export * from "./spend.ts";
-export * from "./gateway.ts";
+export * from "./vercel.ts";

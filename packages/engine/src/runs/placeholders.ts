@@ -31,7 +31,6 @@ export interface Landed {
   readonly file: string;
   readonly sidecar: string;
   readonly cost: number | null;
-  /** Spec 22: the cost is a gateway list price. */
   readonly listPrice?: true;
   readonly width: number | undefined;
   readonly height: number | undefined;
@@ -272,4 +271,13 @@ export const clearChange = (shape: Shape): CanvasChange => {
   if (shape.type === "audio" ? shape.props.file === "" || shape.props.file === undefined : shape.props.assetId === null || shape.props.assetId === undefined) return { put: [], remove: [shape.id] };
   const { run: _run, ...unframed } = unframedMetaOf(shape);
   return { put: [{ ...shape, meta: { ...shape.meta, unframed } } as unknown as TLRecord], remove: [] };
+};
+
+export const costChange = (shape: Shape, sidecar: string, cost: number | null, listPrice: boolean): CanvasChange | undefined => {
+  const unframed = unframedMetaOf(shape);
+  const result = resultMetaOf(shape);
+  if (!result || result.sidecar !== sidecar) return undefined;
+  const { listPrice: _old, ...rest } = result;
+  const next = { ...rest, cost, ...(listPrice ? { listPrice: true as const } : {}) };
+  return { put: [{ ...shape, meta: { ...shape.meta, unframed: { ...unframed, result: next } } } as unknown as TLRecord], remove: [] };
 };

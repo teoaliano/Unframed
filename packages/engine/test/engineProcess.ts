@@ -41,7 +41,6 @@ export interface EngineOptions {
   /** How the stub answers, from the start. */
   stub?: StubHandler;
   elevenLabs?: StubHandler | true;
-  /** Spec 22: point `UNFRAMED_TEST_VERCEL_ORIGIN` at a stub. */
   vercel?: StubHandler | true;
 }
 

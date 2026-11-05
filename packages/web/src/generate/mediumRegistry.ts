@@ -19,7 +19,6 @@ export interface TrayValues {
   /** The person picked the model in the model dialog (or it came back from last-used values). */
   readonly picked: boolean;
   readonly props: TrayProps;
-  /** Spec 22: the provider an image or text run goes through; OpenRouter when absent. */
   readonly provider?: GenerationProvider | undefined;
 }
 
@@ -29,7 +28,6 @@ export interface TrayStatus {
   /** Lines that disable send. */
   readonly blockers: ReadonlyArray<string>;
   readonly needsKey?: boolean | undefined;
-  /** Spec 22: the no-key line's sentence when it is not spec 03's. */
   readonly keyMessage?: string | undefined;
 }
 

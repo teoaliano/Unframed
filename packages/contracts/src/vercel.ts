@@ -1,4 +1,3 @@
-/** Spec 22: the Vercel AI Gateway beside OpenRouter for image and text runs. */
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import { UnframedError } from "./errors.ts";

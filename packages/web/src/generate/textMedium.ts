@@ -3,7 +3,7 @@
  * image and video slot attached, the answer landing as a text result. No props, no Runs,
  * no estimate: the tray shows the model and nothing else.
  */
-import type { ModelParams } from "@unframed/domain";
+import { providerField, type ModelParams } from "@unframed/domain";
 import type { TLShapeId } from "tldraw";
 import type { Payload } from "../rpc/engine.ts";
 import { anchorOf, pageBox } from "./facts.ts";
@@ -25,7 +25,7 @@ const textRunRequest = async ({ editor, project, values, source }: Omit<SendInpu
     selectionPrompt: plan.selectionPrompt,
     instruction: plan.instruction,
     prompt: plan.prompt,
-    ...(values.provider === "vercel" ? { provider: "vercel" as const } : {}),
+    ...providerField(values.provider),
   };
   if (source.kind === "selection") {
     return {

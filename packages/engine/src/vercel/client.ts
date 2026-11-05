@@ -1,6 +1,5 @@
-/** Spec 22: every Vercel AI Gateway call. Never rejects: every failure is an outcome. */
 import type { CostBasis, ModelEntry, ModelsListAnswer, VercelStatus } from "@unframed/contracts";
-import { gatewayAmount, gatewayCatalogueEntry, gatewayListPrice, gatewayMessage, GATEWAY_NO_IMAGE_MESSAGE } from "@unframed/domain";
+import { vercelAmount, vercelCatalogueEntry, vercelListPrice, vercelMessage, VERCEL_NO_IMAGE_MESSAGE } from "@unframed/domain";
 import { errorText } from "../log.ts";
 import type { ReferencePart } from "../openRouter/text.ts";
 
@@ -42,7 +41,7 @@ const call = async (url: string, init: RequestInit, timeoutMs: number): Promise<
   } catch {
     isJson = false;
   }
-  if (!response.ok) return { ok: false, error: gatewayMessage(response.status, isJson ? parsed : undefined, raw) };
+  if (!response.ok) return { ok: false, error: vercelMessage(response.status, isJson ? parsed : undefined, raw) };
   if (!isJson) return { ok: false, error: `Unexpected response from the Vercel AI Gateway: ${raw.slice(0, 300)}` };
   return { ok: true, body: parsed };
 };
@@ -52,7 +51,6 @@ const post = (origin: string, key: string, path: string, body: unknown, timeoutM
 
 const catalogues = new Map<string, { readonly at: number; readonly data: unknown[] }>();
 
-/** The whole public catalogue, cached per origin for ten minutes. Undefined when it cannot be read. */
 const catalogue = async (origin: string, fresh: boolean): Promise<unknown[] | undefined> => {
   const cached = catalogues.get(origin);
   if (!fresh && cached && Date.now() - cached.at < CATALOGUE_TTL_MS) return cached.data;
@@ -64,35 +62,33 @@ const catalogue = async (origin: string, fresh: boolean): Promise<unknown[] | un
   return data;
 };
 
-/** `models.list` for the gateway: the medium's models, the default appended, only the default without a key or on a failure. */
-export const listGatewayModels = async (origin: string, medium: "image" | "text", fallback: string, hasKey: boolean): Promise<ModelsListAnswer> => {
+export const listVercelModels = async (origin: string, medium: "image" | "text", fallback: string, hasKey: boolean): Promise<ModelsListAnswer> => {
   const data = hasKey ? await catalogue(origin, true) : undefined;
-  const models = (data ?? []).flatMap((raw) => gatewayCatalogueEntry(raw, medium) ?? []);
+  const models = (data ?? []).flatMap((raw) => vercelCatalogueEntry(raw, medium) ?? []);
   const all: ModelEntry[] = models.some((model) => model.id === fallback) ? models : [...models, { id: fallback, name: fallback }];
   return { models: all.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)), default: fallback };
 };
 
 const catalogueEntry = async (origin: string, medium: "image" | "text", model: string): Promise<ModelEntry | undefined> =>
-  ((await catalogue(origin, false)) ?? []).flatMap((raw) => gatewayCatalogueEntry(raw, medium) ?? []).find((entry) => entry.id === model);
+  ((await catalogue(origin, false)) ?? []).flatMap((raw) => vercelCatalogueEntry(raw, medium) ?? []).find((entry) => entry.id === model);
 
-export type GatewayImageOutcome =
+export type VercelImageOutcome =
   | { readonly ok: true; readonly bytes: Buffer; readonly id: string | undefined }
   | { readonly ok: false; readonly error: string };
 
-/** One image: generations without references, edits with them. */
-export const gatewayImage = async (origin: string, key: string, input: { readonly model: string; readonly prompt: string; readonly images: ReadonlyArray<string> }): Promise<GatewayImageOutcome> => {
+export const vercelImage = async (origin: string, key: string, input: { readonly model: string; readonly prompt: string; readonly images: ReadonlyArray<string> }): Promise<VercelImageOutcome> => {
   const body: Record<string, unknown> = { model: input.model, prompt: input.prompt, n: 1, response_format: "b64_json" };
   if (input.images.length > 0) body.images = input.images.map((url) => ({ image_url: url }));
   const answer = await post(origin, key, input.images.length > 0 ? "/v1/images/edits" : "/v1/images/generations", body, IMAGE_TIMEOUT_MS);
   if (!answer.ok) return answer;
   const data = field(answer.body, "data");
   const b64 = field(Array.isArray(data) ? data[0] : undefined, "b64_json");
-  if (typeof b64 !== "string" || b64 === "") return { ok: false, error: GATEWAY_NO_IMAGE_MESSAGE };
+  if (typeof b64 !== "string" || b64 === "") return { ok: false, error: VERCEL_NO_IMAGE_MESSAGE };
   const id = field(answer.body, "id");
   return { ok: true, bytes: Buffer.from(b64, "base64"), id: typeof id === "string" && id !== "" ? id : undefined };
 };
 
-export type GatewayTextOutcome =
+export type VercelTextOutcome =
   | { readonly ok: true; readonly text: string; readonly id: string | undefined; readonly usage: unknown }
   | { readonly ok: false; readonly error: string };
 
@@ -103,13 +99,12 @@ const answerText = (content: unknown): string | undefined => {
   return parts.length > 0 ? parts.join("") : undefined;
 };
 
-/** One chat completion: the prompt then the image parts, after a system message when one is given. Video parts are never sent. */
-export const gatewayText = async (
+export const vercelText = async (
   origin: string,
   key: string,
   input: { readonly model: string; readonly prompt: string; readonly references: ReadonlyArray<ReferencePart>; readonly system?: string | undefined },
   noText: string,
-): Promise<GatewayTextOutcome> => {
+): Promise<VercelTextOutcome> => {
   const user = { role: "user", content: [{ type: "text", text: input.prompt }, ...input.references.filter((part) => part.type === "image_url")] };
   const messages = input.system !== undefined && input.system.trim() !== "" ? [{ role: "system", content: input.system }, user] : [user];
   const answer = await post(origin, key, "/v1/chat/completions", { model: input.model, messages }, CALL_TIMEOUT_MS);
@@ -123,13 +118,12 @@ export const gatewayText = async (
 
 const lookup = async (origin: string, key: string, id: string): Promise<number | undefined> => {
   const answer = await call(`${origin}/v1/generation?id=${encodeURIComponent(id)}`, { headers: { authorization: `Bearer ${key}` } }, SHORT_TIMEOUT_MS);
-  return answer.ok ? gatewayAmount(field(field(answer.body, "data"), "total_cost")) : undefined;
+  return answer.ok ? vercelAmount(field(field(answer.body, "data"), "total_cost")) : undefined;
 };
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** A run's cost: the generation lookup (three tries), else the list price, else none. */
-export const gatewayCost = async (input: {
+export const vercelCost = async (input: {
   readonly origin: string;
   readonly key: string;
   readonly id: string | undefined;
@@ -142,17 +136,16 @@ export const gatewayCost = async (input: {
     for (let attempt = 0; attempt < 3; attempt++) {
       if (attempt > 0) await wait(input.waitMs);
       const cost = await lookup(input.origin, input.key, input.id);
-      if (cost !== undefined) return { cost, costBasis: "gateway" };
+      if (cost !== undefined) return { cost, costBasis: "measured" };
     }
   }
   const entry = await catalogueEntry(input.origin, input.medium, input.model);
   const usage = input.medium === "text" ? ((typeof input.usage === "object" && input.usage !== null ? input.usage : {}) as Record<string, unknown>) : undefined;
-  const price = gatewayListPrice({ entry, ...(usage === undefined ? {} : { usage }) });
+  const price = vercelListPrice({ entry, ...(usage === undefined ? {} : { usage }) });
   return price === null ? { cost: null } : { cost: price, costBasis: "list-price" };
 };
 
-/** `vercel.status`: the team's credits. Rejects with the sentence `upstream` carries. */
-export const gatewayCredits = async (origin: string, key: string): Promise<VercelStatus> => {
+export const vercelCredits = async (origin: string, key: string): Promise<VercelStatus> => {
   if (key === "") return { hasKey: false };
   let response: Response;
   try {
@@ -162,8 +155,8 @@ export const gatewayCredits = async (origin: string, key: string): Promise<Verce
   }
   if (response.status === 401 || response.status === 403) return { hasKey: true, revoked: true };
   const body: unknown = response.ok ? await response.json().catch(() => undefined) : undefined;
-  const balance = gatewayAmount(field(body, "balance"));
-  const totalUsed = gatewayAmount(field(body, "total_used"));
+  const balance = vercelAmount(field(body, "balance"));
+  const totalUsed = vercelAmount(field(body, "total_used"));
   if (balance === undefined || totalUsed === undefined) throw new Error(`The Vercel AI Gateway answered ${response.status}.`);
   return { hasKey: true, balance, totalUsed };
 };

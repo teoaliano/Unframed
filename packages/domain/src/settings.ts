@@ -10,7 +10,7 @@ export const SETTINGS_DEFAULTS = {
   OPENROUTER_TEXT_MODEL: "google/gemini-3.5-flash-lite",
   OPENROUTER_VIDEO_MODEL: "bytedance/seedance-2.0",
   ELEVENLABS_AUDIO_MODEL: "eleven_v4",
-  AI_GATEWAY_IMAGE_MODEL: "openai/gpt-image-2",
+  AI_GATEWAY_IMAGE_MODEL: "bfl/flux-kontext-pro",
   AI_GATEWAY_TEXT_MODEL: "google/gemini-3.5-flash-lite",
   OUTPUT_DIR: "./output",
   PORT: 8787,
@@ -25,8 +25,8 @@ export interface EffectiveSettings {
   readonly textModel: string;
   readonly videoModel: string;
   readonly vercelKey: string;
-  readonly gatewayImageModel: string;
-  readonly gatewayTextModel: string;
+  readonly vercelImageModel: string;
+  readonly vercelTextModel: string;
   readonly elevenLabsKey: string;
   readonly audioModel: string;
   readonly outputDir: string;
@@ -53,8 +53,8 @@ export const effectiveSettings = (fileVars: EnvVars, processEnv: EnvVars): Effec
     textModel: value("OPENROUTER_TEXT_MODEL") ?? SETTINGS_DEFAULTS.OPENROUTER_TEXT_MODEL,
     videoModel: value("OPENROUTER_VIDEO_MODEL") ?? SETTINGS_DEFAULTS.OPENROUTER_VIDEO_MODEL,
     vercelKey: value(VERCEL_KEY.variable) ?? "",
-    gatewayImageModel: value("AI_GATEWAY_IMAGE_MODEL") ?? SETTINGS_DEFAULTS.AI_GATEWAY_IMAGE_MODEL,
-    gatewayTextModel: value("AI_GATEWAY_TEXT_MODEL") ?? SETTINGS_DEFAULTS.AI_GATEWAY_TEXT_MODEL,
+    vercelImageModel: value("AI_GATEWAY_IMAGE_MODEL") ?? SETTINGS_DEFAULTS.AI_GATEWAY_IMAGE_MODEL,
+    vercelTextModel: value("AI_GATEWAY_TEXT_MODEL") ?? SETTINGS_DEFAULTS.AI_GATEWAY_TEXT_MODEL,
     elevenLabsKey: value(ELEVENLABS_KEY.variable) ?? "",
     audioModel: value("ELEVENLABS_AUDIO_MODEL") ?? SETTINGS_DEFAULTS.ELEVENLABS_AUDIO_MODEL,
     outputDir: value("OUTPUT_DIR") ?? SETTINGS_DEFAULTS.OUTPUT_DIR,

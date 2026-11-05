@@ -8,7 +8,6 @@ import * as Schema from "effect/Schema";
 export const Medium = Schema.Literals(["image", "video", "text", "audio"]);
 export type Medium = typeof Medium.Type;
 
-/** Spec 22: the service an image or text run goes through. Absent means OpenRouter wherever it is stored. */
 export const GenerationProvider = Schema.Literals(["openrouter", "vercel"]);
 export type GenerationProvider = typeof GenerationProvider.Type;
 
@@ -96,8 +95,7 @@ export const ResultMeta = Schema.Struct({
   /** Spec 11 only: an imported result's approximate recipe. */
   recipe: Schema.optionalKey(ResultRecipe),
   credits: Schema.optionalKey(Schema.NullOr(Schema.Number)),
-  provider: Schema.optionalKey(Schema.Literal("vercel")),
-  /** Spec 22: the cost is the catalogue's list price, not a measured one. */
+  provider: Schema.optionalKey(GenerationProvider),
   listPrice: Schema.optionalKey(Schema.Literal(true)),
 });
 export type ResultMeta = typeof ResultMeta.Type;
@@ -263,9 +261,8 @@ export interface ImageSidecar {
   readonly recipe: ResultRecipe;
   /** Spec 05: a Free output's picks. */
   readonly free?: FreePicks;
-  /** Spec 22: a run through the Vercel AI Gateway, and where its cost came from. */
-  readonly provider?: "vercel";
+  readonly provider?: GenerationProvider;
   readonly costBasis?: CostBasis;
 }
 
-export type CostBasis = "gateway" | "list-price";
+export type CostBasis = "measured" | "list-price";

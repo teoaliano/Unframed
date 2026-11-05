@@ -7,6 +7,8 @@
  */
 import { resultMetaOf, type GenerationProvider, type ImageParams, type RecipeRef } from "@unframed/contracts";
 import {
+  providerField,
+  providerOf,
   composeSelection,
   freeBatch,
   freeNotes,
@@ -61,7 +63,6 @@ export interface StagedFree {
   readonly extraCost: number | undefined;
   readonly model: string | undefined;
   readonly params: ImageParams;
-  /** Spec 22: the provider every output and the repair call go through. */
   readonly provider: GenerationProvider | undefined;
   /** Composites and sketches already rendered and uploaded, by slot: one Generate writes each once. */
   readonly rendered: Map<string, RecipeRef>;
@@ -127,7 +128,7 @@ export const sendBatch = async (editor: Editor, engine: EngineConnection, stage:
     sources: [...live.sources],
     anchor: selectionBox(editor, selected as TLShapeId[]) ?? { x: 0, y: 0, w: 0, h: 0 },
     ...(stage.extraCost === undefined ? {} : { batchExtraCost: stage.extraCost }),
-    ...(stage.provider === "vercel" ? { provider: "vercel" as const } : {}),
+    ...providerField(stage.provider),
   });
 };
 
@@ -154,7 +155,7 @@ export const sendFree = async ({ editor, engine, project, values, source }: Send
     const images = slots.filter((_ref, index) => composition.references[index]!.kind === "image");
     const shape = editor.getShape(found.source.id as TLShapeId);
     const result = found.source.textResult && shape ? resultMetaOf(shape) : undefined;
-    const model = result !== undefined && (result.provider === "vercel") === (values.provider === "vercel") ? result.model : undefined;
+    const model = result !== undefined && providerOf(result.provider) === providerOf(values.provider) ? result.model : undefined;
     const answer = await engine.call("text.complete", {
       project,
       system: repairSystemPrompt(images.length),
@@ -162,7 +163,7 @@ export const sendFree = async ({ editor, engine, project, values, source }: Send
       references: images,
       batchId,
       ...(model === undefined ? {} : { model }),
-      ...(values.provider === "vercel" ? { provider: "vercel" as const } : {}),
+      ...providerField(values.provider),
     });
     if (answer.cost !== null) extraCost = answer.cost;
     const split = splitList(answer.text);
