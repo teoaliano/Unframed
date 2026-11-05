@@ -17,7 +17,7 @@ import { clearStoredModels } from "../lastUsed.ts";
 import { Native } from "../native.ts";
 import { Catalogue } from "../openRouter/catalogue.ts";
 import { ElevenLabsError, listAudioModels, listVoices, subscriptionStatus } from "../elevenLabs/client.ts";
-import { ELEVENLABS_NO_KEY, GENERATION_PROVIDERS, VERCEL_SERVES_MESSAGE } from "@unframed/domain";
+import { ELEVENLABS_NO_KEY, GENERATION_PROVIDERS, providerServesMessage } from "@unframed/domain";
 import { vercelCredits } from "../vercel/client.ts";
 import { providerCatalogues } from "../runs/providers.ts";
 import { VideoCatalogue } from "../openRouter/videoCatalogue.ts";
@@ -181,7 +181,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
         provider !== undefined && provider !== "openrouter"
           ? GENERATION_PROVIDERS[provider].media.includes(medium) && (medium === "image" || medium === "text")
             ? Effect.flatMap(settings.read, (current) => Effect.promise(() => catalogues[provider](current, medium)))
-            : Effect.fail(unframedError("bad_request", VERCEL_SERVES_MESSAGE))
+            : Effect.fail(unframedError("bad_request", providerServesMessage(provider, medium)))
           : medium === "audio"
           ? Effect.flatMap(settings.read, (current) => Effect.promise(() => listAudioModels(config.elevenLabsOrigin, current.elevenLabsKey, current.audioModel)))
           : medium === "video"

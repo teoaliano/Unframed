@@ -7,7 +7,7 @@ import {
   vercelMessage,
   generationProviders,
   VERCEL_NO_KEY_MESSAGE,
-  VERCEL_SERVES_MESSAGE,
+  providerServesMessage,
   normaliseSettingsPatch,
   PROVIDER_KEYS,
   providerKeyView,
@@ -114,7 +114,9 @@ describe("vercelMessage", () => {
   });
   it("names the refusals", () => {
     expect(VERCEL_NO_KEY_MESSAGE).toBe("No Vercel AI Gateway key yet. Add one in Settings, under Generation.");
-    expect(VERCEL_SERVES_MESSAGE).toBe("The Vercel AI Gateway serves image and text runs only. Video runs through OpenRouter.");
+    expect(providerServesMessage("vercel", "video")).toBe("The Vercel AI Gateway serves image and text runs only. Video runs through OpenRouter.");
+    expect(providerServesMessage("vercel", "audio")).toBe("The Vercel AI Gateway serves image and text runs only. Audio runs through ElevenLabs.");
+    expect(providerServesMessage("openrouter", "audio")).toBe("OpenRouter serves image, video and text runs only. Audio runs through ElevenLabs.");
   });
 });
 

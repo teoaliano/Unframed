@@ -108,7 +108,7 @@ Settings variables (may appear in `.env`; `.env` values override the process env
 | `OPENROUTER_IMAGE_MODEL` | `openai/gpt-image-2` | `^[\w.-]+\/[\w.:-]+$` | yes | no |
 | `OPENROUTER_TEXT_MODEL` | `google/gemini-3.5-flash-lite` | same as image | yes | no |
 | `OPENROUTER_VIDEO_MODEL` | `bytedance/seedance-2.0` | same as image | yes | no |
-| `AI_GATEWAY_API_KEY` (spec 22) | none | `^vck_[\w-]{8,200}$` | yes | no (removal is its own action) |
+| `AI_GATEWAY_API_KEY` (spec 22) | none | `^[\w-]{16,200}$` | yes | no (removal is its own action) |
 | `AI_GATEWAY_IMAGE_MODEL` (spec 22) | `bfl/flux-kontext-pro` | the model slug rule | yes | no |
 | `AI_GATEWAY_TEXT_MODEL` (spec 22) | `google/gemini-3.5-flash-lite` | the model slug rule | yes | no |
 | `ELEVENLABS_API_KEY` (spec 15) | none | `^[\w-]{20,200}$` | yes | no (removal is its own action) |

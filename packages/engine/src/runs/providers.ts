@@ -83,6 +83,3 @@ export const providerCatalogues = (input: {
   openrouter: (_settings, medium) => input.openRouter(medium),
   vercel: (settings, medium) => listVercelModels(input.vercelOrigin, medium, GENERATION_PROVIDERS.vercel.defaultModel(settings, medium), GENERATION_PROVIDERS.vercel.key(settings) !== ""),
 });
-
-export const settled = async (answer: { readonly cost: number | null; readonly later?: () => Promise<Priced> }): Promise<Priced> =>
-  answer.later === undefined ? { cost: answer.cost } : answer.later();

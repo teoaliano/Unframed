@@ -9,7 +9,7 @@ import {
   ACTIVITY_STARTED,
   landedSummary,
   estimateImageRun,
-  VERCEL_SERVES_MESSAGE,
+  providerServesMessage,
   GENERATION_PROVIDERS,
   generationProviders,
   providerField,
@@ -151,7 +151,7 @@ export class AgentGeneration {
   async generate(call: GenerateCall): Promise<ToolAnswer> {
     if (call.medium === "text" && Object.keys(call.params).length > 0) return refusal(TEXT_PARAMS_REFUSAL);
     if (call.medium === "video" && call.runs !== 1) return refusal(VIDEO_RUNS_REFUSAL);
-    if (call.provider !== undefined && !GENERATION_PROVIDERS[call.provider].media.includes(call.medium)) return refusal(VERCEL_SERVES_MESSAGE);
+    if (call.provider !== undefined && !GENERATION_PROVIDERS[call.provider].media.includes(call.medium)) return refusal(providerServesMessage(call.provider, call.medium));
     const keys = await this.host.providerKeys();
     const provider: GenerationProvider = call.medium === "video" ? "openrouter" : (call.provider ?? generationProviders(keys, call.medium)[0] ?? "openrouter");
     const records = await this.host.records(call.project);

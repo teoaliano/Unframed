@@ -148,10 +148,13 @@ describe("Vercel catalogues", () => {
     try {
       expect(await rpc.call("models.list", { medium: "image", provider: "vercel" })).toEqual({ models: [{ id: "bfl/flux-kontext-pro", name: "bfl/flux-kontext-pro" }], default: "bfl/flux-kontext-pro" });
       expect(vercel.calls).toEqual([]);
-      for (const medium of ["video", "audio"] as const) {
+      for (const [medium, other] of [
+        ["video", "Video runs through OpenRouter."],
+        ["audio", "Audio runs through ElevenLabs."],
+      ] as const) {
         await expect(rpc.call("models.list", { medium, provider: "vercel" })).rejects.toMatchObject({
           code: "bad_request",
-          message: "The Vercel AI Gateway serves image and text runs only. Video runs through OpenRouter.",
+          message: `The Vercel AI Gateway serves image and text runs only. ${other}`,
         });
       }
     } finally {
@@ -306,15 +309,31 @@ describe("a text call through the vercel", () => {
     }
   });
 
-  it("falls back to the list price after three lookups that find nothing", async () => {
-    const { engine, rpc, vercel, sidecars } = await start({ script: { generation: () => ({ status: 404, body: { error: { message: "Usage event not found" } } }) } });
+  it("text.complete answers as soon as the text arrives, then records the list price after three lookups that find nothing", async () => {
+    const held = gate<void>();
+    const { engine, rpc, vercel, sidecars } = await start({
+      script: {
+        generation: async () => {
+          await held.promise;
+          return { status: 404, body: { error: { message: "Usage event not found" } } };
+        },
+      },
+    });
     try {
       const answer = await rpc.call("text.complete", { project: "board", prompt: "hi", provider: "vercel" });
-      expect(answer.text).toBe("A gateway answer.");
-      expect(answer.cost).toBeCloseTo(0.0003, 10);
-      expect(paths(vercel.calls).filter((path) => path === "/v1/generation")).toHaveLength(3);
-      const [sidecar] = await sidecars();
+      expect(answer).toEqual({ text: "A gateway answer.", cost: null });
+      const [pending] = await sidecars();
+      expect(pending).toMatchObject({ provider: "vercel", cost: null });
+      expect(pending).not.toHaveProperty("costBasis");
+      held.release();
+      let sidecar: any;
+      for (let tries = 0; sidecar?.costBasis === undefined && tries < 200; tries++) {
+        [sidecar] = await sidecars();
+        if (sidecar?.costBasis === undefined) await new Promise((resolve) => setTimeout(resolve, 25));
+      }
       expect(sidecar).toMatchObject({ provider: "vercel", costBasis: "list-price" });
+      expect(sidecar.cost).toBeCloseTo(0.0003, 10);
+      expect(paths(vercel.calls).filter((path) => path === "/v1/generation")).toHaveLength(3);
     } finally {
       await engine.dispose();
     }

@@ -27,7 +27,8 @@ import * as Effect from "effect/Effect";
 import type { CanvasRooms, ChangeOrigin } from "../canvas/rooms.ts";
 import { errorText, logError, logInfo } from "../log.ts";
 import type { ReferencePart } from "../openRouter/text.ts";
-import { settled, type Priced, type RunProvider } from "./providers.ts";
+import { type Priced, type RunProvider } from "./providers.ts";
+import { patchSidecarCost } from "./sidecars.ts";
 import type { SettingsStore } from "../settingsStore.ts";
 import { clearChange, fillFor, isShape, PLACEHOLDER_WIDTH, textPlaceholder, type LandedText, type RunOutcome } from "./placeholders.ts";
 import { fileStamp, writeLoneSidecar } from "./resultFiles.ts";
@@ -152,9 +153,15 @@ export const makeTextRuns = (deps: TextRunDeps) => {
       const startedAt = Date.now();
       const outcome = yield* Effect.promise(() => chatOnce(folder, provider.key(current), provider, model, request.prompt, references, request.system));
       if (!outcome.ok) return yield* unframedError("upstream", outcome.error);
-      const priced = yield* Effect.promise(() => settled(outcome));
-      yield* Effect.promise(() => writeSidecar(folder, startedAt, sidecarOf(request.prompt, model, outcome.text, references, request.batchId ?? null, priced, undefined, provider.id)));
-      return { text: outcome.text, cost: priced.cost };
+      const sidecar = yield* Effect.promise(() => writeSidecar(folder, startedAt, sidecarOf(request.prompt, model, outcome.text, references, request.batchId ?? null, { cost: outcome.cost }, undefined, provider.id)));
+      const later = outcome.later;
+      if (later !== undefined && sidecar !== null) {
+        void later()
+          .catch((): Priced => ({ cost: null }))
+          .then((priced) => patchSidecarCost(folder, sidecar, priced))
+          .catch((error: unknown) => logError(`could not record the cost in ${sidecar}: ${errorText(error)}`));
+      }
+      return { text: outcome.text, cost: outcome.cost };
     });
 
   const text = (request: TextRunRequest) =>

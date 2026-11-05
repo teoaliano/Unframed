@@ -170,11 +170,11 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
   const chosen = routed ? providerByMedium[medium] : undefined;
   const provider = chosen?.provider;
   const catalogue = useCatalogue(engine, definition.catalogue, provider, !routed || chosen !== undefined);
-  const offeredKey = offered.join(",");
+  const others = settings === undefined || offered.length < 2 ? "" : offered.filter((each) => each !== provider).join(",");
   useEffect(() => {
     if (!routed) return;
-    for (const each of offeredKey.split(",")) if (isGenerationProvider(each)) void loadCatalogue(engine, definition.catalogue, each).catch(() => undefined);
-  }, [engine, routed, definition.catalogue, offeredKey]);
+    for (const each of others.split(",")) if (isGenerationProvider(each)) void loadCatalogue(engine, definition.catalogue, each).catch(() => undefined);
+  }, [engine, routed, definition.catalogue, others]);
   const [instruction, setInstruction] = useState(recipe?.recipe.instruction ?? "");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [sending, setSending] = useState(false);
@@ -197,13 +197,11 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
   const audioOnly = settings !== undefined && GENERATION_PROVIDER_IDS.every((id) => !GENERATION_PROVIDERS[id].hasKey(settings)) && settings.hasElevenLabsKey;
 
   useEffect(() => {
-    if (!routed || providerByMedium[medium] || lastUsed === undefined || settings === undefined) return;
-    const wanted =
-      recipe && recipe.recipe.medium === medium
-        ? providerOf(recipe.recipe.provider)
-        : standing && standing.medium === medium
-          ? providerOf(standing.provider)
-          : lastUsed?.provider;
+    if (!routed || providerByMedium[medium] || settings === undefined) return;
+    const recorded =
+      recipe && recipe.recipe.medium === medium ? providerOf(recipe.recipe.provider) : standing && standing.medium === medium ? providerOf(standing.provider) : undefined;
+    if (recorded === undefined && offered.length > 1 && lastUsed === undefined) return;
+    const wanted = recorded ?? lastUsed?.provider;
     const answer = trayProvider({ medium, wanted, settings: keys });
     setProviderByMedium((current) => ({ ...current, [medium]: answer }));
     // eslint-disable-next-line react-hooks/exhaustive-deps

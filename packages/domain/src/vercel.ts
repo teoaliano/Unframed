@@ -1,7 +1,6 @@
 import type { ModelEntry } from "@unframed/contracts";
 
 export const VERCEL_NO_KEY_MESSAGE = "No Vercel AI Gateway key yet. Add one in Settings, under Generation.";
-export const VERCEL_SERVES_MESSAGE = "The Vercel AI Gateway serves image and text runs only. Video runs through OpenRouter.";
 export const VERCEL_NO_IMAGE_MESSAGE = "The Vercel AI Gateway returned no image data.";
 export const VERCEL_VIDEO_BLOCKER =
   "Video runs through OpenRouter only: the Vercel AI Gateway has no video API Unframed can call. Connect OpenRouter in Settings to make video.";

@@ -149,7 +149,7 @@ The upstream words are `error.message` when `error` is an object holding a strin
 | Case | Sentence |
 | --- | --- |
 | no Vercel key at send | `No Vercel AI Gateway key yet. Add one in Settings, under Generation.` |
-| video or audio sent through Vercel | `The Vercel AI Gateway serves image and text runs only. Video runs through OpenRouter.` |
+| video or audio sent through Vercel (`providerServesMessage`, built from the descriptor: the provider's name and media, then the medium's providers) | `The Vercel AI Gateway serves image and text runs only. Video runs through OpenRouter.`, and for audio `… Audio runs through ElevenLabs.` |
 | network failure | `Could not reach the Vercel AI Gateway: <reason>` |
 | the body lost mid-read | `Lost the connection while reading the Vercel AI Gateway's answer: <reason>. The run may still have completed and been charged. Check the AI Gateway logs in the Vercel dashboard.` |
 | 401 | `The Vercel AI Gateway refused the key. It may have been revoked. Paste a new one in Settings, under Generation. (<upstream>)` |
@@ -175,7 +175,7 @@ A run's sidecar always has a `cost` field (index contract 4). For a Vercel run:
 2. Else the catalogue's list price, from the entry the run's model has in Vercel's catalogue (fetched again if the engine has none cached): an image run's `pricing.image`; a text run's `usage.prompt_tokens × pricing.input + usage.completion_tokens × pricing.output`. Each must be a finite number at or above zero. That gives `cost` with `costBasis: "list-price"`.
 3. Else `cost: null` and no `costBasis`.
 
-**The result lands first.** The placeholder fills, and the file and sidecar are written with `cost: null`, as soon as the bytes or the text arrive. When the cost settles (up to about three lookups later), the engine writes `cost` and `costBasis` into the sidecar and the cost (and `listPrice` for a list price) into the result meta on the canvas, then publishes the `output` event with the cost and the run's `finished` event. A placeholder deleted meanwhile is not recreated. So spec 14's ledger, which reads the `output` event, settles on the final cost. `text.complete` lands nothing, so it answers once its cost is known.
+**The result lands first.** The placeholder fills, and the file and sidecar are written with `cost: null`, as soon as the bytes or the text arrive. When the cost settles (up to about three lookups later), the engine writes `cost` and `costBasis` into the sidecar and the cost (and `listPrice` for a list price) into the result meta on the canvas, then publishes the `output` event with the cost and the run's `finished` event. A placeholder deleted meanwhile is not recreated. So spec 14's ledger, which reads the `output` event, settles on the final cost. `text.complete` answers as soon as the text arrives, with `cost: null` for a Vercel call, and writes the cost into its sidecar when it settles; so a Free batch whose repair call went through Vercel carries no `batchExtraCost`, and the repair's cost is in its own sidecar.
 
 Vercel states it adds no markup to provider token prices; `total_cost` can still include surcharges (for example Zero Data Retention), which a list price leaves out, and a team's negotiated discount or its own provider keys change what is billed. The `≈` on the result line says the cost is not measured.
 

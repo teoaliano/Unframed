@@ -88,6 +88,15 @@ export const providerKeysOf = (secrets: ProviderSecrets): ProviderKeys => ({ has
 export const generationProviders = (keys: ProviderKeys, medium: Medium): GenerationProvider[] =>
   GENERATION_PROVIDER_IDS.filter((id) => GENERATION_PROVIDERS[id].media.includes(medium) && GENERATION_PROVIDERS[id].hasKey(keys));
 
+const listed = (items: ReadonlyArray<string>) => (items.length <= 1 ? (items[0] ?? "") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`);
+
+const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+export const providerServesMessage = (provider: GenerationProvider, medium: Medium): string => {
+  const servers = GENERATION_PROVIDER_IDS.filter((id) => GENERATION_PROVIDERS[id].media.includes(medium)).map((id) => GENERATION_PROVIDERS[id].name);
+  return `${capital(GENERATION_PROVIDERS[provider].name)} serves ${listed(GENERATION_PROVIDERS[provider].media)} runs only. ${capital(medium)} runs through ${servers.length > 0 ? listed(servers) : "ElevenLabs"}.`;
+};
+
 export const trayProvider = (input: {
   readonly medium: Medium;
   readonly wanted: GenerationProvider | undefined;

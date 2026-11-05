@@ -260,3 +260,40 @@ test("a text run through Vercel: its catalogue in the model dialog, the chat cal
     await engine.dispose();
   }
 });
+
+test.describe("catalogue calls", () => {
+  const count = (requests: ReadonlyArray<{ url: string }>, path: string) => requests.filter((request) => new URL(request.url, "http://stub").pathname === path).length;
+
+  test("with only an OpenRouter key, opening the composer asks for each medium's catalogue once and never asks Vercel", async ({ page }) => {
+    const { engine } = await start({ vercel: false });
+    try {
+      await openCanvas(page, engine);
+      await clickShape(page, "shape:starter-subject");
+      await openComposer(page);
+      await composer(page).getByRole("radiogroup", { name: "Medium" }).getByRole("radio", { name: "text" }).click();
+      await expect(composer(page).getByTestId("model-chip")).toHaveText("gemini-3.5-flash-lite");
+      expect(count(engine.stub!.requests, "/api/v1/images/models")).toBe(1);
+      expect(count(engine.stub!.requests, "/api/v1/models")).toBe(1);
+      expect(engine.vercel!.requests).toHaveLength(0);
+    } finally {
+      await engine.dispose();
+    }
+  });
+
+  test("with only a Vercel key, opening the composer asks Vercel once per medium and never asks OpenRouter for a catalogue", async ({ page }) => {
+    const { engine } = await start({ openRouter: false });
+    try {
+      await openCanvas(page, engine);
+      await clickShape(page, "shape:starter-subject");
+      await openComposer(page);
+      await expect(composer(page).getByTestId("model-chip")).toHaveText("flux-kontext-pro");
+      expect(count(engine.vercel!.requests, "/v1/models")).toBe(1);
+      await composer(page).getByRole("radiogroup", { name: "Medium" }).getByRole("radio", { name: "text" }).click();
+      await expect(composer(page).getByTestId("model-chip")).toHaveText("gemini-3.5-flash-lite");
+      expect(count(engine.vercel!.requests, "/v1/models")).toBe(2);
+      expect(count(engine.stub!.requests, "/api/v1/images/models") + count(engine.stub!.requests, "/api/v1/models")).toBe(0);
+    } finally {
+      await engine.dispose();
+    }
+  });
+});
