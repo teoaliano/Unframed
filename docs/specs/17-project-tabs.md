@@ -114,7 +114,7 @@ The artifact editor (spec 09) opens as its own tab in the strip, the way a proto
 
 A switch is `activate(name)`. In order:
 
-1. The active canvas settles its pending edits to the room (spec 02's two-second settle).
+1. The active canvas settles its pending edits to the room (spec 02's two-second settle): it waits the animation frames tldraw takes to send the store's changes, then for every push to be answered, so an edit made just before a switch or a rename, such as an editor tab's last save, is in the room first.
 2. The active canvas records its camera and its chat drafts in the tab store.
 3. The active canvas is torn down: its sync socket closes with code 1000, its tldraw editor is disposed (store, history, selection, instance state), its artifact frames unmount, and its chat rail unmounts, which ends its subscriptions and moves its drafts to the tab store. Per-project client modules release what they hold for the project: run watchers, render polls, the library and the generate composer's state for that project. Shared modules that are keyed by project stay keyed, and nothing else survives.
 4. The new project's canvas mounts through spec 02's existing path. The room is read, the view is restored to the tab's remembered camera when there is one, or fitted when there is not, and the rail opens on that project's chats.

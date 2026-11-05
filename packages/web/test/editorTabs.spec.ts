@@ -351,6 +351,25 @@ test("clicking another project and then back on the open editor tab while it sav
   await expect(selected(page)).toHaveAccessibleName("Landing, default");
 });
 
+test("renaming a project on a slow machine still saves the editor's edits under the new name: the canvas waits for tldraw to send them", async ({ page, agent }) => {
+  const before = await editedBoard(page, agent, []);
+  await page.getByRole("tab", { name: "default", exact: true }).click({ button: "right" });
+  await page.getByTestId("tab-menu").getByRole("menuitem", { name: "Rename project" }).click();
+  const dialog = page.getByRole("dialog", { name: "Rename project" });
+  await dialog.getByLabel("Project name").fill("renamed");
+  await page.evaluate(() => {
+    const frame = window.requestAnimationFrame.bind(window);
+    (window as { slowFrames?: () => void }).slowFrames = () => void (window.requestAnimationFrame = frame);
+    window.requestAnimationFrame = (callback) => window.setTimeout(() => frame(callback), 200);
+  });
+  await dialog.getByLabel("Project name").press("Enter");
+  await expect(dialog).toBeHidden();
+  await page.evaluate(() => (window as { slowFrames?: () => void }).slowFrames?.());
+  await expect(page.locator('[data-canvas-project="renamed"] .tl-canvas')).toBeVisible();
+  const fileIn = async () => (await roomShapes(agent, "renamed", "page")).find((record) => record.id === "shape:landing")?.props?.file;
+  await expect.poll(fileIn, { timeout: 6000 }).not.toBe(before);
+});
+
 test("renaming a project with unsaved edits in its editor tab saves them under the new name", async ({ page, agent }) => {
   const before = await editedBoard(page, agent, []);
   await page.getByRole("tab", { name: "default", exact: true }).click({ button: "right" });
