@@ -16,7 +16,7 @@ test("on a board of 10 nodes and 30 wires, dragging a source image renders only 
   await openMetered(page, engine, 55);
 
   const dragged = "shape:img-0";
-  const own = new Set(wires.filter((wire) => (wire.props as { from: string }).from === dragged).map((wire) => wire.id as string));
+  const own = new Set(wires.filter((wire) => (wire as unknown as { props: { from: string } }).props.from === dragged).map((wire) => wire.id as string));
   expect(own.size).toBe(2);
   const box = (await shapeOnScreen(page, dragged).boundingBox())!;
   const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };

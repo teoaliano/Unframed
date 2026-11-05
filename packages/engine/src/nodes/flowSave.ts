@@ -5,11 +5,6 @@ import { shapeBoxes } from "../runs/shapeBounds.ts";
 
 type AnyRecord = TLRecord & { type?: string; parentId?: string; props?: Record<string, unknown> };
 
-/**
- * A flow from the room: the chosen shapes and everything inside them, wrapped as spec 06
- * wraps a preset, with every wire that touches them. A wire with an end outside the set is
- * left out and counted.
- */
 export const flowContent = (project: string, records: ReadonlyArray<TLRecord>, ids: ReadonlyArray<string>, name: string): { content: PresetContent; droppedWires: number } | { error: string } => {
   const shapes = (records as AnyRecord[]).filter((record) => record.typeName === "shape");
   const byId = new Map<string, AnyRecord>(shapes.map((shape) => [shape.id as string, shape]));

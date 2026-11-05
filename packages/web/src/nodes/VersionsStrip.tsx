@@ -112,7 +112,6 @@ const Thumb = ({ shape, version, index }: { readonly shape: NodeShape; readonly 
   );
 };
 
-/** The versions a node keeps, newest first; the current one ringed. Drag one out to put it on the board. */
 export const VersionsStrip = ({ shape }: { readonly shape: NodeShape }) => {
   const { versions, medium } = shape.props;
   if (versions.length === 0) return null;

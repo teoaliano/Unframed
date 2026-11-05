@@ -10,7 +10,6 @@ const FENCE = /^\s*```[a-zA-Z0-9_-]*\s*\n([\s\S]*?)\n?```\s*$/;
 
 export type PageAnswer = { readonly ok: true; readonly html: string } | { readonly ok: false; readonly message: string };
 
-/** One HTML document from a model's answer, a Markdown fence stripped, or the refusal. */
 export const pageAnswer = (text: string): PageAnswer => {
   const fenced = FENCE.exec(text);
   const html = (fenced ? fenced[1]! : text).trim();
@@ -22,7 +21,6 @@ export const pageAnswer = (text: string): PageAnswer => {
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
 
-/** The document's `<title>`, or undefined when it has none. */
 export const pageTitle = (html: string): string | undefined => {
   const match = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html);
   const text = match?.[1]
@@ -40,10 +38,8 @@ export interface PageSendChoice {
   readonly files: "entry" | "linked";
 }
 
-/** What a page sends per model when its wire has no choice. Empty until the evaluation (spec 16, task 31) fills it. */
 export const pageSendDefaults: Readonly<Record<string, { readonly role: WireRole; readonly files: "entry" | "linked" }>> = {};
 
-/** What a page wire sends: the wire's choice, else the model's default, else the refusal. */
 export const pageSend = (input: { readonly role: WireRole; readonly chosen: boolean; readonly files?: "entry" | "linked" | undefined; readonly model: string }): PageSendChoice | { readonly error: string } => {
   const fallback = pageSendDefaults[input.model];
   const role = input.chosen ? input.role : fallback?.role;
@@ -62,11 +58,6 @@ export const missingLinkMessage = (file: string): string => `This page links ${f
 
 const isRemote = (value: string) => /^(?:[a-z][a-z0-9+.-]*:|\/\/|#|\/)/i.test(value);
 
-/**
- * The project files a page links, one level deep: every `href` or `src` that names a file by
- * its relative name. A link to a file that is not in the project folder is refused, and so
- * is a set over the caps.
- */
 export const linkedFiles = (html: string, projectFiles: ReadonlyMap<string, number>): { readonly files: ReadonlyArray<string> } | { readonly error: string } => {
   const files: string[] = [];
   for (const match of html.matchAll(/\b(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)) {

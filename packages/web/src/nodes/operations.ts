@@ -5,7 +5,6 @@ import { knownCatalogue } from "../generate/catalogue.ts";
 import { showError } from "../toasts.tsx";
 import {isNodeShape, isWireShape, nodeCanvas, nodeCatalogues, type NodeShape, type WireShape } from "./facts.ts";
 
-/** The model a node runs: its own, else the medium's default from the session's catalogue. */
 export const nodeModel = (props: Pick<NodeShapeProps, "medium" | "model">): string => props.model !== "" ? props.model : (knownCatalogue(nodeCatalogueOf(props.medium))?.default ?? "");
 
 export const nodeEntry = (props: Pick<NodeShapeProps, "medium" | "model">) => knownCatalogue(nodeCatalogueOf(props.medium))?.models.find((entry) => entry.id === nodeModel(props));
@@ -23,9 +22,7 @@ export const nodeFrames = (props: Pick<NodeShapeProps, "medium" | "model">): str
   return frameImagesOf(entry);
 };
 
-/** The roles each wire into a node shows, from the one function that also builds its run. */
 
-/** Draws a wire from `from` into `to`, or says why it cannot be drawn. */
 export const connectWire = (editor: Editor, from: TLShapeId, to: TLShapeId | undefined): boolean => {
   const canvas = nodeCanvas(editor);
   const target = to === undefined ? undefined : canvas.nodes.get(to);
@@ -57,7 +54,6 @@ export const connectWire = (editor: Editor, from: TLShapeId, to: TLShapeId | und
   return true;
 };
 
-/** Changes a wire's role, or says why it cannot take it. */
 export const setWireRole = (editor: Editor, wireId: TLShapeId, role: WireRole, files?: "entry" | "linked"): void => {
   const wire = editor.getShape(wireId);
   if (!isWireShape(wire)) return;
@@ -79,7 +75,6 @@ export const setWireFiles = (editor: Editor, wireId: TLShapeId, files: "entry" |
   editor.updateShape<WireShape>({ id: wireId, type: "wire", props: { ...wire.props, files } });
 };
 
-/** Moves a wire in its node's input list: before the wire at `before`, or to the end. */
 export const moveWire = (editor: Editor, wireId: TLShapeId, before: TLShapeId | undefined): void => {
   const wire = editor.getShape(wireId);
   if (!isWireShape(wire)) return;
@@ -94,7 +89,6 @@ export const moveWire = (editor: Editor, wireId: TLShapeId, before: TLShapeId | 
   editor.updateShape<WireShape>({ id: wireId, type: "wire", index });
 };
 
-/** Edits a node's own settings as one undo step. */
 type NodePatch = Partial<Pick<NodeShapeProps, "medium" | "model" | "params" | "instruction" | "currentVersionId">> & { readonly runs?: number | undefined };
 
 export const updateNode = (editor: Editor, id: TLShapeId, patch: NodePatch, mark = true): void => {

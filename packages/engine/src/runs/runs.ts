@@ -75,7 +75,6 @@ export class Runs extends Context.Service<
     /** Spec 05: one text call that lands nothing. */
     readonly complete: (request: TextCompleteRequest) => Effect.Effect<TextCompleteAnswer, UnframedError>;
     readonly subscribe: (project: string) => Stream.Stream<RunEvent>;
-    /** Spec 16: a chain's own events join the run events of its project. */
     readonly publish: (project: string, event: RunEvent) => Effect.Effect<void>;
     readonly recipe: (project: string, shapeId: string) => Effect.Effect<ResultRecipe, UnframedError>;
     /** Copies a result's sidecar and the files its recipe names from `from` into `project`, beside `file`. */

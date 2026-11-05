@@ -56,7 +56,6 @@ const STATE_TONE: Record<string, string> = {
   ready: "bg-success",
 };
 
-/** What a version shows: its picture, its clip's first frame, its text, its page or its sound. */
 export const VersionView = ({ version, medium, fit = "contain" }: { readonly version: NodeVersion; readonly medium: NodeShapeProps["medium"]; readonly fit?: "contain" | "cover" }) => {
   const project = useCanvasProject();
   if (version.text !== undefined && (medium === "text" || version.file === undefined || version.file.endsWith(".json"))) {
@@ -93,7 +92,6 @@ const StatusLine = ({ shape }: { readonly shape: NodeShape }) => {
   );
 };
 
-/** A node made from the add menu starts with the image medium's last-used values (spec 03), then keeps its own. */
 const useFreshValues = (shape: NodeShape) => {
   const editor = useEditor();
   const engine = useEngine();

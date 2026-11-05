@@ -31,7 +31,6 @@ const MEDIUM_LABELS: Record<NodeMedium, string> = { image: "image", video: "vide
 
 const definitionOf = (medium: NodeMedium) => mediumDefinition(nodeCatalogueOf(medium))!;
 
-/** A node's tray props: its params, with its runs as the tray's Runs. */
 const trayProps = (props: NodeShapeProps): Record<string, PropValue> => ({ ...props.params, ...(props.medium === "image" && props.runs !== undefined ? { [RUNS_KEY]: props.runs } : {}) });
 
 const splitTray = (medium: NodeMedium, tray: Record<string, PropValue>): Pick<NodeShapeProps, "params" | "runs"> => {
@@ -146,7 +145,6 @@ const RunRow = ({ shape, estimate, blocked }: { readonly shape: NodeShape; reado
   );
 };
 
-/** The node's own composer: spec 03's tray, its persistent instruction, its inputs, its versions and its Run. */
 export const NodeEditor = ({ shape }: { readonly shape: NodeShape }) => {
   const editor = useEditor();
   const engine = useEngine();

@@ -1,4 +1,3 @@
-/** Browser-seam helpers for nodes and wires: a board seeded through the room, and the node card on screen. */
 import type { Locator, Page } from "@playwright/test";
 import type { TLRecord } from "tldraw";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
@@ -8,7 +7,6 @@ import { expect } from "./fixtures.ts";
 export { nodeShape, wireShape } from "../../engine/test/nodeRecords.ts";
 export { imageShape, promptShape, groupShape, pageShape } from "../../engine/test/canvasRecords.ts";
 
-/** Replaces everything on the default canvas with `put`. */
 export const seedBoard = async (engine: TestEngine, put: TLRecord[], project = "default"): Promise<void> => {
   const rpc = await engine.rpc();
   const existing = (await roomRecords(engine, project)).filter((record) => record.typeName === "shape").map((record) => record.id);
@@ -21,7 +19,6 @@ export const imageAsset = (id: string, file: string, w = 96, h = 64): TLRecord =
 
 export const nodeCard = (page: Page, id: string): Locator => shapeOnScreen(page, `shape:${id}`).getByTestId("node-card");
 
-/** Selects a node by clicking its header, where no control sits. */
 export const selectNode = async (page: Page, id: string): Promise<void> => {
   const card = nodeCard(page, id);
   await expect(card).toBeVisible();
@@ -40,7 +37,6 @@ export const waitForNode = (engine: TestEngine, id: string, check: (props: any) 
 
 export const wires = async (engine: TestEngine): Promise<AnyRecord[]> => (await roomRecords(engine, "default")).filter((record) => record.type === "wire");
 
-/** Drags from a shape's wire handle to a point on screen. */
 export const drawWire = async (page: Page, fromId: string, to: { x: number; y: number }): Promise<void> => {
   const from = shapeOnScreen(page, fromId);
   const box = (await from.boundingBox())!;
@@ -61,7 +57,6 @@ export const centreOf = async (locator: Locator): Promise<{ x: number; y: number
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 };
 
-/** Clicks a shape where tldraw hit-tests it: its centre on screen. */
 export const clickShape = async (page: Page, id: string): Promise<void> => {
   const point = await centreOf(shapeOnScreen(page, id));
   await page.mouse.click(point.x, point.y);

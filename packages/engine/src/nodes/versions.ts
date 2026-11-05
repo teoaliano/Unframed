@@ -20,7 +20,6 @@ const withoutKeys = (props: Record<string, unknown>, ...keys: string[]) => {
   return next;
 };
 
-/** The change that puts a run's versions on a node: running, newest first, with the node's run marker. */
 export const startVersions = (
   get: Get,
   shapeId: string,
@@ -49,7 +48,6 @@ export const startVersions = (
   };
 };
 
-/** Fills one running version with what landed. */
 export const fillVersion = (get: Get, shapeId: string, versionId: string, landed: { readonly file?: string; readonly fileName?: string; readonly text?: string }): CanvasChange | undefined => {
   const node = get(shapeId);
   if (!isNode(node) || !node.props.versions.some((version) => version.id === versionId)) return undefined;
@@ -61,7 +59,6 @@ export const fillVersion = (get: Get, shapeId: string, versionId: string, landed
   return put(node, { ...node.props, versions });
 };
 
-/** Takes a version that will not land off its node. */
 export const dropVersion = (get: Get, shapeId: string, versionId: string): CanvasChange | undefined => {
   const node = get(shapeId);
   if (!isNode(node) || !node.props.versions.some((version) => version.id === versionId)) return undefined;
@@ -70,7 +67,6 @@ export const dropVersion = (get: Get, shapeId: string, versionId: string): Canva
   return put(node, { ...node.props, versions, currentVersionId: current });
 };
 
-/** A durable version whose render failed: it stays, with its error. */
 export const failVersion = (get: Get, shapeId: string, versionId: string, error: string): CanvasChange | undefined => {
   const node = get(shapeId);
   if (!isNode(node)) return undefined;
@@ -78,10 +74,6 @@ export const failVersion = (get: Get, shapeId: string, versionId: string, error:
   return put(node, { ...node.props, versions });
 };
 
-/**
- * A run ended: its marker goes, the landed output with the lowest run index becomes current,
- * and a run that landed nothing leaves its failure on the node.
- */
 export const finishRun = (get: Get, shapeId: string, runId: string, errors: ReadonlyArray<string>): CanvasChange | undefined => {
   const node = get(shapeId);
   if (!isNode(node)) return undefined;
@@ -94,7 +86,6 @@ export const finishRun = (get: Get, shapeId: string, runId: string, errors: Read
   return put(node, error === "" ? props : { ...props, error });
 };
 
-/** Marks the steps of a chain that have not started: queued, so nothing else runs them. */
 export const claimNodes = (get: Get, ids: ReadonlyArray<string>, chainId: string, startedAt: number): { readonly change: CanvasChange } | { readonly busy: string } => {
   const records: TLRecord[] = [];
   for (const id of ids) {
@@ -106,7 +97,6 @@ export const claimNodes = (get: Get, ids: ReadonlyArray<string>, chainId: string
   return { change: { put: records, remove: [] } };
 };
 
-/** A node that will not run: its queue marker goes and the reason stays. */
 export const stopNode = (get: Get, id: string, reason: string, chainId?: string): CanvasChange | undefined => {
   const node = get(id);
   if (!isNode(node)) return undefined;
@@ -114,7 +104,6 @@ export const stopNode = (get: Get, id: string, reason: string, chainId?: string)
   return put(node, { ...withoutKeys(node.props, "run"), error: reason });
 };
 
-/** Applies a node change decided from the room as it is now, logging a failure rather than throwing. */
 export const applyNodeChange = (
   rooms: CanvasRooms["Service"],
   runPromise: <A, E>(effect: Effect.Effect<A, E>) => Promise<A>,
@@ -130,7 +119,6 @@ export const applyNodeChange = (
     },
   );
 
-/** Where a node run lands: the node, its chain and step, and what its inputs were. */
 export interface NodeTarget {
   readonly shapeId: string;
   readonly claim: string;

@@ -17,7 +17,6 @@ const groupNodes = (canvas: NodeCanvas, groupId: string, depth = 0): string[] =>
     .flatMap((shape) => (canvas.nodes.has(shape.id) ? [shape.id] : shape.kind === "group" ? groupNodes(canvas, shape.id, depth + 1) : []));
 };
 
-/** The nodes of a selection: every selected node, and every node a selected group holds. */
 export const chainNodesOf = (canvas: NodeCanvas, selected: ReadonlyArray<string>): string[] => {
   const ids = new Set<string>();
   for (const id of selected) {
@@ -27,11 +26,6 @@ export const chainNodesOf = (canvas: NodeCanvas, selected: ReadonlyArray<string>
   return [...ids];
 };
 
-/**
- * A chain's steps: a node runs after every chain node it takes input from, ties by canvas
- * order (top edge, then left edge, then z). A loop is refused, and so is an input from a
- * node outside the chain that has no result.
- */
 export const planChain = (canvas: NodeCanvas, selected: ReadonlyArray<string>): ChainPlan => {
   const members = new Set(chainNodesOf(canvas, selected));
   if (members.size === 0) return { ok: false, message: NO_NODES_MESSAGE };
@@ -67,7 +61,6 @@ export const planChain = (canvas: NodeCanvas, selected: ReadonlyArray<string>): 
   return { ok: true, steps };
 };
 
-/** Every node that depends on `id`, directly or through others. */
 export const downstreamOf = (canvas: NodeCanvas, id: string): string[] => {
   const found = new Set<string>();
   const stack = [id];
@@ -86,10 +79,6 @@ export type DownstreamScope = "pending" | "all";
 
 const PENDING = new Set(["failed", "waiting", "out_of_date", "not_run"]);
 
-/**
- * The nodes Run downstream runs: the node itself always, then its downstream nodes, all of
- * them or only those that failed, are waiting, are out of date or never ran.
- */
 export const downstreamRun = (canvas: NodeCanvas, id: string, scope: DownstreamScope, frames?: (nodeId: string) => ReadonlyArray<string>): string[] => {
   const below = downstreamOf(canvas, id).filter((each) => {
     if (scope === "all") return true;

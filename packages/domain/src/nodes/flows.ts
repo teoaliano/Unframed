@@ -7,16 +7,11 @@ export interface Flow {
 
 const obj = (value: unknown): Record<string, unknown> => (typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {});
 
-/** A node as a flow keeps it: its medium, model, params, runs and instruction, and no results or run state. */
 export const blankNode = <S extends { readonly props: Readonly<Record<string, unknown>> }>(shape: S): S => {
   const { versions: _versions, currentVersionId: _current, run: _run, error: _error, ...props } = shape.props;
   return { ...shape, props: { ...props, versions: [], currentVersionId: null } };
 };
 
-/**
- * A flow from captured content: its nodes blanked, and only the wires whose two ends are both
- * in the saved set. The wires left out are counted.
- */
 export const flowFrom = (content: PresetContent): Flow => {
   const ids = new Set(content.shapes.filter((shape) => shape.type !== "wire").map((shape) => shape.id));
   let droppedWires = 0;
@@ -35,7 +30,6 @@ export const flowFrom = (content: PresetContent): Flow => {
 
 export const isFlowContent = (content: PresetContent): boolean => content.shapes.some((shape) => shape.type === "node");
 
-/** A flow's content with fresh shape ids, every parent and wire end following them. */
 export const flowInsert = (content: PresetContent, mint: () => string): PresetContent => {
   const ids = new Map<string, string>();
   for (const shape of content.shapes) ids.set(shape.id, mint());

@@ -6,11 +6,6 @@ const SETTINGS = ["medium", "model", "params", "runs", "instruction"] as const;
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
-/**
- * A node's versions and run marker are the engine's: no edit of this tab, an undo included,
- * ever takes a landed version back. An edit to the node's settings clears its last failure.
- * A wire lives on the page at the origin, follows its two ends, and goes when either does.
- */
 export const installNodeSideEffects = (editor: Editor): (() => void) => {
   const pageId = (): TLPageId => editor.getCurrentPageId();
   let issued: IndexKey | undefined;

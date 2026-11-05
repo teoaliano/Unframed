@@ -43,12 +43,49 @@ Specs 18 to 21 are merged to `main` through PRs #165, #172, #175, #177 and #178,
 | 13 | design-system catalogue | 11 | merged | see git log | 4/4 tasks. Written after spec 12's live review, at the person's request: a dev-only page at `/design-system/` on the web dev server |
 | 14 | external agents | 12 | merged | PR #110, amended in #130, built in #131 to #142 | 46 tasks in the spec. Built after the first build; the commit log shows the series, and it was not re-verified task by task |
 | 15 | audio | 13 | built, PR open | | 43/43 tasks built. Every task is tested at the seam it names, except one case: the 120 s speech timeout and the 30 s timeout of the other ElevenLabs calls are in the code, with their sentences tested at the domain seam, but no engine test waits them out (spec 15 allows no per-call test override). Still open, awaiting the person's paid call (Further Notes): whether `character-cost` is credits after the model's rate, and whether Eleven v4 takes WAV. Spec 14's `file_add` takes MP3, WAV and M4A |
-| 16 | nodes | | built, PR open | | 29 of 31 tasks, each tested at the seam it names. Task 27 is built except the snapshot of a node's page version: the node shows the page's title card, and the version drags out as a page shape with spec 09's snapshot and live rules (spec 16, Known gaps). Task 31, the page-input evaluation, is the person's step (it spends money), so `pageSendDefaults` stays empty and a page wire refuses its run until its send and Files choices are made. Audio is a node medium, as spec 16's persisted format already listed. The node page writer stamps tags, ids, the tokens tag and component pins, which closes spec 18 task 2, spec 19 task 10 and spec 20 tasks 16 and 44 |
+| 16 | nodes | | built, PR open | | 29 of 31 tasks tested at the seam each names; see "Spec 16 tests" below for where. Open: task 27's snapshot of a node's page version (the node shows a title card; the version drags out as a page shape with spec 09's snapshot and live rules), and task 31, the page-input evaluation, the person's paid step (`pageSendDefaults` stays empty, so a page wire refuses its run until its choices are made). Audio is a node medium; audio is never a wire source. The node page writer closes spec 18 task 2, spec 19 task 10 and spec 20 tasks 16 and 44 |
 | 17 | project tabs | | merged | PRs #143, #146, #148, #149, #150 | 21 tasks. Its ten-tab budget runs in the isolated project of `pnpm test:browser` |
 | 18 | element editing | | merged | PR #172; fixes #180, #183 | 41/41 tasks. Task 2's node page writer came with spec 16. Built by parallel Haiku agents, on `build/18-element-editing` |
 | 19 | kits and tokens | | merged | PR #175; fix #181 | 42/43 tasks. Task 43 is the person's step (rendering outside Unframed). Task 10's node page writer came with spec 16 |
 | 20 | components | | merged | PR #177; fix #179 | 47 of 47 tasks. Task 44 (`wireRefusal` refuses a component) and task 16's node page writer came with spec 16. Written with 18 |
 | 21 | motion timeline | | merged | PRs #165 (task 1), #178; fixes #187, #188 | Every task is built except task 4, the probe report (`docs/research/motion-editability.md`), which is the person's step and is not done. Task 2, the render comparison, was run on PR #165. Task 40 is the budget in `motionPerformance.spec.ts`, which `pnpm test:perf` runs; the strip mounts only the rows in view. The fix PRs also close the build's gaps (a set's diamond moves, hidden rows are greyed, the label column collapses under 900 px, quick frame steps all count) and the review's polish (Design tab names for values, a dashed snap guide, overlapping bars in lanes, the Design tab header wraps) |
+
+## Spec 16 tests
+
+| Task | Seam | Where |
+| --- | --- | --- |
+| 1 wire rules | domain | `packages/domain/test/nodes/wires.test.ts` |
+| 2 role by source | domain | `packages/domain/test/nodes/request.test.ts` ("role by source") |
+| 3 node request | domain | `packages/domain/test/nodes/request.test.ts` ("node request") |
+| 4 fingerprint and status | domain | `packages/domain/test/nodes/status.test.ts` (marks on a wired picture and member order included) |
+| 5 chain planner | domain | `packages/domain/test/nodes/chain.test.ts` |
+| 6 flow rules | domain | `packages/domain/test/nodes/flowsPages.test.ts` ("flows") |
+| 7 contracts, the room and wire ends | engine | `packages/engine/test/wireEnds.test.ts` (a wire whose ends are not shape ids refused; one naming a missing shape dropped; wires dropped after Revert and after any removal) |
+| 8 node run service | engine | `packages/engine/test/nodeRuns.test.ts` ("node.run"), `nodeAudio.test.ts` |
+| 9 boot resolution | engine | `packages/engine/test/nodeBoot.test.ts` |
+| 10 chain runner | engine | `packages/engine/test/nodeRuns.test.ts` ("chain.run", "one run at a time", "what was confirmed is what runs"), `nodeVideo.test.ts` |
+| 11 spend in chains | engine | `packages/engine/test/agentNodes.test.ts` (summed limit naming the step, real cost settled), `agentNodeApproval.test.ts` (once per chain, plan mode) |
+| 12 Run downstream | engine | `packages/engine/test/nodeRuns.test.ts` (the pending choice, the all choice, the node itself first); the menu counts at the browser seam in `nodeRuns.spec.ts` |
+| 13 version operations | engine | `packages/engine/test/nodeRuns.test.ts` ("versions") |
+| 14 agent tools | engine | `packages/engine/test/agentNodes.test.ts` |
+| 15 flow save | engine | `packages/engine/test/nodeWriters.test.ts` ("flow.save"); insert is the tab's, in task 24 |
+| 16 node shape util | browser | `packages/web/test/nodeCard.spec.ts` (summary and live, size limits, header kept while the body scrolls, label) |
+| 17 node composer | browser | `packages/web/test/nodeCard.spec.ts` (instruction persists, Cmd+Enter, last-used values on a new node) |
+| 18 wire drawing | browser | `packages/web/test/wires.spec.ts`, `wireCopies.spec.ts` |
+| 19 role chips | browser | `packages/web/test/wires.spec.ts` |
+| 20 versions strip | browser | `packages/web/test/nodeRuns.spec.ts` ("versions") |
+| 21 status and runs | browser | `packages/web/test/nodeCard.spec.ts` |
+| 22 chains on the canvas | browser | `packages/web/test/nodeRuns.spec.ts` |
+| 23 undo | browser | `packages/web/test/nodeCard.spec.ts` ("Undo") |
+| 24 library | browser | `packages/web/test/nodeFlows.spec.ts` |
+| 25 page output, domain | domain | `packages/domain/test/nodes/flowsPages.test.ts` ("page answer") |
+| 26 page output, engine | engine | `packages/engine/test/nodeRuns.test.ts` ("pages"), `nodeWriters.test.ts` (tags, ids, tokens, pins) |
+| 27 page output, browser | browser | `packages/web/test/nodePages.spec.ts` (title card preview and drag out; no snapshot, open) |
+| 28 page inputs, domain | domain | `packages/domain/test/nodes/flowsPages.test.ts` ("page inputs") |
+| 29 page inputs, engine | engine | `packages/engine/test/nodeWriters.test.ts` (capture, reuse, retake, linked files, no Chrome) |
+| 30 page inputs, browser | browser | `packages/web/test/wires.spec.ts` (HTML, Picture, Both, Files) |
+| 31 evaluation | the person | not run |
+| frame budget | browser | `packages/web/test/nodePerformance.spec.ts`, in `pnpm test:perf` |
 
 ## Performance budgets
 

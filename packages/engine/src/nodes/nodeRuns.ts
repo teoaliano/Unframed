@@ -725,7 +725,7 @@ export const nodeRunsLayer = Layer.effect(
         .read()
         .filter((record) => record.typeName === "shape" && (record as { type?: string }).type === "wire")
         .filter((record) => {
-          const ends = record.props as { from?: string; to?: string };
+          const ends = (record as unknown as { props: { from?: string; to?: string } }).props;
           return room.get(String(ends.from)) === undefined || room.get(String(ends.to)) === undefined;
         })
         .map((record) => record.id);

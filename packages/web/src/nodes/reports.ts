@@ -1,7 +1,6 @@
 import type { EngineConnection } from "../rpc/engine.ts";
 import { showError, showNotice } from "../toasts.tsx";
 
-/** The chain's report: `Chain: <n> of <m> nodes ran.` and its errors; nothing when every step ran. */
 export const chainReport = (ran: number, total: number, errors: ReadonlyArray<string>): { readonly message: string; readonly type: "error" | "warning" } | undefined => {
   if (ran === total) return undefined;
   return { message: `Chain: ${ran} of ${total} nodes ran. ${errors.join("; ")}`.trim(), type: ran === 0 ? "error" : "warning" };

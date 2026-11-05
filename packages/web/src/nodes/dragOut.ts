@@ -35,11 +35,6 @@ const naturalSize = (url: string, kind: "image" | "video"): Promise<{ w: number;
     video.src = url;
   });
 
-/**
- * A version dragged onto the board: an ordinary image, video, prompt, page or audio shape
- * naming the same project file, carrying its sidecar as its result, so it is a result with its
- * recipe. The node is unchanged.
- */
 export const dragOutVersion = async (input: { readonly editor: Editor; readonly project: string; readonly node: NodeShape; readonly version: NodeVersion; readonly at: VecLike }): Promise<TLShapeId | undefined> => {
   const { editor, project, node, version, at } = input;
   const medium = node.props.medium;

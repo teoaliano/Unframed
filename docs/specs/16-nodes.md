@@ -130,7 +130,7 @@ What this spec does not change: Generate on a selection, the composer popover an
 ### The node
 
 - **Schema.** A custom shape like page and motion (spec 02): `meta.ref` (minted or named, spec 06); `props: { w, h, medium, model, params, runs?, instruction, versions, currentVersionId, run?, error? }`. `medium` is one of the media the composer registers, or `page` (a text model whose answer is a page, see Page output). `params` are the keys the tray holds for that medium (specs 03 to 05). `runs` is 1 to 10 for image, absent otherwise. `versions` is newest first. `run` is set while a run is going: `{ runId, chainId, startedAt }`.
-- **Size.** Default 380 by 360. Width 320 to 640, height at least 240. The card scrolls inside when its content is taller.
+- **Size.** Default 380 by 360. Width 320 to 640, height at least 240. The card scrolls inside when its content is taller: its header (the medium and model chips) and its status line stay at the top, and only the body below them scrolls, starting at the top each time the card becomes live.
 - **Label.** Spec 02's label rule: `@<name>` once named, else `Node`, above the top-left.
 - **Creation.** From the add menu's Inputs section (spec 02). A new node starts on image, with the last-used values for that medium (spec 03) and the default model (spec 10), and then keeps its own values.
 - **Groupable.** A node may be a member of a group (spec 02's member rule, changed by this spec).
@@ -166,7 +166,8 @@ What this spec does not change: Generate on a selection, the composer popover an
 | node | its current version when text or a page | its current version when an image or video | the current version when an image (video nodes) |
 
 - **Order.** Reference wires are numbered in the order of the node's input list. The list shows the wires top to bottom; new wires go to the bottom; a drag changes the order. The role replaces top-to-bottom order for wired inputs. Selection's order (spec 03) is unchanged.
-- **Persisting.** Wires are shapes, synced like any other. Moving a source keeps its wire attached. Deleting a source deletes its wires, as tldraw deletes bindings. Deleting a wire or a node is one undo step.
+- **Persisting.** Wires are shapes, synced like any other. Moving a source keeps its wire attached. Deleting a source deletes its wires, as tldraw deletes bindings. Deleting a wire or a node is one undo step. The engine removes, after any change from any source (a tab, an agent, Revert this turn, another tab), every wire whose source or node is no longer on the canvas.
+- **Copying.** Copying, pasting or duplicating shapes keeps every wire whose source and node are both among the copied shapes, rewired to the copies. A wire with only one end copied is not copied. A pasted or duplicated wire never joins the original shapes.
 - **Drawing.** A wire is drawn as a curve in the muted foreground colour at half strength, from the right edge of its source to the left edge of its node, with its role as a small chip at its midpoint (spec 12's badge style). The wires into one node land down its left edge in the order of its input list. The chip shows the role, and for references the number (`image 2`); a page wire shows `HTML`, `Picture · image N` or `Both · image N`, and `Choose what it sends` until it has a choice. A click on the chip opens the role menu; on a page wire the menu also holds the Files choice. A wire lives on the page at the origin and is drawn above the shapes it was created after, so a flow inserted as a group shows its wires. The look of the connection shape waits on the person's reference image (Further notes); until then the curve, colour and chip above are provisional.
 
 ### The node request
@@ -226,6 +227,10 @@ Status never runs anything. A node's `failed` state persists across tab reloads 
   - A motion with no render: `Render <@name> first. A motion is an input once it has a render.`
   - More references than the model takes: `<@name> has <n> references, and <model> takes at most <max>. Remove a wire, or pick another model.`
   - A frame role the model does not take: `<model> takes no <role> frame. Change that wire's role.`
+  - A sketch or a marked picture the tab did not draw for this run: `This node needs a sketch or a marked picture: run it from its card.` (an agent gets spec 14's sketch sentence instead).
+  - Run downstream asked of a node that is not the first of its own chain: `That node must run first.`
+  - A node already running or queued: `@<name> is running. Wait for it to finish.`
+  - A chain whose steps differ from the steps the person confirmed: `The chain changed since you confirmed it. Check its steps and run it again.`
   - Every other message is spec 03's, 04's or 05's, unchanged, including the missing key and the upstream failures.
 - **One run at a time.** Run is disabled while the node carries a run marker, and reads `Running…`.
 - **No upstream runs.** Run never runs an input node by itself. It uses each input's current version.
@@ -237,8 +242,9 @@ Status never runs anything. A node's `failed` state persists across tab reloads 
 - **What a chain is.** `planChain` takes the selected shapes. Every selected node is in the chain. Every node that is a member of a selected group is in it too. Nothing else is added.
 - **Order.** A node runs after every chain node it takes input from. Ties go by canvas order: top edge, then left edge, then z. Steps run one after another; two steps never run at once, so a chain's spend is always in step order.
 - **Inputs from outside the chain.** An input from a node that is not in the chain uses that node's current version, and the node must have one. Otherwise the chain is refused before any step runs.
+- **Claim.** A chain claims its nodes in one canvas change, before any paid call: every step takes a queue marker, and the change is refused, writing nothing, when any step already carries a run or queue marker. So a double click, or the person and an agent at once, start the work once. A run only fills a node it holds the claim of.
 - **Pre-validation.** Every step is validated before the first call. A refusal in any step writes nothing and names the step: `Step <n> (<@name>): <message>`.
-- **Confirmation.** A chain with two or more paid steps asks once before its first step, in a dialog that lists each step's node, model and estimate, with Run and Cancel. A single Run keeps its single click (decided).
+- **Confirmation.** A chain with two or more paid steps asks once before its first step, in a dialog that lists each step's node, model and estimate, with Run and Cancel. A single Run keeps its single click (decided). The tab sends the step list it showed (`steps`); the engine computes the steps again from the same domain rule (`chainStepsOf`, with each video model's frame images from the catalogue) and refuses a chain whose steps differ, so an unconfirmed paid step never runs.
 - **Spend.** The chain button's price is the sum of the steps' estimates when every paid step has an exact estimate (spec 03), else the sum with the missing steps named. The chain's spend is counted against an outside connection's limit before the first step (spec 14, Spend limit).
 - **Step.** A step is a run of its node, as above. A video step's render is durable (spec 04): the chain waits for its version to be filled by the render's landing before the next step starts.
 - **Failure.** When a step fails, its node shows its failure. The chain stops. Every node after it in the chain shows `Waiting for @<name>, which failed.` and never runs. Nothing else in the chain calls or spends. Versions that landed before the failure stay.
@@ -328,14 +334,14 @@ All over spec 01's RPC socket, failing with spec 01's `UnframedError`.
 
 | Method | Input | Success | Failures |
 | --- | --- | --- | --- |
-| `node.run` | `{ project, shapeId, downstream?: boolean, scope?: "pending" \| "all", rendered? }` | `{ chainId, nodes: [shapeId] }` | `not_found` (no such node); `bad_request` with the messages above |
-| `chain.run` | `{ project, shapeIds: string[], rendered? }` | `{ chainId, nodes: [shapeId] }` | the chain refusal, naming the step |
+| `node.run` | `{ project, shapeId, downstream?: boolean, scope?: "pending" \| "all", rendered?, steps? }` | `{ chainId, nodes: [shapeId] }` | `not_found` (no such node); `bad_request` with the messages above |
+| `chain.run` | `{ project, shapeIds: string[], rendered?, steps? }` | `{ chainId, nodes: [shapeId] }` | the chain refusal, naming the step |
 | `node.renders` | `{ project, files: string[] }` | `{ renders: { [motionFile]: mp4File } }` | `not_found` |
 | `node.useVersion` | `{ project, shapeId, versionId }` | `{}` | `not_found` |
 | `node.removeVersion` | `{ project, shapeId, versionId }` | `{}` | `not_found`; a running version: `That version is still being made.` |
 | `flow.save` | `{ project, shapeIds: string[], name }` | the library's preset answer (spec 06), with `droppedWires` | the library's own failures |
 
-`run.subscribe` (spec 03) gains a `chain` event, `{ type: 'chain', runId, chainId, nodes: [shapeId] }`, at the start of a chain of two or more, and a `chainFinished` event, `{ type: 'chainFinished', runId, chainId, ran, total, errors }`, at its end (the tab's chain report reads it); `runId` is the chain id, so existing consumers keep working. Each step reports through the existing `output` and `finished` events, with the node's `shapeId` and `versionId` in place of a placeholder's shape id. `rendered` maps a sketch or composite slot to the project file the tab drew it into.
+`run.subscribe` (spec 03) gains a `chain` event, `{ type: 'chain', runId, chainId, nodes: [shapeId] }`, at the start of a chain of two or more, and a `chainFinished` event, `{ type: 'chainFinished', runId, chainId, ran, total, errors }`, at its end (the tab's chain report reads it); `runId` is the chain id, so existing consumers keep working. Each step reports through the existing `output` and `finished` events, with the node's `shapeId` and `versionId` in place of a placeholder's shape id. `rendered` maps a sketch or composite slot to the project file the tab drew it into. `steps` is the step list the person confirmed (Chains, Confirmation).
 
 Validation runs for the whole chain before the first call. `chain.run` and `node.run` are not durable by themselves: a durable video step is, through spec 04's job store.
 
@@ -346,7 +352,7 @@ Validation runs for the whole chain before the first call. `chain.run` and `node
 - **`node_run`.** One tool, on the in-app list and the outside list (spec 14). Input: `{ ids: string[]; downstream?: boolean; dryRun?: boolean; project? }` (`project` on outside calls only). One id runs that node; several run as a chain in dependency order; `downstream` adds the downstream nodes per the rule above.
   - Dry run answers `{ dryRun: true, steps: [{ node, prompt, references, estimate }], estimate, spendLimit }`. It writes nothing, calls nothing and is never refused by the limit (spec 14).
   - Accepted answers `{ chainId, nodes: [shapeId], status: "running" }` once the node carries its run marker. The agent follows it with `canvas_read`.
-  - Outside spend limit: the chain's estimates are summed and checked before the first step, and each step reserves its estimate as it starts (spec 14's reservation rule) and settles at it when the step lands. A refusal writes nothing and names the step.
+  - Outside spend limit: the chain's estimates are summed and checked before the first step. Each step reserves its estimate as it starts and, when it lands, settles at the cost its sidecars record (the estimate only when the upstream reported none), releasing the rest; a step that fails releases its reservation (spec 14's reservation rule). A refusal writes nothing and names the step.
   - In-app, Supervised mode asks once for the chain, naming its steps and estimate, as spec 14 asks for `generate`. Full access runs it at once. Plan mode refuses it with `assets/prompts/plan-no-writes.md`.
 - **Attribution.** Every call sets `chat: {id, turn}` on each step's run (spec 03). A version's creation and fill are turn changes of that turn, as spec 14 says of `generate`'s placeholders, so Revert this turn removes an unfilled version and a node the turn created. A revert never deletes a file.
 - **Selection.** The selection preamble (spec 07) names a node `node <id> ("<label>")`.
@@ -400,7 +406,7 @@ A good test drives one of the three seams in 00-index and asserts on what it exp
 12. Run downstream: both choices, the statuses the first one includes, the node itself always running, and the menu counts. Seam: engine.
 13. Version operations: use, remove (the file stays, current moves to the newest remaining), and the refusal on a running version. Seam: engine.
 14. Agent tools: `canvas_read` for nodes and wires; `canvas_write` create, update, delete and the refusal of run-written fields; `node_run` dry run and accepted answers; the spend limit and attribution on each step. Seam: engine.
-15. Flow RPC: `flow.save` with `droppedWires`, `flow.insert` with fresh ids and no versions. Seam: engine.
+15. Flow save: `flow.save` with `droppedWires`. Seam: engine. Inserting a flow is the tab's (fresh ids, rewired wires, no versions, through `flowInsert`), tested at the browser seam with task 24.
 16. Node shape util: the summary when not selected and the live composer when selected; the card size limits; the label rule. Seam: browser.
 17. Node composer: spec 03's tray and instruction editor on the node; the instruction persists; Cmd+Enter runs the node; the last-used values start a new node. Seam: browser.
 18. Wire drawing: the handle, a drop onto a node, each refusal toast, a wire to a deleted source removed, Delete on a selected wire. Seam: browser.
@@ -423,7 +429,7 @@ A good test drives one of the three seams in 00-index and asserts on what it exp
 - Motions as node outputs. A node writes pages in this version. A motion is a HyperFrames composition and a render, which spec 09's motion tools own.
 - Linked page files beyond the caps in Page inputs (8 files, 1 MB of text).
 - Captures of more than the viewport (no full-page capture), and captures of motions. A motion's MP4 render is already an input (Wires).
-- Audio as a wire source or a node's output (spec 15).
+- Audio as a wire source (spec 15): an audio shape or an audio node's result never feeds a node (`wireRefusal`). A node's output may be audio: an audio node is in scope (The node, Media).
 - Free mode on a node (spec 05), and batches of a list over a node's inputs.
 - Value nodes that drive a setting through a wire. Settings are the tray's dropdowns and toggles.
 - Parameter sweeps and cartesian batches over a node's settings.
@@ -449,7 +455,7 @@ None open. The seven questions were answered and are in the spec:
 ## Further Notes
 
 - **How the answers map to this spec.** The user answered the six design questions in #103: results as versions, each a normal file (Solution, The node; Versions); each node's own Run and Run downstream, and a chain from a selection or a group (Running one node, Chains, Run downstream); wires with roles that replace top-to-bottom order (Wires); a failed step stops what follows (Chains, Failure); a saved flow as a preset with its nodes and wires (The library and flows); agents read, write and run nodes (The agent). The seven review questions are settled in Open decisions.
-- **Known gaps.** (1) The connection shape's look: the user will send a reference image, and until then the look in Wires is provisional. (2) Page input defaults: set by the evaluation (Tasks, 31). A page wire refuses its run until its send and Files choices are set, so nothing is sent on a default nobody chose. (3) A snapshot of a node's page version (Page output, Preview): the node shows a title card instead. (4) Copying or duplicating a wire: a pasted wire that would join the same two shapes again, or whose ends did not come with it, is removed, so a pasted node and its source arrive without the wire between them. A flow is the way to carry nodes and their wires.
+- **Known gaps.** (1) The connection shape's look: the user will send a reference image, and until then the look in Wires is provisional. (2) Page input defaults: set by the evaluation (Tasks, 31). A page wire refuses its run until its send and Files choices are set, so nothing is sent on a default nobody chose. (3) A snapshot of a node's page version (Page output, Preview): the node shows a title card instead.
 - **Reading of "after".** This spec reads "after" as every later step of the chain, so a branch that does not depend on the failed node also waits. That spends less and matches the words. If the Pivot wants independent branches to finish, that changes Chains, Failure.
 - **Groups.** The user wrote that a chain runs "if they're all in a group". A group's members are the chain's nodes (Chains, What a chain is). A node inside a group is still one node: its wires are its wires.
 - **Research.** `docs/research/node-parameters.md` (PR #112) recommended option B: a card with prompt, model and settings, inputs by wires, one run that is spec 03's run with the wired shapes as the input set. This spec follows B and adds the chain rules the user asked for. The research's cache-by-input idea (ComfyUI, Krea) is reduced to a staleness flag, because the index's pay-per-run rule forbids a run that repeats or skips silently. Its performance note (contract 9) is followed: a node's editor mounts only while the node is live.

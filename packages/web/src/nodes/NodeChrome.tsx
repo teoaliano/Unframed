@@ -10,7 +10,6 @@ import { downstreamCounts, selectionNodes } from "./graph.ts";
 import { chainConfirmation, chainTotal, runNodes, stepEstimate, stepLabel, type ChainStep } from "./runs.ts";
 import { WireHandles } from "./WireHandles.tsx";
 
-/** The dialog a chain with two or more paid steps asks with, once, before its first step. */
 export const ChainConfirm = () => {
   const pending = useValue("chain confirmation", () => chainConfirmation.get(), []);
   if (!pending) return null;
@@ -41,7 +40,6 @@ export const ChainConfirm = () => {
   );
 };
 
-/** What the canvas shows in front for nodes: the wire handle and the chain confirmation. */
 export const NodeChrome = () => (
   <>
     <WireHandles />
@@ -66,10 +64,6 @@ const useChainSteps = (ids: ReadonlyArray<string>): ReadonlyArray<ChainStep> | u
   return steps;
 };
 
-/**
- * The selection toolbar's node buttons (spec 16): Run and Run downstream for one node, Run
- * chain for several nodes or a group that holds them. Nothing when the selection holds no node.
- */
 export const NodeRunButtons = ({ primary }: { readonly primary: boolean }) => {
   const editor = useEditor();
   const engine = useEngine();

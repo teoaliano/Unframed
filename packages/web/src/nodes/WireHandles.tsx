@@ -18,10 +18,6 @@ const handleFor = (editor: Editor, held: TLShapeId | undefined): { id: TLShapeId
   return { id, x: point.x, y: point.y };
 };
 
-/**
- * The wire handle: a dot on the right edge of the hovered or selected shape. Dragged onto a
- * node it draws a wire; dropped anywhere else it says where wires go.
- */
 export const WireHandles = () => {
   const editor = useEditor();
   const [held, setHeld] = useState<TLShapeId>();

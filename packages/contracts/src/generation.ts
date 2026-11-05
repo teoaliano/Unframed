@@ -39,9 +39,7 @@ export const ResultRecipe = Schema.Struct({
   /** Spec 11: imported from the old app, which never recorded references or the selection prompt. */
   approximate: Schema.optionalKey(Schema.Literal(true)),
   sentPrompt: Schema.optionalKey(Schema.String),
-  /** Spec 16: the node and version a node's run filled. */
   node: Schema.optionalKey(Schema.Struct({ shapeId: Schema.String, versionId: Schema.String })),
-  /** Spec 16: the chain a step of one belonged to. */
   chain: Schema.optionalKey(Schema.Struct({ chainId: Schema.String, step: Schema.Number })),
 });
 export type ResultRecipe = typeof ResultRecipe.Type;
@@ -280,13 +278,11 @@ export interface ImageSidecar {
   readonly chain?: ChainRef;
 }
 
-/** Spec 16: the node and version a sidecar's file is. */
 export interface NodeRef {
   readonly shapeId: string;
   readonly versionId: string;
 }
 
-/** Spec 16: the chain and its step a node run belonged to. */
 export interface ChainRef {
   readonly chainId: string;
   readonly step: number;

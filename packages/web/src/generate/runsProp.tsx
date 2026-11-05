@@ -133,5 +133,4 @@ export const runsProp: TrayPropDefinition = {
 
 const CountChip = (props: TrayPropChipProps) => <RunsChip {...props} offersFree={false} />;
 
-/** Spec 16: a node's Runs, a count only. Free needs a list from a selection, which a node does not have. */
 export const nodeRunsProp: TrayPropDefinition = { ...runsProp, Chip: CountChip };

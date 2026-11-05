@@ -45,7 +45,6 @@ const imagePricing = (engine: EngineConnection, model: string): Promise<ImagePri
   return known;
 };
 
-/** One node's estimate as the chain button and the confirmation show it. */
 export const stepEstimate = async (editor: Editor, engine: EngineConnection, id: string): Promise<ChainStep | undefined> => {
   const canvas = nodeCanvas(editor);
   const node = canvas.nodes.get(id);
@@ -68,7 +67,6 @@ export const stepEstimate = async (editor: Editor, engine: EngineConnection, id:
   return { ...step, estimate: null };
 };
 
-/** The nodes a run starts, in order: one node, its downstream, or a chain from a selection. */
 export const runOrder = (editor: Editor, ids: ReadonlyArray<string>, downstream?: DownstreamScope): { readonly steps: ReadonlyArray<string> } | { readonly error: string } => {
   const canvas = nodeCanvas(editor);
   const frames = (id: string) => {
@@ -94,7 +92,6 @@ interface Confirming {
   readonly answer: (run: boolean) => void;
 }
 
-/** The chain confirmation the dialog shows, while one waits. */
 export const chainConfirmation = atom<Confirming | undefined>("chain confirmation", undefined);
 
 const confirmChain = (steps: ReadonlyArray<ChainStep>): Promise<boolean> =>
@@ -109,7 +106,6 @@ const confirmChain = (steps: ReadonlyArray<ChainStep>): Promise<boolean> =>
     });
   });
 
-/** The sketches and marked pictures the steps send, drawn and uploaded once, by slot. */
 const renderInputs = async (editor: Editor, project: string, steps: ReadonlyArray<string>): Promise<RenderedInputs> => {
   const canvas = nodeCanvas(editor);
   const drawn = new Map<string, Slot>();
@@ -130,10 +126,6 @@ const renderInputs = async (editor: Editor, project: string, steps: ReadonlyArra
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
-/**
- * Runs one node, its downstream, or a chain. A chain with two or more paid steps asks once,
- * listing each step; a single Run keeps its one click. A refusal is a toast.
- */
 export const runNodes = async (input: {
   readonly editor: Editor;
   readonly engine: EngineConnection;

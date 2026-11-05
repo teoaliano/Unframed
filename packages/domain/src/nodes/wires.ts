@@ -3,7 +3,6 @@ import { currentVersion, nodeName, shapeOf, type NodeCanvas } from "./model.ts";
 
 export type FrameImage = "first_frame" | "last_frame";
 
-/** What a wire's source is, for the roles it may take: a node is read by the medium of what it makes. */
 export type WireSource =
   | "prompt"
   | "image"
@@ -45,10 +44,6 @@ export const sourceOf = (canvas: NodeCanvas, id: string): WireSource | undefined
 
 const PAGE_ROLES: ReadonlyArray<WireRole> = ["prompt", "reference", "both"];
 
-/**
- * The roles a wire from `source` may take into a node of `medium`, in the order the role
- * menu lists them. On a video node, `first` and `last` need the model's frame images.
- */
 export const rolesFor = (medium: NodeMedium, frames: ReadonlyArray<string>, source: WireSource): WireRole[] => {
   const takesFrame = (role: "first" | "last") => medium === "video" && frames.includes(role === "first" ? "first_frame" : "last_frame");
   const media = (frame: boolean): WireRole[] =>
@@ -75,7 +70,6 @@ export const rolesFor = (medium: NodeMedium, frames: ReadonlyArray<string>, sour
   }
 };
 
-/** The roles a medium takes at all. */
 const mediumTakes = (medium: NodeMedium, role: WireRole): boolean => {
   if (role === "prompt") return true;
   if (medium === "audio") return false;
@@ -97,7 +91,6 @@ const SOURCE_WORDS: Partial<Record<WireSource, string>> = {
   "node-page": "node's page",
 };
 
-/** Whether `to` is upstream of `from` through node wires: a wire from `from` into `to` would close a loop. */
 const reaches = (canvas: NodeCanvas, start: string, goal: string): boolean => {
   const seen = new Set<string>();
   const stack = [start];
@@ -116,11 +109,9 @@ export interface WireRefusalInput {
   readonly from: string;
   readonly to: string;
   readonly role: WireRole;
-  /** The wire being changed, which does not count against itself. */
   readonly wireId?: string | undefined;
 }
 
-/** The sentence that refuses a wire, or null when the wire may be made. */
 export const wireRefusal = ({ canvas, from, to, role, wireId }: WireRefusalInput): string | null => {
   const target = canvas.nodes.get(to);
   if (!target) return WIRE_TARGET_REFUSAL;
@@ -141,10 +132,8 @@ export const wireRefusal = ({ canvas, from, to, role, wireId }: WireRefusalInput
   return null;
 };
 
-/** The role a new wire from `source` starts with: the first one offered. */
 export const defaultRole = (medium: NodeMedium, frames: ReadonlyArray<string>, source: WireSource): WireRole | undefined => rolesFor(medium, frames, source)[0];
 
-/** Whether a node has a result it can send downstream. */
 export const hasResult = (canvas: NodeCanvas, id: string): boolean => {
   const node = canvas.nodes.get(id);
   return node !== undefined && currentVersion(node) !== undefined;

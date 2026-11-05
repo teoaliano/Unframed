@@ -31,7 +31,6 @@ export type NodeRequest =
       readonly ok: false;
       readonly kind: "waiting" | "refused";
       readonly message: string;
-      /** The status line a waiting node shows. */
       readonly status?: string | undefined;
       readonly roles: Readonly<Record<string, string>>;
     };
@@ -39,12 +38,9 @@ export type NodeRequest =
 export interface NodeRequestInput {
   readonly node: NodeFacts;
   readonly canvas: NodeCanvas;
-  /** The model's frame images (spec 04's `supported_frame_images`), for a video node. */
   readonly frames?: ReadonlyArray<string> | undefined;
-  /** How many references the model takes, when it says. */
   readonly referenceCap?: number | undefined;
   readonly model?: string | undefined;
-  /** Nodes whose result a chain makes before this step: they count as having one. */
   readonly assume?: ReadonlySet<string> | undefined;
 }
 
@@ -82,11 +78,6 @@ const blocked = (kind: Blocked["kind"], message: string, status?: string): Block
 
 const pageSendOf = (role: WireRole): { html: boolean; picture: boolean } => ({ html: role === "prompt" || role === "both", picture: role === "reference" || role === "both" });
 
-/**
- * What a node's run sends (spec 16, The node request): its wires' prompt text in wire order,
- * its references numbered in input-list order, its frames, its instruction, and the shapes
- * that fed it. Roles and request come from this one function, so they cannot disagree.
- */
 export const nodeRequest = (input: NodeRequestInput): NodeRequest => {
   const { node, canvas } = input;
   const frames = input.frames ?? [];
@@ -341,7 +332,6 @@ export const nodeRequest = (input: NodeRequestInput): NodeRequest => {
   return { ok: true, parts, instruction, references, frames: nodeFrames, sources: [...new Set(sources)], roles, unsent };
 };
 
-/** The text a request sends, with each page part's HTML from `pageText`. */
 export const nodePromptText = (parts: ReadonlyArray<PromptPart>, instruction: string, pageText: (part: Extract<PromptPart, { type: "page" }>) => string): string =>
   [...parts.map((part) => (part.type === "text" ? part.text : pageText(part))), instruction]
     .map((part) => part.trim())

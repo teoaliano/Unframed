@@ -7,7 +7,6 @@ export interface Captured {
   readonly bounds: Readonly<Record<string, Box>>;
   readonly members: number;
   readonly recipe: boolean;
-  /** Spec 16: the selection holds nodes, so it saves as a flow, with the wires between its shapes. */
   readonly flow?: { readonly ids: ReadonlyArray<string>; readonly nodes: number } | undefined;
 }
 

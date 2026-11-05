@@ -4,7 +4,6 @@ import { resolveReferences } from "../references.ts";
 import { currentVersion, wiresInto, type NodeCanvas, type NodeFacts } from "./model.ts";
 import { nodeRequest } from "./request.ts";
 
-/** A stable 53-bit hash of a string, as hex. Pure, so the engine and the web agree on it. */
 export const stableHash = (text: string): string => {
   let h1 = 0xdeadbeef;
   let h2 = 0x41c6ce57;
@@ -20,10 +19,6 @@ export const stableHash = (text: string): string => {
 
 const sortedParams = (params: Readonly<Record<string, unknown>>) => Object.fromEntries(Object.entries(params).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 
-/**
- * A hash of everything a run sends: the medium, model, params, instruction, and for each
- * wire in order its role, its source and the source's content now.
- */
 export const inputFingerprint = (node: NodeFacts, canvas: NodeCanvas): string => {
   const stored = canvas.stored ?? canvas.shapes;
   const byId = new Map(stored.map((shape) => [shape.id, shape]));
@@ -66,7 +61,6 @@ export type NodeState = "not_run" | "running" | "failed" | "waiting" | "out_of_d
 
 export interface NodeStatus {
   readonly state: NodeState;
-  /** The status line under the node; empty when ready. */
   readonly line: string;
 }
 
@@ -78,7 +72,6 @@ export const RESTART_STOP = "Stopped: the engine restarted before this step ran.
 export const upstreamFailedLine = (name: string): string => `Waiting for ${name}, which failed.`;
 export const failedLine = (message: string): string => (message.startsWith("Stopped:") ? message : `Failed: ${message}`);
 
-/** `Rendering… (N min)`, spec 04's wording for a render under way. */
 export const renderingLine = (startedAt: number, now: number): string => `Rendering… (${Math.max(0, Math.floor((now - startedAt) / 60_000))} min)`;
 
 export interface NodeStatusInput {
@@ -88,7 +81,6 @@ export interface NodeStatusInput {
   readonly now?: number | undefined;
 }
 
-/** The node's status: the first state that matches, in spec 16's order. Status never runs anything. */
 export const nodeStatus = ({ node, canvas, frames, now }: NodeStatusInput): NodeStatus => {
   if (node.run !== undefined) {
     if (node.run.runId === "") return { state: "running", line: QUEUED_LINE };

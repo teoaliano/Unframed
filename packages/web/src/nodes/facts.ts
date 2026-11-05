@@ -20,7 +20,6 @@ export const motionRenders = (editor: Editor): Atom<ReadonlyMap<string, string>>
 
 const canvases = new WeakMap<Editor, Computed<NodeCanvas>>();
 
-/** The node and wire facts of the live canvas, the way the engine reads them. */
 export const nodeCanvas = (editor: Editor): NodeCanvas => {
   let made = canvases.get(editor);
   if (!made) {
@@ -30,7 +29,6 @@ export const nodeCanvas = (editor: Editor): NodeCanvas => {
   return made.get();
 };
 
-/** Keeps the newest render of every motion on the canvas known, for the nodes that take one. */
 export const watchMotionRenders = (editor: Editor, engine: EngineConnection, project: string): (() => void) => {
   let last = "";
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -61,7 +59,6 @@ export const watchMotionRenders = (editor: Editor, engine: EngineConnection, pro
 
 const catalogueAtoms = new WeakMap<Editor, Atom<Readonly<Partial<Record<"image" | "video" | "text" | "audio", ReadonlyArray<ModelEntry>>>>>>();
 
-/** The catalogues the nodes on the canvas read their models' traits from (a video model's frames), as they arrive. */
 export const nodeCatalogues = (editor: Editor) => {
   let found = catalogueAtoms.get(editor);
   if (!found) {
@@ -71,7 +68,6 @@ export const nodeCatalogues = (editor: Editor) => {
   return found;
 };
 
-/** Loads the catalogue of every medium a node on the canvas uses, once each. */
 export const watchNodeCatalogues = (editor: Editor, engine: EngineConnection): (() => void) => {
   const asked = new Set<string>();
   const check = () => {

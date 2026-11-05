@@ -61,14 +61,12 @@ const total = (steps: ReadonlyArray<PlannedStep>): number | null => {
   return paid.some((step) => step.estimate === null) ? null : paid.reduce((sum, step) => sum + (step.estimate ?? 0), 0);
 };
 
-/** The summary a person approves a node run with (spec 16, The agent). */
 export const nodeRunSummary = (steps: ReadonlyArray<PlannedStep>): string => {
   const sum = total(steps);
   const what = steps.length === 1 ? `Run ${steps[0]!.name}` : `Run a chain of ${steps.length} nodes (${steps.map((step) => step.name).join(", ")})`;
   return `${what}, ${sum === null ? "with no exact estimate" : formatEstimate(sum)}.`;
 };
 
-/** `node_run` (spec 16): one node or a chain, through the node run service, with the composer's spend rules. */
 export class AgentNodeRuns {
   private readonly host: NodeRunHost;
 

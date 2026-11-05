@@ -109,7 +109,6 @@ interface CanvasViewInput {
   readonly selection: ReadonlyArray<string>;
   readonly declarations?: ReadonlyMap<string, ComponentDeclaration>;
   readonly pins?: ReadonlyMap<string, ReadonlyArray<Pin>>;
-  /** Spec 16: the newest render of each motion file, for a node's status. */
   readonly renders?: ReadonlyMap<string, string>;
 }
 

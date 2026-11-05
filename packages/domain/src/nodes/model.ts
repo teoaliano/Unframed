@@ -66,7 +66,6 @@ export const nodeFactsOf = (record: RecordLike, ref?: string): NodeFacts => {
   };
 };
 
-/** The node and wire facts of a canvas, from its records and the shape facts read from them. */
 export const nodeCanvasOf = (records: Iterable<RecordLike>, shapes: ReadonlyArray<CanvasShape>, renders: ReadonlyMap<string, string> = new Map()): NodeCanvas => {
   const byId = new Map(shapes.map((shape) => [shape.id, shape]));
   const nodes = new Map<string, NodeFacts>();
@@ -118,7 +117,6 @@ export const shapeName = (canvas: NodeCanvas, id: string): string => {
 
 export const shapeOf = (canvas: NodeCanvas, id: string): CanvasShape | undefined => canvas.shapes.find((each) => each.id === id);
 
-/** The node shapes, in canvas order: top edge, then left edge, then z. */
 export const nodesInCanvasOrder = (canvas: NodeCanvas, ids: Iterable<string>): string[] => {
   const wanted = new Set(ids);
   return canvas.shapes.filter((shape) => wanted.has(shape.id)).sort(readingOrder).map((shape) => shape.id);
