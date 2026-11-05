@@ -10,6 +10,10 @@ import { nameRefusal, slugName, uniqueName } from "../groupRules.ts";
 import { agentShapeId, roomShapeId } from "./turnText.ts";
 import { ARTIFACT_SCALE_MAX, ARTIFACT_SCALE_MIN, isArtifactScale } from "@unframed/contracts";
 import { cappedArtifactScale, scaledArtifactProps } from "../artifacts/artifactRules.ts";
+import { currentVersion, nodeCanvasOf } from "../nodes/model.ts";
+import { nodeStatus } from "../nodes/status.ts";
+import { wireRefusal } from "../nodes/wires.ts";
+import { NODE_DEFAULT_SIZE, NODE_MEDIA, NODE_MIN_HEIGHT, NODE_WIDTH, WIRE_ROLES } from "@unframed/contracts";
 
 export interface CanvasRecord {
   readonly id: string;
@@ -105,6 +109,8 @@ interface CanvasViewInput {
   readonly selection: ReadonlyArray<string>;
   readonly declarations?: ReadonlyMap<string, ComponentDeclaration>;
   readonly pins?: ReadonlyMap<string, ReadonlyArray<Pin>>;
+  /** Spec 16: the newest render of each motion file, for a node's status. */
+  readonly renders?: ReadonlyMap<string, string>;
 }
 
 interface CanvasView {
@@ -161,8 +167,21 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
     if (record.type === "component" && typeof record.props?.tag === "string" && typeof record.props.file === "string") currentSheets.set(record.props.tag, record.props.file);
   }
   const out: Record<string, unknown>[] = [];
+  const nodeCanvas = nodeCanvasOf(input.records, shapes, input.renders ?? new Map());
   for (const record of paintOrder(input.records)) {
     const fact = facts.get(record.id)!;
+    if (fact.kind === "wire") {
+      const wire = obj(record.props);
+      out.push({
+        id: agentShapeId(record.id),
+        kind: "wire",
+        from: agentShapeId(String(wire.from ?? "")),
+        to: agentShapeId(String(wire.to ?? "")),
+        role: wire.role,
+        ...(wire.files === undefined ? {} : { files: wire.files }),
+      });
+      continue;
+    }
     const props = obj(record.props);
     const unframed = obj(obj(record.meta).unframed);
     const local = input.boxes.get(record.id)?.local ?? { x: record.x ?? 0, y: record.y ?? 0, w: 0, h: 0 };
@@ -231,6 +250,22 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
         entry.slots = declaration?.slots ?? [];
         break;
       }
+      case "node": {
+        const node = nodeCanvas.nodes.get(record.id)!;
+        const status = nodeStatus({ node, canvas: nodeCanvas });
+        entry.medium = node.medium;
+        entry.model = node.model;
+        entry.params = node.params;
+        if (node.runs !== undefined) entry.runs = node.runs;
+        entry.instruction = node.instruction;
+        entry.status = status.state;
+        if (status.line !== "") entry.statusLine = status.line;
+        entry.versions = node.versions.length;
+        const current = currentVersion(node);
+        if (current) entry.current = { ...(current.file === undefined ? {} : { file: current.file }), ...(current.fileName === undefined ? {} : { fileName: current.fileName }), ...(current.text === undefined ? {} : { text: current.text }) };
+        if (node.error !== undefined) entry.error = node.error;
+        break;
+      }
       case "mark": {
         entry.type = record.type;
         const text = plainText(props.richText).trim();
@@ -257,7 +292,8 @@ const round = (value: number, places = 2): number => {
 const MAX_OPS = 200;
 
 const OP_TYPES = new Set(["create", "update", "move", "resize", "delete", "reparent", "rename"]);
-const CREATE_KINDS = new Set(["prompt", "image", "video", "audio", "group", "mark"]);
+const CREATE_KINDS = new Set(["prompt", "image", "video", "audio", "group", "mark", "node", "wire"]);
+const RUN_FIELDS = ["versions", "currentVersionId", "run", "status", "error"];
 const MARK_TYPES = new Set(["geo", "note", "arrow", "line"]);
 
 export interface FileFacts {
@@ -482,6 +518,9 @@ const precheck = (ops: ReadonlyArray<unknown>, ctx: BatchContext): void => {
     }
     const props = obj(record.props);
     if (type === "update" && "lockedElements" in props) refuse("update: lockedElements is set by the person in the editor's Layers tab");
+    if (type === "update" || (type === "create" && record.kind === "node")) {
+      for (const field of RUN_FIELDS) if (field in props) refuse(`${String(type)}: ${field} is written by runs`);
+    }
     if (hasDataUrl(props)) refuse(`${String(type)}: bytes cannot travel in shape props; name a file in the project folder instead`);
     if (type === "create" || type === "update") fileOf(String(type), ctx, props);
   }
@@ -605,6 +644,34 @@ const create = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
       record = { ...base, props: { w: size.w, h: size.h, name, color: "black", ...rest }, meta: {} };
       break;
     }
+    case "node": {
+      const medium = props.medium;
+      if (typeof medium !== "string" || !(NODE_MEDIA as ReadonlyArray<string>).includes(medium)) refuse(`create: a node's props.medium is one of ${NODE_MEDIA.join(", ")}`);
+      record = {
+        ...base,
+        props: {
+          w: Math.min(NODE_WIDTH.max, Math.max(NODE_WIDTH.min, w ?? NODE_DEFAULT_SIZE.w)),
+          h: Math.max(NODE_MIN_HEIGHT, h ?? NODE_DEFAULT_SIZE.h),
+          ...nodeSettings("create", medium as string, props),
+          versions: [],
+          currentVersionId: null,
+        },
+        meta: { ref: ref() },
+      };
+      break;
+    }
+    case "wire": {
+      if (parent) refuse("create: a wire cannot be a member of a group");
+      const from = batch.shape("create", props.from);
+      const to = batch.shape("create", props.to);
+      const role = props.role;
+      if (typeof role !== "string" || !(WIRE_ROLES as ReadonlyArray<string>).includes(role)) refuse(`create: a wire's props.role is one of ${WIRE_ROLES.join(", ")}`);
+      const refusal = wireRefusal({ canvas: nodeCanvasOf(batch.records(), canvasShapesOf(batch.records(), ctx.boxes)), from: from.id, to: to.id, role: role as never });
+      if (refusal !== null) refuse(`create: ${refusal}`);
+      const files = props.files === "entry" || props.files === "linked" ? { files: props.files } : {};
+      record = { ...shapeBase(id, "wire", 0, 0, ctx.pageId, batch.indexFor(ctx.pageId)), props: { from: from.id, to: to.id, role, ...files }, meta: { unframed: { chosen: true } } };
+      break;
+    }
     default: {
       const { type: _type, text, ...rest } = props;
       const defaults = MARK_DEFAULTS[tlType]!(w ?? 100, h ?? (tlType === "arrow" || tlType === "line" ? 0 : 100));
@@ -616,6 +683,29 @@ const create = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
     }
   }
   batch.put(record);
+};
+
+const nodeSettings = (op: string, medium: string, props: Record<string, unknown>): Record<string, unknown> => {
+  const settings: Record<string, unknown> = { medium, model: "", params: {}, instruction: "" };
+  if (props.model !== undefined) {
+    if (typeof props.model !== "string") refuse(`${op}: a node's props.model is a model id`);
+    settings.model = props.model;
+  }
+  if (props.params !== undefined) {
+    const params = obj(props.params);
+    for (const [key, value] of Object.entries(params)) if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") refuse(`${op}: params.${key} must be a string, number or boolean`);
+    settings.params = params;
+  }
+  if (props.instruction !== undefined) {
+    if (typeof props.instruction !== "string") refuse(`${op}: a node's props.instruction is text`);
+    settings.instruction = props.instruction;
+  }
+  if (props.runs !== undefined && props.runs !== null) {
+    if (medium !== "image") refuse(`${op}: only an image node takes runs`);
+    if (!Number.isInteger(props.runs) || (props.runs as number) < 1 || (props.runs as number) > 10) refuse(`${op}: runs is a whole number from 1 to 10`);
+    settings.runs = props.runs;
+  }
+  return settings;
 };
 
 const renameShape = (batch: Batch, ctx: BatchContext, shape: CanvasRecord, typed: unknown, op: string): void => {
@@ -649,6 +739,33 @@ const update = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
   const kind = shapeKind(shape.type);
   if (kind === "component") {
     for (const field of ["tag", "file"]) if (field in patch) refuse(`update: ${field} is written by component_write`);
+  }
+  if (kind === "node") {
+    const allowed = new Set(["medium", "model", "params", "runs", "instruction", "w", "h"]);
+    for (const key of Object.keys(patch)) if (!allowed.has(key)) refuse(`update: a node takes medium, model, params, runs and instruction, not ${key}`);
+    const medium = typeof patch.medium === "string" ? patch.medium : String(props.medium);
+    if (!(NODE_MEDIA as ReadonlyArray<string>).includes(medium)) refuse(`update: a node's props.medium is one of ${NODE_MEDIA.join(", ")}`);
+    const settings = nodeSettings("update", medium, { ...patch, ...(patch.runs === undefined && medium !== "image" ? {} : {}) });
+    const next: Record<string, unknown> = { ...props, medium };
+    for (const key of ["model", "params", "instruction", "runs"]) if (key in patch && patch[key] !== null) next[key] = settings[key];
+    if (patch.runs === null || medium !== "image") delete next.runs;
+    if (numeric(patch.w)) next.w = Math.min(NODE_WIDTH.max, Math.max(NODE_WIDTH.min, patch.w));
+    if (numeric(patch.h)) next.h = Math.max(NODE_MIN_HEIGHT, patch.h);
+    delete next.error;
+    batch.put({ ...shape, props: next });
+    return;
+  }
+  if (kind === "wire") {
+    for (const key of Object.keys(patch)) if (key !== "role" && key !== "files") refuse(`update: a wire takes role and files, not ${key}`);
+    const role = patch.role ?? props.role;
+    if (typeof role !== "string" || !(WIRE_ROLES as ReadonlyArray<string>).includes(role)) refuse(`update: a wire's props.role is one of ${WIRE_ROLES.join(", ")}`);
+    const refusal = wireRefusal({ canvas: nodeCanvasOf(batch.records(), canvasShapesOf(batch.records(), ctx.boxes)), from: String(props.from), to: String(props.to), role: role as never, wireId: shape.id });
+    if (refusal !== null) refuse(`update: ${refusal}`);
+    const next: Record<string, unknown> = { ...props, role };
+    if (patch.files === "entry" || patch.files === "linked") next.files = patch.files;
+    else if (patch.files === null) delete next.files;
+    batch.put({ ...shape, props: next, meta: { ...obj(shape.meta), unframed: { ...obj(obj(shape.meta).unframed), chosen: true } } });
+    return;
   }
   if (kind === "group" && "name" in patch) {
     const { name, ...rest } = patch;
@@ -711,12 +828,14 @@ const applyPatch = (batch: Batch, shape: CanvasRecord, props: Record<string, unk
 
 const move = (batch: Batch, op: Record<string, unknown>): void => {
   const shape = batch.shape("move", op.id);
+  if (shape.type === "wire") refuse("move: a wire follows its ends");
   if (!numeric(op.x) || !numeric(op.y)) refuse("move: x and y must be numbers");
   batch.put({ ...shape, x: op.x as number, y: op.y as number });
 };
 
 const resize = (batch: Batch, op: Record<string, unknown>): void => {
   const shape = batch.shape("resize", op.id);
+  if (shape.type === "wire") refuse("resize: a wire has no size to set");
   const w = op.w;
   const h = op.h;
   if (!numeric(w) || !numeric(h) || w <= 0 || h <= 0) refuse("resize: w and h must be positive numbers");
@@ -739,6 +858,9 @@ const resize = (batch: Batch, op: Record<string, unknown>): void => {
     case "text":
       batch.put({ ...shape, props: { ...props, w }, meta: { ...obj(shape.meta), sized: true } });
       return;
+    case "node":
+      batch.put({ ...shape, props: { ...props, w: Math.min(NODE_WIDTH.max, Math.max(NODE_WIDTH.min, w as number)), h: Math.max(NODE_MIN_HEIGHT, h as number) } });
+      return;
     case "arrow":
     case "line":
     case "note":
@@ -753,10 +875,21 @@ const resize = (batch: Batch, op: Record<string, unknown>): void => {
 
 const remove = (batch: Batch, op: Record<string, unknown>): void => {
   const shape = batch.shape("delete", op.id);
+  const gone = new Set([shape.id]);
   if (shape.type === "frame") {
-    for (const record of batch.records()) if (record.typeName === "shape" && record.parentId === shape.id) batch.remove(record.id);
+    for (const record of batch.records()) {
+      if (record.typeName === "shape" && record.parentId === shape.id) {
+        batch.remove(record.id);
+        gone.add(record.id);
+      }
+    }
   }
   batch.remove(shape.id);
+  for (const record of batch.records()) {
+    if (record.type !== "wire") continue;
+    const ends = obj(record.props);
+    if (gone.has(String(ends.from)) || gone.has(String(ends.to))) batch.remove(record.id);
+  }
 };
 
 const reparent = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): void => {

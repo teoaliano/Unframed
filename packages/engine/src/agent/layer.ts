@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { NodeRuns } from "../nodes/nodeRuns.ts";
 import { MediaStore } from "../media/mediaStore.ts";
 import type { ClientChatCommand, ShellStreamItem, ThreadSearchMatch, ThreadStreamItem, TurnDiff } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
@@ -100,6 +101,7 @@ export const agentsLayer = Layer.effect(
 
     const selection = yield* SelectionHub;
     const runs = yield* Runs;
+    const nodeRuns = yield* NodeRuns;
     const catalogue = yield* Catalogue;
     const videoCatalogue = yield* VideoCatalogue;
     const renderJobs = yield* RenderJobs;
@@ -108,6 +110,7 @@ export const agentsLayer = Layer.effect(
       dataDir: config.dataDir,
       selection,
       generationRuns: {
+        nodes: { plan: (input) => run(nodeRuns.plan(input)), run: (input) => run(nodeRuns.run(input)) },
         runImage: (request) => run(runs.image(request)),
         runText: (request) => run(runs.text(request)),
         pricing: (model) => run(catalogue.imagePricing(model)),

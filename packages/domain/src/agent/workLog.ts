@@ -133,6 +133,11 @@ export const describeTool = (input: { readonly toolName: string; readonly itemTy
         const medium = toolInput.medium === "video" ? "a video generation" : toolInput.medium === "text" ? "a text generation" : "an image generation";
         return { label: `Started ${medium}`, action: "tool" };
       }
+      case "node_run": {
+        const count = Array.isArray(toolInput.ids) ? toolInput.ids.length : 0;
+        if (toolInput.dryRun === true) return { label: count === 1 ? "Priced a node run" : `Priced a chain of ${count} nodes`, action: "tool" };
+        return { label: count === 1 && toolInput.downstream !== true ? "Ran a node" : "Ran a chain of nodes", action: "tool" };
+      }
       case "file_add": {
         const name = typeof result.fileName === "string" ? result.fileName : typeof toolInput.path === "string" ? toolInput.path.split(/[\\/]/).pop() : undefined;
         return { label: name ? `Added ${name} to the project` : "Added a file to the project", action: "tool" };
@@ -218,6 +223,8 @@ const failedLabel = (own: string, toolInput: Record<string, unknown>, title: (ki
       const count = Array.isArray(toolInput.shapeIds) ? toolInput.shapeIds.length : 0;
       return count === 0 ? "Couldn't clear the selection" : `Couldn't select ${plural(count, "shape")}`;
     }
+    case "node_run":
+      return Array.isArray(toolInput.ids) && toolInput.ids.length === 1 && toolInput.downstream !== true ? "Couldn't run the node" : "Couldn't run the chain";
     case "generate":
       return `Couldn't start ${toolInput.medium === "video" ? "a video generation" : toolInput.medium === "text" ? "a text generation" : "an image generation"}`;
     default:

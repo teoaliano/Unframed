@@ -36,6 +36,7 @@ export const UNFRAMED_TOOLS = [
   "preview_evaluate",
   "preview_wait_for",
   "generate",
+  "node_run",
 ];
 
 type Distributive<T> = T extends unknown ? Omit<T, "commandId" | "projectId"> : never;

@@ -167,7 +167,7 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
       const itemId = `item-${++items}`;
       const toolName = `${UNFRAMED_TOOL_PREFIX}${call.name}`;
       emit(chatId, { type: "item.started", ...turn, itemId, payload: { itemType: "mcp_tool_call", status: "inProgress", title: toolName, data: { toolName, input: call.input } } });
-      const detail = toolName === "mcp__unframed__generate" ? await context.generationDetail?.(chatId, call.input) : undefined;
+      const detail = toolName === "mcp__unframed__generate" || toolName === "mcp__unframed__node_run" ? await context.generationDetail?.(chatId, call.input, toolName.slice("mcp__unframed__".length)) : undefined;
       const allowed = await session.gate.decide({
         toolName,
         input: call.input,

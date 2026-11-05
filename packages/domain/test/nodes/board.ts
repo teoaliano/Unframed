@@ -51,7 +51,7 @@ export const wire = (id: string, from: string, to: string, role: WireRole, extra
 export const board = (input: {
   shapes?: CanvasShape[];
   nodes?: Array<{ facts: NodeFacts; at?: At }>;
-  wires?: WireFacts[];
+  wires?: ReadonlyArray<WireFacts>;
   renders?: Record<string, string>;
 }): NodeCanvas => {
   const nodes = input.nodes ?? [];
