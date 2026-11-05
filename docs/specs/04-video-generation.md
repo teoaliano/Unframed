@@ -257,7 +257,7 @@ Status classification, one home for both callers: `completed` is done; `failed`,
 **Poll (engine).** RPC `video.poll`. Input `{ jobId, project, params }` (the marker's `durable.params`, the fallback for a job the store never learned about). Output one of `{ status: "completed", cost, savedPath, url }` (url is spec 01's project file URL), `{ status: "failed", error }`, `{ status: <raw upstream status>, progress }` (in flight). Failures are spec 01's `UnframedError` with `details.reason`, coded as for `video.start`.
 
 1. Read the store leniently. A `done` record answers completed from the record; a `failed` record answers failed with its `error` (or `Generation failed.`). This comes before the key check: answering from the store needs no key, and that is how a tab learns its render ended after the key was removed.
-2. No key: `no_key`, `No OpenRouter key yet.`
+2. No key: `no_key`, `Generating needs OpenRouter. Connect it in Settings, under Generation.` (the same refusal spec 03 uses)
 3. Ask upstream. Not answered: network errors fail `unreachable`, `Could not reach OpenRouter: <message>`; the others fail `upstream` with their message.
 4. Terminal failure: fail the job (above) and answer failed. If recording the failure throws: `upstream`, `The render failed upstream (<message>), but recording that failed too: <error>`.
 5. In flight: answer the raw status string and `progress` (or null), so an unusual status reads as unusual.

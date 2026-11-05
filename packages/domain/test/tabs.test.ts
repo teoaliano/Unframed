@@ -6,10 +6,12 @@ import {
   moveTab,
   openTab,
   pinTab,
+  type PinnedTabs,
   popClosed,
   pushClosed,
   restoreTabs,
   statusOf,
+  tabGroup,
   tabWidth,
   unpinTab,
 } from "../src/index.ts";
@@ -31,9 +33,9 @@ describe("project tabs", () => {
   });
 
   it("moves a tab and clamps the target", () => {
-    expect(moveTab(["a", "b", "c"], "a", 2)).toEqual(["b", "c", "a"]);
-    expect(moveTab(["a", "b", "c"], "c", -5)).toEqual(["c", "a", "b"]);
-    expect(moveTab(["a", "b"], "zz", 0)).toEqual(["a", "b"]);
+    expect(moveTab({ order: ["a", "b", "c"], pinned: [] }, "a", 2).order).toEqual(["b", "c", "a"]);
+    expect(moveTab({ order: ["a", "b", "c"], pinned: [] }, "c", -5).order).toEqual(["c", "a", "b"]);
+    expect(moveTab({ order: ["a", "b"], pinned: [] }, "zz", 0).order).toEqual(["a", "b"]);
   });
 
   it("restores the saved order, dropping names that no longer exist, and keeps a surviving active tab", () => {
@@ -85,9 +87,28 @@ describe("project tabs", () => {
   });
 
   it("moves a pinned tab only among the pinned tabs, and an unpinned one only after them", () => {
-    expect(moveTab(["p", "q", "a", "b"], "q", 0, ["p", "q"])).toEqual(["q", "p", "a", "b"]);
-    expect(moveTab(["p", "q", "a", "b"], "p", 3, ["p", "q"])).toEqual(["q", "p", "a", "b"]);
-    expect(moveTab(["p", "q", "a", "b"], "b", 0, ["p", "q"])).toEqual(["p", "q", "b", "a"]);
+    expect(moveTab({ order: ["p", "q", "a", "b"], pinned: ["p", "q"] }, "q", 0)).toEqual({ order: ["q", "p", "a", "b"], pinned: ["q", "p"] });
+    expect(moveTab({ order: ["p", "q", "a", "b"], pinned: ["p", "q"] }, "p", 3).order).toEqual(["q", "p", "a", "b"]);
+    expect(moveTab({ order: ["p", "q", "a", "b"], pinned: ["p", "q"] }, "b", 0).order).toEqual(["p", "q", "b", "a"]);
+  });
+
+  it("keeps a reorder among the pinned tabs when another tab is pinned or unpinned", () => {
+    let tabs: PinnedTabs = { order: ["a", "b", "c"], pinned: [] };
+    tabs = pinTab(tabs, "a");
+    tabs = pinTab(tabs, "b");
+    tabs = moveTab(tabs, "b", 0);
+    expect(tabs).toEqual({ order: ["b", "a", "c"], pinned: ["b", "a"] });
+    tabs = pinTab(tabs, "c");
+    expect(tabs).toEqual({ order: ["b", "a", "c"], pinned: ["b", "a", "c"] });
+    tabs = unpinTab(tabs, "a");
+    expect(tabs).toEqual({ order: ["b", "c", "a"], pinned: ["b", "c"] });
+  });
+
+  it("gives the range of places a tab may move to: the pinned tabs, or the tabs after them", () => {
+    const tabs = { order: ["p", "q", "a", "b", "c"], pinned: ["q", "p"] };
+    expect(tabGroup(tabs, "p")).toEqual({ low: 0, high: 1 });
+    expect(tabGroup(tabs, "b")).toEqual({ low: 2, high: 4 });
+    expect(tabGroup({ order: ["a"], pinned: [] }, "a")).toEqual({ low: 0, high: 0 });
   });
 
   it("restores the pins that survived, with the pinned tabs first", () => {

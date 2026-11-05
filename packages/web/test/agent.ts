@@ -25,7 +25,8 @@ export const startAgentEngine = (options: EngineOptions & { script?: string } = 
 /**
  * An engine that detects providers for real, against fakes: its login shell adds nothing
  * to PATH and `CLAUDE_PATH` and `CODEX_PATH` name files in `dir`, which the test may or may
- * not have written. No real CLI ever runs. Its `.env` carries the fixture key.
+ * not have written. No real CLI ever runs. Its `.env` carries the fixture key, because a
+ * keyless app opens the settings dialog over the canvas (spec 10).
  */
 export const startDetectingEngine = async (dir: string, options: EngineOptions = {}): Promise<TestEngine> => {
   const shell = await fakeShell(join(dir, "shell"));

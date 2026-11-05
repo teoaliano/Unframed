@@ -22,7 +22,6 @@ export interface TabState {
   readonly active: string | undefined;
   /** Every open tab, in the order the strip shows them. */
   readonly order: ReadonlyArray<string>;
-  /** The pinned tabs, the first ones in `order`. Saved with the order. */
   readonly pinned: ReadonlyArray<string>;
   /** Projects closed from the strip, newest first, for Cmd+Shift+T. In memory only. */
   readonly closed: ReadonlyArray<string>;
@@ -123,7 +122,7 @@ export class ProjectActivation {
 
   /** Moves a tab to position `to` in the strip. Saved so the order survives a restart. */
   moveTab(name: string, to: number): void {
-    this.update({ order: moveTab(this.state.order, name, to, this.state.pinned) });
+    this.update(moveTab(this.state, name, to));
     this.persistTabs();
   }
 

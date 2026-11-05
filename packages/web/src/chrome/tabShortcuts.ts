@@ -14,7 +14,7 @@ const dialogOpen = (): boolean => document.querySelector("[role=dialog], [role=a
 
 /**
  * The project tab shortcuts (spec 17, following Figma's desktop app). `Cmd` is Ctrl off macOS.
- * Cmd+T opens the project list, Cmd+W closes the active tab unless it is pinned, Cmd+Shift+T reopens the last closed,
+ * Cmd+T opens the project list, Cmd+W closes the active tab, Cmd+Shift+T reopens the last closed,
  * Cmd+1 to Cmd+8 jump to a tab and Cmd+9 to the last, and Ctrl+Tab cycles on every platform.
  * Alt+ArrowLeft and Alt+ArrowRight move the focused tab. None fire while a field or dialog has focus.
  */

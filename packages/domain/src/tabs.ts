@@ -40,47 +40,51 @@ export const closeTab = (
   return { order: rest, active: next };
 };
 
-/**
- * Moves `name` to position `to`. A pinned tab stays among the pinned tabs at the front and an unpinned one stays
- * after them, so `to` is clamped to the tab's own group. An unknown name leaves the order as it is.
- */
-export const moveTab = (order: ReadonlyArray<string>, name: string, to: number, pinned: ReadonlyArray<string> = []): ReadonlyArray<string> => {
-  const from = order.indexOf(name);
-  if (from === -1) return [...order];
-  const pinnedCount = order.filter((each) => pinned.includes(each)).length;
-  const isPinned = pinned.includes(name);
-  const low = isPinned ? 0 : pinnedCount;
-  const high = isPinned ? pinnedCount - 1 : order.length - 1;
-  const rest = order.filter((each) => each !== name);
-  const at = Math.max(low, Math.min(high, to));
-  return [...rest.slice(0, at), name, ...rest.slice(at)];
-};
-
-/** The open tabs with their pins: the pinned tabs are the first ones in `order`, in that order. */
 export interface PinnedTabs {
   readonly order: ReadonlyArray<string>;
   readonly pinned: ReadonlyArray<string>;
 }
 
-/** Pins `name`: it joins the end of the pinned tabs at the front of the strip. */
-export const pinTab = (tabs: PinnedTabs, name: string): PinnedTabs => {
-  if (!tabs.order.includes(name) || tabs.pinned.includes(name)) return { order: [...tabs.order], pinned: [...tabs.pinned] };
-  const pinned = [...tabs.pinned, name];
-  return { order: [...pinned, ...tabs.order.filter((each) => !pinned.includes(each))], pinned };
+const withPins = (order: ReadonlyArray<string>, pinned: ReadonlySet<string>): PinnedTabs => {
+  const first = order.filter((name) => pinned.has(name));
+  return { order: [...first, ...order.filter((name) => !pinned.has(name))], pinned: first };
 };
 
-/** Unpins `name`: it leaves the pinned tabs and becomes the first unpinned tab. */
+export const tabGroup = (tabs: PinnedTabs, name: string): { readonly low: number; readonly high: number } => {
+  const pinnedCount = tabs.order.filter((each) => tabs.pinned.includes(each)).length;
+  return tabs.pinned.includes(name) ? { low: 0, high: Math.max(0, pinnedCount - 1) } : { low: pinnedCount, high: Math.max(pinnedCount, tabs.order.length - 1) };
+};
+
+export const moveTab = (tabs: PinnedTabs, name: string, to: number): PinnedTabs => {
+  const pinned = new Set(tabs.pinned);
+  if (!tabs.order.includes(name)) return withPins(tabs.order, pinned);
+  const { low, high } = tabGroup(tabs, name);
+  const rest = tabs.order.filter((each) => each !== name);
+  const at = Math.max(low, Math.min(high, to));
+  return withPins([...rest.slice(0, at), name, ...rest.slice(at)], pinned);
+};
+
+export const pinTab = (tabs: PinnedTabs, name: string): PinnedTabs => {
+  const pinned = new Set(tabs.pinned);
+  if (!tabs.order.includes(name) || pinned.has(name)) return withPins(tabs.order, pinned);
+  const current = withPins(tabs.order, pinned);
+  pinned.add(name);
+  return withPins([...current.pinned, name, ...current.order.filter((each) => !current.pinned.includes(each) && each !== name)], pinned);
+};
+
 export const unpinTab = (tabs: PinnedTabs, name: string): PinnedTabs => {
-  if (!tabs.pinned.includes(name)) return { order: [...tabs.order], pinned: [...tabs.pinned] };
-  const pinned = tabs.pinned.filter((each) => each !== name);
-  return { order: [...pinned, name, ...tabs.order.filter((each) => !pinned.includes(each) && each !== name)], pinned };
+  const pinned = new Set(tabs.pinned);
+  if (!pinned.has(name)) return withPins(tabs.order, pinned);
+  pinned.delete(name);
+  const current = withPins(tabs.order, pinned);
+  const rest = current.order.filter((each) => each !== name && !pinned.has(each));
+  return withPins([...current.pinned, name, ...rest], pinned);
 };
 
 /**
  * Restores the saved order against the projects that exist. A saved name that no longer exists is
- * dropped, from the order and from the pins. The pinned tabs come first. The active tab is the saved
- * one when it survived, else the first tab. With nothing left, the result is empty and the caller
- * falls back the way spec 02 does.
+ * dropped. The active tab is the saved one when it survived, else the first tab. With nothing
+ * left, the result is empty and the caller falls back the way spec 02 does.
  */
 export const restoreTabs = (
   saved: { readonly order: ReadonlyArray<string>; readonly active: string | null | undefined; readonly pinned?: ReadonlyArray<string> | undefined },

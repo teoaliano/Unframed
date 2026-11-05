@@ -103,17 +103,17 @@ const barStroke = (width: number, squareStart: boolean) =>
 
 const DRAG = "[-webkit-app-region:drag]";
 const NO_DRAG_CONTROLS = "[&_button]:[-webkit-app-region:no-drag]";
-const NO_DRAG_TABS = "[&_[data-tab-item]]:[-webkit-app-region:no-drag] [&_[data-slot=tabs-tab]]:[-webkit-app-region:no-drag] [&_[data-close]]:[-webkit-app-region:no-drag]";
+const NO_DRAG_TAB_CONTROLS = "[&_[data-tab-item]]:[-webkit-app-region:no-drag] [&_[data-slot=tabs-tab]]:[-webkit-app-region:no-drag] [&_[data-close]]:[-webkit-app-region:no-drag]";
 
 const TAB_ITEM =
-  "relative inline-flex shrink-0 rounded-md data-dragging:z-10 data-dragging:bg-background data-dragging:shadow-md/10 data-dragging:[&_[data-slot=tabs-tab]]:after:opacity-0 data-dragging:[&_[data-slot=tabs-tab]]:cursor-grabbing";
+  "relative inline-flex shrink-0 rounded-md after:pointer-events-none after:absolute after:inset-y-0 after:-end-2 after:w-px after:bg-border data-dragging:z-10 data-dragging:bg-background data-dragging:shadow-md/10 data-dragging:after:hidden data-dragging:[&_[data-slot=tabs-tab]]:cursor-grabbing";
 
 const PinnedMark = ({ name }: { readonly name: string }) => (
   <span
     aria-hidden
     data-slot="top-bar-mark"
     data-letter={(name.match(/[\p{L}\p{N}]/u)?.[0] ?? "?").toUpperCase()}
-    className="flex size-4.5 items-center justify-center rounded-[5px] border bg-muted text-[10px] leading-none font-semibold text-foreground before:content-[attr(data-letter)]"
+    className="flex size-4 items-center justify-center rounded-[4px] border bg-muted text-[10px] leading-none font-semibold text-foreground before:content-[attr(data-letter)]"
   />
 );
 
@@ -156,8 +156,8 @@ export const TopBar = ({
   const [menu, setMenu] = useState<{ readonly name: string; readonly x: number; readonly y: number }>();
   const [bodyWidth, setBodyWidth] = useState(0);
   const names = tabs.map((tab) => tab.name);
-  const pinnedCount = tabs.filter((tab) => tab.pinned === true).length;
-  const reorder = useTabReorder({ list: scroller, names, pinnedCount, onMove });
+  const pinned = tabs.filter((tab) => tab.pinned === true).map((tab) => tab.name);
+  const reorder = useTabReorder({ list: scroller, names, pinned, onMove });
   const windows = platform === "windows";
 
   useEffect(() => {
@@ -247,7 +247,7 @@ export const TopBar = ({
             variant="underline"
             size="sm"
             overflow="truncate"
-            className={cn("h-full min-w-0 max-w-full data-reordering:[&_[data-slot=tabs-indicator]]:opacity-0", NO_DRAG_TABS)}
+            className={cn("h-full min-w-0 max-w-full data-reordering:[&_[data-slot=tabs-indicator]]:opacity-0", NO_DRAG_TAB_CONTROLS)}
             onClick={onListClick}
             onAuxClick={onListAux}
             onContextMenu={onListContext}
@@ -263,10 +263,9 @@ export const TopBar = ({
                   data-pinned={tab.pinned === true ? "true" : undefined}
                   aria-label={tab.pinned === true ? tab.name : undefined}
                   title={tab.title ?? tab.name}
-                  divider
                   closable={tab.pinned !== true}
                   closeLabel={`Close ${tab.name}`}
-                  className={tab.pinned === true ? "min-w-0 px-2" : undefined}
+                  className={tab.pinned === true ? "w-9 min-w-0 px-0" : undefined}
                   {...(tab.status === undefined ? {} : { status: tab.status })}
                 >
                   {tab.pinned === true ? <PinnedMark name={tab.name} /> : <span className="min-w-0 truncate">{tab.name}</span>}

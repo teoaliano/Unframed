@@ -1,7 +1,5 @@
 export type SettingsSection = "generation" | "agents" | "connections" | "general";
 
-export const SETTINGS_SECTIONS: ReadonlyArray<SettingsSection> = ["generation", "agents", "connections", "general"];
-
 export const OPEN_SETTINGS = "unframed:open-settings";
 
 export interface OpenSettingsDetail {

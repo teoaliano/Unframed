@@ -127,3 +127,53 @@ test("an unpinned tab cannot be dragged in front of a pinned one, and Alt+ArrowL
   await page.keyboard.press("Alt+ArrowLeft");
   expect(await page.locator("[role=tab]").first().getAttribute("data-project")).toBe("beta");
 });
+
+const pressAndDrag = async (page: Page, name: string, dx: number) => {
+  const from = (await tab(page, name).boundingBox())!;
+  const y = from.y + from.height / 2;
+  await page.mouse.move(from.x + from.width / 2, y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + from.width / 2 + dx, y, { steps: 6 });
+  return { x: from.x + from.width / 2 + dx, y };
+};
+
+for (const [what, lose] of [
+  ["the window losing focus", (page: Page) => page.evaluate(() => window.dispatchEvent(new Event("blur")))],
+  ["a pointercancel", (page: Page) => page.evaluate(() => window.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 1, bubbles: true })))],
+  ["the list losing pointer capture", (page: Page) => page.evaluate(() => {
+    const list = document.querySelector<HTMLElement>("[aria-label='Open projects']")!;
+    const id = [1, 0, 2].find((each) => list.hasPointerCapture(each));
+    if (id === undefined) throw new Error("the list holds no pointer capture");
+    list.releasePointerCapture(id);
+  })],
+] as const) {
+  test(`${what} mid-drag puts the tabs back, and the next drag still works`, async ({ page, engine }) => {
+    await openTabs(page, engine, ["beta"]);
+    const pointer = await pressAndDrag(page, "beta", -40);
+    await expect(item(page, "beta")).toHaveAttribute("data-dragging", "");
+    await lose(page);
+    await page.mouse.move(pointer.x - 1, pointer.y);
+    await expect(item(page, "beta")).not.toHaveAttribute("data-dragging");
+    await expect.poll(() => translateX(page, "beta")).toBe(0);
+    await page.mouse.up();
+    await expect(tabs(page)).toHaveText(["default", "beta"]);
+
+    await tab(page, "beta").dragTo(tab(page, "default"));
+    await expect(tabs(page)).toHaveText(["beta", "default"]);
+  });
+}
+
+test("scrolling an overflowing strip mid-drag keeps the dragged tab under the pointer", async ({ page, engine }) => {
+  await page.setViewportSize({ width: 900, height: 700 });
+  await openTabs(page, engine, ["b1", "b2", "b3", "b4", "b5", "b6", "b7", "b8", "b9"]);
+  const list = page.getByRole("tablist", { name: "Open projects" });
+  await list.evaluate((element) => (element.scrollLeft = 0));
+  expect(await list.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+  const pointer = await pressAndDrag(page, "b2", 30);
+  await expect(item(page, "b2")).toHaveAttribute("data-dragging", "");
+  await list.evaluate((element) => (element.scrollLeft += 150));
+  await page.mouse.move(pointer.x + 2, pointer.y);
+  const box = (await item(page, "b2").boundingBox())!;
+  expect(Math.abs(box.x + box.width / 2 - (pointer.x + 2))).toBeLessThan(3);
+  await page.mouse.up();
+});

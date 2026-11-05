@@ -13,6 +13,7 @@ import { loadCatalogue } from "../generate/catalogue.ts";
 import { showNotice } from "../toasts.tsx";
 import { Copy, linkClass, ModelSelect, SectionHeading } from "./fields.tsx";
 import { FOLLOW_UP_KEY, LocalAgents, PLAN_MODE_KEY, SEND_SHORTCUT_KEY, type FollowUp } from "./LocalAgents.tsx";
+import { ConfirmDialog } from "../agent/ConfirmDialog.tsx";
 import { OutsideAgents } from "./OutsideAgents.tsx";
 import type { SettingsSection } from "./settingsEvents.ts";
 import { useSettingsUi, type SettingsUi } from "./settingsUi.ts";
@@ -59,6 +60,23 @@ const SECTIONS: ReadonlyArray<{ readonly id: SettingsSection; readonly label: st
   { id: "general", label: "General", icon: SlidersHorizontal },
 ];
 
+const SECTION_OF_FIELD: Record<keyof SettingsPatch, SettingsSection> = {
+  key: "generation",
+  imageModel: "generation",
+  textModel: "generation",
+  videoModel: "generation",
+  outputDir: "general",
+  claudePath: "agents",
+  codexPath: "agents",
+  claudeConfigDir: "agents",
+};
+
+const sectionsWithChanges = (patch: SettingsPatch): ReadonlySet<SettingsSection> =>
+  new Set((Object.keys(patch) as Array<keyof SettingsPatch>).map((field) => SECTION_OF_FIELD[field]));
+
+const listOf = (names: ReadonlyArray<string>): string =>
+  names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+
 type Banner = { readonly kind: "error"; readonly message: string } | { readonly kind: "saved" };
 
 /** Only what changed: the key when typed, a model or the folder when set and different, an agent field whenever different ('' clears it). */
@@ -86,6 +104,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const [banner, setBanner] = useState<Banner>();
   const [saving, setSaving] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [fieldWarning, setFieldWarning] = useState<string>();
   const [catalogues, setCatalogues] = useState<Partial<Record<Medium, ReadonlyArray<string>>>>({});
@@ -389,9 +408,15 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
     ui.showSection(next);
     setBanner(undefined);
   };
+  const changed = settings === undefined ? new Set<SettingsSection>() : sectionsWithChanges(patchOf(draft, settings));
+  const showsSave = saves || changed.size > 0;
+  const requestClose = () => {
+    if (changed.size > 0) setConfirmDiscard(true);
+    else ui.close();
+  };
 
   return (
-    <Dialog open={open} onOpenChange={(next) => (next ? ui.open() : ui.close())}>
+    <Dialog open={open} onOpenChange={(next) => (next ? ui.open() : requestClose())}>
       <DialogPopup
         showCloseButton={false}
         initialFocus={section === "generation" && showsKeySection ? keyField : undefined}
@@ -411,51 +436,52 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
         <div className="flex min-h-0 flex-1 border-t">
-        <Tabs orientation="vertical" value={section} onValueChange={(next) => showSection(next as SettingsSection)} className="min-h-0 flex-1 flex-row">
-          <div className="w-48 shrink-0 border-e bg-muted/40 p-3">
-            <TabsList aria-label="Settings sections" variant="sidebar">
-              {SECTIONS.map(({ id, label, icon: Icon }) => (
-                <TabsTab key={id} value={id} data-section={id}>
-                  <Icon aria-hidden />
-                  {label}
-                </TabsTab>
-              ))}
-            </TabsList>
-          </div>
-          <TabsPanel value={section} className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="settings-section">
-            <DialogPanel data-testid="settings-form">
-              <h2 className="m-0 text-base font-semibold text-foreground" data-testid="settings-section-title">
-                {current.label}
-              </h2>
-              {section === "generation" && generation}
-              {section === "agents" && agents}
-              {section === "connections" && <OutsideAgents hasKey={hasKey} onConnectOpenRouter={() => showSection("generation")} />}
-              {section === "general" && general}
-            </DialogPanel>
-            {banner !== undefined && (
-              <div className="px-6 pb-4">
-                {banner.kind === "error" ? (
-                  <Alert variant="error">
-                    <CircleAlert aria-hidden />
-                    <AlertTitle>{banner.message}</AlertTitle>
-                  </Alert>
-                ) : (
-                  <Alert variant="success" role="status">
-                    <CircleCheck aria-hidden />
-                    <AlertTitle>Saved to .env</AlertTitle>
-                    <AlertDescription>Applied right away, no restart needed.</AlertDescription>
-                  </Alert>
-                )}
-              </div>
-            )}
-          </TabsPanel>
-        </Tabs>
+          <Tabs orientation="vertical" value={section} onValueChange={(next) => showSection(next as SettingsSection)} className="min-h-0 flex-1 flex-row">
+            <div className="w-48 shrink-0 border-e bg-muted/40 p-3">
+              <TabsList aria-label="Settings sections" variant="sidebar">
+                {SECTIONS.map(({ id, label, icon: Icon }) => (
+                  <TabsTab key={id} value={id} data-section={id} data-unsaved={changed.has(id) ? "true" : undefined} aria-description={changed.has(id) ? "Unsaved changes" : undefined}>
+                    <Icon aria-hidden />
+                    {label}
+                    {changed.has(id) && <span aria-hidden data-testid="unsaved-mark" className="ms-auto size-1.5 rounded-full bg-highlight" />}
+                  </TabsTab>
+                ))}
+              </TabsList>
+            </div>
+            <TabsPanel value={section} className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="settings-section">
+              <DialogPanel data-testid="settings-form">
+                <h2 className="m-0 mt-3 text-base font-semibold text-foreground" data-testid="settings-section-title">
+                  {current.label}
+                </h2>
+                {section === "generation" && generation}
+                {section === "agents" && agents}
+                {section === "connections" && <OutsideAgents hasKey={hasKey} onConnectOpenRouter={() => showSection("generation")} />}
+                {section === "general" && general}
+              </DialogPanel>
+              {banner !== undefined && (
+                <div className="px-6 pb-4">
+                  {banner.kind === "error" ? (
+                    <Alert variant="error">
+                      <CircleAlert aria-hidden />
+                      <AlertTitle>{banner.message}</AlertTitle>
+                    </Alert>
+                  ) : (
+                    <Alert variant="success" role="status">
+                      <CircleCheck aria-hidden />
+                      <AlertTitle>Saved to .env</AlertTitle>
+                      <AlertDescription>Applied right away, no restart needed.</AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              )}
+            </TabsPanel>
+          </Tabs>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => ui.close()}>
+          <Button variant="ghost" onClick={requestClose}>
             Close
           </Button>
-          {saves && (
+          {showsSave && (
             <Button type="submit" aria-busy={saving || undefined} disabled={saving}>
               {saving && <Spinner aria-hidden />}
               Save
@@ -463,6 +489,13 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
           )}
         </DialogFooter>
       </DialogPopup>
+      <ConfirmDialog
+        open={confirmDiscard}
+        onOpenChange={setConfirmDiscard}
+        title="Discard unsaved changes?"
+        description={`${listOf([...changed].map((id) => SECTIONS.find((each) => each.id === id)?.label ?? id))} ${changed.size === 1 ? "has" : "have"} changes you have not saved. Closing drops them.`}
+        actions={[{ label: "Discard changes", destructive: true, onClick: () => ui.close() }]}
+      />
     </Dialog>
   );
 };

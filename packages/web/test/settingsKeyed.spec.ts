@@ -370,3 +370,43 @@ test("the settings dialog is the kit's dialog at 760 px with a sidebar of sectio
     await engine.dispose();
   }
 });
+
+test("unsaved changes mark their sections in the sidebar, Save shows on any section, and Close or Escape asks before dropping them", async ({ page }) => {
+  const { engine } = await startSettingsEngine();
+  try {
+    await openApp(page, engine);
+    const dialog = await openSettings(page);
+    await expect(dialog.getByTestId("unsaved-mark")).toHaveCount(0);
+    await dialog.getByLabel("API key").fill("sk-or-v1-typed-but-not-saved-1234");
+    await showSection(dialog, "General");
+    await dialog.getByLabel("Output folder").fill("./elsewhere");
+    await showSection(dialog, "Connections");
+    await expect(dialog.getByRole("tab", { name: "Generation", exact: true })).toHaveAccessibleDescription("Unsaved changes");
+    await expect(dialog.getByRole("tab", { name: "Generation", exact: true }).getByTestId("unsaved-mark")).toBeVisible();
+    await expect(dialog.getByRole("tab", { name: "General", exact: true }).getByTestId("unsaved-mark")).toBeVisible();
+    await expect(dialog.getByRole("tab", { name: "Agents", exact: true }).getByTestId("unsaved-mark")).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Save" })).toBeVisible();
+
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    const confirm = page.getByRole("alertdialog", { name: "Discard unsaved changes?" });
+    await expect(confirm).toContainText("Generation and General have changes you have not saved. Closing drops them.");
+    await confirm.getByRole("button", { name: "Cancel" }).click();
+    await expect(confirm).toHaveCount(0);
+    await expect(dialog).toBeVisible();
+    await showSection(dialog, "General");
+    await expect(dialog.getByLabel("Output folder")).toHaveValue("./elsewhere");
+
+    await page.keyboard.press("Escape");
+    await expect(confirm).toBeVisible();
+    await confirm.getByRole("button", { name: "Discard changes" }).click();
+    await expect(dialog).toBeHidden();
+    expect(await readFile(join(engine.dataDir, ".env"), "utf8")).toBe(`OPENROUTER_API_KEY=${KEY}\n`);
+
+    await openSettings(page);
+    await expect(dialog.getByTestId("unsaved-mark")).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(dialog).toBeHidden();
+  } finally {
+    await engine.dispose();
+  }
+});

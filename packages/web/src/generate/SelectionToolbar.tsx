@@ -1,5 +1,5 @@
 import { resultMetaOf, UnframedError } from "@unframed/contracts";
-import { composeSelection, labelLevel, NO_KEY_MESSAGE, readRef, resultLine, toolbarState, type ToolbarState } from "@unframed/domain";
+import { composeSelection, labelLevel, readRef, resultLine, toolbarState, type ToolbarState } from "@unframed/domain";
 import { renamingShape } from "../canvas/rename.ts";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useEditor, useValue, type Editor, type TLShapeId } from "tldraw";
@@ -17,7 +17,7 @@ import { Composer } from "./composer/Composer.tsx";
 import { assetOf, canvasShapes, resultShapes, toolbarShape } from "./facts.ts";
 import { canvasRoom, placeFloating, type ScreenBox } from "./floating.ts";
 import { mediumDefinition, type RunSource } from "./mediumRegistry.ts";
-import { openOnRecipe, recipeProps, recipeRunProgress, runGroupRecipe } from "./recipeRuns.ts";
+import { NoKeyError, openOnRecipe, recipeProps, recipeRunProgress, runGroupRecipe } from "./recipeRuns.ts";
 import { closeComposer, composerState, leaveRecipeMode, openComposer } from "./state.ts";
 import { composerGlassClass } from "../chrome/composerSurface.ts";
 import { useWheelToCanvas } from "../canvas/wheelToCanvas.ts";
@@ -264,9 +264,8 @@ const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "rec
     try {
       await runGroupRecipe({ editor, engine, project, groupId, recipe, hasKey: settings?.hasKey ?? true });
     } catch (error) {
-      const message = messageOf(error);
-      if (message === NO_KEY_MESSAGE) showErrorAction(message, "Open Settings", () => openSettings("generation"));
-      else showError(message);
+      if (error instanceof NoKeyError) showErrorAction(error.message, "Open Settings", () => openSettings("generation"));
+      else showError(messageOf(error));
     } finally {
       setBusy(false);
     }

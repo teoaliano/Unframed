@@ -17,22 +17,22 @@ export const StatusBand = ({ children }: { readonly children: ReactNode }) => (
  * One status line: what stops the send (a blocker, a failed start) is a kit Alert; a
  * warning or a note is muted text, since the run still goes.
  */
+export const NoKeyLine = () => (
+  <Alert variant="warning" role="status" data-kind="blocked" data-testid="no-key-blocker">
+    <AlertTitle>{NO_KEY_MESSAGE}</AlertTitle>
+    <AlertAction>
+      <Button size="xs" variant="outline" onClick={() => openSettings("generation")}>
+        Open Settings
+      </Button>
+    </AlertAction>
+  </Alert>
+);
+
 export const StatusLine = ({ kind, children }: { readonly kind: StatusKind; readonly children: ReactNode }) => {
   if (kind === "error")
     return (
       <Alert variant="error" data-kind={kind}>
         {children}
-      </Alert>
-    );
-  if (kind === "blocked" && children === NO_KEY_MESSAGE)
-    return (
-      <Alert variant="warning" role="status" data-kind={kind} data-testid="no-key-blocker">
-        <AlertTitle>{children}</AlertTitle>
-        <AlertAction>
-          <Button size="xs" variant="outline" onClick={() => openSettings("generation")}>
-            Open Settings
-          </Button>
-        </AlertAction>
       </Alert>
     );
   if (kind === "blocked")
