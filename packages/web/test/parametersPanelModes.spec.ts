@@ -1,9 +1,8 @@
 import type { Page } from "@playwright/test";
-import { openCanvas, roomRecords, shapeOnScreen } from "./canvas.ts";
+import { openCanvas, settledRecord, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 import { clickShape } from "./generation.ts";
 import { dialsPage, filledArtifact, writeBridge } from "./artifacts.ts";
-import { putRecords } from "./media.ts";
 
 const panel = (page: Page) => page.getByRole("region", { name: "Parameters for Tuned" });
 const toggle = (page: Page) => page.getByTestId("selection-toolbar").getByRole("button", { name: "Parameters" });
@@ -125,11 +124,14 @@ test("the header toggle docks the panel as a right drawer under the top bar, rem
 
 test("the first float of a page scaled to 50 % starts 12 px right of the page as drawn, level with its top", async ({ page, agent }) => {
   await onBoard(page, agent);
-  const record = (await roomRecords(agent, "default")).find((each) => each.id === "shape:tuned")!;
-  await putRecords(agent, [{ ...record, props: { ...record.props, w: 150, h: 100, scale: 0.5 } }]);
-  await expect.poll(async () => Math.round((await shapeOnScreen(page, "shape:tuned").boundingBox())!.width)).toBeLessThan(200);
-  await openPanel(page);
+  await clickShape(page, "shape:tuned");
+  await page.getByTestId("selection-toolbar").getByTestId("artifact-scale").click();
+  await page.getByRole("menuitemradio", { name: "50%", exact: true }).click();
+  await expect.poll(async () => (await settledRecord(agent, "default", "shape:tuned"))?.props).toMatchObject({ w: 150, h: 100, scale: 0.5 });
+  await toggle(page).click();
+  await expect(panel(page).getByRole("slider", { name: "Size" })).toBeVisible();
   const shape = (await shapeOnScreen(page, "shape:tuned").boundingBox())!;
+  expect(Math.round(shape.width)).toBe(150);
   const first = await boxOf(page);
   expect(Math.round(first.x - (shape.x + shape.width))).toBe(12);
   expect(Math.abs(first.y - shape.y)).toBeLessThanOrEqual(1);
