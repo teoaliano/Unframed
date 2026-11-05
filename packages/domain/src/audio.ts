@@ -274,7 +274,6 @@ export const creditsFrom = (header: string | null | undefined): number | null =>
   return Number.isFinite(number) && number >= 0 ? number : null;
 };
 
-
 const parsed = (body: string): unknown => {
   try {
     return JSON.parse(body);

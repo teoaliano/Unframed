@@ -34,7 +34,6 @@ export interface AudioRunDeps {
   readonly emptyPromptMessage: string;
 }
 
-
 const origin = (runId: string): ChangeOrigin => ({ kind: "server", id: runOriginId(runId) });
 
 const definedParams = (params: AudioRunRequest["params"]): Record<string, string | number | boolean> =>

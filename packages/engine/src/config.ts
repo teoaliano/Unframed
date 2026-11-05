@@ -17,7 +17,6 @@ const shimEntryPath = (): string => {
 /** `UNFRAMED_TEST_RENDERER` (spec 01's table): stands in for the motion renderer and the Chrome search. */
 export type TestRenderer = "ok" | "fail" | "no-chrome";
 
-
 /**
  * What the process was started with: the install layout, the hosting variables and the
  * test-only variables. All of it comes from the process environment, never from `.env`.

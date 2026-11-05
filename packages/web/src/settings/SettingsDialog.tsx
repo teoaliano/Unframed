@@ -156,6 +156,8 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
 
   const keyed = open && settings?.hasKey === true;
   const elevenKeyed = open && settings?.hasElevenLabsKey === true;
+  const elevenLabsKeyHint = settings?.elevenLabsKeyHint ?? "";
+  const [elevenLabsSaves, setElevenLabsSaves] = useState(0);
   useEffect(() => {
     if (!elevenKeyed) return;
     let live = true;
@@ -170,7 +172,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
     return () => {
       live = false;
     };
-  }, [elevenKeyed, engine]);
+  }, [elevenKeyed, elevenLabsKeyHint, elevenLabsSaves, engine]);
   useEffect(() => {
     if (!keyed) return;
     let live = true;
@@ -230,6 +232,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
       }
       setDraft((current) => ({ ...current, key: "", elevenLabsKey: "" }));
       if (patch.elevenLabsKey !== undefined) {
+        setElevenLabsSaves((count) => count + 1);
         ui.clearElevenLabsStatus();
         elevenLabsRemoval.reset();
         void ui.fetchElevenLabsStatus();
@@ -259,7 +262,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const openRouterRemoval = useKeyRemoval(
     OPENROUTER_KEY,
     async () => {
-      const answer = await engine.call(OPENROUTER_KEY.removeMethod as "settings.removeKey");
+      const answer = await engine.call(OPENROUTER_KEY.removeMethod);
       ui.setSettings(answer.settings);
       ui.keyChosen();
       ui.clearKeyStatus();
@@ -273,7 +276,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const elevenLabsRemoval = useKeyRemoval(
     ELEVENLABS_KEY,
     async () => {
-      const answer = await engine.call(ELEVENLABS_KEY.removeMethod as "settings.removeElevenLabsKey");
+      const answer = await engine.call(ELEVENLABS_KEY.removeMethod);
       ui.setSettings(answer.settings);
       ui.clearElevenLabsStatus();
       setDraft((current) => ({ ...current, elevenLabsKey: "" }));

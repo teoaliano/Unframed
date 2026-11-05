@@ -13,7 +13,16 @@ export type PreviewSize = (typeof PREVIEW_SIZES)[number];
 export const VIDEO_TOO_LARGE_MESSAGE = "Video is too large. Keep it under 25MB.";
 export const VIDEO_LINK_MESSAGE = "Paste a full https:// link to a video file.";
 
+const AUDIO_TYPES: Readonly<Record<string, ReadonlyArray<string>>> = {
+  mp3: ["audio/mpeg", "audio/mp3"],
+  wav: ["audio/wav", "audio/x-wav", "audio/wave"],
+  m4a: ["audio/mp4", "audio/x-m4a"],
+};
+
+export const AUDIO_SERVED_TYPES: Readonly<Record<string, string>> = Object.fromEntries(Object.entries(AUDIO_TYPES).map(([ext, types]) => [ext, types[0]!]));
+
 const EXTENSIONS: Record<string, string> = {
+  ...Object.fromEntries(Object.entries(AUDIO_TYPES).flatMap(([ext, types]) => types.map((type) => [type, ext]))),
   "image/png": "png",
   "image/jpeg": "jpg",
   "image/webp": "webp",
@@ -22,13 +31,6 @@ const EXTENSIONS: Record<string, string> = {
   "video/mp4": "mp4",
   "video/quicktime": "mov",
   "video/webm": "webm",
-  "audio/mpeg": "mp3",
-  "audio/mp3": "mp3",
-  "audio/wav": "wav",
-  "audio/x-wav": "wav",
-  "audio/wave": "wav",
-  "audio/mp4": "m4a",
-  "audio/x-m4a": "m4a",
   "text/html": "html",
 };
 
@@ -163,9 +165,7 @@ export type DroppedKind = "image" | "video" | "audio" | "page" | "unplayable-aud
 export const AUDIO_FILE_LIMIT = 26_214_400;
 export const AUDIO_TOO_LARGE_MESSAGE = "Sound file is too large. Keep it under 25MB.";
 
-export const AUDIO_SERVED_TYPES: Readonly<Record<string, string>> = { mp3: "audio/mpeg", wav: "audio/wav", m4a: "audio/mp4" };
-
-export const AUDIO_ACCEPT = [...Object.keys(AUDIO_SERVED_TYPES).map((ext) => `.${ext}`), ...Object.keys(EXTENSIONS).filter((type) => type.startsWith("audio/"))].join(",");
+export const AUDIO_ACCEPT = [...Object.keys(AUDIO_SERVED_TYPES).map((ext) => `.${ext}`), ...Object.values(AUDIO_TYPES).flat()].join(",");
 
 export const unplayableAudioMessage = (name: string): string => `${name === "" ? "That sound file" : name} is not a sound file the board can play. Use MP3, WAV or M4A.`;
 

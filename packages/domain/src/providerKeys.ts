@@ -1,6 +1,8 @@
 export type ProviderId = "openrouter" | "elevenlabs";
 
-export interface ProviderKey {
+export type RemoveKeyMethod = "settings.removeKey" | "settings.removeElevenLabsKey";
+
+export interface ProviderKey<M extends RemoveKeyMethod = RemoveKeyMethod> {
   readonly id: ProviderId;
   readonly name: string;
   readonly variable: string;
@@ -11,12 +13,12 @@ export interface ProviderKey {
   readonly message: string;
   readonly origin: string;
   readonly testOriginVariable: string;
-  readonly removeMethod: "settings.removeKey" | "settings.removeElevenLabsKey";
+  readonly removeMethod: M;
   readonly removeWarning: string;
   readonly removedLine: string;
 }
 
-export const OPENROUTER_KEY: ProviderKey = {
+export const OPENROUTER_KEY: ProviderKey<"settings.removeKey"> = {
   id: "openrouter",
   name: "OpenRouter",
   variable: "OPENROUTER_API_KEY",
@@ -32,7 +34,7 @@ export const OPENROUTER_KEY: ProviderKey = {
   removedLine: "Key removed. Generate is disabled until you add one.",
 };
 
-export const ELEVENLABS_KEY: ProviderKey = {
+export const ELEVENLABS_KEY: ProviderKey<"settings.removeElevenLabsKey"> = {
   id: "elevenlabs",
   name: "ElevenLabs",
   variable: "ELEVENLABS_API_KEY",

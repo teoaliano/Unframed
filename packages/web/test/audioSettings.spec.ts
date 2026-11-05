@@ -115,3 +115,20 @@ test("when ElevenLabs refuses the models list, Settings says why under the Audio
     await audio.engine.dispose();
   }
 });
+
+test("replacing a refused ElevenLabs key refetches the audio models: the reason goes and the full list comes back", async ({ page }) => {
+  const audio = await startAudio({ script: { modelsStatus: 401 } });
+  try {
+    await openCanvas(page, audio.engine);
+    const dialog = await openSettings(page);
+    await expect(dialog.getByTestId("audio-models-problem")).toHaveText("ElevenLabs refused the key, so only the default audio model is listed.");
+    audio.script.modelsStatus = 200;
+    await dialog.getByLabel("ElevenLabs API key").fill("sk_fedcba9876543210fedcba98760000");
+    await dialog.getByRole("button", { name: "Save" }).click();
+    await expect(dialog.getByTestId("audio-models-problem")).toHaveCount(0);
+    await dialog.locator("[data-model-select='Audio']").click();
+    await expect(page.getByRole("option")).toHaveText([/eleven_v4/, /eleven_multilingual_v2/, /eleven_flash_v2_5/]);
+  } finally {
+    await audio.engine.dispose();
+  }
+});
