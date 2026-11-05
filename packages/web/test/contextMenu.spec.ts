@@ -70,9 +70,9 @@ test("on empty canvas the menu offers the add items, then tldraw's own groups; n
   const { shortcut } = await platformOf(page);
   const { headings, items } = await rightClick(page, await emptyCanvasPoint(page));
   expect(headings).toEqual(["Inputs", "Artifacts"]);
-  expect(items.slice(0, 7)).toEqual(["Prompt", "Image", "Video", "Audio", "Group", "Page", "Motion"]);
+  expect(items.slice(0, 8)).toEqual(["Prompt", "Image", "Video", "Audio", "Group", "Node", "Page", "Motion"]);
   // tldraw's groups follow, without its cut, copy, paste, group and ungroup.
-  expect(items.slice(7)).toContain(`Select all ${shortcut("A")}`);
+  expect(items.slice(8)).toContain(`Select all ${shortcut("A")}`);
   expect(items.filter(editRow)).toEqual(["Group"]);
   expect((await menu(page).boundingBox())!.width).toBe(188);
   await closeMenu(page);

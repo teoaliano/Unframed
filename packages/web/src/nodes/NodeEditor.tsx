@@ -242,7 +242,7 @@ export const NodeEditor = ({ shape }: { readonly shape: NodeShape }) => {
   const onMenuOpen = useCallback(() => undefined, []);
 
   return (
-    <div className="pointer-events-auto flex flex-col gap-2" data-testid="node-editor" onKeyDown={onKeyDown} {...events}>
+    <div className="pointer-events-auto flex flex-col gap-2" data-testid="node-editor" onKeyDownCapture={onKeyDown} {...events}>
       <ToggleGroup
         role="radiogroup"
         aria-label="Node medium"
