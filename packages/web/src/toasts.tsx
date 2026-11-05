@@ -15,6 +15,23 @@ export const showError = (message: string, options: { id?: string; sticky?: bool
 export const showNotice = (message: string, type: "warning" | "info", description?: string): string =>
   toastManager.add({ title: message, ...(description === undefined ? {} : { description }), type, priority: type === "warning" ? "high" : "low", timeout: ERROR_TIMEOUT_MS });
 
+export const showErrorAction = (message: string, label: string, onAction: () => void): string => {
+  const id: string = toastManager.add({
+    title: message,
+    type: "error",
+    priority: "high",
+    timeout: ERROR_TIMEOUT_MS,
+    actionProps: {
+      children: label,
+      onClick: () => {
+        toastManager.close(id);
+        onAction();
+      },
+    },
+  });
+  return id;
+};
+
 export const showReveal = (message: string, onReveal: () => void): string => {
   const id: string = toastManager.add({
     title: message,

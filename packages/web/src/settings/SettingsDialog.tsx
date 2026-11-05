@@ -1,22 +1,20 @@
-/**
- * The settings dialog (spec 10): the OpenRouter block (connect, paste, remove, key status),
- * default models, the output folder and the local agents. Save sends only what changed.
- */
 import { UnframedError, type ProviderStatuses, type Settings, type SettingsPatch } from "@unframed/contracts";
 import { keyStatusCopy, sendShortcutOf, type SendShortcut } from "@unframed/domain";
-import { CircleAlert, CircleCheck, FolderOpen } from "lucide-react";
+import { Bot, CircleAlert, CircleCheck, FolderOpen, Plug, SlidersHorizontal, Sparkles, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Spinner } from "~/components/ui/spinner";
+import { Tabs, TabsList, TabsPanel, TabsTab } from "~/components/ui/tabs";
 import { useActivation, useEngine } from "../context.ts";
 import { loadCatalogue } from "../generate/catalogue.ts";
 import { showNotice } from "../toasts.tsx";
 import { Copy, linkClass, ModelSelect, SectionHeading } from "./fields.tsx";
 import { FOLLOW_UP_KEY, LocalAgents, PLAN_MODE_KEY, SEND_SHORTCUT_KEY, type FollowUp } from "./LocalAgents.tsx";
 import { OutsideAgents } from "./OutsideAgents.tsx";
+import type { SettingsSection } from "./settingsEvents.ts";
 import { useSettingsUi, type SettingsUi } from "./settingsUi.ts";
 
 export const KEY_SAVED_MESSAGE = "Key saved. Unframed is ready to generate.";
@@ -54,6 +52,13 @@ const draftOf = (settings: Settings | undefined): Draft => ({
   claudeConfigDir: settings?.claudeConfigDir ?? "",
 });
 
+const SECTIONS: ReadonlyArray<{ readonly id: SettingsSection; readonly label: string; readonly icon: LucideIcon }> = [
+  { id: "generation", label: "Generation", icon: Sparkles },
+  { id: "agents", label: "Agents", icon: Bot },
+  { id: "connections", label: "Connections", icon: Plug },
+  { id: "general", label: "General", icon: SlidersHorizontal },
+];
+
 type Banner = { readonly kind: "error"; readonly message: string } | { readonly kind: "saved" };
 
 /** Only what changed: the key when typed, a model or the folder when set and different, an agent field whenever different ('' clears it). */
@@ -72,7 +77,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const engine = useEngine();
   const activation = useActivation();
   const state = useSettingsUi(ui);
-  const { settings, open, connection, starting } = state;
+  const { settings, open, section, connection, starting } = state;
   const hasKey = settings?.hasKey ?? true;
   const pending = connection !== undefined || starting;
 
@@ -123,10 +128,9 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
     ).finally(() => check === checks.current && setChecking(false));
   };
 
-  // Sections 5 to 7 need the key: their catalogues are fetched with it.
-  const showsFullForm = open && settings?.hasKey === true;
+  const keyed = open && settings?.hasKey === true;
   useEffect(() => {
-    if (!showsFullForm) return;
+    if (!keyed) return;
     let live = true;
     for (const { medium } of MEDIA) {
       loadCatalogue(engine, medium).then(
@@ -134,18 +138,21 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
         () => undefined,
       );
     }
+    return () => {
+      live = false;
+    };
+  }, [keyed, engine]);
+
+  useEffect(() => {
+    if (!open) return;
     checkProviders(false);
-    const stop = engine.subscribe("preferences.subscribe", { keys: [FOLLOW_UP_KEY, PLAN_MODE_KEY, SEND_SHORTCUT_KEY] }, ({ key, value }) => {
+    return engine.subscribe("preferences.subscribe", { keys: [FOLLOW_UP_KEY, PLAN_MODE_KEY, SEND_SHORTCUT_KEY] }, ({ key, value }) => {
       if (key === FOLLOW_UP_KEY) setFollowUp(value === "steer" ? "steer" : "queue");
       if (key === SEND_SHORTCUT_KEY) setSendShortcut(sendShortcutOf(value));
       if (key === PLAN_MODE_KEY) setPlanMode(value === true);
     });
-    return () => {
-      live = false;
-      stop();
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showsFullForm, engine]);
+  }, [open, engine]);
 
   const edit = (patch: Partial<Draft>) => {
     setDraft((current) => ({ ...current, ...patch }));
@@ -168,7 +175,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
       ui.setSettings(next);
       // The engine cancelled a pending connection; its next poll would report a lost one.
       if (patch.key !== undefined) ui.keyChosen();
-      if (!hadKey) {
+      if (!hadKey && patch.key !== undefined) {
         showNotice(KEY_SAVED_MESSAGE, "info");
         ui.close();
         return;
@@ -237,14 +244,160 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
 
   const copy = keyStatusCopy({ hasKey, keyHint: settings?.keyHint ?? "", status: state.keyStatus, now: Date.now() });
   const showsKeySection = hasKey || revealed;
+  const saves = section === "agents" || section === "general" || (section === "generation" && showsKeySection);
+
+  const generation = (
+    <>
+      <section className="flex flex-col gap-3" aria-label="OpenRouter">
+        <SectionHeading>OpenRouter</SectionHeading>
+        {!hasKey && !pending && (
+          <div className="flex flex-col items-start gap-3">
+            <p className="m-0 text-sm leading-relaxed text-muted-foreground">
+              Unframed has no image model of its own. It sends your prompts to{" "}
+              <a href="https://openrouter.ai" target="_blank" rel="noreferrer" className={linkClass}>
+                OpenRouter
+              </a>
+              , which runs the model and bills your OpenRouter account per image (a few cents for most models). Connecting takes you there to approve Unframed; the key it gives back is saved on this machine and used only by your local server.
+            </p>
+            <Button onClick={connect}>Connect OpenRouter</Button>
+          </div>
+        )}
+
+        {pending && (
+          <div className="flex flex-col items-start gap-2" data-testid="settings-waiting">
+            <p className="m-0 text-sm text-foreground">Waiting for OpenRouter in your browser…</p>
+            {connection !== undefined && (
+              <p className="m-0 text-xs text-muted-foreground">
+                Didn't open?{" "}
+                <a href={connection.authorizeUrl} target="_blank" rel="noreferrer" className={linkClass}>
+                  Approve Unframed at OpenRouter
+                </a>
+                .
+              </p>
+            )}
+            <Button variant="ghost" className="-ml-3" onClick={() => ui.cancel()}>
+              Cancel
+            </Button>
+          </div>
+        )}
+
+        {!showsKeySection && (
+          <Button variant="ghost" className="-ml-3 self-start" onClick={() => setRevealed(true)}>
+            or paste a key instead
+          </Button>
+        )}
+
+        {showsKeySection && (
+          <div className="flex flex-col gap-2">
+            {!hasKey && <h4 className="m-0 text-xs font-medium text-muted-foreground">API key</h4>}
+            <div className="flex items-center gap-2">
+              <Input
+                ref={keyField}
+                type="password"
+                aria-label="API key"
+                placeholder="sk-or-v1-…"
+                autoFocus
+                spellCheck={false}
+                autoComplete="off"
+                value={draft.key}
+                onChange={(event) => {
+                  edit({ key: event.target.value });
+                  if (confirmRemove) {
+                    setConfirmRemove(false);
+                    setFieldWarning(undefined);
+                  }
+                }}
+              />
+              {hasKey && (
+                <Button variant={confirmRemove ? "destructive" : "ghost"} aria-busy={removing || undefined} disabled={removing} onClick={() => void removeKey()}>
+                  {removing && <Spinner aria-hidden />}
+                  {confirmRemove ? "Yes, remove it" : "Remove key"}
+                </Button>
+              )}
+            </div>
+            <p className="m-0 text-xs text-muted-foreground" data-testid="key-status">
+              <Copy parts={copy.line} />
+            </p>
+            {copy.expiry !== undefined && (
+              <p className="m-0 text-xs text-foreground" data-testid="key-expiry">
+                {copy.expiry}
+              </p>
+            )}
+            {copy.reconnect && !pending && (
+              <Button className="self-start" onClick={connect}>
+                Reconnect OpenRouter
+              </Button>
+            )}
+            {fieldWarning !== undefined && (
+              <p className="m-0 text-xs text-destructive-foreground" data-testid="key-warning">
+                {fieldWarning}
+              </p>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-3 border-t pt-4" aria-label="Default models">
+        <SectionHeading>Default models</SectionHeading>
+        {hasKey && settings !== undefined ? (
+          MEDIA.map(({ medium, label, field }) => (
+            <ModelSelect key={medium} label={label} value={draft[field]} models={catalogues[medium]} onChange={(value) => edit({ [field]: value })} />
+          ))
+        ) : (
+          <p className="m-0 text-xs text-muted-foreground" data-testid="models-need-key">
+            Connect OpenRouter to choose the models Generate starts on.
+          </p>
+        )}
+      </section>
+    </>
+  );
+
+  const agents = (
+    <LocalAgents
+      statuses={statuses}
+      checking={checking}
+      onCheckAgain={() => checkProviders(true)}
+      claudePath={draft.claudePath}
+      codexPath={draft.codexPath}
+      claudeConfigDir={draft.claudeConfigDir}
+      onChange={(field, value) => edit({ [field]: value })}
+      sendShortcut={sendShortcut}
+      onSendShortcut={setSendShortcutPreference}
+      followUp={followUp}
+      onFollowUp={setFollowUpPreference}
+      planMode={planMode}
+      onPlanMode={setPlanModePreference}
+    />
+  );
+
+  const general = (
+    <section className="flex flex-col gap-2">
+      <SectionHeading>Output folder</SectionHeading>
+      <p className="m-0 text-xs text-muted-foreground">Every project is a folder in here, with its files, sidecars and chats.</p>
+      <div className="flex items-center gap-2">
+        <Input aria-label="Output folder" placeholder="./output" font="mono" spellCheck={false} autoComplete="off" value={draft.outputDir} onChange={(event) => edit({ outputDir: event.target.value })} />
+        <Button variant="outline" onClick={() => void browse()}>
+          <FolderOpen aria-hidden />
+          Browse…
+        </Button>
+      </div>
+    </section>
+  );
+
+  const current = SECTIONS.find((each) => each.id === section) ?? SECTIONS[0]!;
+  const showSection = (next: SettingsSection) => {
+    ui.showSection(next);
+    setBanner(undefined);
+  };
 
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? ui.open() : ui.close())}>
       <DialogPopup
         showCloseButton={false}
-        initialFocus={showsKeySection ? keyField : undefined}
+        initialFocus={section === "generation" && showsKeySection ? keyField : undefined}
         data-testid="settings-dialog"
-        className="max-w-[480px]"
+        data-section={section}
+        className="h-[min(640px,calc(100dvh-3rem))] max-w-[760px] overflow-hidden"
         render={
           <form
             onSubmit={(event) => {
@@ -255,156 +408,54 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
         }
       >
         <DialogHeader>
-          <DialogTitle>{hasKey ? "Settings" : "Connect OpenRouter to start"}</DialogTitle>
+          <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
-        <DialogPanel data-testid="settings-form">
-          {!hasKey && !pending && (
-            <section className="flex flex-col items-start gap-3">
-              <p className="m-0 text-sm leading-relaxed text-muted-foreground">
-                Unframed has no image model of its own. It sends your prompts to{" "}
-                <a href="https://openrouter.ai" target="_blank" rel="noreferrer" className={linkClass}>
-                  OpenRouter
-                </a>
-                , which runs the model and bills your OpenRouter account per image (a few cents for most models). Connecting takes you there to approve Unframed; the key it gives back is saved on this machine and used only by your local server.
-              </p>
-              <Button onClick={connect}>Connect OpenRouter</Button>
-            </section>
-          )}
-
-          {pending && (
-            <section className="flex flex-col items-start gap-2" data-testid="settings-waiting">
-              <p className="m-0 text-sm text-foreground">Waiting for OpenRouter in your browser…</p>
-              {connection !== undefined && (
-                <p className="m-0 text-xs text-muted-foreground">
-                  Didn't open?{" "}
-                  <a href={connection.authorizeUrl} target="_blank" rel="noreferrer" className={linkClass}>
-                    Approve Unframed at OpenRouter
-                  </a>
-                  .
-                </p>
-              )}
-              <Button variant="ghost" className="-ml-3" onClick={() => ui.cancel()}>
-                Cancel
-              </Button>
-            </section>
-          )}
-
-          {!showsKeySection && (
-            <Button variant="ghost" className="-ml-3 self-start" onClick={() => setRevealed(true)}>
-              or paste a key instead
-            </Button>
-          )}
-
-          {showsKeySection && (
-            <section className="flex flex-col gap-2">
-              <SectionHeading>{hasKey ? "OpenRouter" : "API key"}</SectionHeading>
-              <div className="flex items-center gap-2">
-                <Input
-                  ref={keyField}
-                  type="password"
-                  aria-label="API key"
-                  placeholder="sk-or-v1-…"
-                  autoFocus
-                  spellCheck={false}
-                  autoComplete="off"
-                  value={draft.key}
-                  onChange={(event) => {
-                    edit({ key: event.target.value });
-                    if (confirmRemove) {
-                      setConfirmRemove(false);
-                      setFieldWarning(undefined);
-                    }
-                  }}
-                />
-                {hasKey && (
-                  <Button variant={confirmRemove ? "destructive" : "ghost"} aria-busy={removing || undefined} disabled={removing} onClick={() => void removeKey()}>
-                    {removing && <Spinner aria-hidden />}
-                    {confirmRemove ? "Yes, remove it" : "Remove key"}
-                  </Button>
+        <div className="flex min-h-0 flex-1 border-t">
+        <Tabs orientation="vertical" value={section} onValueChange={(next) => showSection(next as SettingsSection)} className="min-h-0 flex-1 flex-row">
+          <div className="w-48 shrink-0 border-e bg-muted/40 p-3">
+            <TabsList aria-label="Settings sections" variant="sidebar">
+              {SECTIONS.map(({ id, label, icon: Icon }) => (
+                <TabsTab key={id} value={id} data-section={id}>
+                  <Icon aria-hidden />
+                  {label}
+                </TabsTab>
+              ))}
+            </TabsList>
+          </div>
+          <TabsPanel value={section} className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="settings-section">
+            <DialogPanel data-testid="settings-form">
+              <h2 className="m-0 text-base font-semibold text-foreground" data-testid="settings-section-title">
+                {current.label}
+              </h2>
+              {section === "generation" && generation}
+              {section === "agents" && agents}
+              {section === "connections" && <OutsideAgents hasKey={hasKey} onConnectOpenRouter={() => showSection("generation")} />}
+              {section === "general" && general}
+            </DialogPanel>
+            {banner !== undefined && (
+              <div className="px-6 pb-4">
+                {banner.kind === "error" ? (
+                  <Alert variant="error">
+                    <CircleAlert aria-hidden />
+                    <AlertTitle>{banner.message}</AlertTitle>
+                  </Alert>
+                ) : (
+                  <Alert variant="success" role="status">
+                    <CircleCheck aria-hidden />
+                    <AlertTitle>Saved to .env</AlertTitle>
+                    <AlertDescription>Applied right away, no restart needed.</AlertDescription>
+                  </Alert>
                 )}
               </div>
-              <p className="m-0 text-xs text-muted-foreground" data-testid="key-status">
-                <Copy parts={copy.line} />
-              </p>
-              {copy.expiry !== undefined && (
-                <p className="m-0 text-xs text-foreground" data-testid="key-expiry">
-                  {copy.expiry}
-                </p>
-              )}
-              {copy.reconnect && !pending && (
-                <Button className="self-start" onClick={connect}>
-                  Reconnect OpenRouter
-                </Button>
-              )}
-              {fieldWarning !== undefined && (
-                <p className="m-0 text-xs text-destructive-foreground" data-testid="key-warning">
-                  {fieldWarning}
-                </p>
-              )}
-            </section>
-          )}
-
-          {hasKey && settings !== undefined && (
-            <>
-              <section className="flex flex-col gap-3 border-t pt-4">
-                <SectionHeading>Default models</SectionHeading>
-                {MEDIA.map(({ medium, label, field }) => (
-                  <ModelSelect key={medium} label={label} value={draft[field]} models={catalogues[medium]} onChange={(value) => edit({ [field]: value })} />
-                ))}
-              </section>
-
-              <section className="flex flex-col gap-2 border-t pt-4">
-                <SectionHeading>Output folder</SectionHeading>
-                <div className="flex items-center gap-2">
-                  <Input aria-label="Output folder" placeholder="./output" font="mono" spellCheck={false} autoComplete="off" value={draft.outputDir} onChange={(event) => edit({ outputDir: event.target.value })} />
-                  <Button variant="outline" onClick={() => void browse()}>
-                    <FolderOpen aria-hidden />
-                    Browse…
-                  </Button>
-                </div>
-              </section>
-
-              <LocalAgents
-                statuses={statuses}
-                checking={checking}
-                onCheckAgain={() => checkProviders(true)}
-                claudePath={draft.claudePath}
-                codexPath={draft.codexPath}
-                claudeConfigDir={draft.claudeConfigDir}
-                onChange={(field, value) => edit({ [field]: value })}
-                sendShortcut={sendShortcut}
-                onSendShortcut={setSendShortcutPreference}
-                followUp={followUp}
-                onFollowUp={setFollowUpPreference}
-                planMode={planMode}
-                onPlanMode={setPlanModePreference}
-              />
-              <OutsideAgents />
-            </>
-          )}
-        </DialogPanel>
-
-        {banner !== undefined && (
-          <div className="px-6 pb-4">
-            {banner.kind === "error" ? (
-              <Alert variant="error">
-                <CircleAlert aria-hidden />
-                <AlertTitle>{banner.message}</AlertTitle>
-              </Alert>
-            ) : (
-              <Alert variant="success" role="status">
-                <CircleCheck aria-hidden />
-                <AlertTitle>Saved to .env</AlertTitle>
-                <AlertDescription>Applied right away, no restart needed.</AlertDescription>
-              </Alert>
             )}
-          </div>
-        )}
+          </TabsPanel>
+        </Tabs>
+        </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => ui.close()}>
             Close
           </Button>
-          {showsKeySection && (
+          {saves && (
             <Button type="submit" aria-busy={saving || undefined} disabled={saving}>
               {saving && <Spinner aria-hidden />}
               Save

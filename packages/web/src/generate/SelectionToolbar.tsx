@@ -1,5 +1,5 @@
 import { resultMetaOf, UnframedError } from "@unframed/contracts";
-import { composeSelection, labelLevel, readRef, resultLine, toolbarState, type ToolbarState } from "@unframed/domain";
+import { composeSelection, labelLevel, NO_KEY_MESSAGE, readRef, resultLine, toolbarState, type ToolbarState } from "@unframed/domain";
 import { renamingShape } from "../canvas/rename.ts";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useEditor, useValue, type Editor, type TLShapeId } from "tldraw";
@@ -10,7 +10,8 @@ import { groupRecipeOf } from "../canvas/groupRecipes.ts";
 import { Tip } from "../chrome/ui.tsx";
 import { useSlots } from "../chrome/slots.ts";
 import { useCanvasProject, useEngine, useSettings } from "../context.ts";
-import { showError } from "../toasts.tsx";
+import { showError, showErrorAction } from "../toasts.tsx";
+import { openSettings } from "../settings/settingsEvents.ts";
 import { useKnownCatalogue, usePricing } from "./catalogue.ts";
 import { Composer } from "./composer/Composer.tsx";
 import { assetOf, canvasShapes, resultShapes, toolbarShape } from "./facts.ts";
@@ -263,7 +264,9 @@ const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "rec
     try {
       await runGroupRecipe({ editor, engine, project, groupId, recipe, hasKey: settings?.hasKey ?? true });
     } catch (error) {
-      showError(messageOf(error));
+      const message = messageOf(error);
+      if (message === NO_KEY_MESSAGE) showErrorAction(message, "Open Settings", () => openSettings("generation"));
+      else showError(message);
     } finally {
       setBusy(false);
     }

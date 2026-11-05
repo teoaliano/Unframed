@@ -1,5 +1,8 @@
+import { NO_KEY_MESSAGE } from "@unframed/domain";
 import type { ReactNode } from "react";
-import { Alert } from "~/components/ui/alert";
+import { Alert, AlertAction, AlertTitle } from "~/components/ui/alert";
+import { Button } from "~/components/ui/button";
+import { openSettings } from "../../settings/settingsEvents.ts";
 
 export type StatusKind = "warning" | "info" | "blocked" | "error";
 
@@ -19,6 +22,17 @@ export const StatusLine = ({ kind, children }: { readonly kind: StatusKind; read
     return (
       <Alert variant="error" data-kind={kind}>
         {children}
+      </Alert>
+    );
+  if (kind === "blocked" && children === NO_KEY_MESSAGE)
+    return (
+      <Alert variant="warning" role="status" data-kind={kind} data-testid="no-key-blocker">
+        <AlertTitle>{children}</AlertTitle>
+        <AlertAction>
+          <Button size="xs" variant="outline" onClick={() => openSettings("generation")}>
+            Open Settings
+          </Button>
+        </AlertAction>
       </Alert>
     );
   if (kind === "blocked")

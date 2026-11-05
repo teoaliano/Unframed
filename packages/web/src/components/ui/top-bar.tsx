@@ -113,7 +113,7 @@ const PinnedMark = ({ name }: { readonly name: string }) => (
     aria-hidden
     data-slot="top-bar-mark"
     data-letter={(name.match(/[\p{L}\p{N}]/u)?.[0] ?? "?").toUpperCase()}
-    className="flex size-4 items-center justify-center rounded-[4px] bg-muted text-[10px] leading-none font-semibold text-foreground before:content-[attr(data-letter)]"
+    className="flex size-4.5 items-center justify-center rounded-[5px] border bg-muted text-[10px] leading-none font-semibold text-foreground before:content-[attr(data-letter)]"
   />
 );
 

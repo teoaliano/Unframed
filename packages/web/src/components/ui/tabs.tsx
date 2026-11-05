@@ -24,6 +24,7 @@ const tabsListVariants = cva("relative flex max-w-full items-center", {
       underline: "gap-4 border-b",
       pill: "w-fit gap-0.5 rounded-lg bg-input/40 p-0.5",
       panel: "h-9 gap-1 border-b px-2",
+      sidebar: "w-full flex-col items-stretch gap-0.5",
     },
   },
 });
@@ -53,13 +54,14 @@ const tabsTabVariants = cva(
         underline: "rounded-none",
         pill: "rounded-md data-active:bg-background data-active:shadow-xs/10 hover:bg-background/55 dark:data-active:bg-input/72",
         panel: "rounded-md hover:bg-accent data-active:bg-accent",
+        sidebar: "h-8 justify-start gap-2 rounded-md px-2 text-sm hover:bg-accent data-active:bg-accent [&_svg:not([class*='size-'])]:size-4",
       },
     },
   },
 );
 
 type TabsListVariants = VariantProps<typeof tabsListVariants>;
-type TabsVariant = "underline" | "pill" | "panel";
+type TabsVariant = "underline" | "pill" | "panel" | "sidebar";
 type TabsSize = "sm" | "default" | "lg" | "compact";
 type TabsOverflow = "scroll" | "truncate";
 

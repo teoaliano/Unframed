@@ -204,7 +204,7 @@ The steps below name each failure as `<reason>, <message>`.
 
 Steps, in this order:
 
-1. No key: `no_key`, `No OpenRouter key yet. Add one with the key icon in the top right (it becomes a settings gear once saved).` (the same refusal spec 03 uses).
+1. No key: `no_key`, `Generating needs OpenRouter. Connect it in Settings, under Generation.` (the same refusal spec 03 uses).
 2. Resolve project-file markers in references and frames (spec 03's boundary inliner). Image markers become base64 data URLs. A missing file fails with `invalid` and the inliner's message. A null or non-list array counts as empty.
 3. Empty or whitespace prompt: `invalid`, `Prompt is empty. Select at least one prompt, or type an instruction.`
 4. Local clips (video references whose URL is not `https://`). If any exist and `shareLocalVideos` is not exactly `true`: `local_clip`, `Video generation only accepts a reference video as a public https:// link, and this one is a local file. Tick "Share via temporary link while generating" in the Generate tray, or use the clip in a text run instead, which does take local clips.` The consent is re-sent with every request; the engine never remembers it.

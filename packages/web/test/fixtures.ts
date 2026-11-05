@@ -18,8 +18,7 @@ export const FIXTURE_KEY = "sk-or-v1-test-key-0000abcd";
 /**
  * Starts an engine serving the built web, the way the desktop shell hosts it, with the
  * test-only canvas methods on so a test can read what the room holds. Without a `dotenv`
- * it has a key from the process environment, because a keyless app opens the settings
- * dialog over the canvas at first load (spec 10); `.env` stays untouched either way.
+ * it has a key from the process environment, so Generate works; `.env` stays untouched either way.
  */
 export const startHostedEngine = (options: EngineOptions = {}): Promise<TestEngine> =>
   startEngine({

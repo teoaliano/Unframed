@@ -8,6 +8,7 @@ import { OAUTH_ATTEMPT_MS, OAUTH_NOTHING_CAME_BACK } from "@unframed/domain";
 import { useSyncExternalStore } from "react";
 import type { EngineConnection } from "../rpc/engine.ts";
 import { showError, showNotice } from "../toasts.tsx";
+import { OPEN_SETTINGS, type OpenSettingsDetail, type SettingsSection } from "./settingsEvents.ts";
 
 export const POLL_MS = 1500;
 export const CONNECTED_MESSAGE = "Connected to OpenRouter.";
@@ -27,6 +28,7 @@ export interface SettingsUiState {
   /** `undefined` until the first answer of `settings.subscribe`. */
   readonly settings: Settings | undefined;
   readonly open: boolean;
+  readonly section: SettingsSection;
   /** The latest key status fetched; `undefined` when not fetched or it failed. */
   readonly keyStatus: KeyStatus | undefined;
   readonly connection: PendingConnection | undefined;
@@ -39,7 +41,7 @@ export interface SettingsUiState {
 }
 
 export class SettingsUi {
-  private state: SettingsUiState = { settings: undefined, open: false, keyStatus: undefined, connection: undefined, starting: false, report: undefined, resets: 0 };
+  private state: SettingsUiState = { settings: undefined, open: false, section: "generation", keyStatus: undefined, connection: undefined, starting: false, report: undefined, resets: 0 };
   private readonly listeners = new Set<() => void>();
   private readonly engine: EngineConnection;
   private poller: ReturnType<typeof setInterval> | undefined;
@@ -65,17 +67,14 @@ export class SettingsUi {
     for (const listener of this.listeners) listener();
   }
 
-  /** Follows `settings.subscribe`; the first answer without a key opens the dialog. */
   start(): () => void {
     if (this.stopSettings) return this.stopSettings;
-    let first = true;
-    const stop = this.engine.subscribe("settings.subscribe", undefined, (settings) => {
-      const opens = first && !settings.hasKey;
-      first = false;
-      this.set(opens ? { settings, open: true } : { settings });
-    });
+    const stop = this.engine.subscribe("settings.subscribe", undefined, (settings) => this.set({ settings }));
+    const onOpen = (event: Event) => this.open((event as CustomEvent<OpenSettingsDetail>).detail?.section);
+    window.addEventListener(OPEN_SETTINGS, onOpen);
     this.stopSettings = () => {
       stop();
+      window.removeEventListener(OPEN_SETTINGS, onOpen);
       this.stopSettings = undefined;
     };
     return this.stopSettings;
@@ -85,8 +84,12 @@ export class SettingsUi {
     this.set({ settings });
   }
 
-  open() {
-    this.set({ open: true, report: undefined });
+  open(section?: SettingsSection) {
+    this.set({ open: true, report: undefined, ...(section === undefined ? {} : { section }) });
+  }
+
+  showSection(section: SettingsSection) {
+    this.set({ section });
   }
 
   close() {

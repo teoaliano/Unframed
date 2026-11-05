@@ -66,7 +66,7 @@ test("closing the last tab shows the start state, and the window stays open; Ope
 test("Settings sits at the far right on macOS and Linux and at the far left on Windows", async ({ page, engine }) => {
   await openCanvas(page, engine, "default");
   const os = await platformOf(page);
-  const settings = page.getByRole("button", { name: /^(Settings|Add your API key)$/ });
+  const settings = page.getByRole("button", { name: "Settings", exact: true });
   const box = (await settings.boundingBox())!;
   const viewport = page.viewportSize()!;
   if (os.name === "win32") expect(box.x).toBeLessThan(viewport.width / 2);
