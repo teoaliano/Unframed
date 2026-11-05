@@ -331,7 +331,7 @@ Keys in use, each owned by the spec named:
 | Key | Owner | Value |
 | --- | --- | --- |
 | `project.active` | 02 | the active project's name, kept for the outside-agent view (spec 14) |
-| `project.tabs` | 17 | `{ order: string[], active: string \| null }`: the open project tabs and the active one, read at boot (spec 17) |
+| `project.tabs` | 17 | `{ order: string[], active: string \| null, pinned: string[] }`: the open project tabs, the active one and the pinned ones, read at boot (spec 17) |
 | `lastUsed.image`, `lastUsed.video`, `lastUsed.text` | 03 (04 and 05 add fields) | the composer's last-used values for that medium |
 | `library.view` | 06 | `"card"` or `"list"` |
 | `agent.followUp` | 08 (control in spec 10's dialog) | `"queue"` or `"steer"` |

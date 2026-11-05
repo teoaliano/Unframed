@@ -40,35 +40,65 @@ export const closeTab = (
   return { order: rest, active: next };
 };
 
-/** Moves `name` to position `to` (clamped to the order's ends). An unknown name leaves the order as it is. */
-export const moveTab = (order: ReadonlyArray<string>, name: string, to: number): ReadonlyArray<string> => {
+/**
+ * Moves `name` to position `to`. A pinned tab stays among the pinned tabs at the front and an unpinned one stays
+ * after them, so `to` is clamped to the tab's own group. An unknown name leaves the order as it is.
+ */
+export const moveTab = (order: ReadonlyArray<string>, name: string, to: number, pinned: ReadonlyArray<string> = []): ReadonlyArray<string> => {
   const from = order.indexOf(name);
   if (from === -1) return [...order];
+  const pinnedCount = order.filter((each) => pinned.includes(each)).length;
+  const isPinned = pinned.includes(name);
+  const low = isPinned ? 0 : pinnedCount;
+  const high = isPinned ? pinnedCount - 1 : order.length - 1;
   const rest = order.filter((each) => each !== name);
-  const at = Math.max(0, Math.min(rest.length, to));
+  const at = Math.max(low, Math.min(high, to));
   return [...rest.slice(0, at), name, ...rest.slice(at)];
+};
+
+/** The open tabs with their pins: the pinned tabs are the first ones in `order`, in that order. */
+export interface PinnedTabs {
+  readonly order: ReadonlyArray<string>;
+  readonly pinned: ReadonlyArray<string>;
+}
+
+/** Pins `name`: it joins the end of the pinned tabs at the front of the strip. */
+export const pinTab = (tabs: PinnedTabs, name: string): PinnedTabs => {
+  if (!tabs.order.includes(name) || tabs.pinned.includes(name)) return { order: [...tabs.order], pinned: [...tabs.pinned] };
+  const pinned = [...tabs.pinned, name];
+  return { order: [...pinned, ...tabs.order.filter((each) => !pinned.includes(each))], pinned };
+};
+
+/** Unpins `name`: it leaves the pinned tabs and becomes the first unpinned tab. */
+export const unpinTab = (tabs: PinnedTabs, name: string): PinnedTabs => {
+  if (!tabs.pinned.includes(name)) return { order: [...tabs.order], pinned: [...tabs.pinned] };
+  const pinned = tabs.pinned.filter((each) => each !== name);
+  return { order: [...pinned, name, ...tabs.order.filter((each) => !pinned.includes(each) && each !== name)], pinned };
 };
 
 /**
  * Restores the saved order against the projects that exist. A saved name that no longer exists is
- * dropped. The active tab is the saved one when it survived, else the first tab. With nothing
- * left, the result is empty and the caller falls back the way spec 02 does.
+ * dropped, from the order and from the pins. The pinned tabs come first. The active tab is the saved
+ * one when it survived, else the first tab. With nothing left, the result is empty and the caller
+ * falls back the way spec 02 does.
  */
 export const restoreTabs = (
-  saved: { readonly order: ReadonlyArray<string>; readonly active: string | null | undefined },
+  saved: { readonly order: ReadonlyArray<string>; readonly active: string | null | undefined; readonly pinned?: ReadonlyArray<string> | undefined },
   projects: ReadonlyArray<string>,
-): { readonly order: ReadonlyArray<string>; readonly active: string | undefined } => {
+): { readonly order: ReadonlyArray<string>; readonly active: string | undefined; readonly pinned: ReadonlyArray<string> } => {
   const known = new Set(projects);
   const seen = new Set<string>();
-  const order: string[] = [];
+  const open: string[] = [];
   for (const name of saved.order) {
     if (known.has(name) && !seen.has(name)) {
       seen.add(name);
-      order.push(name);
+      open.push(name);
     }
   }
+  const pinned = open.filter((name) => (saved.pinned ?? []).includes(name));
+  const order = [...pinned, ...open.filter((name) => !pinned.includes(name))];
   const active = typeof saved.active === "string" && seen.has(saved.active) ? saved.active : order[0];
-  return { order, active };
+  return { order, active, pinned };
 };
 
 /** The width each tab gets when `count` tabs share `available` pixels, clamped to the tab limits. */

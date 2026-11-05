@@ -1,5 +1,5 @@
 import { UnframedError } from "@unframed/contracts";
-import { closeTab as closeTabRule, moveTab, openTab, popClosed, pushClosed, restoreTabs } from "@unframed/domain";
+import { closeTab as closeTabRule, moveTab, openTab, pinTab, popClosed, pushClosed, restoreTabs, unpinTab } from "@unframed/domain";
 import { useSyncExternalStore } from "react";
 import { isConnectionFailure, type EngineConnection } from "../rpc/engine.ts";
 import { showError } from "../toasts.tsx";
@@ -22,6 +22,8 @@ export interface TabState {
   readonly active: string | undefined;
   /** Every open tab, in the order the strip shows them. */
   readonly order: ReadonlyArray<string>;
+  /** The pinned tabs, the first ones in `order`. Saved with the order. */
+  readonly pinned: ReadonlyArray<string>;
   /** Projects closed from the strip, newest first, for Cmd+Shift+T. In memory only. */
   readonly closed: ReadonlyArray<string>;
   /** False until the first load has settled, so the start state is not shown while the app is still opening. */
@@ -34,7 +36,7 @@ export interface TabState {
  * restart). `activate` is the only function that changes the active project.
  */
 export class ProjectActivation {
-  private state: TabState = { active: undefined, order: [], closed: [], loaded: false };
+  private state: TabState = { active: undefined, order: [], pinned: [], closed: [], loaded: false };
   private readonly listeners = new Set<() => void>();
   private beforeSwitch: BeforeSwitch | undefined;
   /** Counts activations, so an initial load that finishes after a switch does not override it. */
@@ -65,8 +67,8 @@ export class ProjectActivation {
   }
 
   private persistTabs(): void {
-    const { order, active } = this.state;
-    this.engine.call("preferences.set", { key: TABS_KEY, value: { order: [...order], active: active ?? null } }).catch((error: unknown) => {
+    const { order, active, pinned } = this.state;
+    this.engine.call("preferences.set", { key: TABS_KEY, value: { order: [...order], active: active ?? null, pinned: [...pinned] } }).catch((error: unknown) => {
       showError(`Could not save the open tabs: ${messageOf(error)}`);
     });
   }
@@ -101,7 +103,7 @@ export class ProjectActivation {
     }
     const next = closeTabRule(this.state.order, this.state.active, name);
     const closed = pushClosed(this.state.closed, name);
-    this.update({ order: next.order, active: next.active, closed });
+    this.update({ order: next.order, active: next.active, pinned: this.state.pinned.filter((each) => each !== name), closed });
     this.persistTabs();
     if (wasActive) {
       await this.engine.call("preferences.set", { key: ACTIVE_PROJECT_KEY, value: next.active ?? null }).catch(() => undefined);
@@ -114,14 +116,24 @@ export class ProjectActivation {
     this.generation++;
     await this.beforeSwitch?.();
     const closed = [...this.state.order].reverse().reduce((stack, name) => pushClosed(stack, name), this.state.closed);
-    this.update({ order: [], active: undefined, closed });
+    this.update({ order: [], active: undefined, pinned: [], closed });
     this.persistTabs();
     await this.engine.call("preferences.set", { key: ACTIVE_PROJECT_KEY, value: null }).catch(() => undefined);
   }
 
   /** Moves a tab to position `to` in the strip. Saved so the order survives a restart. */
   moveTab(name: string, to: number): void {
-    this.update({ order: moveTab(this.state.order, name, to) });
+    this.update({ order: moveTab(this.state.order, name, to, this.state.pinned) });
+    this.persistTabs();
+  }
+
+  pinTab(name: string): void {
+    this.update(pinTab(this.state, name));
+    this.persistTabs();
+  }
+
+  unpinTab(name: string): void {
+    this.update(unpinTab(this.state, name));
     this.persistTabs();
   }
 
@@ -137,13 +149,14 @@ export class ProjectActivation {
   renameTab(from: string, to: string): void {
     // The active one is switched by `activate(to)`, which settles the canvas first; only the places change here.
     const swap = (names: ReadonlyArray<string>) => names.map((name) => (name === from ? to : name));
-    this.update({ order: swap(this.state.order), closed: swap(this.state.closed) });
+    this.update({ order: swap(this.state.order), pinned: swap(this.state.pinned), closed: swap(this.state.closed) });
     this.persistTabs();
   }
 
   /** A deleted background project leaves the strip without touching the canvas. */
   forgetTab(name: string): void {
-    this.update({ order: this.state.order.filter((each) => each !== name), closed: this.state.closed.filter((each) => each !== name) });
+    const other = (each: string) => each !== name;
+    this.update({ order: this.state.order.filter(other), pinned: this.state.pinned.filter(other), closed: this.state.closed.filter(other) });
     this.persistTabs();
   }
 
@@ -157,7 +170,7 @@ export class ProjectActivation {
    * is another project in the new folder. The saved tabs are read again against the new folder.
    */
   async reopen(): Promise<void> {
-    this.update({ active: undefined, order: [], closed: [], loaded: false });
+    this.update({ active: undefined, order: [], pinned: [], closed: [], loaded: false });
     await this.initialLoad();
   }
 
@@ -174,7 +187,7 @@ export class ProjectActivation {
       .then((answer) => answer.values)
       .catch(() => ({}) as Record<string, unknown>);
     const remembered = prefs[ACTIVE_PROJECT_KEY];
-    const saved = prefs[TABS_KEY] as { order?: unknown; active?: unknown } | undefined;
+    const saved = prefs[TABS_KEY] as { order?: unknown; active?: unknown; pinned?: unknown } | undefined;
     let projects: ReadonlyArray<string> | undefined;
     let failure: unknown;
     for (let attempt = 0; projects === undefined; ) {
@@ -195,9 +208,10 @@ export class ProjectActivation {
     if (this.generation !== started) return;
 
     const savedOrder = Array.isArray(saved?.order) ? saved.order.filter((name): name is string => typeof name === "string") : [];
-    const restored = restoreTabs({ order: savedOrder, active: typeof saved?.active === "string" ? saved.active : null }, projects);
+    const savedPins = Array.isArray(saved?.pinned) ? saved.pinned.filter((name): name is string => typeof name === "string") : [];
+    const restored = restoreTabs({ order: savedOrder, active: typeof saved?.active === "string" ? saved.active : null, pinned: savedPins }, projects);
     if (restored.active !== undefined) {
-      this.update({ order: restored.order, closed: [], loaded: true });
+      this.update({ order: restored.order, pinned: restored.pinned, closed: [], loaded: true });
       await this.activate(restored.active);
       return;
     }

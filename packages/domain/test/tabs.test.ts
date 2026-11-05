@@ -5,11 +5,13 @@ import {
   finishedAfter,
   moveTab,
   openTab,
+  pinTab,
   popClosed,
   pushClosed,
   restoreTabs,
   statusOf,
   tabWidth,
+  unpinTab,
 } from "../src/index.ts";
 
 describe("project tabs", () => {
@@ -35,13 +37,13 @@ describe("project tabs", () => {
   });
 
   it("restores the saved order, dropping names that no longer exist, and keeps a surviving active tab", () => {
-    expect(restoreTabs({ order: ["b", "gone", "a"], active: "a" }, ["a", "b", "c"])).toEqual({ order: ["b", "a"], active: "a" });
-    expect(restoreTabs({ order: ["b", "a"], active: "gone" }, ["a", "b"])).toEqual({ order: ["b", "a"], active: "b" });
-    expect(restoreTabs({ order: ["x"], active: "x" }, ["a"])).toEqual({ order: [], active: undefined });
+    expect(restoreTabs({ order: ["b", "gone", "a"], active: "a" }, ["a", "b", "c"])).toEqual({ order: ["b", "a"], active: "a", pinned: [] });
+    expect(restoreTabs({ order: ["b", "a"], active: "gone" }, ["a", "b"])).toEqual({ order: ["b", "a"], active: "b", pinned: [] });
+    expect(restoreTabs({ order: ["x"], active: "x" }, ["a"])).toEqual({ order: [], active: undefined, pinned: [] });
   });
 
   it("restores a missing saved tab set from the remembered active project alone", () => {
-    expect(restoreTabs({ order: [], active: null }, ["a", "b"])).toEqual({ order: [], active: undefined });
+    expect(restoreTabs({ order: [], active: null }, ["a", "b"])).toEqual({ order: [], active: undefined, pinned: [] });
   });
 
   it("sizes tabs between 120 and 200 pixels", () => {
@@ -72,5 +74,24 @@ describe("project tabs", () => {
     expect(pushClosed(["a", "b"], "a")).toEqual(["a", "b"]);
     expect(popClosed(["a", "b"])).toEqual({ name: "a", stack: ["b"] });
     expect(popClosed([])).toEqual({ name: undefined, stack: [] });
+  });
+
+  it("pins a tab to the end of the pinned tabs at the front, and unpins it to the first place after them", () => {
+    expect(pinTab({ order: ["a", "b", "c"], pinned: [] }, "c")).toEqual({ order: ["c", "a", "b"], pinned: ["c"] });
+    expect(pinTab({ order: ["c", "a", "b"], pinned: ["c"] }, "b")).toEqual({ order: ["c", "b", "a"], pinned: ["c", "b"] });
+    expect(pinTab({ order: ["c", "a"], pinned: ["c"] }, "c")).toEqual({ order: ["c", "a"], pinned: ["c"] });
+    expect(unpinTab({ order: ["c", "b", "a"], pinned: ["c", "b"] }, "c")).toEqual({ order: ["b", "c", "a"], pinned: ["b"] });
+    expect(unpinTab({ order: ["a", "b"], pinned: [] }, "a")).toEqual({ order: ["a", "b"], pinned: [] });
+  });
+
+  it("moves a pinned tab only among the pinned tabs, and an unpinned one only after them", () => {
+    expect(moveTab(["p", "q", "a", "b"], "q", 0, ["p", "q"])).toEqual(["q", "p", "a", "b"]);
+    expect(moveTab(["p", "q", "a", "b"], "p", 3, ["p", "q"])).toEqual(["q", "p", "a", "b"]);
+    expect(moveTab(["p", "q", "a", "b"], "b", 0, ["p", "q"])).toEqual(["p", "q", "b", "a"]);
+  });
+
+  it("restores the pins that survived, with the pinned tabs first", () => {
+    expect(restoreTabs({ order: ["a", "p", "gone"], active: "a", pinned: ["p", "gone", "x"] }, ["a", "p"])).toEqual({ order: ["p", "a"], active: "a", pinned: ["p"] });
+    expect(restoreTabs({ order: ["a"], active: "a" }, ["a"])).toEqual({ order: ["a"], active: "a", pinned: [] });
   });
 });
