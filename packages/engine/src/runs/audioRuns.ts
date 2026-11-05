@@ -12,7 +12,7 @@ import {
   type RunEvent,
   UnframedError,
 } from "@unframed/contracts";
-import { AUDIO_FORMATS, audioExtension, audioRangeRefusal, DEFAULT_AUDIO_FORMAT, ELEVENLABS_NO_KEY, nextRef, placeResults, projectSlug, speechCall, type Box } from "@unframed/domain";
+import { ELEVENLABS_MODEL_ID, ELEVENLABS_VOICE_ID, AUDIO_FORMATS, audioExtension, audioRangeRefusal, DEFAULT_AUDIO_FORMAT, ELEVENLABS_NO_KEY, nextRef, placeResults, projectSlug, speechCall, type Box } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import * as Effect from "effect/Effect";
 import type { CanvasRooms, ChangeOrigin } from "../canvas/rooms.ts";
@@ -34,8 +34,6 @@ export interface AudioRunDeps {
   readonly emptyPromptMessage: string;
 }
 
-const VOICE_ID = /^[A-Za-z0-9_-]{1,100}$/;
-const MODEL_ID = /^[\w.-]{1,100}$/;
 
 const origin = (runId: string): ChangeOrigin => ({ kind: "server", id: runOriginId(runId) });
 
@@ -49,8 +47,8 @@ export const makeAudioRuns = (deps: AudioRunDeps) => {
     Effect.gen(function* () {
       if ((yield* settings.read).elevenLabsKey === "") return yield* unframedError("unavailable", ELEVENLABS_NO_KEY);
       if (request.prompt.trim() === "") return yield* unframedError("bad_request", deps.emptyPromptMessage);
-      if (!VOICE_ID.test(request.voice.id)) return yield* unframedError("bad_request", "That is not an ElevenLabs voice id.");
-      if (request.model !== undefined && !MODEL_ID.test(request.model)) return yield* unframedError("bad_request", "That does not look like an ElevenLabs model id.");
+      if (!ELEVENLABS_VOICE_ID.test(request.voice.id)) return yield* unframedError("bad_request", "That is not an ElevenLabs voice id.");
+      if (request.model !== undefined && !ELEVENLABS_MODEL_ID.test(request.model)) return yield* unframedError("bad_request", "That does not look like an ElevenLabs model id.");
       if (request.params.output_format !== undefined && !AUDIO_FORMATS.includes(request.params.output_format)) return yield* unframedError("bad_request", "That audio format is not offered here.");
       const refusal = audioRangeRefusal(request.params);
       if (refusal !== undefined) return yield* unframedError("bad_request", refusal);

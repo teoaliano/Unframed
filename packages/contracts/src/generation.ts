@@ -140,7 +140,7 @@ export type ModelEntry = typeof ModelEntry.Type;
 
 export const ModelsListRequest = Schema.Struct({ medium: Schema.Literals(["image", "video", "text", "audio"]) });
 
-export const ModelsListAnswer = Schema.Struct({ models: Schema.Array(ModelEntry), default: Schema.String });
+export const ModelsListAnswer = Schema.Struct({ models: Schema.Array(ModelEntry), default: Schema.String, problem: Schema.optionalKey(Schema.String) });
 export type ModelsListAnswer = typeof ModelsListAnswer.Type;
 
 /** One billing line of an endpoint's pricing. */

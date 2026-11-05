@@ -3,7 +3,7 @@ import { lstat, mkdir, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Settings, SettingsPatch } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
-import { normaliseSettingsPatch, projectSlug } from "@unframed/domain";
+import { ELEVENLABS_KEY, normaliseSettingsPatch, projectSlug } from "@unframed/domain";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -168,7 +168,7 @@ export const lifecycleLayer = Layer.effect(
     const removeKey = Effect.andThen(oauth.cancelAttempt, removeKeyLine((reason) => `Could not write .env: ${reason}`).pipe(lock.withPermits(1)));
 
     const removeElevenLabsKey = Effect.gen(function* () {
-      yield* writeEnv({ ELEVENLABS_API_KEY: null });
+      yield* writeEnv({ [ELEVENLABS_KEY.variable]: null });
       return { settings: yield* published };
     }).pipe(lock.withPermits(1));
 

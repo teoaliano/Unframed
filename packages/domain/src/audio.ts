@@ -1,10 +1,12 @@
 import { UNUSED_ROLE, type Composition } from "./composition.ts";
+import { fieldOf } from "./fieldOf.ts";
 import type { ModelParams } from "./modelParams.ts";
+import { SETTINGS_DEFAULTS } from "./settings.ts";
 
 export type AudioValue = string | number | boolean;
 export type AudioProps = Readonly<Record<string, AudioValue>>;
 
-export const DEFAULT_AUDIO_MODEL = "eleven_v4";
+export const DEFAULT_AUDIO_MODEL = SETTINGS_DEFAULTS.ELEVENLABS_AUDIO_MODEL;
 export const DEFAULT_AUDIO_FORMAT = "mp3_44100_128";
 
 export const AUDIO_FORMATS: ReadonlyArray<string> = [
@@ -272,8 +274,6 @@ export const creditsFrom = (header: string | null | undefined): number | null =>
   return Number.isFinite(number) && number >= 0 ? number : null;
 };
 
-const field = (value: unknown, key: string): unknown =>
-  typeof value === "object" && value !== null ? (value as Record<string, unknown>)[key] : undefined;
 
 const parsed = (body: string): unknown => {
   try {
@@ -283,9 +283,9 @@ const parsed = (body: string): unknown => {
   }
 };
 
-export const elevenLabsMessage = (_status: number, body: string): string => {
-  const detail = field(parsed(body), "detail");
-  const message = field(detail, "message");
+export const elevenLabsMessage = (body: string): string => {
+  const detail = fieldOf(parsed(body), "detail");
+  const message = fieldOf(detail, "message");
   if (typeof message === "string") return message;
   if (typeof detail === "string") return detail;
   return body.slice(0, 300);
@@ -294,10 +294,10 @@ export const elevenLabsMessage = (_status: number, body: string): string => {
 const CREDIT_CODES = ["insufficient_credits", "quota_exceeded"];
 
 export const speechFailure = (status: number, body: string): string => {
-  const upstream = elevenLabsMessage(status, body);
-  const detail = field(parsed(body), "detail");
+  const upstream = elevenLabsMessage(body);
+  const detail = fieldOf(parsed(body), "detail");
   if (status === 401) return `ElevenLabs refused the key: ${upstream}. Check the key in Settings.`;
-  if (status === 402 || CREDIT_CODES.includes(String(field(detail, "code"))) || CREDIT_CODES.includes(String(field(detail, "status")))) {
+  if (status === 402 || CREDIT_CODES.includes(String(fieldOf(detail, "code"))) || CREDIT_CODES.includes(String(fieldOf(detail, "status")))) {
     return `ElevenLabs has no credits left for this: either the account's quota for this period is used up, or this key has hit its own credit limit. Check your plan and the key's limit at elevenlabs.io. (${upstream})`;
   }
   return `ElevenLabs (${status}): ${upstream}`;
@@ -322,4 +322,20 @@ export const audioLine = (input: { readonly model: string; readonly durationMs?:
 export const audioTitle = (text: string): string => {
   const collapsed = text.replace(/\s+/g, " ").trim();
   return collapsed.length > 40 ? `${collapsed.slice(0, 40)}…` : collapsed;
+};
+
+const MAY_BE_CHARGED = "The line may still have been made and charged. Check your ElevenLabs usage.";
+
+export const SPEECH_TIMEOUT_MESSAGE = `ElevenLabs did not answer within 120 seconds. ${MAY_BE_CHARGED}`;
+
+export const SPEECH_STALLED_MESSAGE = `ElevenLabs stopped sending the line before 120 seconds were up. ${MAY_BE_CHARGED}`;
+
+export const speechLostMessage = (reason: string): string => `Lost the connection while reading ElevenLabs' answer: ${reason}. ${MAY_BE_CHARGED}`;
+
+export type AudioModelsProblem = { readonly kind: "revoked" } | { readonly kind: "unreachable"; readonly reason: string } | { readonly kind: "status"; readonly status: number };
+
+export const audioModelsProblemLine = (problem: AudioModelsProblem): string => {
+  const why =
+    problem.kind === "revoked" ? "ElevenLabs refused the key" : problem.kind === "unreachable" ? `Could not reach ElevenLabs (${problem.reason})` : `ElevenLabs answered ${problem.status}`;
+  return `${why}, so only the default audio model is listed.`;
 };

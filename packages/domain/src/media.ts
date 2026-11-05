@@ -151,7 +151,6 @@ export const linkedVideoName = (url: string): string => {
   return segment === "" ? "linked video" : segment;
 };
 
-/** The name of a pasted file that has none: `pasted-<kind>.<ext>` from its type, `png` (`mp3` for audio) when unknown. */
 export const pastedFileName = (kind: "image" | "video" | "audio", mime: string): string => {
   const type = essence(mime);
   const subtype = type.split("/")[1] ?? "";
@@ -159,14 +158,36 @@ export const pastedFileName = (kind: "image" | "video" | "audio", mime: string):
   return `pasted-${kind}.${ext}`;
 };
 
-export type DroppedKind = "image" | "video" | "audio" | "page";
+export type DroppedKind = "image" | "video" | "audio" | "page" | "unplayable-audio";
 
-const AUDIO_NAME = /\.(mp3|wav|m4a)$/i;
+export const AUDIO_FILE_LIMIT = 26_214_400;
+export const AUDIO_TOO_LARGE_MESSAGE = "Sound file is too large. Keep it under 25MB.";
+
+export const AUDIO_SERVED_TYPES: Readonly<Record<string, string>> = { mp3: "audio/mpeg", wav: "audio/wav", m4a: "audio/mp4" };
+
+export const AUDIO_ACCEPT = [...Object.keys(AUDIO_SERVED_TYPES).map((ext) => `.${ext}`), ...Object.keys(EXTENSIONS).filter((type) => type.startsWith("audio/"))].join(",");
+
+export const unplayableAudioMessage = (name: string): string => `${name === "" ? "That sound file" : name} is not a sound file the board can play. Use MP3, WAV or M4A.`;
+
+const SOUND_NAME = /\.(ogg|oga|opus|flac|aac|aif|aiff|wma|weba|caf)$/i;
+
+const isPlayableAudio = (file: { readonly type: string; readonly name: string }): boolean => {
+  const type = essence(file.type);
+  if (type.startsWith("audio/")) return EXTENSIONS[type] !== undefined;
+  const ext = nameExtension(file.name);
+  return ext !== undefined && AUDIO_SERVED_TYPES[ext] !== undefined;
+};
 
 export const dropKind = (file: { readonly type: string; readonly name: string }): DroppedKind | undefined => {
   if (file.type.startsWith("image/")) return "image";
   if (file.type.startsWith("video/")) return "video";
-  if (file.type.startsWith("audio/") || AUDIO_NAME.test(file.name)) return "audio";
+  if (isPlayableAudio(file)) return "audio";
+  if (file.type.startsWith("audio/") || SOUND_NAME.test(file.name)) return "unplayable-audio";
   if (file.type === "text/html" || /\.html?$/i.test(file.name)) return "page";
   return undefined;
+};
+
+export const audioFileRefusal = (file: { readonly type: string; readonly name: string; readonly size: number }): string | undefined => {
+  if (!isPlayableAudio(file)) return unplayableAudioMessage(file.name);
+  return file.size > AUDIO_FILE_LIMIT ? AUDIO_TOO_LARGE_MESSAGE : undefined;
 };

@@ -20,7 +20,6 @@ export const GROUP_DEFAULT: Size = { w: 420, h: 280 };
 const SIDE_MARGIN = 28;
 const TOP_MARGIN = 56;
 
-/** A group may hold prompts, images, videos and marks, never a group, a page, a motion or an audio shape. */
 export const mayBeGroupMember = (type: string): boolean =>
   type !== "frame" && type !== "page" && type !== "motion" && type !== "group" && type !== "audio";
 

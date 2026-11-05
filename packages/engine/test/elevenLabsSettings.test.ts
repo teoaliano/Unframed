@@ -115,7 +115,15 @@ describe("the audio catalogue", () => {
     expect(await (await keyless.rpc()).call("models.list", { medium: "audio" })).toEqual({ default: "eleven_v4", models: [{ id: "eleven_v4", name: "eleven_v4", created: null, params: null }] });
     expect(keyless.elevenLabs!.requests).toHaveLength(0);
     const failing = await startEngine({ dotenv: `ELEVENLABS_API_KEY=${ELEVENLABS_KEY}\nELEVENLABS_AUDIO_MODEL=eleven_v3\n`, elevenLabs: routes.handler });
-    expect(await (await failing.rpc()).call("models.list", { medium: "audio" })).toEqual({ default: "eleven_v3", models: [{ id: "eleven_v3", name: "eleven_v3", created: null, params: null }] });
+    expect(await (await failing.rpc()).call("models.list", { medium: "audio" })).toEqual({
+      default: "eleven_v3",
+      models: [{ id: "eleven_v3", name: "eleven_v3", created: null, params: null }],
+      problem: "ElevenLabs answered 500, so only the default audio model is listed.",
+    });
+    const revoked = await startEngine({ dotenv: `ELEVENLABS_API_KEY=${ELEVENLABS_KEY}\n`, elevenLabs: elevenLabsRoutes({ modelsStatus: 401 }).handler });
+    expect((await (await revoked.rpc()).call("models.list", { medium: "audio" })).problem).toBe("ElevenLabs refused the key, so only the default audio model is listed.");
+    const unreachable = await startEngine({ dotenv: `ELEVENLABS_API_KEY=${ELEVENLABS_KEY}\n`, env: { UNFRAMED_TEST_ELEVENLABS_ORIGIN: "http://127.0.0.1:9" } });
+    expect((await (await unreachable.rpc()).call("models.list", { medium: "audio" })).problem).toMatch(/^Could not reach ElevenLabs \(.+\), so only the default audio model is listed\.$/);
   });
 });
 

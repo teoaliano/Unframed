@@ -297,6 +297,20 @@ describe("run.audio", () => {
   });
 });
 
+describe("run.audio with ElevenLabs unreachable", () => {
+  it("reports that it could not reach ElevenLabs and deletes the placeholder", async () => {
+    const engine = await startEngine({ dotenv: `ELEVENLABS_API_KEY=${ELEVENLABS_KEY}\n`, env: { UNFRAMED_TEST_CANVAS: "1", UNFRAMED_TEST_ELEVENLABS_ORIGIN: "http://127.0.0.1:9" } });
+    const rpc = await engine.rpc();
+    await rpc.call("projects.create", { name: "board" });
+    const events = rpc.subscribe("run.subscribe", { project: "board" });
+    const started = await rpc.call("run.audio", audioRequest({ prompt: "Nobody home" }));
+    const done = await finished(events, started.runId);
+    expect(done.errors[0]).toMatch(/^Could not reach ElevenLabs: .+/);
+    const records = (await rpc.call("testCanvas.read", { project: "board" })).records as any[];
+    expect(records.some((record) => record.id === started.placeholders[0])).toBe(false);
+  });
+});
+
 describe("run.audio without a key", () => {
   it("refuses and writes nothing", async () => {
     const engine = await startEngine({ dotenv: "", env: { UNFRAMED_TEST_CANVAS: "1" }, elevenLabs: true });

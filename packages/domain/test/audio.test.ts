@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   advancedCount,
+  AUDIO_ACCEPT,
+  AUDIO_SERVED_TYPES,
+  audioFileRefusal,
+  audioModelsProblemLine,
+  boardMediaType,
+  SPEECH_STALLED_MESSAGE,
+  SPEECH_TIMEOUT_MESSAGE,
+  speechLostMessage,
   audioDefaults,
   audioExtension,
   audioKeep,
@@ -167,7 +175,7 @@ describe("ElevenLabs answers", () => {
     ["<html>Bad gateway</html>", "<html>Bad gateway</html>"],
     ["x".repeat(400), "x".repeat(300)],
   ])("elevenLabsMessage %#", (body, expected) => {
-    expect(elevenLabsMessage(500, body)).toBe(expected);
+    expect(elevenLabsMessage(body)).toBe(expected);
   });
 
   it.each([
@@ -197,6 +205,22 @@ describe("ElevenLabs answers", () => {
     [{ model: "eleven_v4" }, "eleven_v4"],
   ])("audioLine %#", (input, expected) => {
     expect(audioLine(input)).toBe(expected);
+  });
+});
+
+describe("ElevenLabs failure lines", () => {
+  it("says a timed-out line may still have been charged, before and after the answer starts", () => {
+    expect(SPEECH_TIMEOUT_MESSAGE).toBe("ElevenLabs did not answer within 120 seconds. The line may still have been made and charged. Check your ElevenLabs usage.");
+    expect(SPEECH_STALLED_MESSAGE).toBe("ElevenLabs stopped sending the line before 120 seconds were up. The line may still have been made and charged. Check your ElevenLabs usage.");
+    expect(speechLostMessage("socket hang up")).toBe("Lost the connection while reading ElevenLabs' answer: socket hang up. The line may still have been made and charged. Check your ElevenLabs usage.");
+  });
+
+  it.each([
+    [{ kind: "revoked" }, "ElevenLabs refused the key, so only the default audio model is listed."],
+    [{ kind: "unreachable", reason: "ECONNREFUSED" }, "Could not reach ElevenLabs (ECONNREFUSED), so only the default audio model is listed."],
+    [{ kind: "status", status: 500 }, "ElevenLabs answered 500, so only the default audio model is listed."],
+  ] as const)("audioModelsProblemLine(%j)", (problem, line) => {
+    expect(audioModelsProblemLine(problem)).toBe(line);
   });
 });
 
@@ -254,7 +278,10 @@ describe("audio on the canvas", () => {
 
   it.each([
     [{ type: "audio/mpeg", name: "" }, "audio"],
-    [{ type: "audio/ogg", name: "x.ogg" }, "audio"],
+    [{ type: "audio/ogg", name: "x.ogg" }, "unplayable-audio"],
+    [{ type: "audio/flac", name: "" }, "unplayable-audio"],
+    [{ type: "", name: "take.flac" }, "unplayable-audio"],
+    [{ type: "audio/x-m4a", name: "" }, "audio"],
     [{ type: "", name: "Take 1.MP3" }, "audio"],
     [{ type: "application/octet-stream", name: "line.wav" }, "audio"],
     [{ type: "", name: "voice.m4a" }, "audio"],
@@ -262,6 +289,27 @@ describe("audio on the canvas", () => {
     [{ type: "", name: "notes.txt" }, undefined],
   ])("drop kind of %j", (file, kind) => {
     expect(dropKind(file)).toBe(kind);
+  });
+
+  it.each([
+    [{ type: "audio/mpeg", name: "a.mp3", size: 10 }, undefined],
+    [{ type: "audio/ogg", name: "song.ogg", size: 10 }, "song.ogg is not a sound file the board can play. Use MP3, WAV or M4A."],
+    [{ type: "audio/flac", name: "", size: 10 }, "That sound file is not a sound file the board can play. Use MP3, WAV or M4A."],
+    [{ type: "audio/wav", name: "big.wav", size: 26_214_401 }, "Sound file is too large. Keep it under 25MB."],
+    [{ type: "audio/wav", name: "edge.wav", size: 26_214_400 }, undefined],
+  ])("audioFileRefusal(%j)", (file, expected) => {
+    expect(audioFileRefusal(file)).toBe(expected);
+  });
+
+  it("serves, uploads and accepts the same three audio types", () => {
+    expect(AUDIO_SERVED_TYPES).toEqual({ mp3: "audio/mpeg", wav: "audio/wav", m4a: "audio/mp4" });
+    for (const [ext, mime] of Object.entries(AUDIO_SERVED_TYPES)) {
+      expect(boardMediaType(`x.${ext}`)).toBe(mime);
+      expect(extensionFor(mime, "x.bin")).toBe(ext);
+    }
+    expect(boardMediaType("x.ogg")).toBeUndefined();
+    expect(AUDIO_ACCEPT.split(",")).toEqual(expect.arrayContaining([".mp3", ".wav", ".m4a", "audio/mpeg", "audio/wav", "audio/mp4"]));
+    expect(AUDIO_ACCEPT).not.toContain("ogg");
   });
 
   it("names a nameless pasted sound file by its type, mp3 when unknown", () => {
