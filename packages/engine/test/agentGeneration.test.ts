@@ -34,7 +34,7 @@ describe("an agent's generate", () => {
       const made = await link.call(session, "canvas_write", { project: PROJECT, ops: [prompt("new:fox", "a red fox")] });
       const before = await shapes(generating);
       const answer = await link.call(session, "generate", { project: PROJECT, medium: "image", sources: [made.value.ids["new:fox"]], instruction: "in snow", model: MODEL, dryRun: true });
-      expect(answer.value).toEqual({ dryRun: true, prompt: "a red fox\n\nin snow", references: [], estimate: "est. ~$0.040 each", spendLimit: null });
+      expect(answer.value).toEqual({ dryRun: true, provider: "openrouter", prompt: "a red fox\n\nin snow", references: [], estimate: "est. ~$0.040 each", spendLimit: null });
       expect(await shapes(generating)).toEqual(before);
       expect(generating.requests).toEqual([]);
     } finally {

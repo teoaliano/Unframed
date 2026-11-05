@@ -28,6 +28,7 @@ import * as Fiber from "effect/Fiber";
 import * as Stream from "effect/Stream";
 import { PreferencesStore } from "../preferencesStore.ts";
 import { Projects } from "../projects.ts";
+import { listGatewayModels } from "../gateway/client.ts";
 import { AgentRuntime, DispatchError } from "./runtime.ts";
 import { ArtifactTools } from "../artifacts/artifactTools.ts";
 import { ComponentTools } from "../artifacts/componentTools.ts";
@@ -111,8 +112,14 @@ export const agentsLayer = Layer.effect(
         runImage: (request) => run(runs.image(request)),
         runText: (request) => run(runs.text(request)),
         pricing: (model) => run(catalogue.imagePricing(model)),
-        models: (kind) => run(kind === "video" ? videoCatalogue.list : catalogue.listImageModels).then((answer) => answer.models),
-        defaultModel: (kind) => run(settings.read).then((current) => (kind === "video" ? current.videoModel : current.imageModel)),
+        models: (kind, provider) =>
+          (provider === "vercel"
+            ? run(settings.read).then((current) => listGatewayModels(config.vercelOrigin, "image", current.gatewayImageModel, current.vercelKey !== ""))
+            : run(kind === "video" ? videoCatalogue.list : catalogue.listImageModels)
+          ).then((answer) => answer.models),
+        defaultModel: (kind, provider) =>
+          run(settings.read).then((current) => (kind === "video" ? current.videoModel : provider === "vercel" ? current.gatewayImageModel : current.imageModel)),
+        providerKeys: () => run(settings.read).then((current) => ({ hasKey: current.key !== "", hasVercelKey: current.vercelKey !== "" })),
         startVideo: (request) => run(renderJobs.start(request)),
         onVideoFinished: (jobId, handler) => renderJobs.onFinished(jobId, handler),
         track: (project, handler) => {

@@ -8,7 +8,7 @@ import type { TLShapeId } from "tldraw";
 import type { Payload } from "../rpc/engine.ts";
 import { anchorOf, pageBox } from "./facts.ts";
 import { planOf } from "./imageMedium.ts";
-import { saveLastUsed } from "./lastUsed.ts";
+import { rememberTray } from "./lastUsed.ts";
 import { registerMedium, type MediumDefinition, type SendInput } from "./mediumRegistry.ts";
 import { referencesFor } from "./render.ts";
 
@@ -25,6 +25,7 @@ const textRunRequest = async ({ editor, project, values, source }: Omit<SendInpu
     selectionPrompt: plan.selectionPrompt,
     instruction: plan.instruction,
     prompt: plan.prompt,
+    ...(values.provider === "vercel" ? { provider: "vercel" as const } : {}),
   };
   if (source.kind === "selection") {
     return {
@@ -67,7 +68,7 @@ export const textMedium: MediumDefinition = {
   sendLabel: () => "Run",
   send: async (input) => {
     const started = await input.engine.call("run.text", await textRunRequest(input));
-    if (input.remember !== false) void saveLastUsed(input.engine, "text", { ...(input.values.picked && input.values.model !== undefined ? { model: input.values.model } : {}), props: {} });
+    if (input.remember !== false) void rememberTray(input.engine, "text", input.values, {});
     return { batchId: started.batchId };
   },
   fromRecipe: () => ({}),

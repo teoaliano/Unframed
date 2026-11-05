@@ -31,6 +31,8 @@ export interface Landed {
   readonly file: string;
   readonly sidecar: string;
   readonly cost: number | null;
+  /** Spec 22: the cost is a gateway list price. */
+  readonly listPrice?: true;
   readonly width: number | undefined;
   readonly height: number | undefined;
   readonly mime: string;
@@ -100,7 +102,7 @@ export const fillChange = (shape: Shape, landed: Landed): CanvasChange => {
   const filled = {
     ...shape,
     props: { ...shape.props, assetId, h: height, crop: null },
-    meta: { ...shape.meta, unframed: { ...unframed, ...(result ? { result: { ...result, sidecar: landed.sidecar, cost: landed.cost } } : {}) } },
+    meta: { ...shape.meta, unframed: { ...unframed, ...(result ? { result: { ...result, sidecar: landed.sidecar, cost: landed.cost, ...(landed.listPrice ? { listPrice: true } : {}) } } : {}) } },
   } as unknown as TLRecord;
   return { put: [asset, filled], remove: [] };
 };
@@ -114,6 +116,7 @@ export interface LandedText {
   readonly text: string;
   readonly sidecar: string | null;
   readonly cost: number | null;
+  readonly listPrice?: true;
 }
 
 /** A text result's placeholder: an empty prompt (spec 02's text shape) carrying its marker and unfilled result meta. */
@@ -147,7 +150,7 @@ const textFillChange = (shape: Shape, landed: LandedText): CanvasChange => {
   const filled = {
     ...shape,
     props: { ...shape.props, richText: toRichText(landed.text) },
-    meta: { ...shape.meta, unframed: { ...unframed, ...(result ? { result: { ...result, sidecar: landed.sidecar, cost: landed.cost } } : {}) } },
+    meta: { ...shape.meta, unframed: { ...unframed, ...(result ? { result: { ...result, sidecar: landed.sidecar, cost: landed.cost, ...(landed.listPrice ? { listPrice: true } : {}) } } : {}) } },
   } as unknown as TLRecord;
   return { put: [filled], remove: [] };
 };

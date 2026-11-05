@@ -58,6 +58,8 @@ export const toView = (settings: EffectiveSettings, dataDir: string, previewPort
   textModel: settings.textModel,
   videoModel: settings.videoModel,
   audioModel: settings.audioModel,
+  gatewayImageModel: settings.gatewayImageModel,
+  gatewayTextModel: settings.gatewayTextModel,
   outputDir: resolveOutputDir(settings.outputDir, dataDir),
   claudePath: settings.claudePath,
   codexPath: settings.codexPath,

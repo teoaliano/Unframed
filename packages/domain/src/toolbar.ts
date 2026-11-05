@@ -87,9 +87,15 @@ export const resultLine = (facts: {
   readonly width?: number | undefined;
   readonly height?: number | undefined;
   readonly cost: number | null;
+  readonly provider?: "vercel" | undefined;
+  readonly listPrice?: boolean | undefined;
 }): string =>
   [
     modelPart(facts.model),
     ...(facts.width !== undefined && facts.height !== undefined ? [`${facts.width}×${facts.height}`] : []),
-    ...(facts.cost === null ? [] : [formatCost(facts.cost)]),
+    ...(facts.cost === null ? [] : [costText(facts.cost, facts.listPrice)]),
+    ...(facts.provider === "vercel" ? ["Vercel"] : []),
   ].join(" · ");
+
+/** A result's cost, `≈` in front when it is a list price (spec 22). */
+export const costText = (cost: number, listPrice?: boolean): string => `${listPrice === true ? "≈" : ""}${formatCost(cost)}`;

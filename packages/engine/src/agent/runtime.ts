@@ -57,14 +57,15 @@ import { outsideAgentTools, type OutsideToolDeps } from "./outsideTools.ts";
 import { AgentGeneration } from "./agentGeneration.ts";
 import { generateArguments, generateTool } from "./generateTool.ts";
 import type { ConnectionBook } from "../agentConnections/book.ts";
-import type { ImagePricingAnswer, ImageRunRequest, ModelEntry, RunEvent, TextRunRequest, VideoStartRequest } from "@unframed/contracts";
+import type { GenerationProvider, ImagePricingAnswer, ImageRunRequest, ModelEntry, RunEvent, TextRunRequest, VideoStartRequest } from "@unframed/contracts";
 
 interface GenerationRuns {
   readonly runImage: (request: ImageRunRequest) => Promise<{ runId: string; batchId: string; placeholders: string[] }>;
   readonly runText: (request: TextRunRequest) => Promise<{ runId: string; batchId: string; placeholders: string[] }>;
   readonly pricing: (model: string) => Promise<ImagePricingAnswer>;
-  readonly models: (kind: "image" | "video") => Promise<ReadonlyArray<ModelEntry>>;
-  readonly defaultModel: (kind: "image" | "video") => Promise<string>;
+  readonly models: (kind: "image" | "video", provider?: GenerationProvider) => Promise<ReadonlyArray<ModelEntry>>;
+  readonly defaultModel: (kind: "image" | "video", provider?: GenerationProvider) => Promise<string>;
+  readonly providerKeys: () => Promise<{ readonly hasKey: boolean; readonly hasVercelKey: boolean }>;
   readonly startVideo: (request: VideoStartRequest) => Promise<{ jobId: string; status: string; shapeId: string }>;
   readonly onVideoFinished: (jobId: string, handler: (outcome: { ok: boolean; cost: number | null }) => void) => () => void;
   readonly track: (project: string, handler: (event: RunEvent) => void) => () => void;
@@ -207,8 +208,9 @@ export class AgentRuntime {
       runImage: (request) => deps.generationRuns.runImage(request),
       runText: (request) => deps.generationRuns.runText(request),
       pricing: (model) => deps.generationRuns.pricing(model),
-      models: (kind) => deps.generationRuns.models(kind),
-      defaultModel: (kind) => deps.generationRuns.defaultModel(kind),
+      models: (kind, provider) => deps.generationRuns.models(kind, provider),
+      defaultModel: (kind, provider) => deps.generationRuns.defaultModel(kind, provider),
+      providerKeys: () => deps.generationRuns.providerKeys(),
       startVideo: (request) => deps.generationRuns.startVideo(request),
       onVideoFinished: (jobId, handler) => deps.generationRuns.onVideoFinished(jobId, handler),
       track: (project, handler) => deps.generationRuns.track(project, handler),

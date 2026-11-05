@@ -18,14 +18,17 @@ import {
   type TextSidecar,
   UnframedError,
   type RunChat,
+  type CostBasis,
+  type GenerationProvider,
 } from "@unframed/contracts";
-import { NO_KEY_MESSAGE, nextRef, placeResults, projectSlug, type Box } from "@unframed/domain";
+import { GATEWAY_NO_KEY_MESSAGE, NO_KEY_MESSAGE, nextRef, placeResults, projectSlug, type Box } from "@unframed/domain";
+import { gatewayCost, gatewayText } from "../gateway/client.ts";
 import type { TLRecord } from "@tldraw/tlschema";
 import { getIndicesAbove, type IndexKey } from "@tldraw/utils";
 import * as Effect from "effect/Effect";
 import type { CanvasRooms, ChangeOrigin } from "../canvas/rooms.ts";
 import { errorText, logError, logInfo } from "../log.ts";
-import { chatRequestBody, completeText, type ReferencePart, type TextCallOutcome } from "../openRouter/text.ts";
+import { chatRequestBody, completeText, NO_TEXT_MESSAGE, type ReferencePart } from "../openRouter/text.ts";
 import type { SettingsStore } from "../settingsStore.ts";
 import { clearChange, fillFor, isShape, PLACEHOLDER_WIDTH, textPlaceholder, type LandedText, type RunOutcome } from "./placeholders.ts";
 import { fileStamp, writeLoneSidecar } from "./resultFiles.ts";
@@ -35,6 +38,8 @@ export interface TextRunDeps {
   readonly settings: SettingsStore["Service"];
   readonly rooms: CanvasRooms["Service"];
   readonly openRouterOrigin: string;
+  readonly vercelOrigin: string;
+  readonly gatewayLookupMs: number;
   readonly projectFolder: (project: string) => Effect.Effect<string, UnframedError>;
   /** Refuses a missing reference file or a link that is not https. */
   readonly validateReferences: (refs: ReadonlyArray<RecipeRef>, folder: string) => Effect.Effect<void, UnframedError>;
@@ -67,18 +72,41 @@ const textBase = (startedAt: number, prompt: string) => `${fileStamp(startedAt)}
 export const makeTextRuns = (deps: TextRunDeps) => {
   const { settings, rooms } = deps;
 
-  const validate = (request: { readonly prompt: string; readonly references?: ReadonlyArray<RecipeRef> | undefined }, folder: string) =>
+  const validate = (request: { readonly prompt: string; readonly references?: ReadonlyArray<RecipeRef> | undefined; readonly provider?: GenerationProvider | undefined }, folder: string) =>
     Effect.gen(function* () {
-      if ((yield* settings.read).key === "") return yield* unframedError("unavailable", NO_KEY_MESSAGE);
+      const current = yield* settings.read;
+      if (request.provider === "vercel" ? current.vercelKey === "" : current.key === "")
+        return yield* unframedError("unavailable", request.provider === "vercel" ? GATEWAY_NO_KEY_MESSAGE : NO_KEY_MESSAGE);
       if (request.prompt.trim() === "") return yield* unframedError("bad_request", deps.emptyPromptMessage);
       yield* deps.validateReferences(request.references ?? [], folder);
     });
 
-  /** One chat call with its references inlined, logged. Never rejects. */
-  const chatOnce = async (folder: string, key: string, model: string, prompt: string, references: ReadonlyArray<RecipeRef>, system?: string): Promise<TextCallOutcome> => {
-    let outcome: TextCallOutcome;
+  type ChatOutcome = { readonly ok: true; readonly text: string; readonly cost: number | null; readonly costBasis?: CostBasis } | { readonly ok: false; readonly error: string };
+
+  const gatewayChat = async (key: string, model: string, prompt: string, references: ReadonlyArray<ReferencePart>, system: string | undefined): Promise<ChatOutcome> => {
+    const answer = await gatewayText(deps.vercelOrigin, key, { model, prompt, references, system }, NO_TEXT_MESSAGE);
+    if (!answer.ok) return answer;
+    const cost = await gatewayCost({ origin: deps.vercelOrigin, key, id: answer.id, medium: "text", model, usage: answer.usage, waitMs: deps.gatewayLookupMs });
+    return { ok: true, text: answer.text, ...cost };
+  };
+
+  /** One chat call with its references inlined, through the provider, logged. Never rejects. */
+  const chatOnce = async (
+    folder: string,
+    current: { readonly key: string; readonly vercelKey: string },
+    provider: GenerationProvider | undefined,
+    model: string,
+    prompt: string,
+    references: ReadonlyArray<RecipeRef>,
+    system?: string,
+  ): Promise<ChatOutcome> => {
+    let outcome: ChatOutcome;
     try {
-      outcome = await completeText(deps.openRouterOrigin, key, chatRequestBody(model, prompt, await deps.inline(folder, references), system));
+      const parts = await deps.inline(folder, references);
+      outcome =
+        provider === "vercel"
+          ? await gatewayChat(current.vercelKey, model, prompt, parts, system)
+          : await completeText(deps.openRouterOrigin, current.key, chatRequestBody(model, prompt, parts, system));
     } catch (error) {
       outcome = { ok: false, error: errorText(error) };
     }
@@ -104,7 +132,16 @@ export const makeTextRuns = (deps: TextRunDeps) => {
     }
   };
 
-  const sidecarOf = (prompt: string, model: string, text: string, references: ReadonlyArray<RecipeRef>, batchId: string | null, cost: number | null, chatOf: RunChat | undefined): TextSidecar => ({
+  const sidecarOf = (
+    prompt: string,
+    model: string,
+    text: string,
+    references: ReadonlyArray<RecipeRef>,
+    batchId: string | null,
+    outcome: { readonly cost: number | null; readonly costBasis?: CostBasis },
+    chatOf: RunChat | undefined,
+    provider: GenerationProvider | undefined,
+  ): TextSidecar => ({
     kind: "text",
     ...(chatOf === undefined ? {} : { chat: chatOf }),
     prompt,
@@ -113,8 +150,9 @@ export const makeTextRuns = (deps: TextRunDeps) => {
     referenceCount: references.length,
     references: counts(references),
     batchId,
-    cost,
+    cost: outcome.cost,
     createdAt: new Date().toISOString(),
+    ...(provider === "vercel" ? { provider: "vercel" as const, ...(outcome.costBasis === undefined ? {} : { costBasis: outcome.costBasis }) } : {}),
   });
 
   const complete = (request: TextCompleteRequest) =>
@@ -122,12 +160,13 @@ export const makeTextRuns = (deps: TextRunDeps) => {
       const folder = yield* deps.projectFolder(request.project);
       yield* validate(request, folder);
       const current = yield* settings.read;
-      const model = request.model ?? current.textModel;
+      const provider = request.provider;
+      const model = request.model ?? (provider === "vercel" ? current.gatewayTextModel : current.textModel);
       const references = request.references ?? [];
       const startedAt = Date.now();
-      const outcome = yield* Effect.promise(() => chatOnce(folder, current.key, model, request.prompt, references, request.system));
+      const outcome = yield* Effect.promise(() => chatOnce(folder, current, provider, model, request.prompt, references, request.system));
       if (!outcome.ok) return yield* unframedError("upstream", outcome.error);
-      yield* Effect.promise(() => writeSidecar(folder, startedAt, sidecarOf(request.prompt, model, outcome.text, references, request.batchId ?? null, outcome.cost, undefined)));
+      yield* Effect.promise(() => writeSidecar(folder, startedAt, sidecarOf(request.prompt, model, outcome.text, references, request.batchId ?? null, outcome, undefined, provider)));
       return { text: outcome.text, cost: outcome.cost };
     });
 
@@ -137,7 +176,8 @@ export const makeTextRuns = (deps: TextRunDeps) => {
       const project = projectSlug(request.project);
       yield* validate(request, folder);
       const current = yield* settings.read;
-      const model = request.model ?? current.textModel;
+      const provider = request.provider;
+      const model = request.model ?? (provider === "vercel" ? current.gatewayTextModel : current.textModel);
       const startedAt = Date.now();
       const runId = `run-${startedAt}-${randomUUID().slice(0, 8)}`;
       const batchId = `b-${startedAt}`;
@@ -161,7 +201,7 @@ export const makeTextRuns = (deps: TextRunDeps) => {
         parentId: pageId,
         ref: nextRef(records),
         marker: { runId, runIndex: 1, startedAt },
-        result: { sidecar: null, medium: "text", model, batchId, runIndex: 1, runCount: 1, cost: null, sources: [...request.sources] },
+        result: { sidecar: null, medium: "text", model, batchId, runIndex: 1, runCount: 1, cost: null, sources: [...request.sources], ...(provider === "vercel" ? { provider: "vercel" as const } : {}) },
       });
       const shapeId = placeholder.id as string;
 
@@ -170,7 +210,7 @@ export const makeTextRuns = (deps: TextRunDeps) => {
       yield* Effect.promise(() => deps.publish(project, { type: "started", runId, batchId, count: 1 }));
 
       const finish = async () => {
-        const outcome = await chatOnce(folder, current.key, model, request.prompt, request.references);
+        const outcome = await chatOnce(folder, current, provider, model, request.prompt, request.references);
         let landed: LandedText | undefined;
         if (outcome.ok) {
           const recipe: ResultRecipe = {
@@ -182,9 +222,10 @@ export const makeTextRuns = (deps: TextRunDeps) => {
             references: [...request.references],
             sources: [...request.sources],
             ...(of === undefined ? {} : { of }),
+            ...(provider === "vercel" ? { provider: "vercel" as const } : {}),
           };
-          const sidecar = await writeSidecar(folder, startedAt, { ...sidecarOf(request.prompt, model, outcome.text, request.references, batchId, outcome.cost, request.chat), recipe });
-          landed = { kind: "text", text: outcome.text.replace(/\r\n/g, "\n").trim(), sidecar, cost: outcome.cost };
+          const sidecar = await writeSidecar(folder, startedAt, { ...sidecarOf(request.prompt, model, outcome.text, request.references, batchId, outcome, request.chat, provider), recipe });
+          landed = { kind: "text", text: outcome.text.replace(/\r\n/g, "\n").trim(), sidecar, cost: outcome.cost, ...(outcome.costBasis === "list-price" ? { listPrice: true as const } : {}) };
           run.settle({ ok: true, landed });
         } else {
           run.settle({ ok: false, error: outcome.error });

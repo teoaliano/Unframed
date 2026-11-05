@@ -17,8 +17,10 @@ import {
   type TextCompleteRequest,
   type TextRunRequest,
   type AudioRunRequest,
+  type CostBasis,
 } from "@unframed/contracts";
-import { imageDimensions, NO_KEY_MESSAGE, nextRef, placeResults, projectSlug, sidecarFileName, type Box } from "@unframed/domain";
+import { GATEWAY_NO_KEY_MESSAGE, imageDimensions, NO_KEY_MESSAGE, nextRef, placeResults, projectSlug, sidecarFileName, type Box } from "@unframed/domain";
+import { gatewayCost, gatewayImage } from "../gateway/client.ts";
 import type { TLRecord } from "@tldraw/tlschema";
 import { getIndicesAbove, type IndexKey } from "@tldraw/utils";
 import * as Context from "effect/Context";
@@ -166,7 +168,9 @@ export const runsLayer = Layer.effect(
 
     const validate = (request: ImageRunRequest, folder: string) =>
       Effect.gen(function* () {
-        if ((yield* settings.read).key === "") return yield* unframedError("unavailable", NO_KEY_MESSAGE);
+        const keys = yield* settings.read;
+        if (request.provider === "vercel" ? keys.vercelKey === "" : keys.key === "")
+          return yield* unframedError("unavailable", request.provider === "vercel" ? GATEWAY_NO_KEY_MESSAGE : NO_KEY_MESSAGE);
         if (request.outputs.length < 1 || request.outputs.length > MAX_OUTPUTS) return yield* unframedError("bad_request", OUTPUT_COUNT_MESSAGE);
         if (request.outputs.every((output) => output.prompt.trim() === "")) return yield* unframedError("bad_request", EMPTY_PROMPT_MESSAGE);
         yield* validateReferences(request.outputs.flatMap((output) => output.references), folder);
@@ -215,6 +219,8 @@ export const runsLayer = Layer.effect(
       settings,
       rooms,
       openRouterOrigin: config.openRouterOrigin,
+      vercelOrigin: config.vercelOrigin,
+      gatewayLookupMs: config.gatewayLookupMs,
       projectFolder,
       validateReferences,
       inline,
@@ -243,7 +249,9 @@ export const runsLayer = Layer.effect(
         const project = projectSlug(request.project);
         yield* validate(request, folder);
         const current = yield* settings.read;
-        const model = request.model ?? current.imageModel;
+        const provider = request.provider;
+        const gateway = provider === "vercel";
+        const model = request.model ?? (gateway ? current.gatewayImageModel : current.imageModel);
         const startedAt = Date.now();
         const runId = `run-${startedAt}-${randomUUID().slice(0, 8)}`;
         const batchId = request.batchId ?? `b-${startedAt}`;
@@ -290,6 +298,7 @@ export const runsLayer = Layer.effect(
               cost: null,
               sources: [...request.sources],
               ...(request.batchExtraCost === undefined ? {} : { batchExtraCost: request.batchExtraCost }),
+              ...(gateway ? { provider: "vercel" as const } : {}),
             },
           });
         });
@@ -301,7 +310,7 @@ export const runsLayer = Layer.effect(
         );
         yield* PubSub.publish(events, { project, event: { type: "started", runId, batchId, count: runCount } });
 
-        const land = async (index: number, bytes: Buffer, mediaType: string | undefined, cost: number | null): Promise<Landed> => {
+        const land = async (index: number, bytes: Buffer, mediaType: string | undefined, cost: number | null, costBasis?: CostBasis): Promise<Landed> => {
           const output = request.outputs[index]!;
           const runIndex = index + 1;
           const ext = extensionFor(mediaType, request.params.output_format);
@@ -340,9 +349,11 @@ export const runsLayer = Layer.effect(
               references: [...references],
               sources: [...request.sources],
               ...(of === undefined ? {} : { of }),
+              ...(gateway ? { provider: "vercel" as const } : {}),
             },
             ...(output.free === undefined ? {} : { free: output.free }),
             ...(request.chat === undefined ? {} : { chat: request.chat }),
+            ...(gateway ? { provider: "vercel" as const, ...(costBasis === undefined ? {} : { costBasis }) } : {}),
           };
           await writeSidecar(folder, base, sidecar).catch((error: unknown) => logError(`could not write the sidecar of ${file}: ${errorText(error)}`));
           logInfo(`generated → ${join(folder, file)}${cost === null ? "" : `  ($${cost.toFixed(4)})`}`);
@@ -351,6 +362,7 @@ export const runsLayer = Layer.effect(
             file,
             sidecar: `${base}.json`,
             cost,
+            ...(costBasis === "list-price" ? { listPrice: true as const } : {}),
             width: dimensions?.w,
             height: dimensions?.h,
             mime: mediaType?.split(";")[0]?.trim() || mimeForFile(file),
@@ -362,12 +374,21 @@ export const runsLayer = Layer.effect(
           const output = request.outputs[index]!;
           const runIndex = index + 1;
           const shapeId = placeholders[index]!.id;
-          const body = imageRequestBody(model, output.prompt, request.params);
           let outcome: RunOutcome<Landed>;
           try {
-            if (output.references.length > 0) body.input_references = await inline(folder, output.references);
-            const answer = await generateImage(config.openRouterOrigin, current.key, body);
-            outcome = answer.ok ? { ok: true, landed: await land(index, answer.bytes, answer.mediaType, answer.cost) } : { ok: false, error: answer.error };
+            if (gateway) {
+              const images = (await inline(folder, output.references)).flatMap((part) => (part.type === "image_url" ? [part.image_url.url] : []));
+              const answer = await gatewayImage(config.vercelOrigin, current.vercelKey, { model, prompt: output.prompt, images });
+              if (answer.ok) {
+                const priced = await gatewayCost({ origin: config.vercelOrigin, key: current.vercelKey, id: answer.id, medium: "image", model, waitMs: config.gatewayLookupMs });
+                outcome = { ok: true, landed: await land(index, answer.bytes, undefined, priced.cost, priced.costBasis) };
+              } else outcome = { ok: false, error: answer.error };
+            } else {
+              const body = imageRequestBody(model, output.prompt, request.params);
+              if (output.references.length > 0) body.input_references = await inline(folder, output.references);
+              const answer = await generateImage(config.openRouterOrigin, current.key, body);
+              outcome = answer.ok ? { ok: true, landed: await land(index, answer.bytes, answer.mediaType, answer.cost) } : { ok: false, error: answer.error };
+            }
           } catch (error) {
             outcome = { ok: false, error: errorText(error) };
           }

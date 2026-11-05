@@ -39,6 +39,10 @@ export interface EngineConfig {
   /** Every OpenRouter URL the engine builds starts with this. */
   readonly openRouterOrigin: string;
   readonly elevenLabsOrigin: string;
+  /** Spec 22: every Vercel AI Gateway URL starts with this. */
+  readonly vercelOrigin: string;
+  /** `UNFRAMED_TEST_GATEWAY_LOOKUP_MS`: the wait between gateway generation lookups, in place of 1500 ms. */
+  readonly gatewayLookupMs: number;
   readonly oauthBounce: string | undefined;
   readonly chromePath: string | undefined;
   readonly agentDebug: boolean;
@@ -108,6 +112,8 @@ export const loadConfig = (
       clientDist: clientDist === undefined ? undefined : resolve(clientDist),
       openRouterOrigin: origins.openrouter,
       elevenLabsOrigin: origins.elevenlabs,
+      vercelOrigin: origins.vercel,
+      gatewayLookupMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_GATEWAY_LOOKUP_MS)) ?? 1500,
       oauthBounce: nonEmpty(env.UNFRAMED_OAUTH_BOUNCE),
       chromePath: nonEmpty(env.UNFRAMED_CHROME_PATH),
       agentDebug: nonEmpty(env.UNFRAMED_AGENT_DEBUG) !== undefined,

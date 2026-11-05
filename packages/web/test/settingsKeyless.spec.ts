@@ -31,7 +31,7 @@ test("a keyless first load opens nothing by itself; the gear opens Settings on G
     await expectSlot(dialog.getByRole("button", { name: "Connect OpenRouter" }), "button");
     await expectToken(dialog.getByRole("button", { name: "Connect OpenRouter" }), "background-color", "--primary");
     await expectSlot(dialog.getByRole("button", { name: "or paste a key instead" }), "button");
-    await expect(dialog.getByTestId("models-need-key")).toHaveText("Connect OpenRouter to choose the models Generate starts on.");
+    await expect(dialog.getByTestId("models-need-key")).toHaveText("Connect OpenRouter or paste a Vercel AI Gateway key to choose the models Generate starts on.");
     await expect(dialog.getByRole("combobox", { name: "Image", exact: true })).toHaveCount(0);
     await expect(dialog.getByRole("button", { name: "Save" })).toHaveCount(0);
     await expect(dialog.getByLabel("API key", { exact: true })).toHaveCount(0);

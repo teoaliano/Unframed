@@ -17,7 +17,8 @@ import { clearStoredModels } from "../lastUsed.ts";
 import { Native } from "../native.ts";
 import { Catalogue } from "../openRouter/catalogue.ts";
 import { ElevenLabsError, listAudioModels, listVoices, subscriptionStatus } from "../elevenLabs/client.ts";
-import { ELEVENLABS_NO_KEY } from "@unframed/domain";
+import { ELEVENLABS_NO_KEY, GATEWAY_SERVES_MESSAGE } from "@unframed/domain";
+import { gatewayCredits, listGatewayModels } from "../gateway/client.ts";
 import { VideoCatalogue } from "../openRouter/videoCatalogue.ts";
 import { Runs } from "../runs/runs.ts";
 import { RenderJobs } from "../video/renderJobs.ts";
@@ -86,6 +87,14 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
         Effect.flatMap(settings.read, (current) =>
           Effect.tryPromise({
             try: () => subscriptionStatus(config.elevenLabsOrigin, current.elevenLabsKey),
+            catch: (error) => unframedError("upstream", errorText(error)),
+          }),
+        ),
+      "settings.removeVercelKey": () => lifecycle.removeVercelKey,
+      "vercel.status": () =>
+        Effect.flatMap(settings.read, (current) =>
+          Effect.tryPromise({
+            try: () => gatewayCredits(config.vercelOrigin, current.vercelKey),
             catch: (error) => unframedError("upstream", errorText(error)),
           }),
         ),
@@ -163,8 +172,16 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "preferences.get": ({ keys }) => Effect.map(preferences.get(keys), (values) => ({ values })),
       "preferences.set": ({ key, value }) => Effect.as(preferences.set(key, value), {}),
       "preferences.subscribe": ({ keys }) => preferences.subscribe(keys),
-      "models.list": ({ medium }) =>
-        medium === "audio"
+      "models.list": ({ medium, provider }) =>
+        provider === "vercel"
+          ? medium === "image" || medium === "text"
+            ? Effect.flatMap(settings.read, (current) =>
+                Effect.promise(() =>
+                  listGatewayModels(config.vercelOrigin, medium, medium === "image" ? current.gatewayImageModel : current.gatewayTextModel, current.vercelKey !== ""),
+                ),
+              )
+            : Effect.fail(unframedError("bad_request", GATEWAY_SERVES_MESSAGE))
+          : medium === "audio"
           ? Effect.flatMap(settings.read, (current) => Effect.promise(() => listAudioModels(config.elevenLabsOrigin, current.elevenLabsKey, current.audioModel)))
           : medium === "video"
             ? videoCatalogue.list

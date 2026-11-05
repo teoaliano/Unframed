@@ -8,6 +8,7 @@ import { VideoForget, VideoPoll, VideoStart } from "./video.ts";
 import { OAuthCancel, OAuthPending, OAuthStart, OAuthStatus, ProjectsDelete, ProjectsRename, SettingsRemoveKey } from "./openRouterKey.ts";
 import { RunText, TextComplete } from "./text.ts";
 import { ElevenLabsStatusRpc, RunAudio, SettingsRemoveElevenLabsKey, VoicesList } from "./audio.ts";
+import { SettingsRemoveVercelKey, VercelStatusRpc } from "./gateway.ts";
 import { LibraryCopyFiles, LibraryDelete, LibraryList, LibrarySave } from "./library.ts";
 import {
   ClientChatCommand,
@@ -325,6 +326,8 @@ export const UnframedRpcs = RpcGroup.make(
   VoicesList,
   ElevenLabsStatusRpc,
   SettingsRemoveElevenLabsKey,
+  VercelStatusRpc,
+  SettingsRemoveVercelKey,
   LibraryList,
   LibrarySave,
   LibraryDelete,

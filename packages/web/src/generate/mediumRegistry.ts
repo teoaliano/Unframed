@@ -3,7 +3,7 @@
  * its label, catalogue, props, estimate, warnings and send. This spec registers `image`;
  * specs 04 and 05 register `video` and `text` the same way.
  */
-import type { Medium, ModelEntry, ResultRecipe } from "@unframed/contracts";
+import type { GenerationProvider, Medium, ModelEntry, ResultRecipe } from "@unframed/contracts";
 import type { CanvasShape, Composition, ModelParams } from "@unframed/domain";
 import type { ComponentType } from "react";
 import type { Editor } from "tldraw";
@@ -19,6 +19,8 @@ export interface TrayValues {
   /** The person picked the model in the model dialog (or it came back from last-used values). */
   readonly picked: boolean;
   readonly props: TrayProps;
+  /** Spec 22: the provider an image or text run goes through; OpenRouter when absent. */
+  readonly provider?: GenerationProvider | undefined;
 }
 
 export interface TrayStatus {
@@ -27,6 +29,8 @@ export interface TrayStatus {
   /** Lines that disable send. */
   readonly blockers: ReadonlyArray<string>;
   readonly needsKey?: boolean | undefined;
+  /** Spec 22: the no-key line's sentence when it is not spec 03's. */
+  readonly keyMessage?: string | undefined;
 }
 
 /** What the run is made from: the live selection, or a result's recorded recipe. */
@@ -92,7 +96,13 @@ export interface MediumDefinition {
   /** The model's pricing, which the tray caches per model for the session. */
   readonly pricing: (engine: EngineConnection, model: string) => Promise<unknown>;
   /** The price beside the send button, when it is exact. `pricing` is what `pricing` answered, once it has. */
-  readonly estimate: (input: { readonly pricing: unknown; readonly props: TrayProps; readonly source: RunSource; readonly entry?: ModelEntry | undefined }) => string | undefined;
+  readonly estimate: (input: {
+    readonly pricing: unknown;
+    readonly props: TrayProps;
+    readonly source: RunSource;
+    readonly entry?: ModelEntry | undefined;
+    readonly provider?: GenerationProvider | undefined;
+  }) => string | undefined;
   /** `props` are the tray's, once it has values; `entry` is its model's catalogue entry (spec 04). */
   readonly status: (input: {
     readonly source: RunSource;

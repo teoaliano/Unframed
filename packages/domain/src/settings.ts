@@ -1,4 +1,4 @@
-import { ELEVENLABS_KEY, OPENROUTER_KEY } from "./providerKeys.ts";
+import { ELEVENLABS_KEY, OPENROUTER_KEY, VERCEL_KEY } from "./providerKeys.ts";
 
 /**
  * The settings variables: the ones that may appear in `.env`, where a `.env` value beats
@@ -10,6 +10,8 @@ export const SETTINGS_DEFAULTS = {
   OPENROUTER_TEXT_MODEL: "google/gemini-3.5-flash-lite",
   OPENROUTER_VIDEO_MODEL: "bytedance/seedance-2.0",
   ELEVENLABS_AUDIO_MODEL: "eleven_v4",
+  AI_GATEWAY_IMAGE_MODEL: "openai/gpt-image-2",
+  AI_GATEWAY_TEXT_MODEL: "google/gemini-3.5-flash-lite",
   OUTPUT_DIR: "./output",
   PORT: 8787,
 } as const;
@@ -22,6 +24,9 @@ export interface EffectiveSettings {
   readonly imageModel: string;
   readonly textModel: string;
   readonly videoModel: string;
+  readonly vercelKey: string;
+  readonly gatewayImageModel: string;
+  readonly gatewayTextModel: string;
   readonly elevenLabsKey: string;
   readonly audioModel: string;
   readonly outputDir: string;
@@ -47,6 +52,9 @@ export const effectiveSettings = (fileVars: EnvVars, processEnv: EnvVars): Effec
     imageModel: value("OPENROUTER_IMAGE_MODEL") ?? value("OPENROUTER_MODEL") ?? SETTINGS_DEFAULTS.OPENROUTER_IMAGE_MODEL,
     textModel: value("OPENROUTER_TEXT_MODEL") ?? SETTINGS_DEFAULTS.OPENROUTER_TEXT_MODEL,
     videoModel: value("OPENROUTER_VIDEO_MODEL") ?? SETTINGS_DEFAULTS.OPENROUTER_VIDEO_MODEL,
+    vercelKey: value(VERCEL_KEY.variable) ?? "",
+    gatewayImageModel: value("AI_GATEWAY_IMAGE_MODEL") ?? SETTINGS_DEFAULTS.AI_GATEWAY_IMAGE_MODEL,
+    gatewayTextModel: value("AI_GATEWAY_TEXT_MODEL") ?? SETTINGS_DEFAULTS.AI_GATEWAY_TEXT_MODEL,
     elevenLabsKey: value(ELEVENLABS_KEY.variable) ?? "",
     audioModel: value("ELEVENLABS_AUDIO_MODEL") ?? SETTINGS_DEFAULTS.ELEVENLABS_AUDIO_MODEL,
     outputDir: value("OUTPUT_DIR") ?? SETTINGS_DEFAULTS.OUTPUT_DIR,

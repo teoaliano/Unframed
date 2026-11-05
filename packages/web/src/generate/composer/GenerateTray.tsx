@@ -1,5 +1,17 @@
-import { UnframedError, type Medium } from "@unframed/contracts";
-import { composeSelection, readRef, recipeEquals, recipeFromTray, resolveReferences, selectionHint } from "@unframed/domain";
+import { UnframedError, type GenerationProvider, type Medium } from "@unframed/contracts";
+import {
+  composeSelection,
+  GATEWAY_BROWSE,
+  GATEWAY_VIDEO_BLOCKER,
+  GENERATION_PROVIDER_LABELS,
+  generationProviders,
+  readRef,
+  recipeEquals,
+  recipeFromTray,
+  resolveReferences,
+  selectionHint,
+  trayProvider,
+} from "@unframed/domain";
 import { ArrowUp } from "lucide-react";
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
 import { useEditor, useValue, type TLShapeId } from "tldraw";
@@ -14,7 +26,7 @@ import { useEngine, useSettings } from "../../context.ts";
 import { IMPORTED_RECIPE_NOTE, liveSource } from "../approximate.ts";
 import { useCatalogue, usePricing } from "../catalogue.ts";
 import { canvasShapes, resultShapes, toolbarShape } from "../facts.ts";
-import { loadLastUsed, type LastUsed } from "../lastUsed.ts";
+import { loadLastUsed, storedModel, type LastUsed } from "../lastUsed.ts";
 import { mediumDefinition, registeredMedia, type PropValue, type RunSource, type TrayValues } from "../mediumRegistry.ts";
 import { recipeProps } from "../recipeRuns.ts";
 import { composerState, setMedium, type RecipeMode } from "../state.ts";
@@ -64,7 +76,7 @@ const RecipeLine = ({
   const editor = useEditor();
   const name = useValue("group name", () => readRef(editor.getShape(groupId) ?? {}) ?? "", [editor, groupId]);
   const standing = useValue("group recipe", () => groupRecipeOf(editor.getShape(groupId)), [editor, groupId]);
-  const current = values?.model === undefined ? undefined : recipeFromTray({ medium, model: values.model, props: values.props });
+  const current = values?.model === undefined ? undefined : recipeFromTray({ medium, model: values.model, props: values.props, ...(values.provider === undefined ? {} : { provider: values.provider }) });
   const save = () => {
     if (current) setGroupRecipe(editor, groupId, current);
     onDone();
@@ -100,6 +112,26 @@ const RecipeLine = ({
   );
 };
 
+/** Spec 22: the provider switch, first in the prop row when both keys exist. */
+const ProviderSwitch = ({ provider, onChange }: { readonly provider: GenerationProvider; readonly onChange: (provider: GenerationProvider) => void }) => (
+  <ToggleGroup
+    role="radiogroup"
+    aria-label="Provider"
+    size="sm"
+    value={[provider]}
+    onValueChange={(next) => {
+      const [picked] = next as GenerationProvider[];
+      if (picked !== undefined) onChange(picked);
+    }}
+  >
+    {(["openrouter", "vercel"] as const).map((each) => (
+      <Toggle key={each} value={each} role="radio" aria-checked={each === provider}>
+        {GENERATION_PROVIDER_LABELS[each]}
+      </Toggle>
+    ))}
+  </ToggleGroup>
+);
+
 export interface TrayHandle {
   /** Sends, unless a send is already being acknowledged or something stops it. */
   send(): void;
@@ -125,11 +157,19 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
   const settings = useSettings();
   const medium = useValue("composer medium", () => composerState(editor).get().medium, [editor]);
   const definition = mediumDefinition(medium) ?? registeredMedia()[0]!;
-  const catalogue = useCatalogue(engine, definition.catalogue);
   const [stored, setStored] = useState<{ readonly medium: Medium; readonly value: LastUsed | null }>();
   // Another medium's values are never this one's, even for the render before the switch lands.
   const lastUsed = stored?.medium === medium ? stored.value : undefined;
   const [valuesByMedium, setValuesByMedium] = useState<Partial<Record<Medium, TrayValues>>>({});
+  // Spec 22: the provider each image and text tray runs on, and the values a provider switch carries over.
+  const [providerByMedium, setProviderByMedium] = useState<Partial<Record<Medium, { readonly provider: GenerationProvider; readonly switched?: string }>>>({});
+  const carried = useRef<Partial<Record<Medium, TrayValues>>>({});
+  const keys = { hasKey: settings?.hasKey ?? true, hasVercelKey: settings?.hasVercelKey ?? false };
+  const offered = generationProviders(keys, medium);
+  const routed = medium === "image" || medium === "text";
+  const chosen = routed ? providerByMedium[medium] : undefined;
+  const provider = chosen?.provider;
+  const catalogue = useCatalogue(engine, definition.catalogue, provider, !routed || chosen !== undefined);
   const [instruction, setInstruction] = useState(recipe?.recipe.instruction ?? "");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [sending, setSending] = useState(false);
@@ -149,7 +189,32 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
 
   // The one recipe group the selection held when the composer opened (spec 06): its recipe is the tray's start.
   const [standing] = useState(() => (recipe ? undefined : appliedRecipe(editor)?.recipe));
-  const audioOnly = settings !== undefined && !settings.hasKey && settings.hasElevenLabsKey;
+  const audioOnly = settings !== undefined && !settings.hasKey && !settings.hasVercelKey && settings.hasElevenLabsKey;
+
+  // The provider a tray starts on: the recipe's, the recipe group's, the last used, else OpenRouter (spec 22).
+  useEffect(() => {
+    if (!routed || providerByMedium[medium] || lastUsed === undefined || settings === undefined) return;
+    const wanted =
+      recipe && recipe.recipe.medium === medium
+        ? (recipe.recipe.provider ?? "openrouter")
+        : standing && standing.medium === medium
+          ? (standing.provider ?? "openrouter")
+          : lastUsed?.provider;
+    const answer = trayProvider({ medium, wanted, settings: keys });
+    setProviderByMedium((current) => ({ ...current, [medium]: answer }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routed, providerByMedium, medium, lastUsed, settings, recipe, standing]);
+
+  const switchProvider = (next: GenerationProvider) => {
+    if (!routed || next === provider) return;
+    const now = valuesByMedium[medium];
+    if (now) carried.current[medium] = now;
+    setProviderByMedium((current) => ({ ...current, [medium]: { provider: next } }));
+    setValuesByMedium((current) => {
+      const { [medium]: _dropped, ...rest } = current;
+      return rest;
+    });
+  };
   const [openedOn] = useState(() => composerState(editor).get().medium);
   useEffect(() => {
     if (audioOnly && !recipe && !standing && openedOn !== "audio" && mediumDefinition("audio")) setMedium(editor, "audio");
@@ -160,28 +225,43 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
 
   // The tray opens on the recipe's values in recipe mode or on a recipe group, else the last-used values, else the defaults.
   useEffect(() => {
-    if (valuesByMedium[medium] || !catalogue || lastUsed === undefined) return;
+    if (valuesByMedium[medium] || !catalogue || lastUsed === undefined || (routed && provider === undefined)) return;
+    const listed = (model: string | undefined) => (model !== undefined && catalogue.models.some((entry) => entry.id === model) ? model : undefined);
+    const routing = routed && provider !== undefined ? { provider } : {};
     let values: TrayValues;
-    if (recipe && recipe.recipe.medium === medium) {
+    const carry = carried.current[medium];
+    if (carry && routed && provider !== undefined) {
+      // A provider switch keeps the model the new catalogue lists, else that provider's last pick, else its default.
+      delete carried.current[medium];
+      const kept = listed(carry.model);
+      const model = kept ?? listed(storedModel(lastUsed, provider)) ?? catalogue.default;
+      const props = kept !== undefined ? carry.props : definition.reset(carry.props, definition.params(entryOf(model)));
+      values = { model, picked: kept !== undefined ? carry.picked : listed(storedModel(lastUsed, provider)) !== undefined, props, ...routing };
+    } else if (recipe && recipe.recipe.medium === medium && chosen?.switched !== undefined) {
+      const model = listed(recipe.recipe.model) ?? catalogue.default;
+      const recorded = definition.fromRecipe(recipe.recipe);
+      values = { model, picked: false, props: definition.keep(recorded, definition.params(entryOf(model), recorded)), ...routing };
+    } else if (recipe && recipe.recipe.medium === medium) {
       // The recorded model is not a pick: only the model dialog makes one.
       const recorded = definition.fromRecipe(recipe.recipe);
-      values = { model: recipe.recipe.model, picked: false, props: definition.keep(recorded, definition.params(entryOf(recipe.recipe.model), recorded)) };
+      values = { model: recipe.recipe.model, picked: false, props: definition.keep(recorded, definition.params(entryOf(recipe.recipe.model), recorded)), ...routing };
     } else if (standing && standing.medium === medium) {
-      const model = standing.model === "" ? catalogue.default : standing.model;
-      values = { model, picked: false, props: recipeProps(definition, standing, entryOf(model)) };
+      const model = standing.model === "" || (chosen?.switched !== undefined && listed(standing.model) === undefined) ? catalogue.default : standing.model;
+      values = { model, picked: false, props: recipeProps(definition, standing, entryOf(model)), ...routing };
     } else {
-      const stored = lastUsed?.model !== undefined && catalogue.models.some((entry) => entry.id === lastUsed.model) ? lastUsed.model : undefined;
+      const stored = listed(routed && provider !== undefined ? storedModel(lastUsed, provider) : lastUsed?.model);
       const model = stored ?? catalogue.default;
       const params = definition.params(entryOf(model), lastUsed?.props);
-      values = { model, picked: stored !== undefined, props: lastUsed ? definition.keep(lastUsed.props, params) : definition.defaults(params) };
+      values = { model, picked: stored !== undefined, props: lastUsed ? definition.keep(lastUsed.props, params) : definition.defaults(params), ...routing };
     }
     setValuesByMedium((current) => ({ ...current, [medium]: values }));
-  }, [valuesByMedium, medium, catalogue, lastUsed, recipe, standing, definition, entryOf]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valuesByMedium, medium, catalogue, lastUsed, recipe, standing, definition, entryOf, provider, routed]);
 
   const values = valuesByMedium[medium];
   const entry = entryOf(values?.model);
   const params = useMemo(() => definition.params(entry, values?.props), [definition, entry, values?.props]);
-  const pricing = usePricing(engine, definition, values?.model);
+  const pricing = usePricing(engine, definition, provider === "vercel" ? undefined : values?.model);
 
   const composition = useValue(
     "composition",
@@ -212,8 +292,25 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
     (recipe
       ? { kind: "recipe", recipe, instruction: resolved?.ok ? resolved.text.trim() : "", error: resolved?.ok === false ? resolved.error : undefined }
       : { kind: "selection", composition, selected: editor.getSelectedShapeIds(), shapes, instruction });
-  const status = definition.status({ source, hasKey: settings?.hasKey ?? true, hasElevenLabsKey: settings?.hasElevenLabsKey ?? true, props: values?.props, entry, model: values?.model });
-  const estimate = values ? definition.estimate({ pricing, props: values.props, source, entry }) : undefined;
+  const own = definition.status({
+    source,
+    hasKey: routed ? offered.length > 0 || settings === undefined : (settings?.hasKey ?? true),
+    hasElevenLabsKey: settings?.hasElevenLabsKey ?? true,
+    props: values?.props,
+    entry,
+    model: values?.model,
+  });
+  const gatewayVideos = provider === "vercel" && source.kind === "selection" && source.composition.references.some((slot) => slot.kind === "video");
+  const status = {
+    ...own,
+    warnings: [
+      ...(chosen?.switched === undefined ? [] : [chosen.switched]),
+      ...own.warnings,
+      ...(gatewayVideos ? ["The Vercel AI Gateway takes no video input, so the selected videos are not sent."] : []),
+    ],
+    ...(medium === "video" && settings?.hasKey === false && settings.hasVercelKey ? { keyMessage: GATEWAY_VIDEO_BLOCKER } : {}),
+  };
+  const estimate = values ? definition.estimate({ pricing, props: values.props, source, entry, provider }) : undefined;
   const blocked = status.blockers.length > 0 || status.needsKey === true || values === undefined;
 
   const onMentionMenu = useCallback((open: boolean) => onMenuOpen("mention", open), [onMenuOpen]);
@@ -351,12 +448,18 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
               {line}
             </StatusLine>
           ))}
-          {status.needsKey === true && <NoKeyLine />}
+          {status.needsKey === true && <NoKeyLine message={status.keyMessage} />}
           {failure !== undefined && <StatusLine kind="error">{failure}</StatusLine>}
         </StatusBand>
       )}
       <PropTray
-        lead={definition.Lead && values ? <definition.Lead props={values.props} onChange={(props) => setValues({ ...values, props })} onMenuOpen={onMenuOpen} /> : undefined}
+        lead={
+          routed && offered.length > 1 && provider !== undefined ? (
+            <ProviderSwitch provider={provider} onChange={switchProvider} />
+          ) : definition.Lead && values ? (
+            <definition.Lead props={values.props} onChange={(props) => setValues({ ...values, props })} onMenuOpen={onMenuOpen} />
+          ) : undefined
+        }
         model={values?.model}
         catalogueReady={catalogue !== undefined && catalogue.models.length > 0 && values !== undefined}
         params={params}
@@ -378,8 +481,8 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
           onMenuOpen("dialog", open);
         }}
         title={definition.dialogTitle}
-        browseUrl={definition.browseUrl}
-        browseLabel={definition.browseLabel ?? "Browse on OpenRouter"}
+        browseUrl={provider === "vercel" && routed ? GATEWAY_BROWSE[medium] : definition.browseUrl}
+        browseLabel={provider === "vercel" ? "Browse on Vercel" : (definition.browseLabel ?? "Browse on OpenRouter")}
         columns={definition.modelColumns ?? "openrouter"}
         models={catalogue?.models ?? []}
         current={values?.model}
@@ -387,7 +490,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
         onPick={(model) => {
           if (!values) return;
           const props = model === values.model ? values.props : definition.reset(values.props, definition.params(entryOf(model)));
-          setValues({ model, picked: true, props });
+          setValues({ model, picked: true, props, ...(values.provider === undefined ? {} : { provider: values.provider }) });
         }}
       />
       {definition.Overlay && <definition.Overlay project={project} onSent={onSent} onMenuOpen={onMenuOpen} />}

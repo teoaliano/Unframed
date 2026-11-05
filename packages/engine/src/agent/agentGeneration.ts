@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { TLRecord } from "@tldraw/tlschema";
-import type { ImagePricingAnswer, ImageRunRequest, ModelEntry, RecipeRef, ResultRecipe, RunEvent, TextRunRequest, VideoStartRequest } from "@unframed/contracts";
+import type { GenerationProvider, ImagePricingAnswer, ImageRunRequest, ModelEntry, RecipeRef, ResultRecipe, RunEvent, TextRunRequest, VideoStartRequest } from "@unframed/contracts";
 import {
   canvasShapesOf,
   composeVideoRequest,
@@ -9,6 +9,8 @@ import {
   ACTIVITY_STARTED,
   landedSummary,
   estimateImageRun,
+  GATEWAY_SERVES_MESSAGE,
+  gatewayListPrice,
   estimateVideo,
   formatEstimate,
   formatVideoEstimate,
@@ -63,8 +65,9 @@ export interface GenerationHost {
   /** Calls the handler once when the render job lands or ends without a clip (spec 04). */
   readonly onVideoFinished: (jobId: string, handler: FinishHandler) => () => void;
   /** The models of a kind, as the catalogue lists them. */
-  readonly models: (kind: Kind) => Promise<ReadonlyArray<ModelEntry>>;
-  readonly defaultModel: (kind: Kind) => Promise<string>;
+  readonly models: (kind: Kind, provider?: GenerationProvider) => Promise<ReadonlyArray<ModelEntry>>;
+  readonly defaultModel: (kind: Kind, provider?: GenerationProvider) => Promise<string>;
+  readonly providerKeys: () => Promise<{ readonly hasKey: boolean; readonly hasVercelKey: boolean }>;
   readonly pricing: (model: string) => Promise<ImagePricingAnswer>;
   /** Every run event of a project, until the returned function is called. */
   readonly track: (project: string, handler: (event: RunEvent) => void) => () => void;
@@ -96,7 +99,15 @@ export interface GenerateCall {
   readonly runs: number;
   readonly dryRun: boolean;
   readonly model?: string | undefined;
+  /** Spec 22: image and text only; the provider with a key when absent. */
+  readonly provider?: GenerationProvider | undefined;
 }
+
+/** A gateway image run's estimate: its flat list price per image, or `null`. */
+const gatewayEstimate = (entry: ModelEntry | undefined, runs: number): { each: number; total: number; label: string } | null => {
+  const each = gatewayListPrice({ entry });
+  return each === null ? null : { each, total: each * runs, label: `${formatEstimate(each)} each` };
+};
 
 const refusal = (message: string): ToolAnswer => ({ value: { error: message }, isError: true });
 
@@ -139,6 +150,10 @@ export class AgentGeneration {
   async generate(call: GenerateCall): Promise<ToolAnswer> {
     if (call.medium === "text" && Object.keys(call.params).length > 0) return refusal(TEXT_PARAMS_REFUSAL);
     if (call.medium === "video" && call.runs !== 1) return refusal(VIDEO_RUNS_REFUSAL);
+    if (call.medium === "video" && call.provider === "vercel") return refusal(GATEWAY_SERVES_MESSAGE);
+    const keys = await this.host.providerKeys();
+    const provider: GenerationProvider = call.medium === "video" ? "openrouter" : (call.provider ?? (keys.hasKey || !keys.hasVercelKey ? "openrouter" : "vercel"));
+    const gateway = provider === "vercel";
     const records = await this.host.records(call.project);
     const shapes = canvasShapesOf(records as unknown as CanvasRecord[], shapeBoxes(records as TLRecord[]));
     const sources = call.sources.map((id) => roomShapeId(id));
@@ -146,8 +161,8 @@ export class AgentGeneration {
     if (!plan.ok) return refusal(plan.message);
 
     const kind: Kind | undefined = call.medium === "text" ? undefined : call.medium;
-    const model = kind === undefined ? undefined : (call.model ?? (await this.host.defaultModel(kind)));
-    const entry = kind === undefined || model === undefined ? undefined : await this.entryFor(kind, model);
+    const model = kind === undefined ? undefined : (call.model ?? (await this.host.defaultModel(kind, provider)));
+    const entry = kind === undefined || model === undefined ? undefined : await this.entryFor(kind, model, provider);
     if (entry === "unknown") return refusal(`Unframed has no ${kind} model called "${model}".`);
     const known = entry;
 
@@ -162,13 +177,14 @@ export class AgentGeneration {
 
     const video = kind === "video" && model !== undefined ? this.videoRequest(plan, known, call, shapes, model) : undefined;
     if (video !== undefined && "error" in video) return refusal(video.error);
-    const estimate = kind === undefined || model === undefined ? null : await this.estimateFor(kind, model, plan, known, call, video);
+    const estimate = kind === undefined || model === undefined ? null : gateway ? gatewayEstimate(known, call.runs) : await this.estimateFor(kind, model, plan, known, call, video);
     const spend = call.connectionId === undefined ? undefined : this.host.book.spendOf(call.connectionId);
 
     if (call.dryRun) {
       return {
         value: {
           dryRun: true,
+          ...(call.medium === "video" ? {} : { provider }),
           prompt: plan.prompt,
           references: plan.references,
           estimate: estimate === null ? null : estimate.label,
@@ -199,8 +215,8 @@ export class AgentGeneration {
     try {
       started =
         model === undefined || kind === undefined
-          ? await this.host.runText(this.textRequest(call, plan, anchor))
-          : await this.host.runImage(this.imageRequest(call, plan, model, anchor));
+          ? await this.host.runText({ ...this.textRequest(call, plan, anchor), ...(gateway ? { provider } : {}) })
+          : await this.host.runImage({ ...this.imageRequest(call, plan, model, anchor), ...(gateway ? { provider } : {}) });
     } catch (error) {
       stopTracking();
       if (ledgerKey !== undefined && call.connectionId !== undefined) await this.host.book.release(call.connectionId, ledgerKey);
@@ -231,8 +247,8 @@ export class AgentGeneration {
   }
 
   /** The catalogue entry of a model, `undefined` when the catalogue does not list it, `"unknown"` when it lists others and not this one. */
-  private async entryFor(kind: Kind, model: string): Promise<ModelEntry | "unknown" | undefined> {
-    const models = await this.host.models(kind);
+  private async entryFor(kind: Kind, model: string, provider: GenerationProvider): Promise<ModelEntry | "unknown" | undefined> {
+    const models = await this.host.models(kind, provider);
     if (models.length === 0) return undefined;
     return models.find((candidate) => candidate.id === model) ?? "unknown";
   }
