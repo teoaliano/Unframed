@@ -182,6 +182,17 @@ describe("artifact snapshots", () => {
     expect(changes.values).toHaveLength(2);
   });
 
+  it("does not count the engine's own support files, which reach live frames by message, as changes", async () => {
+    const agent = await startSnapshotting("no-chrome");
+    await writeFile(join(agent.folder, "3-app.html"), `<!doctype html><script src="unframed-dials.js"></script><script src="unframed-tokens.js"></script><script src="unframed-edit.js"></script><script src="gsap.js"></script><script src="card.component.js"></script>`);
+    const changes = agent.rpc.subscribe("artifact.fileChanges", { project: "board" });
+    await seed(agent, [pageShape("pg1", "100", { file: "3-app.html" })]);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    for (const name of ["unframed-dials.js", "unframed-tokens.js", "unframed-edit.js", "gsap.js", "card.component.js"]) await writeFile(join(agent.folder, name), `/* ${Date.now()} */`);
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(changes.values).toEqual([]);
+  });
+
   it("stops following a project's files once it closes, and follows them in the project's new folder after the output folder changes", async () => {
     const agent = await startSnapshotting();
     await writeFile(join(agent.folder, "3-app.html"), `<!doctype html><script src="app.js"></script>`);

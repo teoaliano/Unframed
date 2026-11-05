@@ -302,11 +302,16 @@ describe("an artifact's scale on the canvas", () => {
     expect(artifactLayoutSize({ w: 960, h: 640, scale: 2 })).toEqual({ w: 480, h: 320 });
   });
 
-  it("never lays out wider or taller than 4096: a smaller scale reads as the smallest that keeps it so", () => {
+  it("never lets a scale below 100 % lay out wider or taller than 4096: it reads as the smallest that keeps it so", () => {
     expect(ARTIFACT_LAYOUT_MAX).toBe(4096);
     expect(artifactScale({ w: 480, h: 320, scale: 0.1 })).toBeCloseTo(480 / 4096, 10);
     expect(artifactLayoutSize({ w: 480, h: 320, scale: 0.1 })).toEqual({ w: 4096, h: expect.closeTo(320 * (4096 / 480), 6) });
-    expect(artifactLayoutSize({ w: 6000, h: 400 })).toEqual({ w: 4096, h: expect.closeTo(400 * (4096 / 6000), 6) });
+    expect(artifactLayoutSize({ w: 3000, h: 400, scale: 0.5 })).toEqual({ w: 4096, h: expect.closeTo(400 * (4096 / 3000), 6) });
+  });
+
+  it("leaves a shape larger than 4096 on the canvas at 100 % laid out at its own size, as before scales existed", () => {
+    expect(artifactLayoutSize({ w: 480, h: 6000 })).toEqual({ w: 480, h: 6000 });
+    expect(artifactLayoutSize({ w: 480, h: 6000, scale: 0.5 })).toEqual({ w: 480, h: 6000 });
   });
 
   it("rescales by keeping the layout size, writing the new size on the canvas and leaving the prop out at 100 %", () => {

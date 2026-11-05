@@ -1,4 +1,4 @@
-import { ARTIFACT_SCALE_MAX, isArtifactScale } from "@unframed/contracts";
+import { isArtifactScale } from "@unframed/contracts";
 import { projectSlug } from "../slug.ts";
 import { ADD_PARAMETER_TEMPLATE } from "./prompts.ts";
 
@@ -179,7 +179,7 @@ interface Scaled {
 }
 
 export const cappedArtifactScale = (props: Scaled): number =>
-  Math.min(ARTIFACT_SCALE_MAX, Math.max(isArtifactScale(props.scale) ? props.scale : 1, props.w / ARTIFACT_LAYOUT_MAX, props.h / ARTIFACT_LAYOUT_MAX));
+  Math.max(isArtifactScale(props.scale) ? props.scale : 1, Math.min(1, Math.max(props.w, props.h) / ARTIFACT_LAYOUT_MAX));
 
 export const artifactScale = (props: Scaled): number => cappedArtifactScale(props);
 

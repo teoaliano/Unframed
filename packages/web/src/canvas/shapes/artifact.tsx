@@ -1,7 +1,7 @@
 import { artifactScaleProp, type ArtifactShapeProps } from "@unframed/contracts";
 import { artifactScale, artifactTitle, readRef, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
 import { AppWindow, Clapperboard, Component } from "lucide-react";
-import { useCallback, useEffect, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape, type TLShapeId } from "tldraw";
 import { ArtifactFrame, type ArtifactFrameProps, type EditMessage } from "../../artifacts/ArtifactFrame.tsx";
 import { DropOutline, onFrameEdit } from "../../artifacts/imageDrop.tsx";
@@ -82,6 +82,14 @@ const Scaled = ({ scale, layout, children }: { readonly scale: number; readonly 
   </div>
 );
 
+const useFrameVersion = (file: string, live: boolean, changedAt: number | undefined): number => {
+  const state = useRef({ file, live, since: Date.now(), version: 0 });
+  const current = state.current;
+  if (current.file !== file || current.live !== live) state.current = { file, live, since: Date.now(), version: current.version + 1 };
+  else if (changedAt !== undefined && changedAt > current.since) state.current = { ...current, since: changedAt, version: current.version + 1 };
+  return state.current.version;
+};
+
 const CanvasFrame = ({ shapeId, ...props }: Omit<ArtifactFrameProps, "onAnnounce" | "onReady"> & { readonly shapeId: string }) => {
   const editor = useEditor();
   useEffect(() => () => forgetFrame(editor, shapeId), [editor, shapeId]);
@@ -127,6 +135,7 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
   const title = artifactTitle(props);
   const name = nameOf(shape);
   const changedAt = useValue("artifact file change", () => (live ? fileChangesOf(project).get().get(props.file) : undefined), [project, props.file, live]);
+  const version = useFrameVersion(props.file, live, changedAt);
   const scale = kind === "component" ? 1 : artifactScale(props);
   const layout = { w: props.w / scale, h: props.h / scale };
   const updates = useValue("component updates", () => updateTagsOf(editor, project, props.file).join(","), [editor, project, props.file]);
@@ -136,7 +145,7 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
         <ShapeLabel shapeId={shape.id} kind={kind} name={readRef(shape)} width={props.w} text={name !== undefined ? `@${name}` : title} end={kind !== "component" && updates !== "" ? <UpdatesBadge shapeId={shape.id} /> : undefined} />
         {live && port !== undefined ? (
           <Scaled scale={scale} layout={layout}>
-            <CanvasFrame key={`${props.file} ${changedAt ?? ""}`} shapeId={shape.id} project={project} kind={kind} file={props.file} previewPort={port} dials={props.dials} kit={kit} mode={props.mode} interactive={interactive} lazy />
+            <CanvasFrame key={`${props.file} ${version}`} shapeId={shape.id} project={project} kind={kind} file={props.file} previewPort={port} dials={props.dials} kit={kit} mode={props.mode} interactive={interactive} lazy />
           </Scaled>
         ) : (
           <Still shape={shape} title={title} />

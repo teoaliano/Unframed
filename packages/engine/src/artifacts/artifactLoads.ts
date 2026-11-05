@@ -1,6 +1,8 @@
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { artifactReferences } from "@unframed/domain";
+import { TOKENS_FILE } from "../kits/tokensFile.ts";
+import { isEngineFile } from "./artifactStore.ts";
 
 export const newestChange = async (folder: string, names: ReadonlyArray<string>): Promise<number> => {
   let newest = -Infinity;
@@ -23,7 +25,7 @@ export class ArtifactLoads {
   }
 
   async touched(folder: string, changed: ReadonlyArray<string>, files: Iterable<string>): Promise<Map<string, number>> {
-    const names = new Set(changed);
+    const names = new Set(changed.filter((name) => name !== TOKENS_FILE && !isEngineFile(name)));
     const found = new Map<string, number>();
     for (const file of new Set(files)) {
       const own = names.has(file);
