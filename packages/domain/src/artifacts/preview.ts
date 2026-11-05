@@ -4,6 +4,8 @@
  * selector the engine's browser understands.
  */
 
+import { ARTIFACT_LAYOUT_MAX } from "./artifactRules.ts";
+
 /** t3code's named device sizes, portrait, in CSS pixels. */
 export const PREVIEW_PRESETS: Readonly<Record<string, { readonly width: number; readonly height: number }>> = {
   "iphone-se": { width: 375, height: 667 },
@@ -33,7 +35,7 @@ export type PreviewViewport =
   | { readonly mode: "freeform"; readonly width: number; readonly height: number }
   | { readonly mode: "preset"; readonly preset: string; readonly orientation: "portrait" | "landscape"; readonly width: number; readonly height: number };
 
-const MAX_SIDE = 4096;
+const MAX_SIDE = ARTIFACT_LAYOUT_MAX;
 
 const side = (value: unknown): number | undefined =>
   typeof value === "number" && Number.isInteger(value) && value > 0 && value <= MAX_SIDE ? value : undefined;

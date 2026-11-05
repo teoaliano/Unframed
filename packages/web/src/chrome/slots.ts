@@ -20,6 +20,7 @@ interface ChromeSlots {
   renderButton?: ComponentType<{ shapeId: TLShapeId }>;
   parametersButton?: ComponentType<{ shapeId: TLShapeId }>;
   kitModeButton?: ComponentType<{ shapeId: TLShapeId }>;
+  scaleButton?: ComponentType<{ shapeId: TLShapeId }>;
   leftCardDocked?: boolean;
   artifactEditorOpen?: boolean;
 }

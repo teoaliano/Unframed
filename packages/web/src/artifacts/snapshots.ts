@@ -34,3 +34,26 @@ export const stillOf = (project: string, shapeId: string, current: string | unde
 
 export const snapshotUrl = (project: string, snapshot: ArtifactSnapshot): string =>
   `/api/file/${encodeURIComponent(project)}/${encodeURIComponent(snapshot.file)}?snapshot=${Math.round(snapshot.w)}x${Math.round(snapshot.h)}&mode=${encodeURIComponent(snapshot.mode ?? "none")}&kit=${snapshot.kit ?? "none"}&v=${snapshot.at}`;
+
+const changeStores = new Map<string, Atom<ReadonlyMap<string, number>>>();
+
+export const fileChangesOf = (project: string): Atom<ReadonlyMap<string, number>> => {
+  let found = changeStores.get(project);
+  if (!found) {
+    found = atom(`file changes ${project}`, new Map());
+    changeStores.set(project, found);
+  }
+  return found;
+};
+
+export const watchFileChanges = (engine: EngineConnection, project: string): (() => void) => {
+  const store = fileChangesOf(project);
+  const stop = engine.subscribe("artifact.fileChanges", { project }, (change) => {
+    if ((store.get().get(change.file) ?? -Infinity) >= change.stamp) return;
+    store.set(new Map(store.get()).set(change.file, change.stamp));
+  });
+  return () => {
+    stop();
+    changeStores.delete(project);
+  };
+};

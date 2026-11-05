@@ -3,6 +3,13 @@ import {
   addParameterInstruction,
   applyParametersInstruction,
   artifactFileName,
+  artifactLayoutSize,
+  artifactReferences,
+  artifactScale,
+  ARTIFACT_SCALES,
+  scaledArtifactProps,
+  cappedArtifactScale,
+  ARTIFACT_LAYOUT_MAX,
   artifactTitle,
   artifactUrl,
   BRIDGE_TAG,
@@ -269,5 +276,68 @@ describe("the tokens tag (spec 19)", () => {
   it("is added on its own to a document that has the other tags", () => {
     const html = '<head><script src="./unframed-dials.js"></script></head>';
     expect(injectTags(html, "page")).toBe(`<head>${TOKENS}\n<script src="./unframed-dials.js"></script></head>`);
+  });
+});
+
+describe("the files an artifact loads", () => {
+  it("names every local file a src or href points at, without its query, hash or ./, once each", () => {
+    const html = `<link rel="stylesheet" href="./app.css?v=3"><script src="app.js?v=30"></script><img src='hero%20one.png#x'><script src="app.js"></script>`;
+    expect(artifactReferences(html)).toEqual(["app.css", "app.js", "hero one.png"]);
+  });
+
+  it("leaves out a path into a folder, which the preview origin never serves", () => {
+    expect(artifactReferences(`<img src="img/hero.png"><script src="./lib/app.js"></script>`)).toEqual([]);
+  });
+
+  it("names a module a script imports, and a stylesheet's import or url", () => {
+    const html = `<script type="module">import { a } from "./lib.js"; import "./side.js";</script><style>@import "theme.css"; body { background: url('./bg.png') }</style>`;
+    expect(artifactReferences(html)).toEqual(["lib.js", "side.js", "theme.css", "bg.png"]);
+  });
+
+  it("leaves out absolute, rooted, data and parent paths and anchors", () => {
+    const html = `<a href="#top"></a><script src="https://cdn.example/x.js"></script><img src="data:image/png;base64,AA"><script src="/abs.js"></script><script src="../up.js"></script><a href="mailto:a@b.c"></a><script src="//cdn/x.js"></script>`;
+    expect(artifactReferences(html)).toEqual([]);
+  });
+});
+
+describe("an artifact's scale on the canvas", () => {
+  it("reads 1 for a shape without one, or with one outside 10 % to 400 %", () => {
+    expect(artifactScale({ w: 480, h: 320 })).toBe(1);
+    expect(artifactScale({ w: 480, h: 320, scale: 0.5 })).toBe(0.5);
+    for (const scale of [0, -1, 0.05, 5, Number.NaN, "2"]) expect(artifactScale({ w: 480, h: 320, scale })).toBe(1);
+  });
+
+  it("offers 25 % to 200 %", () => {
+    expect(ARTIFACT_SCALES).toEqual([0.25, 0.5, 0.75, 1, 1.5, 2]);
+  });
+
+  it("lays the artifact out at its size on the canvas divided by its scale", () => {
+    expect(artifactLayoutSize({ w: 720, h: 450, scale: 0.5 })).toEqual({ w: 1440, h: 900 });
+    expect(artifactLayoutSize({ w: 480, h: 320 })).toEqual({ w: 480, h: 320 });
+    expect(artifactLayoutSize({ w: 960, h: 640, scale: 2 })).toEqual({ w: 480, h: 320 });
+  });
+
+  it("never lets a scale below 100 % lay out wider or taller than 4096: it reads as the smallest that keeps it so", () => {
+    expect(ARTIFACT_LAYOUT_MAX).toBe(4096);
+    expect(artifactScale({ w: 480, h: 320, scale: 0.1 })).toBeCloseTo(480 / 4096, 10);
+    expect(artifactLayoutSize({ w: 480, h: 320, scale: 0.1 })).toEqual({ w: 4096, h: expect.closeTo(320 * (4096 / 480), 6) });
+    expect(artifactLayoutSize({ w: 3000, h: 400, scale: 0.5 })).toEqual({ w: 4096, h: expect.closeTo(400 * (4096 / 3000), 6) });
+  });
+
+  it("leaves a shape larger than 4096 on the canvas at 100 % laid out at its own size, as before scales existed", () => {
+    expect(artifactLayoutSize({ w: 480, h: 6000 })).toEqual({ w: 480, h: 6000 });
+    expect(artifactLayoutSize({ w: 480, h: 6000, scale: 0.5 })).toEqual({ w: 480, h: 6000 });
+  });
+
+  it("rescales by keeping the layout size, writing the new size on the canvas and leaving the prop out at 100 %", () => {
+    const base = { file: "a.html", title: "A" };
+    expect(scaledArtifactProps({ ...base, w: 1440, h: 900 }, 0.25)).toEqual({ ...base, w: 360, h: 225, scale: 0.25 });
+    expect(scaledArtifactProps({ ...base, w: 360, h: 225, scale: 0.25 }, 1.5)).toEqual({ ...base, w: 2160, h: 1350, scale: 1.5 });
+    expect(scaledArtifactProps({ ...base, w: 720, h: 450, scale: 0.5 }, 1)).toEqual({ ...base, w: 1440, h: 900 });
+  });
+
+  it("raises a scale written with a size on the canvas so the layout stays within 4096", () => {
+    expect(cappedArtifactScale({ w: 480, h: 320, scale: 0.1 })).toBeCloseTo(480 / 4096, 10);
+    expect(cappedArtifactScale({ w: 480, h: 320, scale: 0.5 })).toBe(0.5);
   });
 });
