@@ -126,6 +126,13 @@ describe("the stdio shim", () => {
     expect(added.id).toBe(2);
     expect(JSON.parse(added.result.content.at(-1).text)).toMatchObject({ fileName: "fox.png", kind: "image" });
 
+    shim.send({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "file_add", arguments: { project: PROJECT, path: "fox.png" } } });
+    const again = await shim.next();
+    shim.send({ jsonrpc: "2.0", id: again.id, error: { code: -32603, message: "roots are not available" } });
+    const erred = await shim.next();
+    expect(erred.id).toBe(3);
+    expect(JSON.parse(erred.result.content.at(-1).text).error).toMatch(/^Your MCP client reports no working folder/);
+
     const plain = new Shim(engine.dataDir, made.token as string);
     await handshake(plain);
     const refused = await plain.request(2, "tools/call", { name: "file_add", arguments: { project: PROJECT, path: join(root, "fox.png") } });

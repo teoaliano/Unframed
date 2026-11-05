@@ -150,15 +150,18 @@ export const buildPreamble = (parts: {
     .filter((part): part is string => part !== undefined && part !== "")
     .join("\n\n");
 
-/**
- * A message that is a provider command (t3code's rule): no attachments and text that starts with
- * `/`. It goes to the provider as typed, with no preamble, so the provider runs it as its own
- * command (`/compact`, or a command its initialization listed) instead of reading it as a prompt.
- */
-export const isProviderCommand = (text: string, attachments: number): boolean => attachments === 0 && /^\/[A-Za-z0-9]/.test(text.trimStart());
+const COMPACT_COMMAND = /^\/compact(?:\s|$)/i;
 
-/** Whether a provider command is the compaction command. */
-export const isCompactCommand = (text: string): boolean => text.trim().toLowerCase() === "/compact";
+export const isCompactCommand = (text: string): boolean => COMPACT_COMMAND.test(text.trim());
+
+export const isProviderCommand = (text: string, attachments: number, commands: ReadonlyArray<string> | undefined): boolean => {
+  if (attachments !== 0) return false;
+  const trimmed = text.trimStart();
+  if (commands === undefined) return /^\/[A-Za-z0-9]/.test(trimmed);
+  if (isCompactCommand(trimmed)) return true;
+  const name = /^\/(\S+)/.exec(trimmed)?.[1]?.toLowerCase();
+  return name !== undefined && commands.some((command) => command.toLowerCase() === name);
+};
 
 export const modelMessage = (preamble: string, text: string): string => (preamble === "" ? text : text === "" ? preamble : `${preamble}\n\n${text}`);
 

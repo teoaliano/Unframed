@@ -51,9 +51,9 @@ import { scriptedAdapter } from "./adapters/scripted.ts";
 import { AttachmentStore } from "./attachmentStore.ts";
 import { KitTools } from "../kits/kitTools.ts";
 import { CanvasTools } from "./canvasTools.ts";
-import { OutsideChats } from "./outsideChats.ts";
+import { latestTurnId, OutsideChats } from "./outsideChats.ts";
 import { outsideSelectionTools } from "./selectionTools.ts";
-import { outsideAgentTools } from "./outsideTools.ts";
+import { outsideAgentTools, type OutsideToolDeps } from "./outsideTools.ts";
 import { AgentGeneration } from "./agentGeneration.ts";
 import { generateArguments, generateTool } from "./generateTool.ts";
 import type { ConnectionBook } from "../agentConnections/book.ts";
@@ -103,6 +103,8 @@ interface AgentRuntimeDeps {
   };
   readonly runEnvironment: (provider: AgentProvider) => Promise<RunEnvironment>;
   readonly defaultModel: (provider: AgentProvider) => Promise<string | undefined>;
+  readonly providerCommands?: (provider: AgentProvider) => Promise<ReadonlyArray<string> | undefined>;
+  readonly saveMedia: OutsideToolDeps["save"];
   readonly realAdapter: (provider: AgentProvider, context: AdapterContext) => ProviderAdapter;
   readonly extraTools?: (context: AgentToolContext) => ReadonlyArray<McpTool>;
   readonly onSessionClosed?: (project: string, chatId: string) => void;
@@ -242,7 +244,7 @@ export class AgentRuntime {
     });
     this.outsideTools = [
       ...outsideSelectionTools({ hub: deps.selection, read: (project) => deps.rooms.read(project) }),
-      ...outsideAgentTools({ note: (binding, text) => this.outsideNote(binding, text), folder: async (project) => (await this.project(project)).folder }),
+      ...outsideAgentTools({ note: (binding, text) => this.outsideNote(binding, text), save: (project, input) => deps.saveMedia(project, input) }),
     ];
     this.outside = new OutsideChats(
       {
@@ -268,10 +270,9 @@ export class AgentRuntime {
     });
   }
 
-  /** An outside agent's `chat_note`: an assistant message in its chat, under the turn its call opened or joined (spec 14). */
   private async outsideNote(binding: McpBinding, text: string): Promise<void> {
     const agent = await this.project(binding.project);
-    const turnId = agent.engine.chat(binding.chatId)?.latestTurn?.turnId ?? null;
+    const turnId = latestTurnId(agent.engine, binding.chatId);
     const messageId = `assistant:note:${randomUUID()}`;
     await this.internal(agent, binding.chatId, { type: "thread.message.assistant.delta", messageId, turnId, delta: text });
     await this.internal(agent, binding.chatId, { type: "thread.message.assistant.complete", messageId, turnId });
@@ -580,8 +581,9 @@ export class AgentRuntime {
     if (!chat) return;
     const message = chat.messages.find((known) => known.id === requested.messageId);
     const steer = requested.steer === true;
-    const command = isProviderCommand(message?.text ?? "", message?.attachments?.length ?? 0);
     const selection = await this.resolveModel((requested.modelSelection as ModelSelection | undefined) ?? chat.modelSelection);
+    const known = selection.provider === "outside" ? undefined : await this.deps.providerCommands?.(selection.provider).catch(() => undefined);
+    const command = isProviderCommand(message?.text ?? "", message?.attachments?.length ?? 0, known);
     if (!steer) {
       this.activeTurns.set(chatId, {
         turnId: String(requested.turnId),

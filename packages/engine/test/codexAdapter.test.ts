@@ -35,7 +35,7 @@ describe("Codex runs a chat", () => {
     expect(chat.activities.find((activity) => activity.kind === "session.configured")?.payload).toMatchObject({ tools: UNFRAMED_TOOLS.map((name) => `mcp__unframed__${name}`) });
 
     const log = await fakeCodexMessages(messages);
-    const start = log.find((entry) => entry.start === true);
+    const start = log.find((entry) => entry.start === true && entry.token !== null);
     expect(start.argv).toEqual(["app-server", "-c", `mcp_servers.unframed.url=http://127.0.0.1:${agent.engine.port}/mcp`, "-c", 'mcp_servers.unframed.bearer_token_env_var="UNFRAMED_MCP_TOKEN"', "-c", "mcp_servers.unframed-app.enabled=false"]);
     expect(start.token).toMatch(/^[0-9a-f]{64}$/);
     expect(start.cwd).toBe(realpathSync(agent.folder));
@@ -86,7 +86,7 @@ describe("Codex runs a chat", () => {
     await agent.send(chatId, "crash now");
     const chat = await agent.settled(chatId, 1);
     expect(chat.latestTurn?.state).toBe("error");
-    const { token, argv } = (await fakeCodexMessages(messages)).find((entry) => entry.start === true);
+    const { token, argv } = (await fakeCodexMessages(messages)).find((entry) => entry.start === true && entry.token !== null);
     const url = String(argv[2]).slice("mcp_servers.unframed.url=".length);
     const listed = await agent.engine.request(new URL(url).pathname, {
       method: "POST",
@@ -133,7 +133,7 @@ describe("Codex runs a chat", () => {
     const request = openRequests(parked, "approval")[0]!.payload as { requestId: string };
     await agent.dispatch({ type: "thread.approval.respond", threadId: chatId, requestId: request.requestId, decision: "accept" });
     await agent.settled(chatId, 1);
-    await agent.send(chatId, "/compact");
+    await agent.send(chatId, "/compact keep the API notes");
     const chat = await agent.settled(chatId, 2);
     expect(chat.latestTurn?.state).toBe("completed");
     const sent = (await fakeCodexMessages(messages)).flatMap((entry) => (entry.message ? [entry.message] : []));
@@ -142,5 +142,21 @@ describe("Codex runs a chat", () => {
     expect(sent.filter((message) => message.method === "turn/start")).toHaveLength(1);
     const compaction = chat.activities.filter((activity) => (activity.payload as { itemType?: string }).itemType === "context_compaction");
     expect(compaction.map((activity) => activity.kind)).toEqual(["tool.started", "tool.completed"]);
+  });
+
+  it("fails the compaction row and the turn when Codex refuses thread/compact/start", async () => {
+    const dir = await makeTempDir("unframed-codex-");
+    const codex = await fakeCodexAppServer(join(dir, "bin"));
+    const shell = await fakeShell(join(dir, "shell"));
+    const agent = await startAgentEngine({
+      dotenv: `CODEX_PATH=${codex}\nCLAUDE_PATH=${join(dir, "none")}\n`,
+      env: { UNFRAMED_TEST_AGENT_SCRIPT: undefined, SHELL: shell, FAKE_SHELL_PATH: "", FAKE_CODEX_MESSAGES: join(dir, "messages.log"), FAKE_CODEX_THREADS: join(dir, "threads.log"), FAKE_CODEX_COMPACT_FAIL: "thread has no turns to compact" },
+    });
+    const chatId = await agent.createChat({ modelSelection: { provider: "codex", model: "gpt-6", traits: {} } });
+    await agent.send(chatId, "/compact");
+    const chat = await agent.settled(chatId, 1);
+    expect(chat.latestTurn?.state).toBe("error");
+    const rows = chat.activities.filter((activity) => (activity.payload as { itemType?: string }).itemType === "context_compaction");
+    expect(rows.at(-1)).toMatchObject({ kind: "tool.completed", payload: { status: "failed", detail: "thread has no turns to compact" } });
   });
 });

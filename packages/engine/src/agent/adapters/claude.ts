@@ -8,6 +8,7 @@ import {
   claudePermissionMode,
   claudeTurnPermissionMode,
   initialClaudeState,
+  isCompactCommand,
   mapClaudeMessage,
   modelMessage,
   UNFRAMED_TOOL_PREFIX,
@@ -80,6 +81,7 @@ interface ClaudeSession {
   model: string;
   boundaries: string[];
   stopped: boolean;
+  compacting: boolean;
 }
 
 const IMAGE_TYPES = new Set(["image/gif", "image/jpeg", "image/png", "image/webp"]);
@@ -128,6 +130,7 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
         const mapped = mapClaudeMessage(session.state, message, {
           turnId: session.turnId,
           registeredTools: context.registeredTools(),
+          compacting: session.compacting,
         });
         session.state = mapped.state;
         for (const event of mapped.events) {
@@ -135,6 +138,7 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
             if (session.state.lastAssistantUuid !== undefined) session.boundaries.push(session.state.lastAssistantUuid);
             emit(session.chatId, { type: "thread.started", payload: { providerThreadId: session.state.sessionId ?? "", resumeCursor: cursor(session) } });
             session.turnId = undefined;
+            session.compacting = false;
           }
           emit(session.chatId, event.type === "session.configured" ? { ...event, payload: { ...event.payload, grantedDirectories: [session.attachmentsDir] } } : event);
         }
@@ -253,6 +257,7 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
         model: input.modelSelection.model,
         boundaries: [...(stored.boundaries ?? [])],
         stopped: false,
+        compacting: false,
       };
       sessions.set(input.chatId, session);
       void run(session);
@@ -264,6 +269,7 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
       if (!session) throw new Error("The Claude session is not running.");
       if (!input.steer) {
         session.turnId = input.turnId;
+        session.compacting = input.command === true && isCompactCommand(input.text);
         session.interactionMode = input.interactionMode;
         if (input.modelSelection.model !== session.model) {
           await session.query.setModel(input.modelSelection.model === "" ? undefined : input.modelSelection.model);

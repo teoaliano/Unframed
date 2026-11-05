@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { MediaStore } from "../media/mediaStore.ts";
 import type { ClientChatCommand, ShellStreamItem, ThreadSearchMatch, ThreadStreamItem, TurnDiff } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
 import { defaultModel, projectSlug, type ClientCommand } from "@unframed/domain";
@@ -102,6 +103,7 @@ export const agentsLayer = Layer.effect(
     const catalogue = yield* Catalogue;
     const videoCatalogue = yield* VideoCatalogue;
     const renderJobs = yield* RenderJobs;
+    const media = yield* MediaStore;
     const runtime = new AgentRuntime({
       dataDir: config.dataDir,
       selection,
@@ -138,6 +140,8 @@ export const agentsLayer = Layer.effect(
       },
       runEnvironment: (provider) => run(detection.runEnvironment(provider)),
       defaultModel: async (provider) => defaultModel((await run(detection.statuses({})))[provider].models ?? []),
+      saveMedia: (project, input) => media.save(project, input),
+      providerCommands: async (provider) => (await run(detection.statuses({})))[provider].commands?.map((command) => command.name),
       realAdapter,
       extraTools: (tools) => [...new ArtifactTools(tools, () => previewPort).tools(), ...new ComponentTools(tools, () => previewPort).tools(), ...preview.tools()],
       onSessionClosed: (_project, chatId) => void preview.closeChat(chatId),

@@ -90,12 +90,10 @@ const result = (id: Message["id"], value: unknown) => ({ jsonrpc: "2.0", id: id 
 const toolError = (id: Message["id"], text: string) => result(id, { content: [{ type: "text", text: JSON.stringify({ error: text }) }], isError: true });
 
 let sessionId: string | undefined;
-/** Whether the client said in `initialize` that it answers `roots/list` (MCP roots). */
 let clientHasRoots = false;
 let rootsAsked = 0;
 const clientAnswers = new Map<string, (answer: Message & { result?: unknown }) => void>();
 
-/** The client's roots, asked over stdio: the engine cannot ask itself, since it answers plain JSON with no stream back. */
 const askRoots = (): Promise<string[] | undefined> => {
   if (!clientHasRoots) return Promise.resolve(undefined);
   const id = `unframed-roots-${++rootsAsked}`;

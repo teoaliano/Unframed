@@ -142,14 +142,28 @@ describe("an answer's files", () => {
 });
 
 describe("provider commands", () => {
-  it("is a message with no attachments whose text starts with a slash and a name", () => {
-    expect(isProviderCommand("/compact", 0)).toBe(true);
-    expect(isProviderCommand("  /review the diff", 0)).toBe(true);
-    expect(isProviderCommand("/compact", 1)).toBe(false);
-    expect(isProviderCommand("compact", 0)).toBe(false);
-    expect(isProviderCommand("/ nothing", 0)).toBe(false);
+  it("is a message with no attachments whose first word names one of the provider's commands", () => {
+    const commands = ["compact", "review"];
+    expect(isProviderCommand("/compact", 0, commands)).toBe(true);
+    expect(isProviderCommand("  /Review the diff", 0, commands)).toBe(true);
+    expect(isProviderCommand("/compact", 1, commands)).toBe(false);
+    expect(isProviderCommand("/Users/me/x.png explain", 0, commands)).toBe(false);
+    expect(isProviderCommand("/compactly", 0, commands)).toBe(false);
+    expect(isProviderCommand("compact", 0, commands)).toBe(false);
+  });
+
+  it("counts /compact as a command even when the provider's list leaves it out", () => {
+    expect(isProviderCommand("/compact keep the API notes", 0, [])).toBe(true);
+  });
+
+  it("falls back to t3code's rule, a slash and a letter or digit, when the provider's list is not known", () => {
+    expect(isProviderCommand("/Users/me/x.png explain", 0, undefined)).toBe(true);
+    expect(isProviderCommand("/ nothing", 0, undefined)).toBe(false);
+  });
+
+  it("matches compaction as the composer does: /compact alone or followed by instructions", () => {
     expect(isCompactCommand(" /Compact ")).toBe(true);
-    expect(isCompactCommand("/compact now")).toBe(false);
+    expect(isCompactCommand("/compact keep the API notes")).toBe(true);
+    expect(isCompactCommand("/compactly")).toBe(false);
   });
 });
-

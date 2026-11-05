@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdir, readdir, readFile, symlink, truncate, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -8,7 +9,6 @@ import { chatsIn, outsideLink as outside } from "./outsideCalls.ts";
 
 const PNG = Buffer.from("89504e470d0a1a0a0000000d4948445200000002000000020802000000fdd49a730000000c4944415408d763f8cfc0f01f0005fe02fe0ddea4070000000049454e44ae426082", "hex");
 
-/** An agent's working folder with a picture in it, and a folder beside it the agent must not reach. */
 const workspace = async () => {
   const dir = await makeTempDir("unframed-agent-root-");
   const root = join(dir, "repo");
@@ -34,7 +34,8 @@ describe("outside agents add a file from their machine (file_add)", () => {
     expect(await readFile(join(agent.folder, file))).toEqual(PNG);
     const [summary] = await chatsIn(agent);
     const sidecar = JSON.parse(await readFile(join(agent.folder, file.replace(/\.png$/, ".json")), "utf8"));
-    expect(sidecar).toMatchObject({ source: "outside-agent", fileName: "fox.png", mime: "image/png", bytes: PNG.length, chat: summary!.id });
+    expect(sidecar).toMatchObject({ source: "outside-agent", fileName: "fox.png", mime: "image/png", bytes: PNG.length, of: "fox.png", chat: summary!.id });
+    expect(JSON.stringify(sidecar)).not.toContain(root);
 
     const placed = await link.call(session, "canvas_write", { project: PROJECT, ops: [{ type: "create", id: "new:fox", kind: "image", x: 0, y: 0, props: { file } }] });
     expect(placed.isError).toBe(false);
@@ -90,5 +91,39 @@ describe("outside agents add a file from their machine (file_add)", () => {
     expect(await refusal("notes.txt")).toBe("notes.txt is not a file the board can show. file_add takes PNG, JPEG, GIF, WebP and AVIF images and MP4, MOV and WebM videos.");
     expect(await refusal("huge.mp4")).toBe("huge.mp4 is 26.0 MB; file_add copies files up to 25 MB.");
     expect(await refusal("")).toBe("Name the file to add with path.");
+  });
+
+  it("reads a relative path from the first root only: when it does not exist, relative paths are refused and the second root is never used", async () => {
+    const agent = await startAgentEngine();
+    const { root } = await workspace();
+    const gone = join(root, "..", "gone");
+    const roots = [pathToFileURL(gone).href, pathToFileURL(root).href];
+    const link = await outside(agent);
+    const session = await link.open();
+    const relative = await link.call(session, "file_add", { project: PROJECT, path: "art/fox.png" }, roots);
+    expect(relative.value.error).toBe(`Your first working folder (${gone}) does not exist, so a relative path has nothing to start from. Give the file's absolute path inside one of your working folders.`);
+    const absolute = await link.call(session, "file_add", { project: PROJECT, path: join(root, "art", "fox.png") }, roots);
+    expect(absolute.isError).toBe(false);
+  });
+
+  it("says there is no file when a folder on the way is missing, and names the roots as the client reported them", async () => {
+    const agent = await startAgentEngine();
+    const { root, elsewhere, roots } = await workspace();
+    const link = await outside(agent);
+    const session = await link.open();
+    const missing = await link.call(session, "file_add", { project: PROJECT, path: join(root, "no-such-folder", "fox.png") }, roots);
+    expect(missing.value.error).toBe(`There is no file at ${join(root, "no-such-folder", "fox.png")}.`);
+    const refused = await link.call(session, "file_add", { project: PROJECT, path: join(elsewhere, "secret.png") }, roots);
+    expect(refused.value.error).toBe(`${join(elsewhere, "secret.png")} is outside your working folder (${root}). Unframed copies only files inside the folders your MCP client reports.`);
+  });
+
+  it("refuses a named pipe or device without reading it, as not a file", async () => {
+    const agent = await startAgentEngine();
+    const { root, roots } = await workspace();
+    execFileSync("mkfifo", [join(root, "pipe.mp4")]);
+    const link = await outside(agent);
+    const session = await link.open();
+    const pipe = await link.call(session, "file_add", { project: PROJECT, path: "pipe.mp4" }, roots);
+    expect(pipe.value.error).toBe("pipe.mp4 is not a file.");
   });
 });

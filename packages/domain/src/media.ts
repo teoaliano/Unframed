@@ -25,6 +25,13 @@ const EXTENSIONS: Record<string, string> = {
   "text/html": "html",
 };
 
+export const boardMediaType = (name: string): string | undefined => {
+  const ext = nameExtension(name);
+  if (ext === undefined) return undefined;
+  const mime = ext === "jpeg" ? "image/jpeg" : Object.keys(EXTENSIONS).find((type) => EXTENSIONS[type] === ext);
+  return mime !== undefined && (mime.startsWith("image/") || mime.startsWith("video/")) ? mime : undefined;
+};
+
 const essence = (mime: string): string => mime.split(";")[0]!.trim().toLowerCase();
 
 const nameExtension = (name: string): string | undefined => {
@@ -78,7 +85,6 @@ export interface MediaSidecar {
   readonly of?: string;
   /** Spec 06: the project a copy for a preset came from. */
   readonly ofProject?: string;
-  /** Spec 14: the outside chat whose agent added the file with `file_add`. */
   readonly chat?: string;
   readonly marks?: ReadonlyArray<string>;
   readonly crop?: unknown;

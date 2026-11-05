@@ -68,6 +68,44 @@ describe("Claude compacts a chat on /compact", () => {
     expect(JSON.stringify(sent[2]!.content)).toMatch(/Since your last turn the canvas changed/);
   });
 
+  it("passes /compact's instructions through as typed, and fails the compaction row of a /compact that had nothing to compact", async () => {
+    const dir = await makeTempDir("unframed-claude-");
+    const claude = await fakeClaudeTurns(join(dir, "bin"));
+    const shell = await fakeShell(join(dir, "shell"));
+    const messages = join(dir, "messages.log");
+    const agent = await startAgentEngine({
+      dotenv: `CLAUDE_PATH=${claude}\nCODEX_PATH=${join(dir, "none")}\n`,
+      env: { UNFRAMED_TEST_AGENT_SCRIPT: undefined, SHELL: shell, FAKE_SHELL_PATH: "", FAKE_CLAUDE_MESSAGES: messages },
+    });
+    const chatId = await agent.createChat({ modelSelection: { provider: "claude", model: "claude-opus-5-5", traits: {} } });
+    await agent.send(chatId, "/compact");
+    const first = await agent.settled(chatId, 1);
+    const failed = first.activities.filter((activity) => (activity.payload as { itemType?: string }).itemType === "context_compaction");
+    expect(failed.at(-1)).toMatchObject({ kind: "tool.completed", payload: { status: "failed", detail: "Not enough messages to compact." } });
+
+    await agent.send(chatId, "/compact keep the API notes");
+    const chat = await agent.settled(chatId, 2);
+    expect((await sentMessages(messages))[1]!.content).toBe("/compact keep the API notes");
+    const items = chat.activities.filter((activity) => activity.turnId === chat.latestTurn!.turnId && (activity.payload as { itemType?: string }).itemType === "context_compaction");
+    expect(items.at(-1)).toMatchObject({ kind: "tool.completed", payload: { status: "completed" } });
+  });
+
+  it("keeps the selection of a message that only starts with a slash, such as a path", async () => {
+    const dir = await makeTempDir("unframed-claude-");
+    const claude = await fakeClaudeTurns(join(dir, "bin"));
+    const shell = await fakeShell(join(dir, "shell"));
+    const messages = join(dir, "messages.log");
+    const agent = await startAgentEngine({
+      dotenv: `CLAUDE_PATH=${claude}\nCODEX_PATH=${join(dir, "none")}\n`,
+      env: { UNFRAMED_TEST_AGENT_SCRIPT: undefined, SHELL: shell, FAKE_SHELL_PATH: "", FAKE_CLAUDE_MESSAGES: messages },
+    });
+    const shape = await firstShape(agent);
+    const chatId = await agent.createChat({ modelSelection: { provider: "claude", model: "claude-opus-5-5", traits: {} } });
+    await agent.send(chatId, "/Users/me/x.png explain this", { selection: [shape] });
+    await agent.settled(chatId, 1);
+    expect(JSON.stringify((await sentMessages(messages))[0]!.content)).toMatch(/Selected: .*\/Users\/me\/x\.png explain this/s);
+  });
+
   it("the scripted agent reports a /compact turn as a context compaction, so the app can be driven without Claude", async () => {
     const agent = await startAgentEngine();
     const chatId = await agent.createChat();

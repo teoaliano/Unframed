@@ -46,7 +46,6 @@ export interface TurnInput {
   readonly interactionMode: InteractionMode;
   /** The message joins the running turn (spec 08's Steer). */
   readonly steer: boolean;
-  /** The message is a provider command: `text` goes as typed, and `preamble` is empty. */
   readonly command?: boolean;
 }
 

@@ -204,7 +204,17 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
         return { turnId: input.turnId };
       }
       if (input.command && isCompactCommand(input.text)) {
-        await session.rpc.request("thread/compact/start", { threadId: session.threadId });
+        try {
+          await session.rpc.request("thread/compact/start", { threadId: session.threadId });
+        } catch (error) {
+          const itemId = `compaction:${input.turnId}`;
+          const detail = errorText(error);
+          session.turnId = undefined;
+          emit(input.chatId, { type: "turn.started", turnId: input.turnId, payload: {} });
+          emit(input.chatId, { type: "item.started", turnId: input.turnId, itemId, payload: { itemType: "context_compaction", status: "inProgress", title: "Compacting context" } });
+          emit(input.chatId, { type: "item.completed", turnId: input.turnId, itemId, payload: { itemType: "context_compaction", status: "failed", title: "Context not compacted", detail } });
+          emit(input.chatId, { type: "turn.completed", turnId: input.turnId, payload: { state: "failed", errorMessage: detail } });
+        }
         return { turnId: input.turnId, resumeCursor: { threadId: session.threadId } };
       }
       const policy = codexPolicy(session.runtimeMode);

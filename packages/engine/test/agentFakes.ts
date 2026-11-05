@@ -139,6 +139,7 @@ rl.on("line", (line) => {
       });
     case "turn/start": return void runTurn(message);
     case "thread/compact/start": {
+      if (process.env.FAKE_CODEX_COMPACT_FAIL) return send({ id: message.id, error: { code: -32603, message: process.env.FAKE_CODEX_COMPACT_FAIL } });
       const threadId = message.params.threadId;
       const turnId = "cx-compact-" + runId + "-" + (++turns);
       send({ id: message.id, result: {} });
@@ -196,13 +197,6 @@ rl.on("close", () => process.exit(0));
 `),
   );
 
-/**
- * A signed-in `claude` that also runs turns of the Agent SDK's stream-json protocol: every user
- * message it gets is logged to `FAKE_CLAUDE_MESSAGES`. A message whose whole content is the string
- * `/compact` compacts as Claude Code does (a compacting status, a compact boundary, an empty
- * result); any other message is a command Claude does not know when it starts with `/` and
- * arrives as content blocks, so it answers as a prompt: "You said: <text>".
- */
 export const fakeClaudeTurns = (dir: string) =>
   write(
     join(dir, "claude"),
@@ -235,7 +229,11 @@ const handle = async (line) => {
   if (turns === 1) send({ type: "system", subtype: "init", session_id: session, tools: await listTools(), model: "claude-opus-5-5", cwd: process.cwd(), permissionMode: "bypassPermissions" });
   const content = message.message.content;
   const result = (usage) => send({ type: "result", subtype: "success", session_id: session, is_error: false, result: "", usage, total_cost_usd: 0, modelUsage: { "claude-opus-5-5": { contextWindow: 200000 } } });
-  if (content === "/compact") {
+  if (typeof content === "string" && (content === "/compact" || content.startsWith("/compact ")) && turns === 1) {
+    send({ type: "assistant", uuid: "uuid-" + turns, session_id: session, parent_tool_use_id: null, message: { id: "local-" + turns, role: "assistant", model: "<synthetic>", content: [{ type: "text", text: "Not enough messages to compact." }], usage: { input_tokens: 0, output_tokens: 0 } } });
+    return send({ type: "result", subtype: "success", session_id: session, is_error: false, result: "Not enough messages to compact.", usage: { input_tokens: 0, output_tokens: 0 } });
+  }
+  if (typeof content === "string" && (content === "/compact" || content.startsWith("/compact "))) {
     send({ type: "system", subtype: "status", status: "compacting", session_id: session });
     send({ type: "system", subtype: "compact_boundary", session_id: session, compact_metadata: { trigger: "manual", pre_tokens: 214000, post_tokens: 12000 } });
     send({ type: "system", subtype: "status", status: null, session_id: session });
