@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { makeTempDir } from "../../engine/test/engineProcess.ts";
 import { openCanvas, plainText, roomShapes, waitForRoom } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
-import { openSettings, startSettingsEngine } from "./settings.ts";
+import { openSettings, showSection, startSettingsEngine } from "./settings.ts";
 import type { Page } from "@playwright/test";
 
 /** A tab's right-click menu item for `project`: Rename project, Delete project, Close, Close all tabs. */
@@ -165,6 +165,7 @@ test("after saving a new output folder, the menu lists its projects and the canv
     await mkdir(join(filled, "zeta"), { recursive: true });
 
     let dialog = await openSettings(page);
+    await showSection(dialog, "General");
     await dialog.getByLabel("Output folder").fill(filled);
     await dialog.getByRole("button", { name: "Save" }).click();
     await expect(dialog.getByRole("status")).toContainText("Saved to .env");
@@ -177,6 +178,7 @@ test("after saving a new output folder, the menu lists its projects and the canv
 
     const empty = join(await makeTempDir(), "empty");
     dialog = await openSettings(page);
+    await showSection(dialog, "General");
     await dialog.getByLabel("Output folder").fill(empty);
     await dialog.getByRole("button", { name: "Save" }).click();
     await expect(dialog.getByRole("status")).toContainText("Saved to .env");

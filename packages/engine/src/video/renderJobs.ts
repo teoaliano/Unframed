@@ -531,7 +531,7 @@ export const renderJobsLayer = Layer.effect(
       if (stored?.status === "done") return completedAnswer(stored);
       if (stored?.status === "failed") return { status: "failed", error: stored.error ?? GENERATION_FAILED };
       const key = await currentKey();
-      if (key === "") throw refusal("no_key", "unavailable", "No OpenRouter key yet.");
+      if (key === "") throw refusal("no_key", "unavailable", NO_KEY_MESSAGE);
       const read = await readVideoStatus(config.openRouterOrigin, key, jobId);
       if (!read.answered) throw read.network ? refusal("unreachable", "upstream", `Could not reach OpenRouter: ${read.cause}`) : refusal("upstream", "upstream", read.message);
       const built: RenderJob = stored ?? { id: jobId, project: projectSlug(project), params, startedAt: Date.now(), status: "pending", refs: refsByJob.get(jobId) ?? null };

@@ -204,7 +204,7 @@ The steps below name each failure as `<reason>, <message>`.
 
 Steps, in this order:
 
-1. No key: `no_key`, `No OpenRouter key yet. Add one with the key icon in the top right (it becomes a settings gear once saved).` (the same refusal spec 03 uses).
+1. No key: `no_key`, `Generating needs OpenRouter. Connect it in Settings, under Generation.` (the same refusal spec 03 uses).
 2. Resolve project-file markers in references and frames (spec 03's boundary inliner). Image markers become base64 data URLs. A missing file fails with `invalid` and the inliner's message. A null or non-list array counts as empty.
 3. Empty or whitespace prompt: `invalid`, `Prompt is empty. Select at least one prompt, or type an instruction.`
 4. Local clips (video references whose URL is not `https://`). If any exist and `shareLocalVideos` is not exactly `true`: `local_clip`, `Video generation only accepts a reference video as a public https:// link, and this one is a local file. Tick "Share via temporary link while generating" in the Generate tray, or use the clip in a text run instead, which does take local clips.` The consent is re-sent with every request; the engine never remembers it.
@@ -257,7 +257,7 @@ Status classification, one home for both callers: `completed` is done; `failed`,
 **Poll (engine).** RPC `video.poll`. Input `{ jobId, project, params }` (the marker's `durable.params`, the fallback for a job the store never learned about). Output one of `{ status: "completed", cost, savedPath, url }` (url is spec 01's project file URL), `{ status: "failed", error }`, `{ status: <raw upstream status>, progress }` (in flight). Failures are spec 01's `UnframedError` with `details.reason`, coded as for `video.start`.
 
 1. Read the store leniently. A `done` record answers completed from the record; a `failed` record answers failed with its `error` (or `Generation failed.`). This comes before the key check: answering from the store needs no key, and that is how a tab learns its render ended after the key was removed.
-2. No key: `no_key`, `No OpenRouter key yet.`
+2. No key: `no_key`, `Generating needs OpenRouter. Connect it in Settings, under Generation.` (the same refusal spec 03 uses)
 3. Ask upstream. Not answered: network errors fail `unreachable`, `Could not reach OpenRouter: <message>`; the others fail `upstream` with their message.
 4. Terminal failure: fail the job (above) and answer failed. If recording the failure throws: `upstream`, `The render failed upstream (<message>), but recording that failed too: <error>`.
 5. In flight: answer the raw status string and `progress` (or null), so an unusual status reads as unusual.

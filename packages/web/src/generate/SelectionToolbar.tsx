@@ -10,13 +10,14 @@ import { groupRecipeOf } from "../canvas/groupRecipes.ts";
 import { Tip } from "../chrome/ui.tsx";
 import { useSlots } from "../chrome/slots.ts";
 import { useCanvasProject, useEngine, useSettings } from "../context.ts";
-import { showError } from "../toasts.tsx";
+import { showError, showErrorAction } from "../toasts.tsx";
+import { openSettings } from "../settings/settingsEvents.ts";
 import { useKnownCatalogue, usePricing } from "./catalogue.ts";
 import { Composer } from "./composer/Composer.tsx";
 import { assetOf, canvasShapes, resultShapes, toolbarShape } from "./facts.ts";
 import { canvasRoom, placeFloating, type ScreenBox } from "./floating.ts";
 import { mediumDefinition, type RunSource } from "./mediumRegistry.ts";
-import { openOnRecipe, recipeProps, recipeRunProgress, runGroupRecipe } from "./recipeRuns.ts";
+import { NoKeyError, openOnRecipe, recipeProps, recipeRunProgress, runGroupRecipe } from "./recipeRuns.ts";
 import { closeComposer, composerState, leaveRecipeMode, openComposer } from "./state.ts";
 import { composerGlassClass } from "../chrome/composerSurface.ts";
 import { useWheelToCanvas } from "../canvas/wheelToCanvas.ts";
@@ -268,7 +269,8 @@ const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "rec
     try {
       await runGroupRecipe({ editor, engine, project, groupId, recipe, hasKey: settings?.hasKey ?? true });
     } catch (error) {
-      showError(messageOf(error));
+      if (error instanceof NoKeyError) showErrorAction(error.message, "Open Settings", () => openSettings("generation"));
+      else showError(messageOf(error));
     } finally {
       setBusy(false);
     }

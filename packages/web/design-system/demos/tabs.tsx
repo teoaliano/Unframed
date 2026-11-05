@@ -61,6 +61,24 @@ export default function TabsDemo() {
             Hover any tab for its hover colour. Press Tab to reach the list: the focused tab shows the focus ring, and the arrow keys move between tabs.
           </p>
         </Row>
+        <Row label="sidebar">
+          <Tabs defaultValue="generation" orientation="vertical" className="w-48">
+            <TabsList variant="sidebar" aria-label="Sidebar">
+              <TabsTab value="generation">
+                <Image aria-hidden />
+                Generation
+              </TabsTab>
+              <TabsTab value="agents">
+                <Bot aria-hidden />
+                Agents
+              </TabsTab>
+              <TabsTab value="general">
+                <Settings aria-hidden />
+                General
+              </TabsTab>
+            </TabsList>
+          </Tabs>
+        </Row>
         <Row label="with icons">
           <Tabs defaultValue="agent" className="max-w-md">
             <TabsList variant="panel" aria-label="With icons">

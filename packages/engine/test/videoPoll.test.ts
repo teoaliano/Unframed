@@ -1,6 +1,7 @@
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { NO_KEY_MESSAGE } from "@unframed/domain";
 import { connectTab } from "./syncClient.ts";
 import { eventually, jobsText, MODEL, pendingRecord, readJobs, recipe, roomRecord, roomShapes, shareCopies, startRendering, startRequest, type Rendering } from "./video.ts";
 import { completed } from "./videoStub.ts";
@@ -47,7 +48,7 @@ describe("answering from the store", () => {
 
   it("refuses with the short no-key message for a pending record when there is no key", async () => {
     const rendering = await startRendering({ key: false, seed: [pendingRecord("gen-1")] });
-    await expect(poll(rendering, "gen-1")).rejects.toMatchObject({ code: "unavailable", message: "No OpenRouter key yet.", details: { reason: "no_key" } });
+    await expect(poll(rendering, "gen-1")).rejects.toMatchObject({ code: "unavailable", message: NO_KEY_MESSAGE, details: { reason: "no_key" } });
   });
 });
 

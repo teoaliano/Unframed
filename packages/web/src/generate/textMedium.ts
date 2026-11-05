@@ -3,7 +3,7 @@
  * image and video slot attached, the answer landing as a text result. No props, no Runs,
  * no estimate: the tray shows the model and nothing else.
  */
-import { NO_KEY_MESSAGE, type ModelParams } from "@unframed/domain";
+import type { ModelParams } from "@unframed/domain";
 import type { TLShapeId } from "tldraw";
 import type { Payload } from "../rpc/engine.ts";
 import { anchorOf, pageBox } from "./facts.ts";
@@ -62,8 +62,7 @@ export const textMedium: MediumDefinition = {
     const blockers: string[] = [];
     if (plan.error !== undefined) blockers.push(plan.error);
     else if (plan.prompt.trim() === "") blockers.push(NOTHING_TO_RUN);
-    if (!hasKey) blockers.push(NO_KEY_MESSAGE);
-    return { warnings: [], blockers };
+    return { warnings: [], blockers, needsKey: !hasKey };
   },
   sendLabel: () => "Run",
   send: async (input) => {

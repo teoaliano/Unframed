@@ -9,10 +9,10 @@ test("the top-left card holds the logo; Settings sits at the end opposite the wi
   const os = await platformOf(page);
   const left = page.locator(".unframed-chrome-left");
   await expect(left.getByRole("img", { name: "Unframed" })).toBeVisible();
-  const settings = page.getByRole("button", { name: /^(Settings|Add your API key)$/ });
+  const settings = page.getByRole("button", { name: "Settings", exact: true });
   await expect(settings).toHaveCount(1);
   // Spec 17: macOS and Linux keep Settings at the far right, Windows at the far left, before the logo.
-  expect(await page.locator(os.name === "win32" ? ".unframed-chrome-left" : ".unframed-chrome-right").getByRole("button", { name: /^(Settings|Add your API key)$/ }).count()).toBe(1);
+  expect(await page.locator(os.name === "win32" ? ".unframed-chrome-left" : ".unframed-chrome-right").getByRole("button", { name: "Settings", exact: true }).count()).toBe(1);
   // Spec 01: the shell's CSS expects exactly one right card.
   await expect(page.locator(".unframed-chrome-right")).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Help" })).toHaveCount(0);
@@ -30,7 +30,7 @@ test("the bar's start sits at the window edge, 36 tall; the lights' zone is 81 p
   const strip = (await page.getByTestId("tab-strip").boundingBox())!;
   expect(strip.height).toBe(36);
   expect(strip.y + strip.height / 2).toBe(18);
-  const settings = (await page.getByRole("button", { name: /^(Settings|Add your API key)$/ }).boundingBox())!;
+  const settings = (await page.getByRole("button", { name: "Settings", exact: true }).boundingBox())!;
   // Settings is a 24 px circle, 9 px past the bar's end and 12 px from the window edge.
   expect([settings.width, settings.height]).toEqual([24, 24]);
   expect(settings.y + settings.height / 2).toBe(18);
@@ -43,7 +43,7 @@ test("the bar's outline is filled with the background; Settings is a circle with
   await openCanvas(page, engine);
   const bar = page.locator("[data-slot=top-bar-body] path").first();
   const cell = page.locator("[data-slot=top-bar-settings]");
-  const settings = page.getByRole("button", { name: /^(Settings|Add your API key)$/ });
+  const settings = page.getByRole("button", { name: "Settings", exact: true });
   await expectSlot(settings, "tooltip-trigger");
   await inBothSchemes(page, async () => {
     expect(await styleOf(bar, "fill")).toBe(await resolvedColor(page, "var(--background)"));
@@ -102,4 +102,48 @@ test("tldraw's style panel shows only while a drawing tool is on or the selectio
   await page.getByTestId("tools.select").click();
   await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0);
+});
+
+const SHIPPED_SHELL_CSS = `.unframed-chrome-left { -webkit-app-region: drag; }
+  .unframed-chrome-left > *:not(svg, [role="img"]) { -webkit-app-region: no-drag; }`;
+
+const appRegions = (page: import("@playwright/test").Page) =>
+  page.evaluate(() => {
+    const region = (selector: string) => {
+      const element = document.querySelector(selector);
+      return element === null ? "missing" : getComputedStyle(element).getPropertyValue("-webkit-app-region");
+    };
+    return {
+      bar: region("[data-slot=top-bar]"),
+      lights: region("[data-slot=top-bar-controls]"),
+      logo: region("[data-slot=top-bar-logo]"),
+      start: region(".unframed-chrome-left"),
+      tabs: region(".unframed-tabs"),
+      empty: region("[data-slot=top-bar-drag]"),
+      end: region(".unframed-chrome-right"),
+      tab: region("[role=tab]"),
+      close: region("[data-close]"),
+      allProjects: region("[data-testid=all-projects] button"),
+      settings: region("[data-slot=top-bar-settings] button"),
+    };
+  });
+
+test("the bar is a window drag region, with its tabs, close buttons, All projects and Settings left clickable, also under the shell's own chrome CSS", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  const expected = {
+    bar: "drag",
+    lights: "drag",
+    logo: "drag",
+    start: "drag",
+    tabs: "drag",
+    empty: "drag",
+    end: "drag",
+    tab: "no-drag",
+    close: "no-drag",
+    allProjects: "no-drag",
+    settings: "no-drag",
+  };
+  expect(await appRegions(page)).toEqual(expected);
+  await page.addStyleTag({ content: SHIPPED_SHELL_CSS });
+  expect(await appRegions(page)).toEqual(expected);
 });
