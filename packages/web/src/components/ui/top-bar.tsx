@@ -4,7 +4,7 @@ import type { ComponentPropsWithRef, CSSProperties, MouseEvent, ReactNode } from
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { Menu, MenuItem, MenuPopup, MenuSeparator } from "~/components/ui/menu";
-import { useTabReorder } from "~/components/ui/tab-reorder";
+import { useTabReorder, type TabPlan } from "~/components/ui/tab-reorder";
 import { Tabs, TabsList, TabsTab } from "~/components/ui/tabs";
 import { cn } from "~/lib/utils";
 
@@ -19,7 +19,33 @@ export interface TopBarTab {
   /** The activity state a test or a style reads (`data-status`). Defaults to the status, else "none". */
   readonly state?: string | undefined;
   readonly pinned?: boolean | undefined;
+  readonly label?: string | undefined;
+  readonly icon?: ReactNode;
+  readonly context?: string | undefined;
+  readonly variant?: "default" | "secondary" | undefined;
+  readonly attachedTo?: string | undefined;
 }
+
+const tabPlan = (tabs: ReadonlyArray<TopBarTab>, name: string): TabPlan => {
+  const tab = tabs.find((each) => each.name === name);
+  const at = tabs.findIndex((each) => each.name === name);
+  if (tab?.attachedTo !== undefined) {
+    let low = at;
+    let high = at;
+    while (low > 0 && tabs[low - 1]!.attachedTo === tab.attachedTo) low--;
+    while (high < tabs.length - 1 && tabs[high + 1]!.attachedTo === tab.attachedTo) high++;
+    return { unit: [name], lane: tabs.slice(low, high + 1).map((each) => [each.name]) };
+  }
+  if (tab?.pinned === true) return { unit: [name], lane: tabs.filter((each) => each.pinned === true).map((each) => [each.name]) };
+  const lane: string[][] = [];
+  tabs.forEach((each, index) => {
+    if (each.pinned === true || each.attachedTo !== undefined) return;
+    const unit = [each.name];
+    for (let next = index + 1; next < tabs.length && tabs[next]!.attachedTo === each.name; next++) unit.push(tabs[next]!.name);
+    lane.push(unit);
+  });
+  return { unit: lane.find((unit) => unit[0] === name) ?? [name], lane };
+};
 
 /** A region's element props. The app passes its hook classes, refs and inline offsets here; the catalogue passes none. */
 export type TopBarRegion = Omit<ComponentPropsWithRef<"div">, "children"> & { readonly [attribute: `data-${string}`]: string | undefined };
@@ -157,7 +183,7 @@ export const TopBar = ({
   const [bodyWidth, setBodyWidth] = useState(0);
   const names = tabs.map((tab) => tab.name);
   const pinned = tabs.filter((tab) => tab.pinned === true).map((tab) => tab.name);
-  const reorder = useTabReorder({ list: scroller, names, pinned, onMove });
+  const reorder = useTabReorder({ list: scroller, names, pinned, plan: (name) => tabPlan(tabs, name), onMove });
   const windows = platform === "windows";
 
   useEffect(() => {
@@ -168,6 +194,7 @@ export const TopBar = ({
   const tabOf = (target: EventTarget): string | undefined =>
     target instanceof Element ? (target.closest<HTMLElement>("[data-tab-item]")?.dataset.tabItem ?? undefined) : undefined;
   const pinnedTab = (name: string) => tabs.find((tab) => tab.name === name)?.pinned === true;
+  const secondaryTab = (name: string) => tabs.find((tab) => tab.name === name)?.variant === "secondary";
 
   const onListClick = (event: MouseEvent<HTMLDivElement>) => {
     if (!(event.target instanceof Element) || event.target.closest("[data-close]") === null) return;
@@ -211,6 +238,7 @@ export const TopBar = ({
   }, [windows, squareStart]);
 
   const positioned = layout === "flow" ? "relative " : "";
+  const tabMenu = menu === undefined ? "none" : secondaryTab(menu.name) ? "short" : "full";
   const settingsNode = (
     <div data-slot="top-bar-settings" className={cn("flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full", NO_DRAG_CONTROLS)}>
       {settings}
@@ -261,14 +289,27 @@ export const TopBar = ({
                   data-active={tab.name === active ? "true" : undefined}
                   data-status={tab.state ?? tab.status ?? "none"}
                   data-pinned={tab.pinned === true ? "true" : undefined}
-                  aria-label={tab.pinned === true ? tab.name : undefined}
+                  data-variant={tab.variant ?? "default"}
+                  aria-label={tab.pinned === true ? tab.name : tab.context === undefined ? undefined : `${tab.label ?? tab.name}, ${tab.context}`}
                   title={tab.title ?? tab.name}
                   closable={tab.pinned !== true}
-                  closeLabel={`Close ${tab.name}`}
-                  className={tab.pinned === true ? "w-9 min-w-0 gap-0 px-0 [&_[data-slot=tabs-status]]:ms-0.5" : undefined}
+                  closeLabel={`Close ${tab.label ?? tab.name}`}
+                  className={tab.pinned === true ? "w-9 min-w-0 gap-0 px-0 [&_[data-slot=tabs-status]]:ms-0.5" : tab.variant === "secondary" ? "max-w-56 gap-1.5" : tab.icon === undefined ? undefined : "gap-1.5"}
                   {...(tab.status === undefined ? {} : { status: tab.status })}
                 >
-                  {tab.pinned === true ? <PinnedMark name={tab.name} /> : <span className="min-w-0 truncate">{tab.name}</span>}
+                  {tab.pinned === true ? (
+                    <PinnedMark name={tab.name} />
+                  ) : (
+                    <>
+                      {tab.icon}
+                      <span className="min-w-0 truncate">{tab.label ?? tab.name}</span>
+                      {tab.context !== undefined && (
+                        <span data-slot="top-bar-tab-context" className="min-w-0 max-w-20 shrink-[2] truncate text-muted-foreground before:me-1 before:content-['·']">
+                          {tab.context}
+                        </span>
+                      )}
+                    </>
+                  )}
                 </TabsTab>
               </span>
             ))}
@@ -292,14 +333,14 @@ export const TopBar = ({
           className="min-w-[180px]"
           data-testid="tab-menu"
         >
-          {menu !== undefined && pinnedTab(menu.name) && onUnpin && <MenuItem onClick={() => onUnpin(menu.name)}>Unpin tab</MenuItem>}
-          {menu !== undefined && !pinnedTab(menu.name) && onPin && <MenuItem onClick={() => onPin(menu.name)}>Pin tab</MenuItem>}
-          {(onPin || onUnpin) && <MenuSeparator />}
+          {tabMenu === "full" && pinnedTab(menu!.name) && onUnpin && <MenuItem onClick={() => onUnpin(menu!.name)}>Unpin tab</MenuItem>}
+          {tabMenu === "full" && !pinnedTab(menu!.name) && onPin && <MenuItem onClick={() => onPin(menu!.name)}>Pin tab</MenuItem>}
+          {tabMenu === "full" && (onPin || onUnpin) && <MenuSeparator />}
           <MenuItem onClick={() => menu && onClose(menu.name)}>Close</MenuItem>
           <MenuItem onClick={() => onCloseAll()}>Close all tabs</MenuItem>
-          <MenuSeparator />
-          {onRename && <MenuItem onClick={() => menu && onRename(menu.name)}>Rename project</MenuItem>}
-          {onDelete && (
+          {tabMenu === "full" && (onRename || onDelete) && <MenuSeparator />}
+          {tabMenu === "full" && onRename && <MenuItem onClick={() => menu && onRename(menu.name)}>Rename project</MenuItem>}
+          {tabMenu === "full" && onDelete && (
             <MenuItem variant="destructive" onClick={() => menu && onDelete(menu.name)}>
               Delete project
             </MenuItem>

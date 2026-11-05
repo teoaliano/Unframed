@@ -1,4 +1,4 @@
-import { Plus, Settings } from "lucide-react";
+import { AppWindow, Clapperboard, Plus, Settings } from "lucide-react";
 import { useState } from "react";
 import { Button } from "~/components/ui/button";
 import { TopBar, type TopBarTab } from "~/components/ui/top-bar";
@@ -64,9 +64,9 @@ const Bar = ({ platform, initial, initialActive }: { readonly platform: Platform
         onRename={() => undefined}
         onDelete={() => undefined}
         onMove={(name, to) => {
-          const from = tabs.findIndex((tab) => tab.name === name);
-          const next = tabs.filter((tab) => tab.name !== name);
-          next.splice(to, 0, tabs[from]!);
+          const block = tabs.filter((tab) => tab.name === name || tab.attachedTo === name);
+          const next = tabs.filter((tab) => !block.includes(tab));
+          next.splice(to, 0, ...block);
           setTabs(next);
         }}
       />
@@ -79,7 +79,8 @@ const MANY = ["spring-campaign-hero-shots", "product-packaging-explorations", "m
 /**
  * The project tab bar (spec 17), one full-width bar. Switch between macOS and Windows: macOS has the
  * window controls at the start and Settings at the end, Windows mirrors them. Right-click a tab for
- * Close, Close all tabs, Rename project and Delete project. The bars are interactive; nothing is saved.
+ * Close, Close all tabs, Rename project and Delete project; a secondary tab offers Close and Close all tabs, and
+ * moves only among the tabs attached to the same tab, which move with it. The bars are interactive; nothing is saved.
  */
 export default function TopBarDemo() {
   const [platform, setPlatform] = useState<Platform>("macos");
@@ -101,6 +102,18 @@ export default function TopBarDemo() {
           platform={platform}
           initial={[{ name: "default" }, { name: "beta", status: "running" }, { name: "gamma", status: "finished" }, { name: "delta", status: "dot" }]}
           initialActive="gamma"
+        />
+      </Section>
+      <Section title="Secondary tabs attached to a tab" flushTop>
+        <Bar
+          platform={platform}
+          initial={[
+            { name: "default" },
+            { name: "default/landing", label: "Landing", context: "default", variant: "secondary", attachedTo: "default", icon: <AppWindow aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />, title: "Landing · Page in default" },
+            { name: "default/teaser", label: "Teaser", context: "default", variant: "secondary", attachedTo: "default", icon: <Clapperboard aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />, title: "Teaser · Motion in default" },
+            { name: "beta" },
+          ]}
+          initialActive="default/landing"
         />
       </Section>
       <Section title="Many tabs that truncate" flushTop>

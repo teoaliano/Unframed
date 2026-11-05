@@ -3,7 +3,7 @@
  * composer's Agent tray, and the chat rail docked to the left edge.
  */
 import { Sparkles } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { TldrawUiButtonIcon, TldrawUiToolbarButton, useEditor, type TLShapeId } from "tldraw";
 import { registerSlot, type AgentTrayProps } from "../chrome/slots.ts";
@@ -12,26 +12,12 @@ import { Button } from "~/components/ui/button";
 import { Sheet, SheetPopup } from "~/components/ui/sheet";
 import { useCanvasProject, useEngine } from "../context.ts";
 import { AgentRail } from "./rail/AgentRail.tsx";
+import { useNarrowWindow } from "../chrome/narrowWindow.ts";
 import { ToolbarAgentTray } from "./composer/AgentTray.tsx";
 import { providerMessage } from "./providers.ts";
 import { QueueSender } from "./queue.tsx";
 import { useChatClient, useProviders, useRailUi, type ChatClient } from "./store.ts";
 
-/**
- * Below 1280 px the rail opens as a Sheet. The docked rail runs the window's full height, and narrower windows leave too
- * little canvas beside it for the zoom controls, the bottom toolbar and the tldraw watermark, which must stay visible.
- */
-const SHEET_QUERY = "(max-width: 1279px)";
-
-const useNarrowWindow = (): boolean =>
-  useSyncExternalStore(
-    (changed) => {
-      const query = window.matchMedia(SHEET_QUERY);
-      query.addEventListener("change", changed);
-      return () => query.removeEventListener("change", changed);
-    },
-    () => window.matchMedia(SHEET_QUERY).matches,
-  );
 
 /** How long the rail waits for its own transitionend before it unmounts anyway: a hidden tab fires none. */
 const EXIT_GUARANTEE_MS = 600;

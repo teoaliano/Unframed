@@ -12,9 +12,7 @@ import {
   type DialsAnnouncement,
 } from "@unframed/domain";
 import {
-  AppWindow,
   ArrowLeft,
-  Clapperboard,
   Component,
   ExternalLink,
   Hand,
@@ -53,6 +51,7 @@ import { KitModePicker } from "../KitMode.tsx";
 import { countUsing } from "../componentPins.ts";
 import { updateTagsOf } from "../updates.ts";
 import { makeComponent } from "./makeComponent.ts";
+import { KIND_LOOK } from "../kinds.ts";
 import { artifactsOf, previewPort } from "../state.ts";
 import { RenderButton } from "../render.tsx";
 import { ComponentSection } from "./ComponentSection.tsx";
@@ -83,6 +82,7 @@ interface ArtifactEditorProps {
   readonly shapeId: TLShapeId;
   readonly onClose: () => void;
   readonly onOpen: (shapeId: string) => void;
+  readonly onLeave?: (commit: () => Promise<void>) => () => void;
 }
 
 type Panel = "design" | "layers" | "parameters";
@@ -135,6 +135,7 @@ export const ArtifactEditor = ({
   shapeId,
   onClose,
   onOpen,
+  onLeave,
 }: ArtifactEditorProps) => {
   const editor = useEditor();
   const project = useCanvasProject();
@@ -321,6 +322,17 @@ export const ArtifactEditor = ({
     onClose();
   }, [gone, onClose]);
 
+  const leaveRef = useRef(onLeave);
+  useEffect(
+    () =>
+      leaveRef.current?.(() => {
+        if (editor.getShape(shapeId)) return sessionRef.current.commit();
+        sessionRef.current.discard(true);
+        return Promise.resolve();
+      }),
+    [editor, shapeId],
+  );
+
   useEffect(() => {
     const onUndo = (event: KeyboardEvent) => {
       if (
@@ -490,8 +502,7 @@ export const ArtifactEditor = ({
   const title =
     displayTitle === "" ? shapeId.replace(/^shape:/, "") : displayTitle;
   const component = facts.kind === "component";
-  const Icon =
-    facts.kind === "page" ? AppWindow : component ? Component : Clapperboard;
+  const Icon = KIND_LOOK[facts.kind].Icon;
   const shownPanel: Panel =
     component && panel === "parameters" ? "design" : panel;
   const askAboutComponent = () => {

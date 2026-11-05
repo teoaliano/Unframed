@@ -1,6 +1,5 @@
 "use client";
 
-import { tabGroup } from "@unframed/domain";
 import type { PointerEvent as ReactPointerEvent, RefObject } from "react";
 import { useLayoutEffect, useRef } from "react";
 
@@ -16,15 +15,26 @@ interface Slot {
   readonly width: number;
 }
 
+interface Unit {
+  readonly slots: ReadonlyArray<Slot>;
+  readonly left: number;
+  readonly width: number;
+}
+
+export interface TabPlan {
+  readonly unit: ReadonlyArray<string>;
+  readonly lane: ReadonlyArray<ReadonlyArray<string>>;
+}
+
 interface Drag {
   readonly name: string;
   readonly pointerId: number;
   readonly startX: number;
   active: boolean;
   slots: ReadonlyArray<Slot>;
+  units: ReadonlyArray<Unit>;
+  laneStart: number;
   from: number;
-  low: number;
-  high: number;
   target: number;
   clientX: number;
 }
@@ -35,18 +45,22 @@ const itemSelector = (name: string) => `[data-tab-item="${CSS.escape(name)}"]`;
 
 const contentX = (root: HTMLElement, clientX: number) => clientX - root.getBoundingClientRect().left + root.scrollLeft;
 
-const layoutAfter = (slots: ReadonlyArray<Slot>, from: number, to: number): Map<string, number> => {
-  const gap = slots.length > 1 ? slots[1]!.left - (slots[0]!.left + slots[0]!.width) : 0;
-  const order = [...slots];
+const unitLefts = (units: ReadonlyArray<Unit>, from: number, to: number, gap: number): Map<string, number> => {
+  const order = [...units];
   const [moved] = order.splice(from, 1);
   order.splice(to, 0, moved!);
   const lefts = new Map<string, number>();
-  let left = slots[0]?.left ?? 0;
-  for (const slot of order) {
-    lefts.set(slot.name, left);
-    left += slot.width + gap;
+  let left = units[0]?.left ?? 0;
+  for (const unit of order) {
+    for (const slot of unit.slots) lefts.set(slot.name, left + (slot.left - unit.left));
+    left += unit.width + gap;
   }
   return lefts;
+};
+
+const defaultPlan = (names: ReadonlyArray<string>, pinned: ReadonlyArray<string>, name: string): TabPlan => {
+  const group = names.filter((each) => pinned.includes(each) === pinned.includes(name));
+  return { unit: [name], lane: group.map((each) => [each]) };
 };
 
 const contentLefts = (root: HTMLElement, names: ReadonlyArray<string>) => {
@@ -70,18 +84,20 @@ export const useTabReorder = ({
   list,
   names,
   pinned,
+  plan,
   onMove,
 }: {
   readonly list: RefObject<HTMLElement | null>;
   readonly names: ReadonlyArray<string>;
   readonly pinned: ReadonlyArray<string>;
+  readonly plan?: ((name: string) => TabPlan) | undefined;
   readonly onMove: ((name: string, to: number) => void) | undefined;
 }) => {
   const drag = useRef<Drag | undefined>(undefined);
   const restingLefts = useRef(new Map<string, number>());
   const leftsAtDrop = useRef<Map<string, number> | undefined>(undefined);
-  const strip = useRef({ names, pinned, onMove });
-  strip.current = { names, pinned, onMove };
+  const strip = useRef({ names, pinned, plan, onMove });
+  strip.current = { names, pinned, plan, onMove };
   const orderKey = names.join("\u0000");
   const measuredKey = useRef<string | undefined>(undefined);
 
@@ -119,42 +135,57 @@ export const useTabReorder = ({
       if (found === undefined) return false;
       slots.push({ name, element: found.element, left: found.left, width: found.width });
     }
-    const from = slots.findIndex((slot) => slot.name === current.name);
+    const { unit, lane } = strip.current.plan?.(current.name) ?? defaultPlan(strip.current.names, strip.current.pinned, current.name);
+    const byName = new Map(slots.map((slot) => [slot.name, slot]));
+    const units: Unit[] = [];
+    for (const names of lane) {
+      const members = names.map((name) => byName.get(name)).filter((slot): slot is Slot => slot !== undefined);
+      if (members.length === 0) return false;
+      const last = members[members.length - 1]!;
+      units.push({ slots: members, left: members[0]!.left, width: last.left + last.width - members[0]!.left });
+    }
+    const from = units.findIndex((each) => each.slots[0]!.name === unit[0]);
     if (from === -1) return false;
-    const { low, high } = tabGroup({ order: strip.current.names, pinned: strip.current.pinned }, current.name);
     current.slots = slots;
+    current.units = units;
+    current.laneStart = strip.current.names.indexOf(lane[0]![0]!);
     current.from = from;
     current.target = from;
-    current.low = low;
-    current.high = high;
     current.active = true;
     root.dataset.reordering = "";
-    slots[from]!.element.dataset.dragging = "";
+    for (const slot of units[from]!.slots) slot.element.dataset.dragging = "";
     return true;
   };
 
   const follow = (current: Drag) => {
     const root = list.current;
     if (root === null) return;
-    const { slots, from, low, high } = current;
-    const dragged = slots[from]!;
-    const min = slots[low]!.left - dragged.left;
-    const max = slots[high]!.left + slots[high]!.width - (dragged.left + dragged.width);
+    const { units, from, slots } = current;
+    const dragged = units[from]!;
+    const first = units[0]!;
+    const last = units[units.length - 1]!;
+    const min = first.left - dragged.left;
+    const max = last.left + last.width - (dragged.left + dragged.width);
     const dx = Math.max(min, Math.min(max, contentX(root, current.clientX) - current.startX));
-    dragged.element.style.transition = "none";
-    dragged.element.style.transform = `translateX(${dx}px)`;
+    for (const slot of dragged.slots) {
+      slot.element.style.transition = "none";
+      slot.element.style.transform = `translateX(${dx}px)`;
+    }
     const leading = dx < 0 ? dragged.left + dx : dragged.left + dragged.width + dx;
     let target = from;
-    if (dx > 0) for (let index = from + 1; index <= high; index++) if (leading > slots[index]!.left + slots[index]!.width / 2) target = index;
-    if (dx < 0) for (let index = from - 1; index >= low; index--) if (leading < slots[index]!.left + slots[index]!.width / 2) target = index;
+    if (dx > 0) for (let index = from + 1; index < units.length; index++) if (leading > units[index]!.left + units[index]!.width / 2) target = index;
+    if (dx < 0) for (let index = from - 1; index >= 0; index--) if (leading < units[index]!.left + units[index]!.width / 2) target = index;
     if (target === current.target) return;
     current.target = target;
-    const after = layoutAfter(slots, from, target);
+    const gap = slots.length > 1 ? slots[1]!.left - (slots[0]!.left + slots[0]!.width) : 0;
+    const after = unitLefts(units, from, target, gap);
     const slide = reducedMotion() ? "none" : SLIDE;
-    for (const slot of slots) {
-      if (slot === dragged) continue;
-      slot.element.style.transition = slide;
-      slot.element.style.transform = `translateX(${(after.get(slot.name) ?? slot.left) - slot.left}px)`;
+    for (const unit of units) {
+      if (unit === dragged) continue;
+      for (const slot of unit.slots) {
+        slot.element.style.transition = slide;
+        slot.element.style.transform = `translateX(${(after.get(slot.name) ?? slot.left) - slot.left}px)`;
+      }
     }
   };
 
@@ -168,20 +199,24 @@ export const useTabReorder = ({
   };
 
   const finish = (current: Drag, commit: boolean) => {
-    const { slots, from } = current;
+    const { slots, units, from } = current;
     const root = list.current;
     const target = commit ? current.target : from;
+    const dragged = units[from]!;
     if (target === from || root === null || strip.current.onMove === undefined) {
-      const dragged = slots[from]!;
-      const visualLeft = root === null ? dragged.left : (contentLefts(root, [current.name]).get(current.name)?.left ?? dragged.left);
+      const visual = root === null ? new Map<string, { left: number }>() : contentLefts(root, dragged.slots.map((slot) => slot.name));
       reset(slots);
-      settle(dragged.element, visualLeft - dragged.left);
+      for (const slot of dragged.slots) settle(slot.element, (visual.get(slot.name)?.left ?? slot.left) - slot.left);
       return;
     }
+    const order = [...units];
+    order.splice(from, 1);
+    order.splice(target, 0, dragged);
+    const to = current.laneStart + order.slice(0, target).reduce((sum, unit) => sum + unit.slots.length, 0);
     const visual = new Map([...contentLefts(root, strip.current.names)].map(([name, { left }]) => [name, left]));
     reset(slots);
     leftsAtDrop.current = visual;
-    strip.current.onMove(current.name, target);
+    strip.current.onMove(current.name, to);
   };
 
   const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
@@ -191,7 +226,7 @@ export const useTabReorder = ({
     const name = event.target.closest<HTMLElement>("[data-tab-item]")?.dataset.tabItem;
     if (name === undefined) return;
     const downX = event.clientX;
-    const current: Drag = { name, pointerId: event.pointerId, startX: contentX(root, downX), active: false, slots: [], from: -1, low: 0, high: 0, target: -1, clientX: downX };
+    const current: Drag = { name, pointerId: event.pointerId, startX: contentX(root, downX), active: false, slots: [], units: [], laneStart: 0, from: -1, target: -1, clientX: downX };
     drag.current = current;
 
     const stop = () => {
