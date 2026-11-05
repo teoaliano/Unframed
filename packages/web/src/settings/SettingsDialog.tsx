@@ -1,5 +1,5 @@
 import { UnframedError, type ProviderStatuses, type Settings, type SettingsPatch } from "@unframed/contracts";
-import { elevenLabsStatusCopy, keyStatusCopy, sendShortcutOf, type SendShortcut } from "@unframed/domain";
+import { ELEVENLABS_KEY, elevenLabsStatusCopy, keyStatusCopy, OPENROUTER_KEY, sendShortcutOf, type SendShortcut } from "@unframed/domain";
 import { Bot, CircleAlert, CircleCheck, FolderOpen, Plug, SlidersHorizontal, Sparkles, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
@@ -17,13 +17,10 @@ import { ConfirmDialog } from "../agent/ConfirmDialog.tsx";
 import { OutsideAgents } from "./OutsideAgents.tsx";
 import type { SettingsSection } from "./settingsEvents.ts";
 import { useSettingsUi, type SettingsUi } from "./settingsUi.ts";
+import { KeyWarning, RemoveKeyButton, useKeyRemoval } from "./keyRemoval.tsx";
 
 export const KEY_SAVED_MESSAGE = "Key saved. Unframed is ready to generate.";
 export const ELEVENLABS_KEY_SAVED_MESSAGE = "ElevenLabs key saved. Audio is ready to generate.";
-const ELEVENLABS_REMOVE_WARNING = "This deletes the ElevenLabs key from .env. Audio generation is disabled until you add one.";
-const ELEVENLABS_REMOVED = "ElevenLabs key removed.";
-const REMOVE_WARNING = "This deletes the key from .env. You will need to paste it again, or make a new one at openrouter.ai/keys.";
-const REMOVED_WARNING = "Key removed. Generate is disabled until you add one.";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
@@ -113,13 +110,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const [revealed, setRevealed] = useState(false);
   const [banner, setBanner] = useState<Banner>();
   const [saving, setSaving] = useState(false);
-  const [confirmRemove, setConfirmRemove] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
-  const [removing, setRemoving] = useState(false);
-  const [confirmRemoveElevenLabs, setConfirmRemoveElevenLabs] = useState(false);
-  const [removingElevenLabs, setRemovingElevenLabs] = useState(false);
-  const [elevenLabsWarning, setElevenLabsWarning] = useState<string>();
-  const [fieldWarning, setFieldWarning] = useState<string>();
   const [catalogues, setCatalogues] = useState<Partial<Record<Medium, ReadonlyArray<string>>>>({});
   const [statuses, setStatuses] = useState<ProviderStatuses>();
   const [checking, setChecking] = useState(false);
@@ -128,6 +119,8 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const [planMode, setPlanMode] = useState(false);
   const keyField = useRef<HTMLInputElement>(null);
   const checks = useRef(0);
+  const resetRemovals = useRef(() => {});
+  const [audioModelsProblem, setAudioModelsProblem] = useState<string>();
 
   // Opening fills the draft from the settings (key field empty) and resets the paste reveal.
   useEffect(() => {
@@ -135,10 +128,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
     setDraft(draftOf(ui.current().settings));
     setRevealed(false);
     setBanner(undefined);
-    setConfirmRemove(false);
-    setFieldWarning(undefined);
-    setConfirmRemoveElevenLabs(false);
-    setElevenLabsWarning(undefined);
+    resetRemovals.current();
     if (ui.current().settings?.hasKey) void ui.fetchKeyStatus();
     if (ui.current().settings?.hasElevenLabsKey) void ui.fetchElevenLabsStatus();
     else ui.clearElevenLabsStatus();
@@ -169,8 +159,12 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   useEffect(() => {
     if (!elevenKeyed) return;
     let live = true;
-    loadCatalogue(engine, "audio").then(
-      (answer) => live && setCatalogues((current) => ({ ...current, audio: answer.models.map((model) => model.id) })),
+    engine.call("models.list", { medium: "audio" }).then(
+      (answer) => {
+        if (!live) return;
+        setCatalogues((current) => ({ ...current, audio: answer.models.map((model) => model.id) }));
+        setAudioModelsProblem(answer.problem);
+      },
       () => undefined,
     );
     return () => {
@@ -237,7 +231,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
       setDraft((current) => ({ ...current, key: "", elevenLabsKey: "" }));
       if (patch.elevenLabsKey !== undefined) {
         ui.clearElevenLabsStatus();
-        setElevenLabsWarning(undefined);
+        elevenLabsRemoval.reset();
         void ui.fetchElevenLabsStatus();
       }
       setBanner({ kind: "saved" });
@@ -262,52 +256,33 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
     }
   };
 
-  const removeKey = async () => {
-    if (!confirmRemove) {
-      setConfirmRemove(true);
-      setFieldWarning(REMOVE_WARNING);
-      return;
-    }
-    setRemoving(true);
-    try {
-      const answer = await engine.call("settings.removeKey");
+  const openRouterRemoval = useKeyRemoval(
+    OPENROUTER_KEY,
+    async () => {
+      const answer = await engine.call(OPENROUTER_KEY.removeMethod as "settings.removeKey");
       ui.setSettings(answer.settings);
       ui.keyChosen();
       ui.clearKeyStatus();
       setDraft((current) => ({ ...current, key: "" }));
-      // The key section stays, so the person sees what happened.
       setRevealed(true);
-      setFieldWarning(REMOVED_WARNING);
       setBanner(answer.renderCleanupError === undefined ? undefined : { kind: "error", message: answer.renderCleanupError });
-    } catch (error) {
-      setFieldWarning(undefined);
-      setBanner({ kind: "error", message: messageOf(error) });
-    } finally {
-      setConfirmRemove(false);
-      setRemoving(false);
-    }
-  };
+    },
+    (message) => setBanner({ kind: "error", message }),
+  );
 
-  const removeElevenLabsKey = async () => {
-    if (!confirmRemoveElevenLabs) {
-      setConfirmRemoveElevenLabs(true);
-      setElevenLabsWarning(ELEVENLABS_REMOVE_WARNING);
-      return;
-    }
-    setRemovingElevenLabs(true);
-    try {
-      const answer = await engine.call("settings.removeElevenLabsKey");
+  const elevenLabsRemoval = useKeyRemoval(
+    ELEVENLABS_KEY,
+    async () => {
+      const answer = await engine.call(ELEVENLABS_KEY.removeMethod as "settings.removeElevenLabsKey");
       ui.setSettings(answer.settings);
       ui.clearElevenLabsStatus();
       setDraft((current) => ({ ...current, elevenLabsKey: "" }));
-      setElevenLabsWarning(ELEVENLABS_REMOVED);
-    } catch (error) {
-      setElevenLabsWarning(undefined);
-      setBanner({ kind: "error", message: messageOf(error) });
-    } finally {
-      setConfirmRemoveElevenLabs(false);
-      setRemovingElevenLabs(false);
-    }
+    },
+    (message) => setBanner({ kind: "error", message }),
+  );
+  resetRemovals.current = () => {
+    openRouterRemoval.reset();
+    elevenLabsRemoval.reset();
   };
 
   const setPlanModePreference = (value: boolean) => {
@@ -386,18 +361,10 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
                 value={draft.key}
                 onChange={(event) => {
                   edit({ key: event.target.value });
-                  if (confirmRemove) {
-                    setConfirmRemove(false);
-                    setFieldWarning(undefined);
-                  }
+                  openRouterRemoval.typed();
                 }}
               />
-              {hasKey && (
-                <Button variant={confirmRemove ? "destructive" : "ghost"} aria-busy={removing || undefined} disabled={removing} onClick={() => void removeKey()}>
-                  {removing && <Spinner aria-hidden />}
-                  {confirmRemove ? "Yes, remove it" : "Remove key"}
-                </Button>
-              )}
+              {hasKey && <RemoveKeyButton removal={openRouterRemoval} />}
             </div>
             <p className="m-0 text-xs text-muted-foreground" data-testid="key-status">
               <Copy parts={copy.line} />
@@ -412,11 +379,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
                 Reconnect OpenRouter
               </Button>
             )}
-            {fieldWarning !== undefined && (
-              <p className="m-0 text-xs text-destructive-foreground" data-testid="key-warning">
-                {fieldWarning}
-              </p>
-            )}
+            <KeyWarning removal={openRouterRemoval} testId="key-warning" />
           </div>
         )}
       </section>
@@ -439,32 +402,15 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
               value={draft.elevenLabsKey}
               onChange={(event) => {
                 edit({ elevenLabsKey: event.target.value });
-                if (confirmRemoveElevenLabs) {
-                  setConfirmRemoveElevenLabs(false);
-                  setElevenLabsWarning(undefined);
-                }
+                elevenLabsRemoval.typed();
               }}
             />
-            {hasElevenLabsKey && (
-              <Button
-                variant={confirmRemoveElevenLabs ? "destructive" : "ghost"}
-                aria-busy={removingElevenLabs || undefined}
-                disabled={removingElevenLabs}
-                onClick={() => void removeElevenLabsKey()}
-              >
-                {removingElevenLabs && <Spinner aria-hidden />}
-                {confirmRemoveElevenLabs ? "Yes, remove it" : "Remove key"}
-              </Button>
-            )}
+            {hasElevenLabsKey && <RemoveKeyButton removal={elevenLabsRemoval} />}
           </div>
           <p className="m-0 text-xs text-muted-foreground" data-testid="elevenlabs-status">
             {elevenLabsCopy}
           </p>
-          {elevenLabsWarning !== undefined && (
-            <p className="m-0 text-xs text-destructive-foreground" data-testid="elevenlabs-warning">
-              {elevenLabsWarning}
-            </p>
-          )}
+          <KeyWarning removal={elevenLabsRemoval} testId="elevenlabs-warning" />
         </div>
       </section>
 
@@ -477,6 +423,11 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
                 <ModelSelect key={medium} label={label} value={draft[field]} models={catalogues[medium]} onChange={(value) => edit({ [field]: value })} />
               ))}
             {hasElevenLabsKey && <ModelSelect label="Audio" value={draft.audioModel} models={catalogues.audio} onChange={(value) => edit({ audioModel: value })} />}
+            {hasElevenLabsKey && audioModelsProblem !== undefined && (
+              <p className="m-0 text-xs text-muted-foreground" data-testid="audio-models-problem">
+                {audioModelsProblem}
+              </p>
+            )}
           </>
         ) : (
           <p className="m-0 text-xs text-muted-foreground" data-testid="models-need-key">

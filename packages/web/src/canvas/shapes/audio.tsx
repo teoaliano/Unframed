@@ -1,5 +1,5 @@
 import { AUDIO_DEFAULT_SIZE, AUDIO_EMPTY_SIZE, AUDIO_HEIGHT, AUDIO_WIDTH, resultMetaOf, runMarkerOf, type AudioShapeProps } from "@unframed/contracts";
-import { audioClock, audioTitle, readRef } from "@unframed/domain";
+import { AUDIO_ACCEPT, audioClock, audioFileRefusal, audioTitle, readRef } from "@unframed/domain";
 import { Pause, Play, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { atom, BaseBoxShapeUtil, HTMLContainer, T, useEditor, useValue, Vec, type Editor, type RecordProps, type TLResizeInfo, type TLShape, type TLShapeId, type TLShapePartial } from "tldraw";
@@ -89,6 +89,8 @@ const EmptyAudio = ({ shape }: { readonly shape: AudioShape }) => {
   const events = controlEvents(editor);
   const onFile = async (file: File | undefined) => {
     if (!file) return;
+    const refusal = audioFileRefusal({ type: file.type, name: file.name, size: file.size });
+    if (refusal !== undefined) return showError(refusal);
     setBusy(true);
     try {
       const saved = await uploadFile(project, file, file.name || "audio.mp3");
@@ -111,7 +113,7 @@ const EmptyAudio = ({ shape }: { readonly shape: AudioShape }) => {
         <input
           ref={input}
           type="file"
-          accept="audio/*"
+          accept={AUDIO_ACCEPT}
           hidden
           onChange={(event) => {
             void onFile(event.currentTarget.files?.[0]);
@@ -126,7 +128,7 @@ const EmptyAudio = ({ shape }: { readonly shape: AudioShape }) => {
 const Generating = ({ shape }: { readonly shape: AudioShape }) => {
   noteRender(shape.id);
   return (
-    <HTMLContainer id={shape.id} className={mediaCardClass} data-testid="audio-empty" data-placeholder="" style={{ width: shape.props.w, height: shape.props.h }}>
+    <HTMLContainer id={shape.id} className={mediaCardClass} data-testid="audio-placeholder" data-placeholder="" style={{ width: shape.props.w, height: shape.props.h }}>
       <AudioLabel shape={shape} />
       <div className="box-border flex h-full items-center justify-center gap-2 p-2.5 text-sm text-muted-foreground" role="status">
         <Spinner size="md" aria-hidden />
@@ -215,7 +217,7 @@ const Player = ({ shape }: { readonly shape: AudioShape }) => {
           setPlaying(false);
         }}
       />
-      <div className="box-border flex h-full items-center gap-2 py-2 pr-3 pl-2">
+      <div className="box-border flex h-full items-center gap-2 py-2 pr-7 pl-2">
         <Button
           variant="ghost"
           size="icon-sm"

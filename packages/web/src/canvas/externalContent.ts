@@ -1,6 +1,6 @@
 import { parseAssetMarker, projectFileMarker, UnframedError } from "@unframed/contracts";
 import { AUDIO_DEFAULT_SIZE } from "@unframed/contracts";
-import { dropKind, isVideoLink, META_REF_TYPES, pastedFileName, readRef, refOnPaste, rewriteRichTextTokens, VIDEO_FILE_LIMIT, VIDEO_TOO_LARGE_MESSAGE } from "@unframed/domain";
+import { audioFileRefusal, dropKind, isVideoLink, unplayableAudioMessage, type DroppedKind, META_REF_TYPES, pastedFileName, readRef, refOnPaste, rewriteRichTextTokens, VIDEO_FILE_LIMIT, VIDEO_TOO_LARGE_MESSAGE } from "@unframed/domain";
 import {
   AssetRecordType,
   createShapeId,
@@ -35,9 +35,12 @@ const MULTI_DROP_OFFSET = 24;
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
-type DroppedKind = MediaKind | "audio" | "page";
+type PlacedKind = Exclude<DroppedKind, "unplayable-audio">;
 
-const kindOf = (file: File): DroppedKind | undefined => dropKind(file);
+const checkSound = (file: File): void => {
+  const refusal = audioFileRefusal({ type: file.type, name: file.name, size: file.size });
+  if (refusal !== undefined) throw new MediaRefused(refusal);
+};
 
 const withoutExtension = (name: string) => name.replace(/\.[^.]*$/, "");
 
@@ -79,9 +82,10 @@ const createAudio = (editor: Editor, file: string, fileName: string, point: VecL
   return id;
 };
 
-const addFile = async (editor: Editor, ctx: ContentContext, file: File, kind: DroppedKind, point: VecLike, failure: string) => {
+const addFile = async (editor: Editor, ctx: ContentContext, file: File, kind: PlacedKind, point: VecLike, failure: string) => {
   try {
     if (kind === "audio") {
+      checkSound(file);
       const saved = await uploadFile(ctx.project, file, file.name || pastedFileName("audio", file.type));
       editor.markHistoryStoppingPoint("add audio");
       return createAudio(editor, saved.file, file.name || saved.fileName, point);
@@ -126,7 +130,8 @@ const handleDrop = async (editor: Editor, ctx: ContentContext, files: ReadonlyAr
   const [only] = files;
   if (files.length === 1 && only) {
     const target = editor.getShapeAtPoint(point, { hitInside: true, hitFrameInside: false });
-    const kind = kindOf(only);
+    const kind = dropKind(only);
+    if (target && target.type === "audio" && kind === "unplayable-audio") return showError(unplayableAudioMessage(only.name));
     if (target && (target.type === "page" || target.type === "motion") && kind === "page") return replaceArtifactFile(editor, ctx, target, only);
     if (target && target.type === "audio" && kind === "audio") return replaceAudio(editor, ctx, [target.id], only, "Could not add");
     if (target && (target.type === "image" || target.type === "video") && kind === target.type) {
@@ -143,8 +148,12 @@ const handleDrop = async (editor: Editor, ctx: ContentContext, files: ReadonlyAr
   let placed = 0;
   await Promise.all(
     files.map((file) => {
-      const kind = kindOf(file);
+      const kind = dropKind(file);
       if (!kind) return undefined;
+      if (kind === "unplayable-audio") {
+        showError(unplayableAudioMessage(file.name));
+        return undefined;
+      }
       const at = { x: point.x + placed * MULTI_DROP_OFFSET, y: point.y + placed * MULTI_DROP_OFFSET };
       placed++;
       if (kind === "video" && file.size > VIDEO_FILE_LIMIT) {
@@ -158,11 +167,12 @@ const handleDrop = async (editor: Editor, ctx: ContentContext, files: ReadonlyAr
 
 const replaceAudio = async (editor: Editor, ctx: ContentContext, targets: ReadonlyArray<TLShapeId>, file: File, failure: string) => {
   try {
+    checkSound(file);
     const saved = await uploadFile(ctx.project, file, file.name || pastedFileName("audio", file.type));
     editor.markHistoryStoppingPoint("replace audio");
     for (const id of targets) fillAudio(editor, id, { file: saved.file, fileName: file.name || saved.fileName });
   } catch (error) {
-    showError(`${failure} ${file.name || "that sound file"}: ${messageOf(error)}`);
+    showError(error instanceof MediaRefused ? error.message : `${failure} ${file.name || "that sound file"}: ${messageOf(error)}`);
   }
 };
 
@@ -175,7 +185,11 @@ const selectedOfKind = (editor: Editor, kind: MediaKind) =>
 const pasteFiles = async (editor: Editor, ctx: ContentContext, files: ReadonlyArray<File>, point: VecLike = editor.inputs.getCurrentPagePoint()) => {
   let placed = 0;
   for (const pastedFile of files) {
-    const kind = kindOf(pastedFile);
+    const kind = dropKind(pastedFile);
+    if (kind === "unplayable-audio") {
+      showError(unplayableAudioMessage(pastedFile.name));
+      continue;
+    }
     if (kind === "audio") {
       const file = named(pastedFile, kind);
       const targets = editor.getSelectedShapes().filter((shape) => shape.type === "audio").map((shape) => shape.id);
@@ -348,7 +362,8 @@ export const installExternalContent = (editor: Editor, ctx: ContentContext): voi
   );
   editor.registerExternalContentHandler("file-replace", async ({ file, shapeId }) => {
     const shape = editor.getShape(shapeId);
-    const kind = kindOf(file);
+    const kind = dropKind(file);
+    if (shape && kind === "unplayable-audio" && shape.type === "audio") return showError(unplayableAudioMessage(file.name));
     if (shape && kind === "audio" && shape.type === "audio") return replaceAudio(editor, ctx, [shape.id], file, "Could not add");
     if (!shape || (kind !== "image" && kind !== "video") || shape.type !== kind) return;
     try {
