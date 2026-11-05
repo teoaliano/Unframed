@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  boardMediaType,
   copyFileName,
   extensionFor,
   isHttpsLink,
@@ -141,3 +142,15 @@ describe("limits", () => {
     expect(UPLOAD_BODY_LIMIT).toBe(500 * 1_048_576);
   });
 });
+
+describe("the media the board can show", () => {
+  it("names an image or video type by the file's extension, and nothing else", () => {
+    expect(boardMediaType("fox.PNG")).toBe("image/png");
+    expect(boardMediaType("fox.jpeg")).toBe("image/jpeg");
+    expect(boardMediaType("clip.mov")).toBe("video/quicktime");
+    expect(boardMediaType("page.html")).toBeUndefined();
+    expect(boardMediaType("notes.txt")).toBeUndefined();
+    expect(boardMediaType("README")).toBeUndefined();
+  });
+});
+

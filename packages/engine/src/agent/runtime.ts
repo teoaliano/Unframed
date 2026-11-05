@@ -8,6 +8,7 @@ import {
   elementContext,
   roomShapeId,
   changeNote,
+  isProviderCommand,
   chatSummary,
   DEFAULT_RUNTIME_MODE,
   classifyToolItem,
@@ -50,8 +51,9 @@ import { scriptedAdapter } from "./adapters/scripted.ts";
 import { AttachmentStore } from "./attachmentStore.ts";
 import { KitTools } from "../kits/kitTools.ts";
 import { CanvasTools } from "./canvasTools.ts";
-import { OutsideChats } from "./outsideChats.ts";
+import { latestTurnId, OutsideChats } from "./outsideChats.ts";
 import { outsideSelectionTools } from "./selectionTools.ts";
+import { outsideAgentTools, type OutsideToolDeps } from "./outsideTools.ts";
 import { AgentGeneration } from "./agentGeneration.ts";
 import { generateArguments, generateTool } from "./generateTool.ts";
 import type { ConnectionBook } from "../agentConnections/book.ts";
@@ -101,6 +103,8 @@ interface AgentRuntimeDeps {
   };
   readonly runEnvironment: (provider: AgentProvider) => Promise<RunEnvironment>;
   readonly defaultModel: (provider: AgentProvider) => Promise<string | undefined>;
+  readonly providerCommands?: (provider: AgentProvider) => Promise<ReadonlyArray<string> | undefined>;
+  readonly saveMedia: OutsideToolDeps["save"];
   readonly realAdapter: (provider: AgentProvider, context: AdapterContext) => ProviderAdapter;
   readonly extraTools?: (context: AgentToolContext) => ReadonlyArray<McpTool>;
   readonly onSessionClosed?: (project: string, chatId: string) => void;
@@ -122,6 +126,7 @@ interface ActiveTurn {
   readonly interactionMode: InteractionMode;
   readonly startedAt: number;
   readonly model: string;
+  readonly command: boolean;
 }
 
 class ProjectAgent {
@@ -237,7 +242,10 @@ export class AgentRuntime {
         });
       },
     });
-    this.outsideTools = [...outsideSelectionTools({ hub: deps.selection, read: (project) => deps.rooms.read(project) })];
+    this.outsideTools = [
+      ...outsideSelectionTools({ hub: deps.selection, read: (project) => deps.rooms.read(project) }),
+      ...outsideAgentTools({ note: (binding, text) => this.outsideNote(binding, text), save: (project, input) => deps.saveMedia(project, input) }),
+    ];
     this.outside = new OutsideChats(
       {
         agent: (slug) => this.project(slug),
@@ -260,6 +268,14 @@ export class AgentRuntime {
       onIdleClose: (project, chatId) => void this.idleClosed(project, chatId),
       ...(deps.onSessionClosed === undefined ? {} : { onClosed: deps.onSessionClosed }),
     });
+  }
+
+  private async outsideNote(binding: McpBinding, text: string): Promise<void> {
+    const agent = await this.project(binding.project);
+    const turnId = latestTurnId(agent.engine, binding.chatId);
+    const messageId = `assistant:note:${randomUUID()}`;
+    await this.internal(agent, binding.chatId, { type: "thread.message.assistant.delta", messageId, turnId, delta: text });
+    await this.internal(agent, binding.chatId, { type: "thread.message.assistant.complete", messageId, turnId });
   }
 
   setApiPort(port: number): void {
@@ -566,6 +582,8 @@ export class AgentRuntime {
     const message = chat.messages.find((known) => known.id === requested.messageId);
     const steer = requested.steer === true;
     const selection = await this.resolveModel((requested.modelSelection as ModelSelection | undefined) ?? chat.modelSelection);
+    const known = selection.provider === "outside" ? undefined : await this.deps.providerCommands?.(selection.provider).catch(() => undefined);
+    const command = isProviderCommand(message?.text ?? "", message?.attachments?.length ?? 0, known);
     if (!steer) {
       this.activeTurns.set(chatId, {
         turnId: String(requested.turnId),
@@ -573,6 +591,7 @@ export class AgentRuntime {
         interactionMode: requested.interactionMode,
         startedAt: Date.now(),
         model: selection.model,
+        command,
       });
       if (Number(requested.turnCount) === 1 && message?.context?.selection.length) {
         await this.tag(agent.slug, chatId, await this.artifactsAmong(agent.slug, message.context.selection));
@@ -580,7 +599,7 @@ export class AgentRuntime {
     }
     try {
       const records = await this.deps.rooms.read(agent.slug);
-      const preamble = await this.preamble(agent, chat, message?.context?.selection ?? [], message?.context?.elements ?? [], message?.attachments ?? [], records);
+      const preamble = command ? "" : await this.preamble(agent, chat, message?.context?.selection ?? [], message?.context?.elements ?? [], message?.attachments ?? [], records);
       const live = this.providers.has(chatId);
       if (!live) await this.internal(agent, chatId, { type: "thread.session.set", session: { status: "starting", activeTurnId: String(requested.turnId), lastError: null } });
       await this.providers.ensure(agent.slug, agent.engine.chat(chatId) ?? chat, agent.folder, agent.engine, selection);
@@ -597,6 +616,7 @@ export class AgentRuntime {
         modelSelection: selection,
         interactionMode: requested.interactionMode ?? chat.interactionMode,
         steer,
+        ...(command ? { command: true } : {}),
       });
     } catch (error) {
       const text = errorText(error);
@@ -865,10 +885,11 @@ export class AgentRuntime {
         });
       }
     }
-    const clock = await this.deps.rooms.clock(agent.slug).catch(() => null);
+    const active = this.activeTurns.get(chatId);
+    const command = active?.turnId === turn.turnId && active.command;
+    const clock = command ? null : await this.deps.rooms.clock(agent.slug).catch(() => null);
     await this.internal(agent, chatId, { type: "thread.turn.settle", turnCount: turn.turnCount, clock, ...(outcome.usage === undefined ? {} : { usage: outcome.usage }) });
     await this.internal(agent, chatId, { type: "thread.turn.files.complete", turnCount: turn.turnCount, files: agent.turnChanges.files(chatId, turn.turnCount) });
-    const active = this.activeTurns.get(chatId);
     await writeTurnSidecar(agent.folder, {
       chatId,
       turn: turn.turnCount,
