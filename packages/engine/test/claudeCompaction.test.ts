@@ -1,15 +1,22 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { CHAT_TITLE_PROMPT } from "@unframed/domain";
 import { describe, expect, it } from "vitest";
 import { PROJECT, startAgentEngine } from "./agent.ts";
 import { fakeClaudeTurns, fakeShell } from "./agentFakes.ts";
 import { makeTempDir } from "./harness.ts";
 
+const TITLE_REQUEST = CHAT_TITLE_PROMPT.slice(0, CHAT_TITLE_PROMPT.indexOf("<first message>"));
+
+const textOf = (content: unknown): string =>
+  typeof content === "string" ? content : Array.isArray(content) ? content.map((block: { text?: unknown }) => (typeof block.text === "string" ? block.text : "")).join("\n") : "";
+
 const sentMessages = async (log: string): Promise<Array<{ content: unknown }>> =>
   (await readFile(log, "utf8").catch(() => ""))
     .split("\n")
     .filter((line) => line !== "")
-    .map((line) => JSON.parse(line));
+    .map((line) => JSON.parse(line) as { content: unknown })
+    .filter((message) => !textOf(message.content).startsWith(TITLE_REQUEST));
 
 const firstShape = async (agent: Awaited<ReturnType<typeof startAgentEngine>>): Promise<string> => {
   const canvas = (await agent.rpc.call("testCanvas.read", { project: PROJECT })) as unknown as { records: Array<{ id: string; typeName: string }> };

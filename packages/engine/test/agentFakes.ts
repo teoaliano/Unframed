@@ -76,7 +76,7 @@ const fs = require("node:fs");
 if (args[0] === "--version") { console.log("codex-cli 0.156.1"); process.exit(0); }
 if (args[0] === "login" && args[1] === "status") { console.log("Logged in using ChatGPT"); process.exit(0); }
 if (args[0] !== "app-server") process.exit(2);
-const log = (entry) => fs.appendFileSync(process.env.FAKE_CODEX_MESSAGES, JSON.stringify(entry) + "\\n");
+const log = (entry) => fs.appendFileSync(process.env.FAKE_CODEX_MESSAGES, JSON.stringify({ pid: process.pid, ...entry }) + "\\n");
 const threadsFile = process.env.FAKE_CODEX_THREADS;
 const known = () => (fs.existsSync(threadsFile) ? fs.readFileSync(threadsFile, "utf8").split("\\n").filter(Boolean) : []);
 const configArg = (key) => { for (let i = 0; i < args.length - 1; i++) if (args[i] === "-c" && args[i + 1].startsWith(key + "=")) return args[i + 1].slice(key.length + 1); };

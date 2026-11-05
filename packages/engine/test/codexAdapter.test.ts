@@ -6,6 +6,11 @@ import { startAgentEngine, UNFRAMED_TOOLS } from "./agent.ts";
 import { fakeCodexAppServer, fakeCodexMessages, fakeShell } from "./agentFakes.ts";
 import { makeTempDir } from "./harness.ts";
 
+const sessionMessages = (log: any[]): any[] => {
+  const start = log.find((entry) => entry.start === true && entry.token !== null);
+  return log.filter((entry) => entry.pid === start.pid && entry.message).map((entry) => entry.message);
+};
+
 describe("Codex runs a chat", () => {
   it("starts a thread in the project folder with the mode's policies and the MCP arguments, streams a reply, raises an approval, and resumes by thread id", async () => {
     const dir = await makeTempDir("unframed-codex-");
@@ -39,7 +44,7 @@ describe("Codex runs a chat", () => {
     expect(start.argv).toEqual(["app-server", "-c", `mcp_servers.unframed.url=http://127.0.0.1:${agent.engine.port}/mcp`, "-c", 'mcp_servers.unframed.bearer_token_env_var="UNFRAMED_MCP_TOKEN"', "-c", "mcp_servers.unframed-app.enabled=false"]);
     expect(start.token).toMatch(/^[0-9a-f]{64}$/);
     expect(start.cwd).toBe(realpathSync(agent.folder));
-    const sent = log.flatMap((entry) => (entry.message ? [entry.message] : []));
+    const sent = sessionMessages(log);
     expect(sent[0]).toMatchObject({ method: "initialize", params: { clientInfo: { name: "unframed", title: "Unframed" }, capabilities: { experimentalApi: true } } });
     expect(sent[0]).not.toHaveProperty("jsonrpc");
     const { version } = JSON.parse(readFileSync(join(import.meta.dirname, "../package.json"), "utf8"));
@@ -136,7 +141,7 @@ describe("Codex runs a chat", () => {
     await agent.send(chatId, "/compact keep the API notes");
     const chat = await agent.settled(chatId, 2);
     expect(chat.latestTurn?.state).toBe("completed");
-    const sent = (await fakeCodexMessages(messages)).flatMap((entry) => (entry.message ? [entry.message] : []));
+    const sent = sessionMessages(await fakeCodexMessages(messages));
     const compact = sent.find((message) => message.method === "thread/compact/start");
     expect(compact.params).toEqual({ threadId: sent.find((message) => message.method === "turn/start").params.threadId });
     expect(sent.filter((message) => message.method === "turn/start")).toHaveLength(1);
