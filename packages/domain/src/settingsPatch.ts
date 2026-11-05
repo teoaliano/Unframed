@@ -4,6 +4,8 @@ export interface SettingsPatchInput {
   readonly imageModel?: string;
   readonly textModel?: string;
   readonly videoModel?: string;
+  readonly elevenLabsKey?: string;
+  readonly audioModel?: string;
   readonly outputDir?: string;
   readonly claudePath?: string;
   readonly codexPath?: string;
@@ -39,6 +41,20 @@ const FIELDS: ReadonlyArray<{
   { field: "imageModel", variable: "OPENROUTER_IMAGE_MODEL", pattern: MODEL, message: MODEL_MESSAGE, clearable: false },
   { field: "textModel", variable: "OPENROUTER_TEXT_MODEL", pattern: MODEL, message: MODEL_MESSAGE, clearable: false },
   { field: "videoModel", variable: "OPENROUTER_VIDEO_MODEL", pattern: MODEL, message: MODEL_MESSAGE, clearable: false },
+  {
+    field: "elevenLabsKey",
+    variable: "ELEVENLABS_API_KEY",
+    pattern: /^[\w-]{20,200}$/,
+    message: "That does not look like an ElevenLabs key.",
+    clearable: false,
+  },
+  {
+    field: "audioModel",
+    variable: "ELEVENLABS_AUDIO_MODEL",
+    pattern: /^[\w.-]{1,100}$/,
+    message: 'That does not look like an ElevenLabs model id. Expected something like "eleven_v4".',
+    clearable: false,
+  },
   {
     field: "outputDir",
     variable: "OUTPUT_DIR",

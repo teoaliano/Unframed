@@ -2,7 +2,7 @@ import { membersOf, readingOrder, type CanvasShape, type Crop } from "./canvasSh
 import { boxesOverlap, type Box } from "./grouping.ts";
 import { createResolver } from "./references.ts";
 
-export type Medium = "image" | "video" | "text";
+export type Medium = "image" | "video" | "text" | "audio";
 
 export type SlotSource =
   | { readonly type: "file"; readonly file: string }
@@ -175,6 +175,7 @@ export const composeSelection = (input: CompositionInput): Composition => {
       case "page":
       case "motion":
       case "component":
+      case "audio":
         roles[shape.id] = UNUSED_ROLE;
         break;
       case "mark": {

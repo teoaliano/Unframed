@@ -36,7 +36,7 @@ export interface MenuInput {
 }
 
 export type EditAction = "cut" | "copy" | "paste" | "group" | "ungroup";
-export type AddAction = "add-prompt" | "add-image" | "add-video" | "add-group" | "add-page" | "add-motion";
+export type AddAction = "add-prompt" | "add-image" | "add-video" | "add-audio" | "add-group" | "add-page" | "add-motion";
 
 export type MenuItem =
   | { readonly action: "reveal"; readonly label: string; readonly files: ReadonlyArray<string> }
@@ -86,6 +86,7 @@ export const INPUT_ITEMS: ReadonlyArray<{ action: AddAction; label: string }> = 
   { action: "add-prompt", label: "Prompt" },
   { action: "add-image", label: "Image" },
   { action: "add-video", label: "Video" },
+  { action: "add-audio", label: "Audio" },
   { action: "add-group", label: "Group" },
 ];
 
@@ -103,7 +104,7 @@ const libraryItem = (selection: ReadonlyArray<MenuShape>): MenuItem => {
 };
 
 const isFilledMedia = (shape: MenuShape): boolean =>
-  (shape.type === "image" || shape.type === "video") && shape.file !== undefined;
+  (shape.type === "image" || shape.type === "video" || shape.type === "audio") && shape.file !== undefined;
 
 const isFilledArtifact = (shape: MenuShape): boolean => shape.filledArtifact === true && shape.file !== undefined;
 
@@ -134,7 +135,7 @@ export const contextMenu = (input: MenuInput): MenuSection[] => {
   if (clicked && clicked.type === "image" && clicked.file !== undefined) {
     imageItems.push({ action: "copy-as-image", label: "Copy as image" });
   }
-  add("image", clicked?.type === "video" ? "Video" : "Image", imageItems);
+  add("image", clicked?.type === "video" ? "Video" : clicked?.type === "audio" ? "Audio" : "Image", imageItems);
 
   const pinned = input.pinned ?? [];
   if (clicked?.filledArtifact) {

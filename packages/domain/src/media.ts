@@ -22,6 +22,13 @@ const EXTENSIONS: Record<string, string> = {
   "video/mp4": "mp4",
   "video/quicktime": "mov",
   "video/webm": "webm",
+  "audio/mpeg": "mp3",
+  "audio/mp3": "mp3",
+  "audio/wav": "wav",
+  "audio/x-wav": "wav",
+  "audio/wave": "wav",
+  "audio/mp4": "m4a",
+  "audio/x-m4a": "m4a",
   "text/html": "html",
 };
 
@@ -144,10 +151,23 @@ export const linkedVideoName = (url: string): string => {
   return segment === "" ? "linked video" : segment;
 };
 
-/** The name of a pasted file that has none: `pasted-<kind>.<ext>` from its type, `png` when unknown. */
-export const pastedFileName = (kind: "image" | "video", mime: string): string => {
+/** The name of a pasted file that has none: `pasted-<kind>.<ext>` from its type, `png` (`mp3` for audio) when unknown. */
+export const pastedFileName = (kind: "image" | "video" | "audio", mime: string): string => {
   const type = essence(mime);
   const subtype = type.split("/")[1] ?? "";
-  const ext = EXTENSIONS[type] ?? (/^[a-z0-9]{1,5}$/.test(subtype) ? subtype : "png");
+  const ext = EXTENSIONS[type] ?? (kind === "audio" ? "mp3" : /^[a-z0-9]{1,5}$/.test(subtype) ? subtype : "png");
   return `pasted-${kind}.${ext}`;
+};
+
+export type DroppedKind = "image" | "video" | "audio" | "page";
+
+const AUDIO_NAME = /\.(mp3|wav|m4a)$/i;
+
+/** What a dropped or pasted file becomes on the canvas, by its type, else by its name; `undefined` for anything else. */
+export const dropKind = (file: { readonly type: string; readonly name: string }): DroppedKind | undefined => {
+  if (file.type.startsWith("image/")) return "image";
+  if (file.type.startsWith("video/")) return "video";
+  if (file.type.startsWith("audio/") || AUDIO_NAME.test(file.name)) return "audio";
+  if (file.type === "text/html" || /\.html?$/i.test(file.name)) return "page";
+  return undefined;
 };

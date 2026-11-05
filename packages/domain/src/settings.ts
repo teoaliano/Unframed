@@ -7,6 +7,7 @@ export const SETTINGS_DEFAULTS = {
   OPENROUTER_IMAGE_MODEL: "openai/gpt-image-2",
   OPENROUTER_TEXT_MODEL: "google/gemini-3.5-flash-lite",
   OPENROUTER_VIDEO_MODEL: "bytedance/seedance-2.0",
+  ELEVENLABS_AUDIO_MODEL: "eleven_v4",
   OUTPUT_DIR: "./output",
   PORT: 8787,
 } as const;
@@ -19,6 +20,8 @@ export interface EffectiveSettings {
   readonly imageModel: string;
   readonly textModel: string;
   readonly videoModel: string;
+  readonly elevenLabsKey: string;
+  readonly audioModel: string;
   readonly outputDir: string;
   readonly claudePath: string;
   readonly codexPath: string;
@@ -42,6 +45,8 @@ export const effectiveSettings = (fileVars: EnvVars, processEnv: EnvVars): Effec
     imageModel: value("OPENROUTER_IMAGE_MODEL") ?? value("OPENROUTER_MODEL") ?? SETTINGS_DEFAULTS.OPENROUTER_IMAGE_MODEL,
     textModel: value("OPENROUTER_TEXT_MODEL") ?? SETTINGS_DEFAULTS.OPENROUTER_TEXT_MODEL,
     videoModel: value("OPENROUTER_VIDEO_MODEL") ?? SETTINGS_DEFAULTS.OPENROUTER_VIDEO_MODEL,
+    elevenLabsKey: value("ELEVENLABS_API_KEY") ?? "",
+    audioModel: value("ELEVENLABS_AUDIO_MODEL") ?? SETTINGS_DEFAULTS.ELEVENLABS_AUDIO_MODEL,
     outputDir: value("OUTPUT_DIR") ?? SETTINGS_DEFAULTS.OUTPUT_DIR,
     claudePath: value("CLAUDE_PATH") ?? "",
     codexPath: value("CODEX_PATH") ?? "",
