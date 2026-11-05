@@ -34,6 +34,7 @@ export const shapeKind = (type: string | undefined): ShapeKind => {
       return "prompt";
     case "image":
     case "video":
+    case "audio":
     case "page":
     case "motion":
     case "component":
@@ -190,6 +191,11 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
         if (fact.kind === "image" && !isDefaultCrop(props.crop)) entry.crop = props.crop;
         break;
       }
+      case "audio": {
+        if (typeof props.file === "string" && props.file !== "") entry.file = props.file;
+        entry.fileName = typeof props.fileName === "string" ? props.fileName : "";
+        break;
+      }
       case "group": {
         entry.members = shapes
           .filter((shape) => shape.parent === record.id)
@@ -248,7 +254,7 @@ const round = (value: number, places = 2): number => {
 const MAX_OPS = 200;
 
 const OP_TYPES = new Set(["create", "update", "move", "resize", "delete", "reparent", "rename"]);
-const CREATE_KINDS = new Set(["prompt", "image", "video", "group", "mark"]);
+const CREATE_KINDS = new Set(["prompt", "image", "video", "audio", "group", "mark"]);
 const MARK_TYPES = new Set(["geo", "note", "arrow", "line"]);
 
 export interface FileFacts {
@@ -435,6 +441,11 @@ class Batch {
   }
 }
 
+const AUDIO_HEIGHT = 64;
+const AUDIO_DEFAULT_SIZE = { w: 320 };
+const AUDIO_EMPTY_SIZE = { w: 240 };
+const clampAudioWidth = (w: number): number => Math.min(640, Math.max(200, w));
+
 const numeric = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
 const fileOf = (op: string, ctx: BatchContext, props: Record<string, unknown>): FileFacts | undefined => {
@@ -568,6 +579,17 @@ const create = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
       };
       break;
     }
+    case "audio": {
+      if (props.url !== undefined) refuse("create: audio takes props.file, a file in the project folder");
+      const facts = typeof props.file === "string" ? ctx.file(props.file) : undefined;
+      const { file: _file, fileName: _fileName, ...rest } = props;
+      record = {
+        ...base,
+        props: { ...rest, w: clampAudioWidth(w ?? (facts ? AUDIO_DEFAULT_SIZE.w : AUDIO_EMPTY_SIZE.w)), h: AUDIO_HEIGHT, file: facts ? (props.file as string) : "", fileName: facts?.fileName ?? "" },
+        meta: { ref: ref() },
+      };
+      break;
+    }
     case "group": {
       const taken = batch.records().flatMap((known) => {
         const known_ref = readRef(known);
@@ -631,6 +653,19 @@ const update = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
     const renamed = batch.working.get(shape.id)!;
     return applyPatch(batch, renamed, { ...obj(renamed.props) }, rest);
   }
+  if (kind === "audio") {
+    if (patch.url !== undefined) refuse("update: audio takes props.file, a file in the project folder");
+    const { file, fileName: _fileName, w, h: _h, ...rest } = patch;
+    if (typeof file === "string") {
+      props.file = file;
+      props.fileName = ctx.file(file)?.fileName ?? "";
+    } else if (file === null) {
+      props.file = "";
+      props.fileName = "";
+    }
+    if (numeric(w) && w > 0) props.w = clampAudioWidth(w);
+    return applyPatch(batch, shape, props, rest);
+  }
   if (kind === "image" || kind === "video") {
     const asset = mediaAsset("update", ctx, kind, patch);
     const { file: _file, url: _url, ...rest } = patch;
@@ -690,6 +725,9 @@ const resize = (batch: Batch, op: Record<string, unknown>): void => {
       batch.put({ ...shape, props: { ...props, w, h: (w as number) * ratio } });
       return;
     }
+    case "audio":
+      batch.put({ ...shape, props: { ...props, w: clampAudioWidth(w as number), h: AUDIO_HEIGHT } });
+      return;
     case "frame": {
       const size = clampGroupSize({ w: w as number, h: h as number });
       batch.put({ ...shape, props: { ...props, ...size } });

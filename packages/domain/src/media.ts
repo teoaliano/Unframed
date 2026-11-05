@@ -13,7 +13,16 @@ export type PreviewSize = (typeof PREVIEW_SIZES)[number];
 export const VIDEO_TOO_LARGE_MESSAGE = "Video is too large. Keep it under 25MB.";
 export const VIDEO_LINK_MESSAGE = "Paste a full https:// link to a video file.";
 
+const AUDIO_TYPES: Readonly<Record<string, ReadonlyArray<string>>> = {
+  mp3: ["audio/mpeg", "audio/mp3"],
+  wav: ["audio/wav", "audio/x-wav", "audio/wave"],
+  m4a: ["audio/mp4", "audio/x-m4a"],
+};
+
+export const AUDIO_SERVED_TYPES: Readonly<Record<string, string>> = Object.fromEntries(Object.entries(AUDIO_TYPES).map(([ext, types]) => [ext, types[0]!]));
+
 const EXTENSIONS: Record<string, string> = {
+  ...Object.fromEntries(Object.entries(AUDIO_TYPES).flatMap(([ext, types]) => types.map((type) => [type, ext]))),
   "image/png": "png",
   "image/jpeg": "jpg",
   "image/webp": "webp",
@@ -29,7 +38,7 @@ export const boardMediaType = (name: string): string | undefined => {
   const ext = nameExtension(name);
   if (ext === undefined) return undefined;
   const mime = ext === "jpeg" ? "image/jpeg" : Object.keys(EXTENSIONS).find((type) => EXTENSIONS[type] === ext);
-  return mime !== undefined && (mime.startsWith("image/") || mime.startsWith("video/")) ? mime : undefined;
+  return mime !== undefined && (mime.startsWith("image/") || mime.startsWith("video/") || mime.startsWith("audio/")) ? mime : undefined;
 };
 
 const essence = (mime: string): string => mime.split(";")[0]!.trim().toLowerCase();
@@ -144,10 +153,41 @@ export const linkedVideoName = (url: string): string => {
   return segment === "" ? "linked video" : segment;
 };
 
-/** The name of a pasted file that has none: `pasted-<kind>.<ext>` from its type, `png` when unknown. */
-export const pastedFileName = (kind: "image" | "video", mime: string): string => {
+export const pastedFileName = (kind: "image" | "video" | "audio", mime: string): string => {
   const type = essence(mime);
   const subtype = type.split("/")[1] ?? "";
-  const ext = EXTENSIONS[type] ?? (/^[a-z0-9]{1,5}$/.test(subtype) ? subtype : "png");
+  const ext = EXTENSIONS[type] ?? (kind === "audio" ? "mp3" : /^[a-z0-9]{1,5}$/.test(subtype) ? subtype : "png");
   return `pasted-${kind}.${ext}`;
+};
+
+export type DroppedKind = "image" | "video" | "audio" | "page" | "unplayable-audio";
+
+export const AUDIO_FILE_LIMIT = 26_214_400;
+export const AUDIO_TOO_LARGE_MESSAGE = "Sound file is too large. Keep it under 25MB.";
+
+export const AUDIO_ACCEPT = [...Object.keys(AUDIO_SERVED_TYPES).map((ext) => `.${ext}`), ...Object.values(AUDIO_TYPES).flat()].join(",");
+
+export const unplayableAudioMessage = (name: string): string => `${name === "" ? "That sound file" : name} is not a sound file the board can play. Use MP3, WAV or M4A.`;
+
+const SOUND_NAME = /\.(ogg|oga|opus|flac|aac|aif|aiff|wma|weba|caf)$/i;
+
+const isPlayableAudio = (file: { readonly type: string; readonly name: string }): boolean => {
+  const type = essence(file.type);
+  if (type.startsWith("audio/")) return EXTENSIONS[type] !== undefined;
+  const ext = nameExtension(file.name);
+  return ext !== undefined && AUDIO_SERVED_TYPES[ext] !== undefined;
+};
+
+export const dropKind = (file: { readonly type: string; readonly name: string }): DroppedKind | undefined => {
+  if (file.type.startsWith("image/")) return "image";
+  if (file.type.startsWith("video/")) return "video";
+  if (isPlayableAudio(file)) return "audio";
+  if (file.type.startsWith("audio/") || SOUND_NAME.test(file.name)) return "unplayable-audio";
+  if (file.type === "text/html" || /\.html?$/i.test(file.name)) return "page";
+  return undefined;
+};
+
+export const audioFileRefusal = (file: { readonly type: string; readonly name: string; readonly size: number }): string | undefined => {
+  if (!isPlayableAudio(file)) return unplayableAudioMessage(file.name);
+  return file.size > AUDIO_FILE_LIMIT ? AUDIO_TOO_LARGE_MESSAGE : undefined;
 };

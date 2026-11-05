@@ -1,6 +1,6 @@
 import { UnframedError } from "@unframed/contracts";
 import { changeLibrary, legacyPresetLine, libraryRange, libraryView, type LibraryControls, type LibraryEntry, type LibrarySort } from "@unframed/domain";
-import { ChevronLeft, ChevronRight, Group, Image, LayoutGrid, List, Package, Palette, Search, SquarePlay, Trash2, Type, UserRound, Workflow, type LucideIcon } from "lucide-react";
+import { AudioLines, ChevronLeft, ChevronRight, Group, Image, LayoutGrid, List, Package, Palette, Search, SquarePlay, Trash2, Type, UserRound, Workflow, type LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Alert } from "~/components/ui/alert";
 import {
@@ -48,6 +48,7 @@ const CHIPS: Record<string, { readonly label: string; readonly Icon: LucideIcon;
   image: { label: "Image", Icon: Image, hue: "teal" },
   video: { label: "Video", Icon: SquarePlay, hue: "orange" },
   text: { label: "Text", Icon: Type, hue: "cyan" },
+  audio: { label: "Audio", Icon: AudioLines, hue: "yellow" },
   user: { label: "Custom", Icon: UserRound, hue: "green" },
   system: { label: "System", Icon: Package, hue: "pink" },
   kit: { label: "Kit", Icon: Palette, hue: "amber" },

@@ -108,6 +108,8 @@ Settings variables (may appear in `.env`; `.env` values override the process env
 | `OPENROUTER_IMAGE_MODEL` | `openai/gpt-image-2` | `^[\w.-]+\/[\w.:-]+$` | yes | no |
 | `OPENROUTER_TEXT_MODEL` | `google/gemini-3.5-flash-lite` | same as image | yes | no |
 | `OPENROUTER_VIDEO_MODEL` | `bytedance/seedance-2.0` | same as image | yes | no |
+| `ELEVENLABS_API_KEY` (spec 15) | none | `^[\w-]{20,200}$` | yes | no (removal is its own action) |
+| `ELEVENLABS_AUDIO_MODEL` (spec 15) | `eleven_v4` | `^[\w.-]{1,100}$` | yes | no |
 | `OUTPUT_DIR` | `./output` | `^[^\n\r"'#]{1,400}$` | yes | no |
 | `CLAUDE_PATH` | empty (found on PATH) | `^[^\n\r"'#;&|$`<>(){}\s][^\n\r"'#;&|$`<>(){}]{0,399}$` | yes | yes |
 | `CODEX_PATH` | empty (found on PATH) | same as `CLAUDE_PATH` | yes | yes |
@@ -133,7 +135,7 @@ Why hosting variables stay out of `.env.example`: `.env` overrides the environme
 
 Client dev variables: `UNFRAMED_CLIENT_PORT` (Vite port, default 5173; when set the port is strict), `UNFRAMED_SERVER_PORT` (the engine port the Vite proxy targets, default 8787) and `UNFRAMED_DEV_SHARE_ORIGIN` (the dev share relay's https origin; `pnpm dev:share` sets it). None of them is part of the hosting contract.
 
-`.env.example` at the repo root contains exactly: `OPENROUTER_API_KEY=` (empty), `OPENROUTER_IMAGE_MODEL=openai/gpt-image-2`, `OPENROUTER_TEXT_MODEL=google/gemini-3.5-flash-lite`, `OPENROUTER_VIDEO_MODEL=bytedance/seedance-2.0`, `OUTPUT_DIR=./output`, `PORT=8787`, each on its own line, with a one-line comment header saying the app writes this file itself and copying it is optional.
+`.env.example` at the repo root contains exactly: `OPENROUTER_API_KEY=` (empty), `OPENROUTER_IMAGE_MODEL=openai/gpt-image-2`, `OPENROUTER_TEXT_MODEL=google/gemini-3.5-flash-lite`, `OPENROUTER_VIDEO_MODEL=bytedance/seedance-2.0`, `ELEVENLABS_API_KEY=` (empty), `ELEVENLABS_AUDIO_MODEL=eleven_v4`, `OUTPUT_DIR=./output`, `PORT=8787`, each on its own line, with a one-line comment header saying the app writes this file itself and copying it is optional.
 
 ### Test-only variables
 
@@ -142,6 +144,7 @@ This is the one table of every test-only variable in the build. A spec that uses
 | Variable | Used by | Effect |
 | --- | --- | --- |
 | `UNFRAMED_TEST_OPENROUTER_ORIGIN` | 01, 03, 04, 05, 10 | replaces `https://openrouter.ai` in every OpenRouter URL the engine builds: image generation and the image catalogue and pricing endpoints (spec 03), video create, status and catalogue and the unofficial `/api/frontend/v1/models/find` endpoint (spec 04), chat completions and the models listing (spec 05), the OAuth authorize page, the key exchange and the key status endpoint (spec 10). There is no per-URL override: every OpenRouter call goes through this one origin. Accepted only when it is an `http://127.0.0.1:<port>` or `http://localhost:<port>` origin; any other value is ignored and the engine logs `  test origin ignored: <value> is not a loopback origin` at boot, so the variable can never send the key anywhere but this machine |
+| `UNFRAMED_TEST_ELEVENLABS_ORIGIN` | 15 | replaces `https://api.elevenlabs.io` in every ElevenLabs URL the engine builds: models, voices, speech and subscription. Accepted only under the same loopback rule as `UNFRAMED_TEST_OPENROUTER_ORIGIN` (one domain function for both); any other value is ignored with `  test origin ignored: <value> is not a loopback origin` |
 | `UNFRAMED_TEST_NATIVE_LOG` | 01 | a file path. When set, reveal and the folder picker never spawn OS commands. Each command the engine would have run is appended as one JSON line `{"cmd": string, "args": string[]}` |
 | `UNFRAMED_TEST_PICK_FOLDER` | 01, 10 | with `UNFRAMED_TEST_NATIVE_LOG` set, the folder picker's answer: `none` behaves as "no picker on this machine", `cancel` as a cancelled dialog, any other value as the chosen path |
 | `UNFRAMED_TEST_SHUTDOWN_HOOK_MS` | 01 | registers one extra shutdown hook that takes this many milliseconds, so a test can watch a hook finish inside the budget or be abandoned at 1.5 seconds |

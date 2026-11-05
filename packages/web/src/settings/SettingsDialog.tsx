@@ -1,5 +1,5 @@
 import { UnframedError, type ProviderStatuses, type Settings, type SettingsPatch } from "@unframed/contracts";
-import { keyStatusCopy, sendShortcutOf, type SendShortcut } from "@unframed/domain";
+import { ELEVENLABS_KEY, elevenLabsStatusCopy, keyStatusCopy, OPENROUTER_KEY, sendShortcutOf, type SendShortcut } from "@unframed/domain";
 import { Bot, CircleAlert, CircleCheck, FolderOpen, Plug, SlidersHorizontal, Sparkles, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
@@ -17,14 +17,14 @@ import { ConfirmDialog } from "../agent/ConfirmDialog.tsx";
 import { OutsideAgents } from "./OutsideAgents.tsx";
 import type { SettingsSection } from "./settingsEvents.ts";
 import { useSettingsUi, type SettingsUi } from "./settingsUi.ts";
+import { KeyWarning, RemoveKeyButton, useKeyRemoval } from "./keyRemoval.tsx";
 
 export const KEY_SAVED_MESSAGE = "Key saved. Unframed is ready to generate.";
-const REMOVE_WARNING = "This deletes the key from .env. You will need to paste it again, or make a new one at openrouter.ai/keys.";
-const REMOVED_WARNING = "Key removed. Generate is disabled until you add one.";
+export const ELEVENLABS_KEY_SAVED_MESSAGE = "ElevenLabs key saved. Audio is ready to generate.";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
-type Medium = "image" | "text" | "video";
+type Medium = "image" | "text" | "video" | "audio";
 const MEDIA: ReadonlyArray<{ readonly medium: Medium; readonly label: string; readonly field: "imageModel" | "textModel" | "videoModel" }> = [
   { medium: "image", label: "Image", field: "imageModel" },
   { medium: "text", label: "Text", field: "textModel" },
@@ -33,6 +33,8 @@ const MEDIA: ReadonlyArray<{ readonly medium: Medium; readonly label: string; re
 
 interface Draft {
   readonly key: string;
+  readonly elevenLabsKey: string;
+  readonly audioModel: string;
   readonly imageModel: string;
   readonly textModel: string;
   readonly videoModel: string;
@@ -44,6 +46,8 @@ interface Draft {
 
 const draftOf = (settings: Settings | undefined): Draft => ({
   key: "",
+  elevenLabsKey: "",
+  audioModel: settings?.audioModel ?? "",
   imageModel: settings?.imageModel ?? "",
   textModel: settings?.textModel ?? "",
   videoModel: settings?.videoModel ?? "",
@@ -65,6 +69,8 @@ const SECTION_OF_FIELD: Record<keyof SettingsPatch, SettingsSection> = {
   imageModel: "generation",
   textModel: "generation",
   videoModel: "generation",
+  elevenLabsKey: "generation",
+  audioModel: "generation",
   outputDir: "general",
   claudePath: "agents",
   codexPath: "agents",
@@ -83,7 +89,8 @@ type Banner = { readonly kind: "error"; readonly message: string } | { readonly 
 const patchOf = (draft: Draft, settings: Settings): SettingsPatch => {
   const patch: { -readonly [K in keyof SettingsPatch]: SettingsPatch[K] } = {};
   if (draft.key.trim() !== "") patch.key = draft.key.trim();
-  for (const field of ["imageModel", "textModel", "videoModel", "outputDir"] as const) {
+  if (draft.elevenLabsKey.trim() !== "") patch.elevenLabsKey = draft.elevenLabsKey.trim();
+  for (const field of ["imageModel", "textModel", "videoModel", "audioModel", "outputDir"] as const) {
     const value = draft[field].trim();
     if (value !== "" && value !== settings[field]) patch[field] = value;
   }
@@ -103,10 +110,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const [revealed, setRevealed] = useState(false);
   const [banner, setBanner] = useState<Banner>();
   const [saving, setSaving] = useState(false);
-  const [confirmRemove, setConfirmRemove] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
-  const [removing, setRemoving] = useState(false);
-  const [fieldWarning, setFieldWarning] = useState<string>();
   const [catalogues, setCatalogues] = useState<Partial<Record<Medium, ReadonlyArray<string>>>>({});
   const [statuses, setStatuses] = useState<ProviderStatuses>();
   const [checking, setChecking] = useState(false);
@@ -115,6 +119,8 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const [planMode, setPlanMode] = useState(false);
   const keyField = useRef<HTMLInputElement>(null);
   const checks = useRef(0);
+  const resetRemovals = useRef(() => {});
+  const [audioModelsProblem, setAudioModelsProblem] = useState<string>();
 
   // Opening fills the draft from the settings (key field empty) and resets the paste reveal.
   useEffect(() => {
@@ -122,9 +128,10 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
     setDraft(draftOf(ui.current().settings));
     setRevealed(false);
     setBanner(undefined);
-    setConfirmRemove(false);
-    setFieldWarning(undefined);
+    resetRemovals.current();
     if (ui.current().settings?.hasKey) void ui.fetchKeyStatus();
+    if (ui.current().settings?.hasElevenLabsKey) void ui.fetchElevenLabsStatus();
+    else ui.clearElevenLabsStatus();
   }, [open, ui]);
 
   // A Connect click, and a reconnect that landed, clear the key draft and the banner.
@@ -148,6 +155,24 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   };
 
   const keyed = open && settings?.hasKey === true;
+  const elevenKeyed = open && settings?.hasElevenLabsKey === true;
+  const elevenLabsKeyHint = settings?.elevenLabsKeyHint ?? "";
+  const [elevenLabsSaves, setElevenLabsSaves] = useState(0);
+  useEffect(() => {
+    if (!elevenKeyed) return;
+    let live = true;
+    engine.call("models.list", { medium: "audio" }).then(
+      (answer) => {
+        if (!live) return;
+        setCatalogues((current) => ({ ...current, audio: answer.models.map((model) => model.id) }));
+        setAudioModelsProblem(answer.problem);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [elevenKeyed, elevenLabsKeyHint, elevenLabsSaves, engine]);
   useEffect(() => {
     if (!keyed) return;
     let live = true;
@@ -188,6 +213,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
     const patch = patchOf(draft, settings);
     if (Object.keys(patch).length === 0) return ui.close();
     const hadKey = settings.hasKey;
+    const hadElevenLabsKey = settings.hasElevenLabsKey;
     setSaving(true);
     try {
       const next = await engine.call("settings.update", patch);
@@ -199,7 +225,18 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
         ui.close();
         return;
       }
-      setDraft((current) => ({ ...current, key: "" }));
+      if (!hadKey && !hadElevenLabsKey && patch.elevenLabsKey !== undefined) {
+        showNotice(ELEVENLABS_KEY_SAVED_MESSAGE, "info");
+        ui.close();
+        return;
+      }
+      setDraft((current) => ({ ...current, key: "", elevenLabsKey: "" }));
+      if (patch.elevenLabsKey !== undefined) {
+        setElevenLabsSaves((count) => count + 1);
+        ui.clearElevenLabsStatus();
+        elevenLabsRemoval.reset();
+        void ui.fetchElevenLabsStatus();
+      }
       setBanner({ kind: "saved" });
       if (patch.key !== undefined) ui.clearKeyStatus();
       if (patch.claudePath !== undefined || patch.codexPath !== undefined || patch.claudeConfigDir !== undefined) checkProviders(false);
@@ -222,30 +259,33 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
     }
   };
 
-  const removeKey = async () => {
-    if (!confirmRemove) {
-      setConfirmRemove(true);
-      setFieldWarning(REMOVE_WARNING);
-      return;
-    }
-    setRemoving(true);
-    try {
-      const answer = await engine.call("settings.removeKey");
+  const openRouterRemoval = useKeyRemoval(
+    OPENROUTER_KEY,
+    async () => {
+      const answer = await engine.call(OPENROUTER_KEY.removeMethod);
       ui.setSettings(answer.settings);
       ui.keyChosen();
       ui.clearKeyStatus();
       setDraft((current) => ({ ...current, key: "" }));
-      // The key section stays, so the person sees what happened.
       setRevealed(true);
-      setFieldWarning(REMOVED_WARNING);
       setBanner(answer.renderCleanupError === undefined ? undefined : { kind: "error", message: answer.renderCleanupError });
-    } catch (error) {
-      setFieldWarning(undefined);
-      setBanner({ kind: "error", message: messageOf(error) });
-    } finally {
-      setConfirmRemove(false);
-      setRemoving(false);
-    }
+    },
+    (message) => setBanner({ kind: "error", message }),
+  );
+
+  const elevenLabsRemoval = useKeyRemoval(
+    ELEVENLABS_KEY,
+    async () => {
+      const answer = await engine.call(ELEVENLABS_KEY.removeMethod);
+      ui.setSettings(answer.settings);
+      ui.clearElevenLabsStatus();
+      setDraft((current) => ({ ...current, elevenLabsKey: "" }));
+    },
+    (message) => setBanner({ kind: "error", message }),
+  );
+  resetRemovals.current = () => {
+    openRouterRemoval.reset();
+    elevenLabsRemoval.reset();
   };
 
   const setPlanModePreference = (value: boolean) => {
@@ -263,7 +303,10 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
 
   const copy = keyStatusCopy({ hasKey, keyHint: settings?.keyHint ?? "", status: state.keyStatus, now: Date.now() });
   const showsKeySection = hasKey || revealed;
-  const saves = section === "agents" || section === "general" || (section === "generation" && showsKeySection);
+  const hasElevenLabsKey = settings?.hasElevenLabsKey === true;
+  const elevenLabsCopy = elevenLabsStatusCopy({ hasKey: hasElevenLabsKey, keyHint: settings?.elevenLabsKeyHint ?? "", status: state.elevenLabsStatus });
+  const saves =
+    section === "agents" || section === "general" || (section === "generation" && (showsKeySection || hasElevenLabsKey || draft.elevenLabsKey.trim() !== ""));
 
   const generation = (
     <>
@@ -321,18 +364,10 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
                 value={draft.key}
                 onChange={(event) => {
                   edit({ key: event.target.value });
-                  if (confirmRemove) {
-                    setConfirmRemove(false);
-                    setFieldWarning(undefined);
-                  }
+                  openRouterRemoval.typed();
                 }}
               />
-              {hasKey && (
-                <Button variant={confirmRemove ? "destructive" : "ghost"} aria-busy={removing || undefined} disabled={removing} onClick={() => void removeKey()}>
-                  {removing && <Spinner aria-hidden />}
-                  {confirmRemove ? "Yes, remove it" : "Remove key"}
-                </Button>
-              )}
+              {hasKey && <RemoveKeyButton removal={openRouterRemoval} />}
             </div>
             <p className="m-0 text-xs text-muted-foreground" data-testid="key-status">
               <Copy parts={copy.line} />
@@ -347,21 +382,56 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
                 Reconnect OpenRouter
               </Button>
             )}
-            {fieldWarning !== undefined && (
-              <p className="m-0 text-xs text-destructive-foreground" data-testid="key-warning">
-                {fieldWarning}
-              </p>
-            )}
+            <KeyWarning removal={openRouterRemoval} testId="key-warning" />
           </div>
         )}
       </section>
 
+      <section className="flex flex-col gap-3 border-t pt-4" aria-label="ElevenLabs">
+        <SectionHeading>ElevenLabs</SectionHeading>
+        {!hasKey && (
+          <p className="m-0 text-xs text-muted-foreground" data-testid="elevenlabs-only-audio">
+            Only want audio? Paste an ElevenLabs key here. Images, video and text still need OpenRouter.
+          </p>
+        )}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <Input
+              type="password"
+              aria-label="ElevenLabs API key"
+              placeholder="sk_…"
+              spellCheck={false}
+              autoComplete="off"
+              value={draft.elevenLabsKey}
+              onChange={(event) => {
+                edit({ elevenLabsKey: event.target.value });
+                elevenLabsRemoval.typed();
+              }}
+            />
+            {hasElevenLabsKey && <RemoveKeyButton removal={elevenLabsRemoval} />}
+          </div>
+          <p className="m-0 text-xs text-muted-foreground" data-testid="elevenlabs-status">
+            {elevenLabsCopy}
+          </p>
+          <KeyWarning removal={elevenLabsRemoval} testId="elevenlabs-warning" />
+        </div>
+      </section>
+
       <section className="flex flex-col gap-3 border-t pt-4" aria-label="Default models">
         <SectionHeading>Default models</SectionHeading>
-        {hasKey && settings !== undefined ? (
-          MEDIA.map(({ medium, label, field }) => (
-            <ModelSelect key={medium} label={label} value={draft[field]} models={catalogues[medium]} onChange={(value) => edit({ [field]: value })} />
-          ))
+        {(hasKey || hasElevenLabsKey) && settings !== undefined ? (
+          <>
+            {hasKey &&
+              MEDIA.map(({ medium, label, field }) => (
+                <ModelSelect key={medium} label={label} value={draft[field]} models={catalogues[medium]} onChange={(value) => edit({ [field]: value })} />
+              ))}
+            {hasElevenLabsKey && <ModelSelect label="Audio" value={draft.audioModel} models={catalogues.audio} onChange={(value) => edit({ audioModel: value })} />}
+            {hasElevenLabsKey && audioModelsProblem !== undefined && (
+              <p className="m-0 text-xs text-muted-foreground" data-testid="audio-models-problem">
+                {audioModelsProblem}
+              </p>
+            )}
+          </>
         ) : (
           <p className="m-0 text-xs text-muted-foreground" data-testid="models-need-key">
             Connect OpenRouter to choose the models Generate starts on.

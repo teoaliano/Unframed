@@ -3,7 +3,7 @@ import { lstat, mkdir, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Settings, SettingsPatch } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
-import { normaliseSettingsPatch, projectSlug } from "@unframed/domain";
+import { ELEVENLABS_KEY, normaliseSettingsPatch, projectSlug } from "@unframed/domain";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -54,6 +54,7 @@ export class Lifecycle extends Context.Service<
   {
     readonly updateSettings: (patch: SettingsPatch) => Effect.Effect<Settings, UnframedError>;
     readonly removeKey: Effect.Effect<RemovedKey, UnframedError>;
+    readonly removeElevenLabsKey: Effect.Effect<{ settings: Settings }, UnframedError>;
     readonly cancelConnection: Effect.Effect<Omit<RemovedKey, "settings">, UnframedError>;
     readonly renameProject: (name: string, to: string) => Effect.Effect<{ name: string; movedRenders: number }, UnframedError>;
     readonly deleteProject: (name: string, confirmRenders: boolean) => Effect.Effect<{ endedRenders: number }, UnframedError>;
@@ -166,6 +167,11 @@ export const lifecycleLayer = Layer.effect(
 
     const removeKey = Effect.andThen(oauth.cancelAttempt, removeKeyLine((reason) => `Could not write .env: ${reason}`).pipe(lock.withPermits(1)));
 
+    const removeElevenLabsKey = Effect.gen(function* () {
+      yield* writeEnv({ [ELEVENLABS_KEY.variable]: null });
+      return { settings: yield* published };
+    }).pipe(lock.withPermits(1));
+
     const cancelConnection = Effect.flatMap(oauth.cancelAttempt, (wrote) =>
       wrote
         ? removeKeyLine((reason) => `Could not remove the key the cancelled connection had written: ${reason}`).pipe(
@@ -252,6 +258,6 @@ export const lifecycleLayer = Layer.effect(
         return { endedRenders: ended };
       }).pipe(lock.withPermits(1));
 
-    return Lifecycle.of({ updateSettings, removeKey, cancelConnection, renameProject, deleteProject });
+    return Lifecycle.of({ updateSettings, removeKey, removeElevenLabsKey, cancelConnection, renameProject, deleteProject });
   }),
 );

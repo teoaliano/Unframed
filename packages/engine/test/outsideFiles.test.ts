@@ -88,7 +88,7 @@ describe("outside agents add a file from their machine (file_add)", () => {
     const refusal = async (path: string) => (await link.call(session, "file_add", { project: PROJECT, path }, roots)).value.error;
     expect(await refusal("art/missing.png")).toBe("There is no file at art/missing.png.");
     expect(await refusal("folder.png")).toBe("folder.png is not a file.");
-    expect(await refusal("notes.txt")).toBe("notes.txt is not a file the board can show. file_add takes PNG, JPEG, GIF, WebP and AVIF images and MP4, MOV and WebM videos.");
+    expect(await refusal("notes.txt")).toBe("notes.txt is not a file the board can show. file_add takes PNG, JPEG, GIF, WebP and AVIF images, MP4, MOV and WebM videos, and MP3, WAV and M4A audio.");
     expect(await refusal("huge.mp4")).toBe("huge.mp4 is 26.0 MB; file_add copies files up to 25 MB.");
     expect(await refusal("")).toBe("Name the file to add with path.");
   });

@@ -1,5 +1,5 @@
 import { extname, join } from "node:path";
-import { snapshotFileName } from "@unframed/domain";
+import { AUDIO_SERVED_TYPES, snapshotFileName } from "@unframed/domain";
 import { PREVIEW_FOLDER, previewFileName } from "../media/mediaStore.ts";
 import { SNAPSHOT_FOLDER } from "../artifacts/snapshots.ts";
 import { fileNameOf } from "../paths.ts";
@@ -21,9 +21,7 @@ const CONTENT_TYPES: Record<string, string> = {
   ".m4v": "video/mp4",
   ".webm": "video/webm",
   ".mov": "video/quicktime",
-  ".mp3": "audio/mpeg",
-  ".wav": "audio/wav",
-  ".m4a": "audio/mp4",
+  ...Object.fromEntries(Object.entries(AUDIO_SERVED_TYPES).map(([ext, mime]) => [`.${ext}`, mime])),
   ".json": "application/json; charset=utf-8",
   ".pdf": "application/pdf",
   ".txt": "text/plain; charset=utf-8",

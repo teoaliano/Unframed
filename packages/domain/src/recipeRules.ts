@@ -5,7 +5,7 @@
 import { readRunsValue, type RunsValue } from "./runsValue.ts";
 import { modelPart } from "./toolbar.ts";
 
-export type RecipeMedium = "image" | "video" | "text";
+export type RecipeMedium = "image" | "video" | "text" | "audio";
 export type RecipeValue = string | number | boolean;
 
 /** Spec 03's `GroupRecipe`: no instruction, no selection prompt, no references. */
@@ -26,7 +26,7 @@ export interface RecipeTray {
 
 const RUNS = "runs";
 const VIEW_FINAL_PROMPT = "viewFinalPrompt";
-const MEDIA: ReadonlyArray<RecipeMedium> = ["image", "video", "text"];
+const MEDIA: ReadonlyArray<RecipeMedium> = ["image", "video", "text", "audio"];
 
 const isValue = (value: unknown): value is RecipeValue => typeof value === "string" || typeof value === "number" || typeof value === "boolean";
 
@@ -96,6 +96,7 @@ const durationPart = (duration: unknown): string | undefined =>
 export const recipeChip = (recipe: GroupRecipe): string => {
   const parts: Array<string | undefined> = [modelPart(recipe.model)];
   if (recipe.medium === "image") parts.push(sizePart(recipe.params));
+  if (recipe.medium === "audio" && typeof recipe.params.voice_name === "string" && recipe.params.voice_name !== "") parts.push(recipe.params.voice_name);
   if (recipe.medium === "video") {
     parts.push(durationPart(recipe.params.duration));
     parts.push(typeof recipe.params.resolution === "string" && recipe.params.resolution !== "" ? recipe.params.resolution : undefined);

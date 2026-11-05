@@ -115,6 +115,7 @@ export const runGroupRecipe = async (input: {
   readonly groupId: string;
   readonly recipe: GroupRecipe;
   readonly hasKey: boolean;
+  readonly hasElevenLabsKey?: boolean;
 }): Promise<void> => {
   const { editor, engine, project, groupId, recipe } = input;
   const definition = mediumDefinition(recipe.medium);
@@ -131,7 +132,7 @@ export const runGroupRecipe = async (input: {
   const shapes = canvasShapes(editor);
   const composition = composeSelection({ shapes, selected, instruction: "", medium: recipe.medium, referenceCap: definition.params(entry, values.props).referenceCap });
   const source: RunSource = { kind: "selection", composition, selected, shapes, instruction: "" };
-  const status = definition.status({ source, hasKey: input.hasKey, props: values.props, entry });
+  const status = definition.status({ source, hasKey: input.hasKey, hasElevenLabsKey: input.hasElevenLabsKey, props: values.props, entry, model: values.model ?? recipe.model });
   const [blocker] = status.blockers;
   if (blocker !== undefined) throw new Error(blocker);
   if (status.needsKey === true) throw new NoKeyError();

@@ -209,6 +209,7 @@ Every id the agent reads or writes is tldraw's shape id without its `shape:` pre
 - `shapes`: every shape, in z-order, as `{id, kind, x, y, w, h, parent?, ref?}` plus per kind. `ref` is the shape's `@id` on every shape that has one (every kind but a mark): a number the canvas minted, or the name a person gave it (spec 06).
   - prompt: `text`
   - image, video: `file` (a project file name), `fileName` (the original name), `aspect`, `crop` when cropped; a linked clip gives `url` (its https link) instead of `file`
+  - audio (spec 15): `file` (omitted when empty) and `fileName`
   - group: `members` (ids, in their order inside the box), `recipe` when it carries standing settings (spec 06)
   - page, motion: `file`, `title`, `dials` when the shape has any saved dial values (spec 09 explains why the agent must see these)
   - result shapes also carry `recipe`, spec 03's result recipe read from the sidecar, and `running: true` while they carry spec 03's run marker
@@ -224,7 +225,7 @@ A member's `x, y` is relative to its group, as the document holds it, and `paren
 
 | Op | Fields | Does |
 | --- | --- | --- |
-| `create` | `id`, `kind`, `x`, `y`, `w?`, `h?`, `parent?`, `props` | adds a shape. `kind` is `prompt` (`props.text`), `image` or `video` (`props.file`, or `props.url` for a clip link), `group` (`props.name`), `mark` (`props.type` one of `geo`, `note`, `arrow`, `line`, plus that tldraw type's own props), `node` (`props.medium` and spec 16's optional settings) or `wire` (`props.from`, `props.to`, `props.role`, spec 16) |
+| `create` | `id`, `kind`, `x`, `y`, `w?`, `h?`, `parent?`, `props` | adds a shape. `kind` is `prompt` (`props.text`), `image` or `video` (`props.file`, or `props.url` for a clip link), `audio` (`props.file` only, spec 15), `group` (`props.name`), `mark` (`props.type` one of `geo`, `note`, `arrow`, `line`, plus that tldraw type's own props), `node` (`props.medium` and spec 16's optional settings) or `wire` (`props.from`, `props.to`, `props.role`, spec 16) |
 | `update` | `id`, `props` | a shallow patch onto the shape's props; `null` deletes an optional key. A node's `versions`, `currentVersionId`, `run`, `status` and `error` are written by runs and refused (spec 16) |
 | `move` | `id`, `x`, `y` | |
 | `resize` | `id`, `w`, `h` | media keeps its aspect lock (spec 02) |
