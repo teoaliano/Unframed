@@ -258,7 +258,6 @@ export const NodeEditor = ({ shape }: { readonly shape: NodeShape }) => {
           </Toggle>
         ))}
       </ToggleGroup>
-      <VersionsStrip shape={shape} />
       <InputList shape={shape} />
       <div
         className="relative flex min-h-20 flex-col rounded-lg border border-input bg-background px-3 pt-2 pb-2 shadow-xs/5 ring-ring/24 transition-shadow has-focus-visible:border-ring has-focus-visible:ring-[3px] dark:bg-input/32"
@@ -301,6 +300,7 @@ export const NodeEditor = ({ shape }: { readonly shape: NodeShape }) => {
         onMenuOpen={onMenuOpen}
       />
       <RunRow shape={shape} estimate={estimate} blocked={refused !== undefined || needsKey || status === "waiting"} />
+      <VersionsStrip shape={shape} />
       <ModelDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}

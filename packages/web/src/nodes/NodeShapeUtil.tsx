@@ -89,12 +89,12 @@ const StatusLine = ({ shape }: { readonly shape: NodeShape }) => {
     },
     [editor, shape.id],
   );
-  if (!status) return null;
+  if (!status || status.state === "ready") return null;
   return (
     <div className="flex min-h-5 items-start gap-1.5 text-xs" data-testid="node-status" data-state={status.state} role={status.state === "failed" ? "alert" : "status"}>
       <span className={`mt-1.5 size-1.5 shrink-0 rounded-full ${STATE_TONE[status.state] ?? "bg-muted-foreground"}`} aria-hidden data-testid="node-status-dot" />
-      <span className={status.state === "failed" ? "text-destructive-foreground" : status.state === "ready" ? "text-muted-foreground" : "text-foreground"}>
-        {status.line === "" ? "Up to date." : status.line}
+      <span className={status.state === "failed" ? "text-destructive-foreground" : "text-foreground"}>
+        {status.line}
       </span>
     </div>
   );

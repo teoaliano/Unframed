@@ -7,6 +7,8 @@ export interface Captured {
   readonly bounds: Readonly<Record<string, Box>>;
   readonly members: number;
   readonly recipe: boolean;
+  /** Spec 16: the selection holds nodes, so it saves as a flow, with the wires between its shapes. */
+  readonly flow?: { readonly ids: ReadonlyArray<string>; readonly nodes: number } | undefined;
 }
 
 interface LibraryUi {
@@ -38,5 +40,6 @@ export const captureSelection = (editor: Editor, project: string): Captured | un
   const captured = { project, content: structuredClone(content), bounds };
   const made = presetFromSelection(captured, { name: "" });
   if (!made.ok) return undefined;
-  return { ...captured, members: made.members, recipe: made.kind === "recipe" };
+  const nodes = content.shapes.filter((shape) => shape.type === "node").length;
+  return { ...captured, members: made.members, recipe: made.kind === "recipe", ...(nodes > 0 ? { flow: { ids: [...ids], nodes } } : {}) };
 };
