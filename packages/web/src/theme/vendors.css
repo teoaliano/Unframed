@@ -94,6 +94,10 @@
   font-family: var(--font-sans);
 }
 
+:root :is([data-shown="dock"], [data-shown="sheet"]) .dialkit-root[data-theme] {
+  --dial-glass-bg: var(--background);
+}
+
 /* The editor's Parameters column insets its header and its prompt box 10 px: DialKit's panel matches. */
 :root .dialkit-root[data-theme] .dialkit-panel-inline {
   padding: 10px;

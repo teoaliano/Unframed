@@ -1,5 +1,6 @@
 import type { ProjectActivity } from "@unframed/contracts";
-import { statusOf, type TabActivity, type TabStatus } from "@unframed/domain";
+import { isEditorTab, projectOfTab, statusOf, type TabActivity, type TabStatus } from "@unframed/domain";
+import { KIND_LOOK } from "../artifacts/kinds.ts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { TopBar, type TopBarRegion, type TopBarStatus, type TopBarTab } from "~/components/ui/top-bar";
 import { useEngine, useActivation } from "../context.ts";
@@ -93,11 +94,27 @@ export const TabStrip = ({
   readonly regions: { readonly frame?: TopBarRegion; readonly start?: TopBarRegion; readonly tabs?: TopBarRegion; readonly end?: TopBarRegion };
 }) => {
   const activation = useActivation();
-  const { active, order, pinned } = useTabState(activation);
+  const { active, editing, editors, order, pinned } = useTabState(activation);
   const activity = useProjectActivity();
   const marks = useFinishedMarks(activity, active);
 
   const tabs: TopBarTab[] = order.map((name) => {
+    if (isEditorTab(name)) {
+      const about = editors.get(name);
+      const kind = about?.kind ?? "page";
+      const label = about?.title === undefined || about.title === "" ? "Untitled" : about.title;
+      const project = projectOfTab(name);
+      const { Icon, word } = KIND_LOOK[kind];
+      return {
+        name,
+        variant: "secondary",
+        attachedTo: project,
+        label,
+        context: project,
+        icon: <Icon aria-hidden data-kind={kind} className="size-3.5 shrink-0 text-muted-foreground" />,
+        title: `${label} · ${word} in ${project}`,
+      };
+    }
     const status = statusOf(activity.get(name), marks.has(name));
     return { name, pinned: pinned.includes(name), status: kitStatus(status), state: status, title: [name, STATUS_LABEL[status]].filter(Boolean).join(" · ") };
   });
@@ -113,7 +130,7 @@ export const TabStrip = ({
       controls={controls}
       squareStart={squareStart}
       tabs={tabs}
-      active={active}
+      active={editing ?? active}
       logo={logo}
       settings={settings}
       regions={regions}

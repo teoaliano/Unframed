@@ -125,7 +125,8 @@ test("the whole top bar stays on screen above the editor and works from it: its 
     const hit = await page.evaluate(({ x, y, selector }) => document.elementFromPoint(x, y)?.closest(selector) !== null, { x: box.x + box.width / 2, y: box.y + box.height / 2, selector: region });
     expect(hit, `${region} is not covered`).toBe(true);
   }
-  await expect(page.getByTestId("tab-strip").getByRole("tab", { name: /default/ })).toBeVisible();
+  await expect(page.getByTestId("tab-strip").getByRole("tab", { name: "default", exact: true })).toBeVisible();
+  await expect(page.getByTestId("tab-strip").getByRole("tab", { name: "Landing, default" })).toBeVisible();
   const railHeader = column(page, "rail").locator("header").first();
   const back = column(page, "centre").getByRole("button", { name: "Back to canvas" });
   const middle = async (locator: typeof railHeader) => {
