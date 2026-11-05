@@ -1,0 +1,8 @@
+{
+  "when": "^long brief",
+  "turns": [
+    { "title": "Long brief", "text": "Read the whole brief. It runs long, so the context is nearly full.", "usage": { "usedTokens": 214000, "maxTokens": 1000000, "totalProcessedTokens": 214000 } },
+    { "text": "", "usage": { "usedTokens": 12000, "maxTokens": 1000000, "totalProcessedTokens": 12000 } },
+    { "text": "Picked up from the summary: the brief is a launch page for the fox campaign." }
+  ]
+}
