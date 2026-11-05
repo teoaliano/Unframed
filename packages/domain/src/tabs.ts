@@ -22,11 +22,35 @@ export type TabStatus = "needs-you" | "running" | "finished" | "none";
 /** Appends `name` when it is not open, else keeps its place. Answers the new order. */
 export const openTab = (order: ReadonlyArray<string>, name: string): ReadonlyArray<string> => (order.includes(name) ? [...order] : [...order, name]);
 
-/**
- * Closing `name`: the order without it, and the active tab afterwards. Closing the active tab
- * activates the tab to its right, else the one to its left, else none. Closing any other tab
- * keeps the active one.
- */
+const EDITOR_MARK = "/";
+
+export interface TabKey {
+  readonly project: string;
+  readonly shape?: string | undefined;
+}
+
+export const parseTabKey = (key: string): TabKey => {
+  const at = key.indexOf(EDITOR_MARK);
+  return at === -1 ? { project: key } : { project: key.slice(0, at), shape: key.slice(at + 1) };
+};
+
+export const editorTabKey = (project: string, shape: string): string => `${project}${EDITOR_MARK}${shape}`;
+
+export const renameTabKey = (key: string, from: string, to: string): string => {
+  const { project, shape } = parseTabKey(key);
+  if (project !== from) return key;
+  return shape === undefined ? to : editorTabKey(to, shape);
+};
+
+export const isEditorTab = (key: string): boolean => parseTabKey(key).shape !== undefined;
+
+export const projectOfTab = (key: string): string => parseTabKey(key).project;
+
+export const shapeOfTab = (key: string): string | undefined => parseTabKey(key).shape;
+
+export const editorTabsOf = (order: ReadonlyArray<string>, project: string): ReadonlyArray<string> =>
+  order.filter((key) => isEditorTab(key) && projectOfTab(key) === project);
+
 export const closeTab = (
   order: ReadonlyArray<string>,
   active: string | undefined,
@@ -34,9 +58,11 @@ export const closeTab = (
 ): { readonly order: ReadonlyArray<string>; readonly active: string | undefined } => {
   const index = order.indexOf(name);
   if (index === -1) return { order: [...order], active };
-  const rest = order.filter((each) => each !== name);
-  if (active !== name) return { order: rest, active };
-  const next = order[index + 1] ?? order[index - 1];
+  const removed = new Set(isEditorTab(name) ? [name] : [name, ...editorTabsOf(order, name)]);
+  const rest = order.filter((each) => !removed.has(each));
+  if (active === undefined || !removed.has(active)) return { order: rest, active };
+  if (isEditorTab(name) && order.includes(projectOfTab(name))) return { order: rest, active: projectOfTab(name) };
+  const next = order.slice(index + 1).find((each) => !removed.has(each)) ?? order.slice(0, index).reverse().find((each) => !removed.has(each));
   return { order: rest, active: next };
 };
 
@@ -45,28 +71,64 @@ export interface PinnedTabs {
   readonly pinned: ReadonlyArray<string>;
 }
 
-const withPins = (order: ReadonlyArray<string>, pinned: ReadonlySet<string>): PinnedTabs => {
-  const first = order.filter((name) => pinned.has(name));
-  return { order: [...first, ...order.filter((name) => !pinned.has(name))], pinned: first };
+export const groupTabs = (tabs: PinnedTabs): PinnedTabs => {
+  const projects = tabs.order.filter((key) => !isEditorTab(key));
+  const pinned = projects.filter((name) => tabs.pinned.includes(name));
+  const unpinned = projects.filter((name) => !tabs.pinned.includes(name));
+  const editors = (name: string) => editorTabsOf(tabs.order, name);
+  return { order: [...pinned, ...pinned.flatMap(editors), ...unpinned.flatMap((name) => [name, ...editors(name)])], pinned };
+};
+
+const withPins = (order: ReadonlyArray<string>, pinned: ReadonlySet<string>): PinnedTabs => groupTabs({ order, pinned: [...pinned] });
+
+export const openEditorTab = (tabs: PinnedTabs, key: string): ReadonlyArray<string> => {
+  if (tabs.order.includes(key) || !tabs.order.includes(projectOfTab(key))) return [...tabs.order];
+  return groupTabs({ order: [...tabs.order, key], pinned: tabs.pinned }).order;
 };
 
 export const tabGroup = (tabs: PinnedTabs, name: string): { readonly low: number; readonly high: number } => {
-  const pinnedCount = tabs.order.filter((each) => tabs.pinned.includes(each)).length;
-  return tabs.pinned.includes(name) ? { low: 0, high: Math.max(0, pinnedCount - 1) } : { low: pinnedCount, high: Math.max(pinnedCount, tabs.order.length - 1) };
+  const grouped = groupTabs(tabs);
+  if (isEditorTab(name)) {
+    const run = editorTabsOf(grouped.order, projectOfTab(name));
+    return { low: grouped.order.indexOf(run[0] ?? name), high: grouped.order.indexOf(run[run.length - 1] ?? name) };
+  }
+  const pinnedCount = grouped.pinned.length;
+  return grouped.pinned.includes(name) ? { low: 0, high: Math.max(0, pinnedCount - 1) } : { low: pinnedCount, high: Math.max(pinnedCount, grouped.order.length - 1) };
 };
 
 export const moveTab = (tabs: PinnedTabs, name: string, to: number): PinnedTabs => {
   const pinned = new Set(tabs.pinned);
-  if (!tabs.order.includes(name)) return withPins(tabs.order, pinned);
-  const { low, high } = tabGroup(tabs, name);
-  const rest = tabs.order.filter((each) => each !== name);
-  const at = Math.max(low, Math.min(high, to));
-  return withPins([...rest.slice(0, at), name, ...rest.slice(at)], pinned);
+  const grouped = withPins(tabs.order, pinned);
+  if (!grouped.order.includes(name)) return grouped;
+  if (isEditorTab(name) || pinned.has(name)) {
+    const { low, high } = tabGroup(grouped, name);
+    const rest = grouped.order.filter((each) => each !== name);
+    const at = Math.max(low, Math.min(high, to));
+    return withPins([...rest.slice(0, at), name, ...rest.slice(at)], pinned);
+  }
+  const block = [name, ...editorTabsOf(grouped.order, name)];
+  const rest = grouped.order.filter((each) => !block.includes(each));
+  const start = rest.findIndex((each) => !isEditorTab(each) && !pinned.has(each));
+  const boundaries = [...rest.keys(), rest.length].filter((at) => at >= (start === -1 ? rest.length : start) && (at === rest.length || (!isEditorTab(rest[at]!) && !pinned.has(rest[at]!))));
+  const at = boundaries.reduce((best, each) => (Math.abs(each - to) < Math.abs(best - to) ? each : best), boundaries[0] ?? rest.length);
+  return withPins([...rest.slice(0, at), ...block, ...rest.slice(at)], pinned);
+};
+
+export const stepTab = (tabs: PinnedTabs, name: string, direction: -1 | 1): PinnedTabs => {
+  const grouped = groupTabs(tabs);
+  const at = grouped.order.indexOf(name);
+  if (at === -1) return grouped;
+  if (isEditorTab(name) || grouped.pinned.includes(name)) return moveTab(grouped, name, at + direction);
+  const projects = grouped.order.filter((each) => !isEditorTab(each) && !grouped.pinned.includes(each));
+  const neighbour = projects[projects.indexOf(name) + direction];
+  if (neighbour === undefined) return grouped;
+  const to = direction < 0 ? grouped.order.indexOf(neighbour) : at + 1 + editorTabsOf(grouped.order, neighbour).length;
+  return moveTab(grouped, name, to);
 };
 
 export const pinTab = (tabs: PinnedTabs, name: string): PinnedTabs => {
   const pinned = new Set(tabs.pinned);
-  if (!tabs.order.includes(name) || pinned.has(name)) return withPins(tabs.order, pinned);
+  if (!tabs.order.includes(name) || pinned.has(name) || isEditorTab(name)) return withPins(tabs.order, pinned);
   const current = withPins(tabs.order, pinned);
   pinned.add(name);
   return withPins([...current.pinned, name, ...current.order.filter((each) => !current.pinned.includes(each) && each !== name)], pinned);
@@ -93,14 +155,14 @@ export const restoreTabs = (
   const known = new Set(projects);
   const seen = new Set<string>();
   const open: string[] = [];
+  const openProjects = new Set(saved.order.filter((name) => !isEditorTab(name) && known.has(name)));
   for (const name of saved.order) {
-    if (known.has(name) && !seen.has(name)) {
+    if ((isEditorTab(name) ? openProjects.has(projectOfTab(name)) : known.has(name)) && !seen.has(name)) {
       seen.add(name);
       open.push(name);
     }
   }
-  const pinned = open.filter((name) => (saved.pinned ?? []).includes(name));
-  const order = [...pinned, ...open.filter((name) => !pinned.includes(name))];
+  const { order, pinned } = groupTabs({ order: open, pinned: open.filter((name) => !isEditorTab(name) && (saved.pinned ?? []).includes(name)) });
   const active = typeof saved.active === "string" && seen.has(saved.active) ? saved.active : order[0];
   return { order, active, pinned };
 };
@@ -126,12 +188,10 @@ export const statusOf = (activity: TabActivity | undefined, finishedUnseen: bool
 export const finishedAfter = (before: TabActivity | undefined, after: TabActivity | undefined): boolean =>
   (before?.running ?? 0) > 0 && (after?.running ?? 0) === 0;
 
-/** The stack of recently closed projects: the newest first, at most `CLOSED_TAB_LIMIT` long. */
-export const pushClosed = (stack: ReadonlyArray<string>, name: string): ReadonlyArray<string> =>
-  [name, ...stack.filter((each) => each !== name)].slice(0, CLOSED_TAB_LIMIT);
+export const pushClosed = <T>(stack: ReadonlyArray<T>, entry: T, same: (a: T, b: T) => boolean = Object.is): ReadonlyArray<T> =>
+  [entry, ...stack.filter((each) => !same(each, entry))].slice(0, CLOSED_TAB_LIMIT);
 
-/** Pops the newest closed project. `name` is undefined when the stack is empty. */
-export const popClosed = (stack: ReadonlyArray<string>): { readonly name: string | undefined; readonly stack: ReadonlyArray<string> } => ({
+export const popClosed = <T>(stack: ReadonlyArray<T>): { readonly name: T | undefined; readonly stack: ReadonlyArray<T> } => ({
   name: stack[0],
   stack: stack.slice(1),
 });

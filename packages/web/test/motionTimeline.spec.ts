@@ -24,6 +24,11 @@ const openMotion = async (page: Page) => {
   await expect(region(page)).toBeVisible();
 };
 
+const expectRestoredEditor = async (page: Page) => {
+  await expect(region(page)).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator("[data-slot=top-bar] [role=tab][data-active='true']")).toHaveAccessibleName("Intro, default");
+};
+
 const boxOf = async (locator: Locator) => {
   const box = await locator.boundingBox();
   if (!box) throw new Error("not on screen");
@@ -103,8 +108,7 @@ test("the timeline resizes by its top border between 120 px and 60 % of the colu
     .poll(async () => (await (await agent.rpc()).call("preferences.get", { keys: ["editor.timeline"] })).values["editor.timeline"], { timeout: 10_000 })
     .toEqual({ height: 180, open: true });
   await page.reload();
-  await openCanvas(page, agent);
-  await openMotion(page);
+  await expectRestoredEditor(page);
   await expect.poll(async () => (await boxOf(timeline(page))).height).toBeCloseTo(180, 0);
 });
 
@@ -123,8 +127,7 @@ test("Hide timeline collapses the strip to its transport row, Show timeline open
     .toEqual({ height: 240, open: false });
 
   await page.reload();
-  await openCanvas(page, agent);
-  await openMotion(page);
+  await expectRestoredEditor(page);
   await expect.poll(async () => (await boxOf(timeline(page))).height).toBeCloseTo(40, 0);
   await timeline(page).getByRole("button", { name: "Show timeline" }).click();
   await expect.poll(async () => (await boxOf(timeline(page))).height).toBeCloseTo(240, -1);

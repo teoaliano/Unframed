@@ -334,7 +334,7 @@ Keys in use, each owned by the spec named:
 | Key | Owner | Value |
 | --- | --- | --- |
 | `project.active` | 02 | the active project's name, kept for the outside-agent view (spec 14) |
-| `project.tabs` | 17 | `{ order: string[], active: string \| null, pinned: string[] }`: the open project tabs, the active one and the pinned ones, read at boot (spec 17) |
+| `project.tabs` | 17 | `{ order: string[], active: string \| null, pinned: string[], editing: string \| null, editors: { key, title, kind }[] }`: the open project tabs and editor tabs, the active project, the pinned ones, the selected editor tab and each editor tab's label, read at boot (spec 17). `editing` and `editors` are optional, so a value saved before editor tabs still reads |
 | `lastUsed.image`, `lastUsed.video`, `lastUsed.text` | 03 (04 and 05 add fields) | the composer's last-used values for that medium |
 | `library.view` | 06 | `"card"` or `"list"` |
 | `agent.followUp` | 08 (control in spec 10's dialog) | `"queue"` or `"steer"` |
@@ -343,6 +343,7 @@ Keys in use, each owned by the spec named:
 | `agent.stash.<project>` | 08 | that project's stashed prompts |
 | `agent.drafts.<project>` | 08 | that project's unsent composer drafts, by chat |
 | `agent.diffLayout` | 08 | `"stacked"` or `"split"` |
+| `parameters.panel` | 09 | `{ mode: "float" \| "dock", x?, y?, w?, h? }`: the canvas Parameters panel's mode, and its floating place (`x`, `y`: pixels from the canvas's top-left) and size (`w`, `h`) |
 
 A later spec that remembers something adds its key to this table.
 

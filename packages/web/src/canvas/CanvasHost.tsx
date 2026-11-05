@@ -19,7 +19,7 @@ import { RoleBadges } from "../generate/overlays.tsx";
 import { installRenderPolls } from "../generate/renderPolls.ts";
 import { watchRunReports } from "../generate/runReports.ts";
 import { LicenseKeyContext } from "../license.ts";
-import type { ProjectActivation } from "../project/activation.ts";
+import { SETTLE_BEFORE_SWITCH_MS, type ProjectActivation } from "../project/activation.ts";
 import { showError } from "../toasts.tsx";
 import { createAssetStore, Previews } from "./assetStore.ts";
 import { clipboardOptions, installExternalContent, type ContentContext } from "./externalContent.ts";
@@ -44,7 +44,6 @@ import { SyncSocket } from "./syncSocket.ts";
 import { recalledCamera, rememberCamera } from "../project/tabMemory.ts";
 import { TLDRAW_ASSET_URLS, TLDRAW_CHROME, TLDRAW_OPTIONS } from "./tldrawChrome.tsx";
 
-const SETTLE_BEFORE_SWITCH_MS = 2000;
 
 const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, AudioShapeUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil, ComponentShapeUtil, NodeShapeUtil, WireShapeUtil];
 
