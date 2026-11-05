@@ -1,10 +1,11 @@
 import type { TLRecord } from "@tldraw/tlschema";
+import { getIndexAbove, type IndexKey } from "@tldraw/utils";
 import { PAGE_ID } from "./canvasRecords.ts";
 
 type At = { x?: number; y?: number; index?: string; parentId?: string };
 
-let index = 0;
-const nextIndex = () => `a${(++index).toString(36).padStart(4, "0")}`;
+let last: IndexKey | null = null;
+const nextIndex = () => (last = getIndexAbove(last));
 
 export const nodeShape = (id: string, ref: string, props: Record<string, unknown> = {}, at: At = {}): TLRecord =>
   ({

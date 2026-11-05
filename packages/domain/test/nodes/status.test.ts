@@ -10,7 +10,7 @@ import {
   type NodeCanvas,
   type NodeFacts,
 } from "../../src/index.ts";
-import { artifact, image, prompt } from "../shapes.ts";
+import { artifact, group, image, prompt } from "../shapes.ts";
 import { board, node, version, wire } from "./board.ts";
 
 const stamped = (facts: NodeFacts, canvas: NodeCanvas): NodeFacts => {
@@ -51,6 +51,34 @@ describe("input fingerprint", () => {
     const up = node("up", "text", { versions: [version("a", { text: "one" }), version("b", { text: "two" })], currentVersionId: "a" });
     const make = (current: string) => board({ nodes: [{ facts: { ...up, currentVersionId: current } }, { facts: node("n", "image") }], wires: [wire("w", "up", "n", "prompt")] });
     expect(inputFingerprint(node("n", "image"), make("a"))).not.toBe(inputFingerprint(node("n", "image"), make("b")));
+  });
+});
+
+describe("input fingerprint over what the request composes", () => {
+  const pictured = (mark: { x: number; props: string }) =>
+    board({
+      shapes: [prompt("p", "go"), image("i", "fox.png", { x: 0, y: 0, w: 200, h: 200, z: 1 }), { id: "m", kind: "mark", bounds: { x: mark.x, y: 20, w: 20, h: 20 }, z: 2 }],
+      nodes: [{ facts: node("n", "image") }],
+      wires: [wire("wp", "p", "n", "prompt"), wire("wi", "i", "n", "reference")],
+      markProps: { m: mark.props },
+    });
+  const print = (canvas: NodeCanvas) => inputFingerprint(canvas.nodes.get("n")!, canvas);
+
+  it("changes when a mark drawn on a wired picture changes, is added or moves off it", () => {
+    const base = print(pictured({ x: 20, props: "red stroke" }));
+    expect(print(pictured({ x: 20, props: "blue stroke" }))).not.toBe(base);
+    expect(print(pictured({ x: 900, props: "red stroke" }))).not.toBe(base);
+    expect(print(pictured({ x: 20, props: "red stroke" }))).toBe(base);
+  });
+
+  it("changes when a wired group's members change their order", () => {
+    const grouped = (first: number) =>
+      board({
+        shapes: [group("g", { x: 0, y: 0 }), image("a", "a.png", { x: 10, y: first, parent: "g" }), image("b", "b.png", { x: 10, y: 150, parent: "g" }), prompt("p", "go")],
+        nodes: [{ facts: node("n", "image") }],
+        wires: [wire("wp", "p", "n", "prompt"), wire("wg", "g", "n", "reference")],
+      });
+    expect(print(grouped(10))).not.toBe(print(grouped(300)));
   });
 });
 

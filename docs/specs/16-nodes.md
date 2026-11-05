@@ -104,7 +104,7 @@ What this spec does not change: Generate on a selection, the composer popover an
 - **role** (of a wire): what the source does in the node's run. One of `prompt`, `reference`, `first`, `last`.
 - **version**: one result of a node run, kept on the node.
 - **current version**: the version a node shows and its wires carry downstream.
-- **input fingerprint**: a hash of everything a run sends: the medium, model, params, instruction, and for each wire in order its role, its source and the source's content now. The engine stamps it on a version and the tab computes it for the status line, so it reads only what both see the same way: a prompt's resolved text, a picture's file and crop, a clip's file or link, a page's file, a motion's newest render, a group's members (sorted by id) and an input node's current version. Marks drawn on a wired picture and the order of a group's members on the board are not in it, because the engine and the tab measure shapes differently.
+- **input fingerprint**: a hash of everything a run sends: the medium, model, params, instruction, and for each wire in order its role, its source and the source's content now. The engine stamps it on a version and the tab computes it for the status line, from what both store: a picture's marks are the marks the request would draw on it, with their stored props, and a group's members come in the order the request sends them, both read from the shapes' stored positions and sizes (the domain's stored geometry), never from what the tab renders.
 - **out of date**: a node whose current version was made from a fingerprint that differs from its inputs now.
 - **chain**: an ordered set of nodes run one after another. A chain of one is a single Run.
 

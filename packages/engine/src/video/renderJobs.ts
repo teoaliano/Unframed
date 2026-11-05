@@ -337,7 +337,7 @@ export const renderJobsLayer = Layer.effect(
         file,
         jobId: record.id,
         recipe,
-        ...(current.target === undefined ? {} : nodeSidecarFields({ shapeId: current.target.shapeId, chainId: current.target.chainId, step: current.target.step, fingerprint: "" }, current.target.versionId)),
+        ...(current.target === undefined ? {} : nodeSidecarFields({ shapeId: current.target.shapeId, chainId: current.target.chainId, step: current.target.step }, current.target.versionId)),
       };
       await writeSidecar(folder, base, sidecar).catch((error: unknown) => logError(`sidecar not written: ${errorText(error)}`));
       const done = await persistJob(dir, record.id, {
@@ -524,7 +524,7 @@ export const renderJobsLayer = Layer.effect(
           runPromise,
           project,
           (get) => {
-            const made = startVersions(get, into.shapeId, { runId: jobId, chainId: into.chainId, batchId: `b-${startedAt}`, count: 1, fingerprint: into.fingerprint, startedAt, durable: true });
+            const made = startVersions(get, into.shapeId, { runId: jobId, chainId: into.chainId, claim: into.claim, batchId: `b-${startedAt}`, count: 1, fingerprint: into.fingerprint, startedAt, durable: true });
             versionId = made?.ids[0];
             return made?.change;
           },

@@ -1,5 +1,5 @@
 import { getIndexAbove, getIndicesAbove, type Editor, type IndexKey, type TLPageId, type TLShape, type TLShapeId } from "tldraw";
-import { isNodeShape, isWireShape, type NodeShape, type WireShape } from "./facts.ts";
+import {isNodeShape, isWireShape, type NodeShape, type WireShape } from "./facts.ts";
 
 const RUN_OWNED = ["versions", "run"] as const;
 const SETTINGS = ["medium", "model", "params", "runs", "instruction"] as const;

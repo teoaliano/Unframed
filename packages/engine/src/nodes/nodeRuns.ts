@@ -9,20 +9,28 @@ import {
   type NodeVersion,
   type RecipeRef,
   type RenderedInputs,
-  type ResultRecipe,
   type RunChat,
+  type ResultRecipe,
   type VideoStartRequest,
 } from "@unframed/contracts";
 import {
   artifactUrl,
   audioRunParams,
   canvasShapesOf,
-  downstreamRun,
-  estimateImageRun,
   estimateVideo,
   inputFingerprint,
   linkedFiles,
   modelParams,
+  CHAIN_CHANGED_MESSAGE,
+  chainStepsOf,
+  frameImagesOf,
+  isPaidMedium,
+  NODE_FIRST_MESSAGE,
+  NODE_SKETCH_MESSAGE,
+  NO_KEY_MESSAGE,
+  nodeCatalogueOf,
+  nodeImageEstimate,
+  type NodeCatalogue,
   NO_CHROME_RENDER_MESSAGE,
   NODE_PAGE_SYSTEM,
   nodeCanvasOf,
@@ -32,7 +40,6 @@ import {
   pageAnswer,
   PAGE_REJECTED_MESSAGE,
   pageTitle,
-  planChain,
   projectSlug,
   RESTART_STOP,
   SKETCH_REFUSAL,
@@ -69,15 +76,13 @@ import { shapeBoxes } from "../runs/shapeBounds.ts";
 import { Config } from "../services.ts";
 import { SettingsStore } from "../settingsStore.ts";
 import { RenderJobs } from "../video/renderJobs.ts";
-import { applyNodeChange, dropVersion, fillVersion, finishRun, isNode, nodeOrigin, nodeSidecarFields, queueNodes, startVersions, stopNode, type NodeTarget } from "./versions.ts";
+import { applyNodeChange, dropVersion, fillVersion, finishRun, isNode, nodeOrigin, nodeSidecarFields, claimNodes, startVersions, stopNode, type NodeTarget } from "./versions.ts";
 
 export const NODE_GONE = "There is no such node on this canvas.";
 export const NODE_BUSY = (name: string) => `${name} is running. Wait for it to finish.`;
 export const VERSION_RUNNING = "That version is still being made.";
 export const VERSION_GONE = "That version is not on this node.";
 const NO_SUCH_NODE = "That node is no longer on the canvas.";
-
-/** One step a chain will run, as validated: what it sends and what it is estimated to cost. */
 export interface PlannedStep {
   readonly node: string;
   readonly name: string;
@@ -85,15 +90,13 @@ export interface PlannedStep {
   readonly model: string;
   readonly prompt: string;
   readonly references: ReadonlyArray<string>;
-  /** Dollars, or null when no exact price exists. */
   readonly estimate: number | null;
   readonly paid: boolean;
 }
 
 export interface ChainHooks {
-  /** Called as a step starts; a rejection stops the chain before the step calls anything. */
   readonly beforeStep?: (step: PlannedStep, index: number) => Promise<void>;
-  readonly afterStep?: (step: PlannedStep, index: number, outcome: { readonly ok: boolean }) => void;
+  readonly afterStep?: (step: PlannedStep, index: number, outcome: { readonly ok: boolean; readonly cost: number | null }) => void;
   readonly onStepStarted?: (step: PlannedStep, index: number) => void;
   readonly onFinished?: (outcome: { readonly ran: number; readonly total: number; readonly errors: ReadonlyArray<string> }) => void;
 }
@@ -105,8 +108,8 @@ export interface ChainInput {
   readonly scope?: "pending" | "all" | undefined;
   readonly rendered?: RenderedInputs | undefined;
   readonly chat?: RunChat | undefined;
-  /** A run an agent starts: it cannot consent to share a local clip, nor draw a sketch. */
   readonly agent?: boolean | undefined;
+  readonly expect?: ReadonlyArray<string> | undefined;
   readonly hooks?: ChainHooks | undefined;
 }
 
@@ -122,9 +125,7 @@ export class NodeRuns extends Context.Service<
 >()("unframed/engine/NodeRuns") {}
 
 const isTextLike = (file: string) => /\.(html?|css|m?js|svg|json|txt|md)$/i.test(file);
-
-/** The newest render of each motion file: the MP4 whose sidecar's `of` names it. */
-export const motionRenders = async (folder: string, files: ReadonlyArray<string>): Promise<Map<string, string>> => {
+export const newestRenders = async (folder: string, files: ReadonlyArray<string>): Promise<Map<string, string>> => {
   const wanted = new Set(files);
   const found = new Map<string, { file: string; at: string }>();
   if (wanted.size === 0) return new Map();
@@ -163,8 +164,6 @@ export const nodeRunsLayer = Layer.effect(
     const config = yield* Config;
     const context = yield* Effect.context<never>();
     const runPromise = Effect.runPromiseWith(context);
-
-    /** Run ids and chain ids this process is running, so a room that opens again leaves them be. */
     const liveRuns = new Set<string>();
     const liveChains = new Set<string>();
 
@@ -179,26 +178,32 @@ export const nodeRunsLayer = Layer.effect(
       const records = await runPromise(rooms.read(project));
       const shapes = canvasShapesOf(records as unknown as CanvasRecord[], shapeBoxes(records as TLRecord[]));
       const motions = shapes.filter((shape) => shape.kind === "motion" && shape.file !== undefined).map((shape) => shape.file!);
-      const renders = await motionRenders(folder, motions);
+      const renders = await newestRenders(folder, motions);
       return { records, canvas: nodeCanvasOf(records as unknown as CanvasRecord[], shapes, renders), folder };
     };
 
-    const models = async (medium: NodeFacts["medium"]): Promise<ReadonlyArray<ModelEntry>> => {
-      if (medium === "image") return (await runPromise(catalogue.listImageModels)).models;
-      if (medium === "video") return (await runPromise(videoCatalogue.list)).models;
-      if (medium === "text" || medium === "page") return (await runPromise(catalogue.listTextModels)).models;
-      return [];
+    const LISTS: Record<NodeCatalogue, () => Promise<ReadonlyArray<ModelEntry>>> = {
+      image: async () => (await runPromise(catalogue.listImageModels)).models,
+      video: async () => (await runPromise(videoCatalogue.list)).models,
+      text: async () => (await runPromise(catalogue.listTextModels)).models,
+      audio: async () => [],
     };
 
-    const modelOf = async (node: NodeFacts): Promise<string> => {
-      if (node.model !== "") return node.model;
-      const current = await runPromise(settings.read);
-      return node.medium === "image" ? current.imageModel : node.medium === "video" ? current.videoModel : node.medium === "audio" ? current.audioModel : current.textModel;
+    const models = (medium: NodeFacts["medium"]): Promise<ReadonlyArray<ModelEntry>> => LISTS[nodeCatalogueOf(medium)]().catch(() => []);
+
+    const DEFAULTS: Record<NodeCatalogue, "imageModel" | "videoModel" | "textModel" | "audioModel"> = { image: "imageModel", video: "videoModel", text: "textModel", audio: "audioModel" };
+
+    const modelOf = async (node: NodeFacts): Promise<string> => (node.model !== "" ? node.model : (await runPromise(settings.read))[DEFAULTS[nodeCatalogueOf(node.medium)]]);
+
+    const entryOf = async (node: NodeFacts): Promise<ModelEntry | undefined> => {
+      const model = await modelOf(node);
+      return (await models(node.medium)).find((each) => each.id === model);
     };
 
-    const framesOf = (entry: ModelEntry | undefined): string[] => {
-      const frames = (entry?.params as { frame_images?: unknown } | null | undefined)?.frame_images;
-      return Array.isArray(frames) ? frames.filter((each): each is string => typeof each === "string") : [];
+    const framesFor = async (canvas: NodeCanvas): Promise<(id: string) => ReadonlyArray<string>> => {
+      const found = new Map<string, ReadonlyArray<string>>();
+      for (const node of canvas.nodes.values()) if (node.medium === "video") found.set(node.id, frameImagesOf(await entryOf(node)));
+      return (id) => found.get(id) ?? [];
     };
 
     interface Composed {
@@ -217,13 +222,12 @@ export const nodeRunsLayer = Layer.effect(
       const node = canvas.nodes.get(id);
       if (!node) return { error: NODE_GONE };
       const model = await modelOf(node);
-      const list = await models(node.medium).catch(() => [] as ReadonlyArray<ModelEntry>);
-      const entry = list.find((each) => each.id === model);
+      const entry = await entryOf(node);
       const referenceCap = node.medium === "image" ? modelParams(entry).referenceCap : undefined;
-      const request = nodeRequest({ node, canvas, frames: framesOf(entry), referenceCap, model, assume });
+      const request = nodeRequest({ node, canvas, frames: frameImagesOf(entry), referenceCap, model, assume });
       if (!request.ok) return { error: request.message };
       const drawn = [...request.references, ...request.frames.map((frame) => frame.slot)].filter((slot) => slot.source.type === "composite" || slot.source.type === "sketch");
-      if (drawn.some((slot) => rendered[slot.shapeId] === undefined)) return { error: agent ? SKETCH_REFUSAL : "This node needs a sketch or a marked picture: run it from its card." };
+      if (drawn.some((slot) => rendered[slot.shapeId] === undefined)) return { error: agent ? SKETCH_REFUSAL : NODE_SKETCH_MESSAGE };
       const needsPicture = request.references.some((slot) => slot.source.type === "page");
       if (needsPicture && (await artifacts.findChrome()) === undefined && config.testRenderer !== "ok") return { error: NO_CHROME_RENDER_MESSAGE };
       return { node, model, entry, parts: request.parts, instruction: request.instruction, references: request.references, frames: request.frames, sources: request.sources, fingerprint: inputFingerprint(node, canvas) };
@@ -284,8 +288,6 @@ export const nodeRunsLayer = Layer.effect(
       await writeLoneSidecar(folder, base, { kind: "capture", source: "capture", of: file, pageHash, files, viewport: { w: 1280, h: 800 }, createdAt: new Date().toISOString() }).catch(() => undefined);
       return { file: `${base}.png` };
     };
-
-    /** The references and frames a step sends, as files: rendered sketches swapped in, pages captured. */
     const sentRefs = async (folder: string, project: string, composed: Composed, rendered: RenderedInputs) => {
       const one = async (slot: Slot): Promise<RecipeRef | { error: string }> => {
         switch (slot.source.type) {
@@ -333,11 +335,7 @@ export const nodeRunsLayer = Layer.effect(
       if (node.medium === "image") {
         const pricing = await runPromise(catalogue.imagePricing(composed.model)).catch(() => undefined);
         if (!pricing) return null;
-        const chosen = {
-          ...(typeof node.params.quality === "string" ? { quality: node.params.quality } : {}),
-          ...(typeof node.params.resolution === "string" ? { resolution: node.params.resolution } : {}),
-        };
-        return estimateImageRun({ endpoints: pricing.endpoints, chosen, referenceImages: composed.references.filter((slot) => slot.kind === "image").length, outputs: node.runs ?? 1 });
+        return nodeImageEstimate({ endpoints: pricing.endpoints, params: node.params, referenceImages: composed.references.filter((slot) => slot.kind === "image").length, runs: node.runs });
       }
       if (node.medium === "video") {
         const settingsOf = videoSettings(composed.entry as VideoEntry | undefined, node.params as Record<string, VideoPropValue>);
@@ -354,24 +352,15 @@ export const nodeRunsLayer = Layer.effect(
       prompt: nodePromptText(composed.parts, composed.instruction, (part) => `[the HTML of ${part.file}]`),
       references: composed.references.map((slot) => `${slot.kind} ${slot.number}`),
       estimate: await estimateOf(composed),
-      paid: composed.node.medium !== "audio",
+      paid: isPaidMedium(composed.node.medium),
     });
-
-    /** The chain's steps in order, every one validated before anything runs. */
     const validate = async (input: ChainInput): Promise<{ canvas: NodeCanvas; folder: string; steps: string[]; planned: PlannedStep[] }> => {
       const { canvas, folder } = await readCanvas(input.project);
       for (const id of input.ids) if (!canvas.nodes.has(id) && canvas.shapes.find((shape) => shape.id === id)?.kind !== "group") throw unframedError("not_found", NODE_GONE);
-      let selected = [...input.ids];
-      if (input.downstream === true && input.ids.length === 1) selected = downstreamRun(canvas, input.ids[0]!, input.scope ?? "pending");
-      const plan = planChain(canvas, selected);
+      const plan = chainStepsOf(canvas, input.ids, input.downstream === true ? (input.scope ?? "pending") : undefined, await framesFor(canvas));
       if (!plan.ok) throw unframedError("bad_request", plan.message);
-      if (input.downstream === true && input.ids.length === 1 && plan.steps[0] !== input.ids[0]) {
-        throw unframedError("bad_request", "That node must run first.");
-      }
-      for (const id of plan.steps) {
-        const node = canvas.nodes.get(id)!;
-        if (node.run !== undefined) throw unframedError("bad_request", NODE_BUSY(nodeName(canvas, id)));
-      }
+      if (input.downstream === true && input.ids.length === 1 && plan.steps[0] !== input.ids[0]) throw unframedError("bad_request", NODE_FIRST_MESSAGE);
+      if (input.expect !== undefined && input.expect.join(" ") !== plan.steps.join(" ")) throw unframedError("bad_request", CHAIN_CHANGED_MESSAGE);
       const planned: PlannedStep[] = [];
       for (const [index, id] of plan.steps.entries()) {
         const composed = await compose(canvas, id, new Set(plan.steps.slice(0, index)), input.agent === true, input.rendered ?? {});
@@ -381,11 +370,12 @@ export const nodeRunsLayer = Layer.effect(
       return { canvas, folder, steps: [...plan.steps], planned };
     };
 
-    type StepOutcome = { readonly ok: true } | { readonly ok: false; readonly error: string };
+    type StepOutcome = { readonly ok: true; readonly cost: number | null } | { readonly ok: false; readonly error: string; readonly cost: number | null };
+    const failed = (error: string): StepOutcome => ({ ok: false, error, cost: null });
 
-    const pageRun = async (project: string, folder: string, composed: Composed, refs: ReadonlyArray<RecipeRef>, prompt: string, selectionPrompt: string, target: NodeTarget, chat: RunChat | undefined): Promise<StepOutcome> => {
+    const pageRun = async (project: string, folder: string, composed: Composed, refs: ReadonlyArray<RecipeRef>, prompt: string, selectionPrompt: string, target: NodeTarget): Promise<StepOutcome> => {
       const current = await runPromise(settings.read);
-      if (current.key === "") return { ok: false, error: "Add your OpenRouter key in Settings to generate." };
+      if (current.key === "") return failed(NO_KEY_MESSAGE);
       const startedAt = Date.now();
       const runId = `run-${startedAt}-${randomUUID().slice(0, 8)}`;
       const batchId = `b-${startedAt}`;
@@ -395,13 +385,13 @@ export const nodeRunsLayer = Layer.effect(
         runPromise,
         project,
         (get) => {
-          const made = startVersions(get, target.shapeId, { runId, chainId: target.chainId, batchId, count: 1, fingerprint: target.fingerprint, startedAt });
+          const made = startVersions(get, target.shapeId, { runId, chainId: target.chainId, claim: target.claim, batchId, count: 1, fingerprint: target.fingerprint, startedAt });
           versionId = made?.ids[0];
           return made?.change;
         },
         runId,
       );
-      if (versionId === undefined) return { ok: false, error: NO_SUCH_NODE };
+      if (versionId === undefined) return failed(NO_SUCH_NODE);
       const id = versionId;
       liveRuns.add(runId);
       try {
@@ -412,6 +402,7 @@ export const nodeRunsLayer = Layer.effect(
         }
         const outcome = await completeText(config.openRouterOrigin, current.key, chatRequestBody(composed.model, prompt, inlined, NODE_PAGE_SYSTEM));
         let error: string | undefined;
+        const cost = outcome.ok ? outcome.cost : null;
         if (!outcome.ok) error = outcome.error;
         else {
           const answer = pageAnswer(outcome.text);
@@ -461,27 +452,86 @@ export const nodeRunsLayer = Layer.effect(
         }
         if (error !== undefined) await applyNodeChange(rooms, runPromise, project, (get) => dropVersion(get, target.shapeId, id), runId);
         await applyNodeChange(rooms, runPromise, project, (get) => finishRun(get, target.shapeId, runId, error === undefined ? [] : [error]), runId);
-        return error === undefined ? { ok: true } : { ok: false, error };
+        return error === undefined ? { ok: true, cost } : { ok: false, error, cost };
       } catch (caught) {
         const error = errorText(caught);
         await applyNodeChange(rooms, runPromise, project, (get) => dropVersion(get, target.shapeId, id), runId);
         await applyNodeChange(rooms, runPromise, project, (get) => finishRun(get, target.shapeId, runId, [error]), runId);
-        return { ok: false, error };
+        return failed(error);
       } finally {
         liveRuns.delete(runId);
       }
     };
 
-    /** Runs one validated step and resolves when its work has landed or failed. */
-    const runStep = async (project: string, folder: string, composed: Composed, rendered: RenderedInputs, target: NodeTarget, input: ChainInput, box: { x: number; y: number; w: number; h: number }): Promise<StepOutcome> => {
-      const { node } = composed;
-      const prompted = await promptOf(folder, composed);
-      if ("error" in prompted) return { ok: false, error: prompted.error };
-      const sent = await sentRefs(folder, project, composed, rendered);
-      if ("error" in sent) return { ok: false, error: sent.error };
-      const { prompt, selectionPrompt } = prompted;
-      if (node.medium === "page") return pageRun(project, folder, composed, sent.references, prompt, selectionPrompt, target, input.chat);
+    interface StepRun {
+      readonly project: string;
+      readonly composed: Composed;
+      readonly prompt: string;
+      readonly selectionPrompt: string;
+      readonly references: ReadonlyArray<RecipeRef>;
+      readonly frames: ReadonlyArray<{ role: "first" | "last"; ref: RecipeRef }>;
+      readonly into: NodeTarget;
+      readonly input: ChainInput;
+      readonly box: { x: number; y: number; w: number; h: number };
+      readonly done: (outcome: StepOutcome) => void;
+    }
 
+    const IMAGE_PARAMS = new Set(["quality", "background", "resolution", "aspect_ratio", "size", "output_format"]);
+    const chatOf = (input: ChainInput) => (input.chat === undefined ? {} : { chat: input.chat });
+    const fileUrlOf = (ref: RecipeRef) => ("url" in ref ? ref.url : `project-file:${ref.file}`);
+
+    const STARTERS: Record<"image" | "text" | "audio" | "video", (run: StepRun) => Promise<string>> = {
+      image: async ({ project, composed, prompt, selectionPrompt, references, into, input, box }) => {
+        const params = Object.fromEntries(Object.entries(composed.node.params).filter(([key]) => IMAGE_PARAMS.has(key)).map(([key, value]) => [key, String(value)]));
+        const outputs = Array.from({ length: Math.min(10, Math.max(1, composed.node.runs ?? 1)) }, () => ({ prompt, references: [...references] }));
+        const request = { project, model: composed.model, params, selectionPrompt, instruction: composed.instruction, outputs, sources: [...composed.sources], anchor: box, ...chatOf(input) };
+        return (await runPromise(runs.image(request, into))).runId;
+      },
+      text: async ({ project, composed, prompt, selectionPrompt, references, into, input, box }) => {
+        const request = { project, model: composed.model, selectionPrompt, instruction: composed.instruction, prompt, references: [...references], sources: [...composed.sources], anchor: box, ...chatOf(input) };
+        return (await runPromise(runs.text(request, into))).runId;
+      },
+      audio: async ({ project, composed, prompt, selectionPrompt, into, box }) => {
+        const voice = voiceOf(composed.node.params);
+        if (voice === undefined) throw unframedError("bad_request", "Pick a voice for this line.");
+        const request = { project, model: composed.model, voice, params: audioRunParams(composed.node.params) as never, selectionPrompt, instruction: composed.instruction, prompt, sources: [...composed.sources], anchor: box };
+        return (await runPromise(runs.audio(request, into))).runId;
+      },
+      video: async ({ project, composed, prompt, selectionPrompt, references, frames, into, input, box, done }) => {
+        const props = composed.node.params as Record<string, VideoPropValue>;
+        const chosen = videoSettings(composed.entry as VideoEntry | undefined, props);
+        const request = {
+          project,
+          prompt,
+          input_references: references.map((ref) => (ref.kind === "video" ? { type: "video_url", video_url: { url: fileUrlOf(ref) } } : { type: "image_url", image_url: { url: fileUrlOf(ref) } })),
+          frame_images: frames.map((frame) => ({ type: "image_url", image_url: { url: fileUrlOf(frame.ref) }, frame_type: frame.role === "first" ? "first_frame" : "last_frame" })),
+          model: composed.model,
+          ...chosen,
+          shareLocalVideos: input.agent !== true && props.shareLocalVideos !== false,
+          landing: box,
+          recipe: {
+            medium: "video",
+            model: composed.model,
+            params: { inputMode: frames.length > 0 ? (frames.length > 1 ? "first_last" : "first_frame") : "reference", ...chosen },
+            selectionPrompt,
+            instruction: composed.instruction,
+            references: [...references, ...frames.map((frame) => frame.ref)],
+            sources: [...composed.sources],
+          } as ResultRecipe,
+        } as VideoStartRequest;
+        const job = await runPromise(renderJobs.start(request, into));
+        renderJobs.onFinished(job.jobId, (outcome) => done(outcome.ok ? { ok: true, cost: outcome.cost } : failed("The render failed.")));
+        return job.jobId;
+      },
+    };
+
+    const runStep = async (project: string, folder: string, composed: Composed, rendered: RenderedInputs, target: NodeTarget, input: ChainInput, box: { x: number; y: number; w: number; h: number }): Promise<StepOutcome> => {
+      const prompted = await promptOf(folder, composed);
+      if ("error" in prompted) return failed(prompted.error);
+      const sent = await sentRefs(folder, project, composed, rendered);
+      if ("error" in sent) return failed(sent.error);
+      const medium = composed.node.medium;
+      if (medium === "page") return pageRun(project, folder, composed, sent.references, prompted.prompt, prompted.selectionPrompt, target);
       return new Promise<StepOutcome>((resolve) => {
         let settled = false;
         let live: string | undefined;
@@ -491,80 +541,14 @@ export const nodeRunsLayer = Layer.effect(
           if (live !== undefined) liveRuns.delete(live);
           resolve(outcome);
         };
-        const into: NodeTarget = { ...target, onFinished: ({ succeeded, errors }) => done(succeeded > 0 ? { ok: true } : { ok: false, error: errors.join("; ") || "The run did not land." }) };
-        const chat = input.chat === undefined ? {} : { chat: input.chat };
-        const started = async (): Promise<string> => {
-          if (node.medium === "image") {
-            const params: Record<string, string> = {};
-            for (const [key, value] of Object.entries(node.params)) if (["quality", "background", "resolution", "aspect_ratio", "size", "output_format"].includes(key)) params[key] = String(value);
-            const references = [...sent.references];
-            return (
-              await runPromise(
-                runs.image(
-                  {
-                    project,
-                    model: composed.model,
-                    params,
-                    selectionPrompt,
-                    instruction: composed.instruction,
-                    outputs: Array.from({ length: Math.min(10, Math.max(1, node.runs ?? 1)) }, () => ({ prompt, references })),
-                    sources: [...composed.sources],
-                    anchor: box,
-                    ...chat,
-                  },
-                  into,
-                ),
-              )
-            ).runId;
-          }
-          if (node.medium === "text") {
-            return (await runPromise(runs.text({ project, model: composed.model, selectionPrompt, instruction: composed.instruction, prompt, references: [...sent.references], sources: [...composed.sources], anchor: box, ...chat }, into))).runId;
-          }
-          if (node.medium === "audio") {
-            const voice = voiceOf(node.params);
-            if (voice === undefined) throw unframedError("bad_request", "Pick a voice for this line.");
-            return (
-              await runPromise(
-                runs.audio(
-                  { project, model: composed.model, voice, params: audioRunParams(node.params) as never, selectionPrompt, instruction: composed.instruction, prompt, sources: [...composed.sources], anchor: box },
-                  into,
-                ),
-              )
-            ).runId;
-          }
-          const props = node.params as Record<string, VideoPropValue>;
-          const chosen = videoSettings(composed.entry as VideoEntry | undefined, props);
-          const url = (ref: RecipeRef) => ("url" in ref ? ref.url : `project-file:${ref.file}`);
-          const request: VideoStartRequest = {
-            project,
-            prompt,
-            input_references: sent.references.map((ref) => (ref.kind === "video" ? { type: "video_url", video_url: { url: url(ref) } } : { type: "image_url", image_url: { url: url(ref) } })),
-            frame_images: sent.frames.map((frame) => ({ type: "image_url", image_url: { url: url(frame.ref) }, frame_type: frame.role === "first" ? "first_frame" : "last_frame" })),
-            model: composed.model,
-            ...chosen,
-            shareLocalVideos: input.agent !== true && props.shareLocalVideos !== false,
-            landing: box,
-            recipe: {
-              medium: "video",
-              model: composed.model,
-              params: { inputMode: sent.frames.length > 0 ? (sent.frames.length > 1 ? "first_last" : "first_frame") : "reference", ...chosen },
-              selectionPrompt,
-              instruction: composed.instruction,
-              references: [...sent.references, ...sent.frames.map((frame) => frame.ref)],
-              sources: [...composed.sources],
-            } as ResultRecipe,
-          } as VideoStartRequest;
-          const job = await runPromise(renderJobs.start(request, into));
-          renderJobs.onFinished(job.jobId, (outcome) => done(outcome.ok ? { ok: true } : { ok: false, error: "The render failed." }));
-          return job.jobId;
-        };
-        started().then(
+        const into: NodeTarget = { ...target, onFinished: ({ succeeded, errors, cost }) => done(succeeded > 0 ? { ok: true, cost } : failed(errors.join("; ") || "The run did not land.")) };
+        STARTERS[medium]({ project, composed, prompt: prompted.prompt, selectionPrompt: prompted.selectionPrompt, references: sent.references, frames: sent.frames, into, input, box, done }).then(
           (runId) => {
             if (settled) return;
             live = runId;
             liveRuns.add(runId);
           },
-          (error: unknown) => done({ ok: false, error: error instanceof UnframedError ? error.message : errorText(error) }),
+          (error: unknown) => done(failed(error instanceof UnframedError ? error.message : errorText(error))),
         );
       });
     };
@@ -577,51 +561,51 @@ export const nodeRunsLayer = Layer.effect(
       let ran = 0;
       let failedAt = -1;
       let failedName = "";
+      let at = 0;
+      const fail = async (index: number, name: string, error: string) => {
+        errors.push(error);
+        failedAt = index;
+        failedName = name;
+        await applyNodeChange(
+          rooms,
+          runPromise,
+          project,
+          (get) => {
+            const node = get(steps[index]!);
+            if (!isNode(node) || node.props.error !== undefined || (node.props.run !== undefined && node.props.run.runId !== "")) return undefined;
+            return stopNode(get, steps[index]!, error);
+          },
+          chainId,
+        );
+      };
       try {
         for (const [index, id] of steps.entries()) {
+          at = index;
           const { records, canvas } = await readCanvas(project);
           const step = planned[index]!;
           const composed = await compose(canvas, id, new Set(), input.agent === true, input.rendered ?? {});
-          let outcome: StepOutcome;
-          if ("error" in composed) outcome = { ok: false, error: composed.error };
-          else {
-            try {
-              await input.hooks?.beforeStep?.(step, index);
-            } catch (error) {
-              outcome = { ok: false, error: error instanceof Error ? error.message : String(error) };
-              errors.push(outcome.error);
-              failedAt = index;
-              failedName = nodeName(canvas, id);
-              await applyNodeChange(rooms, runPromise, project, (get) => stopNode(get, id, outcome.ok ? "" : outcome.error), chainId);
-              break;
-            }
-            input.hooks?.onStepStarted?.(step, index);
-            outcome = await runStep(project, folder, composed, input.rendered ?? {}, { shapeId: id, chainId: steps.length > 1 ? chainId : null, step: index + 1, fingerprint: composed.fingerprint }, input, nodeBox(records, id));
-            input.hooks?.afterStep?.(step, index, outcome);
+          if ("error" in composed) {
+            await fail(index, nodeName(canvas, id), composed.error);
+            break;
           }
-          if (outcome.ok) {
-            ran++;
-            continue;
+          try {
+            await input.hooks?.beforeStep?.(step, index);
+          } catch (error) {
+            await fail(index, nodeName(canvas, id), errorText(error));
+            break;
           }
-          errors.push(outcome.error);
-          failedAt = index;
-          failedName = nodeName(canvas, id);
-          await applyNodeChange(
-            rooms,
-            runPromise,
-            project,
-            (get) => {
-              const node = get(id);
-              if (!isNode(node) || node.props.error !== undefined || (node.props.run !== undefined && node.props.run.runId !== "")) return undefined;
-              return stopNode(get, id, outcome.ok ? "" : outcome.error);
-            },
-            chainId,
-          );
-          break;
+          input.hooks?.onStepStarted?.(step, index);
+          const outcome = await runStep(project, folder, composed, input.rendered ?? {}, { shapeId: id, claim: chainId, chainId: steps.length > 1 ? chainId : null, step: index + 1, fingerprint: composed.fingerprint }, input, nodeBox(records, id));
+          input.hooks?.afterStep?.(step, index, { ok: outcome.ok, cost: outcome.cost });
+          if (!outcome.ok) {
+            await fail(index, nodeName(canvas, id), outcome.error);
+            break;
+          }
+          ran++;
         }
       } catch (error) {
-        errors.push(errorText(error));
         logError(`${chainId}: ${errorText(error)}`);
+        if (failedAt < 0) await fail(at, planned[at]?.name ?? steps[at]!, errorText(error)).catch(() => undefined);
       } finally {
         for (const [index, id] of steps.entries()) {
           if (index <= failedAt || (failedAt < 0 && index < ran)) continue;
@@ -630,19 +614,35 @@ export const nodeRunsLayer = Layer.effect(
         }
         liveChains.delete(chainId);
         input.hooks?.onFinished?.({ ran, total: steps.length, errors });
-        if (steps.length > 1) {
-          await runPromise(runs.publish(project, { type: "chainFinished", runId: chainId, chainId, ran, total: steps.length, errors }));
-        }
+        if (steps.length > 1) await runPromise(runs.publish(project, { type: "chainFinished", runId: chainId, chainId, ran, total: steps.length, errors }));
       }
     };
 
     const run = (input: ChainInput) =>
       Effect.tryPromise({
         try: async () => {
-          const { steps, planned, folder } = await validate(input);
+          const { steps, planned, folder, canvas } = await validate(input);
           const chainId = `chain-${Date.now()}-${randomUUID().slice(0, 8)}`;
           liveChains.add(chainId);
-          await runPromise(rooms.applyWhen(input.project, (get) => queueNodes(get, steps, chainId, Date.now()), nodeOrigin(chainId)));
+          let busy: string | undefined;
+          await runPromise(
+            rooms.applyWhen(
+              input.project,
+              (get) => {
+                const claimed = claimNodes(get, steps, chainId, Date.now());
+                if ("busy" in claimed) {
+                  busy = claimed.busy;
+                  return undefined;
+                }
+                return claimed.change;
+              },
+              nodeOrigin(chainId),
+            ),
+          );
+          if (busy !== undefined) {
+            liveChains.delete(chainId);
+            throw unframedError("bad_request", NODE_BUSY(nodeName(canvas, busy)));
+          }
           if (steps.length > 1) await runPromise(runs.publish(input.project, { type: "chain", runId: chainId, chainId, nodes: steps }));
           void execute(input, chainId, steps, planned, folder).catch((error: unknown) => logError(`${chainId}: ${errorText(error)}`));
           return { chainId, nodes: steps };
@@ -697,11 +697,9 @@ export const nodeRunsLayer = Layer.effect(
 
     const renders = (project: string, files: ReadonlyArray<string>) =>
       Effect.tryPromise({
-        try: async () => ({ renders: Object.fromEntries(await motionRenders(await folderOf(project), files)) }),
+        try: async () => ({ renders: Object.fromEntries(await newestRenders(await folderOf(project), files)) }),
         catch: (error) => (error instanceof UnframedError ? error : unframedError("internal", errorText(error))),
       });
-
-    // A room that opens with node work this process is not doing: the work stopped with the engine.
     yield* rooms.afterOpen((project, room) => {
       const put: TLRecord[] = [];
       for (const record of room.read()) {
@@ -719,6 +717,19 @@ export const nodeRunsLayer = Layer.effect(
         put.push({ ...record, props } as unknown as TLRecord);
       }
       if (put.length > 0) room.change({ put, remove: [] }, { kind: "server", id: `nodes:boot:${project}` });
+    });
+
+    yield* rooms.afterCommit((_project, change, room) => {
+      if (change.removed.length === 0) return;
+      const orphans = room
+        .read()
+        .filter((record) => record.typeName === "shape" && (record as { type?: string }).type === "wire")
+        .filter((record) => {
+          const ends = record.props as { from?: string; to?: string };
+          return room.get(String(ends.from)) === undefined || room.get(String(ends.to)) === undefined;
+        })
+        .map((record) => record.id);
+      if (orphans.length > 0) room.change({ put: [], remove: orphans }, { kind: "server", id: "wires:ends" });
     });
 
     return NodeRuns.of({ plan, run, useVersion, removeVersion, renders });

@@ -10,7 +10,7 @@ import { useCanvasProject, useEngine } from "../context.ts";
 import { loadLastUsed } from "../generate/lastUsed.ts";
 import { mediumDefinition } from "../generate/mediumRegistry.ts";
 import { noteRender } from "../fps/renders.ts";
-import { nodeCanvas, type NodeShape } from "./facts.ts";
+import {nodeCanvas, type NodeShape } from "./facts.ts";
 import { NodeEditor } from "./NodeEditor.tsx";
 import { newNodeProps, nodeFrames, nodeModel } from "./operations.ts";
 

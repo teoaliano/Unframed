@@ -76,12 +76,11 @@ export class AgentNodeRuns {
     this.host = host;
   }
 
-  async detail(project: string, chatId: string, args: Record<string, unknown>): Promise<string | undefined> {
+  async detail(project: string, args: Record<string, unknown>): Promise<string | undefined> {
     const checked = nodeRunArguments(args);
     if (!checked.ok) return undefined;
     try {
       const { steps } = await this.host.plan({ project, ids: checked.ids.map(roomShapeId), downstream: checked.downstream, agent: true });
-      void chatId;
       return nodeRunSummary(steps);
     } catch {
       return undefined;
@@ -137,11 +136,11 @@ export class AgentNodeRuns {
       afterStep: (step, index, outcome) => {
         const key = keys.get(index);
         if (connection !== undefined && key !== undefined) {
-          if (outcome.ok) void this.host.book.settle(connection, key, step.estimate ?? 0);
+          if (outcome.ok) void this.host.book.settle(connection, key, outcome.cost ?? step.estimate ?? 0);
           else void this.host.book.release(connection, key);
         }
         void this.host.activity(call.project, call.chatId, outcome.ok
-          ? { kind: ACTIVITY_LANDED, summary: `${step.name} landed`, turnId: call.turnId, payload: { cost: step.estimate } }
+          ? { kind: ACTIVITY_LANDED, summary: `${step.name} landed`, turnId: call.turnId, payload: { cost: outcome.cost ?? step.estimate } }
           : { kind: ACTIVITY_FAILED, summary: `${step.name} did not land`, turnId: call.turnId, payload: { count: 1 } });
       },
       onFinished: () => {
@@ -156,7 +155,7 @@ export class AgentNodeRuns {
     this.host.holds.runStarted(call.chatId, call.turn);
     let started: ChainStarted;
     try {
-      started = await this.host.run({ ...input, chat, hooks });
+      started = await this.host.run({ ...input, chat, hooks, expect: steps.map((step) => step.node) });
     } catch (error) {
       this.host.holds.runEnded(call.chatId, call.turn);
       return refusal(errorText(error));

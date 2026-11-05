@@ -24,10 +24,12 @@ const withoutKeys = (props: Record<string, unknown>, ...keys: string[]) => {
 export const startVersions = (
   get: Get,
   shapeId: string,
-  input: { readonly runId: string; readonly chainId: string | null; readonly batchId: string; readonly count: number; readonly fingerprint: string; readonly startedAt: number; readonly durable?: boolean },
+  input: { readonly runId: string; readonly chainId: string | null; readonly claim: string; readonly batchId: string; readonly count: number; readonly fingerprint: string; readonly startedAt: number; readonly durable?: boolean },
 ): { change: CanvasChange; ids: string[] } | undefined => {
   const node = get(shapeId);
   if (!isNode(node)) return undefined;
+  const marker = node.props.run;
+  if (marker !== undefined && !(marker.runId === "" && marker.chainId === input.claim)) return undefined;
   const createdAt = new Date(input.startedAt).toISOString();
   const made: NodeVersion[] = Array.from({ length: input.count }, (_, index) => ({
     id: `v-${randomUUID().slice(0, 12)}`,
@@ -93,14 +95,15 @@ export const finishRun = (get: Get, shapeId: string, runId: string, errors: Read
 };
 
 /** Marks the steps of a chain that have not started: queued, so nothing else runs them. */
-export const queueNodes = (get: Get, ids: ReadonlyArray<string>, chainId: string, startedAt: number): CanvasChange => {
+export const claimNodes = (get: Get, ids: ReadonlyArray<string>, chainId: string, startedAt: number): { readonly change: CanvasChange } | { readonly busy: string } => {
   const records: TLRecord[] = [];
   for (const id of ids) {
     const node = get(id);
     if (!isNode(node)) continue;
+    if (node.props.run !== undefined) return { busy: id };
     records.push({ ...node, props: { ...withoutKeys(node.props, "error"), run: { runId: "", chainId, startedAt } } } as unknown as TLRecord);
   }
-  return { put: records, remove: [] };
+  return { change: { put: records, remove: [] } };
 };
 
 /** A node that will not run: its queue marker goes and the reason stays. */
@@ -130,13 +133,14 @@ export const applyNodeChange = (
 /** Where a node run lands: the node, its chain and step, and what its inputs were. */
 export interface NodeTarget {
   readonly shapeId: string;
+  readonly claim: string;
   readonly chainId: string | null;
   readonly step?: number | undefined;
   readonly fingerprint: string;
-  readonly onFinished?: ((outcome: { readonly succeeded: number; readonly errors: ReadonlyArray<string> }) => void) | undefined;
+  readonly onFinished?: ((outcome: { readonly succeeded: number; readonly errors: ReadonlyArray<string>; readonly cost: number | null }) => void) | undefined;
 }
 
-export const nodeSidecarFields = (target: NodeTarget | undefined, versionId: string | undefined) =>
+export const nodeSidecarFields = (target: Pick<NodeTarget, "shapeId" | "chainId" | "step"> | undefined, versionId: string | undefined) =>
   target === undefined || versionId === undefined
     ? {}
     : {

@@ -547,7 +547,7 @@ export class AgentRuntime {
 
   private async nodeRunDetail(chatId: string, input: Readonly<Record<string, unknown>>): Promise<string | undefined> {
     const project = this.chatProjects.get(chatId);
-    return project === undefined ? undefined : this.nodeRuns.detail(project, chatId, { ...input });
+    return project === undefined ? undefined : this.nodeRuns.detail(project, { ...input });
   }
 
   private async generationDetail(chatId: string, input: Readonly<Record<string, unknown>>, tool = "generate"): Promise<string | undefined> {

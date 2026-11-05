@@ -1,4 +1,5 @@
 import { membersOf, type CanvasShape } from "../canvasShapes.ts";
+import { markOwners } from "../composition.ts";
 import { resolveReferences } from "../references.ts";
 import { currentVersion, wiresInto, type NodeCanvas, type NodeFacts } from "./model.ts";
 import { nodeRequest } from "./request.ts";
@@ -24,7 +25,10 @@ const sortedParams = (params: Readonly<Record<string, unknown>>) => Object.fromE
  * wire in order its role, its source and the source's content now.
  */
 export const inputFingerprint = (node: NodeFacts, canvas: NodeCanvas): string => {
-  const byId = new Map(canvas.shapes.map((shape) => [shape.id, shape]));
+  const stored = canvas.stored ?? canvas.shapes;
+  const byId = new Map(stored.map((shape) => [shape.id, shape]));
+  const owners = markOwners(stored);
+  const marksOn = (id: string) => stored.filter((shape) => owners.get(shape.id) === id).map((shape) => [shape.id, canvas.markProps?.get(shape.id) ?? null]);
   const content = (shape: CanvasShape | undefined, depth = 0): unknown => {
     if (!shape) return null;
     const nodeFacts = canvas.nodes.get(shape.id);
@@ -33,7 +37,7 @@ export const inputFingerprint = (node: NodeFacts, canvas: NodeCanvas): string =>
       case "prompt":
         return { text: shape.textResult ? shape.text : resolved(shape.text ?? "", shape.ref) };
       case "image":
-        return { file: shape.file ?? null, crop: shape.crop ?? null };
+        return { file: shape.file ?? null, crop: shape.crop ?? null, marks: marksOn(shape.id) };
       case "video":
         return { file: shape.file ?? null, link: shape.link ?? null };
       case "page":
@@ -41,11 +45,9 @@ export const inputFingerprint = (node: NodeFacts, canvas: NodeCanvas): string =>
       case "motion":
         return { render: shape.file === undefined ? null : (canvas.renders.get(shape.file) ?? null) };
       case "group":
-        return depth > 4
-          ? null
-          : membersOf(canvas.shapes, shape.id)
-              .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-              .map((member) => ({ id: member.id, content: content(member, depth + 1) }));
+        return depth > 4 ? null : membersOf(stored, shape.id).map((member) => ({ id: member.id, content: content(member, depth + 1) }));
+      case "mark":
+        return { id: shape.id, props: canvas.markProps?.get(shape.id) ?? null };
       default:
         return { id: shape.id };
     }

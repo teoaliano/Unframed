@@ -1,3 +1,4 @@
+import { nodeCatalogueOf } from "@unframed/domain";
 import { AUDIO_DEFAULT_SIZE, projectFileMarker, type NodeVersion, type ResultMeta } from "@unframed/contracts";
 import { AssetRecordType, createShapeId, toRichText, type Editor, type TLAssetId, type TLShapeId, type VecLike } from "tldraw";
 import { fileUrl } from "../canvas/assetStore.ts";
@@ -46,7 +47,7 @@ export const dragOutVersion = async (input: { readonly editor: Editor; readonly 
   const sidecar = await readSidecar(project, sidecarName);
   const result: ResultMeta = {
     sidecar: sidecarName ?? null,
-    medium: medium === "page" ? "text" : medium,
+    medium: nodeCatalogueOf(medium),
     model: typeof sidecar.model === "string" ? sidecar.model : node.props.model,
     batchId: version.batchId,
     runIndex: version.runIndex,

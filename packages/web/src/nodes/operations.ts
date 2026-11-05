@@ -1,14 +1,14 @@
 import { NODE_DEFAULT_SIZE, type NodeMedium, type NodeShapeProps, type WireRole } from "@unframed/contracts";
-import { defaultRole, nodeRequest, sourceOf, wireRefusal, WIRE_TARGET_REFUSAL } from "@unframed/domain";
+import { defaultRole, nodeRequest, sourceOf, wireRefusal, WIRE_TARGET_REFUSAL, nodeCatalogueOf, frameImagesOf } from "@unframed/domain";
 import { createShapeId, getIndexBetween, type Editor, type IndexKey, type TLShapeId } from "tldraw";
 import { knownCatalogue } from "../generate/catalogue.ts";
 import { showError } from "../toasts.tsx";
-import { catalogueOf, framesOf, isNodeShape, isWireShape, nodeCanvas, nodeCatalogues, type NodeShape, type WireShape } from "./facts.ts";
+import {isNodeShape, isWireShape, nodeCanvas, nodeCatalogues, type NodeShape, type WireShape } from "./facts.ts";
 
 /** The model a node runs: its own, else the medium's default from the session's catalogue. */
-export const nodeModel = (props: Pick<NodeShapeProps, "medium" | "model">): string => props.model !== "" ? props.model : (knownCatalogue(catalogueOf(props.medium))?.default ?? "");
+export const nodeModel = (props: Pick<NodeShapeProps, "medium" | "model">): string => props.model !== "" ? props.model : (knownCatalogue(nodeCatalogueOf(props.medium))?.default ?? "");
 
-export const nodeEntry = (props: Pick<NodeShapeProps, "medium" | "model">) => knownCatalogue(catalogueOf(props.medium))?.models.find((entry) => entry.id === nodeModel(props));
+export const nodeEntry = (props: Pick<NodeShapeProps, "medium" | "model">) => knownCatalogue(nodeCatalogueOf(props.medium))?.models.find((entry) => entry.id === nodeModel(props));
 
 let framesEditor: Editor | undefined;
 export const bindNodeCatalogues = (editor: Editor) => {
@@ -20,7 +20,7 @@ export const nodeFrames = (props: Pick<NodeShapeProps, "medium" | "model">): str
   const listed = framesEditor === undefined ? undefined : nodeCatalogues(framesEditor).get().video;
   const model = nodeModel(props);
   const entry = listed?.find((each) => each.id === model) ?? nodeEntry(props);
-  return framesOf(entry);
+  return frameImagesOf(entry);
 };
 
 /** The roles each wire into a node shows, from the one function that also builds its run. */

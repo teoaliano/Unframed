@@ -241,3 +241,60 @@ describe("pages", () => {
   });
 });
 
+
+describe("one run at a time", () => {
+  it("two starts at once claim the node once: one runs and pays, the other is refused", async () => {
+    const held = gate<void>();
+    generating.answer(async () => {
+      await held.promise;
+      return { kind: "image", bytes: pngBytes(8, 8) };
+    });
+    await seed([nodeShape("n", "202", { medium: "image", instruction: "a fox" })]);
+    const calls = generating.requests.length;
+    const results = await Promise.allSettled([
+      generating.rpc.call("node.run", { project: "board", shapeId: "shape:n" }),
+      generating.rpc.call("node.run", { project: "board", shapeId: "shape:n" }),
+      generating.rpc.call("chain.run", { project: "board", shapeIds: ["shape:n"] }),
+    ]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    for (const result of results.filter((each) => each.status === "rejected")) expect((result as PromiseRejectedResult).reason).toMatchObject({ message: "@202 is running. Wait for it to finish." });
+    held.release();
+    await waitNode("n", (node) => node.props.currentVersionId !== null && node.props.run === undefined);
+    expect(generating.requests.length - calls).toBe(1);
+    expect((await shape("n")).props.versions).toHaveLength(1);
+  });
+});
+
+describe("what was confirmed is what runs", () => {
+  it("refuses a chain whose steps differ from the ones the person confirmed, and runs nothing", async () => {
+    await seed([nodeShape("a", "201", { medium: "text", instruction: "x" }, { y: 0 }), nodeShape("b", "202", { medium: "text", instruction: "y" }, { y: 500 })]);
+    const calls = chats.requests.length;
+    await expect(generating.rpc.call("chain.run", { project: "board", shapeIds: ["shape:a", "shape:b"], steps: ["shape:a"] })).rejects.toMatchObject({
+      message: "The chain changed since you confirmed it. Check its steps and run it again.",
+    });
+    expect(chats.requests.length).toBe(calls);
+    expect((await shape("a")).props.run).toBeUndefined();
+    const started = await generating.rpc.call("chain.run", { project: "board", shapeIds: ["shape:a", "shape:b"], steps: ["shape:a", "shape:b"] });
+    expect(started.nodes).toEqual(["shape:a", "shape:b"]);
+    await waitNode("b", (node) => node.props.currentVersionId !== null);
+  });
+
+  it("Run downstream's pending choice runs the node and only the nodes after it that are not up to date", async () => {
+    await seed([
+      nodeShape("a", "201", { medium: "text", instruction: "x" }, { y: 0 }),
+      nodeShape("b", "202", { medium: "text" }, { y: 500 }),
+      nodeShape("c", "203", { medium: "text" }, { y: 1000 }),
+      wireShape("ab", "a", "b", "prompt"),
+      wireShape("bc", "b", "c", "prompt"),
+    ]);
+    const all = await generating.rpc.call("node.run", { project: "board", shapeId: "shape:a", downstream: true, scope: "all" });
+    expect(all.nodes).toEqual(["shape:a", "shape:b", "shape:c"]);
+    await waitNode("c", (node) => node.props.currentVersionId !== null && node.props.run === undefined);
+    const c = await shape("c");
+    await generating.rpc.call("testCanvas.apply", { project: "board", change: { put: [{ ...c, props: { ...c.props, instruction: "changed" } }], remove: [] }, origin: { kind: "system", id: "edit" } });
+    const pending = await generating.rpc.call("node.run", { project: "board", shapeId: "shape:a", downstream: true, scope: "pending" });
+    expect(pending.nodes).toEqual(["shape:a", "shape:c"]);
+    await waitNode("c", (node) => node.props.versions.length === 2 && node.props.run === undefined);
+  });
+});
+

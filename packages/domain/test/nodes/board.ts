@@ -53,6 +53,7 @@ export const board = (input: {
   nodes?: Array<{ facts: NodeFacts; at?: At }>;
   wires?: ReadonlyArray<WireFacts>;
   renders?: Record<string, string>;
+  markProps?: Record<string, string>;
 }): NodeCanvas => {
   const nodes = input.nodes ?? [];
   const wires = [...(input.wires ?? [])].sort((a, b) => a.z - b.z);
@@ -65,5 +66,6 @@ export const board = (input: {
     nodes: new Map(nodes.map(({ facts }) => [facts.id, facts])),
     wires,
     renders: new Map(Object.entries(input.renders ?? {})),
+    markProps: new Map(Object.entries(input.markProps ?? {})),
   };
 };

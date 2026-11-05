@@ -305,7 +305,7 @@ export const runsLayer = Layer.effect(
             .applyWhen(
               request.project,
               (get) => {
-                const made = startVersions(get, into.shapeId, { runId, chainId: into.chainId, batchId, count: runCount, fingerprint: into.fingerprint, startedAt });
+                const made = startVersions(get, into.shapeId, { runId, chainId: into.chainId, claim: into.claim, batchId, count: runCount, fingerprint: into.fingerprint, startedAt });
                 versionIds = made?.ids ?? [];
                 return made?.change;
               },
@@ -382,7 +382,7 @@ export const runsLayer = Layer.effect(
           };
         };
 
-        const settle = async (index: number): Promise<{ ok: boolean; error?: string; orphaned?: boolean }> => {
+        const settle = async (index: number): Promise<{ ok: boolean; error?: string; orphaned?: boolean; cost?: number | null }> => {
           const output = request.outputs[index]!;
           const runIndex = index + 1;
           const versionId = versionIds[index];
@@ -407,7 +407,7 @@ export const runsLayer = Layer.effect(
             );
             if (outcome.ok) {
               await publish(project, { type: "output", runId, runIndex, ok: true, shapeId, versionId, file: outcome.landed.file, cost: outcome.landed.cost });
-              return { ok: true, orphaned: !filled };
+              return { ok: true, orphaned: !filled, cost: outcome.landed.cost };
             }
             logError(`${runId}: output ${runIndex} failed: ${outcome.error}`);
             await publish(project, { type: "output", runId, runIndex, ok: false, error: outcome.error, shapeId, versionId });
@@ -452,11 +452,12 @@ export const runsLayer = Layer.effect(
               orphaned: settled.filter((each) => each.orphaned).length,
               ...(into === undefined ? {} : { shapeId: into.shapeId }),
             });
-            into?.onFinished?.({ succeeded, errors });
+            const costs = settled.filter((each) => each.ok).map((each) => each.cost);
+            into?.onFinished?.({ succeeded, errors, cost: costs.length === 0 || costs.some((cost) => cost === null || cost === undefined) ? null : costs.reduce<number>((sum, cost) => sum + (cost ?? 0), 0) });
           })
           .catch((error: unknown) => {
             logError(`${runId}: ${errorText(error)}`);
-            into?.onFinished?.({ succeeded: 0, errors: [errorText(error)] });
+            into?.onFinished?.({ succeeded: 0, errors: [errorText(error)], cost: null });
           });
 
         return { runId, batchId, placeholders: into !== undefined ? versionIds : placeholders.map((placeholder) => placeholder.id as string) };

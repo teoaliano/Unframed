@@ -115,3 +115,29 @@ describe("an agent's nodes and wires", () => {
     }
   });
 });
+
+describe("an agent's chain against the spend limit", () => {
+  it("settles each step at what it really cost, not at its estimate", async () => {
+    const generating = await start();
+    try {
+      const link = await outsideLink(generating as never, "Laptop", { usd: 5, period: "day" });
+      const session = await link.open();
+      const made = await build(link, session);
+      generating.answer(() => ({ kind: "image", bytes: Buffer.from("png"), cost: 0.1 }));
+      await link.call(session, "node_run", { project: PROJECT, ids: [made.value.ids["new:still"]], downstream: true });
+      for (let tries = 0; !(await room(generating)).find((shape) => shape.id === `shape:${made.value.ids["new:again"]}`)?.props.currentVersionId; tries++) {
+        if (tries > 400) throw new Error("the chain did not land");
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      let spent = 0;
+      for (let tries = 0; tries < 100; tries++) {
+        spent = (await link.call(session, "node_run", { project: PROJECT, ids: [made.value.ids["new:still"]], dryRun: true })).value.spendLimit.spent;
+        if (spent > 0.15) break;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      expect(spent).toBeCloseTo(0.2, 5);
+    } finally {
+      await generating.engine.dispose();
+    }
+  });
+});

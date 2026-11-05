@@ -6,7 +6,7 @@ import { Menu, MenuGroup, MenuGroupLabel, MenuPopup, MenuRadioGroup, MenuRadioIt
 import { controlEvents } from "../canvas/shapes/media.tsx";
 import { labelHue } from "../chrome/hue.ts";
 import { noteRender } from "../fps/renders.ts";
-import { nodeCanvas, type WireShape } from "./facts.ts";
+import {nodeCanvas, type WireShape } from "./facts.ts";
 import { nodeFrames, nodeRoles, setWireFiles, setWireRole } from "./operations.ts";
 
 const wireProps: RecordProps<WireShape> = {

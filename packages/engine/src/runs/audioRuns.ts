@@ -90,7 +90,7 @@ export const makeAudioRuns = (deps: AudioRunDeps) => {
           .applyWhen(
             request.project,
             (get) => {
-              const made = startVersions(get, into.shapeId, { runId, chainId: into.chainId, batchId, count: 1, fingerprint: into.fingerprint, startedAt });
+              const made = startVersions(get, into.shapeId, { runId, chainId: into.chainId, claim: into.claim, batchId, count: 1, fingerprint: into.fingerprint, startedAt });
               versionId = made?.ids[0];
               return made?.change;
             },
@@ -174,7 +174,7 @@ export const makeAudioRuns = (deps: AudioRunDeps) => {
           else await deps.publish(project, { type: "output", runId, runIndex: 1, ok: false, error: outcome.error, shapeId, versionId: id });
           await applyNodeChange(rooms, deps.runPromise, request.project, (get) => finishRun(get, into.shapeId, runId, errors), runId);
           await deps.publish(project, { type: "finished", runId, succeeded: outcome.ok ? 1 : 0, failed: outcome.ok ? 0 : 1, errors, orphaned: 0, shapeId });
-          into.onFinished?.({ succeeded: outcome.ok ? 1 : 0, errors });
+          into.onFinished?.({ succeeded: outcome.ok ? 1 : 0, errors, cost: null });
           return;
         }
         const change = await deps
@@ -204,7 +204,7 @@ export const makeAudioRuns = (deps: AudioRunDeps) => {
       };
       void finish().catch((error: unknown) => {
         logError(`${runId}: ${errorText(error)}`);
-        into?.onFinished?.({ succeeded: 0, errors: [errorText(error)] });
+        into?.onFinished?.({ succeeded: 0, errors: [errorText(error)], cost: null });
       });
 
       return { runId, batchId, placeholders: [versionId ?? shapeId] };

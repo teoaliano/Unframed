@@ -236,7 +236,7 @@ export const makeTextRuns = (deps: TextRunDeps) => {
         .applyWhen(
           request.project,
           (get) => {
-            const made = startVersions(get, into.shapeId, { runId, chainId: into.chainId, batchId, count: 1, fingerprint: into.fingerprint, startedAt });
+            const made = startVersions(get, into.shapeId, { runId, chainId: into.chainId, claim: into.claim, batchId, count: 1, fingerprint: into.fingerprint, startedAt });
             versionId = made?.ids[0];
             return made?.change;
           },
@@ -278,11 +278,11 @@ export const makeTextRuns = (deps: TextRunDeps) => {
         }
         await applyNodeChange(rooms, deps.runPromise, request.project, (get) => finishRun(get, into.shapeId, runId, errors), runId);
         await deps.publish(project, { type: "finished", runId, succeeded: outcome.ok ? 1 : 0, failed: outcome.ok ? 0 : 1, errors, orphaned: 0, shapeId: into.shapeId });
-        into.onFinished?.({ succeeded: outcome.ok ? 1 : 0, errors });
+        into.onFinished?.({ succeeded: outcome.ok ? 1 : 0, errors, cost: outcome.ok ? outcome.cost : null });
       };
       void finish().catch((error: unknown) => {
         logError(`${runId}: ${errorText(error)}`);
-        into.onFinished?.({ succeeded: 0, errors: [errorText(error)] });
+        into.onFinished?.({ succeeded: 0, errors: [errorText(error)], cost: null });
       });
       return { runId, batchId, placeholders: [id] };
     });

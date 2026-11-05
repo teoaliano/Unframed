@@ -20,13 +20,14 @@ export const NodeRun = Rpc.make("node.run", {
     downstream: Schema.optionalKey(Schema.Boolean),
     scope: Schema.optionalKey(DownstreamScope),
     rendered: Schema.optionalKey(RenderedInputs),
+    steps: Schema.optionalKey(Schema.Array(Schema.String)),
   }),
   success: ChainStarted,
   error: UnframedError,
 });
 
 export const ChainRun = Rpc.make("chain.run", {
-  payload: Schema.Struct({ project: Schema.String, shapeIds: Schema.Array(Schema.String), rendered: Schema.optionalKey(RenderedInputs) }),
+  payload: Schema.Struct({ project: Schema.String, shapeIds: Schema.Array(Schema.String), rendered: Schema.optionalKey(RenderedInputs), steps: Schema.optionalKey(Schema.Array(Schema.String)) }),
   success: ChainStarted,
   error: UnframedError,
 });

@@ -1,6 +1,7 @@
 import type { NodeMedium, NodeRunMarker, NodeVersion, WireRole } from "@unframed/contracts";
 import { readingOrder, type CanvasShape } from "../canvasShapes.ts";
 import { plainText } from "../refs.ts";
+import { storedPageBoxes } from "../storedBoxes.ts";
 
 export interface NodeFacts {
   readonly id: string;
@@ -31,12 +32,17 @@ export interface NodeCanvas {
   readonly nodes: ReadonlyMap<string, NodeFacts>;
   readonly wires: ReadonlyArray<WireFacts>;
   readonly renders: ReadonlyMap<string, string>;
+  readonly stored?: ReadonlyArray<CanvasShape> | undefined;
+  readonly markProps?: ReadonlyMap<string, string> | undefined;
 }
 
 interface RecordLike {
   readonly id: string;
   readonly typeName: string;
   readonly type?: string | undefined;
+  readonly x?: number | undefined;
+  readonly y?: number | undefined;
+  readonly parentId?: string | undefined;
   readonly props?: unknown;
   readonly meta?: unknown;
 }
@@ -65,7 +71,14 @@ export const nodeCanvasOf = (records: Iterable<RecordLike>, shapes: ReadonlyArra
   const byId = new Map(shapes.map((shape) => [shape.id, shape]));
   const nodes = new Map<string, NodeFacts>();
   const wires: WireFacts[] = [];
-  for (const record of records) {
+  const list = [...records];
+  const boxes = new Map(storedPageBoxes(list as never).map((entry) => [entry.id, entry.box]));
+  const stored = shapes.map((shape) => ({ ...shape, bounds: boxes.get(shape.id) ?? shape.bounds }));
+  const markProps = new Map<string, string>();
+  for (const record of list) {
+    if (record.typeName === "shape" && byId.get(record.id)?.kind === "mark") markProps.set(record.id, JSON.stringify([record.x ?? 0, record.y ?? 0, record.parentId ?? "", record.props ?? null]));
+  }
+  for (const record of list) {
     if (record.typeName !== "shape") continue;
     if (record.type === "node") nodes.set(record.id, nodeFactsOf(record, byId.get(record.id)?.ref));
     else if (record.type === "wire") {
@@ -82,7 +95,7 @@ export const nodeCanvasOf = (records: Iterable<RecordLike>, shapes: ReadonlyArra
     }
   }
   wires.sort((a, b) => a.z - b.z);
-  return { shapes, nodes, wires, renders };
+  return { shapes, nodes, wires, renders, stored, markProps };
 };
 
 export const currentVersion = (node: NodeFacts): NodeVersion | undefined => {

@@ -6,7 +6,7 @@ import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFoote
 import { Button } from "~/components/ui/button";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
 import { useCanvasProject, useEngine } from "../context.ts";
-import { nodeCanvas } from "./facts.ts";
+import {nodeCanvas } from "./facts.ts";
 import { nodeFrames } from "./operations.ts";
 import { chainConfirmation, chainTotal, runNodes, stepEstimate, stepLabel, type ChainStep } from "./runs.ts";
 import { WireHandles } from "./WireHandles.tsx";

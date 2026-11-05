@@ -1,13 +1,14 @@
 import { UnframedError, type ImagePricingAnswer, type RenderedInputs } from "@unframed/contracts";
 import {
-  downstreamRun,
-  estimateImageRun,
+  chainStepsOf,
+  isPaidMedium,
+  nodeCatalogueOf,
+  nodeImageEstimate,
   estimateVideo,
   formatEstimate,
   modelPart,
   nodeName,
   nodeRequest,
-  planChain,
   videoSettings,
   type DownstreamScope,
   type Slot,
@@ -19,7 +20,7 @@ import { loadCatalogue } from "../generate/catalogue.ts";
 import { referencesFor } from "../generate/render.ts";
 import type { EngineConnection } from "../rpc/engine.ts";
 import { showError } from "../toasts.tsx";
-import { catalogueOf, nodeCanvas } from "./facts.ts";
+import {nodeCanvas } from "./facts.ts";
 import { nodeFrames, nodeModel } from "./operations.ts";
 
 export interface ChainStep {
@@ -32,10 +33,13 @@ export interface ChainStep {
 
 const pricing = new Map<string, Promise<ImagePricingAnswer | undefined>>();
 
-const imagePricing = (engine: EngineConnection, model: string) => {
+const imagePricing = (engine: EngineConnection, model: string): Promise<ImagePricingAnswer | undefined> => {
   let known = pricing.get(model);
   if (!known) {
-    known = engine.call("models.imagePricing", { id: model }).catch(() => undefined);
+    known = engine.call("models.imagePricing", { id: model }).catch(() => {
+      pricing.delete(model);
+      return undefined;
+    });
     pricing.set(model, known);
   }
   return known;
@@ -46,20 +50,16 @@ export const stepEstimate = async (editor: Editor, engine: EngineConnection, id:
   const canvas = nodeCanvas(editor);
   const node = canvas.nodes.get(id);
   if (!node) return undefined;
-  const catalogue = await loadCatalogue(engine, catalogueOf(node.medium)).catch(() => undefined);
+  const catalogue = await loadCatalogue(engine, nodeCatalogueOf(node.medium)).catch(() => undefined);
   const model = node.model !== "" ? node.model : (catalogue?.default ?? nodeModel(node));
   const entry = catalogue?.models.find((each) => each.id === model);
-  const step = { id, name: nodeName(canvas, id), model: modelPart(model), paid: node.medium !== "audio" };
+  const step = { id, name: nodeName(canvas, id), model: modelPart(model), paid: isPaidMedium(node.medium) };
   if (node.medium === "image") {
     const answer = await imagePricing(engine, model);
     if (!answer) return { ...step, estimate: null };
     const request = nodeRequest({ node, canvas, assume: new Set(canvas.nodes.keys()) });
     const images = request.ok ? request.references.filter((slot) => slot.kind === "image").length : 0;
-    const chosen = {
-      ...(typeof node.params.quality === "string" ? { quality: node.params.quality } : {}),
-      ...(typeof node.params.resolution === "string" ? { resolution: node.params.resolution } : {}),
-    };
-    return { ...step, estimate: estimateImageRun({ endpoints: answer.endpoints, chosen, referenceImages: images, outputs: node.runs ?? 1 }) };
+    return { ...step, estimate: nodeImageEstimate({ endpoints: answer.endpoints, params: node.params, referenceImages: images, runs: node.runs }) };
   }
   if (node.medium === "video") {
     const settings = videoSettings(entry as VideoEntry | undefined, node.params as Record<string, VideoPropValue>);
@@ -75,8 +75,7 @@ export const runOrder = (editor: Editor, ids: ReadonlyArray<string>, downstream?
     const node = canvas.nodes.get(id);
     return node ? nodeFrames(node) : [];
   };
-  const chosen = downstream !== undefined && ids.length === 1 ? downstreamRun(canvas, ids[0]!, downstream, frames) : ids;
-  const plan = planChain(canvas, chosen);
+  const plan = chainStepsOf(canvas, ids, downstream, frames);
   return plan.ok ? { steps: plan.steps } : { error: plan.message };
 };
 
@@ -100,6 +99,7 @@ export const chainConfirmation = atom<Confirming | undefined>("chain confirmatio
 
 const confirmChain = (steps: ReadonlyArray<ChainStep>): Promise<boolean> =>
   new Promise((resolve) => {
+    chainConfirmation.get()?.answer(false);
     chainConfirmation.set({
       steps,
       answer: (run) => {
@@ -153,9 +153,10 @@ export const runNodes = async (input: {
       if (steps.filter((step) => step.paid).length >= 2 && !(await confirmChain(steps))) return false;
     }
     const rendered = await renderInputs(editor, project, order.steps);
-    if (downstream !== undefined && ids.length === 1) await engine.call("node.run", { project, shapeId: ids[0]!, downstream: true, scope: downstream, rendered });
-    else if (ids.length === 1 && order.steps.length === 1 && order.steps[0] === ids[0]) await engine.call("node.run", { project, shapeId: ids[0]!, rendered });
-    else await engine.call("chain.run", { project, shapeIds: [...ids], rendered });
+    const steps = [...order.steps];
+    if (downstream !== undefined && ids.length === 1) await engine.call("node.run", { project, shapeId: ids[0]!, downstream: true, scope: downstream, rendered, steps });
+    else if (ids.length === 1 && order.steps.length === 1 && order.steps[0] === ids[0]) await engine.call("node.run", { project, shapeId: ids[0]!, rendered, steps });
+    else await engine.call("chain.run", { project, shapeIds: [...ids], rendered, steps });
     return true;
   } catch (error) {
     showError(messageOf(error));

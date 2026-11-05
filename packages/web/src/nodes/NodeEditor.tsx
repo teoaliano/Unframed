@@ -1,5 +1,5 @@
 import { NODE_MEDIA, type NodeMedium, type NodeShapeProps, type NodeVersion } from "@unframed/contracts";
-import { currentVersion, downstreamRun, nodeName, nodeRequest, nodeStatus, shapeName, type Composition } from "@unframed/domain";
+import { currentVersion, downstreamRun, nodeName, nodeRequest, nodeStatus, shapeName, type Composition, nodeCatalogueOf } from "@unframed/domain";
 import { ChevronDown, GripVertical, Play } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import { useEditor, useValue, type TLShapeId } from "tldraw";
@@ -19,7 +19,7 @@ import { canvasShapes } from "../generate/facts.ts";
 import { loadLastUsed, saveLastUsed } from "../generate/lastUsed.ts";
 import { mediumDefinition, type PropValue, type RunSource } from "../generate/mediumRegistry.ts";
 import { nodeRunsProp, RUNS_KEY } from "../generate/runsProp.tsx";
-import { catalogueOf, isWireShape, nodeCanvas, type NodeShape } from "./facts.ts";
+import {isWireShape, nodeCanvas, type NodeShape } from "./facts.ts";
 import { moveWire, nodeFrames, nodeRoles, updateNode } from "./operations.ts";
 import { runNodes } from "./runs.ts";
 import { VersionsStrip } from "./VersionsStrip.tsx";
@@ -28,7 +28,7 @@ export const NODE_INSTRUCTION_PLACEHOLDER = "What should this node make?";
 
 const MEDIUM_LABELS: Record<NodeMedium, string> = { image: "image", video: "video", text: "text", audio: "audio", page: "page" };
 
-const definitionOf = (medium: NodeMedium) => mediumDefinition(medium === "page" ? "text" : medium)!;
+const definitionOf = (medium: NodeMedium) => mediumDefinition(nodeCatalogueOf(medium))!;
 
 /** A node's tray props: its params, with its runs as the tray's Runs. */
 const trayProps = (props: NodeShapeProps): Record<string, PropValue> => ({ ...props.params, ...(props.medium === "image" && props.runs !== undefined ? { [RUNS_KEY]: props.runs } : {}) });
@@ -162,7 +162,7 @@ export const NodeEditor = ({ shape }: { readonly shape: NodeShape }) => {
   const project = useCanvasProject();
   const props = shape.props;
   const definition = definitionOf(props.medium);
-  const catalogue = useCatalogue(engine, catalogueOf(props.medium));
+  const catalogue = useCatalogue(engine, nodeCatalogueOf(props.medium));
   const model = props.model !== "" ? props.model : catalogue?.default;
   const entry = catalogue?.models.find((each) => each.id === model);
   const tray = useMemo(() => trayProps(props), [props]);
@@ -222,7 +222,7 @@ export const NodeEditor = ({ shape }: { readonly shape: NodeShape }) => {
     if (medium === props.medium) return;
     const next = definitionOf(medium);
     const stored = await loadLastUsed(engine, next.medium);
-    const list = await engine.call("models.list", { medium: catalogueOf(medium) }).catch(() => undefined);
+    const list = await engine.call("models.list", { medium: nodeCatalogueOf(medium) }).catch(() => undefined);
     const known = stored?.model !== undefined && list?.models.some((each) => each.id === stored.model) ? stored.model : undefined;
     const chosen = list?.models.find((each) => each.id === (known ?? list.default));
     const nextParams = next.params(chosen, stored?.props);
@@ -252,7 +252,7 @@ export const NodeEditor = ({ shape }: { readonly shape: NodeShape }) => {
           if (picked !== undefined) void switchMedium(picked);
         }}
       >
-        {NODE_MEDIA.filter((medium) => mediumDefinition(medium === "page" ? "text" : medium) !== undefined).map((medium) => (
+        {NODE_MEDIA.filter((medium) => mediumDefinition(nodeCatalogueOf(medium)) !== undefined).map((medium) => (
           <Toggle key={medium} value={medium} role="radio" aria-checked={medium === props.medium} size="sm">
             {MEDIUM_LABELS[medium]}
           </Toggle>
@@ -279,6 +279,7 @@ export const NodeEditor = ({ shape }: { readonly shape: NodeShape }) => {
           }}
           onMenuOpen={() => undefined}
           handle={box}
+          autofocus={false}
         />
       </div>
       {(refused !== undefined || needsKey) && status !== "waiting" && (

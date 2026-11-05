@@ -1,5 +1,5 @@
 import type { ModelEntry, NodeMedium, NodeShapeProps } from "@unframed/contracts";
-import { nodeCanvasOf, type NodeCanvas } from "@unframed/domain";
+import { nodeCanvasOf, nodeCatalogueOf, type NodeCanvas } from "@unframed/domain";
 import { atom, computed, type Atom, type Computed, type Editor, type TLShape, type TLShapeId } from "tldraw";
 import type { EngineConnection } from "../rpc/engine.ts";
 import { canvasShapes } from "../generate/facts.ts";
@@ -77,7 +77,7 @@ export const watchNodeCatalogues = (editor: Editor, engine: EngineConnection): (
   const check = () => {
     for (const shape of editor.getCurrentPageShapes()) {
       if (shape.type !== "node") continue;
-      const medium = catalogueOf((shape.props as { medium: NodeMedium }).medium);
+      const medium = nodeCatalogueOf((shape.props as { medium: NodeMedium }).medium);
       if (asked.has(medium)) continue;
       asked.add(medium);
       void engine.call("models.list", { medium }).then(
@@ -99,10 +99,3 @@ export const nodeProps = (editor: Editor, id: TLShapeId): NodeShapeProps | undef
   return isNodeShape(shape) ? shape.props : undefined;
 };
 
-/** The catalogue a node medium reads: a page node runs a text model. */
-export const catalogueOf = (medium: NodeMedium): "image" | "video" | "text" | "audio" => (medium === "page" ? "text" : medium);
-
-export const framesOf = (entry: ModelEntry | undefined): string[] => {
-  const frames = (entry?.params as { frame_images?: unknown } | null | undefined)?.frame_images;
-  return Array.isArray(frames) ? frames.filter((each): each is string => typeof each === "string") : [];
-};
