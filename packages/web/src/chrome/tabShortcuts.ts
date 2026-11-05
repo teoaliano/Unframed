@@ -53,7 +53,7 @@ export const useTabShortcuts = (activation: ProjectActivation): void => {
       } else if (!event.shiftKey && lower === "w") {
         if (active === undefined) return;
         event.preventDefault();
-        void activation.closeTab(active);
+        if (!activation.tabState().pinned.includes(active)) void activation.closeTab(active);
       } else if (event.shiftKey && lower === "t") {
         event.preventDefault();
         void activation.reopenClosed();

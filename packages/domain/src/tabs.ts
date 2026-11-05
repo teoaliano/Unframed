@@ -40,13 +40,45 @@ export const closeTab = (
   return { order: rest, active: next };
 };
 
-/** Moves `name` to position `to` (clamped to the order's ends). An unknown name leaves the order as it is. */
-export const moveTab = (order: ReadonlyArray<string>, name: string, to: number): ReadonlyArray<string> => {
-  const from = order.indexOf(name);
-  if (from === -1) return [...order];
-  const rest = order.filter((each) => each !== name);
-  const at = Math.max(0, Math.min(rest.length, to));
-  return [...rest.slice(0, at), name, ...rest.slice(at)];
+export interface PinnedTabs {
+  readonly order: ReadonlyArray<string>;
+  readonly pinned: ReadonlyArray<string>;
+}
+
+const withPins = (order: ReadonlyArray<string>, pinned: ReadonlySet<string>): PinnedTabs => {
+  const first = order.filter((name) => pinned.has(name));
+  return { order: [...first, ...order.filter((name) => !pinned.has(name))], pinned: first };
+};
+
+export const tabGroup = (tabs: PinnedTabs, name: string): { readonly low: number; readonly high: number } => {
+  const pinnedCount = tabs.order.filter((each) => tabs.pinned.includes(each)).length;
+  return tabs.pinned.includes(name) ? { low: 0, high: Math.max(0, pinnedCount - 1) } : { low: pinnedCount, high: Math.max(pinnedCount, tabs.order.length - 1) };
+};
+
+export const moveTab = (tabs: PinnedTabs, name: string, to: number): PinnedTabs => {
+  const pinned = new Set(tabs.pinned);
+  if (!tabs.order.includes(name)) return withPins(tabs.order, pinned);
+  const { low, high } = tabGroup(tabs, name);
+  const rest = tabs.order.filter((each) => each !== name);
+  const at = Math.max(low, Math.min(high, to));
+  return withPins([...rest.slice(0, at), name, ...rest.slice(at)], pinned);
+};
+
+export const pinTab = (tabs: PinnedTabs, name: string): PinnedTabs => {
+  const pinned = new Set(tabs.pinned);
+  if (!tabs.order.includes(name) || pinned.has(name)) return withPins(tabs.order, pinned);
+  const current = withPins(tabs.order, pinned);
+  pinned.add(name);
+  return withPins([...current.pinned, name, ...current.order.filter((each) => !current.pinned.includes(each) && each !== name)], pinned);
+};
+
+export const unpinTab = (tabs: PinnedTabs, name: string): PinnedTabs => {
+  const pinned = new Set(tabs.pinned);
+  if (!pinned.has(name)) return withPins(tabs.order, pinned);
+  pinned.delete(name);
+  const current = withPins(tabs.order, pinned);
+  const rest = current.order.filter((each) => each !== name && !pinned.has(each));
+  return withPins([...current.pinned, name, ...rest], pinned);
 };
 
 /**
@@ -55,20 +87,22 @@ export const moveTab = (order: ReadonlyArray<string>, name: string, to: number):
  * left, the result is empty and the caller falls back the way spec 02 does.
  */
 export const restoreTabs = (
-  saved: { readonly order: ReadonlyArray<string>; readonly active: string | null | undefined },
+  saved: { readonly order: ReadonlyArray<string>; readonly active: string | null | undefined; readonly pinned?: ReadonlyArray<string> | undefined },
   projects: ReadonlyArray<string>,
-): { readonly order: ReadonlyArray<string>; readonly active: string | undefined } => {
+): { readonly order: ReadonlyArray<string>; readonly active: string | undefined; readonly pinned: ReadonlyArray<string> } => {
   const known = new Set(projects);
   const seen = new Set<string>();
-  const order: string[] = [];
+  const open: string[] = [];
   for (const name of saved.order) {
     if (known.has(name) && !seen.has(name)) {
       seen.add(name);
-      order.push(name);
+      open.push(name);
     }
   }
+  const pinned = open.filter((name) => (saved.pinned ?? []).includes(name));
+  const order = [...pinned, ...open.filter((name) => !pinned.includes(name))];
   const active = typeof saved.active === "string" && seen.has(saved.active) ? saved.active : order[0];
-  return { order, active };
+  return { order, active, pinned };
 };
 
 /** The width each tab gets when `count` tabs share `available` pixels, clamped to the tab limits. */

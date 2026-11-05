@@ -93,13 +93,13 @@ export const TabStrip = ({
   readonly regions: { readonly frame?: TopBarRegion; readonly start?: TopBarRegion; readonly tabs?: TopBarRegion; readonly end?: TopBarRegion };
 }) => {
   const activation = useActivation();
-  const { active, order } = useTabState(activation);
+  const { active, order, pinned } = useTabState(activation);
   const activity = useProjectActivity();
   const marks = useFinishedMarks(activity, active);
 
   const tabs: TopBarTab[] = order.map((name) => {
     const status = statusOf(activity.get(name), marks.has(name));
-    return { name, status: kitStatus(status), state: status, title: [name, STATUS_LABEL[status]].filter(Boolean).join(" · ") };
+    return { name, pinned: pinned.includes(name), status: kitStatus(status), state: status, title: [name, STATUS_LABEL[status]].filter(Boolean).join(" · ") };
   });
 
   const project = (action: ProjectActionDetail["action"], name: string) => {
@@ -128,6 +128,8 @@ export const TabStrip = ({
       onRename={(name) => project("rename", name)}
       onDelete={(name) => project("delete", name)}
       onMove={(name, to) => activation.moveTab(name, to)}
+      onPin={(name) => activation.pinTab(name)}
+      onUnpin={(name) => activation.unpinTab(name)}
     />
   );
 };

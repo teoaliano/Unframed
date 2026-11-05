@@ -1,11 +1,12 @@
 import { expect, test } from "./fixtures.ts";
-import { openApp, openSettings, startSettingsEngine } from "./settings.ts";
+import { openApp, openSettings, showSection, startSettingsEngine } from "./settings.ts";
 
 test("Connect an agent sets a spend limit, the row shows it, and Limit changes it or removes it", async ({ page }) => {
   const { engine } = await startSettingsEngine();
   try {
     await openApp(page, engine);
     const dialog = await openSettings(page);
+    await showSection(dialog, "Connections");
 
     // Neither field is filled in by default; an amount needs a period before the connection can be made.
     await dialog.getByRole("button", { name: "Connect an agent" }).click();

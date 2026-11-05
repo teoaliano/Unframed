@@ -331,7 +331,7 @@ Keys in use, each owned by the spec named:
 | Key | Owner | Value |
 | --- | --- | --- |
 | `project.active` | 02 | the active project's name, kept for the outside-agent view (spec 14) |
-| `project.tabs` | 17 | `{ order: string[], active: string \| null }`: the open project tabs and the active one, read at boot (spec 17) |
+| `project.tabs` | 17 | `{ order: string[], active: string \| null, pinned: string[] }`: the open project tabs, the active one and the pinned ones, read at boot (spec 17) |
 | `lastUsed.image`, `lastUsed.video`, `lastUsed.text` | 03 (04 and 05 add fields) | the composer's last-used values for that medium |
 | `library.view` | 06 | `"card"` or `"list"` |
 | `agent.followUp` | 08 (control in spec 10's dialog) | `"queue"` or `"steer"` |
@@ -402,6 +402,8 @@ A contract with the desktop shell. Renaming any of these is a breaking change th
 | `<body>` background | an explicit, opaque `background-color` equal to the canvas background of the current theme |
 | `<title>` | `Unframed`, set once in `index.html`. The web never changes `document.title` afterwards, so the shell's override sticks |
 | `<body>` children | the web mounts into `#root` and never removes or reorders other children of `<body>`, so an element the shell appends (its update pill) survives |
+
+The page owns the window drag region of the top bar (spec 17). The bar, its regions, the window controls' space, the logo and the empty space declare `-webkit-app-region: drag`, and every control in it declares `no-drag`. The shell's injected CSS still sets `.unframed-chrome-left` to `drag` and every child of it to `no-drag`; the page beats that rule on the controls' space and the logo with `!important`, because an unlayered injected rule wins over the page's layered one. A shell must not set `-webkit-app-region` on the bar or its children; the rules it injects today are harmless and can be removed in a later shell release.
 | external links | opened with `target="_blank"` or `window.open(url, "_blank")`, which the shell routes to the system browser. The `unframed-update://` scheme belongs to the shell and the web never uses it |
 
 In this spec the web renders an app frame with both chrome cards present (empty), the theme attribute and variable set from the ported theme values in `assets/theme/`, following the system light or dark preference. Spec 02 fills the cards and owns the theme.

@@ -80,7 +80,7 @@ What carries over from the issue and what changes:
 44. As a person whose ElevenLabs key was revoked, I want Settings to say it no longer works, so that a mystery failure becomes an obvious fix.
 45. As a person, I want to pick the default audio model in Settings, alongside image, text and video, so that new audio runs start on the model I prefer.
 46. As a person who only wants audio, I want to add an ElevenLabs key without connecting OpenRouter, so that I can generate speech without an account I do not need.
-47. As a person with only an ElevenLabs key, I want image, video and text to tell me they need an OpenRouter key, and the settings dialog to stop opening on its own, so that the app works for audio and says plainly what else it needs.
+47. As a person with only an ElevenLabs key, I want image, video and text to tell me they need an OpenRouter key, so that the app works for audio and says plainly what else it needs.
 48. As a person, I want the ElevenLabs key never to reach the browser, with the app knowing only whether there is one and its last four characters, so that the same promise covers both keys.
 49. As a person, I want the composer to open on the voice, model and settings I last used for audio, so that a second line in the same voice takes no setup.
 50. As a person, I want to save audio settings as a group's recipe, so that a group of lines always speaks in one voice.
@@ -374,22 +374,16 @@ The usage line is the account's, not the key's, and says so. Settings makes no p
 
 ### The settings dialog
 
-Spec 10's dialog gains an ElevenLabs block after the OpenRouter key section and before Default models. It shows whether or not there is an OpenRouter key, so someone who only wants audio can set ElevenLabs up alone:
+Spec 10's dialog gains an ElevenLabs block in its **Generation** section, after the OpenRouter block and before Default models (Generation holds every provider). Generation is always reachable, so someone who only wants audio can set ElevenLabs up alone, with or without an OpenRouter key:
 
 - Heading `ElevenLabs`. A password field (the kit Input), accessible label `ElevenLabs API key`, placeholder `sk_…`. Beside it, with a key, a ghost button `Remove key` with spec 10's two-step confirm (`Yes, remove it`, field warning `This deletes the ElevenLabs key from .env. Audio generation is disabled until you add one.`, then `ElevenLabs key removed.`). Under it, the status copy.
 - Without an OpenRouter key, the block sits under spec 10's keyless intro, Connect button and paste reveal, with the supporting line `Only want audio? Paste an ElevenLabs key here. Images, video and text still need OpenRouter.` in `text-xs` muted text. Its key field is always shown (there is no reveal step).
-- Save (spec 10) sends `elevenLabsKey` when the trimmed field is non-empty, and clears the field and the shown status on success, then refetches the status. Save is shown when there is either key, the OpenRouter paste field is revealed, or the ElevenLabs field holds text.
+- Save (spec 10) sends `elevenLabsKey` when the trimmed field is non-empty, and clears the field and the shown status on success, then refetches the status. On Generation, Save is shown when there is either key, the OpenRouter paste field is revealed, or the ElevenLabs field holds text.
 - Saving a first ElevenLabs key while there is no OpenRouter key closes the dialog with the toast `ElevenLabs key saved. Audio is ready to generate.`
 
-Spec 10's keyless rules change from "no OpenRouter key" to "neither key":
+Spec 10 no longer opens the dialog on its own and its settings button is always the gear, so a second key changes neither. The gear's tooltip names the keys that exist: spec 10's `Settings: key …<hint>, default models, output folder` with an OpenRouter key; `Settings: ElevenLabs key …<hint>, default models, output folder` with only an ElevenLabs key; `Settings` with neither. Agents, Connections and General do not depend on either key.
 
-- The dialog opens on its own at first load only when there is no key of either kind.
-- The title is `Connect OpenRouter to start` only when there is no key of either kind, else `Settings`.
-- The settings button is the primary `Add your API key` only when there is no key of either kind; otherwise it is spec 10's gear, its tooltip naming the keys that exist (spec 10's `Settings: key …<hint>, default models, output folder` with an OpenRouter key; `Settings: ElevenLabs key …<hint>, default models, output folder` with only an ElevenLabs key).
-- With only an ElevenLabs key, the dialog shows the OpenRouter keyless intro and Connect (so OpenRouter is one click away), the ElevenLabs block, Default models holding only `Audio`, Output folder and Local agents.
-
-
-Default models shows when there is either key. It holds spec 10's `Image`, `Text` and `Video` selects with an OpenRouter key, and a fourth searchable select, `Audio`, listing the audio catalogue's model ids, with an ElevenLabs key. Output folder and Local agents show when there is either key.
+Default models (in Generation) holds spec 10's `Image`, `Text` and `Video` selects with an OpenRouter key, and a fourth searchable select, `Audio`, listing the audio catalogue's model ids, with an ElevenLabs key. With only an ElevenLabs key it holds `Audio` alone; with neither key it holds spec 10's line that the models need a key.
 
 ### The agent
 
@@ -472,7 +466,7 @@ A good test drives one of the three seams in 00-index and asserts on what it exp
 37. Audio result bar: Regenerate (primary) and Agent only, no Generate, Vary or Recipe; Regenerate opens the composer in recipe mode with voice, model, props and instruction prefilled, and sending lands a second take beside the result. Seam: browser.
 38. Last-used audio values: voice, model and props come back on the next open and after an engine restart on a new port. Seam: browser.
 39. Settings with an OpenRouter key: the ElevenLabs block with paste, a bad key's error, the two-step remove, the usage line from the stub's subscription answer, revoked and usage-hidden lines, and the `Audio` default model select shown only with an ElevenLabs key. Seam: browser.
-40. Settings with only an ElevenLabs key: on a fresh install the keyless dialog shows the ElevenLabs block with its line; saving an ElevenLabs key alone closes the dialog with its toast; after a reload the dialog does not open on its own, the title is `Settings`, the button is the gear, and the dialog shows the OpenRouter intro and Connect, Default models with only `Audio`, Output folder and Local agents. Seam: browser.
+40. Settings with only an ElevenLabs key: on a fresh install Generation shows the ElevenLabs block with its line under the OpenRouter intro; saving an ElevenLabs key alone closes the dialog with its toast; after a reload the gear's tooltip names the ElevenLabs key, and Generation shows the OpenRouter intro and Connect, the ElevenLabs block and Default models with only `Audio`. Seam: browser.
 41. Composer with only an ElevenLabs key: an audio run lands; image, video and text show spec 03's no-key blocker; the composer opens on audio when it would open on a medium that needs OpenRouter. Seam: browser.
 42. Naming audio: the label reads "Audio" until named; a double-click on the label, the context menu's Rename and F2 open the "Audio name" field; Copy @<ref> copies the name; a prompt's `@name` of an audio shape is left as typed in every medium; `canvas_write`'s `rename` op renames an audio shape. Seam: browser.
 43. Recipe groups with audio: Save as recipe on the audio medium, the chip `eleven_v4 · <voice>`, Generate from the toolbar runs `run.audio` with the recipe, and the library's `Audio` medium chip. Seam: browser.

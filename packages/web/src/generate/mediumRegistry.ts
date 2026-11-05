@@ -26,6 +26,7 @@ export interface TrayStatus {
   readonly warnings: ReadonlyArray<string>;
   /** Lines that disable send. */
   readonly blockers: ReadonlyArray<string>;
+  readonly needsKey?: boolean | undefined;
 }
 
 /** What the run is made from: the live selection, or a result's recorded recipe. */
