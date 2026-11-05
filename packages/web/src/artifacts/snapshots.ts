@@ -48,8 +48,12 @@ export const fileChangesOf = (project: string): Atom<ReadonlyMap<string, number>
 
 export const watchFileChanges = (engine: EngineConnection, project: string): (() => void) => {
   const store = fileChangesOf(project);
-  return engine.subscribe("artifact.fileChanges", { project }, (change) => {
-    if ((store.get().get(change.file) ?? -Infinity) >= change.at) return;
-    store.set(new Map(store.get()).set(change.file, change.at));
+  const stop = engine.subscribe("artifact.fileChanges", { project }, (change) => {
+    if ((store.get().get(change.file) ?? -Infinity) >= change.stamp) return;
+    store.set(new Map(store.get()).set(change.file, change.stamp));
   });
+  return () => {
+    stop();
+    changeStores.delete(project);
+  };
 };

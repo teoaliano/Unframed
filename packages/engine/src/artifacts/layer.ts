@@ -14,7 +14,7 @@ import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Stream from "effect/Stream";
 import { CanvasRooms, type ChangeOrigin } from "../canvas/rooms.ts";
-import { errorText, logError } from "../log.ts";
+import { errorText, logError, logInfo } from "../log.ts";
 import { TLDOCUMENT_ID } from "@tldraw/tlschema";
 import { MediaStore } from "../media/mediaStore.ts";
 import { OpenProjects } from "../openProjects.ts";
@@ -104,6 +104,8 @@ export const artifactsLayer = Layer.effect(
       publish: (project, snapshot) => void run(PubSub.publish(written, { project, snapshot })),
     });
     const fileChanges = yield* PubSub.unbounded<{ readonly project: string; readonly change: ArtifactFileChange }>();
+    let lastStamp = 0;
+    const nextStamp = () => (lastStamp = Math.max(lastStamp + 1, Date.now()));
     yield* rooms.afterOpen((project, room) => {
       snapshots.opened(project, room.read(), kitOf(room.read()));
       let closed = false;
@@ -114,23 +116,23 @@ export const artifactsLayer = Layer.effect(
           "artifact file watch",
           Effect.sync(() => {
             closed = true;
-            unwatch?.();
+            if (unwatch !== undefined) {
+              unwatch();
+              logInfo(`${project}: stopped following artifact files`);
+            }
             snapshots.forget(project);
           }),
         ),
       );
-      const announced = new Map<string, number>();
       void media.folder(project).then((folder) => {
         if (closed || folder === undefined) return;
+        logInfo(`${project}: following artifact files`);
         unwatch = watchFolder(folder, (names) => {
           const records = room.read();
           snapshots.filesChanged(project, names, records, kitOf(records)).then(
-            (changes) => {
-              for (const change of changes) {
-                if (closed || change.at <= (announced.get(change.file) ?? -Infinity)) continue;
-                announced.set(change.file, change.at);
-                void run(PubSub.publish(fileChanges, { project, change }));
-              }
+            (files) => {
+              if (closed) return;
+              for (const file of files) void run(PubSub.publish(fileChanges, { project, change: { file, stamp: nextStamp() } }));
             },
             (error: unknown) => logError(`artifacts after a file change in ${project}: ${errorText(error)}`),
           );

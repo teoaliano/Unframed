@@ -4,14 +4,7 @@ import { artifactReferences } from "@unframed/domain";
 import { TOKENS_FILE } from "../kits/tokensFile.ts";
 import { isEngineFile } from "./artifactStore.ts";
 
-export const newestChange = async (folder: string, names: ReadonlyArray<string>): Promise<number> => {
-  let newest = -Infinity;
-  for (const name of names) {
-    const info = await stat(join(folder, name)).catch(() => undefined);
-    if (info?.isFile()) newest = Math.max(newest, info.mtimeMs);
-  }
-  return newest;
-};
+const followed = (name: string): boolean => name !== TOKENS_FILE && !isEngineFile(name);
 
 export class ArtifactLoads {
   private readonly loads = new Map<string, ReadonlyArray<string>>();
@@ -19,19 +12,28 @@ export class ArtifactLoads {
   async of(folder: string, file: string, reread = false): Promise<ReadonlyArray<string>> {
     const known = this.loads.get(file);
     if (known !== undefined && !reread) return known;
-    const names = artifactReferences(await readFile(join(folder, file), "utf8").catch(() => ""));
+    const names = artifactReferences(await readFile(join(folder, file), "utf8").catch(() => "")).filter(followed);
     this.loads.set(file, names);
     return names;
   }
 
-  async touched(folder: string, changed: ReadonlyArray<string>, files: Iterable<string>): Promise<Map<string, number>> {
-    const names = new Set(changed.filter((name) => name !== TOKENS_FILE && !isEngineFile(name)));
-    const found = new Map<string, number>();
+  async touched(folder: string, changed: ReadonlyArray<string>, files: Iterable<string>): Promise<ReadonlySet<string>> {
+    const names = new Set(changed.filter(followed));
+    const found = new Set<string>();
     for (const file of new Set(files)) {
       const own = names.has(file);
-      const hit = [...(own ? [file] : []), ...(await this.of(folder, file, own)).filter((name) => names.has(name))];
-      if (hit.length > 0) found.set(file, await newestChange(folder, hit));
+      if (own || (await this.of(folder, file)).some((name) => names.has(name))) found.add(file);
+      if (own) await this.of(folder, file, true);
     }
     return found;
+  }
+
+  async signature(folder: string, file: string): Promise<string> {
+    const parts: string[] = [];
+    for (const name of [file, ...(await this.of(folder, file))]) {
+      const info = await stat(join(folder, name)).catch(() => undefined);
+      parts.push(info?.isFile() ? `${name}:${info.size}:${info.mtimeMs}` : `${name}:-`);
+    }
+    return parts.join("|");
   }
 }

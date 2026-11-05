@@ -121,7 +121,7 @@ export const ArtifactSnapshots = Rpc.make("artifact.snapshots", {
   stream: true,
 });
 
-export const ArtifactFileChange = Schema.Struct({ file: Schema.String, at: Schema.Number });
+export const ArtifactFileChange = Schema.Struct({ file: Schema.String, stamp: Schema.Number });
 export type ArtifactFileChange = typeof ArtifactFileChange.Type;
 
 export const ArtifactFileChanges = Rpc.make("artifact.fileChanges", {

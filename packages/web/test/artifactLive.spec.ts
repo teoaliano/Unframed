@@ -179,3 +179,55 @@ test("a live page reloads when its own file or a file it loads changes on disk, 
   await page.waitForTimeout(1500);
   await expect(heading).toHaveText("Edited in place");
 });
+
+const counted = (label: string) =>
+  `sessionStorage.loads = String(Number(sessionStorage.loads || 0) + 1); document.getElementById('out').textContent = ${JSON.stringify(label)};`;
+
+const loadsOf = async (page: Page, id: string): Promise<number> => {
+  const frame = await shapeOnScreen(page, id).locator("iframe[data-artifact-frame]").elementHandle();
+  return Number(await (await frame!.contentFrame())!.evaluate(() => sessionStorage.loads ?? 0));
+};
+
+test("a script written in chunks reloads a live page once, after the writes go quiet", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await writeProjectFile(engine, "chunked.js", counted("Chunk 0"));
+  await filledArtifact(engine, { id: "shape:chunked", kind: "page", ref: "150", at: { x: 420, y: 60 }, title: "Chunked", html: `<!doctype html><html><body><h1 id="out">Loading</h1><script src="chunked.js"></script></body></html>` });
+  await clickShape(page, "shape:chunked");
+  const heading = insideFrame(page, "shape:chunked").getByRole("heading");
+  await expect(heading).toHaveText("Chunk 0");
+  await expect.poll(() => loadsOf(page, "shape:chunked")).toBe(1);
+
+  for (let chunk = 1; chunk <= 6; chunk++) {
+    await writeProjectFile(engine, "chunked.js", counted(`Chunk ${chunk}`));
+    await page.waitForTimeout(300);
+  }
+  await expect(heading).toHaveText("Chunk 6", { timeout: 10_000 });
+  await page.waitForTimeout(2000);
+  expect(await loadsOf(page, "shape:chunked")).toBe(2);
+});
+
+test("a live page with the focus inside it waits to reload until the focus leaves, keeping what the person typed", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await writeProjectFile(engine, "form.js", "document.getElementById('out').textContent = 'Form one';");
+  await filledArtifact(engine, {
+    id: "shape:form",
+    kind: "page",
+    ref: "150",
+    at: { x: 420, y: 60 },
+    title: "Form",
+    html: `<!doctype html><html><body><h1 id="out">Loading</h1><input aria-label="Name"><script src="form.js"></script></body></html>`,
+  });
+  await clickShape(page, "shape:form");
+  const inside = insideFrame(page, "shape:form");
+  await expect(inside.getByRole("heading")).toHaveText("Form one");
+  await inside.getByRole("textbox", { name: "Name" }).fill("kept");
+  await inside.getByRole("textbox", { name: "Name" }).focus();
+
+  await writeProjectFile(engine, "form.js", "document.getElementById('out').textContent = 'Form two';");
+  await page.waitForTimeout(3000);
+  await expect(inside.getByRole("heading")).toHaveText("Form one");
+  await expect(inside.getByRole("textbox", { name: "Name" })).toHaveValue("kept");
+
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await expect(inside.getByRole("heading")).toHaveText("Form two", { timeout: 5_000 });
+});

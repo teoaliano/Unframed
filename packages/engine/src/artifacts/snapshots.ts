@@ -5,7 +5,7 @@ import type { ArtifactSnapshot } from "@unframed/contracts";
 import { artifactLayoutSize, artifactUrl, isArtifactKind, kitStamp, parseSnapshotFileName, type ArtifactKind, snapshotFileName, snapshotFits, snapshotSeekSeconds, type Kit } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import { errorText, logError } from "../log.ts";
-import { ArtifactLoads, newestChange } from "./artifactLoads.ts";
+import { ArtifactLoads } from "./artifactLoads.ts";
 import { ensurePinnedComponents } from "./artifactStore.ts";
 import type { HeadlessChrome } from "./headlessChrome.ts";
 
@@ -111,7 +111,8 @@ interface ProjectSnapshots {
   readonly seen: Map<string, Seen>;
   readonly timers: Map<string, ReturnType<typeof setTimeout>>;
   readonly fresh: Set<string>;
-  readonly renderedAt: Map<string, number>;
+  readonly rendered: Map<string, string>;
+  readonly known: Map<string, string>;
   readonly loads: ArtifactLoads;
 }
 
@@ -127,7 +128,7 @@ export class Snapshots {
   private of(project: string): ProjectSnapshots {
     let found = this.projects.get(project);
     if (found === undefined) {
-      found = { seen: new Map(), timers: new Map(), fresh: new Set(), renderedAt: new Map(), loads: new ArtifactLoads() };
+      found = { seen: new Map(), timers: new Map(), fresh: new Set(), rendered: new Map(), known: new Map(), loads: new ArtifactLoads() };
       this.projects.set(project, found);
     }
     return found;
@@ -135,11 +136,13 @@ export class Snapshots {
 
   opened(project: string, records: ReadonlyArray<TLRecord>, kit: Kit | null = null): void {
     this.of(project);
+    void this.know(project, records);
     for (const record of records) if (isArtifact(record)) this.consider(project, record, kit);
   }
 
   committed(project: string, put: ReadonlyArray<TLRecord>, kit: Kit | null = null): void {
     if (!this.projects.has(project)) return;
+    void this.know(project, put);
     for (const record of put) if (isArtifact(record)) this.consider(project, record, kit);
   }
 
@@ -148,19 +151,37 @@ export class Snapshots {
     for (const record of records) if (isArtifact(record)) this.consider(project, record, kit, true);
   }
 
-  async filesChanged(project: string, names: ReadonlyArray<string>, records: ReadonlyArray<TLRecord>, kit: Kit | null): Promise<ReadonlyArray<{ file: string; at: number }>> {
+  private async know(project: string, records: ReadonlyArray<TLRecord>): Promise<void> {
+    const state = this.projects.get(project);
+    const folder = state === undefined ? undefined : await this.deps.folder(project);
+    if (state === undefined || folder === undefined) return;
+    for (const record of records) {
+      if (!isArtifact(record) || record.props.file === "" || state.known.has(record.props.file)) continue;
+      const signature = await state.loads.signature(folder, record.props.file);
+      if (!state.known.has(record.props.file)) state.known.set(record.props.file, signature);
+    }
+  }
+
+  async filesChanged(project: string, names: ReadonlyArray<string>, records: ReadonlyArray<TLRecord>, kit: Kit | null): Promise<ReadonlyArray<string>> {
     const state = this.projects.get(project);
     const folder = state === undefined || names.length === 0 ? undefined : await this.deps.folder(project);
     if (state === undefined || folder === undefined) return [];
     const artifacts = records.filter((record): record is ArtifactRecord => isArtifact(record) && record.props.file !== "");
     const touched = await state.loads.touched(folder, names, artifacts.map((record) => record.props.file));
+    const changed = new Map<string, string>();
+    for (const file of touched) {
+      const signature = await state.loads.signature(folder, file);
+      const before = state.known.get(file);
+      state.known.set(file, signature);
+      if (before !== undefined && before !== signature) changed.set(file, signature);
+    }
     if (this.projects.get(project) !== state) return [];
     for (const record of artifacts) {
-      const newest = touched.get(record.props.file);
-      if (newest === undefined || this.deps.renderer === undefined || state.timers.has(record.id)) continue;
-      if (newest > (state.renderedAt.get(record.id) ?? -Infinity)) this.schedule(project, record, false);
+      const signature = changed.get(record.props.file);
+      if (signature === undefined || this.deps.renderer === undefined || state.timers.has(record.id)) continue;
+      if (state.rendered.get(record.id) !== signature) this.schedule(project, record, false);
     }
-    return [...touched].map(([file, at]) => ({ file, at: Math.floor(at) }));
+    return [...changed.keys()];
   }
 
   forget(project: string): void {
@@ -220,25 +241,20 @@ export class Snapshots {
     const size = artifactLayoutSize(shape.props);
     if (onlyIfTokens && !(await readFile(join(folder, shape.props.file), "utf8").catch(() => "")).includes("unframed-tokens.js")) return;
     await ensurePinnedComponents(folder, shape.props.file);
-    const startedAt = Date.now();
     const want = state.seen.get(shapeId);
     const made = { mode: want?.mode ?? null, kit: want?.kit ?? null };
+    const signature = await state.loads.signature(folder, shape.props.file);
+    const dir = join(folder, SNAPSHOT_FOLDER);
+    const name = snapshotFileName(shape.props.file, size, made);
     if (state.fresh.delete(shapeId)) {
-      const changedAt = await newestChange(folder, [shape.props.file, ...(await state.loads.of(folder, shape.props.file, true))]);
-      const cached = (await this.list(project)).some(
-        (snapshot) =>
-          snapshot.file === shape.props.file &&
-          snapshotFits(snapshot, size) &&
-          (snapshot.mode ?? null) === made.mode &&
-          (snapshot.kit ?? null) === made.kit &&
-          snapshot.at >= Math.floor(changedAt),
-      );
+      const stored = await readFile(join(dir, `${name}.sig`), "utf8").catch(() => undefined);
+      const cached = stored === signature && (await this.list(project)).some((snapshot) => snapshot.file === shape.props.file && snapshotFits(snapshot, size) && (snapshot.mode ?? null) === made.mode && (snapshot.kit ?? null) === made.kit);
       if (cached) {
-        state.renderedAt.set(shapeId, startedAt);
+        state.rendered.set(shapeId, signature);
         return;
       }
     }
-    state.renderedAt.set(shapeId, startedAt);
+    state.rendered.set(shapeId, signature);
     const picture = await renderer({
       project,
       kind: shape.type,
@@ -250,12 +266,11 @@ export class Snapshots {
       ...made,
     });
     if (picture === undefined || this.projects.get(project) !== state) return;
-    const dir = join(folder, SNAPSHOT_FOLDER);
     await mkdir(dir, { recursive: true });
-    const name = snapshotFileName(shape.props.file, size, made);
     const temp = join(dir, `.${name}.${process.pid}.tmp`);
     await writeFile(temp, picture);
     await rename(temp, join(dir, name));
+    await writeFile(join(dir, `${name}.sig`), signature);
     const info = await stat(join(dir, name));
     this.deps.publish(project, { file: shape.props.file, w: Math.round(size.w), h: Math.round(size.h), at: Math.floor(info.mtimeMs), ...made });
   }

@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { until, scriptFolder, startAgentEngine, type AgentEngine } from "./agent.ts";
@@ -172,7 +172,7 @@ describe("artifact snapshots", () => {
     await new Promise((resolve) => setTimeout(resolve, 500));
     await writeFile(join(agent.folder, "app.js"), "2");
     await until(async () => changes.values.length === 1, "the change to the script");
-    expect(changes.values[0]).toEqual({ file: "3-app.html", at: expect.any(Number) });
+    expect(changes.values[0]).toEqual({ file: "3-app.html", stamp: expect.any(Number) });
     await writeFile(join(agent.folder, "1-landing.html"), "<h1>Edited</h1>");
     await until(async () => changes.values.length === 2, "the change to the other page");
     expect(changes.values[1]).toMatchObject({ file: "1-landing.html" });
@@ -180,6 +180,66 @@ describe("artifact snapshots", () => {
     await writeFile(join(agent.folder, "nested.js"), "1");
     await new Promise((resolve) => setTimeout(resolve, 1500));
     expect(changes.values).toHaveLength(2);
+  });
+
+  it("announces a change once its writes go quiet, stamped by the engine, even when the file's time goes backwards or was in the future", async () => {
+    const agent = await startSnapshotting();
+    await writeFile(join(agent.folder, "3-app.html"), `<!doctype html><script src="app.js"></script>`);
+    await writeFile(join(agent.folder, "app.js"), "start");
+    const changes = agent.rpc.subscribe("artifact.fileChanges", { project: "board" });
+    const stills = agent.rpc.subscribe("artifact.snapshots", { project: "board" });
+    await seed(agent, [pageShape("pg1", "100", { file: "3-app.html" })]);
+    await until(async () => stills.values.length === 1, "the first snapshot");
+
+    for (let chunk = 1; chunk <= 5; chunk++) {
+      await writeFile(join(agent.folder, "app.js"), "x".repeat(chunk * 1000));
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    await until(async () => changes.values.length === 1, "one change after the writes went quiet");
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(changes.values).toHaveLength(1);
+
+    const past = new Date(Date.now() - 86_400_000);
+    await writeFile(join(agent.folder, "app.js"), "restored from a backup");
+    await utimes(join(agent.folder, "app.js"), past, past);
+    await until(async () => changes.values.length === 2, "the change to an older time");
+    const stamps = changes.values.map((change: any) => change.stamp);
+    expect(stamps[1]).toBeGreaterThan(stamps[0]);
+    await until(async () => stills.values.length >= 3, "a snapshot after the older-time change");
+
+    const future = new Date(Date.now() + 86_400_000);
+    await writeFile(join(agent.folder, "app.js"), "dated tomorrow");
+    await utimes(join(agent.folder, "app.js"), future, future);
+    await until(async () => changes.values.length === 3, "the change to a future time");
+    await writeFile(join(agent.folder, "app.js"), "edited today");
+    await until(async () => changes.values.length === 4, "the next edit, older than the future time");
+  });
+
+  it("renders again on opening a project when a file changed to an older time while it was closed", async () => {
+    const agent = await startSnapshotting();
+    await writeFile(join(agent.folder, "3-app.html"), `<!doctype html><script src="app.js"></script>`);
+    await writeFile(join(agent.folder, "app.js"), "one");
+    await seed(agent, [pageShape("pg1", "100", { file: "3-app.html" })]);
+    await until(async () => (await snapshotFiles(agent)).includes("3-app.html-480x320-none-none.png"), "the first snapshot");
+    const first = await snapshot(agent, "3-app.html-480x320-none-none.png");
+    await agent.engine.stop();
+    const past = new Date(Date.now() - 86_400_000);
+    await writeFile(join(agent.folder, "app.js"), "two, restored with an old time");
+    await utimes(join(agent.folder, "app.js"), past, past);
+    const reopened = await startAgentEngine({ dataDir: agent.engine.dataDir, env: { UNFRAMED_TEST_RENDERER: "ok" } });
+    await reopened.rpc.call("testCanvas.read", { project: "board" });
+    await until(async () => (await snapshot(reopened, "3-app.html-480x320-none-none.png")).startedAt > first.startedAt, "a fresh snapshot after the open");
+  });
+
+  it("starts no file watch that outlives a project opened and closed in the same moment", async () => {
+    const agent = await startSnapshotting("no-chrome");
+    await agent.rpc.call("projects.create", { name: "brief" });
+    await Promise.all([agent.rpc.call("testCanvas.read", { project: "brief" }), agent.rpc.call("projects.rename", { name: "brief", to: "brief-two" }).catch(() => undefined)]);
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const out = agent.engine.stdout();
+    const started = out.split("\n").filter((line) => line.includes("brief: following artifact files")).length;
+    const stopped = out.split("\n").filter((line) => line.includes("brief: stopped following artifact files")).length;
+    expect(started).toBe(stopped);
   });
 
   it("does not count the engine's own support files, which reach live frames by message, as changes", async () => {
