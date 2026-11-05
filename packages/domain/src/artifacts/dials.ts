@@ -18,7 +18,7 @@ export type Normalised =
   | { readonly ok: false; readonly error: string };
 
 interface DialRules {
-  readonly normalise: (config: unknown) => Normalised;
+  readonly normalise: (config: unknown, descriptions?: unknown) => Normalised;
   readonly defaults: (schema: DialSchema) => DialValues;
   readonly merge: (schema: DialSchema, saved: unknown) => DialValues;
   readonly assign: (current: DialValues, next: unknown) => DialValues;
@@ -29,11 +29,6 @@ export function dialRules(): DialRules {
     typeof value === "object" && value !== null && !Array.isArray(value);
   const COLOUR = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/;
   const isNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
-  const isDescribed = (value: unknown): value is { value: unknown; description: string } =>
-    isObject(value) &&
-    typeof value.description === "string" &&
-    Object.prototype.hasOwnProperty.call(value, "value") &&
-    Object.keys(value).every((key) => key === "value" || key === "description");
 
   type Built = { schema: Record<string, DialEntry>; dialkit: Record<string, unknown> } | { error: string };
 
@@ -43,13 +38,7 @@ export function dialRules(): DialRules {
     for (const key of Object.keys(config)) {
       const value = config[key];
       const at = `${path}.${key}`;
-      if (isDescribed(value)) {
-        const inner = build({ [key]: value.value }, path);
-        if ("error" in inner) return inner;
-        const text = value.description.trim();
-        schema[key] = text === "" ? inner.schema[key]! : { ...inner.schema[key]!, description: text };
-        dialkit[key] = inner.dialkit[key];
-      } else if (isNumber(value)) {
+      if (isNumber(value)) {
         schema[key] = { kind: "number", value };
         dialkit[key] = value;
       } else if (typeof value === "boolean") {
@@ -87,10 +76,23 @@ export function dialRules(): DialRules {
     return { schema, dialkit };
   };
 
-  const normalise = (config: unknown): Normalised => {
+  const describe = (schema: DialSchema, descriptions: Record<string, unknown>, prefix: string): DialSchema => {
+    const described: Record<string, DialEntry> = {};
+    for (const key of Object.keys(schema)) {
+      const path = prefix === "" ? key : prefix + "." + key;
+      const entry = schema[key]!;
+      const text = Object.prototype.hasOwnProperty.call(descriptions, path) && typeof descriptions[path] === "string" ? (descriptions[path] as string).trim() : "";
+      const inner = entry.kind === "folder" ? { ...entry, of: describe(entry.of, descriptions, path) } : entry;
+      described[key] = text === "" ? inner : { ...inner, description: text };
+    }
+    return described;
+  };
+
+  const normalise = (config: unknown, descriptions?: unknown): Normalised => {
     if (!isObject(config)) return { ok: false, error: "dials: the parameters must be an object" };
     const built = build(config, "dials");
-    return "error" in built ? { ok: false, error: built.error } : { ok: true, schema: built.schema, dialkit: built.dialkit };
+    if ("error" in built) return { ok: false, error: built.error };
+    return { ok: true, schema: isObject(descriptions) ? describe(built.schema, descriptions, "") : built.schema, dialkit: built.dialkit };
   };
 
   const defaults = (schema: DialSchema): DialValues => {
@@ -143,6 +145,7 @@ export interface DialsAnnouncement {
   readonly config: unknown;
   readonly schema: DialSchema;
   readonly values: DialValues;
+  readonly descriptions?: unknown;
 }
 
 interface BridgeWheel {
@@ -183,7 +186,7 @@ interface BridgeWindow {
 function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
   const LOOPBACK = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
   const framed = (win.parent as unknown) !== win;
-  type State = { name: string; config: unknown; schema: DialSchema; values: DialValues; apply: (values: DialValues) => void };
+  type State = { name: string; config: unknown; descriptions: unknown; schema: DialSchema; values: DialValues; apply: (values: DialValues) => void };
   let state: State | undefined;
   let asker: string | undefined;
   let menuAsker: string | undefined;
@@ -200,7 +203,7 @@ function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
 
   const announce = (to?: string) => {
     if (!framed || state === undefined) return;
-    const message = { type: "unframed:dials", name: state.name, config: state.config, schema: state.schema, values: state.values };
+    const message = { type: "unframed:dials", name: state.name, config: state.config, descriptions: state.descriptions, schema: state.schema, values: state.values };
     try {
       win.parent.postMessage(message, to ?? asker ?? win.location.origin);
     } catch (error) {
@@ -214,8 +217,8 @@ function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
     run(state);
   };
 
-  const declare = (name: unknown, config: unknown, apply: unknown) => {
-    const normalised = dials.normalise(config);
+  const declare = (name: unknown, config: unknown, apply: unknown, descriptions?: unknown) => {
+    const normalised = dials.normalise(config, descriptions);
     if (!normalised.ok) {
       win.console.error("[unframed] " + normalised.error);
       return null;
@@ -223,6 +226,7 @@ function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
     const current: State = {
       name: name === null || name === undefined ? "Parameters" : String(name),
       config,
+      descriptions: typeof descriptions === "object" && descriptions !== null && !Array.isArray(descriptions) ? descriptions : null,
       schema: normalised.schema,
       values: dials.merge(normalised.schema, win.__hfVariables?.unframedDials ?? null),
       apply: typeof apply === "function" ? (apply as (values: DialValues) => void) : () => {},

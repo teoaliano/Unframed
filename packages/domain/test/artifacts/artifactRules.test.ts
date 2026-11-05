@@ -134,7 +134,7 @@ describe("the add-a-parameter instruction", () => {
 
   it("asks for a parameter, with the title and the kind, in the asset's words", () => {
     expect(addParameterInstruction({ ...base, wanted: "  the accent colour " })).toBe(
-      'Add the accent colour as a parameter on the motion "Intro". Expose them with a single `unframed.dials` call so they appear in the Parameters column, give each one a short description of what it changes (`{ value, description }` in place of the bare value), and make the callback actually apply each value. If any of them is part of the animation rather than just dressing, wire it into the timeline — rebuild the timeline from the values instead of setting an animated property alongside it — and express anything that changes over time as its start, its end and a duration. Keep every parameter it already has, and change nothing else about it.',
+      'Add the accent colour as a parameter on the motion "Intro". Expose them with a single `unframed.dials` call so they appear in the Parameters column, give each one a short description of what it changes in the call\'s fourth argument (an object from each parameter\'s path to its description), and make the callback actually apply each value. If any of them is part of the animation rather than just dressing, wire it into the timeline — rebuild the timeline from the values instead of setting an animated property alongside it — and express anything that changes over time as its start, its end and a duration. Keep every parameter it already has, and change nothing else about it.',
     );
   });
 

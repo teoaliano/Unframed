@@ -59,16 +59,22 @@ describe("the built bridge", () => {
     expect(win.unframed.defaultDials("bad")).toBeNull();
   });
 
-  it("announces each parameter's description in the schema and applies plain values", () => {
+  it("takes a descriptions map as a fourth argument, announces it with the schema carrying each description, and applies plain values", () => {
     const { win, posted } = stubWindow();
     const applied: unknown[] = [];
-    win.unframed.dials("Scene", { speed: { value: [1, 0.5, 2], description: "How fast it plays" }, accent: "#a78bfa" }, (values: unknown) => applied.push(values));
+    win.unframed.dials("Scene", { speed: [1, 0.5, 2], accent: "#a78bfa" }, (values: unknown) => applied.push(values), { speed: "How fast it plays" });
     expect(applied).toEqual([{ speed: 1, accent: "#a78bfa" }]);
+    expect(posted[0]?.message.descriptions).toEqual({ speed: "How fast it plays" });
     expect(posted[0]?.message.schema).toEqual({
       speed: { kind: "range", value: 1, min: 0.5, max: 2, description: "How fast it plays" },
       accent: { kind: "color", value: "#a78bfa" },
     });
-    expect(win.unframed.defaultDials({ speed: { value: [2, 0, 5], description: "Speed" } })).toEqual({ speed: 2 });
+  });
+
+  it("announces no descriptions for a declaration without them", () => {
+    const { win, posted } = stubWindow();
+    win.unframed.dials("Scene", { speed: [1, 0.5, 2] }, () => {});
+    expect(posted[0]?.message.descriptions).toBeNull();
   });
 
   it("applies the values before announcing them, then returns them", () => {
@@ -84,6 +90,7 @@ describe("the built bridge", () => {
           type: "unframed:dials",
           name: "Scene",
           config: { accent: "#a78bfa", speed: [1, 0.5, 2] },
+          descriptions: null,
           schema: { accent: { kind: "color", value: "#a78bfa" }, speed: { kind: "range", value: 1, min: 0.5, max: 2 } },
           values: { accent: "#a78bfa", speed: 1 },
         },

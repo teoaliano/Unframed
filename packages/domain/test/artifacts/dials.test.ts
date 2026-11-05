@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { assignDialValues, defaultDialValues, mergeDialValues, normaliseDials, type DialSchema } from "../../src/index.ts";
 
-const schemaOf = (config: unknown): DialSchema => {
-  const normalised = normaliseDials(config);
+const schemaOf = (config: unknown, descriptions?: unknown): DialSchema => {
+  const normalised = normaliseDials(config, descriptions);
   if (!normalised.ok) throw new Error(normalised.error);
   return normalised.schema;
 };
@@ -37,61 +37,42 @@ describe("dial shorthand", () => {
 });
 
 describe("dial descriptions", () => {
-  it("reads { value, description } as the value's own control carrying the description", () => {
-    expect(normaliseDials({ speed: { value: [1, 0.5, 2], description: "How fast the intro plays" }, accent: "#abc" })).toEqual({
+  it("gives a parameter the description its path names in the descriptions map, folders included", () => {
+    expect(
+      normaliseDials(
+        { speed: [1, 0.5, 2], scene: { title: "Hi" }, accent: "#abc" },
+        { speed: "How fast the intro plays", scene: "The opening scene", "scene.title": "The headline" },
+      ),
+    ).toEqual({
       ok: true,
       schema: {
         speed: { kind: "range", value: 1, min: 0.5, max: 2, description: "How fast the intro plays" },
+        scene: { kind: "folder", description: "The opening scene", of: { title: { kind: "text", value: "Hi", description: "The headline" } } },
         accent: { kind: "color", value: "#abc" },
       },
-      dialkit: { speed: [1, 0.5, 2], accent: { type: "color", default: "#abc" } },
+      dialkit: { speed: [1, 0.5, 2], scene: { title: { type: "text", default: "Hi" } }, accent: { type: "color", default: "#abc" } },
     });
   });
 
-  it.each([
-    ["a number", 3, { kind: "number", value: 3 }],
-    ["a switch", false, { kind: "boolean", value: false }],
-    ["a colour", "#a78bfa", { kind: "color", value: "#a78bfa" }],
-    ["text", "Launch day", { kind: "text", value: "Launch day" }],
-    ["a list", ["stack", "grid"], { kind: "select", value: "stack", options: ["stack", "grid"] }],
-  ])("describes %s", (_case, value, entry) => {
-    const normalised = normaliseDials({ key: { value, description: "What it does" } });
-    expect(normalised.ok && normalised.schema.key).toEqual({ ...entry, description: "What it does" });
-  });
-
-  it("describes a folder and the parameters inside it", () => {
-    expect(schemaOf({ scene: { value: { speed: { value: [1, 0, 3], description: "Playback speed" } }, description: "The opening scene" } })).toEqual({
-      scene: { kind: "folder", description: "The opening scene", of: { speed: { kind: "range", value: 1, min: 0, max: 3, description: "Playback speed" } } },
-    });
-  });
-
-  it("trims a description and drops an empty one", () => {
-    expect(schemaOf({ a: { value: 1, description: "  Size of the title  " }, b: { value: 2, description: "  " } })).toEqual({
+  it("trims a description and ignores an empty one, a non-string one, a path no parameter has, and a map that is not an object", () => {
+    expect(schemaOf({ a: 1, b: 2 }, { a: "  Size of the title  ", b: "  ", c: "nothing here", "a.b": "too deep" })).toEqual({
       a: { kind: "number", value: 1, description: "Size of the title" },
       b: { kind: "number", value: 2 },
     });
+    expect(schemaOf({ a: 1 }, { a: 3 })).toEqual({ a: { kind: "number", value: 1 } });
+    for (const map of [null, "a", ["a"], 4]) expect(schemaOf({ a: 1 }, map)).toEqual({ a: { kind: "number", value: 1 } });
   });
 
-  it("keeps an object with other keys, or without a string description, a folder", () => {
-    expect(schemaOf({ box: { value: 1, description: "Hi", extra: true } })).toEqual({
-      box: { kind: "folder", of: { value: { kind: "number", value: 1 }, description: { kind: "text", value: "Hi" }, extra: { kind: "boolean", value: true } } },
-    });
-    expect(schemaOf({ box: { value: 1, description: 2 } })).toEqual({
-      box: { kind: "folder", of: { value: { kind: "number", value: 1 }, description: { kind: "number", value: 2 } } },
-    });
+  it("reads an old artifact's folder holding value and description as a folder, as before", () => {
+    const schema = schemaOf({ box: { value: 1, description: "Hi" } });
+    expect(schema).toEqual({ box: { kind: "folder", of: { value: { kind: "number", value: 1 }, description: { kind: "text", value: "Hi" } } } });
+    expect(mergeDialValues(schema, { box: { value: 4, description: "Saved" } })).toEqual({ box: { value: 4, description: "Saved" } });
   });
 
-  it("gives a described parameter its plain value in defaults and merges saved values over it", () => {
-    const schema = schemaOf({ speed: { value: [1, 0.5, 2], description: "Speed" }, scene: { value: { title: "Hi" }, description: "Scene" } });
+  it("leaves values, defaults and the merge untouched", () => {
+    const schema = schemaOf({ speed: [1, 0.5, 2], scene: { title: "Hi" } }, { speed: "Speed", scene: "Scene" });
     expect(defaultDialValues(schema)).toEqual({ speed: 1, scene: { title: "Hi" } });
     expect(mergeDialValues(schema, { speed: 1.5, scene: { title: "Yo" } })).toEqual({ speed: 1.5, scene: { title: "Yo" } });
-  });
-
-  it("refuses a bad value inside a description with the parameter's own path", () => {
-    expect(normaliseDials({ scene: { speed: { value: [1, 2], description: "Speed" } } })).toEqual({
-      ok: false,
-      error: "dials.scene.speed: an array must be [value, min, max] numbers or a list of strings",
-    });
   });
 });
 
