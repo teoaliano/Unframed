@@ -118,9 +118,9 @@ describe("placement beside the selection", () => {
 describe("the apply-parameters instruction", () => {
   it("asks for the current values as the new defaults, one key per parameter path, the way DialKit copies them", () => {
     expect(
-      applyParametersInstruction({ name: "Look", kind: "page", title: "Grass alphabet", values: { letters: { text: "AB", size: 1.2 }, accent: "#5fbf4a", wind: true } }),
+      applyParametersInstruction({ name: "Look", kind: "page", title: "Landing", values: { letters: { text: "AB", size: 1.2 }, accent: "#5fbf4a", wind: true } }),
     ).toBe(
-      'Update the unframed.dials configuration for "Look" on the page "Grass alphabet" with these values:\n\n```json\n{\n  "letters.text": "AB",\n  "letters.size": 1.2,\n  "accent": "#5fbf4a",\n  "wind": true\n}\n```\n\nApply these values as the new defaults in the unframed.dials call. Keep each parameter\'s description.',
+      'Update the unframed.dials configuration for "Look" on the page "Landing" with these values:\n\n```json\n{\n  "letters.text": "AB",\n  "letters.size": 1.2,\n  "accent": "#5fbf4a",\n  "wind": true\n}\n```\n\nApply these values as the new defaults in the unframed.dials call. Keep each parameter\'s description.',
     );
   });
 
