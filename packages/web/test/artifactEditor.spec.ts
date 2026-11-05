@@ -135,6 +135,32 @@ test("the whole top bar stays on screen above the editor and works from it: its 
   expect(Math.abs((await middle(railHeader)) - (await middle(back)))).toBeLessThanOrEqual(1);
 });
 
+for (const width of [720, 1000, 1440]) {
+  test(`at ${width} px wide the editor starts at the tab strip's bottom edge, neither covering it nor covered by it`, async ({ page, agent }) => {
+    await page.setViewportSize({ width, height: 800 });
+    await openCanvas(page, agent);
+    await filledArtifact(agent, { id: "shape:landing", kind: "page", ref: "150", at: { x: -150, y: -100 }, size: { w: 300, h: 200 }, title: "Landing", html: "<h1>Welcome</h1>" });
+    await expect(shapeOnScreen(page, "shape:landing")).toBeVisible();
+    const at = await centre(shapeOnScreen(page, "shape:landing"));
+    await page.mouse.dblclick(at.x, at.y);
+    await expect(page.getByRole("region", { name: "Editing Landing" })).toBeVisible();
+    const strip = (await page.getByTestId("tab-strip").boundingBox())!;
+    const bar = (await page.locator("[data-slot='top-bar']").boundingBox())!;
+    const top = (await editor(page).boundingBox())!.y;
+    expect(top).toBeCloseTo(bar.y + bar.height, 0);
+    expect(strip.y + strip.height).toBeLessThanOrEqual(top + 0.5);
+    const hits = await page.evaluate(({ y, from, to }) => {
+      const found: string[] = [];
+      for (let x = from + 4; x < to - 4; x += 24) {
+        if (!document.elementFromPoint(x, y - 2)?.closest(".unframed-tabs")) found.push(`strip lost at ${x}`);
+        if (!document.elementFromPoint(x, y + 2)?.closest("[data-testid='artifact-editor']")) found.push(`editor lost at ${x}`);
+      }
+      return found;
+    }, { y: top, from: strip.x, to: strip.x + strip.width });
+    expect(hits).toEqual([]);
+  });
+}
+
 test("the right column's tabs fill its width and sit flush on the header's one border", async ({ page, agent }) => {
   await onBoard(page, agent);
   const at = await centre(shapeOnScreen(page, "shape:landing"));
