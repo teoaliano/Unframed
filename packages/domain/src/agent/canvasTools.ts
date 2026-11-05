@@ -8,6 +8,8 @@ import type { ComponentDeclaration } from "../components/sheet.ts";
 import type { Pin } from "../components/pins.ts";
 import { nameRefusal, slugName, uniqueName } from "../groupRules.ts";
 import { agentShapeId, roomShapeId } from "./turnText.ts";
+import { ARTIFACT_SCALE_MAX, ARTIFACT_SCALE_MIN, isArtifactScale } from "@unframed/contracts";
+import { cappedArtifactScale, scaledArtifactProps } from "../artifacts/artifactRules.ts";
 
 export interface CanvasRecord {
   readonly id: string;
@@ -210,6 +212,7 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
         const pinned = input.pins?.get(record.id) ?? [];
         if (pinned.length > 0) entry.components = pinned.map((pin) => ({ tag: pin.tag, sheet: pin.sheet, current: currentSheets.get(pin.tag) === undefined || currentSheets.get(pin.tag) === pin.sheet }));
         if (typeof props.mode === "string") entry.mode = props.mode;
+        if (isArtifactScale(props.scale) && props.scale !== 1) entry.scale = props.scale;
         if (Array.isArray(props.lockedElements) && props.lockedElements.length > 0) entry.lockedElements = props.lockedElements;
         break;
       }
@@ -681,6 +684,16 @@ const update = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
   }
   if ((kind === "page" || kind === "motion") && typeof patch.mode === "string" && !(ctx.modes ?? []).includes(patch.mode)) {
     refuse(`there is no mode ${patch.mode} in the kit`);
+  }
+  if ((kind === "page" || kind === "motion") && "scale" in patch) {
+    const { scale, ...rest } = patch;
+    const next = scale === null ? 1 : scale;
+    if (!isArtifactScale(next)) refuse(`update: scale must be a number from ${ARTIFACT_SCALE_MIN} to ${ARTIFACT_SCALE_MAX}`);
+    if (!numeric(props.w) || !numeric(props.h)) return applyPatch(batch, shape, props, patch);
+    if (!("w" in rest) && !("h" in rest)) return applyPatch(batch, shape, {}, { ...scaledArtifactProps(props as { w: number; h: number }, next as number), ...rest });
+    const sized = { ...props, ...rest } as { w: number; h: number };
+    const capped = cappedArtifactScale({ ...sized, scale: next });
+    return applyPatch(batch, shape, props, { ...rest, scale: capped === 1 ? null : capped });
   }
   applyPatch(batch, shape, props, patch);
 };

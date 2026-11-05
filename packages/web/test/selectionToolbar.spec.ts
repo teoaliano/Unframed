@@ -61,7 +61,7 @@ test("a selection with nothing to generate from shows Agent only; a filled page 
   // A filled page's frame takes the pointer, so its bar leads with the drag handle, an icon button.
   await clickShape(page, "shape:page");
   const buttons = toolbar(page).getByRole("button");
-  await expect(buttons).toHaveText(["", "Editor", "Parameters", "Agent"]);
+  await expect(buttons).toHaveText(["", "Editor", "Parameters", "100%", "Agent"]);
   await expect(buttons.first()).toHaveAccessibleName("Drag to move");
 });
 

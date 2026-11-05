@@ -1,5 +1,5 @@
 import { parseAssetMarker, type ArtifactShapeProps } from "@unframed/contracts";
-import { isArtifactKind } from "@unframed/domain";
+import { artifactScale, isArtifactKind } from "@unframed/domain";
 import { useEditor, useValue, type Editor, type TLAssetId, type TLShape, type TLShapeId } from "tldraw";
 import { messageOf } from "../agent/store.ts";
 import type { EngineConnection } from "../rpc/engine.ts";
@@ -45,7 +45,7 @@ export const onFrameEdit = (editor: Editor, shapeId: string, message: EditMessag
   state.dropHit.set({ shapeId, elementId, target, box });
 };
 
-export const DropOutline = ({ shapeId }: { readonly shapeId: string }) => {
+export const DropOutline = ({ shapeId, scale = 1 }: { readonly shapeId: string; readonly scale?: number }) => {
   const editor = useEditor();
   const hit = useValue("image drop hit", () => {
     const current = artifactsOf(editor).dropHit.get();
@@ -57,7 +57,7 @@ export const DropOutline = ({ shapeId }: { readonly shapeId: string }) => {
       aria-hidden
       data-drop-outline=""
       className="pointer-events-none absolute border-2 border-primary"
-      style={{ left: hit.box.x, top: hit.box.y, width: hit.box.w, height: hit.box.h }}
+      style={{ left: hit.box.x * scale, top: hit.box.y * scale, width: hit.box.w * scale, height: hit.box.h * scale }}
     />
   );
 };
@@ -80,7 +80,8 @@ export const installImageDrop = (editor: Editor, engine: EngineConnection, proje
         if (state.dropHit.get()?.shapeId === id) state.dropHit.set(undefined);
         continue;
       }
-      postTo(editor, id, { type: "unframed:edit:hitTest", x: point.x - bounds.x, y: point.y - bounds.y });
+      const scale = artifactScale(editor.getShape(id)!.props as ArtifactShapeProps);
+      postTo(editor, id, { type: "unframed:edit:hitTest", x: (point.x - bounds.x) / scale, y: (point.y - bounds.y) / scale });
     }
   };
 

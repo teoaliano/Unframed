@@ -131,7 +131,7 @@ const hintClass = "px-1 text-xs text-muted-foreground";
 
 const DragHandle = () => {
   const editor = useEditor();
-  const drag = useRef<{ readonly from: { x: number; y: number }; readonly shapes: ReadonlyArray<{ id: TLShapeId; type: string; x: number; y: number }> }>(undefined);
+  const drag = useRef<{ readonly from: { x: number; y: number }; readonly shapes: ReadonlyArray<{ id: TLShapeId; type: string; page: { x: number; y: number } }> }>(undefined);
   return (
     <Tip label="Drag to move" side="top">
       <Button
@@ -146,7 +146,7 @@ const DragHandle = () => {
           editor.markHistoryStoppingPoint("drag handle");
           drag.current = {
             from: editor.screenToPage({ x: event.clientX, y: event.clientY }),
-            shapes: editor.getSelectedShapes().map((shape) => ({ id: shape.id, type: shape.type, x: shape.x, y: shape.y })),
+            shapes: editor.getSelectedShapes().map((shape) => ({ id: shape.id, type: shape.type, page: editor.getShapePageTransform(shape).point() })),
           };
         }}
         onPointerMove={(event) => {
@@ -155,7 +155,12 @@ const DragHandle = () => {
           const now = editor.screenToPage({ x: event.clientX, y: event.clientY });
           const dx = now.x - start.from.x;
           const dy = now.y - start.from.y;
-          editor.updateShapes(start.shapes.map((shape) => ({ id: shape.id, type: shape.type, x: shape.x + dx, y: shape.y + dy })) as Parameters<typeof editor.updateShapes>[0]);
+          editor.updateShapes(
+            start.shapes.map((shape) => {
+              const local = editor.getPointInParentSpace(shape.id, { x: shape.page.x + dx, y: shape.page.y + dy });
+              return { id: shape.id, type: shape.type, x: local.x, y: local.y };
+            }) as Parameters<typeof editor.updateShapes>[0],
+          );
         }}
         onPointerUp={() => {
           drag.current = undefined;
@@ -280,6 +285,7 @@ const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "rec
   const Overlay = definition?.Overlay;
   return (
     <div className={barClass}>
+      {state.drag && <DragHandle />}
       <Button size="sm" disabled={busy || progress !== undefined} onClick={() => void generate()}>
         {label}
       </Button>
@@ -297,7 +303,7 @@ const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "rec
 
 const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind: "none" }>; onGenerate: () => void; agent: ReactNode }) => {
   const editor = useEditor();
-  const { openArtifact, renderButton: Render, parametersButton: ParametersToggle, kitModeButton: KitModeToggle } = useSlots();
+  const { openArtifact, renderButton: Render, parametersButton: ParametersToggle, kitModeButton: KitModeToggle, scaleButton: Scale } = useSlots();
   switch (state.kind) {
     case "recipe":
       return <RecipeBar state={state} agent={agent} />;
@@ -320,12 +326,14 @@ const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind
           {Render && editor.getShape(state.shapeId as TLShapeId)?.type === "motion" && <Render shapeId={state.shapeId as TLShapeId} />}
           {ParametersToggle && editor.getShape(state.shapeId as TLShapeId)?.type !== "component" && <ParametersToggle shapeId={state.shapeId as TLShapeId} />}
           {KitModeToggle && <KitModeToggle shapeId={state.shapeId as TLShapeId} />}
+          {Scale && editor.getShape(state.shapeId as TLShapeId)?.type !== "component" && <Scale shapeId={state.shapeId as TLShapeId} />}
           {agent}
         </div>
       );
     case "generate":
       return (
         <div className={barClass}>
+          {state.drag && <DragHandle />}
           <span className={hintClass} data-testid="selection-hint">
             {state.hint}
           </span>
@@ -336,7 +344,12 @@ const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind
         </div>
       );
     case "agent":
-      return agent === null ? null : <div className={barClass}>{agent}</div>;
+      return agent === null && !state.drag ? null : (
+        <div className={barClass}>
+          {state.drag && <DragHandle />}
+          {agent}
+        </div>
+      );
   }
 };
 
@@ -374,7 +387,7 @@ export const SelectionToolbar = () => {
   const agent = agentTray ? <AgentButton onOpen={() => openComposer(editor, "agent")} /> : null;
 
   if (selectionKey === "") return null;
-  if (!expanded && (state === undefined || state.kind === "none" || (state.kind === "agent" && agent === null))) return null;
+  if (!expanded && (state === undefined || state.kind === "none" || (state.kind === "agent" && agent === null && !state.drag))) return null;
 
   return (
     <Floating target={target ?? lastTarget.current} hidden={hidden} expanded={expanded} framed={composer.mode !== "agent"}>
