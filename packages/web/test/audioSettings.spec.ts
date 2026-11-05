@@ -104,3 +104,14 @@ test("with only an ElevenLabs key the composer opens on audio, an audio run land
     await audio.engine.dispose();
   }
 });
+
+test("when ElevenLabs refuses the models list, Settings says why under the Audio select", async ({ page }) => {
+  const audio = await startAudio({ script: { modelsStatus: 401 } });
+  try {
+    await openCanvas(page, audio.engine);
+    const dialog = await openSettings(page);
+    await expect(dialog.getByTestId("audio-models-problem")).toHaveText("ElevenLabs refused the key, so only the default audio model is listed.");
+  } finally {
+    await audio.engine.dispose();
+  }
+});

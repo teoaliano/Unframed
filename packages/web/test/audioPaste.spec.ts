@@ -7,8 +7,9 @@ import { clickShape } from "./generation.ts";
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 
-const pasteSound = (page: Page, name: string, type = "audio/wav") =>
-  page.evaluate(
+const pasteSound = async (page: Page, name: string, type = "audio/wav") => {
+  await page.evaluate(() => navigator.clipboard.writeText(""));
+  await page.evaluate(
     async ({ base64, name, type }) => {
       const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
       const transfer = new DataTransfer();
@@ -17,6 +18,7 @@ const pasteSound = (page: Page, name: string, type = "audio/wav") =>
     },
     { base64: audioBytes(1).toString("base64"), name, type },
   );
+};
 
 test("a pasted sound file the board cannot play is refused, and Copy @ref copies an audio shape's name", async ({ page, audio }) => {
   const { engine } = audio;
