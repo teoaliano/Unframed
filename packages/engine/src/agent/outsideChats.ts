@@ -32,6 +32,7 @@ export interface OutsideCall {
   readonly slug: string;
   readonly tool: McpTool;
   readonly args: Record<string, unknown>;
+  readonly roots?: ReadonlyArray<string>;
 }
 
 /** The chat an outside session's calls into one project show in (spec 14, "The outside chat"). */
@@ -70,12 +71,13 @@ export class OutsideChats {
     const agent = await this.host.agent(input.slug);
     const chatId = await this.bind(input.connection, input.sessionId, agent);
     const turnId = agent.engine.chat(chatId)?.latestTurn?.turnId ?? null;
-    const binding: McpBinding = { project: input.slug, chatId, connectionId: input.connection.id };
+    const binding: McpBinding = { project: input.slug, chatId, connectionId: input.connection.id, ...(input.roots === undefined ? {} : { roots: input.roots }) };
+    const logged = input.tool.workLogRow !== false;
     const callId = randomUUID();
     const title = `mcp__unframed__${input.tool.name}`;
     const at = () => new Date(this.now()).toISOString();
     const note = await this.changeNoteFor(agent, chatId);
-    await this.host.activity(agent, chatId, {
+    if (logged) await this.host.activity(agent, chatId, {
       id: `${callId}:started`,
       tone: "tool",
       kind: "tool.started",
@@ -90,7 +92,7 @@ export class OutsideChats {
     } catch (error) {
       answer = { value: { error: errorText(error) }, isError: true };
     }
-    await this.host.activity(agent, chatId, {
+    if (logged) await this.host.activity(agent, chatId, {
       id: `${callId}:done`,
       tone: "tool",
       kind: answer.isError ? "tool.failed" : "tool.completed",

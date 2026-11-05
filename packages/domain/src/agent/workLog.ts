@@ -133,6 +133,10 @@ export const describeTool = (input: { readonly toolName: string; readonly itemTy
         const medium = toolInput.medium === "video" ? "a video generation" : toolInput.medium === "text" ? "a text generation" : "an image generation";
         return { label: `Started ${medium}`, action: "tool" };
       }
+      case "file_add": {
+        const name = typeof result.fileName === "string" ? result.fileName : typeof toolInput.path === "string" ? toolInput.path.split(/[\\/]/).pop() : undefined;
+        return { label: name ? `Added ${name} to the project` : "Added a file to the project", action: "tool" };
+      }
       case "page_write":
         return { label: `Wrote page ${title("page")}`, action: "canvas" };
       case "page_read":
@@ -206,6 +210,8 @@ const failedLabel = (own: string, toolInput: Record<string, unknown>, title: (ki
   switch (own) {
     case "canvas_read":
       return "Couldn't read the canvas";
+    case "file_add":
+      return "Couldn't add a file to the project";
     case "canvas_write":
       return "Couldn't change the canvas";
     case "canvas_select": {

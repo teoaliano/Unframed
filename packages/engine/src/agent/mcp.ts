@@ -21,6 +21,8 @@ export interface McpBinding {
   readonly chatId: string;
   /** The outside connection the call came through, when it came through one (spec 14). */
   readonly connectionId?: string;
+  /** The working folders the outside client reports (MCP roots, as `file:` URIs), when it reports any. */
+  readonly roots?: ReadonlyArray<string>;
 }
 
 /**
@@ -72,6 +74,8 @@ export interface McpTool {
   readonly name: string;
   readonly description: string;
   readonly inputSchema: Record<string, unknown>;
+  /** `false` for a call that shows in the chat as something other than a work log row (spec 14's `chat_note`). */
+  readonly workLogRow?: false;
   readonly call: (binding: McpBinding, args: Record<string, unknown>) => Promise<ToolAnswer>;
 }
 
@@ -122,7 +126,7 @@ export interface OutsideRoute {
   /** The session ends: its open turns settle and its chats say so. */
   readonly endSession: (sessionId: string) => Promise<void>;
   /** One call from an outside session into one project's chat. */
-  readonly call: (call: { connection: ConnectionRecord; sessionId: string; slug: string; tool: McpTool; args: Record<string, unknown> }) => Promise<ToolAnswer>;
+  readonly call: (call: { connection: ConnectionRecord; sessionId: string; slug: string; tool: McpTool; args: Record<string, unknown>; roots?: ReadonlyArray<string> }) => Promise<ToolAnswer>;
 }
 
 export interface OutsideProject {
@@ -133,6 +137,18 @@ export interface OutsideProject {
 
 /** Spec 14: a session's id is the MCP session header `initialize` answers with a fresh UUID. */
 const SESSION_HEADER = "mcp-session-id";
+/** Spec 14: the stdio shim relays the client's MCP roots on each call, as a URI-encoded JSON list of URIs. */
+export const ROOTS_HEADER = "unframed-mcp-roots";
+
+const rootsOf = (header: string | string[] | undefined): ReadonlyArray<string> | undefined => {
+  if (typeof header !== "string") return undefined;
+  try {
+    const parsed: unknown = JSON.parse(decodeURIComponent(header));
+    return Array.isArray(parsed) ? parsed.filter((uri): uri is string => typeof uri === "string") : undefined;
+  } catch {
+    return undefined;
+  }
+};
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const SESSION_ID_SENTENCE = "Send the Mcp-Session-Id that initialize answered.";
 
@@ -217,7 +233,7 @@ const outsideRequest = async (req: http.IncomingMessage, res: http.ServerRespons
   const headers = opensSession ? { [SESSION_HEADER]: sessionId } : {};
   const answers: unknown[] = [];
   for (const message of batch) {
-    const answer = await handleOutside(message, outside, { connection, sessionId });
+    const answer = await handleOutside(message, outside, { connection, sessionId, roots: rootsOf(req.headers[ROOTS_HEADER]) });
     if (answer !== undefined) answers.push(answer);
   }
   if (answers.length === 0) {
@@ -257,7 +273,7 @@ export const outsideInitializeResult = (protocolVersion: unknown) => ({
 });
 
 /** The outside tool list: `projects_list` first, then every Unframed tool with a required `project`. */
-const handleOutside = async (message: JsonRpcRequest, outside: OutsideRoute, session: { connection: ConnectionRecord; sessionId: string }): Promise<unknown> => {
+const handleOutside = async (message: JsonRpcRequest, outside: OutsideRoute, session: { connection: ConnectionRecord; sessionId: string; roots: ReadonlyArray<string> | undefined }): Promise<unknown> => {
   if (typeof message !== "object" || message === null || typeof message.method !== "string") return rpcError(null, -32600, "Invalid request");
   const isNotification = message.id === undefined || message.id === null;
   switch (message.method) {
@@ -285,7 +301,7 @@ const handleOutside = async (message: JsonRpcRequest, outside: OutsideRoute, ses
       try {
         const slug = name === "" ? undefined : await outside.projectSlug(name);
         if (slug === undefined) return rpcResult(message.id, toolText(refusal(`no project named "${name}"; call projects_list for the names`)));
-        const answer = await outside.call({ connection: session.connection, sessionId: session.sessionId, slug, tool, args: rest });
+        const answer = await outside.call({ connection: session.connection, sessionId: session.sessionId, slug, tool, args: rest, ...(session.roots === undefined ? {} : { roots: session.roots }) });
         return rpcResult(message.id, toolText(answer));
       } catch (error) {
         return rpcResult(message.id, toolText({ value: { error: errorText(error) }, isError: true }));

@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { makeTempDir, sourceEntry, startEngine } from "./harness.ts";
 import { chatsIn } from "./outsideCalls.ts";
@@ -103,6 +104,34 @@ describe("the stdio shim", () => {
     for (const line of shim.lines) expect(() => JSON.parse(line)).not.toThrow();
     expect(shim.lines.length).toBe(3);
     await shim.close();
+    await engine.stop("SIGTERM");
+  });
+
+  it("asks its client for the roots (MCP roots/list) before relaying file_add, so the engine checks the path against them", async () => {
+    const engine = await startEngine();
+    const rpc = await engine.rpc();
+    await rpc.call("projects.create", { name: PROJECT });
+    const made = await rpc.call("agentConnections.create", { name: "Roots", client: "claude-code" });
+    const root = await makeTempDir("unframed-shim-root-");
+    await writeFile(join(root, "fox.png"), Buffer.from("89504e470d0a1a0a", "hex"));
+    const shim = new Shim(engine.dataDir, made.token as string);
+    await shim.request(1, "initialize", { protocolVersion: "2025-06-18", capabilities: { roots: { listChanged: true } } });
+    shim.send({ jsonrpc: "2.0", method: "notifications/initialized" });
+
+    shim.send({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "file_add", arguments: { project: PROJECT, path: "fox.png" } } });
+    const asked = await shim.next();
+    expect(asked).toMatchObject({ jsonrpc: "2.0", method: "roots/list" });
+    shim.send({ jsonrpc: "2.0", id: asked.id, result: { roots: [{ uri: pathToFileURL(root).href, name: "repo" }] } });
+    const added = await shim.next();
+    expect(added.id).toBe(2);
+    expect(JSON.parse(added.result.content.at(-1).text)).toMatchObject({ fileName: "fox.png", kind: "image" });
+
+    const plain = new Shim(engine.dataDir, made.token as string);
+    await handshake(plain);
+    const refused = await plain.request(2, "tools/call", { name: "file_add", arguments: { project: PROJECT, path: join(root, "fox.png") } });
+    expect(JSON.parse(refused.result.content.at(-1).text).error).toMatch(/^Your MCP client reports no working folder/);
+    await shim.close();
+    await plain.close();
     await engine.stop("SIGTERM");
   });
 

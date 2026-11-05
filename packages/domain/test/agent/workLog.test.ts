@@ -37,6 +37,13 @@ describe("the work log", () => {
     expect((workLog(call("i", "Bash", { command: "ls" }, { status: "running" }), { settled: true })[0] as WorkRow).state).toBe("stopped");
   });
 
+  it("labels an outside agent's file_add by the file it added, and its refusal", () => {
+    const added = workLog(call("f", "mcp__unframed__file_add", { path: "/work/repo/fox.png" }, { result: { file: "1-fox.png", fileName: "fox.png" } }));
+    expect((added[0] as WorkRow).label).toBe("Added fox.png to the project");
+    const refused = workLog(call("g", "mcp__unframed__file_add", { path: "/etc/passwd" }, { status: "failed", result: { error: "outside" } }));
+    expect((refused[0] as WorkRow).label).toBe("Couldn't add a file to the project");
+  });
+
   it("labels a context compaction while it runs and once it is done", () => {
     const label = (end: Parameters<typeof call>[3]) => (workLog(call("k", "Context compacted", {}, { itemType: "context_compaction", ...end }))[0] as WorkRow).label;
     expect(label({ status: "running", itemType: "context_compaction" })).toBe("Compacting the context");

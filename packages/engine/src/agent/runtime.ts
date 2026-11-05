@@ -53,6 +53,7 @@ import { KitTools } from "../kits/kitTools.ts";
 import { CanvasTools } from "./canvasTools.ts";
 import { OutsideChats } from "./outsideChats.ts";
 import { outsideSelectionTools } from "./selectionTools.ts";
+import { outsideAgentTools } from "./outsideTools.ts";
 import { AgentGeneration } from "./agentGeneration.ts";
 import { generateArguments, generateTool } from "./generateTool.ts";
 import type { ConnectionBook } from "../agentConnections/book.ts";
@@ -239,7 +240,10 @@ export class AgentRuntime {
         });
       },
     });
-    this.outsideTools = [...outsideSelectionTools({ hub: deps.selection, read: (project) => deps.rooms.read(project) })];
+    this.outsideTools = [
+      ...outsideSelectionTools({ hub: deps.selection, read: (project) => deps.rooms.read(project) }),
+      ...outsideAgentTools({ note: (binding, text) => this.outsideNote(binding, text), folder: async (project) => (await this.project(project)).folder }),
+    ];
     this.outside = new OutsideChats(
       {
         agent: (slug) => this.project(slug),
@@ -262,6 +266,15 @@ export class AgentRuntime {
       onIdleClose: (project, chatId) => void this.idleClosed(project, chatId),
       ...(deps.onSessionClosed === undefined ? {} : { onClosed: deps.onSessionClosed }),
     });
+  }
+
+  /** An outside agent's `chat_note`: an assistant message in its chat, under the turn its call opened or joined (spec 14). */
+  private async outsideNote(binding: McpBinding, text: string): Promise<void> {
+    const agent = await this.project(binding.project);
+    const turnId = agent.engine.chat(binding.chatId)?.latestTurn?.turnId ?? null;
+    const messageId = `assistant:note:${randomUUID()}`;
+    await this.internal(agent, binding.chatId, { type: "thread.message.assistant.delta", messageId, turnId, delta: text });
+    await this.internal(agent, binding.chatId, { type: "thread.message.assistant.complete", messageId, turnId });
   }
 
   setApiPort(port: number): void {

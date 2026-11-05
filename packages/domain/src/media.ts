@@ -70,7 +70,7 @@ export const sidecarFileName = (file: string): string => `${withoutExtension(fil
  */
 export interface MediaSidecar {
   /** Spec 11 adds `legacy-graph` (a file an import extracted) and `legacy-preset` (bytes an old preset carried inline). */
-  readonly source: "upload" | "copy" | "composite" | "sketch" | "legacy-graph" | "legacy-preset";
+  readonly source: "upload" | "copy" | "composite" | "sketch" | "legacy-graph" | "legacy-preset" | "outside-agent";
   readonly fileName: string;
   readonly mime: string;
   readonly bytes: number;
@@ -78,6 +78,8 @@ export interface MediaSidecar {
   readonly of?: string;
   /** Spec 06: the project a copy for a preset came from. */
   readonly ofProject?: string;
+  /** Spec 14: the outside chat whose agent added the file with `file_add`. */
+  readonly chat?: string;
   readonly marks?: ReadonlyArray<string>;
   readonly crop?: unknown;
 }
@@ -95,6 +97,7 @@ export const sidecarText = (sidecar: MediaSidecar): string => {
   };
   if (sidecar.of !== undefined) ordered.of = sidecar.of;
   if (sidecar.ofProject !== undefined) ordered.ofProject = sidecar.ofProject;
+  if (sidecar.chat !== undefined) ordered.chat = sidecar.chat;
   if (sidecar.marks !== undefined) ordered.marks = sidecar.marks;
   if (sidecar.source === "composite" || sidecar.source === "sketch") ordered.crop = sidecar.crop ?? null;
   return `${JSON.stringify(ordered, null, 2)}\n`;
