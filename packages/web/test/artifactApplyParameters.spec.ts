@@ -19,6 +19,16 @@ const onBoard = async (page: Page, engine: TestEngine, at = { x: -520, y: -40 })
   await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible();
 };
 
+const editorFrame = (page: Page) => editor(page).frameLocator("iframe[data-artifact-frame]");
+
+const setFromAnotherTab = async (engine: TestEngine, dials: Record<string, unknown>) => {
+  const tab = await connectTab(engine.port, "default");
+  await tab.loaded;
+  const current = tab.get("shape:tuned");
+  await tab.put([{ ...current, props: { ...current.props, dials } }]);
+  await tab.close();
+};
+
 const openEditorParameters = async (page: Page) => {
   const at = await centre(shapeOnScreen(page, "shape:tuned"));
   await page.mouse.dblclick(at.x, at.y);
@@ -88,7 +98,7 @@ test("a double-click on Apply sends once, and Add a parameter waits while it sen
   await openEditorParameters(page);
   await editor(page).getByRole("button", { name: "Apply" }).dblclick();
   await expect(editor(page).getByRole("button", { name: "Sent" })).toBeVisible({ timeout: 10_000 });
-  await page.waitForTimeout(500);
+  await expect(editor(page).locator('[data-editor-column="rail"]').getByText(/^Update the unframed\.dials configuration/)).toHaveCount(1);
   expect(await userTexts(agent, own)).toEqual([look({ size: 12 })]);
 });
 
@@ -96,15 +106,27 @@ test("Apply sends the values the shape holds now, also after another tab changed
   await onBoard(page, agent);
   const own = await createChat(agent, { title: "Own", tags: ["shape:tuned"] });
   await openEditorParameters(page);
-  const tab = await connectTab(agent.port, "default");
-  await tab.loaded;
-  const current = tab.get("shape:tuned");
-  await tab.put([{ ...current, props: { ...current.props, dials: { size: 30 } } }]);
-  await tab.close();
-  await page.waitForTimeout(500);
+  await expect(editorFrame(page).locator("#values")).toHaveText('{"size":12}');
+  await setFromAnotherTab(agent, { size: 30 });
+  await expect(editorFrame(page).locator("#values")).toHaveText('{"size":30}', { timeout: 10_000 });
   await editor(page).getByRole("button", { name: "Apply" }).click();
   await expect(editor(page).getByRole("button", { name: "Sent" })).toBeVisible({ timeout: 10_000 });
   expect(await userTexts(agent, own)).toEqual([look({ size: 30 })]);
+});
+
+test("a dial moved here after another tab's change is what Apply sends", async ({ page, agent }) => {
+  await onBoard(page, agent);
+  const own = await createChat(agent, { title: "Own", tags: ["shape:tuned"] });
+  await openEditorParameters(page);
+  await setFromAnotherTab(agent, { size: 30 });
+  await expect(editorFrame(page).locator("#values")).toHaveText('{"size":30}', { timeout: 10_000 });
+  const slider = editor(page).getByTestId("artifact-dials").getByRole("slider", { name: "Size" });
+  await slider.focus();
+  await page.keyboard.press("ArrowUp");
+  await expect(editorFrame(page).locator("#values")).toHaveText('{"size":13}');
+  await editor(page).getByRole("button", { name: "Apply" }).click();
+  await expect(editor(page).getByRole("button", { name: "Sent" })).toBeVisible({ timeout: 10_000 });
+  expect(await userTexts(agent, own)).toEqual([look({ size: 13 })]);
 });
 
 test("on the canvas, a sent box leaves the focus to the rail it opened rather than taking it back to its button", async ({ page, agent }) => {
@@ -120,3 +142,4 @@ test("on the canvas, a sent box leaves the focus to the rail it opened rather th
   await expect(panel.getByRole("button", { name: "Add a parameter" })).not.toBeFocused();
   expect(await engineChats(agent)).toHaveLength(1);
 });
+
