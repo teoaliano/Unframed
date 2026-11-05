@@ -339,7 +339,7 @@ describe("audio on the canvas", () => {
 
   it("adds Audio to the add menu's inputs, after Video", () => {
     const inputs = contextMenu({ target: { kind: "canvas" }, selection: [], clipboard: false, libraryRegistered: false, platform: "darwin" }).find((section) => section.section === "inputs");
-    expect(inputs?.items.map((item) => item.label)).toEqual(["Prompt", "Image", "Video", "Audio", "Group"]);
+    expect(inputs?.items.map((item) => item.label)).toEqual(["Prompt", "Image", "Video", "Audio", "Group", "Node"]);
   });
 
   it("chips an audio recipe as the model then the voice name", () => {

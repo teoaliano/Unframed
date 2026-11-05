@@ -259,3 +259,36 @@ describe("canvas_write batches", () => {
     expect(result.put[0]!.props).toMatchObject({ w: 400, h: 200 });
   });
 });
+
+describe("canvas_write and a node's provider", () => {
+  const made = (props: Record<string, unknown>) => {
+    const result = prepareBatch([{ type: "create", id: "new:n", kind: "node", x: 0, y: 0, props }], context([]));
+    if (!result.ok) return result.error;
+    return (result.put.find((record) => record.type === "node") as { props: Record<string, unknown> }).props;
+  };
+
+  it("writes vercel on an image or text node, and nothing for openrouter", () => {
+    expect(made({ medium: "image", provider: "vercel" })).toMatchObject({ provider: "vercel" });
+    expect(made({ medium: "text", provider: "vercel" })).toMatchObject({ provider: "vercel" });
+    expect(made({ medium: "image", provider: "openrouter" })).not.toHaveProperty("provider");
+  });
+
+  it("refuses a provider on a medium it does not serve, and a value that is not one", () => {
+    expect(made({ medium: "video", provider: "vercel" })).toBe("create: The Vercel AI Gateway serves image and text runs only. Video runs through OpenRouter.");
+    expect(made({ medium: "page", provider: "vercel" })).toBe("create: A page node runs through OpenRouter.");
+    expect(made({ medium: "image", provider: "fal" })).toBe('create: provider has to be "openrouter" or "vercel".');
+  });
+
+  it("drops the provider when an update moves the node to a medium it does not serve, and clears it with null", () => {
+    const node: CanvasRecord = { id: "shape:n", typeName: "shape", type: "node", x: 0, y: 0, index: "a1", parentId: PAGE, props: { w: 380, h: 360, medium: "image", model: "", provider: "vercel", params: {}, instruction: "", versions: [], currentVersionId: null }, meta: { ref: "101" } };
+    const update = (patch: Record<string, unknown>) => {
+      const result = prepareBatch([{ type: "update", id: "n", props: patch }], context([node]));
+      if (!result.ok) return result.error;
+      return (result.put[0] as { props: Record<string, unknown> }).props;
+    };
+    expect(update({ medium: "video" })).not.toHaveProperty("provider");
+    expect(update({ provider: null })).not.toHaveProperty("provider");
+    expect(update({ provider: "openrouter" })).not.toHaveProperty("provider");
+    expect(update({ medium: "text" })).toMatchObject({ provider: "vercel" });
+  });
+});

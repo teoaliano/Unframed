@@ -36,7 +36,7 @@ export interface MenuInput {
 }
 
 export type EditAction = "cut" | "copy" | "paste" | "group" | "ungroup";
-export type AddAction = "add-prompt" | "add-image" | "add-video" | "add-audio" | "add-group" | "add-page" | "add-motion";
+export type AddAction = "add-prompt" | "add-image" | "add-video" | "add-audio" | "add-group" | "add-node" | "add-page" | "add-motion";
 
 export type MenuItem =
   | { readonly action: "reveal"; readonly label: string; readonly files: ReadonlyArray<string> }
@@ -88,6 +88,7 @@ export const INPUT_ITEMS: ReadonlyArray<{ action: AddAction; label: string }> = 
   { action: "add-video", label: "Video" },
   { action: "add-audio", label: "Audio" },
   { action: "add-group", label: "Group" },
+  { action: "add-node", label: "Node" },
 ];
 
 export const ARTIFACT_ITEMS: ReadonlyArray<{ action: AddAction; label: string }> = [

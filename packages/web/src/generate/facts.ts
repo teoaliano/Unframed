@@ -26,7 +26,7 @@ export const pageBox = (editor: Editor, id: TLShape["id"]) => {
   return bounds ? { x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h } : undefined;
 };
 
-const describe = (editor: Editor, shape: TLShape, z: number): CanvasShape | undefined => {
+export const describe = (editor: Editor, shape: TLShape, z: number): CanvasShape | undefined => {
   const bounds = pageBox(editor, shape.id);
   if (!bounds) return undefined;
   const kind = kindOfShapeType(shape.type);

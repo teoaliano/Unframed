@@ -22,6 +22,7 @@ import { NoKeyError, openOnRecipe, recipeProps, recipeRunProgress, runGroupRecip
 import { closeComposer, composerState, leaveRecipeMode, openComposer } from "./state.ts";
 import { composerGlassClass } from "../chrome/composerSurface.ts";
 import { useWheelToCanvas } from "../canvas/wheelToCanvas.ts";
+import { NodeRunButtons, selectionNodeCount } from "../nodes/NodeChrome.tsx";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
@@ -301,7 +302,7 @@ const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "rec
   );
 };
 
-const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind: "none" }>; onGenerate: () => void; agent: ReactNode }) => {
+const Bar = ({ state, onGenerate, agent, nodes }: { state: Exclude<ToolbarState, { kind: "none" }>; onGenerate: () => void; agent: ReactNode; nodes: number }) => {
   const editor = useEditor();
   const { openArtifact, renderButton: Render, parametersButton: ParametersToggle, kitModeButton: KitModeToggle, scaleButton: Scale } = useSlots();
   switch (state.kind) {
@@ -338,16 +339,23 @@ const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind
             {state.hint}
           </span>
           {agent}
+          <NodeRunButtons primary={false} />
           <Button size="sm" onClick={onGenerate}>
             Generate
           </Button>
         </div>
       );
     case "agent":
-      return agent === null && !state.drag ? null : (
+      return agent === null && !state.drag && nodes === 0 ? null : (
         <div className={barClass}>
           {state.drag && <DragHandle />}
+          {nodes > 1 && (
+            <span className={hintClass} data-testid="selection-hint">
+              {`${nodes} nodes`}
+            </span>
+          )}
           {agent}
+          <NodeRunButtons primary />
         </div>
       );
   }
@@ -384,17 +392,18 @@ export const SelectionToolbar = () => {
   }, [editor, selectionKey]);
 
   const collapse = useCallback(() => closeComposer(editor), [editor]);
+  const nodes = useValue("selected nodes", () => selectionNodeCount(editor), [editor]);
   const agent = agentTray ? <AgentButton onOpen={() => openComposer(editor, "agent")} /> : null;
 
   if (selectionKey === "") return null;
-  if (!expanded && (state === undefined || state.kind === "none" || (state.kind === "agent" && agent === null && !state.drag))) return null;
+  if (!expanded && (state === undefined || state.kind === "none" || (state.kind === "agent" && agent === null && !state.drag && nodes === 0))) return null;
 
   return (
     <Floating target={target ?? lastTarget.current} hidden={hidden} expanded={expanded} framed={composer.mode !== "agent"}>
       {expanded ? (
         <Composer mode={composer.mode === "agent" ? "agent" : "generate"} project={project} recipe={composer.recipe} onCollapse={collapse} />
       ) : state && state.kind !== "none" ? (
-        <Bar state={state} onGenerate={() => openComposer(editor, "generate")} agent={agent} />
+        <Bar state={state} onGenerate={() => openComposer(editor, "generate")} agent={agent} nodes={nodes} />
       ) : null}
     </Floating>
   );

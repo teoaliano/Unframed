@@ -37,6 +37,7 @@ export interface InstructionEditorProps {
   readonly onMenuOpen: (open: boolean) => void;
   /** The box's editable element, for focus to come back to. */
   readonly handle?: Ref<{ readonly element: () => HTMLElement | null }>;
+  readonly autofocus?: boolean;
 }
 
 /**
@@ -44,7 +45,7 @@ export interface InstructionEditorProps {
  * menu. Attachments and chips are off in the Generate tray. Plain Enter and Shift+Enter insert
  * a line; the composer shell takes Cmd+Enter.
  */
-export const InstructionEditor = ({ initial, placeholder, onChange, onMenuOpen, handle }: InstructionEditorProps) => {
+export const InstructionEditor = ({ initial, placeholder, onChange, onMenuOpen, handle, autofocus }: InstructionEditorProps) => {
   const canvas = useCanvas();
   const [mention, setMention] = useState<Mention>();
   const [highlight, setHighlight] = useState(0);
@@ -83,7 +84,7 @@ export const InstructionEditor = ({ initial, placeholder, onChange, onMenuOpen, 
       Placeholder.configure({ placeholder }),
     ],
     content: toDoc(initial),
-    autofocus: "end",
+    autofocus: autofocus === false ? false : "end",
     editorProps: {
       attributes: { "data-generate-prompt": "", "aria-label": placeholder, role: "textbox", "aria-multiline": "true" },
       handleKeyDown: (_view, event) => {

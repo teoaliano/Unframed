@@ -31,6 +31,13 @@ import { installRename } from "./rename.ts";
 import { watchRunProgress } from "../generate/recipeRuns.ts";
 import { ComponentShapeUtil, MotionShapeUtil, PageShapeUtil } from "./shapes/artifact.tsx";
 import { AudioShapeUtil } from "./shapes/audio.tsx";
+import { NodeShapeUtil } from "../nodes/NodeShapeUtil.tsx";
+import { WireShapeUtil } from "../nodes/WireShapeUtil.tsx";
+import { installNodeSideEffects } from "../nodes/sideEffects.ts";
+import { installWireCopies } from "../nodes/copies.ts";
+import { watchMotionRenders, watchNodeCatalogues } from "../nodes/facts.ts";
+import { bindNodeCatalogues } from "../nodes/operations.ts";
+import { watchChainReports } from "../nodes/reports.ts";
 import { GroupShapeUtil } from "./shapes/group.tsx";
 import { ImageMediaUtil, VideoMediaUtil } from "./shapes/media.tsx";
 import { PromptShapeUtil } from "./shapes/prompt.tsx";
@@ -39,7 +46,7 @@ import { recalledCamera, rememberCamera } from "../project/tabMemory.ts";
 import { TLDRAW_ASSET_URLS, TLDRAW_CHROME, TLDRAW_OPTIONS } from "./tldrawChrome.tsx";
 
 
-const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, AudioShapeUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil, ComponentShapeUtil];
+const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, AudioShapeUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil, ComponentShapeUtil, NodeShapeUtil, WireShapeUtil];
 
 const COMPONENTS: TLComponents = {
   ...TLDRAW_CHROME,
@@ -91,6 +98,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
   const store = useSync({ connect, assets, schema: canvasSchema() });
 
   useEffect(() => watchRunReports(engine, project), [engine, project]);
+  useEffect(() => watchChainReports(engine, project), [engine, project]);
 
   useEffect(() => {
     activation.setBeforeSwitch(() => socket.current?.settled(SETTLE_BEFORE_SWITCH_MS) ?? Promise.resolve());
@@ -112,6 +120,11 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     const stopRename = installRename(editor);
     const stopRunProgress = watchRunProgress(editor, engine, project);
     const stopSelection = installSelectionReporter(editor, engine, project);
+    const stopNodes = installNodeSideEffects(editor);
+    const stopWireCopies = installWireCopies(editor);
+    const stopRenders = watchMotionRenders(editor, engine, project);
+    bindNodeCatalogues(editor);
+    const stopCatalogues = watchNodeCatalogues(editor, engine);
     content.current = { project, engine, minter };
     installExternalContent(editor, content.current);
     const camera = recalledCamera(project);
@@ -127,6 +140,10 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
       stopRename();
       stopRunProgress();
       stopSelection();
+      stopNodes();
+      stopWireCopies();
+      stopRenders();
+      stopCatalogues();
       content.current = undefined;
     };
   }, [project, engine]);

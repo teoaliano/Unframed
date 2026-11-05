@@ -8,7 +8,8 @@ export type SlotSource =
   | { readonly type: "file"; readonly file: string }
   | { readonly type: "link"; readonly url: string }
   | { readonly type: "composite"; readonly image: string; readonly file: string; readonly marks: ReadonlyArray<string>; readonly crop: Crop | null }
-  | { readonly type: "sketch"; readonly marks: ReadonlyArray<string>; readonly bounds: Box };
+  | { readonly type: "sketch"; readonly marks: ReadonlyArray<string>; readonly bounds: Box }
+  | { readonly type: "page"; readonly file: string; readonly files: "entry" | "linked" };
 
 export interface Slot {
   readonly kind: "image" | "video";
@@ -54,7 +55,7 @@ const union = (boxes: ReadonlyArray<Box>): Box => {
   return { x: left, y: top, w: right - left, h: bottom - top };
 };
 
-const markOwners = (shapes: ReadonlyArray<CanvasShape>): Map<string, string> => {
+export const markOwners = (shapes: ReadonlyArray<CanvasShape>): Map<string, string> => {
   const images = shapes.filter((shape) => shape.kind === "image" && shape.file !== undefined);
   const owners = new Map<string, string>();
   for (const mark of shapes) {
@@ -176,7 +177,10 @@ export const composeSelection = (input: CompositionInput): Composition => {
       case "motion":
       case "component":
       case "audio":
+      case "node":
         roles[shape.id] = UNUSED_ROLE;
+        break;
+      case "wire":
         break;
       case "mark": {
         if (shape !== loose[0]) break;

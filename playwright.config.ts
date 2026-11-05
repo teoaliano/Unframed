@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "@playwright/test";
 
-const CLIPBOARD = /\/(agentCopyText|audioPaste|agentMarkdown|artifactPaste|agentPlanCopy|contextMenu|copyImage|componentPaste|copyPaste|groupPaste|groupRefs|menuActions|pasteAcross|resultCopies|systemPaste|textCopies)\.spec\.ts$/;
+const CLIPBOARD = /\/(agentCopyText|audioPaste|agentMarkdown|artifactPaste|agentPlanCopy|contextMenu|copyImage|componentPaste|copyPaste|groupPaste|groupRefs|menuActions|pasteAcross|resultCopies|systemPaste|textCopies|wireCopies)\.spec\.ts$/;
 
 const ISOLATED = /\/projectTabsPerformance\.spec\.ts$/;
 

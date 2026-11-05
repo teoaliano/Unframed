@@ -14,7 +14,7 @@ export interface CanvasRecordLike {
   readonly meta?: unknown;
 }
 
-export const META_REF_TYPES: ReadonlySet<string> = new Set(["text", "image", "video", "audio", "page", "motion", "component"]);
+export const META_REF_TYPES: ReadonlySet<string> = new Set(["text", "image", "video", "audio", "page", "motion", "component", "node"]);
 
 const field = (value: unknown, key: string): unknown =>
   typeof value === "object" && value !== null ? (value as Record<string, unknown>)[key] : undefined;

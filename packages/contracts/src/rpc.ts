@@ -7,6 +7,7 @@ import { Health, Settings, SettingsPatch } from "./settings.ts";
 import { VideoForget, VideoPoll, VideoStart } from "./video.ts";
 import { OAuthCancel, OAuthPending, OAuthStart, OAuthStatus, ProjectsDelete, ProjectsRename, SettingsRemoveKey } from "./openRouterKey.ts";
 import { RunText, TextComplete } from "./text.ts";
+import { ChainRun, FlowSave, NodeRemoveVersion, NodeRenders, NodeRun, NodeUseVersion } from "./nodes.ts";
 import { ElevenLabsStatusRpc, RunAudio, SettingsRemoveElevenLabsKey, VoicesList } from "./audio.ts";
 import { SettingsRemoveVercelKey, VercelStatusRpc } from "./vercel.ts";
 import { LibraryCopyFiles, LibraryDelete, LibraryList, LibrarySave } from "./library.ts";
@@ -368,5 +369,11 @@ export const UnframedRpcs = RpcGroup.make(
   ArtifactPrepareEdit,
   ArtifactEdit,
   ArtifactImages,
+  NodeRun,
+  ChainRun,
+  NodeUseVersion,
+  NodeRemoveVersion,
+  NodeRenders,
+  FlowSave,
 );
 export type UnframedRpcs = typeof UnframedRpcs;

@@ -4,7 +4,7 @@ import { classifyRequest, type RequestType } from "./runtimeEvents.ts";
 
 export const UNFRAMED_TOOL_PREFIX = "mcp__unframed__";
 
-const UNFRAMED_WRITE_TOOLS: ReadonlySet<string> = new Set(["canvas_write", "page_write", "motion_write", "page_edit", "motion_edit", "component_write", "generate", "kit_write"]);
+const UNFRAMED_WRITE_TOOLS: ReadonlySet<string> = new Set(["canvas_write", "page_write", "motion_write", "page_edit", "motion_edit", "component_write", "generate", "kit_write", "node_run"]);
 
 type PolicyAnswer =
   | { readonly kind: "question" }
@@ -29,7 +29,7 @@ export const decidePermission = ({ runtimeMode, interactionMode, tool, input }: 
   if (tool.startsWith(UNFRAMED_TOOL_PREFIX)) {
     const name = tool.slice(UNFRAMED_TOOL_PREFIX.length);
     if (interactionMode === "plan" && UNFRAMED_WRITE_TOOLS.has(name)) return { kind: "deny", message: PLAN_NO_WRITES_MESSAGE };
-    if (name === "generate" && runtimeMode !== "full-access") return { kind: "ask", requestType: "dynamic_tool_call" };
+    if ((name === "generate" || name === "node_run") && runtimeMode !== "full-access") return { kind: "ask", requestType: "dynamic_tool_call" };
     return { kind: "allow" };
   }
   if (runtimeMode === "full-access") return { kind: "allow" };

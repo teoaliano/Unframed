@@ -8,12 +8,14 @@ import { KitHost } from "../kits/KitHost.tsx";
 import { LibraryHost } from "../library/LibraryHost.tsx";
 import { MentionMenu } from "./MentionMenu.tsx";
 import { ArtifactsHost } from "../artifacts/ArtifactsHost.tsx";
+import { NodeChrome } from "../nodes/NodeChrome.tsx";
 
 export const InFront = () => {
   useEffect(() => registerSlot("toolbarEnd", ToolbarEnd), []);
   return (
   <>
     <Tether />
+    <NodeChrome />
     <MentionMenu />
     <SelectionToolbar />
     <LibraryHost />

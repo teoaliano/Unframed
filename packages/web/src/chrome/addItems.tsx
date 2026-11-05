@@ -1,5 +1,5 @@
 import { ARTIFACT_ITEMS, INPUT_ITEMS, type AddAction } from "@unframed/domain";
-import { AlignLeft, AppWindow, AudioLines, Clapperboard, Group, Image, SquarePlay, type LucideIcon } from "lucide-react";
+import { AlignLeft, AppWindow, AudioLines, Clapperboard, Group, Image, SquarePlay, Workflow, type LucideIcon } from "lucide-react";
 
 /** The add menu's sections, shared by the add button and the canvas context menu. */
 export const ADD_SECTIONS = [
@@ -13,6 +13,7 @@ export const ADD_ICONS: Record<AddAction, LucideIcon> = {
   "add-video": SquarePlay,
   "add-audio": AudioLines,
   "add-group": Group,
+  "add-node": Workflow,
   "add-page": AppWindow,
   "add-motion": Clapperboard,
 };

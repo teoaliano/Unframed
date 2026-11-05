@@ -21,7 +21,7 @@ const SIDE_MARGIN = 28;
 const TOP_MARGIN = 56;
 
 export const mayBeGroupMember = (type: string): boolean =>
-  type !== "frame" && type !== "page" && type !== "motion" && type !== "group" && type !== "audio";
+  type !== "frame" && type !== "page" && type !== "motion" && type !== "group" && type !== "audio" && type !== "wire";
 
 /**
  * The box of a group made around `members`: their bounding box plus 28 px left, right

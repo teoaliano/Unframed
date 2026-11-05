@@ -20,7 +20,7 @@ test("the Library dialog: both rows of controls, the system presets, and the emp
   await expect(dialog.getByRole("group", { name: "View" }).getByRole("button")).toHaveCount(2);
   await expect(toggle(page, "View", "Cards")).toHaveAttribute("aria-pressed", "true");
   await expect(toggle(page, "View", "List")).toBeVisible();
-  await expect(dialog.getByRole("group", { name: "Type" }).getByRole("button")).toHaveText(["All", "Recipes", "Groups", "Kits"]);
+  await expect(dialog.getByRole("group", { name: "Type" }).getByRole("button")).toHaveText(["All", "Recipes", "Groups", "Flows", "Kits"]);
   await expect(dialog.getByRole("group", { name: "Source" }).getByRole("button")).toHaveText(["Any", "Custom", "System"]);
   expect(await shownNames(page)).toEqual(["Layerize", "Prose to JSON", "Apple", "Claude", "Vercel", "Notion", "Airbnb", "Linear", "Stripe", "Figma"]);
   await expect(dialog.getByRole("navigation", { name: "Pages" }).getByTestId("library-range")).toHaveText("1–10 of 12");

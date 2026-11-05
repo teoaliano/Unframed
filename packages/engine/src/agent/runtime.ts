@@ -56,10 +56,14 @@ import { outsideSelectionTools } from "./selectionTools.ts";
 import { outsideAgentTools, type OutsideToolDeps } from "./outsideTools.ts";
 import { AgentGeneration } from "./agentGeneration.ts";
 import { generateArguments, generateTool } from "./generateTool.ts";
+import { AgentNodeRuns, nodeRunArguments, nodeRunTool } from "./nodeRunTool.ts";
+import type { ChainInput, PlannedStep } from "../nodes/nodeRuns.ts";
+import type { ChainStarted } from "@unframed/contracts";
 import type { ConnectionBook } from "../agentConnections/book.ts";
 import type { GenerationProvider, ImagePricingAnswer, ImageRunRequest, ModelEntry, RunEvent, TextRunRequest, VideoStartRequest } from "@unframed/contracts";
 
 interface GenerationRuns {
+  readonly nodes: { readonly plan: (input: ChainInput) => Promise<{ readonly steps: ReadonlyArray<PlannedStep> }>; readonly run: (input: ChainInput) => Promise<ChainStarted> };
   readonly runImage: (request: ImageRunRequest) => Promise<{ runId: string; batchId: string; placeholders: string[] }>;
   readonly runText: (request: TextRunRequest) => Promise<{ runId: string; batchId: string; placeholders: string[] }>;
   readonly pricing: (model: string) => Promise<ImagePricingAnswer>;
@@ -168,6 +172,7 @@ export class AgentRuntime {
   readonly outside: OutsideChats;
   readonly outsideTools: McpTool[];
   private readonly generation: AgentGeneration;
+  private readonly nodeRuns: AgentNodeRuns;
   readonly attachments: AttachmentStore;
   readonly providers: ProviderService;
   private readonly projects = new Map<string, Promise<ProjectAgent>>();
@@ -260,6 +265,36 @@ export class AgentRuntime {
     );
     for (const tool of deps.extraTools?.(context) ?? []) this.registry.register(tool);
     this.registry.register(generateTool((binding, args) => this.generateFor(binding, args)));
+    this.nodeRuns = new AgentNodeRuns({
+      plan: (input) => deps.generationRuns.nodes.plan(input),
+      run: (input) => deps.generationRuns.nodes.run(input),
+      recordsOf: async (project, ids) => {
+        const byId = new Map((await deps.rooms.read(project)).map((record) => [record.id as string, record]));
+        return new Map(ids.map((id) => [id, byId.get(id)]));
+      },
+      recordTurn: async (project, chatId, turn, before, after) => {
+        const agent = await this.project(project);
+        agent.turnChanges.record(chatId, turn, before, after, await deps.rooms.clock(project));
+      },
+      holds: {
+        runStarted: (chatId, turn) => {
+          this.paidRuns.set(runKey(chatId, turn), (this.paidRuns.get(runKey(chatId, turn)) ?? 0) + 1);
+          this.outside.runStarted(chatId);
+        },
+        runEnded: (chatId, turn) => {
+          const remaining = (this.paidRuns.get(runKey(chatId, turn)) ?? 1) - 1;
+          if (remaining > 0) this.paidRuns.set(runKey(chatId, turn), remaining);
+          else this.paidRuns.delete(runKey(chatId, turn));
+          this.outside.runEnded(chatId);
+        },
+      },
+      activity: async (project, chatId, draft) => {
+        const agent = await this.project(project);
+        await this.activity(agent, chatId, { id: `${draft.kind}:${randomUUID()}`, tone: "info", kind: draft.kind, summary: draft.summary, payload: draft.payload, turnId: draft.turnId, createdAt: new Date().toISOString() });
+      },
+      book: deps.generationRuns.book,
+    });
+    this.registry.register(nodeRunTool((binding, args) => this.nodeRunFor(binding, args)));
     this.providers = new ProviderService({
       adapterFor: (provider) => this.adapterFor(provider),
       tokens: this.tokens,
@@ -289,7 +324,7 @@ export class AgentRuntime {
       emit: (chatId, draft) => this.onRuntimeEvent(chatId, draft),
       runtimeMode: (chatId) => this.runtimeModeOf(chatId),
       registeredTools: () => this.registry.names(),
-      generationDetail: (chatId, input) => this.generationDetail(chatId, input),
+      generationDetail: (chatId, input, tool) => this.generationDetail(chatId, input, tool),
       log: (chatId, line) => {
         if (this.deps.agentDebug) logInfo(`[agent ${chatId}] ${line}`);
       },
@@ -503,7 +538,22 @@ export class AgentRuntime {
     return this.generation.generate({ project: binding.project, chatId: binding.chatId, turn, turnId, connectionId: binding.connectionId, ...checked });
   }
 
-  private async generationDetail(chatId: string, input: Readonly<Record<string, unknown>>): Promise<string | undefined> {
+  private async nodeRunFor(binding: McpBinding, args: Record<string, unknown>): Promise<ToolAnswer> {
+    const checked = nodeRunArguments(args);
+    if (!checked.ok) return { value: { error: checked.message }, isError: true };
+    const turn = this.chatTurn(binding.project, binding.chatId).turnCount;
+    if (turn === undefined) return { value: { error: "Unframed could not open a turn for this call. Try again." }, isError: true };
+    const turnId = this.chatTurn(binding.project, binding.chatId).turnId ?? null;
+    return this.nodeRuns.run({ project: binding.project, chatId: binding.chatId, turn, turnId, connectionId: binding.connectionId, ids: checked.ids, downstream: checked.downstream, dryRun: checked.dryRun });
+  }
+
+  private async nodeRunDetail(chatId: string, input: Readonly<Record<string, unknown>>): Promise<string | undefined> {
+    const project = this.chatProjects.get(chatId);
+    return project === undefined ? undefined : this.nodeRuns.detail(project, { ...input });
+  }
+
+  private async generationDetail(chatId: string, input: Readonly<Record<string, unknown>>, tool = "generate"): Promise<string | undefined> {
+    if (tool === "node_run") return this.nodeRunDetail(chatId, input);
     const project = this.chatProjects.get(chatId);
     const checked = generateArguments(input);
     if (project === undefined || !checked.ok) return undefined;

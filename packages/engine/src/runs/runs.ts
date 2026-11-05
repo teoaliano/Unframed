@@ -52,6 +52,7 @@ import { makeTextRuns } from "./textRuns.ts";
 import { makeAudioRuns } from "./audioRuns.ts";
 import { extensionFor, mimeForFile, referenceName, resultBase, writeLoneSidecar, writeResultFile, writeSidecar } from "./resultFiles.ts";
 import { shapePageBoxes } from "./shapeBounds.ts";
+import { applyNodeChange, dropVersion, fillVersion, finishRun, nodeSidecarFields, startVersions, type NodeTarget } from "../nodes/versions.ts";
 import { patchSidecarCost, readResultSidecar } from "./sidecars.ts";
 
 export const EMPTY_PROMPT_MESSAGE = "Prompt is empty. Select a prompt, or type an instruction.";
@@ -68,13 +69,14 @@ const REGISTRY_SIZE = 200;
 export class Runs extends Context.Service<
   Runs,
   {
-    readonly image: (request: ImageRunRequest) => Effect.Effect<{ runId: string; batchId: string; placeholders: string[] }, UnframedError>;
+    readonly image: (request: ImageRunRequest, into?: NodeTarget) => Effect.Effect<{ runId: string; batchId: string; placeholders: string[] }, UnframedError>;
     /** Spec 05: answers once the run's empty text result is in the room; the answer fills it later. */
-    readonly text: (request: TextRunRequest) => Effect.Effect<{ runId: string; batchId: string; placeholders: string[] }, UnframedError>;
-    readonly audio: (request: AudioRunRequest) => Effect.Effect<{ runId: string; batchId: string; placeholders: string[] }, UnframedError>;
+    readonly text: (request: TextRunRequest, into?: NodeTarget) => Effect.Effect<{ runId: string; batchId: string; placeholders: string[] }, UnframedError>;
+    readonly audio: (request: AudioRunRequest, into?: NodeTarget) => Effect.Effect<{ runId: string; batchId: string; placeholders: string[] }, UnframedError>;
     /** Spec 05: one text call that lands nothing. */
     readonly complete: (request: TextCompleteRequest) => Effect.Effect<TextCompleteAnswer, UnframedError>;
     readonly subscribe: (project: string) => Stream.Stream<RunEvent>;
+    readonly publish: (project: string, event: RunEvent) => Effect.Effect<void>;
     readonly recipe: (project: string, shapeId: string) => Effect.Effect<ResultRecipe, UnframedError>;
     /** Copies a result's sidecar and the files its recipe names from `from` into `project`, beside `file`. */
     readonly copyRecipe: (project: string, from: string, sidecar: string, file: string) => Effect.Effect<{ sidecar: string }, UnframedError>;
@@ -253,7 +255,7 @@ export const runsLayer = Layer.effect(
       emptyPromptMessage: EMPTY_PROMPT_MESSAGE,
     });
 
-    const image = (request: ImageRunRequest) =>
+    const image = (request: ImageRunRequest, into?: NodeTarget) =>
       Effect.gen(function* () {
         const folder = yield* projectFolder(request.project);
         const project = projectSlug(request.project);
@@ -274,6 +276,7 @@ export const runsLayer = Layer.effect(
         }
 
         const pageId = records.find((record) => record.typeName === "page")?.id ?? "page:page";
+        let versionIds: string[] = [];
         const height = placeholderHeight(request.params);
         const positions = placeResults(
           request.anchor,
@@ -287,7 +290,7 @@ export const runsLayer = Layer.effect(
           .at(-1);
         const indices = getIndicesAbove(topIndex ?? null, runCount);
         const minted: Array<{ typeName: string; type: string; meta: { ref: string } }> = [];
-        const placeholders = request.outputs.map((_output, index) => {
+        const placeholders = into !== undefined ? [] : request.outputs.map((_output, index) => {
           const ref = nextRef([...records, ...minted]);
           minted.push({ typeName: "shape", type: "image", meta: { ref } });
           return imagePlaceholder({
@@ -314,9 +317,27 @@ export const runsLayer = Layer.effect(
 
         const run: RunRecord = { live: true, project, outputs: new Map() };
         remember(runId, run);
-        yield* rooms.apply(request.project, { put: placeholders, remove: [] }, runOrigin(runId)).pipe(
-          Effect.tapError(() => Effect.sync(() => registry.delete(runId))),
-        );
+        if (into !== undefined) {
+          const started = yield* rooms
+            .applyWhen(
+              request.project,
+              (get) => {
+                const made = startVersions(get, into.shapeId, { runId, chainId: into.chainId, claim: into.claim, batchId, count: runCount, fingerprint: into.fingerprint, startedAt });
+                versionIds = made?.ids ?? [];
+                return made?.change;
+              },
+              runOrigin(runId),
+            )
+            .pipe(Effect.tapError(() => Effect.sync(() => registry.delete(runId))));
+          if (started === undefined) {
+            registry.delete(runId);
+            return yield* unframedError("not_found", "That node is no longer on the canvas.");
+          }
+        } else {
+          yield* rooms.apply(request.project, { put: placeholders, remove: [] }, runOrigin(runId)).pipe(
+            Effect.tapError(() => Effect.sync(() => registry.delete(runId))),
+          );
+        }
         yield* PubSub.publish(events, { project, event: { type: "started", runId, batchId, count: runCount } });
 
         const land = async (index: number, bytes: Buffer, mediaType: string | undefined, cost: number | null): Promise<Landed> => {
@@ -359,10 +380,12 @@ export const runsLayer = Layer.effect(
               sources: [...request.sources],
               ...(of === undefined ? {} : { of }),
               ...providerField(provider.id),
+              ...nodeSidecarFields(into, versionIds[index]),
             },
             ...(output.free === undefined ? {} : { free: output.free }),
             ...(request.chat === undefined ? {} : { chat: request.chat }),
             ...providerField(provider.id),
+            ...nodeSidecarFields(into, versionIds[index]),
           };
           await writeSidecar(folder, base, sidecar).catch((error: unknown) => logError(`could not write the sidecar of ${file}: ${errorText(error)}`));
           logInfo(`generated → ${join(folder, file)}${cost === null ? "" : `  ($${cost.toFixed(4)})`}`);
@@ -378,10 +401,11 @@ export const runsLayer = Layer.effect(
           };
         };
 
-        const settle = async (index: number): Promise<{ ok: boolean; error?: string; orphaned?: boolean }> => {
+        const settle = async (index: number): Promise<{ ok: boolean; error?: string; orphaned?: boolean; cost?: number | null }> => {
           const output = request.outputs[index]!;
           const runIndex = index + 1;
-          const shapeId = placeholders[index]!.id;
+          const versionId = versionIds[index];
+          const shapeId = into !== undefined ? into.shapeId : placeholders[index]!.id;
           let outcome: RunOutcome<Landed>;
           let later: (() => Promise<Priced>) | undefined;
           try {
@@ -393,6 +417,28 @@ export const runsLayer = Layer.effect(
             outcome = { ok: false, error: errorText(error) };
           }
           run.outputs.set(runIndex, outcome);
+          if (into !== undefined && versionId !== undefined) {
+            const filled = await applyNodeChange(
+              rooms,
+              runPromise,
+              request.project,
+              (get) => (outcome.ok ? fillVersion(get, into.shapeId, versionId, { file: outcome.landed.file, fileName: outcome.landed.file }) : dropVersion(get, into.shapeId, versionId)),
+              runId,
+            );
+            if (outcome.ok) {
+              let cost = outcome.landed.cost;
+              if (later) {
+                const priced = await later().catch((): Priced => ({ cost: null }));
+                await patchSidecarCost(folder, outcome.landed.sidecar, priced).catch((error: unknown) => logError(`${runId}: could not record the cost in ${outcome.landed.sidecar}: ${errorText(error)}`));
+                cost = priced.cost;
+              }
+              await publish(project, { type: "output", runId, runIndex, ok: true, shapeId, versionId, file: outcome.landed.file, cost });
+              return { ok: true, orphaned: !filled, cost };
+            }
+            logError(`${runId}: output ${runIndex} failed: ${outcome.error}`);
+            await publish(project, { type: "output", runId, runIndex, ok: false, error: outcome.error, shapeId, versionId });
+            return { ok: false, error: outcome.error };
+          }
           const change = await runPromise(
             Effect.map(rooms.read(request.project), (now) => {
               const shape = now.find((record) => record.id === shapeId);
@@ -427,18 +473,27 @@ export const runsLayer = Layer.effect(
         void Promise.all(request.outputs.map((_output, index) => settle(index)))
           .then(async (settled) => {
             run.live = false;
+            const errors = [...new Set(settled.flatMap((each) => (each.error === undefined ? [] : [each.error])))];
+            const succeeded = settled.filter((each) => each.ok).length;
+            if (into !== undefined) await applyNodeChange(rooms, runPromise, request.project, (get) => finishRun(get, into.shapeId, runId, errors), runId);
             await publish(project, {
               type: "finished",
               runId,
-              succeeded: settled.filter((each) => each.ok).length,
+              succeeded,
               failed: settled.filter((each) => !each.ok).length,
-              errors: [...new Set(settled.flatMap((each) => (each.error === undefined ? [] : [each.error])))],
+              errors,
               orphaned: settled.filter((each) => each.orphaned).length,
+              ...(into === undefined ? {} : { shapeId: into.shapeId }),
             });
+            const costs = settled.filter((each) => each.ok).map((each) => each.cost);
+            into?.onFinished?.({ succeeded, errors, cost: costs.length === 0 || costs.some((cost) => cost === null || cost === undefined) ? null : costs.reduce<number>((sum, cost) => sum + (cost ?? 0), 0) });
           })
-          .catch((error: unknown) => logError(`${runId}: ${errorText(error)}`));
+          .catch((error: unknown) => {
+            logError(`${runId}: ${errorText(error)}`);
+            into?.onFinished?.({ succeeded: 0, errors: [errorText(error)], cost: null });
+          });
 
-        return { runId, batchId, placeholders: placeholders.map((placeholder) => placeholder.id as string) };
+        return { runId, batchId, placeholders: into !== undefined ? versionIds : placeholders.map((placeholder) => placeholder.id as string) };
       });
 
     const subscribe = (project: string) =>
@@ -511,6 +566,6 @@ export const runsLayer = Layer.effect(
         return [...registry.values()].filter((run) => run.live && (slug === undefined || run.project === slug)).length;
       });
 
-    return Runs.of({ image, text: texts.text, audio: audios.audio, complete: texts.complete, subscribe, recipe, copyRecipe, liveRuns, track });
+    return Runs.of({ image, text: texts.text, audio: audios.audio, complete: texts.complete, subscribe, publish: (project, event) => Effect.asVoid(PubSub.publish(events, { project: projectSlug(project), event })), recipe, copyRecipe, liveRuns, track });
   }),
 );

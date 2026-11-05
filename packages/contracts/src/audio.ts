@@ -1,3 +1,4 @@
+import type { ChainRef, NodeRef } from "./generation.ts";
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import { UnframedError } from "./errors.ts";
@@ -94,5 +95,6 @@ export interface AudioSidecar {
   readonly runCount: number;
   readonly createdAt: string;
   readonly file: string;
-  readonly recipe: ResultRecipe;
+  readonly recipe: ResultRecipe;  readonly node?: NodeRef;
+  readonly chain?: ChainRef;
 }
