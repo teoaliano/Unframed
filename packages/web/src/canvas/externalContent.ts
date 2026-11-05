@@ -349,6 +349,7 @@ export const installExternalContent = (editor: Editor, ctx: ContentContext): voi
   editor.registerExternalContentHandler("file-replace", async ({ file, shapeId }) => {
     const shape = editor.getShape(shapeId);
     const kind = kindOf(file);
+    if (shape && kind === "audio" && shape.type === "audio") return replaceAudio(editor, ctx, [shape.id], file, "Could not add");
     if (!shape || (kind !== "image" && kind !== "video") || shape.type !== kind) return;
     try {
       fillShape(editor, shape.id, await uploadMediaFile(editor, kind, file));

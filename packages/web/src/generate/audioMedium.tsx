@@ -145,7 +145,7 @@ const AdvancedRow = ({ label, set, onReset, children }: { readonly label: string
   <div className="flex flex-col gap-1.5" data-advanced={label}>
     <div className="flex min-h-6 items-center justify-between gap-2">
       <span className="text-xs font-medium text-foreground">{label}</span>
-      <Button variant="ghost" size="xs" disabled={!set} onClick={onReset} aria-label={`Reset ${label}`}>
+      <Button variant="ghost" size="xs" data-set={set ? "true" : undefined} onClick={onReset} aria-label={`Reset ${label}`}>
         Reset
       </Button>
     </div>

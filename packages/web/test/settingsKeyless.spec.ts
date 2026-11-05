@@ -34,11 +34,11 @@ test("a keyless first load opens nothing by itself; the gear opens Settings on G
     await expect(dialog.getByTestId("models-need-key")).toHaveText("Connect OpenRouter to choose the models Generate starts on.");
     await expect(dialog.getByRole("combobox", { name: "Image", exact: true })).toHaveCount(0);
     await expect(dialog.getByRole("button", { name: "Save" })).toHaveCount(0);
-    await expect(dialog.getByLabel("API key")).toHaveCount(0);
+    await expect(dialog.getByLabel("API key", { exact: true })).toHaveCount(0);
 
     await dialog.getByRole("button", { name: "or paste a key instead" }).click();
     await expect(dialog.getByRole("heading", { name: "API key" })).toBeVisible();
-    const field = dialog.getByLabel("API key");
+    const field = dialog.getByLabel("API key", { exact: true });
     await expect(field).toHaveAttribute("type", "password");
     await expect(field).toHaveAttribute("placeholder", "sk-or-v1-…");
     await expect(field).toBeFocused();
@@ -105,7 +105,7 @@ test("pasting: a bad key shows the key error in the banner, a good one closes th
     await openApp(page, engine);
     const dialog = await openSettings(page);
     await dialog.getByRole("button", { name: "or paste a key instead" }).click();
-    const field = dialog.getByLabel("API key");
+    const field = dialog.getByLabel("API key", { exact: true });
     await field.fill("not-a-key");
     await dialog.getByRole("button", { name: "Save" }).click();
     await expect(dialog.getByRole("alert")).toHaveText('That does not look like an OpenRouter key. Keys start with "sk-or-".');

@@ -21,8 +21,8 @@ test("with a key: the title, the OpenRouter heading, the spend, cap and remainin
     await expect(dialog.getByTestId("key-status")).toHaveText("Connected to OpenRouter. $7.44 spent with this key, of a $10.00 cap, $2.56 still available.");
     await expect(dialog.getByTestId("key-expiry")).toHaveText("This key expires in 30 hours, and nothing renews it. Reconnect before then.");
     await expect(dialog.getByRole("button", { name: "Reconnect OpenRouter" })).toHaveCount(0);
-    await expect(dialog.getByLabel("API key")).toBeFocused();
-    await expect(dialog.getByLabel("API key")).toHaveValue("");
+    await expect(dialog.getByLabel("API key", { exact: true })).toBeFocused();
+    await expect(dialog.getByLabel("API key", { exact: true })).toHaveValue("");
     await expect(dialog.getByRole("button", { name: "Remove key" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Save" })).toBeVisible();
     expect(oauth.keyRequests[0]!.headers.authorization).toBe(`Bearer ${KEY}`);
@@ -46,12 +46,12 @@ test("a revoked key says so and offers Reconnect, which hides while a connection
     await showSection(dialog, "General");
     await dialog.getByLabel("Output folder").fill("./typed-but-not-saved");
     await showSection(dialog, "Generation");
-    await dialog.getByLabel("API key").fill("sk-or-v1-half-typed-key");
+    await dialog.getByLabel("API key", { exact: true }).fill("sk-or-v1-half-typed-key");
     await dialog.getByRole("button", { name: "Reconnect OpenRouter" }).click();
     await expect(dialog.getByTestId("settings-waiting")).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Reconnect OpenRouter" })).toHaveCount(0);
     // The key field and Save stay usable while a connection is pending.
-    await expect(dialog.getByLabel("API key")).toHaveValue("");
+    await expect(dialog.getByLabel("API key", { exact: true })).toHaveValue("");
     await expect(dialog.getByRole("button", { name: "Save" })).toBeEnabled();
 
     oauth.keyStatus(() => liveKey());
@@ -78,7 +78,7 @@ test("Remove key asks twice, typing cancels the confirm, and the removal says wh
     await expect(dialog.getByTestId("key-warning")).toHaveText(
       "This deletes the key from .env. You will need to paste it again, or make a new one at openrouter.ai/keys.",
     );
-    await dialog.getByLabel("API key").pressSequentially("s");
+    await dialog.getByLabel("API key", { exact: true }).pressSequentially("s");
     await expect(dialog.getByRole("button", { name: "Remove key" })).toBeVisible();
     await expect(dialog.getByTestId("key-warning")).toHaveCount(0);
     expect(await readFile(join(engine.dataDir, ".env"), "utf8")).toBe(`OPENROUTER_API_KEY=${KEY}\n`);
@@ -86,7 +86,7 @@ test("Remove key asks twice, typing cancels the confirm, and the removal says wh
     await dialog.getByRole("button", { name: "Remove key" }).click();
     await dialog.getByRole("button", { name: "Yes, remove it" }).click();
     await expect(dialog.getByTestId("key-warning")).toHaveText("Key removed. Generate is disabled until you add one.");
-    await expect(dialog.getByLabel("API key")).toHaveValue("");
+    await expect(dialog.getByLabel("API key", { exact: true })).toHaveValue("");
     await expect(dialog.getByRole("alert")).toHaveText(/^The key was removed, but renders already in progress could not be stopped: The job store at .+ is not valid JSON: .+/);
     await expect(dialog.getByRole("button", { name: "Connect OpenRouter" })).toBeVisible();
     await expect(dialog.locator("[data-slot='dialog-title']")).toHaveText("Settings");
@@ -317,7 +317,7 @@ test("the settings dialog is the kit's dialog at 760 px with a sidebar of sectio
     // One Close: the footer's, with no corner close beside it.
     await expect(dialog.getByRole("button", { name: "Close" })).toHaveCount(1);
 
-    await expectSlot(dialog.getByLabel("API key"), "input");
+    await expectSlot(dialog.getByLabel("API key", { exact: true }), "input");
     await expectSlot(dialog.getByRole("button", { name: "Remove key" }), "button");
     for (const label of ["Image", "Text", "Video"]) await expectSlot(dialog.getByRole("combobox", { name: label, exact: true }), "combobox-trigger");
     await showSection(dialog, "General");
@@ -377,7 +377,7 @@ test("unsaved changes mark their sections in the sidebar, Save shows on any sect
     await openApp(page, engine);
     const dialog = await openSettings(page);
     await expect(dialog.getByTestId("unsaved-mark")).toHaveCount(0);
-    await dialog.getByLabel("API key").fill("sk-or-v1-typed-but-not-saved-1234");
+    await dialog.getByLabel("API key", { exact: true }).fill("sk-or-v1-typed-but-not-saved-1234");
     await showSection(dialog, "General");
     await dialog.getByLabel("Output folder").fill("./elsewhere");
     await showSection(dialog, "Connections");
