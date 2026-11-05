@@ -271,7 +271,7 @@ export const TopBar = ({
                   title={tab.title ?? tab.name}
                   closable={tab.pinned !== true}
                   closeLabel={`Close ${tab.label ?? tab.name}`}
-                  className={tab.pinned === true ? "w-9 min-w-0 gap-0 px-0 [&_[data-slot=tabs-status]]:ms-0.5" : tab.icon === undefined ? undefined : "gap-1.5"}
+                  className={tab.pinned === true ? "w-9 min-w-0 gap-0 px-0 [&_[data-slot=tabs-status]]:ms-0.5" : tab.icon === undefined ? undefined : "max-w-56 gap-1.5"}
                   {...(tab.status === undefined ? {} : { status: tab.status })}
                 >
                   {tab.pinned === true ? (
@@ -281,7 +281,7 @@ export const TopBar = ({
                       {tab.icon}
                       <span className="min-w-0 truncate">{tab.label ?? tab.name}</span>
                       {tab.context !== undefined && (
-                        <span data-slot="top-bar-tab-context" className="min-w-0 max-w-16 shrink-[2] truncate text-muted-foreground">
+                        <span data-slot="top-bar-tab-context" className="min-w-0 max-w-20 shrink-[2] truncate text-muted-foreground before:me-1 before:content-['·']">
                           {tab.context}
                         </span>
                       )}

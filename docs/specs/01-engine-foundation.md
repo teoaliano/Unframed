@@ -340,6 +340,7 @@ Keys in use, each owned by the spec named:
 | `agent.stash.<project>` | 08 | that project's stashed prompts |
 | `agent.drafts.<project>` | 08 | that project's unsent composer drafts, by chat |
 | `agent.diffLayout` | 08 | `"stacked"` or `"split"` |
+| `parameters.panel` | 09 | `{ mode: "float" \| "dock", x?, y?, w?, h? }`: the canvas Parameters panel's mode and its floating place and size |
 
 A later spec that remembers something adds its key to this table.
 

@@ -83,6 +83,7 @@ export * from "./artifacts/burst.ts";
 export * from "./artifacts/framePatches.ts";
 export * from "./artifacts/live.ts";
 export * from "./artifacts/preview.ts";
+export * from "./artifacts/parametersPanel.ts";
 export type { LegacyEdge, LegacyGraph, LegacyNode } from "./legacy/graph.ts";
 export * from "./legacy/report.ts";
 export { rebuild, type Rebuilt } from "./legacy/reader.ts";

@@ -196,3 +196,16 @@
 :root .tl-container:has(~ [data-slot="docked-rail"][data-state="open"]) .tlui-navigation-panel {
   left: 380px;
 }
+
+/*
+ * The Parameters panel docked on the right (spec 09) covers the canvas's right 320 px, so the bottom toolbar centres in
+ * the canvas left uncovered. The drawer sits in the layer in front of the canvas, one step above the watermark's, so the
+ * watermark's layer rises over it while it is docked: the watermark stays visible over the drawer's corner.
+ */
+:root .tl-container:has([data-slot="parameters-dock"]) {
+  --tl-layer-watermark: 251;
+}
+
+:root .tl-container:has([data-slot="parameters-dock"]) .tlui-layout__bottom {
+  padding-right: 320px;
+}
