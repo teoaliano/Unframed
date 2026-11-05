@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clearAllChats, clearedNotice, continuableChat, inlineTabs, linkedArtifacts, nextActive, recapRows, revertSkipLine, tabLabel, tabTooltip, visibleChats, type ChatActivity, type RailChat } from "../../src/index.ts";
+import { clearAllChats, clearedNotice, continuableChat, inlineTabs, linkedArtifacts, nextActive, railShown, recapRows, revertSkipLine, tabLabel, tabTooltip, visibleChats, type ChatActivity, type RailChat } from "../../src/index.ts";
 
 describe("inline tabs", () => {
   const widths = [100, 80, 60, 120];
@@ -329,5 +329,27 @@ describe("linked artifacts", () => {
     expect(visibleChats(before, ["shape:p1"]).map((each) => each.id)).toEqual(["a"]);
     expect(visibleChats(after, ["shape:p1"])).toEqual([]);
     expect(continuableChat(after, ["shape:p1"])).toBeUndefined();
+  });
+});
+
+describe("the chat the rail shows", () => {
+  const chat = (id: string, tags: string[], createdAt: string): RailChat => ({ id, title: id, preview: "", tags, status: "idle", createdAt });
+  const chats = [chat("a", ["shape:one"], "2026-01-01"), chat("b", ["shape:two"], "2026-01-02"), chat("c", ["shape:one"], "2026-01-03")];
+  const shown = (fields: { selected?: string[]; chosen?: string | null; pinned?: string | null; drafting?: boolean }) =>
+    railShown({ chats, selected: fields.selected ?? [], chosen: fields.chosen ?? null, pinned: fields.pinned ?? null, drafting: fields.drafting ?? false });
+
+  it("shows the chosen chat when the selection's chats hold it, else the newest of them", () => {
+    expect(shown({ selected: ["shape:one"], chosen: "a" })).toEqual({ visible: [chats[2], chats[0]], active: "a" });
+    expect(shown({ selected: ["shape:one"], chosen: "b" }).active).toBe("c");
+    expect(shown({ chosen: "b" }).active).toBe("b");
+  });
+
+  it("shows a pinned chat even outside the selection's chats", () => {
+    expect(shown({ selected: ["shape:one"], pinned: "b" })).toEqual({ visible: [chats[1], chats[2], chats[0]], active: "b" });
+  });
+
+  it("shows no chat while a new one is being drafted, or when the selection has none", () => {
+    expect(shown({ selected: ["shape:one"], chosen: "a", drafting: true }).active).toBeNull();
+    expect(shown({ selected: ["shape:three"] }).active).toBeNull();
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addParameterInstruction,
+  applyParametersInstruction,
   artifactFileName,
   artifactLayoutSize,
   artifactReferences,
@@ -121,12 +122,26 @@ describe("placement beside the selection", () => {
   });
 });
 
+describe("the apply-parameters instruction", () => {
+  it("asks for the current values as the new defaults, one key per parameter path, the way DialKit copies them", () => {
+    expect(
+      applyParametersInstruction({ name: "Look", kind: "page", title: "Landing", values: { letters: { text: "AB", size: 1.2 }, accent: "#5fbf4a", wind: true } }),
+    ).toBe(
+      'Update the unframed.dials configuration for "Look" on the page "Landing" with these values:\n\n```json\n{\n  "letters.text": "AB",\n  "letters.size": 1.2,\n  "accent": "#5fbf4a",\n  "wind": true\n}\n```\n\nApply these values as the new defaults in the unframed.dials call. Keep each parameter\'s description.',
+    );
+  });
+
+  it("puts a title or a name with $ patterns in literally", () => {
+    expect(applyParametersInstruction({ name: "$&", kind: "motion", title: "$1", values: {} })).toContain('for "$&" on the motion "$1" with these values:\n\n```json\n{}\n```');
+  });
+});
+
 describe("the add-a-parameter instruction", () => {
   const base = { kind: "motion" as const, title: "Intro" };
 
   it("asks for a parameter, with the title and the kind, in the asset's words", () => {
     expect(addParameterInstruction({ ...base, wanted: "  the accent colour " })).toBe(
-      'Add the accent colour as a parameter on the motion "Intro". Expose them with a single `unframed.dials` call so they appear in the Parameters column, and make the callback actually apply each value. If any of them is part of the animation rather than just dressing, wire it into the timeline — rebuild the timeline from the values instead of setting an animated property alongside it — and express anything that changes over time as its start, its end and a duration. Keep every parameter it already has, and change nothing else about it.',
+      'Add the accent colour as a parameter on the motion "Intro". Expose them with a single `unframed.dials` call so they appear in the Parameters column, give each one a short description of what it changes in the call\'s fourth argument (an object from each parameter\'s path to its description), and make the callback actually apply each value. If any of them is part of the animation rather than just dressing, wire it into the timeline — rebuild the timeline from the values instead of setting an animated property alongside it — and express anything that changes over time as its start, its end and a duration. Keep every parameter it already has, and change nothing else about it.',
     );
   });
 

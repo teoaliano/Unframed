@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
-import type { FrameLocator, Page } from "@playwright/test";
-import { addParameterInstruction, BRIDGE_TAG } from "@unframed/domain";
+import type { FrameLocator, Locator, Page } from "@playwright/test";
+import { addParameterInstruction, applyParametersInstruction, BRIDGE_TAG } from "@unframed/domain";
 import { connectTab } from "../../engine/test/syncClient.ts";
 import { centre, openCanvas, roomRecords, settledRecord, shapeOnScreen } from "./canvas.ts";
 import { engineChats, expect, test, userTexts } from "./agent.ts";
@@ -36,6 +36,8 @@ test("an artifact that declares parameters shows them as DialKit controls; one t
   await expect(dials.getByLabel("Accent color value")).toHaveValue("#a78bfa");
   await expect(dials.getByText("Caption")).toBeVisible();
   await expect(dials.getByText("Scene")).toBeVisible();
+  await expect(editor(page).getByRole("textbox", { name: "Add a parameter" })).toHaveCount(0);
+  await editor(page).getByRole("button", { name: "Add a parameter" }).click();
   await expect(editor(page).getByRole("textbox", { name: "Add a parameter" })).toHaveAttribute("placeholder", "Add a parameter… (e.g. the background colour, the title size)");
   await expect(dials.locator(".dialkit-folder-title-root")).toBeVisible();
   await expect(editor(page).getByRole("textbox", { name: "Add a parameter" })).toBeVisible();
@@ -46,12 +48,15 @@ test("an artifact that declares parameters shows them as DialKit controls; one t
   const [title, box] = lefts.map((each) => Math.round(each!.x));
   expect(Math.abs(box! - title!)).toBeLessThanOrEqual(1);
   await page.keyboard.press("Escape");
+  await expect(editor(page).getByRole("button", { name: "Add a parameter" })).toBeFocused();
+  await editor(page).getByRole("button", { name: "Back to canvas" }).click();
 
   await page.mouse.click(640, 600);
   await openEditor(page, "shape:plain", "Plain");
   await expect(editorFrame(page).getByRole("heading", { name: "No parameters here" })).toBeVisible();
   await expect(editor(page).getByText("No parameters yet.")).toBeVisible();
   await expect(editor(page).getByTestId("artifact-dials")).toHaveCount(0);
+  await editor(page).getByRole("button", { name: "Add a parameter" }).click();
   await expect(editor(page).getByRole("textbox", { name: "Add a parameter" })).toHaveAttribute("placeholder", "Describe a parameter… (e.g. the accent colour and the intro speed)");
 });
 
@@ -323,6 +328,8 @@ test("a page with no parameters opens a panel that asks the agent for one, in th
   const panel = canvasPanel(page, "Plain");
   await expect(panel.getByText("No parameters yet.")).toBeVisible();
   const box = panel.getByRole("textbox", { name: "Add a parameter" });
+  await expect(box).toHaveCount(0);
+  await panel.getByRole("button", { name: "Add a parameter" }).click();
   await expect(box).toHaveAttribute("placeholder", "Describe a parameter… (e.g. the accent colour and the intro speed)");
   await expect(panel.getByText("The agent writes it")).toBeVisible();
   await expect(panel.getByRole("button", { name: "Add", exact: true })).toBeDisabled();
@@ -330,7 +337,7 @@ test("a page with no parameters opens a panel that asks the agent for one, in th
   await page.keyboard.press("Backspace");
   await expect(box).toHaveValue("the background colour");
   await panel.getByRole("button", { name: "Add", exact: true }).click();
-  await expect(box).toHaveValue("", { timeout: 10_000 });
+  await expect(box).toHaveCount(0, { timeout: 10_000 });
   const [chat] = await engineChats(agent);
   expect(chat?.tags).toEqual(["shape:plain"]);
   expect(await userTexts(agent, chat!.id)).toEqual([addParameterInstruction({ wanted: "the background colour", kind: "page", title: "Plain" })]);
@@ -425,4 +432,123 @@ test("a slider's label stays readable while it is hovered and while it is dragge
     await page.mouse.up();
     await page.mouse.move(0, 0);
   });
+});
+
+test("on the canvas panel, Apply sends the current values to the artifact's chat and opens the rail on it, and the folded box opens below the header", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await writeBridge(agent);
+  await filledArtifact(agent, { id: "shape:tuned", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Tuned", html: dialsPage({ size: [12, 8, 40], scene: { speed: [1, 0, 5] } }) });
+  await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible();
+  await clickShape(page, "shape:tuned");
+  await parametersToggle(page).click();
+  const panel = canvasPanel(page, "Tuned");
+  await expect(panel.getByTestId("artifact-dials").locator(".dialkit-folder-title-root")).toHaveText("Look");
+  await expect(panel.getByRole("textbox", { name: "Add a parameter" })).toHaveCount(0);
+  await panel.getByRole("button", { name: "Add a parameter" }).click();
+  await expect(panel.getByRole("textbox", { name: "Add a parameter" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(panel.getByRole("textbox", { name: "Add a parameter" })).toHaveCount(0);
+  await expect(panel).toBeVisible();
+
+  await panel.getByRole("button", { name: "Apply" }).click();
+  await expect(panel.getByRole("button", { name: "Sent" })).toBeVisible({ timeout: 10_000 });
+  const [chat] = await engineChats(agent);
+  expect(chat?.tags).toEqual(["shape:tuned"]);
+  expect(await userTexts(agent, chat!.id)).toEqual([applyParametersInstruction({ name: "Look", kind: "page", title: "Tuned", values: { size: 12, scene: { speed: 1 } } })]);
+  await expect(page.getByRole("complementary", { name: "Agent" })).toBeVisible();
+});
+
+const describedPage = (config: Record<string, unknown>, descriptions: Record<string, string> | undefined) => `<!doctype html><html><head><style>body{margin:0;font:14px sans-serif}</style>${BRIDGE_TAG}</head><body><pre id="values">none</pre>
+<script>
+unframed.dials("Look", ${JSON.stringify(config)}, function (v) {
+  document.getElementById("values").textContent = JSON.stringify(v);
+}${descriptions === undefined ? "" : `, ${JSON.stringify(descriptions)}`});
+</script></body></html>`;
+
+test("a parameter's description shows in a kit tooltip beside the panel, on the canvas and in the editor; one without a description shows none", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await writeBridge(agent);
+  const config = { size: [12, 8, 40], scene: { speed: [1, 0, 5] }, caption: "Hello" };
+  const descriptions = { size: "The title's size in pixels", scene: "The opening scene", "scene.speed": "How fast the intro plays" };
+  await filledArtifact(agent, { id: "shape:tuned", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Tuned", html: describedPage(config, descriptions) });
+  await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible();
+  await clickShape(page, "shape:tuned");
+  await parametersToggle(page).click();
+  const panel = canvasPanel(page, "Tuned");
+  const tip = page.getByTestId("parameter-description");
+  const hoverLabel = async (scope: Locator, text: string) => {
+    const box = (await scope.getByTestId("artifact-dials").getByText(text, { exact: true }).boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  };
+  await expect(panel.getByRole("slider", { name: "Size" })).toHaveAttribute("aria-description", "The title's size in pixels");
+  await hoverLabel(panel, "Size");
+  await expect(tip).toHaveText("The title's size in pixels");
+  await expect(tip).toHaveAttribute("data-slot", "tooltip-popup");
+  const [label, popup, card] = [(await panel.getByText("Size", { exact: true }).boundingBox())!, (await tip.boundingBox())!, (await panel.boundingBox())!];
+  expect(popup.x + popup.width <= card.x + 1 || popup.x >= card.x + card.width - 1, "the tooltip sits beside the panel, never over it").toBe(true);
+  expect(Math.abs(popup.y + popup.height / 2 - (label.y + label.height / 2))).toBeLessThanOrEqual(4);
+  await hoverLabel(panel, "Speed");
+  await expect(tip).toHaveText("How fast the intro plays");
+  await hoverLabel(panel, "Scene");
+  await expect(tip).toHaveText("The opening scene");
+  await hoverLabel(panel, "Caption");
+  await page.waitForTimeout(700);
+  await expect(tip).toHaveCount(0);
+  await page.mouse.move(1200, 700);
+  await expect(tip).toHaveCount(0);
+
+  await page.keyboard.press("Escape");
+  await openEditor(page, "shape:tuned", "Tuned");
+  await hoverLabel(editor(page), "Speed");
+  await expect(tip).toHaveText("How fast the intro plays");
+});
+
+test("every kind of control and a folder take their description from the descriptions map", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await writeBridge(agent);
+  const config = { count: 3, on: true, accent: "#a78bfa", caption: "Hello", size: [12, 8, 40], mode: ["stack", "grid"], scene: { speed: [1, 0, 5] } };
+  const descriptions = { count: "A number", on: "A switch", accent: "A colour", caption: "Some text", size: "A range", mode: "A list", scene: "A folder", "scene.speed": "Inside the folder" };
+  await filledArtifact(agent, { id: "shape:tuned", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Tuned", html: describedPage(config, descriptions) });
+  await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible();
+  await openEditor(page, "shape:tuned", "Tuned");
+  const dials = editor(page).getByTestId("artifact-dials");
+  await expect(dials.locator(".dialkit-folder-title-root")).toHaveText("Look");
+  await expect(dials).toHaveAttribute("data-described", String(Object.keys(descriptions).length));
+  await expect(dials.locator("[aria-description]")).toHaveCount(Object.keys(descriptions).length);
+});
+
+test("an older artifact whose folder holds parameters named value and description keeps it a folder with its saved values", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await writeBridge(agent);
+  await filledArtifact(agent, {
+    id: "shape:tuned",
+    kind: "page",
+    ref: "150",
+    at: { x: -520, y: -40 },
+    size: { w: 300, h: 200 },
+    title: "Tuned",
+    html: describedPage({ box: { value: [1, 0, 5], description: "Hello" } }, undefined),
+    dials: { box: { value: 4, description: "Saved" } },
+  });
+  await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible();
+  await openEditor(page, "shape:tuned", "Tuned");
+  const dials = editor(page).getByTestId("artifact-dials");
+  await expect(dials.getByText("Box", { exact: true })).toBeVisible();
+  await expect(dials.getByRole("slider", { name: "Value" })).toHaveAttribute("aria-valuenow", "4");
+  await expect(dials.locator("[aria-description]")).toHaveCount(0);
+  await expect.poll(() => shown(editorFrame(page))).toEqual({ box: { value: 4, description: "Saved" } });
+});
+
+test("the header row shows the Add a parameter button's focus ring whole", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await writeBridge(agent);
+  await filledArtifact(agent, { id: "shape:tuned", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Tuned", html: dialsPage({ size: [12, 8, 40] }) });
+  await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible();
+  await clickShape(page, "shape:tuned");
+  await parametersToggle(page).click();
+  const panel = canvasPanel(page, "Tuned");
+  await panel.getByRole("button", { name: "Add a parameter" }).click();
+  await page.keyboard.press("Escape");
+  await expect(panel.getByRole("button", { name: "Add a parameter" })).toBeFocused();
+  expect(await styleOf(panel.locator(".dialkit-panel-toolbar"), "overflow")).toBe("visible");
 });
