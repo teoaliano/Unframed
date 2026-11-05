@@ -61,7 +61,7 @@ test("with only an ElevenLabs key to come: the block sits under the OpenRouter i
     await openCanvas(page, audio.engine);
     let dialog = await openSettings(page);
     await expect(dialog.getByRole("button", { name: "Connect OpenRouter" })).toBeVisible();
-    await expect(block(dialog).getByTestId("elevenlabs-only-audio")).toHaveText("Only want audio? Paste an ElevenLabs key here. Images, video and text still need OpenRouter.");
+    await expect(block(dialog).getByTestId("elevenlabs-only-audio")).toHaveText("Only want audio? Paste an ElevenLabs key here. Images and text need OpenRouter or the Vercel AI Gateway, and video needs OpenRouter.");
     await expect(dialog.getByRole("button", { name: "Save" })).toHaveCount(0);
     await dialog.getByLabel("ElevenLabs API key").fill(ELEVENLABS_KEY);
     await dialog.getByRole("button", { name: "Save" }).click();

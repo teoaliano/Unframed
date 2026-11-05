@@ -63,7 +63,7 @@ export const VideoStatus = ({ status, failure, values, source, entry, setProps }
           {line}
         </StatusLine>
       ))}
-      {status.needsKey === true && <NoKeyLine />}
+      {status.needsKey === true && <NoKeyLine message={status.keyMessage} />}
       {failure !== undefined && <StatusLine kind="error">{failure}</StatusLine>}
     </StatusBand>
   );

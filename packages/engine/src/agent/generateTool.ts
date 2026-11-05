@@ -1,8 +1,10 @@
+import type { GenerationProvider } from "@unframed/contracts";
+import { GENERATION_PROVIDER_IDS, isGenerationProvider, VERCEL_BAD_PROVIDER } from "@unframed/domain";
 import type { ToolAnswer, McpBinding, McpTool } from "./mcp.ts";
 
 /** The description of `generate`, for an outside agent (spec 14). */
 export const GENERATE_DESCRIPTION =
-  "Start one paid generation from the shapes you name: an image (one batch of up to 10 outputs), a video (one clip) or a text answer. The person pays OpenRouter for it. Call it with dryRun true first to see the final prompt and the estimate, then again to run. A selection that needs a sketch or a marked picture, or a reference video on this computer, cannot be sent from here: the answer says so, and the person makes that one in the app. The answer gives the run and its placeholders at once; the result lands later, and canvas_read shows its cost when it has one.";
+  "Start one paid generation from the shapes you name: an image (one batch of up to 10 outputs), a video (one clip) or a text answer. The person pays OpenRouter or the Vercel AI Gateway for it. Call it with dryRun true first to see the final prompt and the estimate, then again to run. A selection that needs a sketch or a marked picture, or a reference video on this computer, cannot be sent from here: the answer says so, and the person makes that one in the app. The answer gives the run and its placeholders at once; the result lands later, and canvas_read shows its cost when it has one.";
 
 /** The `generate` tool, registered for an outside connection (spec 14). Its handler is the runtime's. */
 export const generateTool = (run: (binding: McpBinding, args: Record<string, unknown>) => Promise<ToolAnswer>): McpTool => ({
@@ -22,6 +24,7 @@ export const generateTool = (run: (binding: McpBinding, args: Record<string, unk
       runs: { type: "integer", minimum: 1, maximum: 10, description: "Outputs of one image batch. Text and video run once." },
       dryRun: { type: "boolean", description: "Only show the final prompt, the references and the estimate. Nothing is sent or spent." },
       model: { type: "string", description: "The model to use. The default when omitted." },
+      provider: { type: "string", enum: [...GENERATION_PROVIDER_IDS], description: 'provider: "openrouter" or "vercel" for image and text; the one with a key when omitted. Video runs through OpenRouter.' },
     },
     required: ["medium", "sources"],
     additionalProperties: false,
@@ -30,7 +33,7 @@ export const generateTool = (run: (binding: McpBinding, args: Record<string, unk
 });
 
 export type GenerateArguments =
-  | { ok: true; medium: "image" | "video" | "text"; sources: string[]; instruction: string; params: Record<string, string | number | boolean>; runs: number; dryRun: boolean; model: string | undefined }
+  | { ok: true; medium: "image" | "video" | "text"; sources: string[]; instruction: string; params: Record<string, string | number | boolean>; runs: number; dryRun: boolean; model: string | undefined; provider: GenerationProvider | undefined }
   | { ok: false; message: string };
 
 const PARAM_VALUE = (value: unknown): value is string | number | boolean => typeof value === "string" || typeof value === "number" || typeof value === "boolean";
@@ -45,6 +48,7 @@ export const generateArguments = (args: Record<string, unknown>): GenerateArgume
   if (!Number.isInteger(runs) || (runs as number) < 1 || (runs as number) > 10) return { ok: false, message: "runs has to be a whole number from 1 to 10." };
   if (args.dryRun !== undefined && typeof args.dryRun !== "boolean") return { ok: false, message: "dryRun has to be true or false." };
   if (args.model !== undefined && typeof args.model !== "string") return { ok: false, message: "model has to be the name of a model." };
+  if (args.provider !== undefined && !isGenerationProvider(args.provider)) return { ok: false, message: VERCEL_BAD_PROVIDER };
   const params = args.params ?? {};
   if (typeof params !== "object" || params === null || Array.isArray(params) || !Object.values(params).every(PARAM_VALUE)) {
     return { ok: false, message: "params has to be an object whose values are text, numbers or true/false." };
@@ -58,5 +62,6 @@ export const generateArguments = (args: Record<string, unknown>): GenerateArgume
     runs: runs as number,
     dryRun: args.dryRun === true,
     model: args.model as string | undefined,
+    provider: isGenerationProvider(args.provider) ? args.provider : undefined,
   };
 };

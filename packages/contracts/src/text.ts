@@ -6,7 +6,7 @@ import type { ChainRef, NodeRef } from "./generation.ts";
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import { UnframedError } from "./errors.ts";
-import { PageBox, RecipeAction, RecipeRef, RunChat, RunStarted, type ResultRecipe } from "./generation.ts";
+import { GenerationProvider, PageBox, RecipeAction, RecipeRef, RunChat, RunStarted, type CostBasis, type ResultRecipe } from "./generation.ts";
 
 export const TextRunRequest = Schema.Struct({
   project: Schema.String,
@@ -24,6 +24,7 @@ export const TextRunRequest = Schema.Struct({
   of: Schema.optionalKey(Schema.Struct({ shapeId: Schema.String, action: RecipeAction })),
   /** The chat and turn that started the run, for a run an agent started (spec 14). */
   chat: Schema.optionalKey(RunChat),
+  provider: Schema.optionalKey(GenerationProvider),
 });
 export type TextRunRequest = typeof TextRunRequest.Type;
 
@@ -36,6 +37,7 @@ export const TextCompleteRequest = Schema.Struct({
   references: Schema.optionalKey(Schema.Array(RecipeRef)),
   /** The batch the call is part of, for its sidecar. */
   batchId: Schema.optionalKey(Schema.String),
+  provider: Schema.optionalKey(GenerationProvider),
 });
 export type TextCompleteRequest = typeof TextCompleteRequest.Type;
 
@@ -75,4 +77,6 @@ export interface TextSidecar {
   readonly recipe?: ResultRecipe;
   readonly node?: NodeRef;
   readonly chain?: ChainRef;
+  readonly provider?: GenerationProvider;
+  readonly costBasis?: CostBasis;
 }

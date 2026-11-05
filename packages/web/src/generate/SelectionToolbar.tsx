@@ -207,7 +207,7 @@ const ResultBar = ({ state, onGenerate, agent }: { state: Extract<ToolbarState, 
         return audioLine({ model: result.model, durationMs: seconds === undefined ? undefined : seconds * 1000, credits: result.credits });
       }
       const asset = assetOf(editor, shape)?.props as { w?: number; h?: number } | undefined;
-      return resultLine({ model: result.model, width: asset?.w, height: asset?.h, cost: result.cost });
+      return resultLine({ model: result.model, width: asset?.w, height: asset?.h, cost: result.cost, provider: result.provider, listPrice: result.listPrice });
     },
     [editor, shapeId],
   );
@@ -273,7 +273,7 @@ const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "rec
     if (busy || !recipe) return;
     setBusy(true);
     try {
-      await runGroupRecipe({ editor, engine, project, groupId, recipe, hasKey: settings?.hasKey ?? true, hasElevenLabsKey: settings?.hasElevenLabsKey ?? true });
+      await runGroupRecipe({ editor, engine, project, groupId, recipe, keys: settings ?? { hasKey: true, hasVercelKey: false }, hasElevenLabsKey: settings?.hasElevenLabsKey ?? true });
     } catch (error) {
       if (error instanceof NoKeyError) showErrorAction(error.message, "Open Settings", () => openSettings("generation"));
       else showError(messageOf(error));

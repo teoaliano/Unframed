@@ -412,6 +412,7 @@ type ResultRecipe = {               // what a result's sidecar holds: everything
   of?: { sidecar: string; action: 'regenerate' | 'vary' | 'recipe' }  // 'recipe' now; files written before may hold the other two
   approximate?: true                // spec 11: imported from the old app, which never recorded references or the selection prompt
   sentPrompt?: string               // with approximate: the full prompt the old app sent
+  provider?: 'openrouter' | 'vercel' // spec 22: written only when not 'openrouter'; absent is OpenRouter
 }
 type RecipeRef = { kind: 'image' | 'video'; file: string; original?: string }
                | { kind: 'video'; url: string }              // https only
@@ -422,6 +423,7 @@ type GroupRecipe = {                // a group's standing settings (spec 06), st
   model: string
   params: Record<string, string | number | boolean>
   runs: number | 'free'             // 1 to 10, or Free (spec 05); 1 for video and text
+  provider?: 'openrouter' | 'vercel' // spec 22, as on ResultRecipe
 }
 ```
 
@@ -431,7 +433,7 @@ An **approximate** recipe (spec 11) has an empty `selectionPrompt` and `referenc
 
 Copies keep the result meta (the sidecar is in the same project). Cross-project paste copies the sidecar and every reference file its recipe names along with the image (spec 02 copies the image file; this spec adds the rest, through `recipe.copy`). A result whose recipe cannot come along pastes as an ordinary image, with the toast `Could not copy the result's recipe: <message>`.
 
-The result's line, shown under a selected result: `<model part> · <W>×<H> · $<cost>` with any missing part omitted. `W×H` are the file's pixel dimensions.
+The result's line, shown under a selected result: `<model part> · <W>×<H> · $<cost>` with any missing part omitted. `W×H` are the file's pixel dimensions. A result made through the Vercel AI Gateway (spec 22) ends `· Vercel`, and its cost reads `≈$<cost>` when it is a list price (`listPrice` on the result meta), for example `flux-2-pro · 1024×1024 · ≈$0.0300 · Vercel`. `ResultMeta` gains `provider?` and `listPrice?: true`.
 
 Actions:
 
@@ -466,7 +468,7 @@ type ImageSidecar = {
 
 `original` names the canvas image a composite was rendered from. A sketch has no `original`.
 
-Last-used values: the preferences `lastUsed.image`, `lastUsed.video` and `lastUsed.text` in spec 01's preferences store, each `{ model?: string; props: Record<string, string | number | boolean> }` (specs 04 and 05 add fields). A missing or unreadable preference means "none".
+Last-used values: the preferences `lastUsed.image`, `lastUsed.video` and `lastUsed.text` in spec 01's preferences store, each `{ provider?, model?: string; models?: { openrouter?: string; vercel?: string }; props: Record<string, string | number | boolean> }` (specs 04 and 05 add fields). `provider` (spec 22) is the provider of the last send, written only when it is not `openrouter`; `model` is that provider's pick; `models` keeps the other provider's pick. An OpenRouter-only person's value stays `{ model?, props }`. A missing or unreadable preference means "none".
 
 ## Testing Decisions
 

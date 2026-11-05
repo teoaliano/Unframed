@@ -90,7 +90,7 @@ test("Remove key asks twice, typing cancels the confirm, and the removal says wh
     await expect(dialog.getByRole("alert")).toHaveText(/^The key was removed, but renders already in progress could not be stopped: The job store at .+ is not valid JSON: .+/);
     await expect(dialog.getByRole("button", { name: "Connect OpenRouter" })).toBeVisible();
     await expect(dialog.locator("[data-slot='dialog-title']")).toHaveText("Settings");
-    await expect(dialog.getByTestId("models-need-key")).toHaveText("Connect OpenRouter to choose the models Generate starts on.");
+    await expect(dialog.getByTestId("models-need-key")).toHaveText("Connect OpenRouter or paste a Vercel AI Gateway key to choose the models Generate starts on.");
     expect(await readFile(join(engine.dataDir, ".env"), "utf8")).toBe("");
     expect((await (await engine.rpc()).call("settings.get")).hasKey).toBe(false);
   } finally {

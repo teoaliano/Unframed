@@ -31,6 +31,7 @@ export interface Landed {
   readonly file: string;
   readonly sidecar: string;
   readonly cost: number | null;
+  readonly listPrice?: true;
   readonly width: number | undefined;
   readonly height: number | undefined;
   readonly mime: string;
@@ -100,7 +101,7 @@ export const fillChange = (shape: Shape, landed: Landed): CanvasChange => {
   const filled = {
     ...shape,
     props: { ...shape.props, assetId, h: height, crop: null },
-    meta: { ...shape.meta, unframed: { ...unframed, ...(result ? { result: { ...result, sidecar: landed.sidecar, cost: landed.cost } } : {}) } },
+    meta: { ...shape.meta, unframed: { ...unframed, ...(result ? { result: { ...result, sidecar: landed.sidecar, cost: landed.cost, ...(landed.listPrice ? { listPrice: true } : {}) } } : {}) } },
   } as unknown as TLRecord;
   return { put: [asset, filled], remove: [] };
 };
@@ -114,6 +115,7 @@ export interface LandedText {
   readonly text: string;
   readonly sidecar: string | null;
   readonly cost: number | null;
+  readonly listPrice?: true;
 }
 
 /** A text result's placeholder: an empty prompt (spec 02's text shape) carrying its marker and unfilled result meta. */
@@ -147,7 +149,7 @@ const textFillChange = (shape: Shape, landed: LandedText): CanvasChange => {
   const filled = {
     ...shape,
     props: { ...shape.props, richText: toRichText(landed.text) },
-    meta: { ...shape.meta, unframed: { ...unframed, ...(result ? { result: { ...result, sidecar: landed.sidecar, cost: landed.cost } } : {}) } },
+    meta: { ...shape.meta, unframed: { ...unframed, ...(result ? { result: { ...result, sidecar: landed.sidecar, cost: landed.cost, ...(landed.listPrice ? { listPrice: true } : {}) } } : {}) } },
   } as unknown as TLRecord;
   return { put: [filled], remove: [] };
 };
@@ -269,4 +271,13 @@ export const clearChange = (shape: Shape): CanvasChange => {
   if (shape.type === "audio" ? shape.props.file === "" || shape.props.file === undefined : shape.props.assetId === null || shape.props.assetId === undefined) return { put: [], remove: [shape.id] };
   const { run: _run, ...unframed } = unframedMetaOf(shape);
   return { put: [{ ...shape, meta: { ...shape.meta, unframed } } as unknown as TLRecord], remove: [] };
+};
+
+export const costChange = (shape: Shape, sidecar: string, cost: number | null, listPrice: boolean): CanvasChange | undefined => {
+  const unframed = unframedMetaOf(shape);
+  const result = resultMetaOf(shape);
+  if (!result || result.sidecar !== sidecar) return undefined;
+  const { listPrice: _old, ...rest } = result;
+  const next = { ...rest, cost, ...(listPrice ? { listPrice: true as const } : {}) };
+  return { put: [{ ...shape, meta: { ...shape.meta, unframed: { ...unframed, result: next } } } as unknown as TLRecord], remove: [] };
 };

@@ -18,7 +18,8 @@ import {
   type TextRunRequest,
   type AudioRunRequest,
 } from "@unframed/contracts";
-import { imageDimensions, NO_KEY_MESSAGE, nextRef, placeResults, projectSlug, sidecarFileName, type Box } from "@unframed/domain";
+import { imageDimensions, nextRef, placeResults, projectSlug, providerField, providerOf, sidecarFileName, type Box } from "@unframed/domain";
+import { runProviders, type Priced } from "./providers.ts";
 import type { TLRecord } from "@tldraw/tlschema";
 import { getIndicesAbove, type IndexKey } from "@tldraw/utils";
 import * as Context from "effect/Context";
@@ -29,12 +30,12 @@ import * as Stream from "effect/Stream";
 import { CanvasRooms, type ChangeOrigin, type RoomAccess } from "../canvas/rooms.ts";
 import { errorText, logError, logInfo } from "../log.ts";
 import { MediaStore } from "../media/mediaStore.ts";
-import { generateImage, imageRequestBody } from "../openRouter/images.ts";
 import type { ReferencePart } from "../openRouter/text.ts";
 import { Config } from "../services.ts";
 import { SettingsStore } from "../settingsStore.ts";
 import {
   clearChange,
+  costChange,
   fillFor,
   imagePlaceholder,
   isShape,
@@ -52,7 +53,7 @@ import { makeAudioRuns } from "./audioRuns.ts";
 import { extensionFor, mimeForFile, referenceName, resultBase, writeLoneSidecar, writeResultFile, writeSidecar } from "./resultFiles.ts";
 import { shapePageBoxes } from "./shapeBounds.ts";
 import { applyNodeChange, dropVersion, fillVersion, finishRun, nodeSidecarFields, startVersions, type NodeTarget } from "../nodes/versions.ts";
-import { readResultSidecar } from "./sidecars.ts";
+import { patchSidecarCost, readResultSidecar } from "./sidecars.ts";
 
 export const EMPTY_PROMPT_MESSAGE = "Prompt is empty. Select a prompt, or type an instruction.";
 export const OUTPUT_COUNT_MESSAGE = "A run makes between 1 and 10 images.";
@@ -168,7 +169,8 @@ export const runsLayer = Layer.effect(
 
     const validate = (request: ImageRunRequest, folder: string) =>
       Effect.gen(function* () {
-        if ((yield* settings.read).key === "") return yield* unframedError("unavailable", NO_KEY_MESSAGE);
+        const provider = providers[providerOf(request.provider)];
+        if (provider.key(yield* settings.read) === "") return yield* unframedError("unavailable", provider.noKeyMessage);
         if (request.outputs.length < 1 || request.outputs.length > MAX_OUTPUTS) return yield* unframedError("bad_request", OUTPUT_COUNT_MESSAGE);
         if (request.outputs.every((output) => output.prompt.trim() === "")) return yield* unframedError("bad_request", EMPTY_PROMPT_MESSAGE);
         yield* validateReferences(request.outputs.flatMap((output) => output.references), folder);
@@ -213,10 +215,24 @@ export const runsLayer = Layer.effect(
       };
     };
 
+    const patchCost = async (projectName: string, folder: string, shapeId: string, sidecar: string, priced: Priced, runId: string) => {
+      await patchSidecarCost(folder, sidecar, priced).catch((error: unknown) => logError(`${runId}: could not record the cost in ${sidecar}: ${errorText(error)}`));
+      const change = await runPromise(
+        Effect.map(rooms.read(projectName), (now) => {
+          const shape = now.find((record) => record.id === shapeId);
+          return isShape(shape) ? costChange(shape, sidecar, priced.cost, priced.costBasis === "list-price") : undefined;
+        }),
+      ).catch(() => undefined);
+      if (change) await runPromise(rooms.apply(projectName, change, runOrigin(runId))).catch((error: unknown) => logError(`${runId}: could not record the cost on the canvas: ${errorText(error)}`));
+    };
+
+    const providers = runProviders(config);
+
     const texts = makeTextRuns({
       settings,
       rooms,
-      openRouterOrigin: config.openRouterOrigin,
+      providers,
+      patchCost,
       projectFolder,
       validateReferences,
       inline,
@@ -245,7 +261,8 @@ export const runsLayer = Layer.effect(
         const project = projectSlug(request.project);
         yield* validate(request, folder);
         const current = yield* settings.read;
-        const model = request.model ?? current.imageModel;
+        const provider = providers[providerOf(request.provider)];
+        const model = request.model ?? provider.defaultModel(current, "image");
         const startedAt = Date.now();
         const runId = `run-${startedAt}-${randomUUID().slice(0, 8)}`;
         const batchId = request.batchId ?? `b-${startedAt}`;
@@ -293,6 +310,7 @@ export const runsLayer = Layer.effect(
               cost: null,
               sources: [...request.sources],
               ...(request.batchExtraCost === undefined ? {} : { batchExtraCost: request.batchExtraCost }),
+              ...providerField(provider.id),
             },
           });
         });
@@ -361,10 +379,12 @@ export const runsLayer = Layer.effect(
               references: [...references],
               sources: [...request.sources],
               ...(of === undefined ? {} : { of }),
+              ...providerField(provider.id),
               ...nodeSidecarFields(into, versionIds[index]),
             },
             ...(output.free === undefined ? {} : { free: output.free }),
             ...(request.chat === undefined ? {} : { chat: request.chat }),
+            ...providerField(provider.id),
             ...nodeSidecarFields(into, versionIds[index]),
           };
           await writeSidecar(folder, base, sidecar).catch((error: unknown) => logError(`could not write the sidecar of ${file}: ${errorText(error)}`));
@@ -386,11 +406,12 @@ export const runsLayer = Layer.effect(
           const runIndex = index + 1;
           const versionId = versionIds[index];
           const shapeId = into !== undefined ? into.shapeId : placeholders[index]!.id;
-          const body = imageRequestBody(model, output.prompt, request.params);
           let outcome: RunOutcome<Landed>;
+          let later: (() => Promise<Priced>) | undefined;
           try {
-            if (output.references.length > 0) body.input_references = await inline(folder, output.references);
-            const answer = await generateImage(config.openRouterOrigin, current.key, body);
+            const references = output.references.length > 0 ? await inline(folder, output.references) : [];
+            const answer = await provider.image(provider.key(current), { model, prompt: output.prompt, params: request.params, references });
+            later = answer.ok ? answer.later : undefined;
             outcome = answer.ok ? { ok: true, landed: await land(index, answer.bytes, answer.mediaType, answer.cost) } : { ok: false, error: answer.error };
           } catch (error) {
             outcome = { ok: false, error: errorText(error) };
@@ -405,8 +426,14 @@ export const runsLayer = Layer.effect(
               runId,
             );
             if (outcome.ok) {
-              await publish(project, { type: "output", runId, runIndex, ok: true, shapeId, versionId, file: outcome.landed.file, cost: outcome.landed.cost });
-              return { ok: true, orphaned: !filled, cost: outcome.landed.cost };
+              let cost = outcome.landed.cost;
+              if (later) {
+                const priced = await later().catch((): Priced => ({ cost: null }));
+                await patchSidecarCost(folder, outcome.landed.sidecar, priced).catch((error: unknown) => logError(`${runId}: could not record the cost in ${outcome.landed.sidecar}: ${errorText(error)}`));
+                cost = priced.cost;
+              }
+              await publish(project, { type: "output", runId, runIndex, ok: true, shapeId, versionId, file: outcome.landed.file, cost });
+              return { ok: true, orphaned: !filled, cost };
             }
             logError(`${runId}: output ${runIndex} failed: ${outcome.error}`);
             await publish(project, { type: "output", runId, runIndex, ok: false, error: outcome.error, shapeId, versionId });
@@ -427,7 +454,14 @@ export const runsLayer = Layer.effect(
           if (outcome.ok) {
             const orphaned = change === undefined;
             if (orphaned) logInfo(`${runId}: output ${runIndex} landed after its placeholder was deleted → ${join(folder, outcome.landed.file)}`);
-            await publish(project, { type: "output", runId, runIndex, ok: true, shapeId, file: outcome.landed.file, cost: outcome.landed.cost });
+            let landed = outcome.landed;
+            if (later) {
+              const priced = await later().catch((): Priced => ({ cost: null }));
+              landed = { ...landed, cost: priced.cost, ...(priced.costBasis === "list-price" ? { listPrice: true as const } : {}) };
+              run.outputs.set(runIndex, { ok: true, landed });
+              await patchCost(request.project, folder, shapeId, landed.sidecar, priced, runId);
+            }
+            await publish(project, { type: "output", runId, runIndex, ok: true, shapeId, file: landed.file, cost: landed.cost });
             return { ok: true, orphaned };
           }
           logError(`${runId}: output ${runIndex} failed: ${outcome.error}`);

@@ -8,6 +8,9 @@ import * as Schema from "effect/Schema";
 export const Medium = Schema.Literals(["image", "video", "text", "audio"]);
 export type Medium = typeof Medium.Type;
 
+export const GenerationProvider = Schema.Literals(["openrouter", "vercel"]);
+export type GenerationProvider = typeof GenerationProvider.Type;
+
 /** What a run sent, exactly: a project file (a composite names the canvas image it came from), or an https link. */
 export const RecipeRef = Schema.Union([
   Schema.Struct({ kind: Schema.Literals(["image", "video"]), file: Schema.String, original: Schema.optionalKey(Schema.String) }),
@@ -41,6 +44,7 @@ export const ResultRecipe = Schema.Struct({
   sentPrompt: Schema.optionalKey(Schema.String),
   node: Schema.optionalKey(Schema.Struct({ shapeId: Schema.String, versionId: Schema.String })),
   chain: Schema.optionalKey(Schema.Struct({ chainId: Schema.String, step: Schema.Number })),
+  provider: Schema.optionalKey(GenerationProvider),
 });
 export type ResultRecipe = typeof ResultRecipe.Type;
 
@@ -50,6 +54,7 @@ export const GroupRecipe = Schema.Struct({
   model: Schema.String,
   params: Schema.Record(Schema.String, ParamValue),
   runs: Schema.Union([Schema.Number, Schema.Literal("free")]),
+  provider: Schema.optionalKey(GenerationProvider),
 });
 export type GroupRecipe = typeof GroupRecipe.Type;
 
@@ -92,6 +97,8 @@ export const ResultMeta = Schema.Struct({
   /** Spec 11 only: an imported result's approximate recipe. */
   recipe: Schema.optionalKey(ResultRecipe),
   credits: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+  provider: Schema.optionalKey(GenerationProvider),
+  listPrice: Schema.optionalKey(Schema.Literal(true)),
 });
 export type ResultMeta = typeof ResultMeta.Type;
 
@@ -140,7 +147,7 @@ export const ModelEntry = Schema.Struct({
 });
 export type ModelEntry = typeof ModelEntry.Type;
 
-export const ModelsListRequest = Schema.Struct({ medium: Schema.Literals(["image", "video", "text", "audio"]) });
+export const ModelsListRequest = Schema.Struct({ medium: Schema.Literals(["image", "video", "text", "audio"]), provider: Schema.optionalKey(GenerationProvider) });
 
 export const ModelsListAnswer = Schema.Struct({ models: Schema.Array(ModelEntry), default: Schema.String, problem: Schema.optionalKey(Schema.String) });
 export type ModelsListAnswer = typeof ModelsListAnswer.Type;
@@ -203,6 +210,7 @@ export const ImageRunRequest = Schema.Struct({
   /** Spec 05: a Free batch's repair call cost, set on every member's result meta. */
   batchExtraCost: Schema.optionalKey(Schema.Number),
   chat: Schema.optionalKey(RunChat),
+  provider: Schema.optionalKey(GenerationProvider),
 });
 export type ImageRunRequest = typeof ImageRunRequest.Type;
 
@@ -274,6 +282,8 @@ export interface ImageSidecar {
   readonly recipe: ResultRecipe;
   /** Spec 05: a Free output's picks. */
   readonly free?: FreePicks;
+  readonly provider?: GenerationProvider;
+  readonly costBasis?: CostBasis;
   readonly node?: NodeRef;
   readonly chain?: ChainRef;
 }
@@ -287,3 +297,5 @@ export interface ChainRef {
   readonly chainId: string;
   readonly step: number;
 }
+
+export type CostBasis = "measured" | "list-price";

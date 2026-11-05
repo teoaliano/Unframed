@@ -152,7 +152,7 @@ export const NodeEditor = ({ shape }: { readonly shape: NodeShape }) => {
   const project = useCanvasProject();
   const props = shape.props;
   const definition = definitionOf(props.medium);
-  const catalogue = useCatalogue(engine, nodeCatalogueOf(props.medium));
+  const catalogue = useCatalogue(engine, nodeCatalogueOf(props.medium), undefined);
   const model = props.model !== "" ? props.model : catalogue?.default;
   const entry = catalogue?.models.find((each) => each.id === model);
   const tray = useMemo(() => trayProps(props), [props]);

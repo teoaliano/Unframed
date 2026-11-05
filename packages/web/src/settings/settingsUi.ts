@@ -3,7 +3,7 @@
  * the key status, and the one pending OpenRouter connection with its poll. It lives outside
  * the dialog so that closing the dialog never abandons a connection.
  */
-import { UnframedError, type ElevenLabsStatus, type KeyStatus, type Settings } from "@unframed/contracts";
+import { UnframedError, type ElevenLabsStatus, type KeyStatus, type Settings, type VercelStatus } from "@unframed/contracts";
 import { OAUTH_ATTEMPT_MS, OAUTH_NOTHING_CAME_BACK } from "@unframed/domain";
 import { useSyncExternalStore } from "react";
 import type { EngineConnection } from "../rpc/engine.ts";
@@ -32,6 +32,7 @@ export interface SettingsUiState {
   /** The latest key status fetched; `undefined` when not fetched or it failed. */
   readonly keyStatus: KeyStatus | undefined;
   readonly elevenLabsStatus: ElevenLabsStatus | undefined;
+  readonly vercelStatus: VercelStatus | undefined;
   readonly connection: PendingConnection | undefined;
   /** Between a Connect click and the engine's answer. */
   readonly starting: boolean;
@@ -42,7 +43,7 @@ export interface SettingsUiState {
 }
 
 export class SettingsUi {
-  private state: SettingsUiState = { settings: undefined, open: false, section: "generation", keyStatus: undefined, elevenLabsStatus: undefined, connection: undefined, starting: false, report: undefined, resets: 0 };
+  private state: SettingsUiState = { settings: undefined, open: false, section: "generation", keyStatus: undefined, elevenLabsStatus: undefined, vercelStatus: undefined, connection: undefined, starting: false, report: undefined, resets: 0 };
   private readonly listeners = new Set<() => void>();
   private readonly engine: EngineConnection;
   private poller: ReturnType<typeof setInterval> | undefined;
@@ -50,6 +51,7 @@ export class SettingsUi {
   /** Bumped by every key status fetch, so only the latest of overlapping fetches is shown. */
   private statusFetch = 0;
   private elevenLabsFetch = 0;
+  private vercelFetch = 0;
   private cancelling: Promise<void> = Promise.resolve();
   private stopSettings: (() => void) | undefined;
 
@@ -118,6 +120,17 @@ export class SettingsUi {
     const fetch = ++this.elevenLabsFetch;
     const status = await this.engine.call("elevenlabs.status").catch(() => undefined);
     if (fetch === this.elevenLabsFetch) this.set({ elevenLabsStatus: status });
+  }
+
+  clearVercelStatus() {
+    this.vercelFetch++;
+    this.set({ vercelStatus: undefined });
+  }
+
+  async fetchVercelStatus(): Promise<void> {
+    const fetch = ++this.vercelFetch;
+    const status = await this.engine.call("vercel.status").catch(() => undefined);
+    if (fetch === this.vercelFetch) this.set({ vercelStatus: status });
   }
 
   async fetchKeyStatus(): Promise<void> {

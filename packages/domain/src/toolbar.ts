@@ -1,3 +1,5 @@
+import type { GenerationProvider } from "@unframed/contracts";
+import { providerLabel } from "./generationProviders.ts";
 import type { ShapeKind } from "./canvasShapes.ts";
 import type { RunsValue } from "./runsValue.ts";
 
@@ -87,9 +89,14 @@ export const resultLine = (facts: {
   readonly width?: number | undefined;
   readonly height?: number | undefined;
   readonly cost: number | null;
+  readonly provider?: GenerationProvider | undefined;
+  readonly listPrice?: boolean | undefined;
 }): string =>
   [
     modelPart(facts.model),
     ...(facts.width !== undefined && facts.height !== undefined ? [`${facts.width}×${facts.height}`] : []),
-    ...(facts.cost === null ? [] : [formatCost(facts.cost)]),
+    ...(facts.cost === null ? [] : [costText(facts.cost, facts.listPrice)]),
+    ...providerLabel(facts.provider),
   ].join(" · ");
+
+export const costText = (cost: number, listPrice?: boolean): string => `${listPrice === true ? "≈" : ""}${formatCost(cost)}`;

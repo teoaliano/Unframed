@@ -210,6 +210,8 @@ Confirm re-runs Free batch on the text as confirmed, against the canvas as it is
 
 ### Persisted formats
 
+**Provider (spec 22).** `run.text` and `text.complete` take an optional `provider` (`openrouter` or `vercel`, absent is OpenRouter), and the text tray offers spec 22's provider switch when both keys exist, with each provider's own text catalogue and default model. A text result made through Vercel lands as soon as its answer arrives and gets its cost when the generation lookup settles; its sidecar gains `provider: "vercel"` and `costBasis`, and its label reads `<cost> · Vercel · @<ref>` (`≈` before a list price). `text.complete` through Vercel answers as soon as the text arrives, with `cost: null`, and records the cost in its sidecar afterwards, so a Free batch repaired through Vercel has no `batchExtraCost`. Free's outputs and its repair call go through the tray's provider; the repair uses the source text result's model only when that result was made through the same provider, else the provider's default text model.
+
 Text sidecar, `<stamp>-text-<slug>.json` in the project folder, `stamp` and `slug` as spec 03 (slug of the prompt, `image` when empty), written exclusively with spec 03's `-2` to `-5` retries. The first block is kept from the old app field for field; `recipe` is present only for runs that landed a text result:
 
 ```ts

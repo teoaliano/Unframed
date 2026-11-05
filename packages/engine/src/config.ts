@@ -39,6 +39,8 @@ export interface EngineConfig {
   /** Every OpenRouter URL the engine builds starts with this. */
   readonly openRouterOrigin: string;
   readonly elevenLabsOrigin: string;
+  readonly vercelOrigin: string;
+  readonly vercelLookupMs: number;
   readonly oauthBounce: string | undefined;
   readonly chromePath: string | undefined;
   readonly agentDebug: boolean;
@@ -108,6 +110,8 @@ export const loadConfig = (
       clientDist: clientDist === undefined ? undefined : resolve(clientDist),
       openRouterOrigin: origins.openrouter,
       elevenLabsOrigin: origins.elevenlabs,
+      vercelOrigin: origins.vercel,
+      vercelLookupMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_VERCEL_LOOKUP_MS)) ?? 1500,
       oauthBounce: nonEmpty(env.UNFRAMED_OAUTH_BOUNCE),
       chromePath: nonEmpty(env.UNFRAMED_CHROME_PATH),
       agentDebug: nonEmpty(env.UNFRAMED_AGENT_DEBUG) !== undefined,

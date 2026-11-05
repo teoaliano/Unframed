@@ -9,6 +9,7 @@ import { OAuthCancel, OAuthPending, OAuthStart, OAuthStatus, ProjectsDelete, Pro
 import { RunText, TextComplete } from "./text.ts";
 import { ChainRun, FlowSave, NodeRemoveVersion, NodeRenders, NodeRun, NodeUseVersion } from "./nodes.ts";
 import { ElevenLabsStatusRpc, RunAudio, SettingsRemoveElevenLabsKey, VoicesList } from "./audio.ts";
+import { SettingsRemoveVercelKey, VercelStatusRpc } from "./vercel.ts";
 import { LibraryCopyFiles, LibraryDelete, LibraryList, LibrarySave } from "./library.ts";
 import {
   ClientChatCommand,
@@ -326,6 +327,8 @@ export const UnframedRpcs = RpcGroup.make(
   VoicesList,
   ElevenLabsStatusRpc,
   SettingsRemoveElevenLabsKey,
+  VercelStatusRpc,
+  SettingsRemoveVercelKey,
   LibraryList,
   LibrarySave,
   LibraryDelete,
