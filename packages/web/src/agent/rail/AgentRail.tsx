@@ -1,4 +1,4 @@
-import { clearAllChats, clearedNotice, resetMoment, usageLimitHit, visibleChats, nextActive } from "@unframed/domain";
+import { clearAllChats, clearedNotice, railShown, resetMoment, usageLimitHit } from "@unframed/domain";
 import { BrushCleaning, CircleAlert, Gauge, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useMaybeEditor, useValue } from "tldraw";
@@ -104,14 +104,12 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
     if (client.ui.pinned !== null) client.setUi({ pinned: null });
   }, [client, selectionKey]);
 
-  const visible = useMemo(() => {
-    const shown = visibleChats(chats, selectedArtifacts);
-    const pinned = ui.pinned === null ? undefined : chats.find((chat) => chat.id === ui.pinned);
-    return pinned && !shown.includes(pinned) ? [pinned, ...shown] : shown;
-  }, [chats, selectedArtifacts, ui.pinned]);
   // New chat leaves no tab active: the next message starts a chat.
   const drafting = ui.chosen === NEW_CHAT;
-  const active = drafting ? null : ui.pinned !== null && visible.some((chat) => chat.id === ui.pinned) ? ui.pinned : nextActive(ui.chosen, visible);
+  const { visible, active } = useMemo(
+    () => railShown({ chats, selected: selectedArtifacts, chosen: ui.chosen, pinned: ui.pinned, drafting }),
+    [chats, selectedArtifacts, ui.chosen, ui.pinned, drafting],
+  );
   const activeSummary = visible.find((chat) => chat.id === active);
   // The session's failure shows here only when the transcript cannot say it: a failed turn's reply already ends with it.
   const activeChat = useWatchedThread(client, active);

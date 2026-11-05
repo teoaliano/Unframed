@@ -8,6 +8,7 @@ import { SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { atom, react, useEditor, useValue, type TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
+import { cn } from "~/lib/utils";
 import { useWheelToCanvas } from "../canvas/wheelToCanvas.ts";
 import { Tip } from "../chrome/ui.tsx";
 import { canvasRoom, placeBeside } from "../generate/floating.ts";
@@ -106,8 +107,8 @@ export const ParametersPanel = ({ shapeId }: { readonly shapeId: TLShapeId }) =>
           </Button>
         </Tip>
       </header>
-      <div className={announcement === undefined ? "min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-2.5" : "min-h-0 flex-1 overflow-y-auto overflow-x-hidden"} data-scrolls="true">
-        <ParametersContent shapeId={shapeId} kind={facts.kind} title={title} announcement={announcement} saved={facts.dials} post={post} openRail />
+      <div className={cn("min-h-0 flex-1 overflow-y-auto overflow-x-hidden", announcement === undefined && "pb-2.5")} data-scrolls="true">
+        <ParametersContent shapeId={shapeId} kind={facts.kind} title={title} announcement={announcement} saved={facts.dials} post={post} place="canvas" />
       </div>
     </section>
   );

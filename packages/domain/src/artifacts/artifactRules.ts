@@ -132,7 +132,7 @@ const parameterPaths = (values: Readonly<Record<string, unknown>>, prefix: strin
   return into;
 };
 
-export const applyParametersInstruction = (input: { readonly name: string; readonly kind: ArtifactKind; readonly title: string; readonly values: Readonly<Record<string, unknown>> }): string =>
+export const applyParametersInstruction = (input: { readonly name: string; readonly kind: "page" | "motion"; readonly title: string; readonly values: Readonly<Record<string, unknown>> }): string =>
   APPLY_PARAMETERS_TEMPLATE.replace("<name>", () => input.name)
     .replace("<kind>", input.kind)
     .replace("<title>", () => input.title)

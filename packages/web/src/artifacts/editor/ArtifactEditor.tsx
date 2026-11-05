@@ -35,6 +35,7 @@ import { Button } from "~/components/ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Sheet, SheetPopup } from "~/components/ui/sheet";
 import { Tabs, TabsList, TabsTab } from "~/components/ui/tabs";
+import { TOP_BAR_HEIGHT } from "~/components/ui/top-bar";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { cn } from "~/lib/utils";
 import { AgentRail } from "../../agent/rail/AgentRail.tsx";
@@ -58,7 +59,7 @@ import { ComponentSection } from "./ComponentSection.tsx";
 import { EditOverlay } from "./EditOverlay.tsx";
 import { DesignTab } from "./DesignTab.tsx";
 import { LayersTab } from "./LayersTab.tsx";
-import { COLUMN, ColumnHeader, ParametersBody } from "./Parameters.tsx";
+import { COLUMN, ColumnHeader, ParametersContent } from "./Parameters.tsx";
 import { PreviewSizeControl, usePreviewSize } from "./PreviewSize.tsx";
 import { useEditSession, type EditMode } from "./editSession.ts";
 import { makeEditableInstruction, tellAgent } from "./tellAgent.ts";
@@ -604,17 +605,21 @@ export const ArtifactEditor = ({
         />
       )}
       {shownPanel === "parameters" && (
-        <ParametersBody
-          shapeId={shapeId}
-          kind={facts.kind}
-          title={title}
-          announcement={announcement}
-          saved={dials}
-          onWrite={(values) =>
-            session.releaseDials(values as Record<string, unknown>)
-          }
-          post={(values) => post.current?.(values)}
-        />
+        <div className="min-h-0 flex-1 overflow-auto">
+          <ParametersContent
+            shapeId={shapeId}
+            kind={facts.kind}
+            title={title}
+            announcement={announcement}
+            saved={dials}
+            onWrite={(values) =>
+              session.releaseDials(values as Record<string, unknown>)
+            }
+            post={(values) => post.current?.(values)}
+            place="editor"
+            railVisible={!railFolded || sheet === "agent"}
+          />
+        </div>
       )}
     </>
   );
@@ -623,12 +628,13 @@ export const ArtifactEditor = ({
       ref={grid}
       data-testid="artifact-editor"
       className={cn(
-        "pointer-events-auto absolute inset-x-0 top-9 bottom-0 z-[700] box-border grid gap-3 bg-background p-3 font-sans text-foreground",
+        "pointer-events-auto absolute inset-x-0 bottom-0 z-[700] box-border grid gap-3 bg-background p-3 font-sans text-foreground",
         timeline
           ? "grid-rows-[minmax(0,1fr)_auto]"
           : "grid-rows-[minmax(0,1fr)]",
         columns,
       )}
+      style={{ top: TOP_BAR_HEIGHT }}
       {...KEEP_FROM_CANVAS}
     >
       {!railFolded && (
