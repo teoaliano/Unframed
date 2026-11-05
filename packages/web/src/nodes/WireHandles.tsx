@@ -6,9 +6,7 @@ import { connectWire } from "./operations.ts";
 const NO_HANDLE = new Set(["wire", "audio", "component", "arrow"]);
 
 const handleFor = (editor: Editor, held: TLShapeId | undefined): { id: TLShapeId; x: number; y: number } | undefined => {
-  const hovered = editor.getHoveredShapeId();
-  const only = editor.getOnlySelectedShapeId();
-  const id = held ?? hovered ?? only ?? undefined;
+  const id = held ?? editor.getOnlySelectedShapeId() ?? undefined;
   if (id === undefined) return undefined;
   const shape: TLShape | undefined = editor.getShape(id);
   if (!shape || NO_HANDLE.has(shape.type) || editor.isInAny("select.translating", "select.resizing", "select.rotating", "select.brushing", "hand.dragging")) return undefined;

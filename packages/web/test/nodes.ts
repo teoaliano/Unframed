@@ -38,10 +38,8 @@ export const waitForNode = (engine: TestEngine, id: string, check: (props: any) 
 export const wires = async (engine: TestEngine): Promise<AnyRecord[]> => (await roomRecords(engine, "default")).filter((record) => record.type === "wire");
 
 export const drawWire = async (page: Page, fromId: string, to: { x: number; y: number }): Promise<void> => {
-  const from = shapeOnScreen(page, fromId);
-  const box = (await from.boundingBox())!;
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.move(box.x + box.width / 2 + 2, box.y + box.height / 2 + 1);
+  const box = (await shapeOnScreen(page, fromId).boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   const handle = page.getByTestId("wire-handle");
   await expect(handle).toHaveAttribute("data-wire-from", fromId);
   const at = (await handle.boundingBox())!;

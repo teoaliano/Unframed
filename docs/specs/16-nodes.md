@@ -143,7 +143,7 @@ What this spec does not change: Generate on a selection, the composer popover an
 
 ### Wires
 
-- **Connecting.** A drag from a shape's wire handle (a dot on its right edge, shown while the shape is hovered or selected) onto a node. A wire dropped on anything that is not a node is refused. A refusal shows one toast sentence from `wireRefusal`, and no wire is created. A new wire takes the first role its source is offered. A page wire drawn by hand has made no choice yet: the wire's `meta.unframed.chosen` is set once the person picks in the role menu, or when an agent names the role.
+- **Connecting.** A drag from a shape's wire handle (a dot on its right edge, shown while the shape is the only one selected; hovering shows nothing, as spec 02's selection look requires) onto a node. A wire dropped on anything that is not a node is refused. A refusal shows one toast sentence from `wireRefusal`, and no wire is created. A new wire takes the first role its source is offered. A page wire drawn by hand has made no choice yet: the wire's `meta.unframed.chosen` is set once the person picks in the role menu, or when an agent names the role.
 - **Refusals**, with their exact sentences:
   - Target not a node: `A wire ends at a node. Drop it on a node.`
   - Source is audio: `An audio shape is never an input yet, so this wire is refused.`

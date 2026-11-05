@@ -23,6 +23,26 @@ test("a wire drawn from a shape's handle onto a node is made with its first role
   expect(await wires(engine)).toHaveLength(1);
 });
 
+test("the wire handle shows on the selected shape only; hovering a shape shows none", async ({ page, generation }) => {
+  const { engine } = generation;
+  await openCanvas(page, engine);
+  await seedBoard(engine, [promptShape("fox", "201", "a lone red fox", { x: -440, y: 0 }), promptShape("pic", "203", "a wide field", { x: -440, y: 260 })]);
+  const handle = page.getByTestId("wire-handle");
+  const fox = await centreOf(shapeOnScreen(page, "shape:fox"));
+  await page.mouse.move(fox.x, fox.y);
+  await page.mouse.move(fox.x + 2, fox.y + 1);
+  await page.waitForTimeout(200);
+  await expect(handle).toHaveCount(0);
+
+  await clickShape(page, "shape:fox");
+  await expect(handle).toHaveAttribute("data-wire-from", "shape:fox");
+  const pic = await centreOf(shapeOnScreen(page, "shape:pic"));
+  await page.mouse.move(pic.x, pic.y);
+  await page.mouse.move(pic.x + 2, pic.y + 1);
+  await page.waitForTimeout(200);
+  await expect(handle).toHaveAttribute("data-wire-from", "shape:fox");
+});
+
 test("a loop, an audio source and a second first frame are refused with their sentences", async ({ page, generation }) => {
   const { engine } = generation;
   await openCanvas(page, engine);
