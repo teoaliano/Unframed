@@ -6,6 +6,8 @@ import { ActivationContext, EngineContext, useActivation, useSettings } from "./
 import { ImportGate } from "./legacy/ImportGate.tsx";
 import { LicenseKeyContext, tldrawLicenseKey } from "./license.ts";
 import { ProjectActivation, useTabState } from "./project/activation.ts";
+import { DeviceTabs } from "./project/deviceTabs.ts";
+import { readClientMode } from "./deviceMode.ts";
 import { OPEN_PROJECT_LIST } from "./chrome/tabEvents.ts";
 import { Button } from "~/components/ui/button";
 import type { EngineConnection } from "./rpc/engine.ts";
@@ -59,8 +61,14 @@ export const App = ({ engine }: { readonly engine: EngineConnection }) => {
   useEffect(() => {
     if (loaded.current) return;
     loaded.current = true;
-    void activation.initialLoad();
-    void reportIpadAvailability(engine).catch(() => undefined);
+    const onMac = () => {
+      void activation.initialLoad();
+      void reportIpadAvailability(engine).catch(() => undefined);
+    };
+    void readClientMode(engine).then((device) => {
+      if (device) new DeviceTabs(activation, engine).start();
+      else onMac();
+    }, onMac);
   }, [activation, engine]);
   return (
     <EngineContext.Provider value={engine}>

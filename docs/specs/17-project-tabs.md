@@ -83,6 +83,8 @@ Spec 08's chat tabs keep their name. Where this spec says "project tab", it mean
 
 ### Restart and the saved tabs
 
+- **A device client never writes the tabs.** A device client (spec 22) subscribes to `project.tabs` instead of reading it once, shows the Mac's order, and follows the Mac's active tab until it picks its own; it writes neither `project.tabs` nor `project.active`, and its strip has no close button, no drag, and no tab menu, so Close, Close all tabs, Rename project and Delete project are out of reach there, and Cmd+W, Cmd+Shift+T and Alt+Arrow do nothing on it. All projects and Add project stay. Spec 22 holds the following and detaching rules.
+
 - **Saved form.** The preference `project.tabs` (spec 01's preferences store) holds `{ order: string[], active: string | null }`. It is written through `preferences.set` each time the order or the active tab changes, and not on every pan or edit. It replaces `project.active`.
 - **Migration.** When `project.tabs` is absent, the boot reads `project.active` and opens that one project as the only tab. The old key is then left in place and ignored.
 - **Boot.** Read `project.tabs`. `restoreTabs` filters the saved order against `projects.list`. Every surviving project becomes a tab in that order. The active tab is the saved one when it survived, else the first tab. If no saved project survives, boot falls back exactly as spec 02 does: the first project, else a new `default`. A failed list still opens nothing and shows spec 02's sticky toast.

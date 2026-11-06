@@ -14,9 +14,13 @@ const windowId = crypto.randomUUID();
 
 export const installSelectionReporter = (editor: Editor, engine: EngineConnection, project: string): (() => void) => {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const report = () => {
+  let last: string | undefined;
+  const report = (force = false) => {
     // Room ids, as the canvas holds them: the engine reads the selection against the room.
     const shapeIds: string[] = editor.getSelectedShapeIds().map((id) => String(id));
+    const reported = shapeIds.join(" ");
+    if (!force && reported === last) return;
+    last = reported;
     void engine.call("selection.report", { project, windowId, shapeIds }).catch(() => undefined);
   };
   const schedule = () => {
@@ -28,11 +32,15 @@ export const installSelectionReporter = (editor: Editor, engine: EngineConnectio
     const present = apply.shapeIds.map((id) => roomShapeId(id) as TLShapeId).filter((id) => editor.getShape(id) !== undefined);
     editor.setSelectedShapes(present);
     clearTimeout(timer);
-    report();
+    report(true);
   });
-  report();
+  const stopState = engine.onStateChange((state) => {
+    if (state === "open") report(true);
+  });
+  report(true);
   return () => {
     clearTimeout(timer);
+    stopState();
     stopListening();
     stopStream();
   };

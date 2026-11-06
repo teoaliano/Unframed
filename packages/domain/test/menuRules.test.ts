@@ -64,6 +64,18 @@ describe("contextMenu", () => {
     ]);
   });
 
+  it("leaves reveal and Copy path out for a device client, on media and on artifacts", () => {
+    const filled: MenuShape = { id: "pg", type: "page", ref: "106", file: "1-brief.html", filledArtifact: true };
+    expect(outline(shape(image, [image], { device: true }))).toEqual([
+      ["image", ["Copy as image"]],
+      ["reference", ["Copy @101", "Rename F2"]],
+      ["edit", ["Cut ⌘X", "Copy ⌘C", "Group ⌘G"]],
+    ]);
+    expect(outline(shape(video, [video], { device: true }))[0]).toEqual(["reference", ["Copy @103", "Rename F2"]]);
+    expect(outline(shape(filled, [filled], { device: true }))[0]).toEqual(["artifact", ["Keep playing"]]);
+    expect(outline(shape(filled, [filled]))[0]).toEqual(["artifact", ["Keep playing", "Reveal in Finder", "Copy path"]]);
+  });
+
   it("reveals every selected filled image and video, counted, when the right-clicked one is among them", () => {
     const menu = shape(image, [image, video, emptyImage, prompt]);
     const reveal = menu[0]!.items[0]!;

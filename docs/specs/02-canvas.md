@@ -283,14 +283,16 @@ Custom shape props and every later change to them use tldraw's shape migrations,
 
 ### Context menu
 
+On a device client (spec 22) the two items that reach the Mac's disk, reveal and "Copy path", are left out, in every section that would show them.
+
 Sections appear in this order, each only when it has at least one item. The Image section is headed "Video" when the right-clicked shape is a video. A checkbox row (spec 09's Keep playing) starts its label where the plain rows do, with its check at the end of the row. An item that would do nothing is left out, never greyed. After the Unframed sections come tldraw's own context menu groups, minus tldraw's group, ungroup, cut, copy and paste items, which Unframed's Edit section replaces.
 
 | Section | Item | Shown when |
 | --- | --- | --- |
-| Image | "Reveal in Finder" on macOS, "Show in Explorer" on Windows, "Show in file manager" elsewhere, with " (<n>)" appended when more than one file | the right-clicked shape is a filled image or video with a project file; the files are every selected filled image and video, else the right-clicked one |
-| Image | "Copy path" | the right-clicked shape is a filled image or video with a project file; copies that file's absolute path and says "Path copied" in a toast, since a path on the clipboard cannot be seen |
+| Image | "Reveal in Finder" on macOS, "Show in Explorer" on Windows, "Show in file manager" elsewhere, with " (<n>)" appended when more than one file | the right-clicked shape is a filled image or video with a project file, on a Mac client; the files are every selected filled image and video, else the right-clicked one |
+| Image | "Copy path" | the right-clicked shape is a filled image or video with a project file, on a Mac client; copies that file's absolute path and says "Path copied" in a toast, since a path on the clipboard cannot be seen |
 | Image | "Copy as image" | the right-clicked shape is a filled image |
-| Page, Motion | spec 09's "Keep playing", reveal and "Copy path" | the right-clicked shape is a filled page or motion (spec 09) |
+| Page, Motion | spec 09's "Keep playing", reveal and "Copy path" | the right-clicked shape is a filled page or motion (spec 09); reveal and "Copy path" on a Mac client only |
 | Reference | "Copy @<ref>" | the right-clicked shape has an `@id` (every kind but a mark) |
 | Reference | "Rename F2" | the right-clicked shape has an `@id`; it opens spec 06's name field in the shape's label |
 | Edit | "Cut ⌘X", "Copy ⌘C" | something is selected or right-clicked |

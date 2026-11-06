@@ -32,8 +32,9 @@ export interface TopBarProps {
   /** The control after the last tab, the plus. */
   readonly newProject: ReactNode;
   readonly onActivate: (name: string) => void;
-  readonly onClose: (name: string) => void;
-  readonly onCloseAll: () => void;
+  /** Absent leaves the tabs with no close button, no drag and no right-click menu. */
+  readonly onClose?: (name: string) => void;
+  readonly onCloseAll?: () => void;
   readonly onRename?: (name: string) => void;
   readonly onDelete?: (name: string) => void;
   /** Moves a dragged tab to position `to` in the order. */
@@ -123,6 +124,7 @@ export const TopBar = ({
   const [bodyWidth, setBodyWidth] = useState(0);
   const names = tabs.map((tab) => tab.name);
   const windows = platform === "windows";
+  const manage = onClose !== undefined;
 
   useEffect(() => {
     if (active === undefined) return;
@@ -142,21 +144,21 @@ export const TopBar = ({
   const onListClick = (event: MouseEvent<HTMLDivElement>) => {
     if (!(event.target instanceof Element) || event.target.closest("[data-close]") === null) return;
     const name = tabOf(event.target);
-    if (name !== undefined) onClose(name);
+    if (name !== undefined) onClose?.(name);
   };
   const onListAux = (event: MouseEvent<HTMLDivElement>) => {
     const name = tabOf(event.target);
-    if (name !== undefined && event.button === 1) onClose(name);
+    if (name !== undefined && event.button === 1) onClose?.(name);
   };
   const onListContext = (event: MouseEvent<HTMLDivElement>) => {
     const name = tabOf(event.target);
-    if (name === undefined) return;
+    if (name === undefined || !manage) return;
     event.preventDefault();
     setMenu({ name, x: event.clientX, y: event.clientY });
   };
   const onListDragStart = (event: DragEvent<HTMLDivElement>) => {
     const name = tabOf(event.target);
-    if (name === undefined) return;
+    if (name === undefined || !manage) return;
     event.dataTransfer.setData("text/plain", name);
     event.dataTransfer.effectAllowed = "move";
     setDragging(name);
@@ -250,9 +252,9 @@ export const TopBar = ({
                 data-active={tab.name === active ? "true" : undefined}
                 data-status={tab.state ?? tab.status ?? "none"}
                 title={tab.title ?? tab.name}
-                draggable
+                draggable={manage}
                 divider
-                closable
+                closable={manage}
                 closeLabel={`Close ${tab.name}`}
                 {...(tab.status === undefined ? {} : { status: tab.status })}
               >
@@ -279,8 +281,8 @@ export const TopBar = ({
           className="min-w-[180px]"
           data-testid="tab-menu"
         >
-          <MenuItem onClick={() => menu && onClose(menu.name)}>Close</MenuItem>
-          <MenuItem onClick={() => onCloseAll()}>Close all tabs</MenuItem>
+          <MenuItem onClick={() => menu && onClose?.(menu.name)}>Close</MenuItem>
+          <MenuItem onClick={() => onCloseAll?.()}>Close all tabs</MenuItem>
           <MenuSeparator />
           {onRename && <MenuItem onClick={() => menu && onRename(menu.name)}>Rename project</MenuItem>}
           {onDelete && (

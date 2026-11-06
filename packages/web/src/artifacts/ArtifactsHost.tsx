@@ -8,7 +8,9 @@ import { createPortal } from "react-dom";
 import { useEditor, useValue, type Editor, type TLCamera, type TLShapeId } from "tldraw";
 import { registerSlot } from "../chrome/slots.ts";
 import { useCanvasProject, useEngine, useSettings } from "../context.ts";
+import { isDeviceClient, useIsDevice } from "../deviceMode.ts";
 import { closeComposer } from "../generate/state.ts";
+import { showNotice } from "../toasts.tsx";
 import { ParametersButton } from "./ParametersButton.tsx";
 import { RenderButton } from "./render.tsx";
 import { artifactsOf, installFrameHold, installTuningWatch, previewPort } from "./state.ts";
@@ -25,10 +27,16 @@ interface Opened {
 
 const saved = new WeakMap<Editor, Opened>();
 
+export const EDITOR_ON_MAC = "Open this on your Mac to edit or play it.";
+
 /** Opens the editor on one artifact: saves the camera, selects it alone, closes the composer, then shows the editor. */
 export const openArtifactEditor = (editor: Editor, shapeId: TLShapeId): void => {
   const shape = editor.getShape(shapeId);
   if (!shape || !isArtifactKind(shape.type)) return;
+  if (isDeviceClient()) {
+    showNotice(EDITOR_ON_MAC, "info");
+    return;
+  }
   const state = artifactsOf(editor);
   if (state.editing.get() === undefined) saved.set(editor, { camera: editor.getCamera() });
   editor.select(shapeId);
@@ -51,6 +59,7 @@ export const ArtifactsHost = () => {
   const engine = useEngine();
   const project = useCanvasProject();
   const settings = useSettings();
+  const device = useIsDevice();
 
   useEffect(() => {
     if (settings) previewPort.set(settings.previewPort);
@@ -63,14 +72,14 @@ export const ArtifactsHost = () => {
       watchSnapshots(engine, project),
       registerSlot("openArtifact", openArtifactEditor),
       registerSlot("renderButton", RenderButton),
-      registerSlot("parametersButton", ParametersButton),
+      ...(device ? [] : [registerSlot("parametersButton", ParametersButton)]),
       installTuningWatch(editor),
     ];
     return () => {
       for (const stop of stops) stop();
       closeArtifactEditor(editor);
     };
-  }, [editor, engine, project]);
+  }, [editor, engine, project, device]);
 
   const editing = useValue("editing artifact", () => artifactsOf(editor).editing.get(), [editor]);
   const tuning = useValue("tuning artifact", () => artifactsOf(editor).tuning.get(), [editor]);

@@ -16,6 +16,7 @@ import { loadCatalogue } from "../generate/catalogue.ts";
 import { showNotice } from "../toasts.tsx";
 import { Copy, linkClass, ModelSelect, SectionHeading } from "./fields.tsx";
 import { FOLLOW_UP_KEY, LocalAgents, PLAN_MODE_KEY, type FollowUp } from "./LocalAgents.tsx";
+import { useIsDevice } from "../deviceMode.ts";
 import { IpadAccess } from "./IpadAccess.tsx";
 import { OutsideAgents } from "./OutsideAgents.tsx";
 import { useSettingsUi, type SettingsUi } from "./settingsUi.ts";
@@ -74,6 +75,7 @@ const patchOf = (draft: Draft, settings: Settings): SettingsPatch => {
 
 export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const engine = useEngine();
+  const device = useIsDevice();
   const activation = useActivation();
   const state = useSettingsUi(ui);
   const { settings, open, connection, starting } = state;
@@ -265,7 +267,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
                 </a>
                 , which runs the model and bills your OpenRouter account per image (a few cents for most models). Connecting takes you there to approve Unframed; the key it gives back is saved on this machine and used only by your local server.
               </p>
-              <Button onClick={connect}>Connect OpenRouter</Button>
+              {!device && <Button onClick={connect}>Connect OpenRouter</Button>}
             </section>
           )}
 
@@ -329,7 +331,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
                   {copy.expiry}
                 </p>
               )}
-              {copy.reconnect && !pending && (
+              {copy.reconnect && !pending && !device && (
                 <Button className="self-start" onClick={connect}>
                   Reconnect OpenRouter
                 </Button>
@@ -355,10 +357,12 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
                 <SectionHeading>Output folder</SectionHeading>
                 <div className="flex items-center gap-2">
                   <Input aria-label="Output folder" placeholder="./output" font="mono" spellCheck={false} autoComplete="off" value={draft.outputDir} onChange={(event) => edit({ outputDir: event.target.value })} />
-                  <Button variant="outline" onClick={() => void browse()}>
-                    <FolderOpen aria-hidden />
-                    Browse…
-                  </Button>
+                  {!device && (
+                    <Button variant="outline" onClick={() => void browse()}>
+                      <FolderOpen aria-hidden />
+                      Browse…
+                    </Button>
+                  )}
                 </div>
               </section>
 
@@ -375,16 +379,18 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
                 planMode={planMode}
                 onPlanMode={setPlanModePreference}
               />
-              <IpadAccess
-                access={settings.ipadAccess}
-                onAccess={async (on) => {
-                  const next = await engine.call("settings.update", { ipadAccess: on ? "on" : "" });
-                  ui.setSettings(next);
-                  setDraft((current) => ({ ...current, ipadPort: String(next.ipadPort) }));
-                }}
-                port={draft.ipadPort}
-                onPort={(value) => edit({ ipadPort: value })}
-              />
+              {!device && (
+                <IpadAccess
+                  access={settings.ipadAccess}
+                  onAccess={async (on) => {
+                    const next = await engine.call("settings.update", { ipadAccess: on ? "on" : "" });
+                    ui.setSettings(next);
+                    setDraft((current) => ({ ...current, ipadPort: String(next.ipadPort) }));
+                  }}
+                  port={draft.ipadPort}
+                  onPort={(value) => edit({ ipadPort: value })}
+                />
+              )}
               <OutsideAgents />
             </>
           )}

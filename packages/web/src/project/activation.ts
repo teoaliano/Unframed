@@ -16,6 +16,11 @@ const messageOf = (error: unknown): string =>
 /** Something that must settle before the active project changes (the open canvas's pending edits). */
 export type BeforeSwitch = () => Promise<void>;
 
+export interface DeviceHooks {
+  readonly choose: (name: string) => void;
+  readonly reload: () => Promise<void>;
+}
+
 /** The tab state the strip and the canvas read. A new object on every change, so a subscriber can compare by identity. */
 export interface TabState {
   /** The project whose canvas is mounted, or undefined when no tab is open (the start state). */
@@ -40,6 +45,7 @@ export class ProjectActivation {
   /** Counts activations, so an initial load that finishes after a switch does not override it. */
   private generation = 0;
   private readonly engine: EngineConnection;
+  private deviceHooks: DeviceHooks | undefined;
 
   constructor(engine: EngineConnection) {
     this.engine = engine;
@@ -54,6 +60,25 @@ export class ProjectActivation {
     return () => void this.listeners.delete(listener);
   };
 
+  setDeviceHooks(hooks: DeviceHooks): void {
+    this.deviceHooks = hooks;
+  }
+
+  private get onDevice(): boolean {
+    return this.deviceHooks !== undefined;
+  }
+
+  async showTabs(order: ReadonlyArray<string>, active: string | undefined): Promise<void> {
+    if (active === this.state.active) {
+      this.update({ order: [...order], active, loaded: true });
+      return;
+    }
+    const started = ++this.generation;
+    await this.beforeSwitch?.();
+    if (this.generation !== started) return;
+    this.update({ order: [...order], active, loaded: true });
+  }
+
   /** The open canvas registers what must settle before it is closed. */
   setBeforeSwitch(hook: BeforeSwitch | undefined): void {
     this.beforeSwitch = hook;
@@ -65,6 +90,7 @@ export class ProjectActivation {
   }
 
   private persistTabs(): void {
+    if (this.onDevice) return;
     const { order, active } = this.state;
     this.engine.call("preferences.set", { key: TABS_KEY, value: { order: [...order], active: active ?? null } }).catch((error: unknown) => {
       showError(`Could not save the open tabs: ${messageOf(error)}`);
@@ -72,6 +98,10 @@ export class ProjectActivation {
   }
 
   async activate(name: string): Promise<void> {
+    if (this.deviceHooks !== undefined) {
+      this.deviceHooks.choose(name);
+      return;
+    }
     this.generation++;
     const order = openTab(this.state.order, name);
     if (name === this.state.active) {
@@ -93,7 +123,7 @@ export class ProjectActivation {
    * the neighbour; a background tab only leaves the strip. Closing deletes nothing.
    */
   async closeTab(name: string): Promise<void> {
-    if (!this.state.order.includes(name)) return;
+    if (this.onDevice || !this.state.order.includes(name)) return;
     const wasActive = name === this.state.active;
     if (wasActive) {
       this.generation++;
@@ -110,23 +140,26 @@ export class ProjectActivation {
 
   /** Closes every tab (the right-click menu's Close all tabs). The projects stay; the canvas settles first. */
   async closeAllTabs(): Promise<void> {
-    if (this.state.order.length === 0) return;
+    if (this.onDevice || this.state.order.length === 0) return;
     this.generation++;
     await this.beforeSwitch?.();
     const closed = [...this.state.order].reverse().reduce((stack, name) => pushClosed(stack, name), this.state.closed);
     this.update({ order: [], active: undefined, closed });
     this.persistTabs();
+    if (this.onDevice) return;
     await this.engine.call("preferences.set", { key: ACTIVE_PROJECT_KEY, value: null }).catch(() => undefined);
   }
 
   /** Moves a tab to position `to` in the strip. Saved so the order survives a restart. */
   moveTab(name: string, to: number): void {
+    if (this.onDevice) return;
     this.update({ order: moveTab(this.state.order, name, to) });
     this.persistTabs();
   }
 
   /** Cmd+Shift+T: opens the most recently closed project in a new tab at the end. */
   async reopenClosed(): Promise<void> {
+    if (this.onDevice) return;
     const { name, stack } = popClosed(this.state.closed);
     if (name === undefined) return;
     this.update({ closed: stack });
@@ -158,6 +191,10 @@ export class ProjectActivation {
    */
   async reopen(): Promise<void> {
     this.update({ active: undefined, order: [], closed: [], loaded: false });
+    if (this.deviceHooks !== undefined) {
+      await this.deviceHooks.reload();
+      return;
+    }
     await this.initialLoad();
   }
 

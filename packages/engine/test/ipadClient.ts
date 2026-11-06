@@ -5,7 +5,7 @@ import WebSocket, { type ClientOptions } from "ws";
 import { makeTempDir, startEngine, type RawResponse, type TestEngine } from "./harness.ts";
 import { connectRpc, type TestRpcClient } from "./rpcClient.ts";
 
-export const TEST_NAME = "ipad-test.local";
+export const TEST_NAME = "localhost";
 
 export interface IpadEngineOptions {
   readonly port?: string;

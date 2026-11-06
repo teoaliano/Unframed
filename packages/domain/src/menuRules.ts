@@ -33,6 +33,7 @@ export interface MenuInput {
   readonly platform: string;
   /** Spec 09: the artifacts this project has pinned with "Keep playing". */
   readonly pinned?: ReadonlyArray<string>;
+  readonly device?: boolean;
 }
 
 export type EditAction = "cut" | "copy" | "paste" | "group" | "ungroup";
@@ -129,8 +130,11 @@ export const contextMenu = (input: MenuInput): MenuSection[] => {
     if (items.length > 0) sections.push({ section, heading, items });
   };
 
+  const files = (shape: MenuShape, sameKind: (other: MenuShape) => boolean): MenuItem[] =>
+    input.device === true ? [] : fileItems(shape, selection, sameKind, platform);
+
   const imageItems: MenuItem[] = [];
-  if (clicked && isFilledMedia(clicked)) imageItems.push(...fileItems(clicked, selection, isFilledMedia, platform));
+  if (clicked && isFilledMedia(clicked)) imageItems.push(...files(clicked, isFilledMedia));
   if (clicked && clicked.type === "image" && clicked.file !== undefined) {
     imageItems.push({ action: "copy-as-image", label: "Copy as image" });
   }
@@ -143,7 +147,7 @@ export const contextMenu = (input: MenuInput): MenuSection[] => {
       checked || pinned.length < PIN_LIMIT
         ? { action: "keep-playing", label: "Keep playing", checked }
         : { action: "keep-playing", label: "Keep playing", checked, disabled: true, tooltip: PIN_LIMIT_MESSAGE },
-      ...(isFilledArtifact(clicked) ? fileItems(clicked, selection, isFilledArtifact, platform) : []),
+      ...(isFilledArtifact(clicked) ? files(clicked, isFilledArtifact) : []),
     ]);
   }
 

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import type { ProjectActivation } from "../project/activation.ts";
 import { platform } from "../canvas/platform.ts";
+import { isDeviceClient } from "../deviceMode.ts";
 import { OPEN_PROJECT_LIST } from "./tabEvents.ts";
 
 /** The text fields where a shortcut belongs to the field: the prompt editor, the chat composer, form inputs. */
@@ -36,7 +37,9 @@ export const useTabShortcuts = (activation: ProjectActivation): void => {
         return;
       }
 
-      if (event.altKey && !cmd && (key === "ArrowLeft" || key === "ArrowRight")) {
+      const manages = !isDeviceClient();
+
+      if (manages && event.altKey && !cmd && (key === "ArrowLeft" || key === "ArrowRight")) {
         const focused = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.project : undefined;
         if (focused === undefined) return;
         event.preventDefault();
@@ -51,10 +54,11 @@ export const useTabShortcuts = (activation: ProjectActivation): void => {
         event.preventDefault();
         window.dispatchEvent(new Event(OPEN_PROJECT_LIST));
       } else if (!event.shiftKey && lower === "w") {
-        if (active === undefined) return;
+        if (active === undefined || !manages) return;
         event.preventDefault();
         void activation.closeTab(active);
       } else if (event.shiftKey && lower === "t") {
+        if (!manages) return;
         event.preventDefault();
         void activation.reopenClosed();
       } else if (!event.shiftKey && /^[1-9]$/.test(key) && order.length > 0) {

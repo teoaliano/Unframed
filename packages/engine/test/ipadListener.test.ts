@@ -110,7 +110,7 @@ describe("the device guard", () => {
     const engine = await startIpadEngine();
     const port = await ipadPortOf(engine);
     const ca = await readAuthority(engine.dataDir);
-    for (const host of [`127.0.0.1:${port}`, `localhost:${port}`, `${TEST_NAME}:1`, TEST_NAME]) {
+    for (const host of [`127.0.0.1:${port}`, `mbp-other.local:${port}`, `${TEST_NAME}:1`, TEST_NAME]) {
       const answer = await deviceRequest(port, ca, "/", { host });
       expect(answer.status).toBe(403);
       expect(answer.json().error).toBe(`Open Unframed at https://${TEST_NAME}:${port}.`);

@@ -15,6 +15,7 @@ import { Spinner } from "~/components/ui/spinner";
 import { ConfirmDialog } from "../agent/ConfirmDialog.tsx";
 import { parseSpendLimit, SpendFields } from "./SpendFields.tsx";
 import { useEngine } from "../context.ts";
+import { useIsDevice } from "../deviceMode.ts";
 import { lastUsedText, SectionHeading } from "./fields.tsx";
 
 const COPIED_MS = 1200;
@@ -234,6 +235,7 @@ const LimitDialog = ({ connection, onClose, onSaved }: { readonly connection: Ag
 
 export const OutsideAgents = () => {
   const engine = useEngine();
+  const device = useIsDevice();
   const [connections, setConnections] = useState<ReadonlyArray<AgentConnection> | undefined>(undefined);
   const [connecting, setConnecting] = useState(false);
   const [revoking, setRevoking] = useState<AgentConnection | undefined>(undefined);
@@ -269,17 +271,21 @@ export const OutsideAgents = () => {
           <Button variant="ghost" size="sm" onClick={() => setLimiting(connection)}>
             Limit
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => setRevoking(connection)}>
-            Revoke
-          </Button>
+          {!device && (
+            <Button variant="ghost" size="sm" onClick={() => setRevoking(connection)}>
+              Revoke
+            </Button>
+          )}
         </div>
       ))}
-      <div>
-        <Button variant="outline" size="sm" onClick={() => setConnecting(true)}>
-          <Plug />
-          Connect an agent
-        </Button>
-      </div>
+      {!device && (
+        <div>
+          <Button variant="outline" size="sm" onClick={() => setConnecting(true)}>
+            <Plug />
+            Connect an agent
+          </Button>
+        </div>
+      )}
       <ConnectDialog open={connecting} onClose={() => setConnecting(false)} onMade={refresh} />
       <LimitDialog connection={limiting} onClose={() => setLimiting(undefined)} onSaved={refresh} />
       <ConfirmDialog

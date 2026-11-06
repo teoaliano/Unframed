@@ -1,75 +1,18 @@
-import { chromium, type Browser, type Page } from "@playwright/test";
-import { TEST_NAME } from "../../engine/test/ipadClient.ts";
-import type { TestEngine } from "../../engine/test/engineProcess.ts";
-import { openCanvas, roomShapes, shapeOnScreen } from "./canvas.ts";
+import { centre, openCanvas, roomShapes, shapeOnScreen } from "./canvas.ts";
 import { expect, instructionBox, openComposer, pressSend, startGeneration, test } from "./generation.ts";
-
-const IPAD_AGENT =
-  "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
-
-const ipadPort = async (engine: TestEngine): Promise<number> => {
-  const status = await (await engine.rpc()).call("ipad.status");
-  if (!status.listening) throw new Error("the iPad listener is not up");
-  return status.port;
-};
-
-const openDevice = async (port: number, code: string): Promise<{ browser: Browser; page: Page }> => {
-  const use = test.info().project.use;
-  const launchOptions = use.launchOptions ?? {};
-  const browser = await chromium.launch({
-    ...launchOptions,
-    ...(use.channel === undefined ? {} : { channel: use.channel }),
-    headless: true,
-    args: [...(launchOptions.args ?? []), `--host-resolver-rules=MAP ${TEST_NAME} 127.0.0.1`],
-  });
-  const context = await browser.newContext({
-    ignoreHTTPSErrors: true,
-    hasTouch: true,
-    viewport: { width: 1180, height: 820 },
-    userAgent: IPAD_AGENT,
-  });
-  const page = await context.newPage();
-  await page.goto(`https://${TEST_NAME}:${port}/`);
-  await expect(page.getByRole("heading", { name: "Pair with Unframed" })).toBeVisible();
-  await page.getByLabel("Pairing code").fill(code);
-  await page.getByRole("button", { name: "Pair" }).click();
-  await expect(page.locator("[data-canvas-project] .tl-canvas")).toBeVisible({ timeout: 30_000 });
-  return { browser, page };
-};
-
-const penStroke = async (page: Page, from: { x: number; y: number }, to: { x: number; y: number }): Promise<void> => {
-  const cdp = await page.context().newCDPSession(page);
-  const event = (type: "mousePressed" | "mouseMoved" | "mouseReleased", at: { x: number; y: number }, buttons: number) =>
-    cdp.send("Input.dispatchMouseEvent", {
-      type,
-      x: at.x,
-      y: at.y,
-      button: buttons === 1 ? "left" : "none",
-      buttons,
-      clickCount: 1,
-      pointerType: "pen",
-      force: 0.6,
-    });
-  await event("mousePressed", from, 1);
-  for (let step = 1; step <= 6; step += 1) {
-    await event("mouseMoved", { x: from.x + ((to.x - from.x) * step) / 6, y: from.y + ((to.y - from.y) * step) / 6 }, 1);
-  }
-  await event("mouseReleased", to, 0);
-  await cdp.detach();
-};
+import { IPAD_DOTENV, openDevice, penStroke, testIpad, type DeviceClient } from "./ipad.ts";
+import { KEY, startSettingsEngine } from "./settings.ts";
 
 test("a paired iPad draws with the Pencil onto the Mac's canvas, and a result from the Mac lands on it", async ({ page }) => {
   const generation = await startGeneration({
-    env: { UNFRAMED_TEST_IPAD: TEST_NAME, IPAD_PORT: "0" },
+    env: testIpad(),
     dotenv: "OPENROUTER_API_KEY=sk-or-v1-browser-test-0000\nIPAD_ACCESS=on\n",
   });
   const { engine } = generation;
-  let device: { browser: Browser; page: Page } | undefined;
+  let device: DeviceClient | undefined;
   try {
     const project = await openCanvas(page, engine);
-    const port = await ipadPort(engine);
-    const started = await (await engine.rpc()).call("ipad.pairStart");
-    device = await openDevice(port, started.code);
+    device = await openDevice(engine);
     expect((await (await engine.rpc()).call("ipad.devices")).devices).toHaveLength(1);
 
     await device.page.keyboard.press("d");
@@ -96,7 +39,33 @@ test("a paired iPad draws with the Pencil onto the Mac's canvas, and a result fr
       .then(async () => (await roomShapes(engine, project, "image")).find((shape) => shape.props.assetId)!);
     await expect(shapeOnScreen(device.page, image.id)).toBeVisible({ timeout: 20_000 });
   } finally {
-    await device?.browser.close();
+    await device?.close();
+    await engine.dispose();
+  }
+});
+
+test("the device pans its own view and leaves the Mac's where it was", async ({ page }) => {
+  const { engine } = await startSettingsEngine({ env: testIpad(), dotenv: `OPENROUTER_API_KEY=${KEY}\n${IPAD_DOTENV}` });
+  let device: DeviceClient | undefined;
+  try {
+    const project = await openCanvas(page, engine);
+    const starter = "shape:starter-scene";
+    await expect(shapeOnScreen(page, starter)).toBeVisible();
+    device = await openDevice(engine, project);
+    await expect(shapeOnScreen(device.page, starter)).toBeVisible({ timeout: 20_000 });
+
+    const macBefore = await centre(shapeOnScreen(page, starter));
+    const deviceBefore = await centre(shapeOnScreen(device.page, starter));
+
+    await device.page.mouse.move(600, 400);
+    await device.page.mouse.wheel(0, 240);
+    await expect.poll(async () => Math.round((await centre(shapeOnScreen(device.page, starter))).y)).not.toBe(Math.round(deviceBefore.y));
+
+    const macAfter = await centre(shapeOnScreen(page, starter));
+    expect(Math.round(macAfter.x)).toBe(Math.round(macBefore.x));
+    expect(Math.round(macAfter.y)).toBe(Math.round(macBefore.y));
+  } finally {
+    await device?.close();
     await engine.dispose();
   }
 });

@@ -2,12 +2,11 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { deviceRequest, readAuthority, TEST_NAME } from "../../engine/test/ipadClient.ts";
+import { deviceRequest, readAuthority } from "../../engine/test/ipadClient.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { expect, test } from "./fixtures.ts";
+import { testIpad, TEST_NAME } from "./ipad.ts";
 import { openApp, openSettings, startSettingsEngine } from "./settings.ts";
-
-const testIpad = (extra: Record<string, string> = {}) => ({ UNFRAMED_TEST_IPAD: TEST_NAME, IPAD_PORT: "0", ...extra });
 
 const section = (page: Page) => page.getByTestId("ipad-section");
 
