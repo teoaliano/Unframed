@@ -133,7 +133,7 @@ test("audio in other media: the unused mark in every tray, nothing sent, Agent o
   const { engine } = audio;
   await openCanvas(page, engine);
   await filledAudio(engine, "shape:line", "300", { x: 420, y: 420 }, "line.wav");
-  await filledMedia(engine, { id: "shape:photo", type: "image", ref: "301", at: { x: 760, y: 420 }, bytes: pngBytes(20, 20), name: "photo.png", mime: "image/png", natural: { w: 20, h: 20 }, width: 140 });
+  await filledMedia(engine, { id: "shape:photo", type: "image", ref: "301", at: { x: 120, y: 420 }, bytes: pngBytes(20, 20), name: "photo.png", mime: "image/png", natural: { w: 20, h: 20 }, width: 140 });
 
   await clickShape(page, "shape:line");
   await expect(toolbar(page).getByRole("button", { name: "Generate" })).toHaveCount(0);

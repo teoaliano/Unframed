@@ -192,7 +192,7 @@ export const TopBar = ({
       <div data-slot="top-bar-body" aria-hidden className="pointer-events-none absolute inset-0 box-border border-b bg-background" />
       <div data-slot="top-bar-start" {...region(cn(positioned, "flex h-9 shrink-0 items-center", DRAG, windows ? "pe-3" : "pe-4", lights && LIGHTS_INSET), regions.start)}>
         {lights && (
-          <div data-slot="top-bar-controls" aria-hidden className="pointer-events-none absolute inset-y-0 left-0">
+          <div data-slot="top-bar-controls" aria-hidden className="pointer-events-none absolute inset-y-0 left-0 [-webkit-app-region:drag]!">
             {controls === "stand-ins" && <WindowDots />}
           </div>
         )}
