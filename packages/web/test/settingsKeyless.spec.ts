@@ -3,18 +3,27 @@ import { join } from "node:path";
 import { toast } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 import { expectSlot, expectToken } from "./kit.ts";
-import { openApp, settingsButton, settingsDialog, startSettingsEngine } from "./settings.ts";
+import { openApp, openSettings, settingsButton, settingsDialog, showSection, startSettingsEngine } from "./settings.ts";
 
 const INTRO =
   "Unframed has no image model of its own. It sends your prompts to OpenRouter, which runs the model and bills your OpenRouter account per image (a few cents for most models). Connecting takes you there to approve Unframed; the key it gives back is saved on this machine and used only by your local server.";
 
-test("a keyless first load opens the dialog by itself, with the intro, Connect, and no Save until the paste field is revealed", async ({ page }) => {
+test("a keyless first load opens nothing by itself; the gear opens Settings on Generation with the intro, Connect, and no Save until the paste field is revealed", async ({ page }) => {
   const { engine } = await startSettingsEngine({ key: false });
   try {
     await openApp(page, engine);
-    const dialog = settingsDialog(page);
-    await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole("heading", { name: "Connect OpenRouter to start" })).toBeVisible();
+    await page.waitForTimeout(500);
+    await expect(settingsDialog(page)).toHaveCount(0);
+    const button = settingsButton(page);
+    await expect(button).toHaveAccessibleName("Settings");
+    await expect(button).not.toHaveAttribute("data-keyless");
+    expect(await button.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
+    await button.hover();
+    await expect(page.locator("[data-slot=tooltip-popup]")).toHaveText("Settings");
+
+    const dialog = await openSettings(page);
+    await expect(dialog.locator("[data-slot='dialog-title']")).toHaveText("Settings");
+    await expect(dialog.getByRole("tab", { name: "Generation" })).toHaveAttribute("aria-selected", "true");
     await expect(dialog.getByText(INTRO)).toBeVisible();
     await expect(dialog.getByRole("link", { name: "OpenRouter", exact: true })).toHaveAttribute("href", "https://openrouter.ai");
     await expect(dialog.getByRole("button", { name: "Connect OpenRouter" })).toBeVisible();
@@ -22,15 +31,14 @@ test("a keyless first load opens the dialog by itself, with the intro, Connect, 
     await expectSlot(dialog.getByRole("button", { name: "Connect OpenRouter" }), "button");
     await expectToken(dialog.getByRole("button", { name: "Connect OpenRouter" }), "background-color", "--primary");
     await expectSlot(dialog.getByRole("button", { name: "or paste a key instead" }), "button");
-    await expect(dialog.getByText("Default models")).toHaveCount(0);
-    await expect(dialog.getByText("Output folder")).toHaveCount(0);
-    await expect(dialog.getByText("Local agents")).toHaveCount(0);
+    await expect(dialog.getByTestId("models-need-key")).toHaveText("Connect OpenRouter or paste a Vercel AI Gateway key to choose the models Generate starts on.");
+    await expect(dialog.getByRole("combobox", { name: "Image", exact: true })).toHaveCount(0);
     await expect(dialog.getByRole("button", { name: "Save" })).toHaveCount(0);
-    await expect(dialog.getByLabel("API key")).toHaveCount(0);
+    await expect(dialog.getByLabel("API key", { exact: true })).toHaveCount(0);
 
     await dialog.getByRole("button", { name: "or paste a key instead" }).click();
     await expect(dialog.getByRole("heading", { name: "API key" })).toBeVisible();
-    const field = dialog.getByLabel("API key");
+    const field = dialog.getByLabel("API key", { exact: true });
     await expect(field).toHaveAttribute("type", "password");
     await expect(field).toHaveAttribute("placeholder", "sk-or-v1-…");
     await expect(field).toBeFocused();
@@ -41,14 +49,51 @@ test("a keyless first load opens the dialog by itself, with the intro, Connect, 
 
     await dialog.getByRole("button", { name: "Close", exact: true }).click();
     await expect(dialog).toBeHidden();
-    const button = settingsButton(page);
-    await expect(button).toHaveAccessibleName("Add your API key");
-    await button.hover();
-    await expect(page.getByText("No OpenRouter key yet. Click to add one")).toBeVisible();
-
     // The reveal resets each time the dialog opens.
     await button.click();
     await expect(dialog.getByRole("button", { name: "or paste a key instead" })).toBeVisible();
+  } finally {
+    await engine.dispose();
+  }
+});
+
+test("without a key, Agents, Connections and General work: the local agents, outside connections and the output folder are all there", async ({ page }) => {
+  const { engine } = await startSettingsEngine({ key: false });
+  try {
+    await openApp(page, engine);
+    const dialog = await openSettings(page);
+
+    await showSection(dialog, "Agents");
+    const agents = dialog.getByRole("region", { name: "Local agents" });
+    await expect(agents.getByRole("button", { name: "Check again" })).toBeVisible();
+    await expect(dialog.getByLabel("Claude command or path")).toBeVisible();
+    await expect(dialog.getByRole("combobox", { name: "Follow-up behavior" })).toHaveText("Queue");
+    await expect(dialog.getByRole("button", { name: "Save" })).toBeVisible();
+
+    await showSection(dialog, "Connections");
+    await expect(dialog.getByText("Agents outside Unframed")).toBeVisible();
+    await expect(dialog.getByTestId("agents-generate-need-key")).toContainText("Connect OpenRouter to let agents generate.");
+    await expect(dialog.getByRole("button", { name: "Save" })).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Connect an agent" }).click();
+    const connect = page.getByRole("dialog", { name: "Connect an agent" });
+    await expect(connect.getByTestId("agents-generate-need-key")).toHaveText("Connect OpenRouter to let agents generate.");
+    await expect(connect.getByLabel("Spend limit amount")).toHaveCount(0);
+    await connect.getByRole("button", { name: "Create connection" }).click();
+    await expect(connect.getByTestId("setup-code").first()).toBeVisible();
+    await connect.getByRole("button", { name: "Done" }).click();
+    await expect(dialog.getByTestId("outside-connection")).toHaveCount(1);
+    await expect(dialog.getByTestId("outside-connection").getByRole("button", { name: "Limit" })).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Connect OpenRouter to let agents generate" }).click();
+    await expect(dialog.getByRole("tab", { name: "Generation" })).toHaveAttribute("aria-selected", "true");
+
+    await showSection(dialog, "General");
+    const folder = dialog.getByLabel("Output folder");
+    await expect(folder).toHaveValue(join(engine.dataDir, "output"));
+    await folder.fill(join(engine.dataDir, "elsewhere"));
+    await dialog.getByRole("button", { name: "Save" }).click();
+    await expect(dialog.getByRole("status").filter({ hasText: "Saved to .env" })).toBeVisible();
+    await expect(dialog).toBeVisible();
+    expect((await (await engine.rpc()).call("settings.get")).outputDir).toBe(join(engine.dataDir, "elsewhere"));
   } finally {
     await engine.dispose();
   }
@@ -58,9 +103,9 @@ test("pasting: a bad key shows the key error in the banner, a good one closes th
   const { engine } = await startSettingsEngine({ key: false });
   try {
     await openApp(page, engine);
-    const dialog = settingsDialog(page);
+    const dialog = await openSettings(page);
     await dialog.getByRole("button", { name: "or paste a key instead" }).click();
-    const field = dialog.getByLabel("API key");
+    const field = dialog.getByLabel("API key", { exact: true });
     await field.fill("not-a-key");
     await dialog.getByRole("button", { name: "Save" }).click();
     await expect(dialog.getByRole("alert")).toHaveText('That does not look like an OpenRouter key. Keys start with "sk-or-".');

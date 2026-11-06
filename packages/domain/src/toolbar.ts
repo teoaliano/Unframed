@@ -1,3 +1,5 @@
+import type { GenerationProvider } from "@unframed/contracts";
+import { providerLabel } from "./generationProviders.ts";
 import type { ShapeKind } from "./canvasShapes.ts";
 import type { RunsValue } from "./runsValue.ts";
 
@@ -28,9 +30,11 @@ export type ToolbarState =
   | { readonly kind: "result"; readonly shapeId: string; readonly generate: boolean }
   | { readonly kind: "generating"; readonly shapeId: string }
   | { readonly kind: "open"; readonly shapeId: string }
-  | { readonly kind: "generate"; readonly hint: string }
-  | { readonly kind: "recipe"; readonly groupId: string; readonly name: string; readonly runs: RunsValue }
-  | { readonly kind: "agent" };
+  | { readonly kind: "generate"; readonly hint: string; readonly drag: boolean }
+  | { readonly kind: "recipe"; readonly groupId: string; readonly name: string; readonly runs: RunsValue; readonly drag: boolean }
+  | { readonly kind: "agent"; readonly drag: boolean };
+
+const holdsFrame = (shape: ToolbarShape): boolean => (shape.kind === "page" || shape.kind === "motion" || shape.kind === "component") && !!shape.file;
 
 export const recipeGroupOf = (selected: ReadonlyArray<ToolbarShape>): ToolbarShape | undefined => {
   const groups = selected.filter((shape) => shape.kind === "group" && shape.recipe !== undefined);
@@ -66,12 +70,13 @@ export const toolbarState = (input: ToolbarInput): ToolbarState => {
       if (only.generating) return { kind: "generating", shapeId: only.id };
       return { kind: "result", shapeId: only.id, generate: input.usable };
     }
-    if ((only.kind === "page" || only.kind === "motion" || only.kind === "component") && only.file) return { kind: "open", shapeId: only.id };
+    if (holdsFrame(only)) return { kind: "open", shapeId: only.id };
   }
+  const drag = selected.length > 1 && selected.some(holdsFrame);
   const recipeGroup = recipeGroupOf(selected);
-  if (recipeGroup?.recipe) return { kind: "recipe", groupId: recipeGroup.id, name: recipeGroup.ref ?? "", runs: recipeGroup.recipe.runs };
-  if (input.usable) return { kind: "generate", hint: selectionHint(selected, input.results) };
-  return { kind: "agent" };
+  if (recipeGroup?.recipe) return { kind: "recipe", groupId: recipeGroup.id, name: recipeGroup.ref ?? "", runs: recipeGroup.recipe.runs, drag };
+  if (input.usable) return { kind: "generate", hint: selectionHint(selected, input.results), drag };
+  return { kind: "agent", drag };
 };
 
 export const modelPart = (model: string): string => {
@@ -84,9 +89,14 @@ export const resultLine = (facts: {
   readonly width?: number | undefined;
   readonly height?: number | undefined;
   readonly cost: number | null;
+  readonly provider?: GenerationProvider | undefined;
+  readonly listPrice?: boolean | undefined;
 }): string =>
   [
     modelPart(facts.model),
     ...(facts.width !== undefined && facts.height !== undefined ? [`${facts.width}×${facts.height}`] : []),
-    ...(facts.cost === null ? [] : [formatCost(facts.cost)]),
+    ...(facts.cost === null ? [] : [costText(facts.cost, facts.listPrice)]),
+    ...providerLabel(facts.provider),
   ].join(" · ");
+
+export const costText = (cost: number, listPrice?: boolean): string => `${listPrice === true ? "≈" : ""}${formatCost(cost)}`;

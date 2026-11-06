@@ -9,8 +9,16 @@ import type { TurnChanges } from "./turnChanges.ts";
 const TOO_LARGE_BYTES = 2 * 1024 * 1024;
 export const TOO_LARGE = "This file is too large to diff.";
 
+const nodeLabel = (record: TLRecord | null): string | undefined => {
+  if (record?.typeName !== "shape") return undefined;
+  const ref = (record.meta as { ref?: unknown }).ref;
+  if (record.type === "node") return typeof ref === "string" ? `Node @${ref}` : "Node";
+  if (record.type === "wire") return `Wire, ${String((record.props as { role?: unknown }).role)}`;
+  return undefined;
+};
+
 const labelOf = (record: TLRecord | null, shapeId: string): string =>
-  shapeLabel((record?.typeName === "shape" ? record.props : {}) as { title?: unknown; fileName?: unknown }) ?? agentShapeId(shapeId);
+  nodeLabel(record) ?? shapeLabel((record?.typeName === "shape" ? record.props : {}) as { title?: unknown; fileName?: unknown }) ?? agentShapeId(shapeId);
 
 const isArtifact = (record: TLRecord | null): boolean => record?.typeName === "shape" && (record.type === "page" || record.type === "motion" || record.type === "component");
 

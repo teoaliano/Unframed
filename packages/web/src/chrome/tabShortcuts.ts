@@ -25,7 +25,8 @@ export const useTabShortcuts = (activation: ProjectActivation): void => {
       if (typing(event.target) || dialogOpen()) return;
       const cmd = mac ? event.metaKey : event.ctrlKey;
       const key = event.key;
-      const { order, active } = activation.tabState();
+      const { order } = activation.tabState();
+      const active = activation.selectedTab();
 
       if (event.ctrlKey && key === "Tab" && order.length > 0) {
         const at = Math.max(0, order.indexOf(active ?? ""));
@@ -40,8 +41,7 @@ export const useTabShortcuts = (activation: ProjectActivation): void => {
         const focused = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.project : undefined;
         if (focused === undefined) return;
         event.preventDefault();
-        const at = order.indexOf(focused);
-        activation.moveTab(focused, at + (key === "ArrowLeft" ? -1 : 1));
+        activation.stepTab(focused, key === "ArrowLeft" ? -1 : 1);
         return;
       }
 
@@ -53,7 +53,7 @@ export const useTabShortcuts = (activation: ProjectActivation): void => {
       } else if (!event.shiftKey && lower === "w") {
         if (active === undefined) return;
         event.preventDefault();
-        void activation.closeTab(active);
+        if (!activation.tabState().pinned.includes(active)) void activation.closeTab(active);
       } else if (event.shiftKey && lower === "t") {
         event.preventDefault();
         void activation.reopenClosed();

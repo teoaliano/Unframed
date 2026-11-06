@@ -7,6 +7,9 @@ import { Health, Settings, SettingsPatch } from "./settings.ts";
 import { VideoForget, VideoPoll, VideoStart } from "./video.ts";
 import { OAuthCancel, OAuthPending, OAuthStart, OAuthStatus, ProjectsDelete, ProjectsRename, SettingsRemoveKey } from "./openRouterKey.ts";
 import { RunText, TextComplete } from "./text.ts";
+import { ChainRun, FlowSave, NodeRemoveVersion, NodeRenders, NodeRun, NodeUseVersion } from "./nodes.ts";
+import { ElevenLabsStatusRpc, RunAudio, SettingsRemoveElevenLabsKey, VoicesList } from "./audio.ts";
+import { SettingsRemoveVercelKey, VercelStatusRpc } from "./vercel.ts";
 import { LibraryCopyFiles, LibraryDelete, LibraryList, LibrarySave } from "./library.ts";
 import {
   ClientChatCommand,
@@ -21,7 +24,7 @@ import {
   TurnDiff,
   TurnDiffInput,
 } from "./agent.ts";
-import { ArtifactOpenLive, ArtifactSnapshots, ComponentCopy, ComponentPinsSubscribe, ComponentUpdates, MotionRenderStart, MotionRenderStatus, MotionTimelineRpc, MotionUpload } from "./artifacts.ts";
+import { ArtifactFileChanges, ArtifactOpenLive, ArtifactSnapshots, ComponentCopy, ComponentPinsSubscribe, ComponentUpdates, MotionRenderStart, MotionRenderStatus, MotionTimelineRpc, MotionUpload } from "./artifacts.ts";
 import { KitExportFile, KitUsage } from "./kits.ts";
 import { KitSaveToLibrary, KitUpdateInLibrary } from "./library.ts";
 import { LegacyImportMarkSeen, LegacyImportReport, LegacyImportRetry, LegacyImportStatus } from "./legacy.ts";
@@ -320,6 +323,12 @@ export const UnframedRpcs = RpcGroup.make(
   VideoForget,
   RunText,
   TextComplete,
+  RunAudio,
+  VoicesList,
+  ElevenLabsStatusRpc,
+  SettingsRemoveElevenLabsKey,
+  VercelStatusRpc,
+  SettingsRemoveVercelKey,
   LibraryList,
   LibrarySave,
   LibraryDelete,
@@ -337,6 +346,7 @@ export const UnframedRpcs = RpcGroup.make(
   MotionRenderStatus,
   MotionTimelineRpc,
   ArtifactSnapshots,
+  ArtifactFileChanges,
   ArtifactOpenLive,
   ComponentPinsSubscribe,
   ComponentUpdates,
@@ -359,5 +369,11 @@ export const UnframedRpcs = RpcGroup.make(
   ArtifactPrepareEdit,
   ArtifactEdit,
   ArtifactImages,
+  NodeRun,
+  ChainRun,
+  NodeUseVersion,
+  NodeRemoveVersion,
+  NodeRenders,
+  FlowSave,
 );
 export type UnframedRpcs = typeof UnframedRpcs;

@@ -16,6 +16,10 @@ import { MediaStore } from "../media/mediaStore.ts";
 import { clearStoredModels } from "../lastUsed.ts";
 import { Native } from "../native.ts";
 import { Catalogue } from "../openRouter/catalogue.ts";
+import { ElevenLabsError, listAudioModels, listVoices, subscriptionStatus } from "../elevenLabs/client.ts";
+import { ELEVENLABS_NO_KEY, GENERATION_PROVIDERS, providerServesMessage } from "@unframed/domain";
+import { vercelCredits } from "../vercel/client.ts";
+import { providerCatalogues } from "../runs/providers.ts";
 import { VideoCatalogue } from "../openRouter/videoCatalogue.ts";
 import { Runs } from "../runs/runs.ts";
 import { RenderJobs } from "../video/renderJobs.ts";
@@ -35,6 +39,8 @@ import { Artifacts } from "../artifacts/layer.ts";
 import { legacyImportMethods } from "../legacy/methods.ts";
 import { ProjectDatabase } from "../projectDatabase.ts";
 import { projectActivityStream } from "../projectActivity.ts";
+import { NodeRuns } from "../nodes/nodeRuns.ts";
+import { flowContent } from "../nodes/flowSave.ts";
 
 const asUnframed = (error: unknown): UnframedError => (error instanceof UnframedError ? error : unframedError("internal", errorText(error)));
 
@@ -48,6 +54,10 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const media = yield* MediaStore;
     const config = yield* Config;
     const catalogue = yield* Catalogue;
+    const catalogues = providerCatalogues({
+      vercelOrigin: config.vercelOrigin,
+      openRouter: (medium) => Effect.runPromise(medium === "image" ? catalogue.listImageModels : catalogue.listTextModels),
+    });
     const videoCatalogue = yield* VideoCatalogue;
     const runs = yield* Runs;
     const renderJobs = yield* RenderJobs;
@@ -59,6 +69,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const artifacts = yield* Artifacts;
     const connections = yield* AgentConnections;
     const selectionHub = yield* SelectionHub;
+    const nodeRuns = yield* NodeRuns;
     const legacy = legacyImportMethods(yield* ProjectDatabase, projects);
     const context = yield* Effect.context<SettingsStore | Projects | Native>();
 
@@ -79,6 +90,32 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
         ),
       "settings.subscribe": () => settings.subscribe,
       "settings.removeKey": () => lifecycle.removeKey,
+      "settings.removeElevenLabsKey": () => lifecycle.removeElevenLabsKey,
+      "elevenlabs.status": () =>
+        Effect.flatMap(settings.read, (current) =>
+          Effect.tryPromise({
+            try: () => subscriptionStatus(config.elevenLabsOrigin, current.elevenLabsKey),
+            catch: (error) => unframedError("upstream", errorText(error)),
+          }),
+        ),
+      "settings.removeVercelKey": () => lifecycle.removeVercelKey,
+      "vercel.status": () =>
+        Effect.flatMap(settings.read, (current) =>
+          Effect.tryPromise({
+            try: () => vercelCredits(config.vercelOrigin, current.vercelKey),
+            catch: (error) => unframedError("upstream", errorText(error)),
+          }),
+        ),
+      "voices.list": (input) =>
+        Effect.flatMap(settings.read, (current) =>
+          current.elevenLabsKey === ""
+            ? Effect.fail(unframedError("unavailable", ELEVENLABS_NO_KEY))
+            : Effect.tryPromise({
+                try: () => listVoices(config.elevenLabsOrigin, current.elevenLabsKey, input),
+                catch: (error) => unframedError("upstream", error instanceof ElevenLabsError ? error.message : errorText(error)),
+              }),
+        ),
+      "run.audio": (request) => runs.audio(request),
       "oauth.start": () => oauth.start,
       "oauth.pending": () => oauth.pending,
       "oauth.cancel": () => lifecycle.cancelConnection,
@@ -143,10 +180,32 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "preferences.get": ({ keys }) => Effect.map(preferences.get(keys), (values) => ({ values })),
       "preferences.set": ({ key, value }) => Effect.as(preferences.set(key, value), {}),
       "preferences.subscribe": ({ keys }) => preferences.subscribe(keys),
-      "models.list": ({ medium }) =>
-        medium === "video" ? videoCatalogue.list : medium === "text" ? catalogue.listTextModels : catalogue.listImageModels,
+      "models.list": ({ medium, provider }) =>
+        provider !== undefined && provider !== "openrouter"
+          ? GENERATION_PROVIDERS[provider].media.includes(medium) && (medium === "image" || medium === "text")
+            ? Effect.flatMap(settings.read, (current) => Effect.promise(() => catalogues[provider](current, medium)))
+            : Effect.fail(unframedError("bad_request", providerServesMessage(provider, medium)))
+          : medium === "audio"
+          ? Effect.flatMap(settings.read, (current) => Effect.promise(() => listAudioModels(config.elevenLabsOrigin, current.elevenLabsKey, current.audioModel)))
+          : medium === "video"
+            ? videoCatalogue.list
+            : medium === "text"
+              ? catalogue.listTextModels
+              : catalogue.listImageModels,
       "models.imagePricing": ({ id }) => catalogue.imagePricing(id),
       "run.image": (request) => runs.image(request),
+      "node.run": ({ project, shapeId, downstream, scope, rendered, steps }) => nodeRuns.run({ project, ids: [shapeId], downstream, scope, rendered, expect: steps }),
+      "chain.run": ({ project, shapeIds, rendered, steps }) => nodeRuns.run({ project, ids: shapeIds, rendered, expect: steps }),
+      "node.useVersion": ({ project, shapeId, versionId }) => nodeRuns.useVersion(project, shapeId, versionId),
+      "node.removeVersion": ({ project, shapeId, versionId }) => nodeRuns.removeVersion(project, shapeId, versionId),
+      "node.renders": ({ project, files }) => nodeRuns.renders(project, files),
+      "flow.save": ({ project, shapeIds, name, summary }) =>
+        Effect.gen(function* () {
+          const made = flowContent(project, yield* rooms.read(project), shapeIds, name);
+          if ("error" in made) return yield* unframedError("bad_request", made.error);
+          const saved = yield* presets.save({ name, summary: summary ?? "", content: made.content });
+          return { preset: saved.preset, droppedWires: made.droppedWires };
+        }),
       "run.text": (request) => runs.text(request),
       "text.complete": (request) => runs.complete(request),
       "run.subscribe": ({ project }) => runs.subscribe(project),
@@ -184,6 +243,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "motion.renderStatus": ({ project, id }) => artifacts.renderStatus(project, id),
       "motion.timeline": ({ project, file }) => artifacts.timeline(project, file),
       "artifact.snapshots": ({ project }) => artifacts.snapshots(project),
+      "artifact.fileChanges": ({ project }) => artifacts.fileChanges(project),
       "component.pins": ({ project }) => artifacts.componentPins(project),
       "component.copy": (input) => artifacts.componentCopy(input),
       "component.updates": ({ project, shapeId }) => artifacts.componentUpdates(project, shapeId),

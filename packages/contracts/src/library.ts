@@ -27,7 +27,7 @@ const PresetFields = {
 const ContentPreset = Schema.Struct({
   ...PresetFields,
   needs: Schema.optionalKey(Schema.String),
-  kind: Schema.Literals(["recipe", "group"]),
+  kind: Schema.Literals(["recipe", "group", "flow"]),
   medium: Schema.optionalKey(Medium),
   content: PresetContent,
 });

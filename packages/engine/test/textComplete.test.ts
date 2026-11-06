@@ -153,7 +153,7 @@ describe("text.complete failures", () => {
     await rpc.call("projects.create", { name: "board" });
     await expect(rpc.call("text.complete", { project: "board", prompt: "" })).rejects.toMatchObject({
       code: "unavailable",
-      message: "No OpenRouter key yet. Add one with the key icon in the top right (it becomes a settings gear once saved).",
+      message: "Generating needs OpenRouter. Connect it in Settings, under Generation.",
     });
     expect(engine.stub!.requests).toEqual([]);
   });

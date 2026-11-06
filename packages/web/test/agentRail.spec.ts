@@ -58,7 +58,7 @@ test("the Agent button slides the rail in from the left under the top bar, full 
   await expect(card).toHaveAttribute("data-docked", "");
   await expect(card).not.toHaveAttribute("inert");
   expect((await page.locator("[data-slot='top-bar-body']").boundingBox())!.x).toBe(0);
-  await expect(page.getByRole("button", { name: /^(Settings|Add your API key)$/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
 
   // The zoom controls and the bottom toolbar move out beside the rail.
   expect((await page.locator(".tlui-navigation-panel").boundingBox())!.x).toBeGreaterThanOrEqual(380);

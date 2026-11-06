@@ -5,8 +5,10 @@
  * stages it for the final prompt dialog. Everything after the list text is in hand is the
  * one pure Free batch call, so what the dialog shows is what gets sent.
  */
-import { resultMetaOf, type ImageParams, type RecipeRef } from "@unframed/contracts";
+import { resultMetaOf, type GenerationProvider, type ImageParams, type RecipeRef } from "@unframed/contracts";
 import {
+  providerField,
+  providerOf,
   composeSelection,
   freeBatch,
   freeNotes,
@@ -61,6 +63,7 @@ export interface StagedFree {
   readonly extraCost: number | undefined;
   readonly model: string | undefined;
   readonly params: ImageParams;
+  readonly provider: GenerationProvider | undefined;
   /** Composites and sketches already rendered and uploaded, by slot: one Generate writes each once. */
   readonly rendered: Map<string, RecipeRef>;
 }
@@ -125,6 +128,7 @@ export const sendBatch = async (editor: Editor, engine: EngineConnection, stage:
     sources: [...live.sources],
     anchor: selectionBox(editor, selected as TLShapeId[]) ?? { x: 0, y: 0, w: 0, h: 0 },
     ...(stage.extraCost === undefined ? {} : { batchExtraCost: stage.extraCost }),
+    ...providerField(stage.provider),
   });
 };
 
@@ -150,7 +154,8 @@ export const sendFree = async ({ editor, engine, project, values, source }: Send
   if (splitList(found.listText).sections.length < 2) {
     const images = slots.filter((_ref, index) => composition.references[index]!.kind === "image");
     const shape = editor.getShape(found.source.id as TLShapeId);
-    const model = found.source.textResult && shape ? resultMetaOf(shape)?.model : undefined;
+    const result = found.source.textResult && shape ? resultMetaOf(shape) : undefined;
+    const model = result !== undefined && providerOf(result.provider) === providerOf(values.provider) ? result.model : undefined;
     const answer = await engine.call("text.complete", {
       project,
       system: repairSystemPrompt(images.length),
@@ -158,6 +163,7 @@ export const sendFree = async ({ editor, engine, project, values, source }: Send
       references: images,
       batchId,
       ...(model === undefined ? {} : { model }),
+      ...providerField(values.provider),
     });
     if (answer.cost !== null) extraCost = answer.cost;
     const split = splitList(answer.text);
@@ -180,6 +186,7 @@ export const sendFree = async ({ editor, engine, project, values, source }: Send
     extraCost,
     model: values.model,
     params,
+    provider: values.provider,
     rendered,
   };
   const batch = freeBatch({ shapes: source.shapes, selected: source.selected, instruction: source.instruction, sourceId: found.source.id, listText, repaired });

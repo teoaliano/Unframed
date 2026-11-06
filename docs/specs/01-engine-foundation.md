@@ -108,6 +108,11 @@ Settings variables (may appear in `.env`; `.env` values override the process env
 | `OPENROUTER_IMAGE_MODEL` | `openai/gpt-image-2` | `^[\w.-]+\/[\w.:-]+$` | yes | no |
 | `OPENROUTER_TEXT_MODEL` | `google/gemini-3.5-flash-lite` | same as image | yes | no |
 | `OPENROUTER_VIDEO_MODEL` | `bytedance/seedance-2.0` | same as image | yes | no |
+| `AI_GATEWAY_API_KEY` (spec 22) | none | `^[\w-]{16,200}$` | yes | no (removal is its own action) |
+| `AI_GATEWAY_IMAGE_MODEL` (spec 22) | `bfl/flux-kontext-pro` | the model slug rule | yes | no |
+| `AI_GATEWAY_TEXT_MODEL` (spec 22) | `google/gemini-3.5-flash-lite` | the model slug rule | yes | no |
+| `ELEVENLABS_API_KEY` (spec 15) | none | `^[\w-]{20,200}$` | yes | no (removal is its own action) |
+| `ELEVENLABS_AUDIO_MODEL` (spec 15) | `eleven_v4` | `^[\w.-]{1,100}$` | yes | no |
 | `OUTPUT_DIR` | `./output` | `^[^\n\r"'#]{1,400}$` | yes | no |
 | `CLAUDE_PATH` | empty (found on PATH) | `^[^\n\r"'#;&|$`<>(){}\s][^\n\r"'#;&|$`<>(){}]{0,399}$` | yes | yes |
 | `CODEX_PATH` | empty (found on PATH) | same as `CLAUDE_PATH` | yes | yes |
@@ -133,7 +138,7 @@ Why hosting variables stay out of `.env.example`: `.env` overrides the environme
 
 Client dev variables: `UNFRAMED_CLIENT_PORT` (Vite port, default 5173; when set the port is strict), `UNFRAMED_SERVER_PORT` (the engine port the Vite proxy targets, default 8787) and `UNFRAMED_DEV_SHARE_ORIGIN` (the dev share relay's https origin; `pnpm dev:share` sets it). None of them is part of the hosting contract.
 
-`.env.example` at the repo root contains exactly: `OPENROUTER_API_KEY=` (empty), `OPENROUTER_IMAGE_MODEL=openai/gpt-image-2`, `OPENROUTER_TEXT_MODEL=google/gemini-3.5-flash-lite`, `OPENROUTER_VIDEO_MODEL=bytedance/seedance-2.0`, `OUTPUT_DIR=./output`, `PORT=8787`, each on its own line, with a one-line comment header saying the app writes this file itself and copying it is optional.
+`.env.example` at the repo root contains exactly: `OPENROUTER_API_KEY=` (empty), `OPENROUTER_IMAGE_MODEL=openai/gpt-image-2`, `OPENROUTER_TEXT_MODEL=google/gemini-3.5-flash-lite`, `OPENROUTER_VIDEO_MODEL=bytedance/seedance-2.0`, `AI_GATEWAY_API_KEY=` (empty), `AI_GATEWAY_IMAGE_MODEL=bfl/flux-kontext-pro`, `AI_GATEWAY_TEXT_MODEL=google/gemini-3.5-flash-lite`, `ELEVENLABS_API_KEY=` (empty), `ELEVENLABS_AUDIO_MODEL=eleven_v4`, `OUTPUT_DIR=./output`, `PORT=8787`, each on its own line, with a one-line comment header saying the app writes this file itself and copying it is optional.
 
 ### Test-only variables
 
@@ -142,6 +147,9 @@ This is the one table of every test-only variable in the build. A spec that uses
 | Variable | Used by | Effect |
 | --- | --- | --- |
 | `UNFRAMED_TEST_OPENROUTER_ORIGIN` | 01, 03, 04, 05, 10 | replaces `https://openrouter.ai` in every OpenRouter URL the engine builds: image generation and the image catalogue and pricing endpoints (spec 03), video create, status and catalogue and the unofficial `/api/frontend/v1/models/find` endpoint (spec 04), chat completions and the models listing (spec 05), the OAuth authorize page, the key exchange and the key status endpoint (spec 10). There is no per-URL override: every OpenRouter call goes through this one origin. Accepted only when it is an `http://127.0.0.1:<port>` or `http://localhost:<port>` origin; any other value is ignored and the engine logs `  test origin ignored: <value> is not a loopback origin` at boot, so the variable can never send the key anywhere but this machine |
+| `UNFRAMED_TEST_VERCEL_ORIGIN` | 22 | replaces `https://ai-gateway.vercel.sh` in every Vercel AI Gateway URL the engine builds, under the same loopback rule as `UNFRAMED_TEST_OPENROUTER_ORIGIN` |
+| `UNFRAMED_TEST_VERCEL_LOOKUP_MS` | 22 | the wait between Vercel AI Gateway generation lookups, in place of 1500 ms |
+| `UNFRAMED_TEST_ELEVENLABS_ORIGIN` | 15 | replaces `https://api.elevenlabs.io` in every ElevenLabs URL the engine builds: models, voices, speech and subscription. Accepted only under the same loopback rule as `UNFRAMED_TEST_OPENROUTER_ORIGIN` (one domain function for both); any other value is ignored with `  test origin ignored: <value> is not a loopback origin` |
 | `UNFRAMED_TEST_NATIVE_LOG` | 01 | a file path. When set, reveal and the folder picker never spawn OS commands. Each command the engine would have run is appended as one JSON line `{"cmd": string, "args": string[]}` |
 | `UNFRAMED_TEST_PICK_FOLDER` | 01, 10 | with `UNFRAMED_TEST_NATIVE_LOG` set, the folder picker's answer: `none` behaves as "no picker on this machine", `cancel` as a cancelled dialog, any other value as the chosen path |
 | `UNFRAMED_TEST_SHUTDOWN_HOOK_MS` | 01 | registers one extra shutdown hook that takes this many milliseconds, so a test can watch a hook finish inside the budget or be abandoned at 1.5 seconds |
@@ -331,7 +339,7 @@ Keys in use, each owned by the spec named:
 | Key | Owner | Value |
 | --- | --- | --- |
 | `project.active` | 02 | the active project's name, kept for the outside-agent view (spec 14) |
-| `project.tabs` | 17 | `{ order: string[], active: string \| null }`: the open project tabs and the active one, read at boot (spec 17) |
+| `project.tabs` | 17 | `{ order: string[], active: string \| null, pinned: string[], editing: string \| null, editors: { key, title, kind }[] }`: the open project tabs and editor tabs, the active project, the pinned ones, the selected editor tab and each editor tab's label, read at boot (spec 17). `editing` and `editors` are optional, so a value saved before editor tabs still reads |
 | `lastUsed.image`, `lastUsed.video`, `lastUsed.text` | 03 (04 and 05 add fields) | the composer's last-used values for that medium |
 | `library.view` | 06 | `"card"` or `"list"` |
 | `agent.followUp` | 08 (control in spec 10's dialog) | `"queue"` or `"steer"` |
@@ -340,6 +348,7 @@ Keys in use, each owned by the spec named:
 | `agent.stash.<project>` | 08 | that project's stashed prompts |
 | `agent.drafts.<project>` | 08 | that project's unsent composer drafts, by chat |
 | `agent.diffLayout` | 08 | `"stacked"` or `"split"` |
+| `parameters.panel` | 09 | `{ mode: "float" \| "dock", x?, y?, w?, h? }`: the canvas Parameters panel's mode, and its floating place (`x`, `y`: pixels from the canvas's top-left) and size (`w`, `h`) |
 
 A later spec that remembers something adds its key to this table.
 
@@ -402,6 +411,8 @@ A contract with the desktop shell. Renaming any of these is a breaking change th
 | `<body>` background | an explicit, opaque `background-color` equal to the canvas background of the current theme |
 | `<title>` | `Unframed`, set once in `index.html`. The web never changes `document.title` afterwards, so the shell's override sticks |
 | `<body>` children | the web mounts into `#root` and never removes or reorders other children of `<body>`, so an element the shell appends (its update pill) survives |
+
+The page owns the window drag region of the top bar (spec 17). The bar, its regions, the window controls' space, the logo and the empty space declare `-webkit-app-region: drag`, and every control in it declares `no-drag`. The shell's injected CSS still sets `.unframed-chrome-left` to `drag` and every child of it to `no-drag`; the page beats that rule on the controls' space and the logo with `!important`, because an unlayered injected rule wins over the page's layered one. A shell must not set `-webkit-app-region` on the bar or its children; the rules it injects today are harmless and can be removed in a later shell release.
 | external links | opened with `target="_blank"` or `window.open(url, "_blank")`, which the shell routes to the system browser. The `unframed-update://` scheme belongs to the shell and the web never uses it |
 
 In this spec the web renders an app frame with both chrome cards present (empty), the theme attribute and variable set from the ported theme values in `assets/theme/`, following the system light or dark preference. Spec 02 fills the cards and owns the theme.

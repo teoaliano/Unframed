@@ -46,6 +46,7 @@ export interface TurnInput {
   readonly interactionMode: InteractionMode;
   /** The message joins the running turn (spec 08's Steer). */
   readonly steer: boolean;
+  readonly command?: boolean;
 }
 
 export interface TitleInput {
@@ -69,7 +70,7 @@ export interface AdapterContext {
   readonly log: (chatId: string, line: string) => void;
   readonly dataDir: string;
   /** The approval detail of an in-app `generate`: its shapes, medium and estimate (spec 14). */
-  readonly generationDetail?: (chatId: string, input: Readonly<Record<string, unknown>>) => Promise<string | undefined>;
+  readonly generationDetail?: (chatId: string, input: Readonly<Record<string, unknown>>, tool?: string) => Promise<string | undefined>;
 }
 
 /**

@@ -8,6 +8,14 @@ import type { ComponentDeclaration } from "../components/sheet.ts";
 import type { Pin } from "../components/pins.ts";
 import { nameRefusal, slugName, uniqueName } from "../groupRules.ts";
 import { agentShapeId, roomShapeId } from "./turnText.ts";
+import { ARTIFACT_SCALE_MAX, ARTIFACT_SCALE_MIN, isArtifactScale } from "@unframed/contracts";
+import { cappedArtifactScale, scaledArtifactProps } from "../artifacts/artifactRules.ts";
+import { currentVersion, nodeCanvasOf } from "../nodes/model.ts";
+import { nodeStatus } from "../nodes/status.ts";
+import { wireRefusal } from "../nodes/wires.ts";
+import { GENERATION_PROVIDERS, isGenerationProvider, providerField, providerServesMessage } from "../generationProviders.ts";
+import { VERCEL_BAD_PROVIDER } from "../vercel.ts";
+import { NODE_DEFAULT_SIZE, NODE_MEDIA, NODE_MIN_HEIGHT, NODE_WIDTH, WIRE_ROLES } from "@unframed/contracts";
 
 export interface CanvasRecord {
   readonly id: string;
@@ -32,9 +40,12 @@ export const shapeKind = (type: string | undefined): ShapeKind => {
       return "prompt";
     case "image":
     case "video":
+    case "audio":
     case "page":
     case "motion":
     case "component":
+    case "node":
+    case "wire":
       return type;
     case "frame":
       return "group";
@@ -100,6 +111,7 @@ interface CanvasViewInput {
   readonly selection: ReadonlyArray<string>;
   readonly declarations?: ReadonlyMap<string, ComponentDeclaration>;
   readonly pins?: ReadonlyMap<string, ReadonlyArray<Pin>>;
+  readonly renders?: ReadonlyMap<string, string>;
 }
 
 interface CanvasView {
@@ -126,6 +138,7 @@ export const canvasShapesOf = (records: ReadonlyArray<CanvasRecord>, boxes: Read
       ...(kind === "prompt" && obj(unframed.result).medium === "text" ? { textResult: true } : {}),
       ...(media.file === undefined ? {} : { file: media.file }),
       ...(media.url === undefined ? {} : { link: media.url }),
+      ...((kind === "page" || kind === "motion") && typeof obj(shape.props).file === "string" && obj(shape.props).file !== "" ? { file: obj(shape.props).file as string } : {}),
     };
   });
 };
@@ -155,8 +168,21 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
     if (record.type === "component" && typeof record.props?.tag === "string" && typeof record.props.file === "string") currentSheets.set(record.props.tag, record.props.file);
   }
   const out: Record<string, unknown>[] = [];
+  const nodeCanvas = nodeCanvasOf(input.records, shapes, input.renders ?? new Map());
   for (const record of paintOrder(input.records)) {
     const fact = facts.get(record.id)!;
+    if (fact.kind === "wire") {
+      const wire = obj(record.props);
+      out.push({
+        id: agentShapeId(record.id),
+        kind: "wire",
+        from: agentShapeId(String(wire.from ?? "")),
+        to: agentShapeId(String(wire.to ?? "")),
+        role: wire.role,
+        ...(wire.files === undefined ? {} : { files: wire.files }),
+      });
+      continue;
+    }
     const props = obj(record.props);
     const unframed = obj(obj(record.meta).unframed);
     const local = input.boxes.get(record.id)?.local ?? { x: record.x ?? 0, y: record.y ?? 0, w: 0, h: 0 };
@@ -188,6 +214,11 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
         if (fact.kind === "image" && !isDefaultCrop(props.crop)) entry.crop = props.crop;
         break;
       }
+      case "audio": {
+        if (typeof props.file === "string" && props.file !== "") entry.file = props.file;
+        entry.fileName = typeof props.fileName === "string" ? props.fileName : "";
+        break;
+      }
       case "group": {
         entry.members = shapes
           .filter((shape) => shape.parent === record.id)
@@ -204,6 +235,7 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
         const pinned = input.pins?.get(record.id) ?? [];
         if (pinned.length > 0) entry.components = pinned.map((pin) => ({ tag: pin.tag, sheet: pin.sheet, current: currentSheets.get(pin.tag) === undefined || currentSheets.get(pin.tag) === pin.sheet }));
         if (typeof props.mode === "string") entry.mode = props.mode;
+        if (isArtifactScale(props.scale) && props.scale !== 1) entry.scale = props.scale;
         if (Array.isArray(props.lockedElements) && props.lockedElements.length > 0) entry.lockedElements = props.lockedElements;
         break;
       }
@@ -217,6 +249,23 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
         entry.variants = declaration?.variants ?? {};
         entry.props = declaration?.props ?? {};
         entry.slots = declaration?.slots ?? [];
+        break;
+      }
+      case "node": {
+        const node = nodeCanvas.nodes.get(record.id)!;
+        const status = nodeStatus({ node, canvas: nodeCanvas });
+        entry.medium = node.medium;
+        entry.model = node.model;
+        if (node.provider !== undefined) entry.provider = node.provider;
+        entry.params = node.params;
+        if (node.runs !== undefined) entry.runs = node.runs;
+        entry.instruction = node.instruction;
+        entry.status = status.state;
+        if (status.line !== "") entry.statusLine = status.line;
+        entry.versions = node.versions.length;
+        const current = currentVersion(node);
+        if (current) entry.current = { ...(current.file === undefined ? {} : { file: current.file }), ...(current.fileName === undefined ? {} : { fileName: current.fileName }), ...(current.text === undefined ? {} : { text: current.text }) };
+        if (node.error !== undefined) entry.error = node.error;
         break;
       }
       case "mark": {
@@ -245,7 +294,8 @@ const round = (value: number, places = 2): number => {
 const MAX_OPS = 200;
 
 const OP_TYPES = new Set(["create", "update", "move", "resize", "delete", "reparent", "rename"]);
-const CREATE_KINDS = new Set(["prompt", "image", "video", "group", "mark"]);
+const CREATE_KINDS = new Set(["prompt", "image", "video", "audio", "group", "mark", "node", "wire"]);
+const RUN_FIELDS = ["versions", "currentVersionId", "run", "status", "error"];
 const MARK_TYPES = new Set(["geo", "note", "arrow", "line"]);
 
 export interface FileFacts {
@@ -432,6 +482,11 @@ class Batch {
   }
 }
 
+const AUDIO_HEIGHT = 64;
+const AUDIO_DEFAULT_SIZE = { w: 320 };
+const AUDIO_EMPTY_SIZE = { w: 240 };
+const clampAudioWidth = (w: number): number => Math.min(640, Math.max(200, w));
+
 const numeric = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
 const fileOf = (op: string, ctx: BatchContext, props: Record<string, unknown>): FileFacts | undefined => {
@@ -465,6 +520,9 @@ const precheck = (ops: ReadonlyArray<unknown>, ctx: BatchContext): void => {
     }
     const props = obj(record.props);
     if (type === "update" && "lockedElements" in props) refuse("update: lockedElements is set by the person in the editor's Layers tab");
+    if (type === "update" || (type === "create" && record.kind === "node")) {
+      for (const field of RUN_FIELDS) if (field in props) refuse(`${String(type)}: ${field} is written by runs`);
+    }
     if (hasDataUrl(props)) refuse(`${String(type)}: bytes cannot travel in shape props; name a file in the project folder instead`);
     if (type === "create" || type === "update") fileOf(String(type), ctx, props);
   }
@@ -565,6 +623,17 @@ const create = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
       };
       break;
     }
+    case "audio": {
+      if (props.url !== undefined) refuse("create: audio takes props.file, a file in the project folder");
+      const facts = typeof props.file === "string" ? ctx.file(props.file) : undefined;
+      const { file: _file, fileName: _fileName, ...rest } = props;
+      record = {
+        ...base,
+        props: { ...rest, w: clampAudioWidth(w ?? (facts ? AUDIO_DEFAULT_SIZE.w : AUDIO_EMPTY_SIZE.w)), h: AUDIO_HEIGHT, file: facts ? (props.file as string) : "", fileName: facts?.fileName ?? "" },
+        meta: { ref: ref() },
+      };
+      break;
+    }
     case "group": {
       const taken = batch.records().flatMap((known) => {
         const known_ref = readRef(known);
@@ -575,6 +644,34 @@ const create = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
       const size = clampGroupSize({ w: w ?? 420, h: h ?? 280 });
       const { name: _name, ...rest } = props;
       record = { ...base, props: { w: size.w, h: size.h, name, color: "black", ...rest }, meta: {} };
+      break;
+    }
+    case "node": {
+      const medium = props.medium;
+      if (typeof medium !== "string" || !(NODE_MEDIA as ReadonlyArray<string>).includes(medium)) refuse(`create: a node's props.medium is one of ${NODE_MEDIA.join(", ")}`);
+      record = {
+        ...base,
+        props: {
+          w: Math.min(NODE_WIDTH.max, Math.max(NODE_WIDTH.min, w ?? NODE_DEFAULT_SIZE.w)),
+          h: Math.max(NODE_MIN_HEIGHT, h ?? NODE_DEFAULT_SIZE.h),
+          ...nodeSettings("create", medium as string, props),
+          versions: [],
+          currentVersionId: null,
+        },
+        meta: { ref: ref() },
+      };
+      break;
+    }
+    case "wire": {
+      if (parent) refuse("create: a wire cannot be a member of a group");
+      const from = batch.shape("create", props.from);
+      const to = batch.shape("create", props.to);
+      const role = props.role;
+      if (typeof role !== "string" || !(WIRE_ROLES as ReadonlyArray<string>).includes(role)) refuse(`create: a wire's props.role is one of ${WIRE_ROLES.join(", ")}`);
+      const refusal = wireRefusal({ canvas: nodeCanvasOf(batch.records(), canvasShapesOf(batch.records(), ctx.boxes)), from: from.id, to: to.id, role: role as never });
+      if (refusal !== null) refuse(`create: ${refusal}`);
+      const files = props.files === "entry" || props.files === "linked" ? { files: props.files } : {};
+      record = { ...shapeBase(id, "wire", 0, 0, ctx.pageId, batch.indexFor(ctx.pageId)), props: { from: from.id, to: to.id, role, ...files }, meta: { unframed: { chosen: true } } };
       break;
     }
     default: {
@@ -588,6 +685,38 @@ const create = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
     }
   }
   batch.put(record);
+};
+
+export const PAGE_NODE_PROVIDER = "A page node runs through OpenRouter.";
+
+const nodeSettings = (op: string, medium: string, props: Record<string, unknown>): Record<string, unknown> => {
+  const settings: Record<string, unknown> = { medium, model: "", params: {}, instruction: "" };
+  if (props.model !== undefined) {
+    if (typeof props.model !== "string") refuse(`${op}: a node's props.model is a model id`);
+    settings.model = props.model;
+  }
+  if (props.params !== undefined) {
+    const params = obj(props.params);
+    for (const [key, value] of Object.entries(params)) if (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") refuse(`${op}: params.${key} must be a string, number or boolean`);
+    settings.params = params;
+  }
+  if (props.instruction !== undefined) {
+    if (typeof props.instruction !== "string") refuse(`${op}: a node's props.instruction is text`);
+    settings.instruction = props.instruction;
+  }
+  if (props.runs !== undefined && props.runs !== null) {
+    if (medium !== "image") refuse(`${op}: only an image node takes runs`);
+    if (!Number.isInteger(props.runs) || (props.runs as number) < 1 || (props.runs as number) > 10) refuse(`${op}: runs is a whole number from 1 to 10`);
+    settings.runs = props.runs;
+  }
+  if (props.provider !== undefined && props.provider !== null) {
+    const provider = props.provider;
+    if (!isGenerationProvider(provider)) return refuse(`${op}: ${VERCEL_BAD_PROVIDER}`);
+    if (medium === "page" && provider !== "openrouter") refuse(`${op}: ${PAGE_NODE_PROVIDER}`);
+    if (medium !== "page" && !GENERATION_PROVIDERS[provider].media.includes(medium as never)) refuse(`${op}: ${providerServesMessage(provider, medium as never)}`);
+    Object.assign(settings, providerField(provider));
+  }
+  return settings;
 };
 
 const renameShape = (batch: Batch, ctx: BatchContext, shape: CanvasRecord, typed: unknown, op: string): void => {
@@ -622,11 +751,56 @@ const update = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
   if (kind === "component") {
     for (const field of ["tag", "file"]) if (field in patch) refuse(`update: ${field} is written by component_write`);
   }
+  if (kind === "node") {
+    const allowed = new Set(["medium", "model", "params", "runs", "instruction", "provider", "w", "h"]);
+    for (const key of Object.keys(patch)) if (!allowed.has(key)) refuse(`update: a node takes medium, model, provider, params, runs and instruction, not ${key}`);
+    const medium = typeof patch.medium === "string" ? patch.medium : String(props.medium);
+    if (!(NODE_MEDIA as ReadonlyArray<string>).includes(medium)) refuse(`update: a node's props.medium is one of ${NODE_MEDIA.join(", ")}`);
+    const settings = nodeSettings("update", medium, { ...patch, ...(patch.runs === undefined && medium !== "image" ? {} : {}) });
+    const next: Record<string, unknown> = { ...props, medium };
+    for (const key of ["model", "params", "instruction", "runs"]) if (key in patch && patch[key] !== null) next[key] = settings[key];
+    if (patch.runs === null || medium !== "image") delete next.runs;
+    if ("provider" in patch) {
+      delete next.provider;
+      Object.assign(next, providerField(settings.provider as never));
+    }
+    if (medium !== "image" && medium !== "text") delete next.provider;
+    if (numeric(patch.w)) next.w = Math.min(NODE_WIDTH.max, Math.max(NODE_WIDTH.min, patch.w));
+    if (numeric(patch.h)) next.h = Math.max(NODE_MIN_HEIGHT, patch.h);
+    delete next.error;
+    batch.put({ ...shape, props: next });
+    return;
+  }
+  if (kind === "wire") {
+    for (const key of Object.keys(patch)) if (key !== "role" && key !== "files") refuse(`update: a wire takes role and files, not ${key}`);
+    const role = patch.role ?? props.role;
+    if (typeof role !== "string" || !(WIRE_ROLES as ReadonlyArray<string>).includes(role)) refuse(`update: a wire's props.role is one of ${WIRE_ROLES.join(", ")}`);
+    const refusal = wireRefusal({ canvas: nodeCanvasOf(batch.records(), canvasShapesOf(batch.records(), ctx.boxes)), from: String(props.from), to: String(props.to), role: role as never, wireId: shape.id });
+    if (refusal !== null) refuse(`update: ${refusal}`);
+    const next: Record<string, unknown> = { ...props, role };
+    if (patch.files === "entry" || patch.files === "linked") next.files = patch.files;
+    else if (patch.files === null) delete next.files;
+    batch.put({ ...shape, props: next, meta: { ...obj(shape.meta), unframed: { ...obj(obj(shape.meta).unframed), chosen: true } } });
+    return;
+  }
   if (kind === "group" && "name" in patch) {
     const { name, ...rest } = patch;
     renameShape(batch, ctx, shape, name, "update");
     const renamed = batch.working.get(shape.id)!;
     return applyPatch(batch, renamed, { ...obj(renamed.props) }, rest);
+  }
+  if (kind === "audio") {
+    if (patch.url !== undefined) refuse("update: audio takes props.file, a file in the project folder");
+    const { file, fileName: _fileName, w, h: _h, ...rest } = patch;
+    if (typeof file === "string") {
+      props.file = file;
+      props.fileName = ctx.file(file)?.fileName ?? "";
+    } else if (file === null) {
+      props.file = "";
+      props.fileName = "";
+    }
+    if (numeric(w) && w > 0) props.w = clampAudioWidth(w);
+    return applyPatch(batch, shape, props, rest);
   }
   if (kind === "image" || kind === "video") {
     const asset = mediaAsset("update", ctx, kind, patch);
@@ -647,6 +821,16 @@ const update = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
   if ((kind === "page" || kind === "motion") && typeof patch.mode === "string" && !(ctx.modes ?? []).includes(patch.mode)) {
     refuse(`there is no mode ${patch.mode} in the kit`);
   }
+  if ((kind === "page" || kind === "motion") && "scale" in patch) {
+    const { scale, ...rest } = patch;
+    const next = scale === null ? 1 : scale;
+    if (!isArtifactScale(next)) refuse(`update: scale must be a number from ${ARTIFACT_SCALE_MIN} to ${ARTIFACT_SCALE_MAX}`);
+    if (!numeric(props.w) || !numeric(props.h)) return applyPatch(batch, shape, props, patch);
+    if (!("w" in rest) && !("h" in rest)) return applyPatch(batch, shape, {}, { ...scaledArtifactProps(props as { w: number; h: number }, next as number), ...rest });
+    const sized = { ...props, ...rest } as { w: number; h: number };
+    const capped = cappedArtifactScale({ ...sized, scale: next });
+    return applyPatch(batch, shape, props, { ...rest, scale: capped === 1 ? null : capped });
+  }
   applyPatch(batch, shape, props, patch);
 };
 
@@ -660,12 +844,14 @@ const applyPatch = (batch: Batch, shape: CanvasRecord, props: Record<string, unk
 
 const move = (batch: Batch, op: Record<string, unknown>): void => {
   const shape = batch.shape("move", op.id);
+  if (shape.type === "wire") refuse("move: a wire follows its ends");
   if (!numeric(op.x) || !numeric(op.y)) refuse("move: x and y must be numbers");
   batch.put({ ...shape, x: op.x as number, y: op.y as number });
 };
 
 const resize = (batch: Batch, op: Record<string, unknown>): void => {
   const shape = batch.shape("resize", op.id);
+  if (shape.type === "wire") refuse("resize: a wire has no size to set");
   const w = op.w;
   const h = op.h;
   if (!numeric(w) || !numeric(h) || w <= 0 || h <= 0) refuse("resize: w and h must be positive numbers");
@@ -677,6 +863,9 @@ const resize = (batch: Batch, op: Record<string, unknown>): void => {
       batch.put({ ...shape, props: { ...props, w, h: (w as number) * ratio } });
       return;
     }
+    case "audio":
+      batch.put({ ...shape, props: { ...props, w: clampAudioWidth(w as number), h: AUDIO_HEIGHT } });
+      return;
     case "frame": {
       const size = clampGroupSize({ w: w as number, h: h as number });
       batch.put({ ...shape, props: { ...props, ...size } });
@@ -684,6 +873,9 @@ const resize = (batch: Batch, op: Record<string, unknown>): void => {
     }
     case "text":
       batch.put({ ...shape, props: { ...props, w }, meta: { ...obj(shape.meta), sized: true } });
+      return;
+    case "node":
+      batch.put({ ...shape, props: { ...props, w: Math.min(NODE_WIDTH.max, Math.max(NODE_WIDTH.min, w as number)), h: Math.max(NODE_MIN_HEIGHT, h as number) } });
       return;
     case "arrow":
     case "line":
@@ -699,10 +891,21 @@ const resize = (batch: Batch, op: Record<string, unknown>): void => {
 
 const remove = (batch: Batch, op: Record<string, unknown>): void => {
   const shape = batch.shape("delete", op.id);
+  const gone = new Set([shape.id]);
   if (shape.type === "frame") {
-    for (const record of batch.records()) if (record.typeName === "shape" && record.parentId === shape.id) batch.remove(record.id);
+    for (const record of batch.records()) {
+      if (record.typeName === "shape" && record.parentId === shape.id) {
+        batch.remove(record.id);
+        gone.add(record.id);
+      }
+    }
   }
   batch.remove(shape.id);
+  for (const record of batch.records()) {
+    if (record.type !== "wire") continue;
+    const ends = obj(record.props);
+    if (gone.has(String(ends.from)) || gone.has(String(ends.to))) batch.remove(record.id);
+  }
 };
 
 const reparent = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): void => {

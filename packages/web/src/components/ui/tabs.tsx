@@ -11,11 +11,20 @@ import { cn } from "~/lib/utils";
 
 // First draft for design review (spec 13): three looks, three sizes, a status slot and two overflow modes.
 const tabsListVariants = cva("relative flex max-w-full items-center", {
+  compoundVariants: [
+    { fill: true, className: "h-full w-full gap-0" },
+    { fill: true, variant: "underline", className: "border-b-0" },
+  ],
   defaultVariants: {
+    fill: false,
     overflow: "scroll",
     variant: "underline",
   },
   variants: {
+    fill: {
+      true: "",
+      false: "",
+    },
     overflow: {
       scroll: "overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
       truncate: "overflow-hidden",
@@ -24,6 +33,7 @@ const tabsListVariants = cva("relative flex max-w-full items-center", {
       underline: "gap-4 border-b",
       pill: "w-fit gap-0.5 rounded-lg bg-input/40 p-0.5",
       panel: "h-9 gap-1 border-b px-2",
+      sidebar: "w-full flex-col items-stretch gap-0.5",
     },
   },
 });
@@ -31,12 +41,18 @@ const tabsListVariants = cva("relative flex max-w-full items-center", {
 const tabsTabVariants = cva(
   "relative inline-flex cursor-pointer select-none items-center justify-center whitespace-nowrap font-medium text-muted-foreground outline-none transition-colors before:pointer-events-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-64 data-active:text-foreground [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
+    compoundVariants: [{ fill: true, className: "h-full flex-1" }],
     defaultVariants: {
+      fill: false,
       overflow: "scroll",
       size: "default",
       variant: "underline",
     },
     variants: {
+      fill: {
+        true: "",
+        false: "",
+      },
       overflow: {
         scroll: "shrink-0",
         // Fits its content from 96 px to 160 px and never goes below 96 px: the name truncates inside the tab, and the list clips at its edge.
@@ -53,18 +69,20 @@ const tabsTabVariants = cva(
         underline: "rounded-none",
         pill: "rounded-md data-active:bg-background data-active:shadow-xs/10 hover:bg-background/55 dark:data-active:bg-input/72",
         panel: "rounded-md hover:bg-accent data-active:bg-accent",
+        sidebar: "h-8 justify-start gap-2 rounded-md px-2 text-sm hover:bg-accent data-active:bg-accent [&_svg:not([class*='size-'])]:size-4",
       },
     },
   },
 );
 
 type TabsListVariants = VariantProps<typeof tabsListVariants>;
-type TabsVariant = "underline" | "pill" | "panel";
+type TabsVariant = "underline" | "pill" | "panel" | "sidebar";
 type TabsSize = "sm" | "default" | "lg" | "compact";
 type TabsOverflow = "scroll" | "truncate";
 
 /** What a list passes to its tabs, so a tab takes its look from the list it sits in. */
-const TabsContext = React.createContext<{ readonly variant: TabsVariant; readonly size: TabsSize; readonly overflow: TabsOverflow }>({
+const TabsContext = React.createContext<{ readonly variant: TabsVariant; readonly size: TabsSize; readonly overflow: TabsOverflow; readonly fill: boolean }>({
+  fill: false,
   overflow: "scroll",
   size: "default",
   variant: "underline",
@@ -98,9 +116,10 @@ function TabsList({
   overflow = "scroll",
   size = "default",
   variant = "underline",
+  fill = false,
   ...props
-}: TabsPrimitive.List.Props & { readonly variant?: TabsVariant; readonly size?: TabsSize; readonly overflow?: TabsOverflow }) {
-  const context = React.useMemo(() => ({ overflow, size, variant }), [overflow, size, variant]);
+}: TabsPrimitive.List.Props & { readonly variant?: TabsVariant; readonly size?: TabsSize; readonly overflow?: TabsOverflow; readonly fill?: boolean }) {
+  const context = React.useMemo(() => ({ fill, overflow, size, variant }), [fill, overflow, size, variant]);
   const change = React.use(TabsChangeContext);
   const { onClick, ...rest } = props;
   // One click handler for every tab in the list: a tab itself has none (see TabsTab).
@@ -110,7 +129,7 @@ function TabsList({
     if (tab !== null && change !== undefined && !tab.hasAttribute("data-disabled")) change(tab.dataset.tabValue as never, undefined as never);
   };
   return (
-    <TabsPrimitive.List className={cn(tabsListVariants({ overflow, variant }), className)} data-slot="tabs-list" data-variant={variant} data-overflow={overflow} onClick={handleClick} {...rest}>
+    <TabsPrimitive.List className={cn(tabsListVariants({ fill, overflow, variant }), className)} data-slot="tabs-list" data-variant={variant} data-overflow={overflow} onClick={handleClick} {...rest}>
       <TabsContext value={context}>{children}</TabsContext>
       {variant === "underline" && <TabsIndicator />}
     </TabsPrimitive.List>
@@ -151,13 +170,13 @@ interface TabsTabProps extends TabsPrimitive.Tab.Props {
 }
 
 function TabsTab({ className, children, status, closable = false, onClose, closeLabel = "Close tab", divider = false, ...props }: TabsTabProps) {
-  const { overflow, size, variant } = React.use(TabsContext);
+  const { fill, overflow, size, variant } = React.use(TabsContext);
   // The tab renders its own button without Base UI's onClick: React gives every element with an onClick prop a
   // click listener, and the list handles the click instead (see TabsList).
   const tab = (
     <TabsPrimitive.Tab
       className={cn(
-        tabsTabVariants({ overflow, size, variant }),
+        tabsTabVariants({ fill, overflow, size, variant }),
         "peer",
         closable && (size === "sm" ? "pe-6" : "pe-7"),
         divider && "after:pointer-events-none after:absolute after:inset-y-0 after:end-0 after:w-px after:bg-border",

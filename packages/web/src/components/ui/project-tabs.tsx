@@ -36,15 +36,22 @@ interface ProjectTabProps extends TabsPrimitive.Tab.Props {
   readonly status?: TabsStatus;
   readonly onClose?: () => void;
   readonly closeLabel?: string;
+  /** The name the list's drag and menus find this tab by (`data-tab-item`). */
+  readonly item?: string;
+  readonly closable?: boolean;
 }
 
 /**
  * One project: the full height of the bar, 96 to 160 px wide with the name truncating, a divider after it, and the
  * accent fill when active. Its 14 px close button sits 8 px from the right edge and shows on the active tab and on hover.
  */
-function ProjectTab({ className, children, status, onClose, closeLabel = "Close tab", ...props }: ProjectTabProps) {
+function ProjectTab({ className, children, status, onClose, closeLabel = "Close tab", item, closable = true, ...props }: ProjectTabProps) {
   return (
-    <span data-slot="project-tab-group" className="group/tab relative inline-flex h-full shrink-0 border-e">
+    <span
+      data-slot="project-tab-group"
+      data-tab-item={item}
+      className="group/tab relative inline-flex h-full shrink-0 border-e bg-background data-dragging:z-10 data-dragging:bg-popover data-dragging:shadow-md/10 data-dragging:ring-1 data-dragging:ring-border data-dragging:[&_[data-slot=project-tab]]:cursor-grabbing"
+    >
       <TabsPrimitive.Tab
         className={cn(
           "peer relative inline-flex h-full min-w-24 max-w-40 shrink-0 cursor-pointer select-none items-center justify-start gap-1 whitespace-nowrap ps-2 pe-7 text-xs font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-active:bg-accent data-active:text-foreground [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:pointer-events-none [&_svg]:shrink-0",
@@ -62,6 +69,7 @@ function ProjectTab({ className, children, status, onClose, closeLabel = "Close 
         {children}
         <TabStatusIcon status={status} />
       </TabsPrimitive.Tab>
+      {closable && (
       <Button
         variant="ghost-muted"
         size="icon-tiny"
@@ -72,6 +80,7 @@ function ProjectTab({ className, children, status, onClose, closeLabel = "Close 
       >
         <X aria-hidden className="size-3.5" />
       </Button>
+      )}
     </span>
   );
 }

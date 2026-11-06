@@ -3,12 +3,12 @@
  * image and video slot attached, the answer landing as a text result. No props, no Runs,
  * no estimate: the tray shows the model and nothing else.
  */
-import { NO_KEY_MESSAGE, type ModelParams } from "@unframed/domain";
+import { providerField, type ModelParams } from "@unframed/domain";
 import type { TLShapeId } from "tldraw";
 import type { Payload } from "../rpc/engine.ts";
 import { anchorOf, pageBox } from "./facts.ts";
 import { planOf } from "./imageMedium.ts";
-import { saveLastUsed } from "./lastUsed.ts";
+import { rememberTray } from "./lastUsed.ts";
 import { registerMedium, type MediumDefinition, type SendInput } from "./mediumRegistry.ts";
 import { referencesFor } from "./render.ts";
 
@@ -25,6 +25,7 @@ const textRunRequest = async ({ editor, project, values, source }: Omit<SendInpu
     selectionPrompt: plan.selectionPrompt,
     instruction: plan.instruction,
     prompt: plan.prompt,
+    ...providerField(values.provider),
   };
   if (source.kind === "selection") {
     return {
@@ -62,13 +63,12 @@ export const textMedium: MediumDefinition = {
     const blockers: string[] = [];
     if (plan.error !== undefined) blockers.push(plan.error);
     else if (plan.prompt.trim() === "") blockers.push(NOTHING_TO_RUN);
-    if (!hasKey) blockers.push(NO_KEY_MESSAGE);
-    return { warnings: [], blockers };
+    return { warnings: [], blockers, needsKey: !hasKey };
   },
   sendLabel: () => "Run",
   send: async (input) => {
     const started = await input.engine.call("run.text", await textRunRequest(input));
-    if (input.remember !== false) void saveLastUsed(input.engine, "text", { ...(input.values.picked && input.values.model !== undefined ? { model: input.values.model } : {}), props: {} });
+    if (input.remember !== false) void rememberTray(input.engine, "text", input.values, {});
     return { batchId: started.batchId };
   },
   fromRecipe: () => ({}),

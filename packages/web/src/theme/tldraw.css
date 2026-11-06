@@ -204,3 +204,11 @@
 :root .tl-container:has(> [data-unframed-design-panel]) .tlui-layout__bottom {
   padding-right: 320px;
 }
+
+:root .tl-container[data-parameters-panel] {
+  --tl-layer-watermark: 251;
+}
+
+:root .tl-container[data-parameters-panel="dock"]:not(:has(~ [data-slot="docked-rail"][data-state="open"])) .tlui-layout__bottom {
+  padding-right: var(--parameters-dock-width);
+}

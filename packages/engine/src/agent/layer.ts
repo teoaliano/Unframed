@@ -1,4 +1,6 @@
 import { join } from "node:path";
+import { NodeRuns } from "../nodes/nodeRuns.ts";
+import { MediaStore } from "../media/mediaStore.ts";
 import type { ClientChatCommand, ShellStreamItem, ThreadSearchMatch, ThreadStreamItem, TurnDiff } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
 import { defaultModel, projectSlug, type ClientCommand } from "@unframed/domain";
@@ -27,6 +29,8 @@ import * as Fiber from "effect/Fiber";
 import * as Stream from "effect/Stream";
 import { PreferencesStore } from "../preferencesStore.ts";
 import { Projects } from "../projects.ts";
+import { GENERATION_PROVIDERS, providerKeysOf } from "@unframed/domain";
+import { providerCatalogues } from "../runs/providers.ts";
 import { AgentRuntime, DispatchError } from "./runtime.ts";
 import { ArtifactTools } from "../artifacts/artifactTools.ts";
 import { ComponentTools } from "../artifacts/componentTools.ts";
@@ -99,18 +103,28 @@ export const agentsLayer = Layer.effect(
 
     const selection = yield* SelectionHub;
     const runs = yield* Runs;
+    const nodeRuns = yield* NodeRuns;
     const catalogue = yield* Catalogue;
     const videoCatalogue = yield* VideoCatalogue;
     const renderJobs = yield* RenderJobs;
+    const media = yield* MediaStore;
+    const catalogues = providerCatalogues({
+      vercelOrigin: config.vercelOrigin,
+      openRouter: (medium) => run(medium === "image" ? catalogue.listImageModels : catalogue.listTextModels),
+    });
     const runtime = new AgentRuntime({
       dataDir: config.dataDir,
       selection,
       generationRuns: {
+        nodes: { plan: (input) => run(nodeRuns.plan(input)), run: (input) => run(nodeRuns.run(input)) },
         runImage: (request) => run(runs.image(request)),
         runText: (request) => run(runs.text(request)),
         pricing: (model) => run(catalogue.imagePricing(model)),
-        models: (kind) => run(kind === "video" ? videoCatalogue.list : catalogue.listImageModels).then((answer) => answer.models),
-        defaultModel: (kind) => run(settings.read).then((current) => (kind === "video" ? current.videoModel : current.imageModel)),
+        models: (kind, provider) =>
+          (kind === "video" ? run(videoCatalogue.list) : run(settings.read).then((current) => catalogues[provider](current, "image"))).then((answer) => answer.models),
+        defaultModel: (kind, provider) =>
+          run(settings.read).then((current) => (kind === "video" ? current.videoModel : GENERATION_PROVIDERS[provider].defaultModel(current, "image"))),
+        providerKeys: () => run(settings.read).then(providerKeysOf),
         startVideo: (request) => run(renderJobs.start(request)),
         onVideoFinished: (jobId, handler) => renderJobs.onFinished(jobId, handler),
         track: (project, handler) => {
@@ -138,6 +152,8 @@ export const agentsLayer = Layer.effect(
       },
       runEnvironment: (provider) => run(detection.runEnvironment(provider)),
       defaultModel: async (provider) => defaultModel((await run(detection.statuses({})))[provider].models ?? []),
+      saveMedia: (project, input) => media.save(project, input),
+      providerCommands: async (provider) => (await run(detection.statuses({})))[provider].commands?.map((command) => command.name),
       realAdapter,
       extraTools: (tools) => [...new ArtifactTools(tools, () => previewPort).tools(), ...new ComponentTools(tools, () => previewPort).tools(), ...preview.tools()],
       onSessionClosed: (_project, chatId) => void preview.closeChat(chatId),

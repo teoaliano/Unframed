@@ -1,4 +1,4 @@
-import { PRESET_EMPTY_NAME_MESSAGE, presetFromSelection } from "@unframed/domain";
+import { droppedWiresNote, PRESET_EMPTY_NAME_MESSAGE, presetFromSelection } from "@unframed/domain";
 import { useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
@@ -13,8 +13,10 @@ const fieldLabelClass = "grid gap-1.5";
 const fieldNameClass = "text-xs font-medium text-foreground";
 
 /** `N shape(s), saved as you have them now.`, naming the recipe when the group has one. */
-export const saveSubtitle = (captured: Pick<Captured, "members" | "recipe">): string =>
-  `${captured.members} ${captured.members === 1 ? "shape" : "shapes"}${captured.recipe ? " and its recipe" : ""}, saved as you have them now.`;
+export const saveSubtitle = (captured: Pick<Captured, "members" | "recipe" | "flow">): string =>
+  captured.flow !== undefined
+    ? `A flow of ${captured.flow.nodes} ${captured.flow.nodes === 1 ? "node" : "nodes"} and the shapes and wires between them, with no results.`
+    : `${captured.members} ${captured.members === 1 ? "shape" : "shapes"}${captured.recipe ? " and its recipe" : ""}, saved as you have them now.`;
 
 /**
  * "Add to library": a name and a description; the rest is read from the selection captured
@@ -37,6 +39,14 @@ export const AddToLibraryDialog = ({ captured, onClose }: { readonly captured: C
     setBusy(true);
     setProblem(undefined);
     try {
+      if (captured.flow !== undefined) {
+        const saved = await engine.call("flow.save", { project: captured.project, shapeIds: [...captured.flow.ids], name: trimmed, summary: summary.trim() });
+        const note = droppedWiresNote(saved.droppedWires);
+        if (note !== undefined) showNotice(note, "info");
+        else showNotice(`Saved “${trimmed}” to your library.`, "info");
+        onClose();
+        return;
+      }
       await engine.call("library.save", { name: trimmed, summary: summary.trim(), content: made.content });
       showNotice(`Saved “${trimmed}” to your library.`, "info");
       onClose();

@@ -3,11 +3,12 @@
  * the key status, and the one pending OpenRouter connection with its poll. It lives outside
  * the dialog so that closing the dialog never abandons a connection.
  */
-import { UnframedError, type KeyStatus, type Settings } from "@unframed/contracts";
+import { UnframedError, type ElevenLabsStatus, type KeyStatus, type Settings, type VercelStatus } from "@unframed/contracts";
 import { OAUTH_ATTEMPT_MS, OAUTH_NOTHING_CAME_BACK } from "@unframed/domain";
 import { useSyncExternalStore } from "react";
 import type { EngineConnection } from "../rpc/engine.ts";
 import { showError, showNotice } from "../toasts.tsx";
+import { OPEN_SETTINGS, type OpenSettingsDetail, type SettingsSection } from "./settingsEvents.ts";
 
 export const POLL_MS = 1500;
 export const CONNECTED_MESSAGE = "Connected to OpenRouter.";
@@ -27,8 +28,11 @@ export interface SettingsUiState {
   /** `undefined` until the first answer of `settings.subscribe`. */
   readonly settings: Settings | undefined;
   readonly open: boolean;
+  readonly section: SettingsSection;
   /** The latest key status fetched; `undefined` when not fetched or it failed. */
   readonly keyStatus: KeyStatus | undefined;
+  readonly elevenLabsStatus: ElevenLabsStatus | undefined;
+  readonly vercelStatus: VercelStatus | undefined;
   readonly connection: PendingConnection | undefined;
   /** Between a Connect click and the engine's answer. */
   readonly starting: boolean;
@@ -39,13 +43,15 @@ export interface SettingsUiState {
 }
 
 export class SettingsUi {
-  private state: SettingsUiState = { settings: undefined, open: false, keyStatus: undefined, connection: undefined, starting: false, report: undefined, resets: 0 };
+  private state: SettingsUiState = { settings: undefined, open: false, section: "generation", keyStatus: undefined, elevenLabsStatus: undefined, vercelStatus: undefined, connection: undefined, starting: false, report: undefined, resets: 0 };
   private readonly listeners = new Set<() => void>();
   private readonly engine: EngineConnection;
   private poller: ReturnType<typeof setInterval> | undefined;
   private polling = false;
   /** Bumped by every key status fetch, so only the latest of overlapping fetches is shown. */
   private statusFetch = 0;
+  private elevenLabsFetch = 0;
+  private vercelFetch = 0;
   private cancelling: Promise<void> = Promise.resolve();
   private stopSettings: (() => void) | undefined;
 
@@ -65,17 +71,14 @@ export class SettingsUi {
     for (const listener of this.listeners) listener();
   }
 
-  /** Follows `settings.subscribe`; the first answer without a key opens the dialog. */
   start(): () => void {
     if (this.stopSettings) return this.stopSettings;
-    let first = true;
-    const stop = this.engine.subscribe("settings.subscribe", undefined, (settings) => {
-      const opens = first && !settings.hasKey;
-      first = false;
-      this.set(opens ? { settings, open: true } : { settings });
-    });
+    const stop = this.engine.subscribe("settings.subscribe", undefined, (settings) => this.set({ settings }));
+    const onOpen = (event: Event) => this.open((event as CustomEvent<OpenSettingsDetail>).detail?.section);
+    window.addEventListener(OPEN_SETTINGS, onOpen);
     this.stopSettings = () => {
       stop();
+      window.removeEventListener(OPEN_SETTINGS, onOpen);
       this.stopSettings = undefined;
     };
     return this.stopSettings;
@@ -85,8 +88,12 @@ export class SettingsUi {
     this.set({ settings });
   }
 
-  open() {
-    this.set({ open: true, report: undefined });
+  open(section?: SettingsSection) {
+    this.set({ open: true, report: undefined, ...(section === undefined ? {} : { section }) });
+  }
+
+  showSection(section: SettingsSection) {
+    this.set({ section });
   }
 
   close() {
@@ -102,6 +109,28 @@ export class SettingsUi {
   clearKeyStatus() {
     this.statusFetch++;
     this.set({ keyStatus: undefined });
+  }
+
+  clearElevenLabsStatus() {
+    this.elevenLabsFetch++;
+    this.set({ elevenLabsStatus: undefined });
+  }
+
+  async fetchElevenLabsStatus(): Promise<void> {
+    const fetch = ++this.elevenLabsFetch;
+    const status = await this.engine.call("elevenlabs.status").catch(() => undefined);
+    if (fetch === this.elevenLabsFetch) this.set({ elevenLabsStatus: status });
+  }
+
+  clearVercelStatus() {
+    this.vercelFetch++;
+    this.set({ vercelStatus: undefined });
+  }
+
+  async fetchVercelStatus(): Promise<void> {
+    const fetch = ++this.vercelFetch;
+    const status = await this.engine.call("vercel.status").catch(() => undefined);
+    if (fetch === this.vercelFetch) this.set({ vercelStatus: status });
   }
 
   async fetchKeyStatus(): Promise<void> {

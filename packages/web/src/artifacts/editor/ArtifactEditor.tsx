@@ -12,9 +12,7 @@ import {
   type DialsAnnouncement,
 } from "@unframed/domain";
 import {
-  AppWindow,
   ArrowLeft,
-  Clapperboard,
   Component,
   ExternalLink,
   Hand,
@@ -35,6 +33,7 @@ import { Button } from "~/components/ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Sheet, SheetPopup } from "~/components/ui/sheet";
 import { Tabs, TabsList, TabsTab } from "~/components/ui/tabs";
+import { TOP_BAR_HEIGHT } from "~/components/ui/top-bar";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { cn } from "~/lib/utils";
 import { AgentRail } from "../../agent/rail/AgentRail.tsx";
@@ -52,13 +51,14 @@ import { KitModePicker } from "../KitMode.tsx";
 import { countUsing } from "../componentPins.ts";
 import { updateTagsOf } from "../updates.ts";
 import { makeComponent } from "./makeComponent.ts";
+import { KIND_LOOK } from "../kinds.ts";
 import { artifactsOf, previewPort } from "../state.ts";
 import { RenderButton } from "../render.tsx";
 import { ComponentSection } from "./ComponentSection.tsx";
 import { EditOverlay } from "./EditOverlay.tsx";
 import { DesignTab } from "./DesignTab.tsx";
 import { LayersTab } from "./LayersTab.tsx";
-import { COLUMN, ColumnHeader, ParametersBody } from "./Parameters.tsx";
+import { COLUMN, ColumnHeader, ParametersContent } from "./Parameters.tsx";
 import { PreviewSizeControl, usePreviewSize } from "./PreviewSize.tsx";
 import { useEditSession, type EditMode } from "./editSession.ts";
 import { makeEditableInstruction, tellAgent } from "./tellAgent.ts";
@@ -82,6 +82,7 @@ interface ArtifactEditorProps {
   readonly shapeId: TLShapeId;
   readonly onClose: () => void;
   readonly onOpen: (shapeId: string) => void;
+  readonly onLeave?: (commit: () => Promise<void>) => () => void;
 }
 
 type Panel = "design" | "layers" | "parameters";
@@ -134,6 +135,7 @@ export const ArtifactEditor = ({
   shapeId,
   onClose,
   onOpen,
+  onLeave,
 }: ArtifactEditorProps) => {
   const editor = useEditor();
   const project = useCanvasProject();
@@ -320,6 +322,17 @@ export const ArtifactEditor = ({
     onClose();
   }, [gone, onClose]);
 
+  const leaveRef = useRef(onLeave);
+  useEffect(
+    () =>
+      leaveRef.current?.(() => {
+        if (editor.getShape(shapeId)) return sessionRef.current.commit();
+        sessionRef.current.discard(true);
+        return Promise.resolve();
+      }),
+    [editor, shapeId],
+  );
+
   useEffect(() => {
     const onUndo = (event: KeyboardEvent) => {
       if (
@@ -489,8 +502,7 @@ export const ArtifactEditor = ({
   const title =
     displayTitle === "" ? shapeId.replace(/^shape:/, "") : displayTitle;
   const component = facts.kind === "component";
-  const Icon =
-    facts.kind === "page" ? AppWindow : component ? Component : Clapperboard;
+  const Icon = KIND_LOOK[facts.kind].Icon;
   const shownPanel: Panel =
     component && panel === "parameters" ? "design" : panel;
   const askAboutComponent = () => {
@@ -546,9 +558,9 @@ export const ArtifactEditor = ({
     : "grid-cols-[360px_minmax(0,1fr)_320px]";
   const parametersBody = (
     <>
-      <ColumnHeader>
-        <Tabs value={shownPanel} onValueChange={(next) => setPanel(String(next) as Panel)} className="h-12 min-w-0">
-          <TabsList variant="underline" aria-label="Editor panels">
+      <ColumnHeader className="px-0">
+        <Tabs value={shownPanel} onValueChange={(next) => setPanel(String(next) as Panel)} className="h-full min-w-0">
+          <TabsList variant="underline" fill aria-label="Editor panels">
             <TabsTab value="design">Design</TabsTab>
             <TabsTab value="layers">Layers</TabsTab>
             {!component && (
@@ -604,17 +616,21 @@ export const ArtifactEditor = ({
         />
       )}
       {shownPanel === "parameters" && (
-        <ParametersBody
-          shapeId={shapeId}
-          kind={facts.kind}
-          title={title}
-          announcement={announcement}
-          saved={dials}
-          onWrite={(values) =>
-            session.releaseDials(values as Record<string, unknown>)
-          }
-          post={(values) => post.current?.(values)}
-        />
+        <div className="min-h-0 flex-1 overflow-auto">
+          <ParametersContent
+            shapeId={shapeId}
+            kind={facts.kind}
+            title={title}
+            announcement={announcement}
+            saved={dials}
+            onWrite={(values) =>
+              session.releaseDials(values as Record<string, unknown>)
+            }
+            post={(values) => post.current?.(values)}
+            place="editor"
+            railVisible={!railFolded || sheet === "agent"}
+          />
+        </div>
       )}
     </>
   );
@@ -623,12 +639,13 @@ export const ArtifactEditor = ({
       ref={grid}
       data-testid="artifact-editor"
       className={cn(
-        "pointer-events-auto absolute inset-0 z-[700] box-border grid gap-3 bg-background p-3 font-sans text-foreground",
+        "pointer-events-auto absolute inset-x-0 bottom-0 z-[700] box-border grid gap-3 bg-background p-3 font-sans text-foreground",
         timeline
           ? "grid-rows-[minmax(0,1fr)_auto]"
           : "grid-rows-[minmax(0,1fr)]",
         columns,
       )}
+      style={{ top: TOP_BAR_HEIGHT }}
       {...KEEP_FROM_CANVAS}
     >
       {!railFolded && (

@@ -33,7 +33,7 @@ export interface PresetContent {
   readonly [key: string]: unknown;
 }
 
-type PresetKind = "recipe" | "group";
+type PresetKind = "recipe" | "group" | "flow";
 type PresetSource = "user" | "system";
 
 export interface Preset {
@@ -202,6 +202,7 @@ export const describePresetContent = (content: unknown): DescribedPreset => {
   const [rootId] = value.rootShapeIds as unknown[];
   const root = (value.shapes as unknown[]).map(record).find((shape) => shape?.id === rootId);
   if (root?.type !== "frame") return { ok: false };
+  if ((value.shapes as unknown[]).some((shape) => record(shape)?.type === "node")) return { ok: true, kind: "flow" };
   const recipe = readGroupRecipe(record(record(root.meta)?.unframed)?.recipe);
   return recipe ? { ok: true, kind: "recipe", medium: recipe.medium } : { ok: true, kind: "group" };
 };

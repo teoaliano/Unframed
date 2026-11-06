@@ -179,7 +179,7 @@ Shown under the box, above the tray, as status lines. A line that disables send 
 - Over the cap (image slots, including composites and the sketch, above the model's `input_references` maximum): `5 images are selected, but this model takes at most 4. Deselect the rest, or pick a model that takes more.` When the cap is 1: `... but this model takes only one. ...`. When images are named by `@`, the count and the fix name both sources: all named, `2 images are named with @, but this model takes only one. Take out an @ name, or pick a model that takes more.`; mixed, `6 images go with this run (4 selected, 2 named with @), but this model takes at most 5. Deselect some, take out an @ name, or pick a model that takes more.` The sketch counts as selected.
 - Empty prompt (no parts and no instruction): send is disabled and the tray reads `Nothing says what to make. Select a prompt, or type an instruction.`
 - Composition error (a cycle): send is disabled and the error line shows the message.
-- No key (from the engine's health, spec 01): send is disabled and the tray reads `No OpenRouter key yet. Add one with the key icon in the top right (it becomes a settings gear once saved).`
+- No key (from the engine's health, spec 01): send is disabled and the tray reads `Generating needs OpenRouter. Connect it in Settings, under Generation.` The line carries an outline button `Open Settings`, which opens Settings on its Generation section (spec 10). A recipe group's Generate (spec 06) pressed without a key shows the same sentence as an error toast with the same `Open Settings` action.
 
 ### Toolbar states
 
@@ -190,15 +190,17 @@ Decided from the selection by a pure function in the web (tested at the domain s
 | nothing | no bar |
 | exactly one result (spec terms: a shape with a recipe) | Regenerate, Agent, Generate (primary, last), as on any usable selection; the result's line shows under it. Generate is left out when the result has nothing to send (a failed render, spec 04), and Regenerate is then the primary |
 | exactly one result still generating | the hint `Generating…`, Agent |
-| exactly one page or motion with a file | a six-dot drag handle, Editor, Render for a motion (spec 09), Parameters (spec 09), Agent (spec 09 connects Editor to its editor and Parameters to its canvas panel) |
+| exactly one page, motion or component with a file | a six-dot drag handle, Editor, Render for a motion (spec 09), Parameters for a page or motion (spec 09), the kit mode (spec 19), Scale for a page or motion (spec 09; a component has no Scale), Agent (spec 09 connects Editor to its editor, Parameters to its canvas panel and Scale to the artifact's scale on the canvas). Scale is offered for one selected artifact only, never for a multi-selection |
 | usable | hint, Agent, Generate (primary, last) |
 | not usable | Agent only |
+
+Whenever the selection holds more than one shape and at least one of them is a page, motion or component with a file, the bar for it (usable, not usable or recipe) starts with the same six-dot drag handle, which moves every selected shape together, the pointer's move on the page converted into each shape's own parent space so a shape inside a group (rotated or not) follows the pointer, since a live artifact's frame takes the pointer and would otherwise leave the selection with nothing to drag by.
 
 The hint is `@<name>` when the selection is exactly one group, otherwise `N selected` where N counts the selected shapes as tldraw counts them (a group is one). When the selection is exactly the members of one batch (spec 05), the hint is `4 images · $0.6720`.
 
 The bar and the composer stay above spec 02's bottom bar: the room below the selection ends at the bottom bar's top edge.
 
-Look (spec 12): the bar is a `surface-glass` card with the kit's border, `rounded-xl` radius and small shadow. Its buttons are the kit's Button at `sm` size: the primary one (Generate, Editor, and Regenerate on a result bar without Generate) is `default`, Regenerate (beside Generate) and Agent are `outline`, a recipe group's Recipe (spec 06) is `ghost`. Parameters is the kit's Toggle, `outline` at `sm`, since it stays pressed while its panel is open. Agent is never the primary action. The bar has no dividers between its actions. The drag handle (a ghost icon Button with the grip icon, label and tooltip "Drag to move") moves the selection with the pointer, since a filled page's or motion's frame takes the pointer; the whole move is one undo step. The hint and the result's line are `text-xs` in the muted foreground.
+Look (spec 12): the bar is a `surface-glass` card with the kit's border, `rounded-xl` radius and small shadow. Its buttons are the kit's Button at `sm` size: the primary one (Generate, Editor, and Regenerate on a result bar without Generate) is `default`, Regenerate (beside Generate) and Agent are `outline`, a recipe group's Recipe (spec 06) is `ghost`. Parameters is the kit's Toggle, `outline` at `sm`, since it stays pressed while its panel is open. Agent is never the primary action. The bar has no dividers between its actions. The drag handle (a ghost icon Button with the grip icon, label and tooltip "Drag to move") moves the whole selection with the pointer, since a filled page's or motion's frame takes the pointer; the whole move is one undo step. The hint and the result's line are `text-xs` in the muted foreground.
 
 Placement: centred above the selection's screen bounds, 12 px gap, where the bounds take in the 22 px label band above them while a selected shape shows a label (spec 02), so the bar never covers the label of what it is about, clamped 8 px from the canvas's sides; flipped below the selection when there is no room above; when there is room neither above nor below, pinned inside the canvas at the top margin. It never sits under the top-left card (spec 02): a place that would overlap the card, 8 px around it, moves to 8 px right of the card, or below it when there is no room to its right. The composer uses the same rule with its own size, so it grows upward on the same centre and bottom edge (downward when flipped). The morph animates size and position over 200 ms ease-out; under reduced motion it crossfades over 120 ms. The bar hides while a shape is dragged, while the canvas is dragged (not on wheel moves), during a box selection, and while a name field is open in a label (spec 06), and comes back when the field closes. Pointer and click events on the bar and composer never reach the canvas. A wheel over them is forwarded to the canvas at the same pointer position, unless the element under the pointer scrolls itself (the instruction box once it overflows).
 
@@ -206,7 +208,7 @@ Placement: centred above the selection's screen bounds, 12 px gap, where the bou
 
 Width 420 px. Three bands. The bar grows into t3code's composer shell (spec 12): `rounded-3xl`, a glass fill of `--card` (dark: `--surface-raised`) at the glass opacity with the glass blur, the kit border, and `shadow-composer` in light (none in dark, as in t3code). The radius, fill and shadow change within the same 200 ms morph.
 
-Top band: the medium switch (the kit's `segmented` ToggleGroup of the registered media, with radio semantics, lowercase labels `image`, `video`, `text`) on the left; the source count on the right in `text-xs` muted foreground, the same text as the toolbar hint (`3 selected`, `@character`), or `recipe · N sources` in recipe mode (`recipe · 1 source` for one).
+Top band: the medium switch (the kit's `segmented` ToggleGroup of the registered media, with radio semantics, lowercase labels `image`, `video`, `text`, `audio` (spec 15)) on the left; the source count on the right in `text-xs` muted foreground, the same text as the toolbar hint (`3 selected`, `@character`), or `recipe · N sources` in recipe mode (`recipe · 1 source` for one).
 
 Box: the instruction editor (Tiptap, one paragraph per line, the `@` mention menu of spec 02's prompt editing), placeholder `What should this make?`, autofocused on open, inside the kit's field frame (input border, background, `rounded-lg`, the focus ring while the editor has focus). Attachments and chips are off in the Generate tray. The send button sits at the box's bottom right with the price estimate immediately to its left; it is t3code's labelled message-action pill (spec 12, shared with the Agent tray's round Send), with an up arrow, in `--message-action` (the primary colour). Send label: `Generate` (spec 05 adds `Generate 4×`). Cmd+Enter (Ctrl+Enter off macOS) sends wherever focus is while the composer is open, except in a text field outside it or while one of its menus is open; Enter and Shift+Enter insert a line. While the send is being acknowledged, the button shows a spinner and is disabled; a second press does nothing.
 
@@ -314,7 +316,7 @@ A run an agent starts (spec 14's `generate`, from an in-app chat or an outside c
 
 Validation before acknowledgement, each failing the call with its message and writing nothing:
 
-- No key: `No OpenRouter key yet. Add one with the key icon in the top right (it becomes a settings gear once saved).`
+- No key: `Generating needs OpenRouter. Connect it in Settings, under Generation.`
 - Every output prompt empty after trimming: `Prompt is empty. Select a prompt, or type an instruction.`
 - 0 or more than 10 outputs: `A run makes between 1 and 10 images.`
 - A reference file (basename only; any path is stripped) not in the project folder: `Reference file not found in this project: <file>`
@@ -383,13 +385,14 @@ A result is an ordinary image shape (spec 02; a prompt in spec 05, a video in sp
 ```ts
 type ResultMeta = {                 // meta.unframed.result
   sidecar: string | null            // file name of the sidecar in the project folder; null on an unfilled placeholder
-  medium: 'image' | 'text' | 'video'
+  medium: 'image' | 'text' | 'video' | 'audio'    // audio: spec 15
   model: string
   batchId: string; runIndex: number; runCount: number
   cost: number | null
   sources: string[]                 // shape ids, for the tether only
   batchExtraCost?: number           // spec 05: a Free batch's repair call, on every member
   recipe?: ResultRecipe             // spec 11 only: an imported result's approximate recipe
+  credits?: number | null           // spec 15 only: the ElevenLabs credits an audio result used; its cost stays null
 }
 ```
 
@@ -399,7 +402,7 @@ The recipe itself lives in the sidecar, never on the shape, with one exception: 
 
 ```ts
 type ResultRecipe = {               // what a result's sidecar holds: everything needed to repeat its run
-  medium: 'image' | 'video' | 'text'
+  medium: 'image' | 'video' | 'text' | 'audio'
   model: string
   params: Record<string, string | number | boolean>  // the props that were sent, keys as the medium's tray names them (spec 04 adds inputMode, duration, generate_audio, shareLocalVideos)
   selectionPrompt: string           // the selection's composed prompt parts, joined (spec 05 Free: shared context and the section)
@@ -409,16 +412,18 @@ type ResultRecipe = {               // what a result's sidecar holds: everything
   of?: { sidecar: string; action: 'regenerate' | 'vary' | 'recipe' }  // 'recipe' now; files written before may hold the other two
   approximate?: true                // spec 11: imported from the old app, which never recorded references or the selection prompt
   sentPrompt?: string               // with approximate: the full prompt the old app sent
+  provider?: 'openrouter' | 'vercel' // spec 22: written only when not 'openrouter'; absent is OpenRouter
 }
 type RecipeRef = { kind: 'image' | 'video'; file: string; original?: string }
                | { kind: 'video'; url: string }              // https only
                // for video with params.inputMode 'first_frame' or 'first_last', references are the frames, first then last
 
 type GroupRecipe = {                // a group's standing settings (spec 06), stored as meta.unframed.recipe on the group
-  medium: 'image' | 'video' | 'text'
+  medium: 'image' | 'video' | 'text' | 'audio'
   model: string
   params: Record<string, string | number | boolean>
   runs: number | 'free'             // 1 to 10, or Free (spec 05); 1 for video and text
+  provider?: 'openrouter' | 'vercel' // spec 22, as on ResultRecipe
 }
 ```
 
@@ -428,7 +433,7 @@ An **approximate** recipe (spec 11) has an empty `selectionPrompt` and `referenc
 
 Copies keep the result meta (the sidecar is in the same project). Cross-project paste copies the sidecar and every reference file its recipe names along with the image (spec 02 copies the image file; this spec adds the rest, through `recipe.copy`). A result whose recipe cannot come along pastes as an ordinary image, with the toast `Could not copy the result's recipe: <message>`.
 
-The result's line, shown under a selected result: `<model part> · <W>×<H> · $<cost>` with any missing part omitted. `W×H` are the file's pixel dimensions.
+The result's line, shown under a selected result: `<model part> · <W>×<H> · $<cost>` with any missing part omitted. `W×H` are the file's pixel dimensions. A result made through the Vercel AI Gateway (spec 22) ends `· Vercel`, and its cost reads `≈$<cost>` when it is a list price (`listPrice` on the result meta), for example `flux-2-pro · 1024×1024 · ≈$0.0300 · Vercel`. `ResultMeta` gains `provider?` and `listPrice?: true`.
 
 Actions:
 
@@ -463,7 +468,7 @@ type ImageSidecar = {
 
 `original` names the canvas image a composite was rendered from. A sketch has no `original`.
 
-Last-used values: the preferences `lastUsed.image`, `lastUsed.video` and `lastUsed.text` in spec 01's preferences store, each `{ model?: string; props: Record<string, string | number | boolean> }` (specs 04 and 05 add fields). A missing or unreadable preference means "none".
+Last-used values: the preferences `lastUsed.image`, `lastUsed.video` and `lastUsed.text` in spec 01's preferences store, each `{ provider?, model?: string; models?: { openrouter?: string; vercel?: string }; props: Record<string, string | number | boolean> }` (specs 04 and 05 add fields). `provider` (spec 22) is the provider of the last send, written only when it is not `openrouter`; `model` is that provider's pick; `models` keeps the other provider's pick. An OpenRouter-only person's value stays `{ model?, props }`. A missing or unreadable preference means "none".
 
 ## Testing Decisions
 
@@ -487,7 +492,7 @@ A good test drives one of the three seams in 00-index and asserts only on what t
 9. Selection to request: sketch ownership (overlap, above in z, topmost wins, computed against all images). Seam: domain.
 10. Selection to request: owned marks make a composite in the image's slot; a crop alone makes a composite; loose selected marks make one sketch in the first loose mark's slot; the sketch counts as an image. Seam: domain.
 11. Selection to request: `usable`, `sources`, and the over-cap and video warnings with their exact strings. Seam: domain.
-12. Toolbar state function: every row of the toolbar states table, including the `@name` hint and the batch hint. Seam: domain.
+12. Toolbar state function: every row of the toolbar states table, including the `@name` hint, the batch hint and the drag handle on a selection of several shapes holding a filled artifact; dragging that handle moves every selected shape, as one undo step. Seam: domain (the handle's drag: browser).
 13. Model params: enum and array values, the `input_references` cap, `supported`, and the image prop set. Seam: domain.
 14. Model params: exact sizes replace resolution and ratio; ratio labels snap within 2%. Seam: domain.
 15. Model params: defaults applied only when declared and allowed; reset on model change leaves Runs alone. Seam: domain.

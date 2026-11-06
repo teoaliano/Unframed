@@ -8,6 +8,7 @@ import {
   elementContext,
   roomShapeId,
   changeNote,
+  isProviderCommand,
   chatSummary,
   DEFAULT_RUNTIME_MODE,
   classifyToolItem,
@@ -50,19 +51,25 @@ import { scriptedAdapter } from "./adapters/scripted.ts";
 import { AttachmentStore } from "./attachmentStore.ts";
 import { KitTools } from "../kits/kitTools.ts";
 import { CanvasTools } from "./canvasTools.ts";
-import { OutsideChats } from "./outsideChats.ts";
+import { latestTurnId, OutsideChats } from "./outsideChats.ts";
 import { outsideSelectionTools } from "./selectionTools.ts";
+import { outsideAgentTools, type OutsideToolDeps } from "./outsideTools.ts";
 import { AgentGeneration } from "./agentGeneration.ts";
 import { generateArguments, generateTool } from "./generateTool.ts";
+import { AgentNodeRuns, nodeRunArguments, nodeRunTool } from "./nodeRunTool.ts";
+import type { ChainInput, PlannedStep } from "../nodes/nodeRuns.ts";
+import type { ChainStarted } from "@unframed/contracts";
 import type { ConnectionBook } from "../agentConnections/book.ts";
-import type { ImagePricingAnswer, ImageRunRequest, ModelEntry, RunEvent, TextRunRequest, VideoStartRequest } from "@unframed/contracts";
+import type { GenerationProvider, ImagePricingAnswer, ImageRunRequest, ModelEntry, RunEvent, TextRunRequest, VideoStartRequest } from "@unframed/contracts";
 
 interface GenerationRuns {
+  readonly nodes: { readonly plan: (input: ChainInput) => Promise<{ readonly steps: ReadonlyArray<PlannedStep> }>; readonly run: (input: ChainInput) => Promise<ChainStarted> };
   readonly runImage: (request: ImageRunRequest) => Promise<{ runId: string; batchId: string; placeholders: string[] }>;
   readonly runText: (request: TextRunRequest) => Promise<{ runId: string; batchId: string; placeholders: string[] }>;
   readonly pricing: (model: string) => Promise<ImagePricingAnswer>;
-  readonly models: (kind: "image" | "video") => Promise<ReadonlyArray<ModelEntry>>;
-  readonly defaultModel: (kind: "image" | "video") => Promise<string>;
+  readonly models: (kind: "image" | "video", provider: GenerationProvider) => Promise<ReadonlyArray<ModelEntry>>;
+  readonly defaultModel: (kind: "image" | "video", provider: GenerationProvider) => Promise<string>;
+  readonly providerKeys: () => Promise<{ readonly hasKey: boolean; readonly hasVercelKey: boolean }>;
   readonly startVideo: (request: VideoStartRequest) => Promise<{ jobId: string; status: string; shapeId: string }>;
   readonly onVideoFinished: (jobId: string, handler: (outcome: { ok: boolean; cost: number | null }) => void) => () => void;
   readonly track: (project: string, handler: (event: RunEvent) => void) => () => void;
@@ -101,6 +108,8 @@ interface AgentRuntimeDeps {
   };
   readonly runEnvironment: (provider: AgentProvider) => Promise<RunEnvironment>;
   readonly defaultModel: (provider: AgentProvider) => Promise<string | undefined>;
+  readonly providerCommands?: (provider: AgentProvider) => Promise<ReadonlyArray<string> | undefined>;
+  readonly saveMedia: OutsideToolDeps["save"];
   readonly realAdapter: (provider: AgentProvider, context: AdapterContext) => ProviderAdapter;
   readonly extraTools?: (context: AgentToolContext) => ReadonlyArray<McpTool>;
   readonly onSessionClosed?: (project: string, chatId: string) => void;
@@ -122,6 +131,7 @@ interface ActiveTurn {
   readonly interactionMode: InteractionMode;
   readonly startedAt: number;
   readonly model: string;
+  readonly command: boolean;
 }
 
 class ProjectAgent {
@@ -162,6 +172,7 @@ export class AgentRuntime {
   readonly outside: OutsideChats;
   readonly outsideTools: McpTool[];
   private readonly generation: AgentGeneration;
+  private readonly nodeRuns: AgentNodeRuns;
   readonly attachments: AttachmentStore;
   readonly providers: ProviderService;
   private readonly projects = new Map<string, Promise<ProjectAgent>>();
@@ -202,8 +213,9 @@ export class AgentRuntime {
       runImage: (request) => deps.generationRuns.runImage(request),
       runText: (request) => deps.generationRuns.runText(request),
       pricing: (model) => deps.generationRuns.pricing(model),
-      models: (kind) => deps.generationRuns.models(kind),
-      defaultModel: (kind) => deps.generationRuns.defaultModel(kind),
+      models: (kind, provider) => deps.generationRuns.models(kind, provider),
+      defaultModel: (kind, provider) => deps.generationRuns.defaultModel(kind, provider),
+      providerKeys: () => deps.generationRuns.providerKeys(),
       startVideo: (request) => deps.generationRuns.startVideo(request),
       onVideoFinished: (jobId, handler) => deps.generationRuns.onVideoFinished(jobId, handler),
       track: (project, handler) => deps.generationRuns.track(project, handler),
@@ -237,7 +249,10 @@ export class AgentRuntime {
         });
       },
     });
-    this.outsideTools = [...outsideSelectionTools({ hub: deps.selection, read: (project) => deps.rooms.read(project) })];
+    this.outsideTools = [
+      ...outsideSelectionTools({ hub: deps.selection, read: (project) => deps.rooms.read(project) }),
+      ...outsideAgentTools({ note: (binding, text) => this.outsideNote(binding, text), save: (project, input) => deps.saveMedia(project, input) }),
+    ];
     this.outside = new OutsideChats(
       {
         agent: (slug) => this.project(slug),
@@ -250,6 +265,36 @@ export class AgentRuntime {
     );
     for (const tool of deps.extraTools?.(context) ?? []) this.registry.register(tool);
     this.registry.register(generateTool((binding, args) => this.generateFor(binding, args)));
+    this.nodeRuns = new AgentNodeRuns({
+      plan: (input) => deps.generationRuns.nodes.plan(input),
+      run: (input) => deps.generationRuns.nodes.run(input),
+      recordsOf: async (project, ids) => {
+        const byId = new Map((await deps.rooms.read(project)).map((record) => [record.id as string, record]));
+        return new Map(ids.map((id) => [id, byId.get(id)]));
+      },
+      recordTurn: async (project, chatId, turn, before, after) => {
+        const agent = await this.project(project);
+        agent.turnChanges.record(chatId, turn, before, after, await deps.rooms.clock(project));
+      },
+      holds: {
+        runStarted: (chatId, turn) => {
+          this.paidRuns.set(runKey(chatId, turn), (this.paidRuns.get(runKey(chatId, turn)) ?? 0) + 1);
+          this.outside.runStarted(chatId);
+        },
+        runEnded: (chatId, turn) => {
+          const remaining = (this.paidRuns.get(runKey(chatId, turn)) ?? 1) - 1;
+          if (remaining > 0) this.paidRuns.set(runKey(chatId, turn), remaining);
+          else this.paidRuns.delete(runKey(chatId, turn));
+          this.outside.runEnded(chatId);
+        },
+      },
+      activity: async (project, chatId, draft) => {
+        const agent = await this.project(project);
+        await this.activity(agent, chatId, { id: `${draft.kind}:${randomUUID()}`, tone: "info", kind: draft.kind, summary: draft.summary, payload: draft.payload, turnId: draft.turnId, createdAt: new Date().toISOString() });
+      },
+      book: deps.generationRuns.book,
+    });
+    this.registry.register(nodeRunTool((binding, args) => this.nodeRunFor(binding, args)));
     this.providers = new ProviderService({
       adapterFor: (provider) => this.adapterFor(provider),
       tokens: this.tokens,
@@ -262,6 +307,14 @@ export class AgentRuntime {
     });
   }
 
+  private async outsideNote(binding: McpBinding, text: string): Promise<void> {
+    const agent = await this.project(binding.project);
+    const turnId = latestTurnId(agent.engine, binding.chatId);
+    const messageId = `assistant:note:${randomUUID()}`;
+    await this.internal(agent, binding.chatId, { type: "thread.message.assistant.delta", messageId, turnId, delta: text });
+    await this.internal(agent, binding.chatId, { type: "thread.message.assistant.complete", messageId, turnId });
+  }
+
   setApiPort(port: number): void {
     this.apiPort = port;
   }
@@ -271,7 +324,7 @@ export class AgentRuntime {
       emit: (chatId, draft) => this.onRuntimeEvent(chatId, draft),
       runtimeMode: (chatId) => this.runtimeModeOf(chatId),
       registeredTools: () => this.registry.names(),
-      generationDetail: (chatId, input) => this.generationDetail(chatId, input),
+      generationDetail: (chatId, input, tool) => this.generationDetail(chatId, input, tool),
       log: (chatId, line) => {
         if (this.deps.agentDebug) logInfo(`[agent ${chatId}] ${line}`);
       },
@@ -485,7 +538,22 @@ export class AgentRuntime {
     return this.generation.generate({ project: binding.project, chatId: binding.chatId, turn, turnId, connectionId: binding.connectionId, ...checked });
   }
 
-  private async generationDetail(chatId: string, input: Readonly<Record<string, unknown>>): Promise<string | undefined> {
+  private async nodeRunFor(binding: McpBinding, args: Record<string, unknown>): Promise<ToolAnswer> {
+    const checked = nodeRunArguments(args);
+    if (!checked.ok) return { value: { error: checked.message }, isError: true };
+    const turn = this.chatTurn(binding.project, binding.chatId).turnCount;
+    if (turn === undefined) return { value: { error: "Unframed could not open a turn for this call. Try again." }, isError: true };
+    const turnId = this.chatTurn(binding.project, binding.chatId).turnId ?? null;
+    return this.nodeRuns.run({ project: binding.project, chatId: binding.chatId, turn, turnId, connectionId: binding.connectionId, ids: checked.ids, downstream: checked.downstream, dryRun: checked.dryRun });
+  }
+
+  private async nodeRunDetail(chatId: string, input: Readonly<Record<string, unknown>>): Promise<string | undefined> {
+    const project = this.chatProjects.get(chatId);
+    return project === undefined ? undefined : this.nodeRuns.detail(project, { ...input });
+  }
+
+  private async generationDetail(chatId: string, input: Readonly<Record<string, unknown>>, tool = "generate"): Promise<string | undefined> {
+    if (tool === "node_run") return this.nodeRunDetail(chatId, input);
     const project = this.chatProjects.get(chatId);
     const checked = generateArguments(input);
     if (project === undefined || !checked.ok) return undefined;
@@ -566,6 +634,8 @@ export class AgentRuntime {
     const message = chat.messages.find((known) => known.id === requested.messageId);
     const steer = requested.steer === true;
     const selection = await this.resolveModel((requested.modelSelection as ModelSelection | undefined) ?? chat.modelSelection);
+    const known = selection.provider === "outside" ? undefined : await this.deps.providerCommands?.(selection.provider).catch(() => undefined);
+    const command = isProviderCommand(message?.text ?? "", message?.attachments?.length ?? 0, known);
     if (!steer) {
       this.activeTurns.set(chatId, {
         turnId: String(requested.turnId),
@@ -573,6 +643,7 @@ export class AgentRuntime {
         interactionMode: requested.interactionMode,
         startedAt: Date.now(),
         model: selection.model,
+        command,
       });
       if (Number(requested.turnCount) === 1 && message?.context?.selection.length) {
         await this.tag(agent.slug, chatId, await this.artifactsAmong(agent.slug, message.context.selection));
@@ -580,7 +651,7 @@ export class AgentRuntime {
     }
     try {
       const records = await this.deps.rooms.read(agent.slug);
-      const preamble = await this.preamble(agent, chat, message?.context?.selection ?? [], message?.context?.elements ?? [], message?.attachments ?? [], records);
+      const preamble = command ? "" : await this.preamble(agent, chat, message?.context?.selection ?? [], message?.context?.elements ?? [], message?.attachments ?? [], records);
       const live = this.providers.has(chatId);
       if (!live) await this.internal(agent, chatId, { type: "thread.session.set", session: { status: "starting", activeTurnId: String(requested.turnId), lastError: null } });
       await this.providers.ensure(agent.slug, agent.engine.chat(chatId) ?? chat, agent.folder, agent.engine, selection);
@@ -597,6 +668,7 @@ export class AgentRuntime {
         modelSelection: selection,
         interactionMode: requested.interactionMode ?? chat.interactionMode,
         steer,
+        ...(command ? { command: true } : {}),
       });
     } catch (error) {
       const text = errorText(error);
@@ -865,10 +937,11 @@ export class AgentRuntime {
         });
       }
     }
-    const clock = await this.deps.rooms.clock(agent.slug).catch(() => null);
+    const active = this.activeTurns.get(chatId);
+    const command = active?.turnId === turn.turnId && active.command;
+    const clock = command ? null : await this.deps.rooms.clock(agent.slug).catch(() => null);
     await this.internal(agent, chatId, { type: "thread.turn.settle", turnCount: turn.turnCount, clock, ...(outcome.usage === undefined ? {} : { usage: outcome.usage }) });
     await this.internal(agent, chatId, { type: "thread.turn.files.complete", turnCount: turn.turnCount, files: agent.turnChanges.files(chatId, turn.turnCount) });
-    const active = this.activeTurns.get(chatId);
     await writeTurnSidecar(agent.folder, {
       chatId,
       turn: turn.turnCount,

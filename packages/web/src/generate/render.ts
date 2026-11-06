@@ -92,6 +92,8 @@ export const referencesFor = async (editor: Editor, project: string, slots: Read
         refs.push({ kind: "image", file: saved.file, original: source.file });
         break;
       }
+      case "page":
+        throw new Error("A page picture is taken by the engine, at a node's run.");
       case "sketch": {
         const saved = await uploadRendered(project, await renderSketch(editor, source), "sketch.png", { source: "sketch", marks: source.marks, crop: null });
         refs.push({ kind: "image", file: saved.file });

@@ -1,5 +1,6 @@
+import { isArtifactScale } from "@unframed/contracts";
 import { projectSlug } from "../slug.ts";
-import { ADD_PARAMETER_TEMPLATE } from "./prompts.ts";
+import { ADD_PARAMETER_TEMPLATE, APPLY_PARAMETERS_TEMPLATE } from "./prompts.ts";
 
 export type ArtifactKind = "page" | "motion" | "component";
 
@@ -123,6 +124,21 @@ export const addParameterInstruction = (input: { readonly wanted: string; readon
     .replace("<title>", () => input.title);
 };
 
+const parameterPaths = (values: Readonly<Record<string, unknown>>, prefix: string, into: Record<string, unknown>): Record<string, unknown> => {
+  for (const [key, value] of Object.entries(values)) {
+    const path = prefix === "" ? key : `${prefix}.${key}`;
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) parameterPaths(value as Record<string, unknown>, path, into);
+    else into[path] = value;
+  }
+  return into;
+};
+
+export const applyParametersInstruction = (input: { readonly name: string; readonly kind: "page" | "motion"; readonly title: string; readonly values: Readonly<Record<string, unknown>> }): string =>
+  APPLY_PARAMETERS_TEMPLATE.replace("<name>", () => input.name)
+    .replace("<kind>", input.kind)
+    .replace("<title>", () => input.title)
+    .replace("<values>", () => JSON.stringify(parameterPaths(input.values, "", {}), null, 2));
+
 export const compositionSize = (html: string): { w: number; h: number } => {
   const root = /<[a-z][^>]*\bdata-composition-id\s*=[^>]*>/i.exec(html)?.[0] ?? /<[a-z][^>]*\bid\s*=\s*["']?root\b[^>]*>/i.exec(html)?.[0];
   const read = (name: string) => {
@@ -167,6 +183,62 @@ export const farOffscreen = (box: PlacementBox, viewport: PlacementBox): boolean
 
 export const snapshotFits = (snapshot: { readonly w: number; readonly h: number }, shape: { readonly w: number; readonly h: number }): boolean =>
   Math.abs(shape.w - snapshot.w) <= snapshot.w * 0.1 && Math.abs(shape.h - snapshot.h) <= snapshot.h * 0.1;
+
+export const ARTIFACT_SCALES = [0.25, 0.5, 0.75, 1, 1.5, 2] as const;
+export const ARTIFACT_LAYOUT_MAX = 4096;
+
+interface Scaled {
+  readonly w: number;
+  readonly h: number;
+  readonly scale?: unknown;
+}
+
+export const cappedArtifactScale = (props: Scaled): number =>
+  Math.max(isArtifactScale(props.scale) ? props.scale : 1, Math.min(1, Math.max(props.w, props.h) / ARTIFACT_LAYOUT_MAX));
+
+export const artifactScale = (props: Scaled): number => cappedArtifactScale(props);
+
+export const artifactLayoutSize = (props: Scaled): { w: number; h: number } => {
+  const scale = artifactScale(props);
+  return { w: props.w / scale, h: props.h / scale };
+};
+
+export const scaledArtifactProps = <P extends Scaled>(props: P, next: number): Omit<P, "scale"> & { w: number; h: number; scale?: number } => {
+  const layout = artifactLayoutSize(props);
+  const { scale: _scale, ...rest } = props;
+  return { ...rest, w: layout.w * next, h: layout.h * next, ...(next === 1 ? {} : { scale: next }) };
+};
+
+const REFERENCE_PATTERNS = [
+  /\b(?:src|href)\s*=\s*["']([^"']+)["']/gi,
+  /\bimport\s*(?:[^"';]*?\bfrom\s*)?["']([^"']+)["']/g,
+  /@import\s+(?:url\(\s*)?["']([^"']+)["']/gi,
+  /\burl\(\s*["']?([^"')]+)["']?\s*\)/gi,
+];
+
+const localPath = (raw: string): string | undefined => {
+  const bare = raw.trim().replace(/[?#].*$/, "");
+  if (bare === "" || bare.startsWith("/") || /^[a-z][a-z0-9+.-]*:/i.test(bare)) return undefined;
+  let path: string;
+  try {
+    path = decodeURIComponent(bare);
+  } catch {
+    path = bare;
+  }
+  const name = path.replace(/^(\.\/)+/, "");
+  return name === "" || name === "." || name === ".." || name.includes("/") || name.includes("\\") ? undefined : name;
+};
+
+export const artifactReferences = (html: string): string[] => {
+  const found = new Set<string>();
+  for (const pattern of REFERENCE_PATTERNS) {
+    for (const match of html.matchAll(pattern)) {
+      const path = localPath(match[1]!);
+      if (path !== undefined) found.add(path);
+    }
+  }
+  return [...found];
+};
 
 export const snapshotSeekSeconds = (duration: number): number => (Number.isFinite(duration) && duration > 0 && duration < 1 ? duration / 2 : 1);
 

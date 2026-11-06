@@ -24,13 +24,13 @@ const photoAt = async (engine: TestEngine): Promise<{ x: number; y: number } | u
   return record === undefined ? undefined : { x: record.x ?? 0, y: record.y ?? 0 };
 };
 
-const onBoard = async (page: Page, engine: TestEngine, locked: string[] = []) => {
+const onBoard = async (page: Page, engine: TestEngine, locked: string[] = [], scale?: number) => {
   await openCanvas(page, engine);
   await writeBridge(engine);
   const { file } = await filledArtifact(engine, { id: "shape:landing", kind: "page", ref: "150", at: PAGE_AT, size: { w: 400, h: 260 }, title: "Landing", html: PAGE });
-  if (locked.length > 0) {
-    const shape = artifactShape({ id: "shape:landing", kind: "page", ref: "150", at: PAGE_AT, size: { w: 400, h: 260 }, title: "Landing", file });
-    await putRecords(engine, [{ ...shape, props: { ...shape.props, lockedElements: locked } }]);
+  if (locked.length > 0 || scale !== undefined) {
+    const shape = artifactShape({ id: "shape:landing", kind: "page", ref: "150", at: scale === undefined ? PAGE_AT : { x: PAGE_AT.x + 200, y: PAGE_AT.y }, size: { w: 400, h: 260 }, title: "Landing", file });
+    await putRecords(engine, [{ ...shape, props: { ...shape.props, ...(locked.length > 0 ? { lockedElements: locked } : {}), ...(scale === undefined ? {} : { scale }) } }]);
   }
   await filledMedia(engine, { id: "shape:photo", type: "image", ref: "160", at: PHOTO_AT, bytes: pngBytes(800, 400), name: "photo.png", mime: "image/png", natural: { w: 800, h: 400 }, width: 160 });
   await expect(shapeOnScreen(page, "shape:landing")).toBeVisible();
@@ -78,6 +78,32 @@ test("dragging an image over a selected page outlines the picture under the poin
   await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(() => pageFile(agent), { timeout: 8000 }).toBe(before);
   await expect.poll(() => photoAt(agent), { timeout: 4000 }).toEqual(start);
+});
+
+test("on a page scaled on the canvas, the outline sits on the picture under the pointer", async ({ page, agent }) => {
+  await onBoard(page, agent, [], 0.5);
+  await selectPage(page);
+  const shape = shapeOnScreen(page, "shape:landing");
+  const card = (await shape.locator("[data-testid='artifact-card']").boundingBox())!;
+  const frame = (await shape.locator("iframe[data-artifact-frame]").boundingBox())!;
+  expect(frame.width).toBeCloseTo(card.width, 0);
+  expect(frame.height).toBeCloseTo(card.height, 0);
+  const inside = await shape.frameLocator("iframe[data-artifact-frame]").locator("img[alt='Hero picture']").evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { x: rect.x, y: rect.y, w: rect.width, h: rect.height, viewport: window.innerWidth };
+  });
+  expect(inside.viewport).toBe(800);
+  const scale = frame.width / inside.viewport;
+  const drawn = { x: frame.x + inside.x * scale, y: frame.y + inside.y * scale, width: inside.w * scale, height: inside.h * scale };
+
+  await dragPhotoTo(page, { x: drawn.x + drawn.width / 2, y: drawn.y + drawn.height / 2 });
+  await expect(outline(page)).toBeVisible({ timeout: 5_000 });
+  const box = (await outline(page).boundingBox())!;
+  expect(Math.abs(box.x - drawn.x)).toBeLessThan(2);
+  expect(Math.abs(box.y - drawn.y)).toBeLessThan(2);
+  expect(Math.abs(box.width - drawn.width)).toBeLessThan(2);
+  expect(Math.abs(box.height - drawn.height)).toBeLessThan(2);
+  await page.mouse.up();
 });
 
 test("a drop off any picture is an ordinary move, and a locked picture is no target", async ({ page, agent }) => {

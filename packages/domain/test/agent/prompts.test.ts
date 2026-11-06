@@ -19,6 +19,8 @@ import {
   FAILURE_OTHER_SUBTYPE,
   FAILURE_SENTENCES,
   IMPLEMENT_PLAN_PROMPT,
+  NODE_PAGE_SYSTEM,
+  NODE_RUN_DESCRIPTION,
   PLAN_CAPTURED_MESSAGE,
   PLAN_NO_WRITES_MESSAGE,
   QUIT_MID_TURN,
@@ -34,7 +36,8 @@ const blocks = (file: string): string[] => {
 describe("the agent's model-facing text is the assets' text", () => {
   it("holds the system prompt and the canvas tool descriptions", () => {
     expect(AGENT_SYSTEM_PROMPT).toBe(blocks("agent-system.md")[0]);
-    expect([CANVAS_READ_DESCRIPTION, CANVAS_WRITE_DESCRIPTION]).toEqual(blocks("tool-descriptions.md"));
+    expect([CANVAS_READ_DESCRIPTION, CANVAS_WRITE_DESCRIPTION, NODE_RUN_DESCRIPTION]).toEqual(blocks("tool-descriptions.md"));
+    expect(NODE_PAGE_SYSTEM).toBe(blocks("node-page.md")[0]);
     expect(AGENT_SYSTEM_PROMPT).toContain("reuse them instead of copying their markup, and when the person asks for something repeated, propose a component.");
   });
 
@@ -75,7 +78,9 @@ describe("the agent's model-facing text is the assets' text", () => {
 
 describe("the outside agent's text is the asset's text", () => {
   it("holds the projects_list description and the instructions to their blocks", async () => {
-    const { OUTSIDE_AGENT_INSTRUCTIONS, OUTSIDE_PROJECTS_LIST_DESCRIPTION } = await import("../../src/index.ts");
+    const { OUTSIDE_AGENT_INSTRUCTIONS, OUTSIDE_CHAT_NOTE_DESCRIPTION, OUTSIDE_FILE_ADD_DESCRIPTION, OUTSIDE_PROJECTS_LIST_DESCRIPTION } = await import("../../src/index.ts");
+    expect(OUTSIDE_CHAT_NOTE_DESCRIPTION).toBe(blocks("outside-agent.md")[2]);
+    expect(OUTSIDE_FILE_ADD_DESCRIPTION).toBe(blocks("outside-agent.md")[3]);
     expect(OUTSIDE_PROJECTS_LIST_DESCRIPTION).toBe(blocks("outside-agent.md")[0]);
     expect(OUTSIDE_AGENT_INSTRUCTIONS).toBe(blocks("outside-agent.md")[1]);
   });

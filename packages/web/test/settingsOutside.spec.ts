@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures.ts";
-import { openApp, openSettings, startSettingsEngine } from "./settings.ts";
+import { openApp, openSettings, showSection, startSettingsEngine } from "./settings.ts";
 
 /** The connect dialog's setup text, and the token in its code. */
 const tokenIn = (text: string) => /UNFRAMED_MCP_TOKEN=(ufx_[0-9a-f]{64})/.exec(text)![1]!;
@@ -9,6 +9,7 @@ test("Connect an agent shows Codex's setup once, the row says Never used, and a 
   try {
     await openApp(page, engine);
     const dialog = await openSettings(page);
+    await showSection(dialog, "Connections");
     await expect(dialog.getByRole("heading", { name: "Agents outside Unframed" })).toBeVisible();
     await expect(dialog.getByTestId("outside-connection")).toHaveCount(0);
 
@@ -39,6 +40,7 @@ test("Connect an agent shows Codex's setup once, the row says Never used, and a 
     expect(answer.status).toBe(200);
     await page.keyboard.press("Escape");
     const reopened = await openSettings(page);
+    await showSection(reopened, "Connections");
     await expect(reopened.getByTestId("outside-connection")).toContainText("Last used just now");
   } finally {
     await engine.dispose();
@@ -52,6 +54,7 @@ test("Revoke asks first, then the row is gone and the revoked token answers 401"
     const made = await rpc.call("agentConnections.create", { name: "Laptop", client: "claude-code" });
     await openApp(page, engine);
     const dialog = await openSettings(page);
+    await showSection(dialog, "Connections");
     await dialog.getByRole("button", { name: "Revoke" }).click();
     const ask = page.getByRole("alertdialog", { name: "Revoke Laptop?" });
     await expect(ask).toContainText("The agent loses access at once. Its chats and the changes it made stay.");

@@ -1,6 +1,5 @@
 import type { Page } from "@playwright/test";
 import { gate } from "../../engine/test/openRouterStub.ts";
-import { closeSettings } from "./settings.ts";
 import { emptyCanvasPoint, openCanvas, roomShapes, shapeOnScreen } from "./canvas.ts";
 import { clickShape, composer, expect, instructionBox, openComposer, pressSend, selectGroup, sendButton, sendRun, startGeneration, test, toolbar } from "./generation.ts";
 import { pngBytes } from "./images.ts";
@@ -120,7 +119,7 @@ test("the top band offers only the registered media and names the source by coun
   await selectGroup(page, "shape:character");
   await openComposer(page);
   const media = composer(page).getByRole("radiogroup", { name: "Medium" });
-  await expect(media.getByRole("radio")).toHaveText(["image", "video", "text"]);
+  await expect(media.getByRole("radio")).toHaveText(["image", "video", "text", "audio"]);
   await expect(media.getByRole("radio", { name: "image" })).toHaveAttribute("aria-checked", "true");
   await expect(composer(page).getByTestId("source-count")).toHaveText("@character");
 });
@@ -222,18 +221,21 @@ test("warnings and the states that disable send", async ({ page, generation }) =
   await expect(sendButton(page)).toBeDisabled();
 });
 
-test("without a key, send is disabled and the tray says where to add one", async ({ page }) => {
+test("without a key, send is disabled, the tray says to connect OpenRouter, and Open Settings opens Settings on Generation", async ({ page }) => {
   const generation = await startGeneration({ key: false });
   try {
     await openCanvas(page, generation.engine);
-    // A keyless first load opens the settings dialog (spec 10).
-    await closeSettings(page);
+    await expect(page.getByTestId("settings-dialog")).toHaveCount(0);
     await clickShape(page, "shape:starter-subject");
     await openComposer(page);
-    await expect(composer(page).getByTestId("composer-status")).toHaveText(
-      "No OpenRouter key yet. Add one with the key icon in the top right (it becomes a settings gear once saved).",
-    );
+    const blocker = composer(page).getByTestId("no-key-blocker");
+    await expect(blocker.locator("[data-slot=alert-title]")).toHaveText("Generating needs OpenRouter. Connect it in Settings, under Generation.");
     await expect(sendButton(page)).toBeDisabled();
+    await blocker.getByRole("button", { name: "Open Settings" }).click();
+    const dialog = page.getByTestId("settings-dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("tab", { name: "Generation" })).toHaveAttribute("aria-selected", "true");
+    await expect(dialog.getByRole("button", { name: "Connect OpenRouter" })).toBeVisible();
   } finally {
     await generation.engine.dispose();
   }

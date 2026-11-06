@@ -8,6 +8,7 @@ import "./canvas.css";
 import "../generate/imageMedium.ts";
 import "../generate/videoMedium.ts";
 import "../generate/textMedium.ts";
+import "../generate/audioMedium.tsx";
 import { DotGrid } from "../chrome/DotGrid.tsx";
 import { installLabelActivity, installLabelLevel } from "../chrome/labelLevel.ts";
 import { OVERLAY_UTILS } from "../chrome/selectionLook.ts";
@@ -18,7 +19,7 @@ import { RoleBadges } from "../generate/overlays.tsx";
 import { installRenderPolls } from "../generate/renderPolls.ts";
 import { watchRunReports } from "../generate/runReports.ts";
 import { LicenseKeyContext } from "../license.ts";
-import type { ProjectActivation } from "../project/activation.ts";
+import { SETTLE_BEFORE_SWITCH_MS, type ProjectActivation } from "../project/activation.ts";
 import { showError } from "../toasts.tsx";
 import { createAssetStore, Previews } from "./assetStore.ts";
 import { clipboardOptions, installExternalContent, type ContentContext } from "./externalContent.ts";
@@ -29,6 +30,14 @@ import { installRefMinting, RefMinter } from "./refs.ts";
 import { installRename } from "./rename.ts";
 import { watchRunProgress } from "../generate/recipeRuns.ts";
 import { ComponentShapeUtil, MotionShapeUtil, PageShapeUtil } from "./shapes/artifact.tsx";
+import { AudioShapeUtil } from "./shapes/audio.tsx";
+import { NodeShapeUtil } from "../nodes/NodeShapeUtil.tsx";
+import { WireShapeUtil } from "../nodes/WireShapeUtil.tsx";
+import { installNodeSideEffects } from "../nodes/sideEffects.ts";
+import { installWireCopies } from "../nodes/copies.ts";
+import { watchMotionRenders, watchNodeCatalogues } from "../nodes/facts.ts";
+import { bindNodeCatalogues } from "../nodes/operations.ts";
+import { watchChainReports } from "../nodes/reports.ts";
 import { GroupShapeUtil } from "./shapes/group.tsx";
 import { ImageMediaUtil, VideoMediaUtil } from "./shapes/media.tsx";
 import { PromptShapeUtil } from "./shapes/prompt.tsx";
@@ -38,9 +47,8 @@ import { SyncSocket } from "./syncSocket.ts";
 import { recalledCamera, rememberCamera } from "../project/tabMemory.ts";
 import { TLDRAW_ASSET_URLS, TLDRAW_CHROME, TLDRAW_OPTIONS } from "./tldrawChrome.tsx";
 
-const SETTLE_BEFORE_SWITCH_MS = 2000;
 
-const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil, ComponentShapeUtil, ...DESIGNED_SHAPE_UTILS];
+const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, AudioShapeUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil, ComponentShapeUtil, NodeShapeUtil, WireShapeUtil, ...DESIGNED_SHAPE_UTILS];
 
 const COMPONENTS: TLComponents = {
   ...TLDRAW_CHROME,
@@ -92,6 +100,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
   const store = useSync({ connect, assets, schema: canvasSchema() });
 
   useEffect(() => watchRunReports(engine, project), [engine, project]);
+  useEffect(() => watchChainReports(engine, project), [engine, project]);
 
   useEffect(() => {
     activation.setBeforeSwitch(() => socket.current?.settled(SETTLE_BEFORE_SWITCH_MS) ?? Promise.resolve());
@@ -114,6 +123,11 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     const stopRunProgress = watchRunProgress(editor, engine, project);
     const stopSelection = installSelectionReporter(editor, engine, project);
     const stopNextShapeDesign = installNextShapeDesign(editor);
+    const stopNodes = installNodeSideEffects(editor);
+    const stopWireCopies = installWireCopies(editor);
+    const stopRenders = watchMotionRenders(editor, engine, project);
+    bindNodeCatalogues(editor);
+    const stopCatalogues = watchNodeCatalogues(editor, engine);
     content.current = { project, engine, minter };
     installExternalContent(editor, content.current);
     const camera = recalledCamera(project);
@@ -130,6 +144,10 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
       stopRunProgress();
       stopSelection();
       stopNextShapeDesign();
+      stopNodes();
+      stopWireCopies();
+      stopRenders();
+      stopCatalogues();
       content.current = undefined;
     };
   }, [project, engine]);

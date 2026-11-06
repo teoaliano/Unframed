@@ -5,7 +5,7 @@
  * counts what has settled from spec 03's run events.
  */
 import { runMarkerOf, type ModelEntry } from "@unframed/contracts";
-import { composeSelection, trayFromRecipe, type GroupRecipe } from "@unframed/domain";
+import { composeSelection, generationProviders, NO_KEY_MESSAGE, providerOf, trayFromRecipe, trayProvider, type GroupRecipe, type ProviderKeys } from "@unframed/domain";
 import { atom, type Atom, type Editor, type TLShapeId } from "tldraw";
 import type { EngineConnection } from "../rpc/engine.ts";
 import { loadCatalogue } from "./catalogue.ts";
@@ -102,31 +102,47 @@ export const recipeProps = (definition: MediumDefinition, recipe: GroupRecipe, e
  * Runs `recipe` over the selection at once. A Free recipe stops at the final prompt
  * dialog, so nothing is spent until it is confirmed there.
  */
+export class NoKeyError extends Error {
+  constructor() {
+    super(NO_KEY_MESSAGE);
+  }
+}
+
 export const runGroupRecipe = async (input: {
   readonly editor: Editor;
   readonly engine: EngineConnection;
   readonly project: string;
   readonly groupId: string;
   readonly recipe: GroupRecipe;
-  readonly hasKey: boolean;
+  readonly keys: ProviderKeys;
+  readonly hasElevenLabsKey?: boolean;
 }): Promise<void> => {
   const { editor, engine, project, groupId, recipe } = input;
   const definition = mediumDefinition(recipe.medium);
   if (!definition) throw new Error(`There is no ${recipe.medium} medium.`);
-  const entry = (await loadCatalogue(engine, definition.catalogue)).models.find((model) => model.id === recipe.model);
+  const { keys } = input;
+  const routed = recipe.medium === "image" || recipe.medium === "text";
+  const { provider, switched } = trayProvider({ medium: recipe.medium, wanted: providerOf(recipe.provider), settings: keys });
+  const catalogue = await loadCatalogue(engine, definition.catalogue, routed ? provider : undefined);
+  const listed = catalogue.models.find((model) => model.id === recipe.model);
+  const model = recipe.model === "" || (switched !== undefined && listed === undefined) ? undefined : recipe.model;
+  const entry = model === undefined ? undefined : listed;
   const props = recipeProps(definition, recipe, entry);
   // The empty model of a system preset not yet given one runs on the default.
   const values: TrayValues = {
-    model: recipe.model === "" ? undefined : recipe.model,
+    model,
     picked: false,
     props: recipe.runs === "free" ? { ...props, [VIEW_FINAL_PROMPT_KEY]: true } : props,
+    ...(routed ? { provider } : {}),
   };
   const selected = editor.getSelectedShapeIds();
   const shapes = canvasShapes(editor);
   const composition = composeSelection({ shapes, selected, instruction: "", medium: recipe.medium, referenceCap: definition.params(entry, values.props).referenceCap });
   const source: RunSource = { kind: "selection", composition, selected, shapes, instruction: "" };
-  const [blocker] = definition.status({ source, hasKey: input.hasKey, props: values.props, entry }).blockers;
+  const status = definition.status({ source, hasKey: routed ? generationProviders(keys, recipe.medium).length > 0 : keys.hasKey, hasElevenLabsKey: input.hasElevenLabsKey, props: values.props, entry, model: values.model ?? recipe.model });
+  const [blocker] = status.blockers;
   if (blocker !== undefined) throw new Error(blocker);
+  if (status.needsKey === true) throw new NoKeyError();
   const outcome = await definition.send({ editor, engine, project, values, source, remember: false });
   const staged = outcome === "stay" ? stagedFree(editor).get()?.batchId : undefined;
   const run: RecipeRun | undefined =

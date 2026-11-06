@@ -1,6 +1,6 @@
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { acceptTestOrigin, OUTSIDE_TURN_IDLE_MS } from "@unframed/domain";
+import { acceptTestOrigin, OUTSIDE_TURN_IDLE_MS, PROVIDER_KEYS, type ProviderId } from "@unframed/domain";
 import { agentConnectionsFilePath, discoveryFilePath, envFilePath, preferencesFilePath, resolveDataDir } from "./paths.ts";
 
 const positiveInt = (value: string | undefined): number | undefined => {
@@ -16,8 +16,6 @@ const shimEntryPath = (): string => {
 
 /** `UNFRAMED_TEST_RENDERER` (spec 01's table): stands in for the motion renderer and the Chrome search. */
 export type TestRenderer = "ok" | "fail" | "no-chrome";
-
-export const OPENROUTER_ORIGIN = "https://openrouter.ai";
 
 /**
  * What the process was started with: the install layout, the hosting variables and the
@@ -40,6 +38,9 @@ export interface EngineConfig {
   readonly clientDist: string | undefined;
   /** Every OpenRouter URL the engine builds starts with this. */
   readonly openRouterOrigin: string;
+  readonly elevenLabsOrigin: string;
+  readonly vercelOrigin: string;
+  readonly vercelLookupMs: number;
   readonly oauthBounce: string | undefined;
   readonly chromePath: string | undefined;
   readonly agentDebug: boolean;
@@ -83,12 +84,12 @@ export const loadConfig = (
   const warnings: string[] = [];
   const dataDir = resolveDataDir(env, installRoot);
   const clientDist = nonEmpty(env.UNFRAMED_CLIENT_DIST);
-  const testOrigin = nonEmpty(env.UNFRAMED_TEST_OPENROUTER_ORIGIN);
-  let openRouterOrigin = OPENROUTER_ORIGIN;
-  if (testOrigin !== undefined) {
-    const accepted = acceptTestOrigin(testOrigin);
-    if (accepted === undefined) warnings.push(`test origin ignored: ${testOrigin} is not a loopback origin`);
-    else openRouterOrigin = accepted;
+  const origins = {} as Record<ProviderId, string>;
+  for (const provider of PROVIDER_KEYS) {
+    const testOrigin = nonEmpty(env[provider.testOriginVariable]);
+    const accepted = testOrigin === undefined ? undefined : acceptTestOrigin(testOrigin);
+    if (testOrigin !== undefined && accepted === undefined) warnings.push(`test origin ignored: ${testOrigin} is not a loopback origin`);
+    origins[provider.id] = accepted ?? provider.origin;
   }
   const nativeLogPath = nonEmpty(env.UNFRAMED_TEST_NATIVE_LOG);
   const shutdownHook = nonEmpty(env.UNFRAMED_TEST_SHUTDOWN_HOOK_MS);
@@ -107,7 +108,10 @@ export const loadConfig = (
       outsideTurnIdleMs: positiveInt(env.UNFRAMED_TEST_OUTSIDE_TURN_IDLE_MS) ?? OUTSIDE_TURN_IDLE_MS,
       runAsNode: env.ELECTRON_RUN_AS_NODE === "1",
       clientDist: clientDist === undefined ? undefined : resolve(clientDist),
-      openRouterOrigin,
+      openRouterOrigin: origins.openrouter,
+      elevenLabsOrigin: origins.elevenlabs,
+      vercelOrigin: origins.vercel,
+      vercelLookupMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_VERCEL_LOOKUP_MS)) ?? 1500,
       oauthBounce: nonEmpty(env.UNFRAMED_OAUTH_BOUNCE),
       chromePath: nonEmpty(env.UNFRAMED_CHROME_PATH),
       agentDebug: nonEmpty(env.UNFRAMED_AGENT_DEBUG) !== undefined,

@@ -4,7 +4,7 @@
  * marker whose work did not land.
  */
 import { randomUUID } from "node:crypto";
-import { projectFileMarker, resultMetaOf, unframedMetaOf, type ImageRunRequest, type ResultMeta, type RunMarker } from "@unframed/contracts";
+import { AUDIO_DEFAULT_SIZE, projectFileMarker, resultMetaOf, unframedMetaOf, type ImageRunRequest, type ResultMeta, type RunMarker } from "@unframed/contracts";
 import { plainText } from "@unframed/domain";
 import { toRichText, type TLRecord } from "@tldraw/tlschema";
 import { getIndexAbove, type IndexKey } from "@tldraw/utils";
@@ -31,6 +31,7 @@ export interface Landed {
   readonly file: string;
   readonly sidecar: string;
   readonly cost: number | null;
+  readonly listPrice?: true;
   readonly width: number | undefined;
   readonly height: number | undefined;
   readonly mime: string;
@@ -100,7 +101,7 @@ export const fillChange = (shape: Shape, landed: Landed): CanvasChange => {
   const filled = {
     ...shape,
     props: { ...shape.props, assetId, h: height, crop: null },
-    meta: { ...shape.meta, unframed: { ...unframed, ...(result ? { result: { ...result, sidecar: landed.sidecar, cost: landed.cost } } : {}) } },
+    meta: { ...shape.meta, unframed: { ...unframed, ...(result ? { result: { ...result, sidecar: landed.sidecar, cost: landed.cost, ...(landed.listPrice ? { listPrice: true } : {}) } } : {}) } },
   } as unknown as TLRecord;
   return { put: [asset, filled], remove: [] };
 };
@@ -114,6 +115,7 @@ export interface LandedText {
   readonly text: string;
   readonly sidecar: string | null;
   readonly cost: number | null;
+  readonly listPrice?: true;
 }
 
 /** A text result's placeholder: an empty prompt (spec 02's text shape) carrying its marker and unfilled result meta. */
@@ -147,7 +149,7 @@ const textFillChange = (shape: Shape, landed: LandedText): CanvasChange => {
   const filled = {
     ...shape,
     props: { ...shape.props, richText: toRichText(landed.text) },
-    meta: { ...shape.meta, unframed: { ...unframed, ...(result ? { result: { ...result, sidecar: landed.sidecar, cost: landed.cost } } : {}) } },
+    meta: { ...shape.meta, unframed: { ...unframed, ...(result ? { result: { ...result, sidecar: landed.sidecar, cost: landed.cost, ...(landed.listPrice ? { listPrice: true } : {}) } } : {}) } },
   } as unknown as TLRecord;
   return { put: [filled], remove: [] };
 };
@@ -208,9 +210,56 @@ const clipFillChange = (shape: Shape, landed: LandedClip): CanvasChange => {
   return { put: [asset, filled], remove: [] };
 };
 
+export interface LandedAudio {
+  readonly kind: "audio";
+  readonly file: string;
+  readonly sidecar: string | null;
+  readonly credits: number | null;
+}
+
+export const audioPlaceholder = (input: {
+  readonly at: { readonly x: number; readonly y: number };
+  readonly index: string;
+  readonly parentId: string;
+  readonly ref: string;
+  readonly marker: RunMarker;
+  readonly result: ResultMeta;
+}): TLRecord =>
+  ({
+    id: `shape:${randomUUID()}`,
+    typeName: "shape",
+    type: "audio",
+    x: input.at.x,
+    y: input.at.y,
+    rotation: 0,
+    index: input.index,
+    parentId: input.parentId,
+    isLocked: false,
+    opacity: 1,
+    props: { ...AUDIO_DEFAULT_SIZE, file: "", fileName: "" },
+    meta: { ref: input.ref, unframed: { run: input.marker, result: input.result } },
+  }) as unknown as TLRecord;
+
+const audioFillChange = (shape: Shape, landed: LandedAudio): CanvasChange => {
+  const { run: _run, ...unframed } = unframedMetaOf(shape);
+  const result = resultMetaOf(shape);
+  const filled = {
+    ...shape,
+    props: { ...shape.props, file: landed.file },
+    meta: { ...shape.meta, unframed: { ...unframed, ...(result ? { result: { ...result, sidecar: landed.sidecar, cost: null, credits: landed.credits } } : {}) } },
+  } as unknown as TLRecord;
+  return { put: [filled], remove: [] };
+};
+
 /** The change that fills a placeholder with whatever landed for it. */
-export const fillFor = (shape: Shape, landed: Landed | LandedText | LandedClip): CanvasChange =>
-  "kind" in landed ? (landed.kind === "clip" ? clipFillChange(shape, landed) : textFillChange(shape, landed)) : fillChange(shape, landed);
+export const fillFor = (shape: Shape, landed: Landed | LandedText | LandedClip | LandedAudio): CanvasChange =>
+  "kind" in landed
+    ? landed.kind === "clip"
+      ? clipFillChange(shape, landed)
+      : landed.kind === "audio"
+        ? audioFillChange(shape, landed)
+        : textFillChange(shape, landed)
+    : fillChange(shape, landed);
 
 /** The change that settles a marker whose work did not land: the marker goes, and an empty shape goes too. */
 export const clearChange = (shape: Shape): CanvasChange => {
@@ -219,7 +268,16 @@ export const clearChange = (shape: Shape): CanvasChange => {
     const { run: _run, ...unframed } = unframedMetaOf(shape);
     return { put: [{ ...shape, meta: { ...shape.meta, unframed } } as unknown as TLRecord], remove: [] };
   }
-  if (shape.props.assetId === null || shape.props.assetId === undefined) return { put: [], remove: [shape.id] };
+  if (shape.type === "audio" ? shape.props.file === "" || shape.props.file === undefined : shape.props.assetId === null || shape.props.assetId === undefined) return { put: [], remove: [shape.id] };
   const { run: _run, ...unframed } = unframedMetaOf(shape);
   return { put: [{ ...shape, meta: { ...shape.meta, unframed } } as unknown as TLRecord], remove: [] };
+};
+
+export const costChange = (shape: Shape, sidecar: string, cost: number | null, listPrice: boolean): CanvasChange | undefined => {
+  const unframed = unframedMetaOf(shape);
+  const result = resultMetaOf(shape);
+  if (!result || result.sidecar !== sidecar) return undefined;
+  const { listPrice: _old, ...rest } = result;
+  const next = { ...rest, cost, ...(listPrice ? { listPrice: true as const } : {}) };
+  return { put: [{ ...shape, meta: { ...shape.meta, unframed: { ...unframed, result: next } } } as unknown as TLRecord], remove: [] };
 };
