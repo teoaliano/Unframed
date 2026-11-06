@@ -2,9 +2,9 @@ import type { Locator, Page } from "@playwright/test";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { test as agentTest } from "./agent.ts";
 import { artifactShape, filledArtifact } from "./artifacts.ts";
-import { centre, editorFocused, emptyCanvasPoint, openCanvas, plainText, roomRecords, shapeOnScreen, waitForRoom } from "./canvas.ts";
+import { centre, clearOfDesignPanel, editorFocused, emptyCanvasPoint, openCanvas, plainText, roomRecords, shapeOnScreen, waitForRoom } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
-import { clickShape, openComposer, sendRun, test as generationTest } from "./generation.ts";
+import { clickShape, openComposer, sendRun, settled, test as generationTest } from "./generation.ts";
 import { pngBytes } from "./images.ts";
 import { emptyMedia, filledMedia, groupRecord, promptRecord, putRecords } from "./media.ts";
 
@@ -56,6 +56,7 @@ test("a prompt's label renames it, a name in use takes a suffix, and a double-cl
   await openCanvas(page, engine);
   await putRecords(engine, [promptRecord("shape:line", "300", "a red fox", { x: 480, y: 120 }), promptRecord("shape:fox", "fox", "taken", { x: 480, y: 300 })]);
   await expect(label(page, "shape:line")).toHaveText("@300");
+  await clearOfDesignPanel(page);
 
   await dblclickLabel(page, "shape:line");
   await expect(field(page, "Prompt")).toBeFocused();
@@ -195,6 +196,9 @@ generationTest("a prompt that names an image by @ sends that image as a referenc
   await filledMedia(engine, { id: "shape:other", type: "image", ref: "301", at: { x: 480, y: 300 }, bytes: other, name: "other.png", mime: "image/png", natural: { w: 64, h: 40 }, width: 160 });
   await putRecords(engine, [promptRecord("shape:line", "300", "put @hero in the snow beside image 1", { x: -400, y: 120 })]);
   await expect(shapeOnScreen(page, "shape:hero")).toBeVisible();
+  await page.mouse.click(10, 400);
+  await page.keyboard.press("-");
+  await settled(shapeOnScreen(page, "shape:other"));
 
   await clickShape(page, "shape:line");
   await clickShape(page, "shape:other", ["Shift"]);

@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { openCanvas, shapeOnScreen, toast } from "./canvas.ts";
+import { clearOfDesignPanel, openCanvas, shapeOnScreen, toast } from "./canvas.ts";
 import { clickShape, composer, instructionBox, openComposer, pressSend, sendButton, sendRun } from "./generation.ts";
 import { pngBytes } from "./images.ts";
 import { filledMedia, promptRecord, putRecords } from "./media.ts";
@@ -67,6 +67,7 @@ const sidecarOf = async (generation: TextGeneration, shape: { meta?: any }) =>
 
 /** Selects `ids`, opens the composer on Free, and types `instruction`. */
 const freeOn = async (page: Page, ids: string[], instruction = "", viewFinalPrompt = false) => {
+  await clearOfDesignPanel(page);
   await select(page, ids);
   await openComposer(page);
   await setFree(page, viewFinalPrompt);

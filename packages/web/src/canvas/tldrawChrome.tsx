@@ -1,12 +1,13 @@
 /**
- * tldraw's UI as Unframed shows it: Lucide icons, the parts spec 02 hides, and the style
- * panel only when it has something to set. The canvas and the design-system catalogue both
+ * tldraw's UI as Unframed shows it: Lucide icons, the parts spec 02 hides, and the Design
+ * panel in place of tldraw's style panel. The canvas and the design-system catalogue both
  * mount tldraw with these, so the catalogue shows exactly what the canvas does.
  */
 import { getAssetUrlsByImport } from "@tldraw/assets/imports.vite";
-import { DefaultStylePanel, useEditor, useValue, type TLComponents, type TldrawOptions, type TLUiStylePanelProps } from "tldraw";
+import type { TLComponents, TldrawOptions } from "tldraw";
 import "tldraw/tldraw.css";
 import { BottomToolbar } from "../chrome/BottomToolbar.tsx";
+import { DesignPanel } from "./DesignPanel.tsx";
 import { lucideIconUrls } from "./icons.tsx";
 
 const tldrawAssets = getAssetUrlsByImport();
@@ -26,16 +27,6 @@ export const TLDRAW_OPTIONS: Partial<TldrawOptions> = {
   },
 };
 
-/**
- * tldraw's style panel, shown only when it has something to set: a drawing tool is on, or
- * the selection holds shapes with styles (prompts, drawings). Media, artifacts and groups have none.
- */
-const StylePanel = (props: TLUiStylePanelProps) => {
-  const editor = useEditor();
-  const styled = useValue("styled selection or tool", () => editor.getSharedStyles().size > 0, [editor]);
-  return styled ? <DefaultStylePanel {...props} /> : null;
-};
-
 /** tldraw's main, page, help and debug menus, its share panel and its media toolbars are hidden. */
 export const TLDRAW_CHROME: TLComponents = {
   MainMenu: null,
@@ -47,7 +38,7 @@ export const TLDRAW_CHROME: TLComponents = {
   // One toolbar per selection: Unframed's selection toolbar, never tldraw's media bars beside it.
   ImageToolbar: null,
   VideoToolbar: null,
-  StylePanel,
+  StylePanel: DesignPanel,
   // One bottom bar: quick actions, tools and Unframed's own buttons (spec 02).
   Toolbar: BottomToolbar,
 };

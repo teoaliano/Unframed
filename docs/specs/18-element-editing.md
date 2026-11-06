@@ -26,7 +26,7 @@ The **owner rule** decides what an edit changes. A literal value in the source g
 
 The person can **lock** an element in Layers. The agent's write tools then refuse a write that changes or removes it, with a sentence that tells the agent to ask the person to unlock it.
 
-On the canvas only one thing changes: dropping an image shape onto a live page swaps the picture under the drop point.
+On the canvas two things change: dropping an image shape onto a live page swaps the picture under the drop point, and tldraw's style panel gives way to the **Design panel**, the Design tab's controls set on the canvas's own text, notes, shapes and drawings with exact values (sizes in px, any colour, any font family, weight, line height, alignment, stroke, corner radius, opacity).
 
 ## User Stories
 
@@ -69,6 +69,7 @@ On the canvas only one thing changes: dropping an image shape onto a live page s
 37. As an agent, I want a refused write to name the locked element and what to do, so that I can recover.
 38. As an outside agent, I want the same ids, locks and refusals, so that working from a terminal is the same as working in the app.
 39. As a person, I want the canvas to pan as smoothly as before while I drag an image over a page, so that editing never makes the board heavy.
+40. As a person, I want the Design tab's controls on the canvas's text, sticky notes, shapes and drawings, with exact sizes, colours, fonts, weights, line heights, alignment, strokes, corners and opacity, so that the canvas and the editor work the same way.
 
 ## Implementation Decisions
 
@@ -111,6 +112,9 @@ On the canvas only one thing changes: dropping an image shape onto a live page s
 | Edit contracts | contracts | `SourceEdit`, `ElementChip`, the four RPCs, `MessageContext.elements`, the edit sidecar | new |
 | Editor modes and tabs, frame overlay, burst controller | web | Edit and Interact, the tab strip, outlines over the frame, the commit and swap | new, inside spec 09's editor |
 | Design tab, Layers tab, image picker | web | the inspector, the tree, the picture chooser | new |
+| Design controls | web | the number, font, keyword and colour controls and the Section and Row layout the Design tab and the Design panel share | new |
+| Shape design | domain | `shapeDesignOf(meta)` reads a canvas shape's exact values, `designPatched(design, patch)`, `designValueRefusal(key, value)`, `designKeysOf(type)` and `designDisplayValues(type, design)` map them onto tldraw's display values | new |
+| Design panel | web | the canvas inspector in tldraw's style panel slot, the shape utils that apply `meta.unframed.design`, and the next-shape values | new, replacing tldraw's style panel |
 | Canvas image drop | web | the drop target on a live page | new |
 | Element chips in the composer | web | the chip row of spec 08's Agent tray | extended (spec 08) |
 
@@ -330,6 +334,30 @@ Spec 09's editor, with these changes. Contract 9 holds: everything below runs in
 - **Layout** shows only for an element whose computed `display` is flex or inline-flex. Making an element flex, grid and transforms are the agent's (Out of Scope).
 - **Read-only** fields follow the owner table above. A runtime element shows every section read-only with the `Set by the agent's code.` line and its button at the top.
 
+### The Design panel on the canvas
+
+- **Where.** Docked to the window's right edge, like the agent rail on the left (spec 08): 320 px wide, from the top bar's bottom border (36 px, spec 17) to the window's bottom, on solid `--background` with the kit's left border and square corners, scrolling when its content is taller. It sits in tldraw's container one layer under the watermark, so the watermark stays visible over its bottom-right corner, and its content ends 56 px above its bottom edge so no control sits under the watermark. While it shows, the bottom row (the bottom toolbar) centres in the canvas left of it. It carries `data-unframed-design-panel`, which spec 03's floating toolbars keep clear of. It is hidden while nothing it edits is selected and no creation tool is on. tldraw's own style panel is never shown.
+- **When.** While a creation tool is on (Prompt, Draw, Highlight, Line, Arrow, Note, or a geo shape), the panel sets that tool's next shape and its title reads `Next {kind}`, whatever is still selected. Otherwise it edits the selected prompts, notes, geo shapes, arrows, drawings, lines and highlights, titled with the kind (`Text`, `Sticky note`, `Arrow`, `Drawing`, `Line`, `Highlight`, a geo shape by its geo, such as `Rectangle`) or `{n} shapes`. Images, videos, artifacts, groups and nodes in the selection are left out, and with none of those kinds selected the panel is hidden.
+- **Controls.** The Design tab's controls in its Sections and Rows, with its value rules: a number applies on Enter or when the field is left, arrows step by 1 and Shift by 10, a colour opens the same popover and writes `#rrggbb` or `#rrggbbaa`, and differing values across the selection show `Mixed`. A field shows a section only when every shape in the selection takes it. Each change is one undo step. Esc inside the panel gives the keyboard back to the canvas.
+
+| Section | Field | Shapes | What it writes |
+| --- | --- | --- | --- |
+| Text | Font | prompt, note, geo, arrow | `Draw`, `Sans`, `Serif` or `Mono` set tldraw's `font` and clear the family; any other family (free text, quoted when it has a space) is `fontFamily` |
+| Text | Size | prompt, note, geo, arrow | `fontSize`, px |
+| Text | Weight | prompt, note, geo | `fontWeight`, 100 to 900 |
+| Text | Line height | prompt, note, geo, arrow | `lineHeight`, unitless |
+| Text | Align | prompt, note, geo | tldraw's `textAlign` (prompt) or `align`: left, center, right |
+| Text | Vertical | note, geo | tldraw's `verticalAlign`: top, middle, bottom |
+| Text | Colour | prompt, note, geo, arrow | `textColor` |
+| Fill | Background | note, geo, drawing | `fillColor`; on a geo shape or a drawing it also sets tldraw's `fill` to solid. `None` sets `fill` to none and clears the colour |
+| Shape | Border (all notes and geo shapes) or Stroke: width, style, colour | geo, note, arrow, drawing, line, highlight; style on geo, arrow, drawing and line | `strokeWidth` px; tldraw's `dash` (draw, solid, dashed, dotted); `strokeColor` |
+| Shape | Corner radius | geo | `cornerRadius`, px |
+| Shape | Opacity | all of them | the shape's `opacity`, 0 to 100 % written as 0 to 1 |
+
+- **Stored values.** The exact values live in `meta.unframed.design` on the shape: `{ fontFamily?, fontSize?, fontWeight?, lineHeight?, textColor?, fillColor?, strokeColor?, strokeWidth?, cornerRadius? }`. A value present wins over what tldraw derives from the shape's style props; an absent one shows tldraw's value in the current scheme. A set colour is the same in both schemes. `shapeDesignOf` ignores a value out of range or in the wrong form (size 1 to 1000, line height 0.5 to 10, stroke 0 to 200, radius 0 to 1000, colours as above, weights in hundreds, families of letters, digits, spaces, commas, quotes, dots, hyphens and underscores). The shape utils apply the values through tldraw's display values, so measuring, hit areas and rendering use them; a geo shape's label measures again when they change, and a weight reaches the label through a CSS variable because tldraw draws labels at normal weight.
+- **The next shape.** Values set with a tool on are held for the session, not written, and given to each shape that tool creates. Font, align, vertical align, dash and fill go to tldraw's next-shape styles, and opacity to its next-shape opacity.
+- **Copies** keep `design`, as they keep every `meta.unframed` field spec 03 does not strip.
+
 ### Images
 
 - **The picker.** `Replace image` opens a UI kit Popover titled `Choose an image`: a filter field, then a grid of the project's images from `artifact.images`, newest first, each a thumbnail from spec 02's 512 preview with its original name as the label and tooltip, and at the foot an outline Button `Upload image` that opens the file chooser and uploads through spec 02's upload route. Choosing (or a finished upload) adds an image edit to the burst and patches the frame. Empty: `No images in this project yet.`
@@ -383,6 +411,7 @@ Spec 09's editor, with these changes. Contract 9 holds: everything below runs in
 10. **Spec 07, What the model is told before each message**: "The preamble has up to three parts, each on its own paragraph:" It has up to four: the elements part comes after the selection.
 11. **Spec 07, `canvas_write`**: the `update` row, "a shallow patch onto the shape's props", gains two refusals: `lockedElements`, and a `file` change that breaks a lock. `canvas_read` reports `lockedElements`.
 12. **00-index, Stack**: "Motion | HyperFrames (`@hyperframes/core`, `player`, `producer`), GSAP" gains `@hyperframes/parsers`, pinned at 0.8.93 with the others, used for its `hf-ids` export. Why: element ids follow HyperFrames' own scheme, so ids the engine stamps are the ones HyperFrames tools read.
+14. **Spec 02, Chrome**: "Its style panel shows only while a drawing tool is on or the selection holds shapes with styles". tldraw's style panel is replaced by the Design panel, which keeps that rule for the kinds it edits. **Spec 12, Out of Scope**: "Replacing tldraw's toolbar, style panel or menus with kit components." The style panel is rebuilt on the kit. Why: the person asked for the Design tab's exact controls on canvas text, notes and shapes, which tldraw's swatches (four sizes, a fixed palette) cannot give.
 13. **Spec 08, Context chips**: "The chips are the message's `context.selection`; spec 07 builds the "Selected:" preamble line from them." Element chips join the row and are the message's `context.elements`.
 
 Not bent: contract 3 (artifacts are served only by the preview origin; the edit bridge is one more file there), contract 8 (ids, names, hides and versions live in the project folder, locks on the shape), contract 9 (the editor replaces the canvas; on the canvas an image drag only posts a message per frame to a frame in another process), spec 09's "Every edit is a new file", and the hosting contract (spec 01).
@@ -440,6 +469,10 @@ A good test drives one of the three seams in 00-index and asserts on what it exp
 39. Layers: the tree in document order with runtime elements greyed, selection both ways, hover outlines, rename with `data-uf-name` written and cleared, hide and show. Seam: browser
 40. Locks end to end: locking in Layers sets `lockedElements` as one undo step; the locked element cannot be picked in the frame and is read-only in Design; a scripted agent's write that changes it is refused and the turn's work log shows the refusal; unlocking lets the next write through. Seam: browser
 41. Tell the agent: chips for two selected elements land in the artifact's continuable chat (or a new chat tagged with it), the rail opens there, a chip can be removed, a sent message carries them and its bubble counts them; Ask the agent to make this editable fills the instruction into an empty draft. Seam: browser
+42. Shape design: `shapeDesignOf` reads `meta.unframed.design` and drops values out of range or form; `designPatched` sets, removes and ignores; `designDisplayValues` maps each kind's values onto its tldraw display values. Seam: domain
+43. The Design panel on a prompt: it replaces tldraw's style panel; font, size, weight, align, colour and opacity land in the room and on screen. Seam: browser
+44. The Design panel on a rectangle and a sticky note: label size, corner radius, border width, background (which sets `fill` to solid) and `None`, vertical align, and a note's background. Seam: browser
+45. The Design panel hides for media, shows for a drawing tool with `Next drawing` even with an image still selected, and a stroke width set there lands on the next drawing. Seam: browser
 
 ## Out of Scope
 
@@ -452,6 +485,7 @@ A good test drives one of the three seams in 00-index and asserts on what it exp
 - Dropping an image file from outside the app onto a page to swap a picture (it lands on the canvas as spec 02 says), and swapping pictures of a motion on the canvas.
 - Video and audio sources in the Design tab.
 - Element editing on the canvas or in the live viewer. All of it lives in the editor, except the image drop.
+- In the canvas Design panel: letter spacing, justify, shadows, padding and per-side values; images, videos, artifacts, groups and nodes; a label's custom weight in tldraw's SVG and image export.
 - Tokens and kits (spec 19), components (spec 20) and the motion timeline (spec 21).
 
 ## Open decisions

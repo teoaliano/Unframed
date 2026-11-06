@@ -22,7 +22,7 @@ After this spec, one button is one component with a handful of variants, one men
 4. As a person, I want every text field, select and combobox to share one frame and one focus ring, so that I can see where I am typing.
 5. As a person, I want tooltips to look the same everywhere, including over tldraw's toolbar, so that hover help is predictable.
 6. As a person, I want toasts in the same style as the rest of the app, so that a notice looks like it belongs.
-7. As a person, I want tldraw's toolbar, style panel, zoom controls, quick actions, shortcuts dialog and link dialog to use the app's colours, font, radii and shadows, so that the canvas tools do not look like a different program.
+7. As a person, I want tldraw's toolbar, zoom controls, quick actions, shortcuts dialog and link dialog to use the app's colours, font, radii and shadows, so that the canvas tools do not look like a different program.
 8. As a person, I want the context menu to look like every other menu, with its section headings and a disabled item that is visibly disabled, so that right-click matches the rest of the app.
 9. As a person, I want the tldraw watermark left visible and uncovered, so that the licence terms are met.
 10. As a person, I want light and dark to follow my system as before, with every surface switching together, so that nothing stays light in dark mode by mistake.
@@ -114,7 +114,7 @@ Copy rules:
 - Copy the files as they are. Change only what an Unframed contract forces, and mark each change with a one-line comment naming the contract, so a later t3code update is a mechanical merge.
 - Unframed runs `@base-ui/react` 1.8.0; t3code pins 1.5.0. Where a copied component uses an API that changed between them, adapt it to 1.8.0 and note it in the same one-line way.
 - Add `class-variance-authority` and `tailwind-merge` at t3code's versions.
-- Components t3code does not have (a slider) are not invented as kit components. Tabs is the one exception: `tabs.tsx` wraps Base UI's Tabs in the kit's conventions, with `underline`, `pill` and `panel` variants, three sizes, a status slot, an optional close button and `scroll` or `truncate` overflow. It is a first draft for design review, so its looks are settled in review, not here. The rail tabs follow t3code's panel tab look (its right panel tabs), built from kit parts in the rail's own module, and do not use the kit Tabs. The artifact editor's dials stay DialKit.
+- Components t3code does not have (a slider) are not invented as kit components. Tabs is the one exception: `tabs.tsx` wraps Base UI's Tabs in the kit's conventions, with `underline`, `pill` and `panel` variants, three sizes, a status slot, an optional close button and `scroll` or `truncate` overflow. It is a first draft for design review, so its looks are settled in review, not here. The top bar's project tabs are their own pattern in `project-tabs.tsx` (spec 17) and do not use the kit Tabs either; they share only its status slot. The rail tabs follow t3code's panel tab look (its right panel tabs), built from kit parts in the rail's own module, and do not use the kit Tabs. The artifact editor's dials stay DialKit.
 - t3code's feature-level looks (the composer surface, message bubbles, timeline rows, approval and question panels, the diff panel shell) are copied as the class recipes of the matching Unframed surfaces, not as new kit components, because they are feature modules in t3code too.
 
 **tldraw theme adapter.** A stylesheet that maps tldraw's theme variables onto the kit's tokens, for both `.tl-theme__light` and `.tl-theme__dark`:
@@ -123,7 +123,7 @@ Copy rules:
 - `--tl-radius-0` to `-4` onto the kit's radius scale; `--tl-shadow-1` to `-4` onto the kit's popup shadows.
 - `--tl-font-sans` for tldraw's UI chrome (not for shape content) to the kit's sans stack.
 - tldraw's menu rows, toolbar buttons and panel paddings get the kit's row height, radius and highlight through tldraw's own class names, in this one stylesheet only.
-- tldraw's UI icons (tools, menus, zoom and quick actions) are Lucide's, the kit's icon set, passed through tldraw's icon asset URLs. The style panel's fill, dash, size, font and arrowhead swatches, which Lucide has no match for, keep tldraw's icons.
+- tldraw's UI icons (tools, menus, zoom and quick actions) are Lucide's, the kit's icon set, passed through tldraw's icon asset URLs. Spec 18 replaces the style panel, and its swatches with it, by the Design panel on the kit.
 - The watermark is never targeted: no rule changes its visibility, opacity, position or size, and no kit surface is placed over it (index contract 7).
 - The context menu keeps spec 02's structure and width; its headings and the greyed "Add to library" row use the kit's menu label and disabled styles.
 
@@ -217,7 +217,7 @@ Each task updates the spec passages for the surface it restyles, in the same com
 3. Project menu, project name dialog and the project delete confirms on kit Menu, Dialog, Input and AlertDialog, with the existing project menu tests passing. Seam: browser.
 4. Add menu on the kit Menu at 152 px; Library and Add at the end of the one bottom bar (spec 02). Seam: browser.
 5. Toasts and the connection notice on the kit Toast, bottom-left, with their existing tests passing. Seam: browser.
-6. tldraw theme adapter: the toolbar, style panel, zoom controls, quick actions, shortcuts dialog and link dialog take the kit's colours, font, radii and shadows in both schemes; a toolbar button's background and the style panel's background equal the mapped tokens; the watermark stays uncovered. Seam: browser.
+6. tldraw theme adapter: the toolbar, zoom controls, quick actions, shortcuts dialog and link dialog take the kit's colours, font, radii and shadows in both schemes; a toolbar button's background and the Design panel's background (spec 18) equal the mapped tokens; the watermark stays uncovered. Seam: browser.
 7. Context menu: kit menu look for rows, headings and the disabled "Add to library" row, at 188 px, with every context menu test passing. Seam: browser.
 8. Canvas: selection line and grips in `--highlight` and `--card`, dot grid on the new tokens, shape labels, prompt hint, empty media, Remove button, video transport, render placeholder, artifact cards (white page kept), role badges, tether and mention menu on the kit; the selection look, dot grid, media and badge tests pass with updated colours. Seam: browser.
 9. Group frame, its name field and recipe chip on the new tokens and kit Input and Badge; the group tests pass. Seam: browser.
@@ -241,7 +241,7 @@ Each task updates the spec passages for the surface it restyles, in the same com
 ## Out of Scope
 
 - t3code's named themes (t3-chat, grove, ocean, ember, iris), custom themes, the contrast layer's user control, and appearance settings (font, font size, chat width). Default light and dark only.
-- Replacing tldraw's toolbar, style panel or menus with kit components. They are themed, not rebuilt.
+- Replacing tldraw's toolbar or menus with kit components. They are themed, not rebuilt. Spec 18 replaces the style panel with the Design panel.
 - Changing tldraw's shape content fonts, or any shape's geometry.
 - Layout changes: moving, resizing or reordering surfaces, and new motion. Where a surface's size is in a spec, it stays.
 - New components t3code does not have (a slider, an avatar, an accordion). Tabs is the exception named in Implementation Decisions.

@@ -32,13 +32,15 @@ import { ComponentShapeUtil, MotionShapeUtil, PageShapeUtil } from "./shapes/art
 import { GroupShapeUtil } from "./shapes/group.tsx";
 import { ImageMediaUtil, VideoMediaUtil } from "./shapes/media.tsx";
 import { PromptShapeUtil } from "./shapes/prompt.tsx";
+import { DESIGNED_SHAPE_UTILS } from "./shapes/designed.tsx";
+import { installNextShapeDesign } from "./nextShapeDesign.ts";
 import { SyncSocket } from "./syncSocket.ts";
 import { recalledCamera, rememberCamera } from "../project/tabMemory.ts";
 import { TLDRAW_ASSET_URLS, TLDRAW_CHROME, TLDRAW_OPTIONS } from "./tldrawChrome.tsx";
 
 const SETTLE_BEFORE_SWITCH_MS = 2000;
 
-const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil, ComponentShapeUtil];
+const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil, ComponentShapeUtil, ...DESIGNED_SHAPE_UTILS];
 
 const COMPONENTS: TLComponents = {
   ...TLDRAW_CHROME,
@@ -111,6 +113,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     const stopRename = installRename(editor);
     const stopRunProgress = watchRunProgress(editor, engine, project);
     const stopSelection = installSelectionReporter(editor, engine, project);
+    const stopNextShapeDesign = installNextShapeDesign(editor);
     content.current = { project, engine, minter };
     installExternalContent(editor, content.current);
     const camera = recalledCamera(project);
@@ -126,6 +129,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
       stopRename();
       stopRunProgress();
       stopSelection();
+      stopNextShapeDesign();
       content.current = undefined;
     };
   }, [project, engine]);

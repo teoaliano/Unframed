@@ -63,7 +63,7 @@ test("closing the last tab shows the start state, and the window stays open; Ope
   await expect(page.getByRole("menuitemradio", { name: "default" })).toBeVisible();
 });
 
-test("Settings sits at the far right on macOS and Linux and at the far left on Windows", async ({ page, engine }) => {
+test("Settings sits at the far right on macOS and Linux and on the left, after the logo, on Windows", async ({ page, engine }) => {
   await openCanvas(page, engine, "default");
   const os = await platformOf(page);
   const settings = page.getByRole("button", { name: /^(Settings|Add your API key)$/ });
@@ -73,17 +73,43 @@ test("Settings sits at the far right on macOS and Linux and at the far left on W
   else expect(box.x).toBeGreaterThan(viewport.width / 2);
 });
 
-test("the strip is the kit's underline tabs: the active tab carries the indicator and the foreground colour", async ({ page, engine }) => {
+test("the strip is the bar's own project tabs: full height, a divider before and after each, the active one on the accent fill, a 14 px close 8 px in, the plus 8 px after", async ({ page, engine }) => {
   await openCanvas(page, engine, "default");
   await openInTab(page, engine, "beta");
-  const list = page.locator("[data-slot=tabs-list][data-variant=underline]");
-  await expect(list).toHaveCount(1);
-  await expect(page.locator("[data-slot=tabs-indicator]")).toHaveCount(1);
+  await expect(page.locator("[data-slot=tabs-list], [data-slot=tabs-indicator]")).toHaveCount(0);
+  const list = page.locator("[data-slot=project-tabs-list]");
+  expect(await list.evaluate((element) => getComputedStyle(element).borderLeftWidth)).toBe("1px");
   const tab = active(page);
-  await expect(tab).toHaveAttribute("data-slot", "tabs-tab");
-  const colour = await tab.evaluate((element) => getComputedStyle(element).color);
-  const idle = await page.locator("[role=tab]:not([data-active='true'])").first().evaluate((element) => getComputedStyle(element).color);
-  expect(colour).not.toBe(idle);
+  await expect(tab).toHaveAttribute("data-slot", "project-tab");
+  const idleTab = page.locator("[role=tab]:not([data-active='true'])").first();
+  const look = (element: Element) => ({
+    height: element.getBoundingClientRect().height,
+    color: getComputedStyle(element).color,
+    background: getComputedStyle(element).backgroundColor,
+    divider: getComputedStyle(element.parentElement!).borderRightWidth,
+  });
+  await expect.poll(() => idleTab.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
+  const [on, off] = [await tab.evaluate(look), await idleTab.evaluate(look)];
+  const accent = await page.evaluate(() => {
+    const probe = document.createElement("div");
+    probe.style.backgroundColor = "var(--accent)";
+    document.body.append(probe);
+    const value = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return value;
+  });
+  expect([on.height, off.height, on.divider, off.divider]).toEqual([36, 36, "1px", "1px"]);
+  expect(on.background).toBe(accent);
+  expect(off.background).toBe("rgba(0, 0, 0, 0)");
+  expect(on.color).not.toBe(off.color);
+  const name = await tab.locator("span").first().boundingBox();
+  const box = (await tab.boundingBox())!;
+  expect(name!.x - box.x).toBe(8);
+  const close = (await page.getByRole("button", { name: `Close ${await tab.textContent()}` }).boundingBox())!;
+  expect([close.width, box.x + box.width - (close.x + close.width)]).toEqual([14, 8]);
+  const plus = (await page.getByTestId("all-projects").getByRole("button").boundingBox())!;
+  const strip = (await list.boundingBox())!;
+  expect([plus.x - (strip.x + strip.width), plus.y]).toEqual([8, 6]);
 });
 
 test("the open tabs and their order come back after a reload, with the same one active", async ({ page, engine }) => {

@@ -24,7 +24,7 @@ const LogoMark = () => (
  * The top bar (spec 17): one full-width bar, drawn by `components/ui/top-bar`. Its three regions keep
  * the DOM hooks of spec 01 (`.unframed-chrome-left`, `.unframed-tabs`, `.unframed-chrome-right`), so the
  * shell can still move them. Settings sits at the end opposite the window controls: the top-right on
- * macOS, the far left on Windows, where it is the first thing in the start region.
+ * macOS, the start region on Windows, right after the logo.
  */
 export const TopCorners = () => {
   const { settingsButton: SettingsButton, leftCardDocked, artifactEditorOpen } = useSlots();
@@ -58,7 +58,6 @@ export const TopCorners = () => {
       <TabStrip
         platform={settingsOnLeft ? "windows" : "macos"}
         controls="space"
-        squareStart={docked}
         logo={<LogoMark />}
         settings={SettingsButton && <SettingsButton />}
         regions={{

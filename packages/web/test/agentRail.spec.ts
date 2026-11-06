@@ -54,7 +54,7 @@ test("the Agent button slides the rail in from the left under the top bar, full 
   expect(box.y + box.height).toBe(page.viewportSize()!.height);
   expect(await computed(panel, "border-bottom-width", "border-bottom-right-radius")).toEqual({ "border-bottom-width": "0px", "border-bottom-right-radius": "0px" });
 
-  // The top-left card stays in the bar, usable, and the bar runs square from the window's left edge.
+  // The top-left card stays in the bar, usable, and the bar runs from the window's left edge.
   await expect(card).toHaveAttribute("data-docked", "");
   await expect(card).not.toHaveAttribute("inert");
   expect((await page.locator("[data-slot='top-bar-body']").boundingBox())!.x).toBe(0);
@@ -70,7 +70,7 @@ test("the Agent button slides the rail in from the left under the top bar, full 
   expect(await computed(panel, "transition-duration")).toEqual({ "transition-duration": "0.2s, 0.16s" });
   await expect(panel).toHaveCount(0);
   await expect(card).not.toHaveAttribute("data-docked");
-  expect((await page.locator("[data-slot='top-bar-body']").boundingBox())!.x).toBeGreaterThan(0);
+  expect((await page.locator("[data-slot='top-bar-body']").boundingBox())!.x).toBe(0);
   expect((await page.locator(".tlui-navigation-panel").boundingBox())!.x).toBe(0);
 
   // Reopened, it comes back at rest.

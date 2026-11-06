@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { openCanvas, plainText, roomRecords, shapeOnScreen } from "./canvas.ts";
+import { clearOfDesignPanel, openCanvas, plainText, roomRecords, shapeOnScreen } from "./canvas.ts";
 import { clickShape, composer, instructionBox, openComposer, pressSend, sendButton } from "./generation.ts";
 import { pngBytes } from "./images.ts";
 import { expectSlot, expectToken } from "./kit.ts";
@@ -23,6 +23,7 @@ const setUp = async (page: Page, generation: TextGeneration, list: string) => {
 /** Opens the composer on the list, the scene and the photo with Free and View final prompt, types `instruction`, and sends. */
 const stage = async (page: Page, instruction = "") => {
   await page.mouse.click(10, 400);
+  await clearOfDesignPanel(page);
   await clickShape(page, "shape:list");
   await clickShape(page, "shape:starter-scene", ["Shift"]);
   await clickShape(page, "shape:photo", ["Shift"]);

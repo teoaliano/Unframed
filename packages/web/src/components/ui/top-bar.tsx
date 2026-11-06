@@ -1,10 +1,10 @@
 "use client";
 
-import type { ComponentPropsWithRef, CSSProperties, DragEvent, MouseEvent, ReactNode } from "react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { ComponentPropsWithRef, DragEvent, MouseEvent, ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Menu, MenuItem, MenuPopup, MenuSeparator } from "~/components/ui/menu";
-import { Tabs, TabsList, TabsTab } from "~/components/ui/tabs";
+import { ProjectTab, ProjectTabs, ProjectTabsList } from "~/components/ui/project-tabs";
 import { cn } from "~/lib/utils";
 
 export type TopBarStatus = "running" | "finished" | "dot";
@@ -23,7 +23,7 @@ export interface TopBarTab {
 export type TopBarRegion = Omit<ComponentPropsWithRef<"div">, "children"> & { readonly [attribute: `data-${string}`]: string | undefined };
 
 export interface TopBarProps {
-  /** macOS: window controls, then the logo, the tabs and Settings. Windows: Settings, the logo, the tabs, then the controls. */
+  /** macOS: window controls, then the logo, the tabs and Settings. Windows: the logo, Settings, the tabs, then the controls. */
   readonly platform: "macos" | "windows";
   readonly tabs: ReadonlyArray<TopBarTab>;
   readonly active: string | undefined;
@@ -41,7 +41,7 @@ export interface TopBarProps {
   readonly regions?: {
     /** The bar behind the three regions. */
     readonly frame?: TopBarRegion;
-    /** The start region: the window controls' space, Settings on Windows, and the logo. */
+    /** The start region: the window controls' space, the logo, and Settings on Windows. */
     readonly start?: TopBarRegion;
     /** The tabs and the plus. */
     readonly tabs?: TopBarRegion;
@@ -58,44 +58,14 @@ export interface TopBarProps {
    * draws nothing: the app's controls are the window's own, drawn over that space. "none" leaves it out.
    */
   readonly controls?: "stand-ins" | "space" | "none" | undefined;
-  /**
-   * The bar runs square from the window's left edge, with no end curve there: a panel docked under it (the agent
-   * rail) meets its bottom border with no gap.
-   */
-  readonly squareStart?: boolean | undefined;
 }
 
-const BAR_HEIGHT = 36;
 /**
- * Window edge to the bar on macOS. The shell puts the traffic lights at x 12 (main.js `trafficLightPosition`), the same
- * as the margin above and below them (the OS draws them about 13 px tall, centred on the bar's 18 px midline). The three
- * lights span about 60 px, so they end near x 72 and the bar's end crosses the midline 9 px after them. The start region's
- * spacer and the bar's left edge both use this one number.
+ * Window edge to the logo on macOS, as the start region's padding. The shell puts the traffic lights at x 12 (spec 17's
+ * `trafficLightPosition`) and the group ends near x 72, so the logo starts 22 px after the green light. The shell's own `padding-left` on `.unframed-chrome-left` (spec 01) replaces this
+ * padding rather than adding to it.
  */
-const LIGHTS_ZONE = 81;
-/** The bar's end, where it crosses the midline, to the Settings button. */
-const SETTINGS_GAP = 9;
-/** The Windows caption buttons (144 px) and the 12 px to the bar. */
-const CAPTION_ZONE = 156;
-
-/**
- * Each end of the bar is one S-curve: it leaves the window edge sloping down, steepens through the middle and lands flat on
- * the bottom edge. The points are relative to where the curve crosses the midline, which is the bar's edge for layout (x 0
- * and `width`): the top corner sits 11.3 px further out, the bottom one 20.1 px further in.
- */
-const END_TOP = 11.3;
-const END_BOTTOM = 20.1;
-const MID = 17.78;
-const startEnd = `M${-END_TOP} 0C-3.4 4.7 -1.5 10.05 0 ${MID}C2.19 29.07 7.4 36 ${END_BOTTOM} 36`;
-const n = (value: number) => Math.round(value * 100) / 100;
-const barEnd = (width: number) =>
-  `H${n(width - END_BOTTOM)}C${n(width - 7.4)} 36 ${n(width - 2.19)} 29.07 ${width} ${MID}C${n(width + 1.5)} 10.05 ${n(width + 3.4)} 4.7 ${n(width + END_TOP)} 0`;
-
-/** The bar's outline as one path. The fill closes the top against the window edge; the stroke does not, so the border is the outline and nothing more. */
-const barFill = (width: number, squareStart: boolean) => (squareStart ? `M0 0V${BAR_HEIGHT}${barEnd(width)}Z` : `${startEnd}${barEnd(width)}Z`);
-/** A square start has no side at the window edge, so its outline starts on the bottom border. */
-const barStroke = (width: number, squareStart: boolean) =>
-  squareStart ? `M0 ${BAR_HEIGHT}${barEnd(width)}` : barFill(width, false).replace(/Z$/, "");
+const LIGHTS_INSET = "ps-23.5";
 
 const WindowDots = () => (
   <span className="flex h-full items-center gap-2 ps-3">
@@ -106,8 +76,8 @@ const WindowDots = () => (
 );
 
 /**
- * The project tab bar (spec 17), drawn to the reference: a 36 px bar with an S-curve at each end, its border on
- * the outline, the window controls and Settings beside it. The tabs are the kit's underline Tabs, the buttons the kit's
+ * The project tab bar (spec 17): one solid 36 px bar across the window, its border along the bottom, the window
+ * controls and Settings inside it. The tabs are the bar's own project tabs, the buttons the kit's
  * buttons; a right-click on a tab opens Close, Close all tabs, Rename and Delete.
  */
 export const TopBar = ({
@@ -126,14 +96,10 @@ export const TopBar = ({
   regions = {},
   layout = "flow",
   controls = "stand-ins",
-  squareStart = false,
 }: TopBarProps) => {
   const scroller = useRef<HTMLDivElement>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const bodyRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<string>();
   const [menu, setMenu] = useState<{ readonly name: string; readonly x: number; readonly y: number }>();
-  const [bodyWidth, setBodyWidth] = useState(0);
   const names = tabs.map((tab) => tab.name);
   const windows = platform === "windows";
 
@@ -145,7 +111,7 @@ export const TopBar = ({
   /** The tab an event landed on. A tab's close button sits beside the tab, in the same group. */
   const tabOf = (target: EventTarget): string | undefined => {
     if (!(target instanceof Element)) return undefined;
-    const group = target.closest("[data-slot='tabs-tab-group']");
+    const group = target.closest("[data-slot='project-tab-group']");
     const tab = group === null ? target.closest<HTMLElement>("[data-project]") : group.querySelector<HTMLElement>("[data-project]");
     return tab?.dataset.project;
   };
@@ -185,32 +151,6 @@ export const TopBar = ({
     setDragging(undefined);
   };
 
-  // The bar's body is its fill and outline. On macOS it starts at the lights' zone and stops 12 px before Settings; on
-  // Windows it starts 12 px after Settings and stops before the caption buttons. Settings is the edge that moves, so the
-  // body is measured from it, and its width is kept for the outline's path.
-  useLayoutEffect(() => {
-    const root = rootRef.current;
-    const body = bodyRef.current;
-    const settingsNode = root?.querySelector<HTMLElement>("[data-slot=top-bar-settings]");
-    if (root === null || root === undefined || body === null || settingsNode === null || settingsNode === undefined) return;
-    const measure = () => {
-      const bar = root.getBoundingClientRect();
-      const square = settingsNode.getBoundingClientRect();
-      if (windows) {
-        body.style.left = squareStart ? "0px" : `${square.right + SETTINGS_GAP - bar.left}px`;
-        body.style.right = `${CAPTION_ZONE}px`;
-      } else {
-        body.style.left = squareStart ? "0px" : `${LIGHTS_ZONE}px`;
-        body.style.right = `${bar.right - (square.left - SETTINGS_GAP)}px`;
-      }
-      setBodyWidth(Math.round(body.getBoundingClientRect().width));
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    for (const element of [root, settingsNode]) observer.observe(element);
-    return () => observer.disconnect();
-  }, [windows, squareStart]);
-
   const positioned = layout === "flow" ? "relative " : "";
   const settingsNode = (
     <div data-slot="top-bar-settings" className="flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full">
@@ -218,36 +158,26 @@ export const TopBar = ({
     </div>
   );
   const region = (base: string, custom: TopBarRegion | undefined): TopBarRegion => ({ ...custom, className: cn(base, custom?.className) });
-  const controlsSpace = (width: string, style?: CSSProperties) =>
-    controls === "none" ? null : (
-      <div data-slot="top-bar-controls" aria-hidden className={cn("h-9 shrink-0", width)} style={style}>
-        {controls === "stand-ins" && <WindowDots />}
-      </div>
-    );
+  const lights = !windows && controls !== "none";
 
   return (
-    <div data-slot="top-bar" data-platform={platform} ref={rootRef} {...region("relative box-border flex h-9 w-full min-w-0 items-stretch", regions.frame)}>
-      <div data-slot="top-bar-body" ref={bodyRef} aria-hidden className="absolute inset-y-0 left-0 right-0">
-        <svg className="pointer-events-none absolute inset-0 overflow-visible" width={bodyWidth} height={BAR_HEIGHT}>
-          <path d={barFill(bodyWidth, squareStart)} className="fill-background stroke-none" />
-          <path d={barStroke(bodyWidth, squareStart)} className="fill-none stroke-border" />
-        </svg>
-      </div>
-      <div data-slot="top-bar-start" {...region(`${positioned}flex h-9 shrink-0 items-center`, regions.start)}>
-        {!windows && controlsSpace("", { width: LIGHTS_ZONE })}
+    <div data-slot="top-bar" data-platform={platform} {...region("relative box-border flex h-9 w-full min-w-0 items-stretch", regions.frame)}>
+      <div data-slot="top-bar-body" aria-hidden className="pointer-events-none absolute inset-0 box-border border-b bg-background" />
+      <div data-slot="top-bar-start" {...region(cn(positioned, "flex h-9 shrink-0 items-center", windows ? "pe-3" : "pe-4", lights && LIGHTS_INSET), regions.start)}>
+        {lights && (
+          <div data-slot="top-bar-controls" aria-hidden className="pointer-events-none absolute inset-y-0 left-0">
+            {controls === "stand-ins" && <WindowDots />}
+          </div>
+        )}
+        <span className={cn("flex shrink-0 items-center", !lights && "ps-3")}>{logo}</span>
         {windows && <span className="flex shrink-0 items-center ps-3">{settingsNode}</span>}
-        {/* The logo sits 15 px into the bar, clear of the end curve. */}
-        <span className={cn("flex shrink-0 items-center ps-[15px] pe-2", windows && "ms-[9px]")}>{logo}</span>
       </div>
       <div data-slot="top-bar-tabs" {...region(`${positioned}flex h-9 min-w-0 shrink items-stretch`, regions.tabs)}>
-        <Tabs className="h-9 w-fit min-w-0 shrink" value={active ?? null} onValueChange={(name) => onActivate(String(name))}>
-          <TabsList
+        <ProjectTabs className="w-fit min-w-0 shrink" value={active ?? null} onValueChange={(name) => onActivate(String(name))}>
+          <ProjectTabsList
             ref={scroller}
             aria-label="Open projects"
-            variant="underline"
-            size="sm"
-            overflow="truncate"
-            className="h-full min-w-0 max-w-full"
+            className="min-w-0"
             onClick={onListClick}
             onAuxClick={onListAux}
             onContextMenu={onListContext}
@@ -257,7 +187,7 @@ export const TopBar = ({
             onDragEnd={() => setDragging(undefined)}
           >
             {tabs.map((tab) => (
-              <TabsTab
+              <ProjectTab
                 key={tab.name}
                 value={tab.name}
                 data-project={tab.name}
@@ -265,24 +195,26 @@ export const TopBar = ({
                 data-status={tab.state ?? tab.status ?? "none"}
                 title={tab.title ?? tab.name}
                 draggable
-                divider
-                closable
                 closeLabel={`Close ${tab.name}`}
                 {...(tab.status === undefined ? {} : { status: tab.status })}
               >
                 <span className="min-w-0 truncate">{tab.name}</span>
-              </TabsTab>
+              </ProjectTab>
             ))}
-          </TabsList>
-        </Tabs>
-        <div data-slot="top-bar-new" className="flex h-9 shrink-0 items-center ps-1">
+          </ProjectTabsList>
+        </ProjectTabs>
+        <div data-slot="top-bar-new" className="flex h-9 shrink-0 items-center ps-2">
           {newProject}
         </div>
       </div>
       <div data-slot="top-bar-drag" className={`${positioned}h-9 min-w-8 flex-1`} />
       <div data-slot="top-bar-end" {...region(`${positioned}flex h-9 shrink-0 items-center`, regions.end)}>
         {!windows && <span className="flex h-9 items-center pe-3">{settingsNode}</span>}
-        {windows && controlsSpace("w-39")}
+        {windows && controls !== "none" && (
+          <div data-slot="top-bar-controls" aria-hidden className="pointer-events-none h-9 w-39 shrink-0">
+            {controls === "stand-ins" && <WindowDots />}
+          </div>
+        )}
       </div>
       <Menu open={menu !== undefined} onOpenChange={(open) => !open && setMenu(undefined)}>
         <MenuPopup
@@ -290,7 +222,7 @@ export const TopBar = ({
           align="start"
           side="bottom"
           sideOffset={4}
-          className="min-w-[180px]"
+          className="min-w-45"
           data-testid="tab-menu"
         >
           <MenuItem onClick={() => menu && onClose(menu.name)}>Close</MenuItem>

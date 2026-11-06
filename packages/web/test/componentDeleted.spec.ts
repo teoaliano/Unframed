@@ -29,8 +29,8 @@ test("a deleted component leaves its instances working, offers no update, and un
 
   const deleteCard = async () => {
     await page.mouse.click(640, 600);
-    const card = await centre(shapeOnScreen(page, "shape:card"));
-    await page.mouse.click(card.x, card.y);
+    const card = (await shapeOnScreen(page, "shape:card").boundingBox())!;
+    await page.mouse.click(card.x + 40, card.y + card.height / 2);
     await page.keyboard.press("Delete");
     await expect(shapeOnScreen(page, "shape:card")).toHaveCount(0);
   };
