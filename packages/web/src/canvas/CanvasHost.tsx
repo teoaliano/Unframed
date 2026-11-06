@@ -41,12 +41,14 @@ import { watchChainReports } from "../nodes/reports.ts";
 import { GroupShapeUtil } from "./shapes/group.tsx";
 import { ImageMediaUtil, VideoMediaUtil } from "./shapes/media.tsx";
 import { PromptShapeUtil } from "./shapes/prompt.tsx";
+import { DESIGNED_SHAPE_UTILS } from "./shapes/designed.tsx";
+import { installNextShapeDesign } from "./nextShapeDesign.ts";
 import { SyncSocket } from "./syncSocket.ts";
 import { recalledCamera, rememberCamera } from "../project/tabMemory.ts";
 import { TLDRAW_ASSET_URLS, TLDRAW_CHROME, TLDRAW_OPTIONS } from "./tldrawChrome.tsx";
 
 
-const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, AudioShapeUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil, ComponentShapeUtil, NodeShapeUtil, WireShapeUtil];
+const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, AudioShapeUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil, ComponentShapeUtil, NodeShapeUtil, WireShapeUtil, ...DESIGNED_SHAPE_UTILS];
 
 const COMPONENTS: TLComponents = {
   ...TLDRAW_CHROME,
@@ -120,6 +122,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     const stopRename = installRename(editor);
     const stopRunProgress = watchRunProgress(editor, engine, project);
     const stopSelection = installSelectionReporter(editor, engine, project);
+    const stopNextShapeDesign = installNextShapeDesign(editor);
     const stopNodes = installNodeSideEffects(editor);
     const stopWireCopies = installWireCopies(editor);
     const stopRenders = watchMotionRenders(editor, engine, project);
@@ -140,6 +143,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
       stopRename();
       stopRunProgress();
       stopSelection();
+      stopNextShapeDesign();
       stopNodes();
       stopWireCopies();
       stopRenders();

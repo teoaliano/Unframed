@@ -404,7 +404,7 @@ A contract with the desktop shell. Renaming any of these is a breaking change th
 | Hook | Contract |
 | --- | --- |
 | `.unframed-chrome-left` | exactly one element: the top-left floating chrome card (logo and project menu, filled by spec 02). Its position comes from ordinary CSS properties with no `!important`, so the shell's injected CSS can move it |
-| `.unframed-chrome-right` | exactly one element: the top-right chrome card. It holds the Settings button on macOS and Linux and stays empty on Windows, where Settings sits at the far left of the top-left card (spec 17). The shell's CSS still finds it. Same rule |
+| `.unframed-chrome-right` | exactly one element: the top-right chrome card. It holds the Settings button on macOS and Linux and stays empty on Windows, where Settings sits in the top-left card, after the logo (spec 17). The shell's CSS still finds it. Same rule |
 | `.unframed-tabs` | the project tab strip (spec 17), one element between the two cards. Added by spec 17; the shell's Windows caption inset applies to it |
 | `data-unframed-theme` on `<html>` | `"light"` or `"dark"`: the theme currently shown, updated live when it changes |
 | `--unframed-text-secondary` on `<html>` | the secondary text colour of the current theme, readable with `getComputedStyle(document.documentElement)` |

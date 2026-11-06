@@ -1,11 +1,11 @@
 "use client";
 
-import type { ComponentPropsWithRef, CSSProperties, MouseEvent, ReactNode } from "react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { ComponentPropsWithRef, MouseEvent, ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Menu, MenuItem, MenuPopup, MenuSeparator } from "~/components/ui/menu";
+import { ProjectTab, ProjectTabs, ProjectTabsList } from "~/components/ui/project-tabs";
 import { useTabReorder, type TabPlan } from "~/components/ui/tab-reorder";
-import { Tabs, TabsList, TabsTab } from "~/components/ui/tabs";
 import { cn } from "~/lib/utils";
 
 export type TopBarStatus = "running" | "finished" | "dot";
@@ -51,7 +51,7 @@ const tabPlan = (tabs: ReadonlyArray<TopBarTab>, name: string): TabPlan => {
 export type TopBarRegion = Omit<ComponentPropsWithRef<"div">, "children"> & { readonly [attribute: `data-${string}`]: string | undefined };
 
 export interface TopBarProps {
-  /** macOS: window controls, then the logo, the tabs and Settings. Windows: Settings, the logo, the tabs, then the controls. */
+  /** macOS: window controls, then the logo, the tabs and Settings. Windows: the logo, Settings, the tabs, then the controls. */
   readonly platform: "macos" | "windows";
   readonly tabs: ReadonlyArray<TopBarTab>;
   readonly active: string | undefined;
@@ -71,7 +71,7 @@ export interface TopBarProps {
   readonly regions?: {
     /** The bar behind the three regions. */
     readonly frame?: TopBarRegion;
-    /** The start region: the window controls' space, Settings on Windows, and the logo. */
+    /** The start region: the window controls' space, the logo, and Settings on Windows. */
     readonly start?: TopBarRegion;
     /** The tabs and the plus. */
     readonly tabs?: TopBarRegion;
@@ -88,51 +88,20 @@ export interface TopBarProps {
    * draws nothing: the app's controls are the window's own, drawn over that space. "none" leaves it out.
    */
   readonly controls?: "stand-ins" | "space" | "none" | undefined;
-  /**
-   * The bar runs square from the window's left edge, with no end curve there: a panel docked under it (the agent
-   * rail) meets its bottom border with no gap.
-   */
-  readonly squareStart?: boolean | undefined;
 }
 
 export const TOP_BAR_HEIGHT = 36;
-/**
- * Window edge to the bar on macOS. The shell puts the traffic lights at x 12 (main.js `trafficLightPosition`), the same
- * as the margin above and below them (the OS draws them about 13 px tall, centred on the bar's 18 px midline). The three
- * lights span about 60 px, so they end near x 72 and the bar's end crosses the midline 9 px after them. The start region's
- * spacer and the bar's left edge both use this one number.
- */
-const LIGHTS_ZONE = 81;
-/** The bar's end, where it crosses the midline, to the Settings button. */
-const SETTINGS_GAP = 9;
-/** The Windows caption buttons (144 px) and the 12 px to the bar. */
-const CAPTION_ZONE = 156;
 
 /**
- * Each end of the bar is one S-curve: it leaves the window edge sloping down, steepens through the middle and lands flat on
- * the bottom edge. The points are relative to where the curve crosses the midline, which is the bar's edge for layout (x 0
- * and `width`): the top corner sits 11.3 px further out, the bottom one 20.1 px further in.
+ * Window edge to the logo on macOS, as the start region's padding. The shell puts the traffic lights at x 12 (spec 17's
+ * `trafficLightPosition`) and the group ends near x 72, so the logo starts 22 px after the green light. The shell's own
+ * `padding-left` on `.unframed-chrome-left` (spec 01) replaces this padding rather than adding to it.
  */
-const END_TOP = 11.3;
-const END_BOTTOM = 20.1;
-const MID = 17.78;
-const startEnd = `M${-END_TOP} 0C-3.4 4.7 -1.5 10.05 0 ${MID}C2.19 29.07 7.4 36 ${END_BOTTOM} 36`;
-const n = (value: number) => Math.round(value * 100) / 100;
-const barEnd = (width: number) =>
-  `H${n(width - END_BOTTOM)}C${n(width - 7.4)} 36 ${n(width - 2.19)} 29.07 ${width} ${MID}C${n(width + 1.5)} 10.05 ${n(width + 3.4)} 4.7 ${n(width + END_TOP)} 0`;
-
-/** The bar's outline as one path. The fill closes the top against the window edge; the stroke does not, so the border is the outline and nothing more. */
-const barFill = (width: number, squareStart: boolean) => (squareStart ? `M0 0V${TOP_BAR_HEIGHT}${barEnd(width)}Z` : `${startEnd}${barEnd(width)}Z`);
-/** A square start has no side at the window edge, so its outline starts on the bottom border. */
-const barStroke = (width: number, squareStart: boolean) =>
-  squareStart ? `M0 ${TOP_BAR_HEIGHT}${barEnd(width)}` : barFill(width, false).replace(/Z$/, "");
+const LIGHTS_INSET = "ps-23.5";
 
 const DRAG = "[-webkit-app-region:drag]";
 const NO_DRAG_CONTROLS = "[&_button]:[-webkit-app-region:no-drag]";
-const NO_DRAG_TAB_CONTROLS = "[&_[data-tab-item]]:[-webkit-app-region:no-drag] [&_[data-slot=tabs-tab]]:[-webkit-app-region:no-drag] [&_[data-close]]:[-webkit-app-region:no-drag]";
-
-const TAB_ITEM =
-  "relative inline-flex shrink-0 rounded-md after:pointer-events-none after:absolute after:inset-y-0 after:-end-2 after:w-px after:bg-border data-last:after:end-0 data-dragging:z-10 data-dragging:bg-popover data-dragging:shadow-md/10 data-dragging:ring-1 data-dragging:ring-border data-dragging:after:hidden data-dragging:[&_[data-slot=tabs-tab]]:cursor-grabbing";
+const NO_DRAG_TAB_CONTROLS = "[&_[data-tab-item]]:[-webkit-app-region:no-drag] [&_[data-slot=project-tab]]:[-webkit-app-region:no-drag] [&_[data-close]]:[-webkit-app-region:no-drag]";
 
 const PinnedMark = ({ name }: { readonly name: string }) => (
   <span
@@ -152,9 +121,9 @@ const WindowDots = () => (
 );
 
 /**
- * The project tab bar (spec 17), drawn to the reference: a 36 px bar with an S-curve at each end, its border on
- * the outline, the window controls and Settings beside it. The tabs are the kit's underline Tabs, the buttons the kit's
- * buttons; a right-click on a tab opens Close, Close all tabs, Rename and Delete.
+ * The project tab bar (spec 17): one solid 36 px bar across the window, its border along the bottom, the window
+ * controls and Settings inside it. The tabs are the bar's own project tabs, the buttons the kit's buttons; a
+ * right-click on a tab opens Pin, Close, Close all tabs, Rename and Delete.
  */
 export const TopBar = ({
   platform,
@@ -174,13 +143,9 @@ export const TopBar = ({
   regions = {},
   layout = "flow",
   controls = "stand-ins",
-  squareStart = false,
 }: TopBarProps) => {
   const scroller = useRef<HTMLDivElement>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const bodyRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<{ readonly name: string; readonly x: number; readonly y: number }>();
-  const [bodyWidth, setBodyWidth] = useState(0);
   const names = tabs.map((tab) => tab.name);
   const pinned = tabs.filter((tab) => tab.pinned === true).map((tab) => tab.name);
   const reorder = useTabReorder({ list: scroller, names, pinned, plan: (name) => tabPlan(tabs, name), onMove });
@@ -211,31 +176,6 @@ export const TopBar = ({
     event.preventDefault();
     setMenu({ name, x: event.clientX, y: event.clientY });
   };
-  // The bar's body is its fill and outline. On macOS it starts at the lights' zone and stops 12 px before Settings; on
-  // Windows it starts 12 px after Settings and stops before the caption buttons. Settings is the edge that moves, so the
-  // body is measured from it, and its width is kept for the outline's path.
-  useLayoutEffect(() => {
-    const root = rootRef.current;
-    const body = bodyRef.current;
-    const settingsNode = root?.querySelector<HTMLElement>("[data-slot=top-bar-settings]");
-    if (root === null || root === undefined || body === null || settingsNode === null || settingsNode === undefined) return;
-    const measure = () => {
-      const bar = root.getBoundingClientRect();
-      const square = settingsNode.getBoundingClientRect();
-      if (windows) {
-        body.style.left = squareStart ? "0px" : `${square.right + SETTINGS_GAP - bar.left}px`;
-        body.style.right = `${CAPTION_ZONE}px`;
-      } else {
-        body.style.left = squareStart ? "0px" : `${LIGHTS_ZONE}px`;
-        body.style.right = `${bar.right - (square.left - SETTINGS_GAP)}px`;
-      }
-      setBodyWidth(Math.round(body.getBoundingClientRect().width));
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    for (const element of [root, settingsNode]) observer.observe(element);
-    return () => observer.disconnect();
-  }, [windows, squareStart]);
 
   const positioned = layout === "flow" ? "relative " : "";
   const tabMenu = menu === undefined ? "none" : secondaryTab(menu.name) ? "short" : "full";
@@ -245,84 +185,87 @@ export const TopBar = ({
     </div>
   );
   const region = (base: string, custom: TopBarRegion | undefined): TopBarRegion => ({ ...custom, className: cn(base, custom?.className) });
-  const controlsSpace = (width: string, style?: CSSProperties) =>
-    controls === "none" ? null : (
-      <div data-slot="top-bar-controls" aria-hidden className={cn("h-9 shrink-0 [-webkit-app-region:drag]!", width)} style={style}>
-        {controls === "stand-ins" && <WindowDots />}
-      </div>
-    );
+  const lights = !windows && controls !== "none";
 
   return (
-    <div data-slot="top-bar" data-platform={platform} ref={rootRef} {...region(`relative box-border flex h-9 w-full min-w-0 items-stretch ${DRAG}`, regions.frame)}>
-      <div data-slot="top-bar-body" ref={bodyRef} aria-hidden className="absolute inset-y-0 left-0 right-0">
-        <svg className="pointer-events-none absolute inset-0 overflow-visible" width={bodyWidth} height={TOP_BAR_HEIGHT}>
-          <path d={barFill(bodyWidth, squareStart)} className="fill-background stroke-none" />
-          <path d={barStroke(bodyWidth, squareStart)} className="fill-none stroke-border" />
-        </svg>
-      </div>
-      <div data-slot="top-bar-start" {...region(`${positioned}flex h-9 shrink-0 items-center ${DRAG}`, regions.start)}>
-        {!windows && controlsSpace("", { width: LIGHTS_ZONE })}
-        {windows && <span className="flex shrink-0 items-center ps-3">{settingsNode}</span>}
-        <span data-slot="top-bar-logo" className={cn("flex shrink-0 items-center ps-[15px] pe-2 [-webkit-app-region:drag]!", windows && "ms-[9px]")}>
+    <div data-slot="top-bar" data-platform={platform} {...region(`relative box-border flex h-9 w-full min-w-0 items-stretch ${DRAG}`, regions.frame)}>
+      <div data-slot="top-bar-body" aria-hidden className="pointer-events-none absolute inset-0 box-border border-b bg-background" />
+      <div data-slot="top-bar-start" {...region(cn(positioned, "flex h-9 shrink-0 items-center", DRAG, windows ? "pe-3" : "pe-4", lights && LIGHTS_INSET), regions.start)}>
+        {lights && (
+          <div data-slot="top-bar-controls" aria-hidden className="pointer-events-none absolute inset-y-0 left-0 [-webkit-app-region:drag]!">
+            {controls === "stand-ins" && <WindowDots />}
+          </div>
+        )}
+        <span data-slot="top-bar-logo" className={cn("flex shrink-0 items-center [-webkit-app-region:drag]!", !lights && "ps-3")}>
           {logo}
         </span>
+        {windows && <span className="flex shrink-0 items-center ps-3">{settingsNode}</span>}
       </div>
       <div data-slot="top-bar-tabs" {...region(`${positioned}flex h-9 min-w-0 shrink items-stretch ${DRAG}`, regions.tabs)}>
-        <Tabs className="h-9 w-fit min-w-0 shrink" value={active ?? null} onValueChange={(name) => onActivate(String(name))}>
-          <TabsList
+        <ProjectTabs className="w-fit min-w-0 shrink" value={active ?? null} onValueChange={(name) => onActivate(String(name))}>
+          <ProjectTabsList
             ref={scroller}
             aria-label="Open projects"
-            variant="underline"
-            size="sm"
-            overflow="truncate"
-            className={cn("h-full min-w-0 max-w-full data-reordering:[&_[data-slot=tabs-indicator]]:opacity-0", NO_DRAG_TAB_CONTROLS)}
+            className={cn("min-w-0", NO_DRAG_TAB_CONTROLS)}
             onClick={onListClick}
             onAuxClick={onListAux}
             onContextMenu={onListContext}
             onPointerDown={reorder.onPointerDown}
           >
-            {tabs.map((tab, index) => (
-              <span key={tab.name} data-tab-item={tab.name} data-last={index === tabs.length - 1 ? "" : undefined} className={TAB_ITEM}>
-                <TabsTab
-                  value={tab.name}
-                  data-project={tab.name}
-                  data-active={tab.name === active ? "true" : undefined}
-                  data-status={tab.state ?? tab.status ?? "none"}
-                  data-pinned={tab.pinned === true ? "true" : undefined}
-                  data-variant={tab.variant ?? "default"}
-                  aria-label={tab.pinned === true ? tab.name : tab.context === undefined ? undefined : `${tab.label ?? tab.name}, ${tab.context}`}
-                  title={tab.title ?? tab.name}
-                  closable={tab.pinned !== true}
-                  closeLabel={`Close ${tab.label ?? tab.name}`}
-                  className={tab.pinned === true ? "w-9 min-w-0 gap-0 px-0 [&_[data-slot=tabs-status]]:ms-0.5" : tab.variant === "secondary" ? "max-w-56 gap-1.5" : tab.icon === undefined ? undefined : "gap-1.5"}
-                  {...(tab.status === undefined ? {} : { status: tab.status })}
-                >
-                  {tab.pinned === true ? (
-                    <PinnedMark name={tab.name} />
-                  ) : (
-                    <>
-                      {tab.icon}
-                      <span className="min-w-0 truncate">{tab.label ?? tab.name}</span>
-                      {tab.context !== undefined && (
-                        <span data-slot="top-bar-tab-context" className="min-w-0 max-w-20 shrink-[2] truncate text-muted-foreground before:me-1 before:content-['·']">
-                          {tab.context}
-                        </span>
-                      )}
-                    </>
-                  )}
-                </TabsTab>
-              </span>
+            {tabs.map((tab) => (
+              <ProjectTab
+                key={tab.name}
+                item={tab.name}
+                value={tab.name}
+                data-project={tab.name}
+                data-active={tab.name === active ? "true" : undefined}
+                data-status={tab.state ?? tab.status ?? "none"}
+                data-pinned={tab.pinned === true ? "true" : undefined}
+                data-variant={tab.variant ?? "default"}
+                aria-label={tab.pinned === true ? tab.name : tab.context === undefined ? undefined : `${tab.label ?? tab.name}, ${tab.context}`}
+                title={tab.title ?? tab.name}
+                closable={tab.pinned !== true}
+                closeLabel={`Close ${tab.label ?? tab.name}`}
+                className={
+                  tab.pinned === true
+                    ? "w-9 min-w-0 justify-center gap-0 ps-0 pe-0 [&_[data-slot=tabs-status]]:ms-0.5"
+                    : tab.variant === "secondary"
+                      ? "max-w-56 gap-1.5"
+                      : tab.icon === undefined
+                        ? undefined
+                        : "gap-1.5"
+                }
+                {...(tab.status === undefined ? {} : { status: tab.status })}
+              >
+                {tab.pinned === true ? (
+                  <PinnedMark name={tab.name} />
+                ) : (
+                  <>
+                    {tab.icon}
+                    <span className="min-w-0 truncate">{tab.label ?? tab.name}</span>
+                    {tab.context !== undefined && (
+                      <span data-slot="top-bar-tab-context" className="min-w-0 max-w-20 shrink-[2] truncate text-muted-foreground before:me-1 before:content-['·']">
+                        {tab.context}
+                      </span>
+                    )}
+                  </>
+                )}
+              </ProjectTab>
             ))}
-          </TabsList>
-        </Tabs>
-        <div data-slot="top-bar-new" className={cn("flex h-9 shrink-0 items-center ps-1", NO_DRAG_CONTROLS)}>
+          </ProjectTabsList>
+        </ProjectTabs>
+        <div data-slot="top-bar-new" className={cn("flex h-9 shrink-0 items-center ps-2", NO_DRAG_CONTROLS)}>
           {newProject}
         </div>
       </div>
       <div data-slot="top-bar-drag" className={`${positioned}h-9 min-w-8 flex-1 ${DRAG}`} />
       <div data-slot="top-bar-end" {...region(`${positioned}flex h-9 shrink-0 items-center ${DRAG}`, regions.end)}>
         {!windows && <span className="flex h-9 items-center pe-3">{settingsNode}</span>}
-        {windows && controlsSpace("w-39")}
+        {windows && controls !== "none" && (
+          <div data-slot="top-bar-controls" aria-hidden className="pointer-events-none h-9 w-39 shrink-0 [-webkit-app-region:drag]!">
+            {controls === "stand-ins" && <WindowDots />}
+          </div>
+        )}
       </div>
       <Menu open={menu !== undefined} onOpenChange={(open) => !open && setMenu(undefined)}>
         <MenuPopup
@@ -330,7 +273,7 @@ export const TopBar = ({
           align="start"
           side="bottom"
           sideOffset={4}
-          className="min-w-[180px]"
+          className="min-w-45"
           data-testid="tab-menu"
         >
           {tabMenu === "full" && pinnedTab(menu!.name) && onUnpin && <MenuItem onClick={() => onUnpin(menu!.name)}>Unpin tab</MenuItem>}

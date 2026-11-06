@@ -75,6 +75,7 @@ export * from "./elevenLabsIds.ts";
 export * from "./fieldOf.ts";
 export * from "./jobLifecycle.ts";
 export * from "./designFields.ts";
+export * from "./shapeDesign.ts";
 export * from "./elementChips.ts";
 export * from "./artifacts/prompts.ts";
 export * from "./artifacts/dials.ts";

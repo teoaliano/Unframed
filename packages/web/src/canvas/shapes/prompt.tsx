@@ -19,6 +19,7 @@ import {
 } from "tldraw";
 import { Spinner } from "~/components/ui/spinner";
 import { ShapeLabel } from "./ShapeLabel.tsx";
+import { customValuesFor, weightStyle } from "./designed.tsx";
 import { noteRender } from "../../fps/renders.ts";
 
 export const PROMPT_HUG_WIDTH = 320;
@@ -30,7 +31,7 @@ export const PROMPT_RUNNING = "Running…";
 
 const HINT_TEXT = toRichText(PROMPT_HINT);
 
-type PromptMeta = { ref?: string; sized?: boolean };
+type PromptMeta = { ref?: string; sized?: boolean; unframed?: { design?: unknown } };
 const metaOf = (shape: TLTextShape) => shape.meta as PromptMeta;
 
 export const isEmptyPrompt = (shape: TLTextShape): boolean => plainText(shape.props.richText).trim() === "";
@@ -72,7 +73,7 @@ const boxCache = createComputedCache(
     const util = editor.getShapeUtil(shape) as PromptShapeUtil;
     return promptBox(editor, shape, getDisplayValues(util, shape));
   },
-  { areRecordsEqual: (a, b) => a.props === b.props && metaOf(a).sized === metaOf(b).sized },
+  { areRecordsEqual: (a, b) => a.props === b.props && metaOf(a).sized === metaOf(b).sized && metaOf(a).unframed?.design === metaOf(b).unframed?.design },
 );
 
 /**
@@ -80,7 +81,7 @@ const boxCache = createComputedCache(
  * when emptied, says "Add text…" while empty, and is never scaled by a resize: dragging an
  * edge or corner changes its width and pins that size.
  */
-export class PromptShapeUtil extends TextShapeUtil {
+export class PromptShapeUtil extends TextShapeUtil.configure({ getCustomDisplayValues: customValuesFor<TextShapeUtilDisplayValues>("text") }) {
   static override type = "text" as const;
 
   override getDefaultProps(): TLTextShape["props"] {
@@ -137,7 +138,12 @@ const PromptShape = ({ shape, util }: { readonly shape: TLTextShape; readonly ut
   const cost = result?.medium === "text" && result.cost !== null ? `${[costText(result.cost, result.listPrice), ...providerLabel(result.provider)].join(" · ")} · ` : "";
   const hintStyle = { fontFamily: dv.fontFamily, fontSize: dv.fontSize, lineHeight: dv.lineHeight, width, height };
   return (
-    <div className="relative" data-testid="prompt" style={{ width, height, transform: `scale(${shape.props.scale})`, transformOrigin: "top left" }}>
+    <div
+      className="relative"
+      data-testid="prompt"
+      {...(weightStyle(shape) === undefined ? {} : { "data-uf-weight": "" })}
+      style={{ width, height, transform: `scale(${shape.props.scale})`, transformOrigin: "top left", ...weightStyle(shape) }}
+    >
       <ShapeLabel shapeId={shape.id} kind="prompt" name={ref} width={width} text={`${cost}@${ref ?? ""}`} />
       {running ? (
         <div className="pointer-events-none absolute top-0 left-0 flex items-center gap-1.5 whitespace-nowrap text-muted-foreground" data-testid="prompt-hint" role="status" style={hintStyle}>

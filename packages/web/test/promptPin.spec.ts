@@ -1,10 +1,11 @@
-import { openCanvas, roomRecords, settledRecord, shapeOnScreen } from "./canvas.ts";
+import { clearOfDesignPanel, openCanvas, roomRecords, settledRecord, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 
 const SCENE = "shape:starter-scene";
 
 test("dragging a prompt's edge pins its size, a still press does not, and double-clicking the edge makes it hug again", async ({ page, engine }) => {
   await openCanvas(page, engine);
+  await clearOfDesignPanel(page);
   const box = shapeOnScreen(page, SCENE).locator("[data-testid='prompt']");
   const hugged = (await box.boundingBox())!;
   await shapeOnScreen(page, SCENE).locator(".tl-rich-text").click();

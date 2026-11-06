@@ -226,7 +226,7 @@ function TabsPanel({ className, ...props }: TabsPrimitive.Panel.Props) {
   );
 }
 
-export { Tabs, TabsList, TabsTab, TabsPanel, TabsIndicator };
+export { Tabs, TabsList, TabsTab, TabsPanel, TabsIndicator, TabStatusIcon, type TabsStatus };
 
 // The *Variants function is for components/ui modules only.
 export { tabsListVariants, tabsTabVariants };

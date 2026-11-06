@@ -6,14 +6,14 @@ import { expectToken, inBothSchemes, styleOf, tokenColor } from "./kit.ts";
 const afterStyle = (locator: Locator, property: string) =>
   locator.evaluate((element, name) => getComputedStyle(element, "::after").getPropertyValue(name), property);
 
-test("tldraw's toolbar, style panel, zoom controls, menus and shortcuts dialog take the kit's tokens, font and radii", async ({ page, engine }) => {
+test("tldraw's toolbar, the Design panel, zoom controls, menus and shortcuts dialog take the kit's tokens, font and radii", async ({ page, engine }) => {
   await openCanvas(page, engine);
   const subject = await centre(shapeOnScreen(page, "shape:starter-subject"));
   await page.mouse.click(subject.x, subject.y);
   // tldraw's tools sit in Unframed's one bottom bar, which carries the panel fill.
   const toolbar = page.getByTestId("bottom-toolbar");
   const selectTool = page.getByTestId("tools.select");
-  const stylePanel = page.locator(".tlui-style-panel__wrapper");
+  const stylePanel = page.getByTestId("design-panel");
   await expect(stylePanel).toBeVisible();
 
   await inBothSchemes(page, async () => {
@@ -21,10 +21,8 @@ test("tldraw's toolbar, style panel, zoom controls, menus and shortcuts dialog t
     await expect(selectTool).toHaveAttribute("aria-pressed", "true");
     expect(await afterStyle(selectTool, "background-color")).toBe(await tokenColor(page, "--primary"));
     expect(await afterStyle(selectTool, "border-top-left-radius")).toBe("8px");
-    await expectToken(stylePanel, "background-color", "--popover");
-    // The style panel's buttons share the kit control radius with the toolbar's.
-    expect(await afterStyle(stylePanel.locator(".tlui-button").first(), "border-top-left-radius")).toBe("8px");
-    expect(await styleOf(stylePanel, "border-top-left-radius")).toBe("14px");
+    await expectToken(stylePanel, "background-color", "--background");
+    expect(await styleOf(stylePanel, "border-top-left-radius")).toBe("0px");
     // tldraw's UI chrome is in the kit's system font; the canvas keeps tldraw's shape font.
     const kitFont = await styleOf(page.locator("body"), "font-family");
     expect(await styleOf(page.getByTestId("tools.select"), "font-family")).toBe(kitFont);
@@ -49,14 +47,10 @@ test("tldraw's toolbar, style panel, zoom controls, menus and shortcuts dialog t
   });
 });
 
-test("tldraw's toolbar and menu icons are Lucide's; style swatches Lucide has no match for stay tldraw's", async ({ page, engine }) => {
+test("tldraw's toolbar and menu icons are Lucide's", async ({ page, engine }) => {
   await openCanvas(page, engine);
   const maskOf = (locator: import("@playwright/test").Locator) => locator.locator(".tlui-icon").first().evaluate((icon) => (icon as HTMLElement).style.mask || (icon as HTMLElement).style.webkitMask);
   for (const [tool, lucide] of [["select", "mouse-pointer-2"], ["hand", "hand"], ["draw", "pencil"], ["eraser", "eraser"], ["text", "type"]] as const) {
     expect(await maskOf(page.getByTestId(`tools.${tool}`))).toContain(encodeURIComponent(`lucide-${lucide}`));
   }
-  await page.getByTestId("tools.draw").click();
-  const fill = page.locator(".tlui-style-panel [data-testid^='style.fill']").first();
-  await expect(fill).toBeVisible();
-  expect(await maskOf(fill)).not.toContain("lucide");
 });

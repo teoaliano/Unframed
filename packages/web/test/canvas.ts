@@ -44,6 +44,22 @@ export const roomRecords = async (engine: TestEngine, project: string): Promise<
 export const roomShapes = async (engine: TestEngine, project: string, type?: string): Promise<AnyRecord[]> =>
   (await roomRecords(engine, project)).filter((record) => record.typeName === "shape" && (type === undefined || record.type === type));
 
+/** Pans the canvas left by the Design panel's column, so shapes on the right stay clickable while it shows (spec 18). */
+export const clearOfDesignPanel = async (page: Page): Promise<void> => {
+  const before = await page.locator(".tl-shape").first().boundingBox();
+  await page.mouse.move(400, 400);
+  await page.mouse.wheel(340, 0);
+  let last = before?.x;
+  await expect
+    .poll(async () => {
+      const x = (await page.locator(".tl-shape").first().boundingBox())?.x;
+      const settled = x !== before?.x && x === last;
+      last = x;
+      return settled;
+    })
+    .toBe(true);
+};
+
 export const shapeOnScreen = (page: Page, id: string): Locator => page.locator(`[data-shape-id="${id}"]`);
 
 /** A prompt record's text, read the way the app reads it. */
@@ -65,7 +81,7 @@ export const emptyCanvasPoint = async (page: Page): Promise<{ x: number; y: numb
       return { x: rect.x, y: rect.y - 30, w: rect.width, h: rect.height + 30 };
     }),
   );
-  const clear = (x: number, y: number) => boxes.every((box) => x < box.x - 40 || x > box.x + box.w + 40 || y < box.y - 40 || y > box.y + box.h + 40);
+  const clear = (x: number, y: number) => x < size.width - 340 && boxes.every((box) => x < box.x - 40 || x > box.x + box.w + 40 || y < box.y - 40 || y > box.y + box.h + 40);
   for (const fy of [0.55, 0.45, 0.65, 0.35]) {
     for (const fx of [0.8, 0.2, 0.7, 0.3, 0.6, 0.4]) {
       const point = { x: Math.round(size.width * fx), y: Math.round(size.height * fy) };

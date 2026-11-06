@@ -96,7 +96,7 @@ export const canvasRoom = (editor: Editor): CanvasRoom => {
   const band = [".unframed-chrome-left", ".unframed-tabs"]
     .map((selector) => doc.querySelector<HTMLElement>(selector)?.getBoundingClientRect())
     .filter((rect): rect is DOMRect => rect !== undefined && rect.width > 0);
-  const panelRect = doc.querySelector<HTMLElement>(".tlui-style-panel__wrapper")?.getBoundingClientRect();
+  const panelRect = doc.querySelector<HTMLElement>("[data-unframed-design-panel]")?.getBoundingClientRect();
   const left = Math.min(...band.map((rect) => rect.left));
   const right = Math.max(...band.map((rect) => rect.right));
   const top = Math.min(...band.map((rect) => rect.top));
