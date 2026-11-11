@@ -8,11 +8,11 @@ describe("outside chats and turns", () => {
     const link = await outside(agent);
     const session = await link.open();
     const tools = await link.list(session);
-    expect(tools.map((tool) => tool.name)).toEqual(["projects_list", ...UNFRAMED_TOOLS, "canvas_select", "chat_note", "file_add"]);
+    expect(tools.map((tool) => tool.name)).toEqual(["projects_list", ...UNFRAMED_TOOLS, "canvas_select", "canvas_snapshot", "chat_note", "file_add"]);
     for (const tool of tools.slice(1)) expect(tool.inputSchema.required).toContain("project");
   });
 
-  it("makes one outside chat for a session's first call into a project, titled with the connection and the time, and reuses it", async () => {
+  it("makes one outside chat for a session's first call into a project, titled with the connection, and reuses it", async () => {
     const agent = await startAgentEngine();
     const link = await outside(agent);
     const session = await link.open();
@@ -25,7 +25,7 @@ describe("outside chats and turns", () => {
     const chats = await chatsIn(agent);
     expect(chats).toHaveLength(1);
     expect(chats[0]).toMatchObject({ provider: "outside", titledBy: "user", outside: { client: "claude-code" } });
-    expect(chats[0]!.title).toMatch(/^Work laptop Claude Code · \d{1,2}:\d{2} (am|pm)$/);
+    expect(chats[0]!.title).toBe("Work laptop Claude Code");
 
     await link.call(session, "canvas_read", { project: PROJECT });
     const again = await chatsIn(agent);
@@ -46,7 +46,7 @@ describe("outside chats and turns", () => {
     expect(row.payload).toMatchObject({ itemType: "mcp_tool_call", data: { toolName: "mcp__unframed__canvas_read" } });
   });
 
-  it("gives a second session its own chat in the same project, and a second project its own chat for the same session", async () => {
+  it("keeps every session of a connection in one chat per project, and gives a second project its own chat", async () => {
     const agent = await startAgentEngine();
     await (await agent.engine.rpc()).call("projects.create", { name: "Second board" });
     const link = await outside(agent);
@@ -57,7 +57,7 @@ describe("outside chats and turns", () => {
     await link.call(two, "canvas_read", { project: PROJECT });
     await link.call(one, "canvas_read", { project: "Second board" });
 
-    expect(await chatsIn(agent, PROJECT)).toHaveLength(2);
+    expect(await chatsIn(agent, PROJECT)).toHaveLength(1);
     expect(await chatsIn(agent, "second-board")).toHaveLength(1);
   });
 
