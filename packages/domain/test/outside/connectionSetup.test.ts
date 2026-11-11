@@ -18,12 +18,12 @@ describe("connection setup: Claude Code", () => {
   it("adds the server at user scope with the token, quoting the data folder with its space", () => {
     const [command] = codeOf({ client: "claude-code" });
     expect(command).toBe(
-      "claude mcp add --scope user --env UNFRAMED_MCP_TOKEN=ufx_abc123 unframed-app -- '/usr/local/bin/node' '/repo/packages/engine/src/mcp.ts' --data-dir '/Users/me/Library/Application Support/Unframed/data'",
+      "claude mcp add unframed-app --scope user --env UNFRAMED_MCP_TOKEN=ufx_abc123 -- '/usr/local/bin/node' '/repo/packages/engine/src/mcp.ts' --data-dir '/Users/me/Library/Application Support/Unframed/data'",
     );
   });
 
   it("adds ELECTRON_RUN_AS_NODE only when asked", () => {
-    expect(codeOf({ client: "claude-code", runAsNode: true })[0]).toContain("--env UNFRAMED_MCP_TOKEN=ufx_abc123 --env ELECTRON_RUN_AS_NODE=1 unframed-app");
+    expect(codeOf({ client: "claude-code", runAsNode: true })[0]).toContain("--env UNFRAMED_MCP_TOKEN=ufx_abc123 --env ELECTRON_RUN_AS_NODE=1 -- ");
     expect(codeOf({ client: "claude-code", runAsNode: false })[0]).not.toContain("ELECTRON_RUN_AS_NODE");
   });
 

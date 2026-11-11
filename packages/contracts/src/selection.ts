@@ -14,10 +14,32 @@ export const SelectionSubscribe = Schema.Struct({
   windowId: Schema.String,
 });
 
-/** The engine asks a window to select these shapes. The window answers with `selection.report`. */
-export const SelectionApply = Schema.Struct({
+const SelectApply = Schema.Struct({
   kind: Schema.Literal("apply"),
   requestId: Schema.String,
   shapeIds: Schema.Array(Schema.String),
 });
+
+const SnapshotRequest = Schema.Struct({
+  kind: Schema.Literal("snapshot"),
+  requestId: Schema.String,
+  bounds: Schema.Struct({ x: Schema.Number, y: Schema.Number, w: Schema.Number, h: Schema.Number }),
+  scale: Schema.Number,
+});
+
+/**
+ * What the engine asks of a window: select these shapes (answered with `selection.report`), or
+ * render an area of the canvas as the person sees it (answered with `selection.snapshotResult`).
+ */
+export const SelectionApply = Schema.Union([SelectApply, SnapshotRequest]);
 export type SelectionApply = typeof SelectionApply.Type;
+
+/** A window's answer to a snapshot request: the PNG as base64, or why it could not draw it. */
+export const SelectionSnapshotResult = Schema.Struct({
+  requestId: Schema.String,
+  png: Schema.optional(Schema.String),
+  width: Schema.optional(Schema.Number),
+  height: Schema.optional(Schema.Number),
+  error: Schema.optional(Schema.String),
+});
+export type SelectionSnapshotResult = typeof SelectionSnapshotResult.Type;

@@ -138,6 +138,8 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const [banner, setBanner] = useState<Banner>();
   const [saving, setSaving] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [sheetHost, setSheetHost] = useState<HTMLDivElement | null>(null);
+  const [paneSheet, setPaneSheet] = useState(false);
   const [catalogues, setCatalogues] = useState<Partial<Record<Medium, ReadonlyArray<string>>>>({});
   const [statuses, setStatuses] = useState<ProviderStatuses>();
   const [checking, setChecking] = useState(false);
@@ -637,14 +639,14 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
                 ))}
               </TabsList>
             </div>
-            <TabsPanel value={section} className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="settings-section">
-              <DialogPanel data-testid="settings-form">
+            <TabsPanel value={section} className="relative flex min-h-0 min-w-0 flex-1 flex-col" data-testid="settings-section">
+              <DialogPanel data-testid="settings-form" inert={paneSheet}>
                 <h2 className="m-0 mt-3 text-base font-semibold text-foreground" data-testid="settings-section-title">
                   {current.label}
                 </h2>
                 {section === "generation" && generation}
                 {section === "agents" && agents}
-                {section === "connections" && <OutsideAgents hasKey={hasKey} onConnectOpenRouter={() => showSection("generation")} />}
+                {section === "connections" && <OutsideAgents hasKey={hasKey} onConnectOpenRouter={() => showSection("generation")} sheetHost={sheetHost} onSheet={setPaneSheet} />}
                 {section === "ipad" && ipadHere && settings !== undefined && (
                   <IpadAccess
                     access={settings.ipadAccess}
@@ -675,6 +677,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
                   )}
                 </div>
               )}
+              <div ref={setSheetHost} />
             </TabsPanel>
           </Tabs>
         </div>

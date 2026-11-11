@@ -163,3 +163,46 @@ test.describe("on a window narrower than 1280 px", () => {
     await expect(sheet).toHaveCount(0);
   });
 });
+
+test("the docked rail resizes from its right edge from 320 to 640 px, the bottom row and toasts follow it, and the width is remembered", async ({ page, agent }) => {
+  await page.setViewportSize({ width: 1920, height: 900 });
+  await openCanvas(page, agent);
+  await openRail(page);
+  const panel = rail(page);
+  const settled = () => rail(page).evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+  await settled();
+  const grip = panel.getByRole("separator", { name: "Resize agent rail" });
+  const drag = async (dx: number) => {
+    const box = (await grip.boundingBox())!;
+    const from = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    for (let step = 1; step <= 8; step++) await page.mouse.move(from.x + (dx * step) / 8, from.y);
+    await page.mouse.up();
+  };
+  await drag(120);
+  await expect.poll(async () => Math.round((await panel.boundingBox())!.width)).toBe(500);
+  await expect.poll(async () => (await page.locator(".tlui-navigation-panel").boundingBox())!.x).toBeGreaterThanOrEqual(500);
+  expect((await page.getByTestId("bottom-toolbar").boundingBox())!.x).toBeGreaterThanOrEqual(500);
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--toast-start-offset").trim())).toBe("500px");
+  await drag(1000);
+  await expect.poll(async () => Math.round((await panel.boundingBox())!.width)).toBe(640);
+  await drag(-1000);
+  await expect.poll(async () => Math.round((await panel.boundingBox())!.width)).toBe(320);
+  await grip.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(async () => Math.round((await panel.boundingBox())!.width)).toBe(336);
+  await expect
+    .poll(async () => (await (await agent.rpc()).call("preferences.get", { keys: ["agent.rail"] })).values["agent.rail"])
+    .toEqual({ w: 336 });
+
+  await page.reload();
+  await openRail(page);
+  await settled();
+  await expect.poll(async () => Math.round((await rail(page).boundingBox())!.width)).toBe(336);
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await rail(page).getByRole("separator", { name: "Resize agent rail" }).focus();
+  for (let press = 0; press < 20; press++) await page.keyboard.press("ArrowRight");
+  await expect.poll(async () => Math.round((await rail(page).boundingBox())!.width)).toBe(440);
+});

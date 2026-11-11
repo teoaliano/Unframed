@@ -71,7 +71,7 @@ describe("outside turns: revert, change notes, session end, revoke, restart and 
     expect(JSON.parse(changed.content[1]!).shapes).toEqual(expect.any(Array));
   });
 
-  it("ends a session's open turns and tells its chats, leaving another session's turn open", async () => {
+  it("shares one chat between two sessions, and ends its turn only when the last of them ends", async () => {
     const agent = await startAgentEngine();
     const link = await outside(agent);
     const one = await link.open();
@@ -79,17 +79,19 @@ describe("outside turns: revert, change notes, session end, revoke, restart and 
     await link.call(one, "canvas_read", { project: PROJECT });
     await link.call(two, "canvas_read", { project: PROJECT });
     const chats = await chatsIn(agent);
-    const oneChat = chats.find((chat) => chat.outside?.sessionId === one)!;
-    const twoChat = chats.find((chat) => chat.outside?.sessionId === two)!;
+    expect(chats).toHaveLength(1);
+    const chatId = chats[0]!.id;
 
     expect(await link.end(one)).toBe(200);
-    const ended = await agent.settled(oneChat.id, 1);
+    const watched = await agent.watch(chatId);
+    const open = await watched.until((chat) => chat.latestTurn?.state === "running", "the turn to stay open");
+    await watched.close();
+    expect(open.activities.some((activity) => activity.kind === "outside.session-ended")).toBe(false);
+
+    expect(await link.end(two)).toBe(200);
+    const ended = await agent.settled(chatId, 1);
     expect(ended.latestTurn?.state).toBe("completed");
-    expect(ended.activities.some((activity) => activity.kind === "outside.session-ended")).toBe(true);
-    const stillOpen = await agent.watch(twoChat.id);
-    const open = await stillOpen.until((chat) => chat.latestTurn?.state === "running", "the other turn to stay open");
-    await stillOpen.close();
-    expect(open.latestTurn?.state).toBe("running");
+    expect(ended.activities.filter((activity) => activity.kind === "outside.session-ended")).toHaveLength(1);
   });
 
   it("refuses a revoked connection and settles its chats' open turns, which say they are disconnected", async () => {

@@ -8,6 +8,8 @@ import { useId } from "react";
 import { Input } from "~/components/ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 
+export const SPEND_LIMIT_HINT = "Counts only the images, video and text this agent generates. Its own Claude or Codex usage and Unframed's built-in agents are not counted.";
+
 export const PERIOD_LABELS: Record<SpendPeriod, string> = { day: "Per day", week: "Per week", month: "Per month", lifetime: "For its whole life" };
 
 /** The limit the fields say, or the sentence for what they cannot say (`null` limit: no limit). */
@@ -32,11 +34,15 @@ export const SpendFields = ({
   readonly onPeriod: (period: SpendPeriod) => void;
 }) => {
   const periodId = useId();
+  const hintId = useId();
   return (
     <div className="flex flex-col gap-3">
       <label className="flex flex-col gap-1.5 text-sm">
         <span className="text-muted-foreground">Spend limit, in US dollars</span>
-        <Input aria-label="Spend limit amount" inputMode="decimal" placeholder="No limit" value={amount} onChange={(event) => onAmount(event.target.value)} />
+        <Input aria-label="Spend limit amount" aria-describedby={hintId} inputMode="decimal" placeholder="No limit" value={amount} onChange={(event) => onAmount(event.target.value)} />
+        <span id={hintId} className="text-xs text-muted-foreground" data-testid="spend-limit-hint">
+          {SPEND_LIMIT_HINT}
+        </span>
       </label>
       <div className="flex flex-col gap-1.5 text-sm">
         <span id={periodId} className="text-muted-foreground">
