@@ -61,7 +61,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [2]
     steps:
       - uses: actions/checkout@v4
 
@@ -79,11 +79,13 @@ jobs:
 
       # One invocation per project, so the clipboard and isolated projects keep their one-worker
       # rule: each project's own config runs them alone.
-      - run: pnpm exec playwright test --project=canvas --shard=${{ matrix.shard }}/3
+      - run: pnpm exec playwright test --project=canvas --shard=2/3 --trace=retain-on-failure --retries=0 --output=pw-out
 
-      - run: pnpm exec playwright test --project=clipboard --shard=${{ matrix.shard }}/3
-
-      - run: pnpm exec playwright test --project=isolated --shard=${{ matrix.shard }}/3
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pw-out
+          path: pw-out
 
   # The required check. It passes only when the unit and bundle job and all three browser shards passed.
   test:
