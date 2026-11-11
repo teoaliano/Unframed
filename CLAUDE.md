@@ -17,7 +17,7 @@ This codebase replaced an older Unframed (a React Flow canvas with output nodes)
 
 1. **Specs are built in order**, one `/implement` run each: `/implement docs/specs/NN-<slug>.md`. The index lists the order; `BUILD-STATUS.md` at the root, once it exists, says which are done. A spec may rely on everything before it and nothing after it.
 2. **Implementation Decisions are binding; Out of Scope is left alone.** A task whose seam does not work is a spec problem: stop and say so rather than inventing a new seam.
-3. **Three test seams, no others** (defined in the index): the engine seam, the domain seam, the browser seam. Every behaviour is tested through one of them.
+3. **Four test seams, no others** (defined in the index): the engine seam, the domain seam, the browser seam, and the shell seam for the desktop app in `apps/desktop` (`npm test` there: `node --test` against fakes of Electron and electron-updater, plus `e2e/update.mjs`, a real signed update on a Mac). Every behaviour is tested through one of them.
 4. **Changes land by pull request, never a direct push to `main`**, not even one-liners. The desktop shell ships builds from tags on `main`. During the first build everything lands on the local `build` branch and the person opens the pull requests.
 5. **When a spec's behaviour changes after it is built**, update the spec in the same PR, so the spec stays the description of the app.
 

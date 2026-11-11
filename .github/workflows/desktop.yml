@@ -19,7 +19,21 @@ defaults:
     working-directory: apps/desktop
 
 jobs:
+  draft:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open a draft Release for the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" --repo teoaliano/Unframed >/dev/null 2>&1 \
+            || gh release create "$TAG" --repo teoaliano/Unframed --draft --title "$TAG" --notes ""
+
   build:
+    needs: draft
     strategy:
       fail-fast: false
       matrix:
@@ -71,6 +85,10 @@ jobs:
 
       - run: npm ci
 
+      - name: Shell tests
+        if: runner.os == 'macOS'
+        run: npm test
+
       # Fail loudly if the pin did not resolve to what package.json claims, since
       # that failure is otherwise silent -- npm honours a stale lockfile happily.
       - name: Report the engine version actually installed
@@ -100,7 +118,7 @@ jobs:
       # so the Release got the unstapled DMG and a feed hashed from it. Mac uploads
       # happen in a later step, once the feed is re-hashed. Windows is unchanged.
       - name: Package
-        run: npx electron-builder --publish ${{ runner.os != 'macOS' && startsWith(github.ref, 'refs/tags/v') && 'always' || 'never' }}
+        run: npx electron-builder --publish never
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
           # electron-builder reads these two by default, which is why no config
@@ -221,22 +239,26 @@ jobs:
         shell: bash
         run: ls -lh dist/*.dmg dist/*.zip dist/*.exe 2>/dev/null || ls -lh dist
 
-      # The mac uploads, after every check above has passed. Same shape electron-builder
-      # gives a Release: published rather than draft, on the PUBLIC repo, where the
-      # updater looks. A Windows job may create the Release first, so a failed create
-      # is tolerated when the Release then exists.
-      - name: Publish the mac installers to the public Release
+      - name: Attach the mac installers to the draft Release
         if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v')
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
-          gh release view "$TAG" --repo teoaliano/Unframed >/dev/null 2>&1 \
-            || gh release create "$TAG" --repo teoaliano/Unframed --title "$TAG" --notes "" \
-            || gh release view "$TAG" --repo teoaliano/Unframed >/dev/null
           gh release upload "$TAG" --repo teoaliano/Unframed --clobber \
-            dist/*.dmg dist/*.dmg.blockmap dist/*.zip dist/*.zip.blockmap dist/latest-mac.yml
+            dist/*.dmg dist/*.dmg.blockmap dist/*.zip dist/*.zip.blockmap
+          gh release upload "$TAG" --repo teoaliano/Unframed --clobber dist/latest-mac.yml
+
+      - name: Attach the Windows installer to the draft Release
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release upload "$TAG" --repo teoaliano/Unframed --clobber dist/*.exe dist/*.exe.blockmap
+          gh release upload "$TAG" --repo teoaliano/Unframed --clobber dist/latest.yml
 
       # Pre-release testing only, and deliberately short-lived: Actions storage is
       # 500MB and one installer is ~100MB. Real releases attach to the PUBLIC repo's
@@ -254,3 +276,25 @@ jobs:
             apps/desktop/dist/*.exe
           retention-days: 1
           if-no-files-found: error
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Publish the Release once both platforms are attached
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          ASSETS=$(gh release view "$TAG" --repo teoaliano/Unframed --json assets --jq '.assets[].name')
+          echo "$ASSETS"
+          for f in latest-mac.yml latest.yml; do
+            echo "$ASSETS" | grep -qx "$f" || { echo "$f is missing from the draft" >&2; exit 1; }
+          done
+          echo "$ASSETS" | grep -q '\.zip$'
+          echo "$ASSETS" | grep -q '\.exe$'
+          gh release edit "$TAG" --repo teoaliano/Unframed --draft=false --latest
