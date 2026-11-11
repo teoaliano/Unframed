@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "electron-updater": "^6.8.9",
-    "unframed": "github:teoaliano/Unframed#engine-v0.8.4-dist"
+    "unframed": "github:teoaliano/Unframed#engine-v0.8.5-dist"
   },
   "devDependencies": {
     "electron": "^44.4.5",
