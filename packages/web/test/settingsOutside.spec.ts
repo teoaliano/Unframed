@@ -13,8 +13,23 @@ test("Connect an agent shows Codex's setup once, the row says Never used, and a 
     await expect(dialog.getByRole("heading", { name: "Agents outside Unframed" })).toBeVisible();
     await expect(dialog.getByTestId("outside-connection")).toHaveCount(0);
 
+    // The form is a page over the Settings pane, not a second dialog: the section behind it is inert,
+    // the back arrow returns to the button, and Escape closes it without closing Settings.
+    const button = dialog.getByRole("button", { name: "Connect an agent" });
+    await button.click();
+    await expect(page.getByRole("dialog")).toHaveCount(1);
+    await expect(dialog.getByRole("region", { name: "Connect an agent" })).toBeVisible();
+    await expect(dialog.getByTestId("settings-form")).toHaveAttribute("inert", "");
+    await dialog.getByRole("button", { name: "Back to connections" }).click();
+    await expect(dialog.getByRole("region", { name: "Connect an agent" })).toHaveCount(0);
+    await expect(button).toBeFocused();
+    await expect(dialog.getByTestId("settings-form")).not.toHaveAttribute("inert");
+    await button.click();
+    await page.keyboard.press("Escape");
+    await expect(dialog.getByRole("region", { name: "Connect an agent" })).toHaveCount(0);
+    await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "Connect an agent" }).click();
-    const connect = page.getByRole("dialog", { name: "Connect an agent" });
+    const connect = dialog.getByRole("region", { name: "Connect an agent" });
     await connect.getByText("Codex", { exact: true }).click();
     await expect(connect.getByLabel("Name")).toHaveValue("Codex");
     await connect.getByLabel("Name").fill("Codex in the IDE");
@@ -27,6 +42,7 @@ test("Connect an agent shows Codex's setup once, the row says Never used, and a 
     const token = tokenIn(await code.innerText());
 
     await connect.getByRole("button", { name: "Done" }).click();
+    await expect(connect).toHaveCount(0);
     const row = dialog.getByTestId("outside-connection");
     await expect(row).toContainText("Codex in the IDE");
     await expect(row).toContainText("Codex");
@@ -56,9 +72,10 @@ test("Revoke asks first, then the row is gone and the revoked token answers 401"
     const dialog = await openSettings(page);
     await showSection(dialog, "Connections");
     await dialog.getByRole("button", { name: "Revoke" }).click();
-    const ask = page.getByRole("alertdialog", { name: "Revoke Laptop?" });
+    const ask = dialog.getByRole("region", { name: "Revoke Laptop?" });
     await expect(ask).toContainText("The agent loses access at once. Its chats and the changes it made stay.");
     await expect(dialog.getByTestId("outside-connection")).toHaveCount(1);
+    await expect(page.getByRole("dialog")).toHaveCount(1);
     await ask.getByRole("button", { name: "Revoke" }).click();
     await expect(dialog.getByTestId("outside-connection")).toHaveCount(0);
 
