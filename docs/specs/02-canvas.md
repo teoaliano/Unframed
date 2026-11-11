@@ -285,6 +285,8 @@ Custom shape props and every later change to them use tldraw's shape migrations,
 
 On a device client (spec 22) the two items that reach the Mac's disk, reveal and "Copy path", are left out, in every section that would show them.
 
+The menu opens on a right-click, and on a long press: a touch held still for 500 ms on the canvas opens it where the finger is, with the shape under the finger as the right-clicked one. A move of more than 10 px, or a release, cancels the press. Touch only, because the pen draws: a stylus resting still must never open a menu.
+
 Sections appear in this order, each only when it has at least one item. The Image section is headed "Video" when the right-clicked shape is a video. A checkbox row (spec 09's Keep playing) starts its label where the plain rows do, with its check at the end of the row. An item that would do nothing is left out, never greyed. After the Unframed sections come tldraw's own context menu groups, minus tldraw's group, ungroup, cut, copy and paste items, which Unframed's Edit section replaces.
 
 | Section | Item | Shown when |

@@ -45,7 +45,7 @@ Spec 12's run on `build`, with the dev server stopped: `pnpm typecheck` exit 0 (
 | 19 | kits and tokens | | not built | | 0/43 tasks (one is the person's step). Written with 18 |
 | 20 | components | | not built | | 0/47 tasks. Written with 18 |
 | 21 | motion timeline | | not built | | 0/40 tasks (two are the person's steps); task 1 upgrades HyperFrames on its own PR |
-| 22 | iPad access | | not built | | 0/33 tasks (two are the person's steps). Written at the person's request after the tldraw key gained `mbp-aliano.local`; every question decided |
+| 22 | iPad access | | built, not merged | `t3/ipad-mirror-local-dev-server`: 9bb3ac74, 99c7d6f3, 0f74881d and the fourth commit on that branch | 32/33 tasks, in four PRs: the rules, the certificates and the listener; the Settings section and pairing; device mode in the web; touch, the Home Screen and the shell. Task 33 is the person's check on the real iPad. The build also fixed a spec 14 defect: a window reported its selection on any store change, so the Mac took the live selection back the moment the iPad connected |
 
 ## Performance budgets
 

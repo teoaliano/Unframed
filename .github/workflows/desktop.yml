@@ -71,6 +71,12 @@ jobs:
 
       - run: npm ci
 
+      # The keep-awake handler (spec 22) against a fake powerSaveBlocker. No Electron,
+      # so it runs on both platforms in seconds and gates every PR.
+      - name: Keep-awake smoke test
+        shell: bash
+        run: node test/keep-awake.smoke.js
+
       # Fail loudly if the pin did not resolve to what package.json claims, since
       # that failure is otherwise silent -- npm honours a stale lockfile happily.
       - name: Report the engine version actually installed

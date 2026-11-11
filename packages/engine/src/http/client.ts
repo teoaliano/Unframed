@@ -4,6 +4,16 @@ import { sendFile } from "./sendFile.ts";
 
 const ASSETS_PREFIX = "/assets/";
 
+/**
+ * The Home Screen files (spec 22), served from the dist root under their own names
+ * because a manifest and an apple-touch-icon are looked for at fixed paths. The iPad
+ * listener serves these to an unpaired device, so they hold nothing about a project.
+ */
+const ROOT_FILES: Record<string, string> = {
+  "/manifest.webmanifest": "application/manifest+json",
+  "/apple-touch-icon.png": "image/png",
+};
+
 const CLIENT_TYPES: Record<string, string> = {
   ".js": "text/javascript; charset=utf-8",
   ".mjs": "text/javascript; charset=utf-8",
@@ -22,8 +32,8 @@ const CLIENT_TYPES: Record<string, string> = {
 
 /**
  * The built web client, on the engine's own origin, when `UNFRAMED_CLIENT_DIST` is set:
- * `index.html` for `/` and the hashed files under `/assets/`. Nothing else, and no SPA
- * catch-all, so an unknown path is a 404.
+ * `index.html` for `/`, the hashed files under `/assets/` and the Home Screen files at the
+ * root. Nothing else, and no SPA catch-all, so an unknown path is a 404.
  */
 export const clientRoute =
   (clientDist: string): Route =>
@@ -33,6 +43,13 @@ export const clientRoute =
       return sendFile(req, res, resolve(clientDist, "index.html"), {
         "content-type": "text/html; charset=utf-8",
         "cache-control": "no-cache",
+      });
+    }
+    const rootType = ROOT_FILES[url.pathname];
+    if (rootType !== undefined) {
+      return sendFile(req, res, resolve(clientDist, url.pathname.slice(1)), {
+        "content-type": rootType,
+        "cache-control": "public, max-age=3600",
       });
     }
     if (!url.pathname.startsWith(ASSETS_PREFIX)) return false;

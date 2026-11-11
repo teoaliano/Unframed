@@ -52,14 +52,15 @@ test("the device pans its own view and leaves the Mac's where it was", async ({ 
     const starter = "shape:starter-scene";
     await expect(shapeOnScreen(page, starter)).toBeVisible();
     device = await openDevice(engine, project);
-    await expect(shapeOnScreen(device.page, starter)).toBeVisible({ timeout: 20_000 });
+    const onDevice = device.page;
+    await expect(shapeOnScreen(onDevice, starter)).toBeVisible({ timeout: 20_000 });
 
     const macBefore = await centre(shapeOnScreen(page, starter));
-    const deviceBefore = await centre(shapeOnScreen(device.page, starter));
+    const deviceBefore = await centre(shapeOnScreen(onDevice, starter));
 
-    await device.page.mouse.move(600, 400);
-    await device.page.mouse.wheel(0, 240);
-    await expect.poll(async () => Math.round((await centre(shapeOnScreen(device.page, starter))).y)).not.toBe(Math.round(deviceBefore.y));
+    await onDevice.mouse.move(600, 400);
+    await onDevice.mouse.wheel(0, 240);
+    await expect.poll(async () => Math.round((await centre(shapeOnScreen(onDevice, starter))).y)).not.toBe(Math.round(deviceBefore.y));
 
     const macAfter = await centre(shapeOnScreen(page, starter));
     expect(Math.round(macAfter.x)).toBe(Math.round(macBefore.x));

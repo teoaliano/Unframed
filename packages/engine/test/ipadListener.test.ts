@@ -187,7 +187,15 @@ describe("an unpaired device", () => {
   it("may still ask for the Home Screen files", async () => {
     const engine = await startIpadEngine();
     const port = await ipadPortOf(engine);
-    const answer = await deviceRequest(port, await readAuthority(engine.dataDir), "/manifest.webmanifest", { headers: { accept: "application/manifest+json" } });
-    expect(answer.status).not.toBe(401);
+    const ca = await readAuthority(engine.dataDir);
+
+    const manifest = await deviceRequest(port, ca, "/manifest.webmanifest", { headers: { accept: "application/manifest+json" } });
+    expect(manifest.status).toBe(200);
+    expect(manifest.headers["content-type"]).toBe("application/manifest+json");
+    expect(manifest.json().display).toBe("standalone");
+
+    const icon = await deviceRequest(port, ca, "/apple-touch-icon.png", { headers: { accept: "image/png" } });
+    expect(icon.status).toBe(200);
+    expect(icon.headers["content-type"]).toBe("image/png");
   });
 });

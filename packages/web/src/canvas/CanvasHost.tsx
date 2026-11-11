@@ -1,6 +1,7 @@
 import { useSync } from "@tldraw/sync";
 import { canvasSchema } from "@unframed/contracts";
 import { UPLOAD_BODY_LIMIT } from "@unframed/domain";
+import { installLongPressMenu } from "./longPressMenu.ts";
 import { installSelectionReporter } from "./selectionReport.ts";
 import { useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { Tldraw, type Editor, type TLComponents } from "tldraw";
@@ -120,6 +121,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     const stopRename = installRename(editor);
     const stopRunProgress = watchRunProgress(editor, engine, project);
     const stopSelection = installSelectionReporter(editor, engine, project);
+    const stopLongPress = installLongPressMenu(editor);
     content.current = { project, engine, minter };
     installExternalContent(editor, content.current);
     // A tab that comes back to the front keeps the view it had (spec 17); a first open fits.
@@ -136,6 +138,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
       stopRename();
       stopRunProgress();
       stopSelection();
+      stopLongPress();
       content.current = undefined;
     };
   }, [project, engine]);

@@ -79,3 +79,11 @@ export const penStroke = async (page: Page, from: { x: number; y: number }, to: 
   await event("mouseReleased", to, 0);
   await cdp.detach();
 };
+
+export const touchHold = async (page: Page, at: { x: number; y: number }, holdMs: number): Promise<void> => {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: at.x, y: at.y }] });
+  await page.waitForTimeout(holdMs);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await cdp.detach();
+};

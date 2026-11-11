@@ -2,12 +2,17 @@
 // a window at it. Everything the window needs is served by the engine over HTTP,
 // so there is no preload and no IPC bridge -- the canvas is the same code the free
 // clone runs, unmodified.
-const { app, BrowserWindow, Notification, shell, dialog, nativeTheme } = require('electron');
+const { app, BrowserWindow, Notification, shell, dialog, nativeTheme, powerSaveBlocker } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { fork } = require('node:child_process');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
+const { createKeepAwake } = require('./keep-awake.js');
+
+// Held while a paired iPad has a socket open (spec 22). An older engine never sends
+// the message, so nothing is ever held.
+const keepAwake = createKeepAwake(powerSaveBlocker);
 
 // One instance only. Not for the port -- PORT=0 already removed that fight -- but
 // because PUT /api/presets replaces the whole array, so two windows each holding a
@@ -82,6 +87,7 @@ function startEngine() {
         resolve(msg.port);
       }
       if (msg?.type === 'reveal') revealFiles(msg.files);
+      if (msg?.type === 'keep-awake') keepAwake.set(msg.on === true);
     });
 
     engine.on('error', (err) => {
@@ -94,6 +100,7 @@ function startEngine() {
     engine.on('exit', (code) => {
       clearTimeout(timer);
       engine = null;
+      keepAwake.set(false);
       if (win) fatal(`The engine stopped unexpectedly (code ${code}).`);
       else reject(new Error(`The engine exited immediately (code ${code}).`));
     });
@@ -691,6 +698,7 @@ app.on('second-instance', () => {
 const ENGINE_EXIT_CEILING = 2000;
 
 app.on('before-quit', (e) => {
+  keepAwake.set(false);
   if (engine) {
     const child = engine;
     engine = null;

@@ -21,6 +21,8 @@ export const startIpadEngine = async (options: IpadEngineOptions = {}): Promise<
     await mkdir(join(dist, "assets"), { recursive: true });
     await writeFile(join(dist, "index.html"), "<!doctype html><title>Unframed</title>");
     await writeFile(join(dist, "assets", "app.js"), "export const app = 1;\n");
+    await writeFile(join(dist, "manifest.webmanifest"), '{"name":"Unframed","display":"standalone"}');
+    await writeFile(join(dist, "apple-touch-icon.png"), "icon bytes");
   }
   return startEngine({
     ...(dist === undefined ? {} : { clientDist: dist }),
