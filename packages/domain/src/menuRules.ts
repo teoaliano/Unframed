@@ -1,6 +1,7 @@
 import { mayBeGroupMember } from "./grouping.ts";
 import { presetCase, PRESET_SPLIT_MESSAGE } from "./presetRules.ts";
 import { PIN_LIMIT, PIN_LIMIT_MESSAGE } from "./artifacts/artifactRules.ts";
+import type { Features } from "./features.ts";
 
 /** What the menu rules need to know about a shape. `file` is its project file, when it has one. */
 export interface MenuShape {
@@ -34,6 +35,7 @@ export interface MenuInput {
   /** Spec 09: the artifacts this project has pinned with "Keep playing". */
   readonly pinned?: ReadonlyArray<string>;
   readonly device?: boolean;
+  readonly features: Features;
 }
 
 export type EditAction = "cut" | "copy" | "paste" | "group" | "ungroup";
@@ -83,7 +85,7 @@ export const shortcutHint = (action: EditAction, platform: string): string => {
 
 const EDIT_LABELS: Record<EditAction, string> = { cut: "Cut", copy: "Copy", paste: "Paste", group: "Group", ungroup: "Ungroup" };
 
-export const INPUT_ITEMS: ReadonlyArray<{ action: AddAction; label: string }> = [
+const INPUT_ITEMS: ReadonlyArray<{ action: AddAction; label: string }> = [
   { action: "add-prompt", label: "Prompt" },
   { action: "add-image", label: "Image" },
   { action: "add-video", label: "Video" },
@@ -92,14 +94,17 @@ export const INPUT_ITEMS: ReadonlyArray<{ action: AddAction; label: string }> = 
   { action: "add-node", label: "Node" },
 ];
 
+export const inputItems = (features: Features): ReadonlyArray<{ action: AddAction; label: string }> =>
+  features.has("nodes") ? INPUT_ITEMS : INPUT_ITEMS.filter((item) => item.action !== "add-node");
+
 export const ARTIFACT_ITEMS: ReadonlyArray<{ action: AddAction; label: string }> = [
   { action: "add-page", label: "Page" },
   { action: "add-motion", label: "Motion" },
 ];
 
 /** Add to library: enabled when the selection can become one group; otherwise shown disabled, with the reason when there is one. */
-const libraryItem = (selection: ReadonlyArray<MenuShape>): MenuItem => {
-  const found = presetCase(selection);
+const libraryItem = (selection: ReadonlyArray<MenuShape>, features: Features): MenuItem => {
+  const found = presetCase(features.has("nodes") ? selection : selection.filter((shape) => shape.type !== "node" && shape.type !== "wire"));
   if (found.kind === "split") return { action: "add-to-library", label: "Add to library", disabled: true, tooltip: PRESET_SPLIT_MESSAGE };
   if (found.kind === "empty") return { action: "add-to-library", label: "Add to library", disabled: true };
   return { action: "add-to-library", label: "Add to library" };
@@ -170,10 +175,10 @@ export const contextMenu = (input: MenuInput): MenuSection[] => {
   if (clicked?.type === "frame" && clicked.recipe) editItems.push({ action: "clear-recipe", label: "Clear recipe" });
   add("edit", "Edit", editItems);
 
-  add("library", "Library", input.libraryRegistered && selection.length > 0 ? [libraryItem(selection)] : []);
+  add("library", "Library", input.libraryRegistered && selection.length > 0 ? [libraryItem(selection, input.features)] : []);
 
   if (target.kind === "canvas") {
-    add("inputs", "Inputs", [...INPUT_ITEMS]);
+    add("inputs", "Inputs", [...inputItems(input.features)]);
     add("artifacts", "Artifacts", [...ARTIFACT_ITEMS]);
   }
   return sections;

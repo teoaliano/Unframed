@@ -85,7 +85,7 @@ if (process.argv.includes("--share")) {
   console.log(`  Shared on your tailnet  →  ${webEnv.UNFRAMED_DEV_SHARE_ORIGIN}/`);
 }
 
-start(["--watch", join(repoRoot, "packages/engine/src/main.ts")], repoRoot, process.env);
+start(["--watch", join(repoRoot, "packages/engine/src/main.ts")], repoRoot, { ...process.env, UNFRAMED_FEATURES: process.env.UNFRAMED_FEATURES ?? "all" });
 start([viteBin], webRoot, webEnv);
 
 process.on("SIGINT", () => stop(0));

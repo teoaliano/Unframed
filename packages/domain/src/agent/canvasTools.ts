@@ -15,6 +15,7 @@ import { nodeStatus } from "../nodes/status.ts";
 import { wireRefusal } from "../nodes/wires.ts";
 import { GENERATION_PROVIDERS, isGenerationProvider, providerField, providerServesMessage } from "../generationProviders.ts";
 import { VERCEL_BAD_PROVIDER } from "../vercel.ts";
+import { FEATURE_OFF_MESSAGES, type Features } from "../features.ts";
 import { NODE_DEFAULT_SIZE, NODE_MEDIA, NODE_MIN_HEIGHT, NODE_WIDTH, WIRE_ROLES } from "@unframed/contracts";
 
 export interface CanvasRecord {
@@ -315,6 +316,7 @@ export interface BatchContext {
   readonly pageId: string;
   readonly boxes: ReadonlyMap<string, ShapeBoxes>;
   readonly modes?: ReadonlyArray<string>;
+  readonly features: Features;
 }
 
 type PreparedBatch =
@@ -511,6 +513,7 @@ const precheck = (ops: ReadonlyArray<unknown>, ctx: BatchContext): void => {
       if (kind === "page" || kind === "motion") refuse("create: make pages and motions with page_write and motion_write");
       if (kind === "component") refuse("create: make components with component_write");
       if (typeof kind !== "string" || !CREATE_KINDS.has(kind)) refuse(`create: unknown kind "${String(kind)}"`);
+      if ((kind === "node" || kind === "wire") && !ctx.features.has("nodes")) refuse(`create: ${FEATURE_OFF_MESSAGES.nodes}`);
       const id = record.id;
       if (typeof id !== "string" || id === "") refuse('create: id must be a string (use "new:<name>" for a fresh id)');
       const key = id as string;
@@ -748,6 +751,7 @@ const update = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
   const patch = stripEngineKeys(obj(op.props));
   const props: Record<string, unknown> = { ...obj(shape.props) };
   const kind = shapeKind(shape.type);
+  if ((kind === "node" || kind === "wire") && !ctx.features.has("nodes")) refuse(`update: ${FEATURE_OFF_MESSAGES.nodes}`);
   if (kind === "component") {
     for (const field of ["tag", "file"]) if (field in patch) refuse(`update: ${field} is written by component_write`);
   }

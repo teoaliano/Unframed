@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { plainText, prepareBatch, readRef, type BatchContext, type CanvasRecord } from "../../src/index.ts";
+import { ALL_FEATURES, NO_FEATURES, plainText, prepareBatch, readRef, type BatchContext, type CanvasRecord, type Features } from "../../src/index.ts";
 
 const PAGE = "page:page";
 
@@ -43,7 +43,7 @@ const motion = (id: string, title: string): CanvasRecord => ({
   meta: { ref: "150" },
 });
 
-const context = (records: CanvasRecord[], files: Record<string, { w?: number; h?: number; mime?: string }> = {}): BatchContext => {
+const context = (records: CanvasRecord[], files: Record<string, { w?: number; h?: number; mime?: string }> = {}, features: Features = ALL_FEATURES): BatchContext => {
   let n = 0;
   let index = 0;
   return {
@@ -54,6 +54,7 @@ const context = (records: CanvasRecord[], files: Record<string, { w?: number; h?
     indexAbove: () => `b${++index}`,
     pageId: PAGE,
     boxes: new Map(),
+    features,
   };
 };
 
@@ -290,5 +291,30 @@ describe("canvas_write and a node's provider", () => {
     expect(update({ provider: null })).not.toHaveProperty("provider");
     expect(update({ provider: "openrouter" })).not.toHaveProperty("provider");
     expect(update({ medium: "text" })).toMatchObject({ provider: "vercel" });
+  });
+});
+
+describe("canvas_write with nodes off", () => {
+  const node: CanvasRecord = { id: "shape:n", typeName: "shape", type: "node", x: 0, y: 0, index: "a1", parentId: PAGE, props: { w: 380, h: 360, medium: "image", model: "", params: {}, instruction: "", versions: [], currentVersionId: null }, meta: { ref: "101" } };
+  const wire: CanvasRecord = { id: "shape:w", typeName: "shape", type: "wire", x: 0, y: 0, index: "a2", parentId: PAGE, props: { from: "shape:p", to: "shape:n", role: "prompt" }, meta: {} };
+  const records = [prompt("p", "100", "a fox"), node, wire];
+  const off = (ops: unknown) => prepareBatch(ops, context(records, {}, NO_FEATURES));
+
+  it("refuses to create or update a node or a wire, plainly", () => {
+    const refusal = (ops: unknown) => {
+      const result = off(ops);
+      return result.ok ? undefined : result.error;
+    };
+    expect(refusal([{ type: "create", id: "new:n2", kind: "node", x: 0, y: 0, props: { medium: "image" } }])).toBe("create: Nodes are not available in this build.");
+    expect(refusal([{ type: "create", id: "new:w2", kind: "wire", x: 0, y: 0, props: { from: "p", to: "n", role: "reference" } }])).toBe("create: Nodes are not available in this build.");
+    expect(refusal([{ type: "update", id: "n", props: { instruction: "a cat" } }])).toBe("update: Nodes are not available in this build.");
+    expect(refusal([{ type: "update", id: "w", props: { role: "reference" } }])).toBe("update: Nodes are not available in this build.");
+  });
+
+  it("still moves, resizes and deletes them", () => {
+    expect(off([{ type: "move", id: "n", x: 40, y: 40 }]).ok).toBe(true);
+    expect(off([{ type: "resize", id: "n", w: 400, h: 400 }]).ok).toBe(true);
+    const deleted = off([{ type: "delete", id: "n" }]);
+    expect(deleted.ok && deleted.remove).toEqual(["shape:n", "shape:w"]);
   });
 });

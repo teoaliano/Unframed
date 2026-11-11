@@ -2,7 +2,8 @@ import { useRef, useState } from "react";
 import { TldrawUiButtonIcon, TldrawUiToolbar, TldrawUiToolbarButton, useEditor } from "tldraw";
 import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup } from "~/components/ui/menu";
 import { addShape, kindOfAddAction, viewportCentre } from "../canvas/addShapes.ts";
-import { ADD_ICONS, ADD_SECTIONS } from "./addItems.tsx";
+import { useFeatures } from "../features.ts";
+import { ADD_ICONS, addSections } from "./addItems.tsx";
 import { useSlots } from "./slots.ts";
 
 export const ToolbarEnd = () => {
@@ -10,6 +11,7 @@ export const ToolbarEnd = () => {
   const { agentButton: Agent, kitButton: Kit, libraryButton: Library } = useSlots();
   const [open, setOpen] = useState(false);
   const add = useRef<HTMLButtonElement>(null);
+  const features = useFeatures();
   return (
     <TldrawUiToolbar orientation="horizontal" label="Unframed" data-unframed-toolbar-group="">
       {Agent && <Agent />}
@@ -20,7 +22,7 @@ export const ToolbarEnd = () => {
       </TldrawUiToolbarButton>
       <Menu open={open} onOpenChange={setOpen}>
         <MenuPopup anchor={add} side="top" align="end" sideOffset={8} className="w-38 min-w-0" finalFocus={() => editor.getEditingShapeId() === null}>
-          {ADD_SECTIONS.map((section) => (
+          {addSections(features).map((section) => (
             <MenuGroup key={section.heading}>
               <MenuGroupLabel>{section.heading}</MenuGroupLabel>
               {section.items.map((item) => {

@@ -69,6 +69,7 @@ export interface AdapterContext {
   readonly registeredTools: () => ReadonlyArray<string>;
   readonly log: (chatId: string, line: string) => void;
   readonly dataDir: string;
+  readonly systemPrompt: string;
   /** The approval detail of an in-app `generate`: its shapes, medium and estimate (spec 14). */
   readonly generationDetail?: (chatId: string, input: Readonly<Record<string, unknown>>, tool?: string) => Promise<string | undefined>;
 }

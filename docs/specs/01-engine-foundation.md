@@ -135,6 +135,7 @@ Hosting variables (read from the process environment only, never written to `.en
 | `UNFRAMED_OAUTH_BOUNCE` | the public page the OpenRouter consent screen redirects through (spec 10); unset means direct loopback |
 | `UNFRAMED_CHROME_PATH` | the first Chromium binary motion rendering tries (spec 09) |
 | `UNFRAMED_AGENT_DEBUG` | any non-empty value logs every stderr line of a local agent session as `  [agent <chat id>] <line>` (spec 07) |
+| `UNFRAMED_FEATURES` | turns on features that production builds leave off: a comma list of `nodes` (spec 16) and `element-editing` (spec 18), or `all` for both. Names are trimmed and case does not matter; an unknown name is ignored. Unset means both off, which is what the desktop shell runs, since it sets nothing. `pnpm dev` sets `all` when the variable is unset, and the test harness starts every engine with `all` unless a test removes it |
 
 Why hosting variables stay out of `.env.example`: `.env` overrides the environment, so a line left present but empty there would shadow the value the shell sets.
 
@@ -259,11 +260,11 @@ Schemas (in contracts):
 
 ```
 Settings { hasKey: boolean, keyHint: string, imageModel: string, textModel: string, videoModel: string, outputDir: string, claudePath: string, codexPath: string, claudeConfigDir: string, previewPort: number }
-Health   = Settings & { ok: true, client: "mac" | "device" }
+Health   = Settings & { ok: true, client: "mac" | "device", features: Array<"nodes" | "element-editing"> }
 SettingsPatch { key?, imageModel?, textModel?, videoModel?, outputDir?, claudePath?, codexPath?, claudeConfigDir?: string }
 ```
 
-`client` (spec 23) says which listener this socket came through: `"mac"` for the API listener, `"device"` for the iPad listener. It is how the web learns it is a device client; it is stamped by the engine and never read from a payload. `keyHint` is the last 4 characters of the key, or `''`. `outputDir` is the resolved absolute path. No response anywhere carries the key itself. The preferences methods (`preferences.get`, `preferences.set`, `preferences.subscribe`) are defined under "Preferences store" below. Later specs add methods to the same group (spec 10 adds `settings.removeKey`, the `oauth.*` methods, `projects.rename`, `projects.delete`).
+`features` lists the features `UNFRAMED_FEATURES` turned on, in the order `nodes`, `element-editing`. The web reads it once at startup, with `client`, and shows or hides what each feature owns. `client` (spec 23) says which listener this socket came through: `"mac"` for the API listener, `"device"` for the iPad listener. It is how the web learns it is a device client; it is stamped by the engine and never read from a payload. `keyHint` is the last 4 characters of the key, or `''`. `outputDir` is the resolved absolute path. No response anywhere carries the key itself. The preferences methods (`preferences.get`, `preferences.set`, `preferences.subscribe`) are defined under "Preferences store" below. Later specs add methods to the same group (spec 10 adds `settings.removeKey`, the `oauth.*` methods, `projects.rename`, `projects.delete`).
 
 ### Settings store
 
@@ -513,6 +514,7 @@ A good test drives the system through one of the three seams in 00-index and ass
 53. Open-project registry: after `projects.create` opened a project's database, SIGTERM closes it through `closeAll()` within the shutdown budget, leaving no `unframed.sqlite-wal` file behind. Later specs test their own closers through the operations that call `close(project)` (spec 10). Seam: engine.
 54. Preferences store: `preferences.set` then `preferences.get` round-trips a value; `null` deletes it; a bad key and an oversized value are refused with their messages; a second socket's `preferences.subscribe` sees the change; an unparsable `preferences.json` reads as `{}` and the next set replaces it; a value survives an engine restart on a new port. Seam: engine.
 55. Dev share relay decision table: share origins accepted and refused (http, path, query, fragment, credentials, empty); a request through the share origin is readdressed to loopback, case-insensitively, including a navigation with no `Origin`; a foreign `Origin` or `Host` (another site, another port, a suffix of the share host, `null`) is forwarded unchanged and the loopback guard refuses it; loopback requests are left alone. Seam: domain.
+56. Feature flags: `readFeatures` reads `UNFRAMED_FEATURES` (unset, empty, one name, both, `all`, mixed case and spaces, an unknown name ignored) (domain); `server.health.features` lists what the engine was started with (engine). Seam: domain and engine.
 
 ## Out of Scope
 

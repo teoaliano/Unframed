@@ -396,6 +396,15 @@ Spec 09's editor, with these changes. Contract 9 holds: everything below runs in
 - The dials contract gains one sentence: when a parameter sets a style or a text, assign its value straight to it (`el.style.color = v.accent`, `el.style.fontSize = v.size + "px"`), so the person can edit it in the Design tab.
 - `page_read` and `motion_read` return the current file, so the person's edits are in what the agent reads. The change note (spec 07) already counts a person's commit as the person's change.
 
+### Behind the element-editing flag
+
+The editor's part of this spec is behind the `element-editing` feature (spec 01, `UNFRAMED_FEATURES`). Production desktop builds leave it off; `pnpm dev` and the test harness turn it on. With it off, the editor is the preview, the chat and Parameters only:
+
+- **The editor.** It opens in Interact mode and stays there. There is no Mode toggle, V and I do nothing, no Design or Layers tab (the right column's tab list holds Parameters alone, and is the panel it opens on), no Tell the agent and no Ask the agent to make this editable. The frame loads without the edit bridge, so there is no edit overlay, and the source tree is not read and no prepare runs on open. A component's editor, which has no Parameters, shows `Element editing is not available in this build.` in the right column. The motion timeline (spec 21) is not shown either, since its edits are source edits; the motion plays with HyperFrames' own controls.
+- **The canvas.** Dropping an image on a live page swaps nothing: the drop handler is not installed and no drop outline shows.
+- **The engine.** `artifact.edit` and `artifact.prepareEdit` answer `unavailable`: `Element editing is not available in this build.` `artifact.sourceTree` and `artifact.images` still answer.
+- **What stays.** Element ids are still stamped on every write, locks a person set before are still kept and still refuse the agent's writes that break them, and the agent's element context fills only when elements are selected, which cannot happen here. The canvas Design panel is not part of this flag.
+
 ### Rules this spec bends
 
 00-index requires a spec that bends a shared rule to say so and why. This one bends the following, and keeps the rest.
@@ -474,6 +483,8 @@ A good test drives one of the three seams in 00-index and asserts on what it exp
 43. The Design panel on a prompt: it replaces tldraw's style panel; font, size, weight, align, colour and opacity land in the room and on screen. Seam: browser
 44. The Design panel on a rectangle and a sticky note: label size, corner radius, border width, background (which sets `fill` to solid) and `None`, vertical align, and a note's background. Seam: browser
 45. The Design panel hides for media, shows for a drawing tool with `Next drawing` even with an image still selected, and a stroke width set there lands on the next drawing. Seam: browser
+46. Element-editing flag, engine: with `UNFRAMED_FEATURES` unset, `artifact.edit` and `artifact.prepareEdit` refused with their sentence. Seam: engine.
+47. Element-editing flag, browser: with `UNFRAMED_FEATURES` unset, the editor opens on a page with the frame showing it, no Mode toggle, a tab list of Parameters alone, and V doing nothing. Seam: browser.
 
 ## Out of Scope
 

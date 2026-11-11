@@ -360,6 +360,17 @@ Validation runs for the whole chain before the first call. `chain.run` and `node
 - **Selection.** The selection preamble (spec 07) names a node `node <id> ("<label>")`.
 - **Descriptions.** The tool descriptions in `assets/prompts/tool-descriptions.md` and the sentence on refs in `assets/prompts/agent-system.md` change at build time to name nodes and wires, as spec 15 does for audio. `node_run`'s description is new and written in the same file.
 
+### Behind the nodes flag
+
+Nodes are behind the `nodes` feature (spec 01, `UNFRAMED_FEATURES`). Production desktop builds leave it off; `pnpm dev` and the test harness turn it on. With it off, every project still loads: node and wire shapes stay registered and drawn, and a person can select, move, resize and delete them (deleting a node still deletes its wires). Nothing creates, runs or rewires one:
+
+- **Adding.** Node is left out of the add menu and the canvas context menu's Inputs (`inputItems`). Pasting, duplicating or inserting a preset drops node and wire shapes from what lands.
+- **The card.** A selected node never goes live: it shows its summary (current result and instruction) and no editor, so there is no tray, instruction box, input reordering, Run, Run downstream, Cmd/Ctrl+Enter or versions strip. The wire handle and the chain confirmation are not mounted. A wire's role chip shows its role and opens no menu.
+- **The toolbar.** No Run, Run downstream or Run chain button, and a selection of nodes is not counted.
+- **The library.** Flows are not listed, the Flows filter is gone, and a flow is never inserted. "Add to library" on a selection holding nodes saves the other shapes as an ordinary preset and leaves the nodes and wires out; a selection of nodes and wires alone shows the item disabled.
+- **The engine.** `node.run`, `chain.run`, `node.useVersion`, `node.removeVersion` and `flow.save` answer `unavailable`: `Nodes are not available in this build.` `node.renders` still answers. Chain reports are not watched.
+- **The agent.** `node_run` is not registered, so it is in neither the in-app list, Claude's allowed tools nor the outside list. The system prompt is built without the node sentence and without "node" in the kinds that have a ref. `canvas_read`'s description says a node or wire from another build is reported as it is and is read-only; `canvas_write`'s drops the node and wire kinds and says they can be moved, resized and deleted, never created or updated. `canvas_write` refuses `create` and `update` of a node or wire with `create: Nodes are not available in this build.` (or `update: ...`); move, resize, reparent, rename and delete still work.
+
 ### Rules this spec bends
 
 00-index requires a spec that bends a shared rule to say so and why. This one bends the following, and keeps the rest.
@@ -426,6 +437,9 @@ A good test drives one of the three seams in 00-index and asserts on what it exp
 30. Page inputs, browser: the role menu on a page wire offers HTML, Picture and Both; the Files choice appears on a page wire. Seam: browser.
 31. Evaluation, not a test (it spends money, so the person runs the paid calls). Before tasks 28 and 29 set their defaults: a set of five pages (a single-file prototype, a motion composition's page, a multi-file prototype with linked CSS and a second page, a text-heavy layout, an SVG or canvas drawing); each sent to the image and video models the composer offers, as HTML, as a picture, and as both, and with linked files alone and with them; each answer scored against its page by a written rubric; results in `docs/research/page-inputs.md`; then `pageSendDefaults` and the default `files` set from them. The agent may prepare the page set and the harness when the build starts; the person runs the paid calls.
 32. Node provider (spec 22): `nodeProvider`, the fingerprint and `nodeListEstimate` (domain); an image and a text node run through the Vercel stub with the provider on the sidecar and recipe, a node refused without the Vercel key, `node_run`'s estimate and its refusal under a limit, and `canvas_write`'s provider rules (engine and domain); the node's provider switch, Vercel's catalogue and price, and a chain priced from it (browser).
+33. Nodes flag, domain: `inputItems` and the context menu without Node when off; Add to library judged without nodes and wires; `canvas_write` refusing to create or update a node or wire and still moving, resizing and deleting them; the system prompt and canvas tool descriptions without nodes. Seam: domain.
+34. Nodes flag, engine: with `UNFRAMED_FEATURES` unset, `node_run` absent from the tool list, `canvas_write`'s description without nodes, and `node.run`, `chain.run`, `node.useVersion`, `node.removeVersion` and `flow.save` refused while `node.renders` answers. Seam: engine.
+35. Nodes flag, browser: with `UNFRAMED_FEATURES` unset, no Node in the add menu or the context menu, no wire handle on a selected shape, a selected node that stays a summary with no Run in the toolbar, a role chip with no menu, and Delete removing the node and its wire. Seam: browser.
 
 ## Out of Scope
 

@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import http from "node:http";
 import { join } from "node:path";
 import readline from "node:readline";
+import { readFeatures } from "@unframed/domain";
 import { unframedToolCatalogue } from "./agent/toolCatalogue.ts";
 import { outsideInitializeResult, outsideToolList, ROOTS_HEADER } from "./agent/mcp.ts";
 import { FILE_ADD } from "./agent/outsideTools.ts";
@@ -27,7 +28,7 @@ const argument = (name: string): string | undefined => {
 const dataDir = argument("--data-dir") ?? "";
 const token = process.env.UNFRAMED_MCP_TOKEN ?? "";
 /** The offline copy of the outside list: the same functions the engine answers with (spec 14). */
-const offlineTools = () => outsideToolList(unframedToolCatalogue());
+const offlineTools = () => outsideToolList(unframedToolCatalogue(readFeatures(process.env.UNFRAMED_FEATURES)));
 
 /** The engine's port, when the discovery file names a live process. */
 const discover = (): number | undefined => {
