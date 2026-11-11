@@ -2,10 +2,10 @@ import { useState } from "react";
 import { ProjectTab, ProjectTabs, ProjectTabsList } from "~/components/ui/project-tabs";
 import { Demos, Section } from "../frame.tsx";
 
-const Strip = ({ names, status }: { readonly names: ReadonlyArray<string>; readonly status?: Readonly<Record<string, "running" | "finished" | "dot">> }) => {
+const Strip = ({ names, status }: { readonly names: ReadonlyArray<string>; readonly status?: Readonly<Record<string, "running" | "finished" | "needs-you">> }) => {
   const [active, setActive] = useState(names[0]);
   return (
-    <div className="flex h-9 overflow-hidden rounded-xl border bg-background">
+    <div className="flex h-9 overflow-hidden bg-background">
       <ProjectTabs value={active ?? null} onValueChange={(name) => setActive(String(name))}>
         <ProjectTabsList aria-label="Open projects">
           {names.map((name) => (

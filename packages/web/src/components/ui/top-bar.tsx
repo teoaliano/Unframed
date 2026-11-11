@@ -8,7 +8,7 @@ import { ProjectTab, ProjectTabs, ProjectTabsList } from "~/components/ui/projec
 import { useTabReorder, type TabPlan } from "~/components/ui/tab-reorder";
 import { cn } from "~/lib/utils";
 
-export type TopBarStatus = "running" | "finished" | "dot";
+export type TopBarStatus = "running" | "finished" | "needs-you";
 
 export interface TopBarTab {
   readonly name: string;
@@ -258,7 +258,7 @@ export const TopBar = ({
           {newProject}
         </div>
       </div>
-      <div data-slot="top-bar-drag" className={`${positioned}h-9 min-w-8 flex-1 ${DRAG}`} />
+      {layout === "flow" && <div data-slot="top-bar-drag" className={`relative h-9 min-w-8 flex-1 ${DRAG}`} />}
       <div data-slot="top-bar-end" {...region(`${positioned}flex h-9 shrink-0 items-center ${DRAG}`, regions.end)}>
         {!windows && <span className="flex h-9 items-center pe-3">{settingsNode}</span>}
         {windows && controls !== "none" && (

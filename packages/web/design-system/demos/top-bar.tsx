@@ -100,7 +100,7 @@ export default function TopBarDemo() {
       <Section title="Several tabs, with status" flushTop>
         <Bar
           platform={platform}
-          initial={[{ name: "default" }, { name: "beta", status: "running" }, { name: "gamma", status: "finished" }, { name: "delta", status: "dot" }]}
+          initial={[{ name: "default" }, { name: "beta", status: "running" }, { name: "gamma", status: "finished" }, { name: "delta", status: "needs-you" }]}
           initialActive="gamma"
         />
       </Section>
