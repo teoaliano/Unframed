@@ -41,7 +41,9 @@
     ],
     "asar": true,
     "asarUnpack": [
-      "node_modules/**"
+      "node_modules/unframed/server/mcp.js",
+      "node_modules/@esbuild/**",
+      "node_modules/@img/**"
     ],
     "mac": {
       "target": [

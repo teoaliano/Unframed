@@ -146,26 +146,31 @@ jobs:
 
       # The check that would have caught 0.0.2, which signed, notarized, published
       # and then died on launch with ERR_MODULE_NOT_FOUND: Cannot find package
-      # 'express'. Every step above proves something about the BUNDLE; none of them
-      # ever ran the thing. npm hoists the engine's dependencies to the top-level
-      # node_modules, so unpacking only node_modules/unframed left them inside
-      # app.asar -- where a forked Node process cannot see them, and where ESM
-      # cannot look at all, since Electron patches require() for asar but not the
-      # ESM loader. So: start the packaged engine the way main.js forks it, and
-      # require its banner. asarUnpack is shared config, so proving it on mac
-      # proves the packing for Windows too. Runs on PRs -- that is the point.
+      # 'express'. The engine sat in app.asar.unpacked while npm had hoisted its
+      # dependencies into app.asar, and a module outside the archive cannot resolve
+      # one inside it. The engine now runs from inside app.asar beside them, and
+      # only native binaries and the MCP shim are unpacked. So: start the packaged
+      # engine the way main.js forks it and require its banner, run esbuild the way
+      # the engine reaches it, and check the shim path that existing Claude Code and
+      # Codex setups call. asarUnpack is shared config, so proving it on mac proves
+      # the packing for Windows too. Runs on PRs -- that is the point.
       - name: Prove the packaged engine actually starts
         if: runner.os == 'macOS'
         shell: bash
         run: |
           APP="$PWD/dist/mac-arm64/Unframed.app"
-          ENGINE="$APP/Contents/Resources/app.asar.unpacked/node_modules/unframed/server/index.js"
+          RES="$APP/Contents/Resources"
+          ESBUILD="$RES/app.asar.unpacked/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+          test -f "$RES/app.asar.unpacked/node_modules/unframed/server/mcp.js"
+          ELECTRON_RUN_AS_NODE=1 ESBUILD_BINARY_PATH="$ESBUILD" "$APP/Contents/MacOS/Unframed" -e \
+            "require('$RES/app.asar/node_modules/esbuild').buildSync({ stdin: { contents: 'export const a: number = 1', loader: 'ts' }, write: false })"
           ELECTRON_RUN_AS_NODE=1 \
+          ESBUILD_BINARY_PATH="$ESBUILD" \
           UNFRAMED_DATA_DIR="$RUNNER_TEMP/engine-data" \
-          UNFRAMED_CLIENT_DIST="$APP/Contents/Resources/app.asar.unpacked/node_modules/unframed/client/dist" \
+          UNFRAMED_CLIENT_DIST="$RES/app.asar/node_modules/unframed/client/dist" \
           OUTPUT_DIR="$RUNNER_TEMP/engine-out" \
           PORT=0 \
-          "$APP/Contents/MacOS/Unframed" "$ENGINE" > "$RUNNER_TEMP/engine.log" 2>&1 &
+          "$APP/Contents/MacOS/Unframed" "$RES/app.asar/node_modules/unframed/server/index.js" > "$RUNNER_TEMP/engine.log" 2>&1 &
           ENGINE_PID=$!
           for i in $(seq 1 30); do
             if grep -q 'Unframed server' "$RUNNER_TEMP/engine.log" 2>/dev/null; then break; fi
@@ -208,16 +213,26 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          UNPACKED="dist/mac-arm64/Unframed.app/Contents/Resources/app.asar.unpacked"
-          test -f "$UNPACKED/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs"
-          if find "$UNPACKED" -path "*@anthropic-ai/claude-agent-sdk-*" -name claude | grep .; then
+          RES="dist/mac-arm64/Unframed.app/Contents/Resources"
+          npx asar list "$RES/app.asar" > "$RUNNER_TEMP/asar.txt"
+          find "$RES/app.asar.unpacked" -type f >> "$RUNNER_TEMP/asar.txt"
+          grep -q '/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs$' "$RUNNER_TEMP/asar.txt"
+          if grep -E '@anthropic-ai/claude-agent-sdk-[^/]+/claude$' "$RUNNER_TEMP/asar.txt"; then
             echo "The bundled CLI is back in the bundle; the files exclusion stopped matching." >&2
             exit 1
           fi
           # Sourcemaps and type declarations are read by debuggers and compilers, not
           # by a packaged app -- 78MB of them shipped until they were excluded.
-          if find "$UNPACKED" \( -name '*.js.map' -o -name '*.d.ts' \) | head -5 | grep .; then
+          if grep -E '\.(js\.map|d\.ts)$' "$RUNNER_TEMP/asar.txt" | head -5 | grep .; then
             echo "Build artifacts are back in the bundle; the files exclusions stopped matching." >&2
+            exit 1
+          fi
+          # Every unpacked file is unpacked, signature-checked and swapped on each
+          # update. Unpacking all of node_modules made that 5,000 files.
+          UNPACKED_FILES=$(find "$RES/app.asar.unpacked" -type f | wc -l)
+          echo "unpacked files: $UNPACKED_FILES"
+          if [ "$UNPACKED_FILES" -gt 100 ]; then
+            echo "asarUnpack has widened again; unpack only native binaries and the MCP shim." >&2
             exit 1
           fi
 

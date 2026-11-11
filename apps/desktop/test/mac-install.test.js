@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { createMacInstaller } = require('../src/updates/mac-install');
+const { createMacInstaller, relaunchedAfter, waitForExit } = require('../src/updates/mac-install');
 const { quietLog } = require('./fakes');
 
 const DR = 'identifier "com.teoaliano.unframed" and anchor apple generic and certificate leaf[subject.OU] = N2X3SV5FDD';
@@ -34,6 +34,7 @@ async function setup({ appName = 'Unframed.app', fromVersion = '1.0.0', zipVersi
       if (!verifies) throw new Error('code object is not signed at all');
       return { stdout: '' };
     }
+    if (cmd === 'open') return { stdout: '' };
     if (cmd === 'plutil') {
       return { stdout: fs.readFileSync(path.join(args.at(-1), '..', 'version'), 'utf8') };
     }
@@ -110,4 +111,21 @@ test('cleanup removes what an earlier install left beside the app', async () => 
   await ctx.installer.cleanup();
   assert.deepEqual(ctx.leftovers(), []);
   assert.equal(ctx.versionOnDisk(), '1.1.0');
+});
+
+test('the relaunch goes through LaunchServices as a new instance that knows which process to wait for', async () => {
+  const ctx = await setup();
+  await ctx.installer.relaunch(4242);
+  assert.deepEqual(ctx.calls.at(-1), ['open', '-n', ctx.appPath, '--args', '--unframed-relaunch-after=4242']);
+  assert.equal(relaunchedAfter(['/x/Unframed', '--unframed-relaunch-after=4242']), 4242);
+  assert.equal(relaunchedAfter(['/x/Unframed']), null);
+  assert.equal(relaunchedAfter(['/x/Unframed', '--unframed-relaunch-after=nope']), null);
+});
+
+test('the relaunched instance waits for the old process to exit, but not forever', async () => {
+  let checks = 0;
+  const alive = () => ++checks < 3;
+  assert.equal(await waitForExit(4242, { alive, everyMs: 1, timeoutMs: 1000 }), true);
+  assert.equal(checks, 3);
+  assert.equal(await waitForExit(4242, { alive: () => true, everyMs: 1, timeoutMs: 20 }), false);
 });
