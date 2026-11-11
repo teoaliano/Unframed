@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { changeNote, outsideChatTitle, outsideTurn, type ActivityInput, type Chat, type ChatCommand } from "@unframed/domain";
+import { changeNote, outsideTurn, type ActivityInput, type Chat, type ChatCommand } from "@unframed/domain";
 import type { ConnectionRecord } from "../agentConnections/book.ts";
 import { errorText } from "../log.ts";
 import type { ChatEngine } from "./chatEngine.ts";
@@ -35,15 +35,15 @@ export interface OutsideCall {
 
 export const latestTurnId = (engine: ChatEngine, chatId: string): string | null => engine.chat(chatId)?.latestTurn?.turnId ?? null;
 
-/** The chat an outside session's calls into one project show in (spec 14, "The outside chat"). */
-export const outsideChatOf = (chats: ReadonlyArray<Chat>, connectionId: string, sessionId: string): Chat | undefined =>
+/** The chat every session of one connection shows its calls into one project in (spec 14, "The outside chat"). */
+export const outsideChatOf = (chats: ReadonlyArray<Chat>, connectionId: string): Chat | undefined =>
   chats
-    .filter((chat) => chat.deletedAt === null && chat.outside?.connectionId === connectionId && chat.outside.sessionId === sessionId)
+    .filter((chat) => chat.deletedAt === null && chat.outside?.connectionId === connectionId)
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))[0];
 
 /**
  * The outside calls (spec 14): one call from an outside session into one project. It finds or makes
- * the session's chat there, opens or continues its turn by the idle rule, records the call's
+ * the connection's chat there, opens or continues its turn by the idle rule, records the call's
  * activities, runs the tool in that chat, and settles the turn once it has been quiet for the idle time.
  */
 export class OutsideChats {
@@ -56,6 +56,7 @@ export class OutsideChats {
   private readonly inFlight = new Map<string, number>();
   /** Chats whose settle was asked for while a run was in flight: they settle when the last run ends. */
   private readonly deferred = new Set<string>();
+  private readonly liveSessions = new Map<string, Set<string>>();
 
   private readonly host: OutsideHost;
   private readonly idleMs: number;
@@ -121,11 +122,18 @@ export class OutsideChats {
     return changeNote(await this.host.changeLog(agent.slug, since).catch(() => []), chatId);
   }
 
-  /** Settles the open outside turns of one session in every project it touched, and tells each chat it ended. */
+  /**
+   * Ends one session in every chat it called into. A chat whose other sessions are still live keeps
+   * its turn open; the last session to end settles it and tells the chat.
+   */
   async endSession(sessionId: string, agents: ReadonlyArray<OutsideAgent>): Promise<void> {
     for (const agent of agents) {
       for (const chat of agent.engine.chats()) {
-        if (chat.deletedAt !== null || chat.outside?.sessionId !== sessionId) continue;
+        const live = this.liveSessions.get(chat.id);
+        if (chat.deletedAt !== null || chat.outside === undefined || live?.has(sessionId) !== true) continue;
+        live.delete(sessionId);
+        if (live.size > 0) continue;
+        this.liveSessions.delete(chat.id);
         await this.settle(agent, chat.id);
         await this.note(agent, chat.id, "outside.session-ended", "This session ended.");
       }
@@ -137,6 +145,7 @@ export class OutsideChats {
     for (const agent of agents) {
       for (const chat of agent.engine.chats()) {
         if (chat.deletedAt !== null || chat.outside?.connectionId !== connectionId) continue;
+        this.liveSessions.delete(chat.id);
         await this.settle(agent, chat.id);
         await this.note(agent, chat.id, "outside.disconnected", "Disconnected. This connection was revoked in Settings.");
       }
@@ -156,12 +165,12 @@ export class OutsideChats {
   private async bind(connection: ConnectionRecord, sessionId: string, agent: OutsideAgent): Promise<string> {
     const now = this.now();
     const createdAt = new Date(now).toISOString();
-    let chat = outsideChatOf(agent.engine.chats(), connection.id, sessionId);
+    let chat = outsideChatOf(agent.engine.chats(), connection.id);
     if (chat === undefined) {
       const chatId = randomUUID();
       await this.host.command(agent, chatId, {
         type: "thread.outside.create",
-        title: outsideChatTitle(connection.name, new Date(now)),
+        title: connection.name,
         outside: { connectionId: connection.id, sessionId, client: connection.client },
         createdAt,
       });
@@ -169,6 +178,7 @@ export class OutsideChats {
       if (chat === undefined) throw new Error("Could not start the outside chat for this call.");
     }
     const chatId = chat.id;
+    this.liveSessions.set(chatId, (this.liveSessions.get(chatId) ?? new Set()).add(sessionId));
     const action = outsideTurn({
       openTurn: chat.latestTurn?.state === "running",
       lastCallAt: this.lastCallAt.get(chatId),

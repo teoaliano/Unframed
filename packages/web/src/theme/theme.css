@@ -509,9 +509,10 @@
   /* Unframed: bottom-left toasts sit above tldraw's zoom controls (spec 02). */
   --toast-footer-offset: 2rem;
   --parameters-dock-width: 380px;
-  /* Unframed: while the docked agent rail is open, bottom-left toasts start past its 380 px, clear of its composer (spec 08). */
+  --agent-rail-width: 380px;
+  /* Unframed: while the docked agent rail is open, bottom-left toasts start past it, clear of its composer (spec 08). */
   &:has([data-slot="docked-rail"][data-state="open"]) {
-    --toast-start-offset: 380px;
+    --toast-start-offset: var(--agent-rail-width);
   }
 
   @variant dark {
@@ -521,7 +522,7 @@
 
 /* Unframed: with the chat rail docked open, bottom-left toasts start past it, so they never cover the composer (spec 08). */
 body:has(aside[aria-label="Agent"][data-state="open"]:not([data-embedded])) [data-slot="toast-viewport"][data-position*="left"] {
-  left: calc(380px + var(--toast-inset));
+  left: calc(var(--agent-rail-width) + var(--toast-inset));
 }
 
 @theme inline {

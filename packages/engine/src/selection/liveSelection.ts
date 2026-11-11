@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { SelectionApply } from "@unframed/contracts";
+import type { SelectionApply, SelectionSnapshotResult } from "@unframed/contracts";
 import * as Context from "effect/Context";
 import * as Layer from "effect/Layer";
 
@@ -8,6 +8,14 @@ export const NO_WINDOW_NOTE = "Unframed has no window open on this project, so t
 
 /** How long a `canvas_select` waits for the window to report the selection it was asked for. */
 export const APPLY_WAIT_MS = 2000;
+
+/** How long a `canvas_snapshot` waits for the window to draw the area. */
+export const SNAPSHOT_WAIT_MS = 15000;
+
+export const SNAPSHOT_NO_WINDOW = "Unframed has no window open on this project, so there is nothing to look at. Ask the person to open the project in Unframed.";
+export const SNAPSHOT_TIMED_OUT = "The Unframed window did not draw the snapshot in time. Try a smaller area.";
+
+export type SnapshotAnswer = { readonly png: string; readonly width: number; readonly height: number } | { readonly error: string };
 
 interface WindowState {
   /** The most recent report's order: the window that changed most recently has the highest. */
@@ -24,6 +32,7 @@ interface WindowState {
  */
 export class LiveSelection {
   private readonly projects = new Map<string, Map<string, WindowState>>();
+  private readonly snapshots = new Map<string, (answer: SnapshotAnswer) => void>();
   private counter = 0;
 
   /** A window opens its selection stream. The returned function drops the window. */
@@ -74,6 +83,40 @@ export class LiveSelection {
     target.listen!({ kind: "apply", requestId: randomUUID(), shapeIds: [...shapeIds] });
     await Promise.race([reported, new Promise<void>((resolve) => setTimeout(resolve, APPLY_WAIT_MS).unref())]);
     return { shapeIds: target.shapeIds ? [...target.shapeIds] : [] };
+  }
+
+  /** Asks the most recently changed window to draw an area of the canvas, as the person sees it. */
+  async snapshot(project: string, bounds: { x: number; y: number; w: number; h: number }, scale: number, waitMs = SNAPSHOT_WAIT_MS): Promise<SnapshotAnswer> {
+    const target = this.listenerOf(project);
+    if (target === undefined) return { error: SNAPSHOT_NO_WINDOW };
+    const requestId = randomUUID();
+    let timer: NodeJS.Timeout | undefined;
+    const answered = new Promise<SnapshotAnswer>((resolve) => {
+      this.snapshots.set(requestId, resolve);
+      timer = setTimeout(() => resolve({ error: SNAPSHOT_TIMED_OUT }), waitMs);
+      timer.unref();
+    });
+    target.listen!({ kind: "snapshot", requestId, bounds, scale });
+    const answer = await answered;
+    clearTimeout(timer);
+    this.snapshots.delete(requestId);
+    return answer;
+  }
+
+  /** A window answers a snapshot request. An answer nobody waits for any more is dropped. */
+  snapshotResult(result: SelectionSnapshotResult): void {
+    const resolve = this.snapshots.get(result.requestId);
+    if (resolve === undefined) return;
+    if (result.png !== undefined && result.width !== undefined && result.height !== undefined) resolve({ png: result.png, width: result.width, height: result.height });
+    else resolve({ error: result.error ?? "The Unframed window could not draw the snapshot." });
+  }
+
+  private listenerOf(project: string): WindowState | undefined {
+    let target: WindowState | undefined;
+    for (const state of this.projects.get(project)?.values() ?? []) {
+      if (state.listen !== undefined && (target === undefined || state.seq > target.seq)) target = state;
+    }
+    return target;
   }
 
   private windowsOf(project: string): Map<string, WindowState> {

@@ -12,6 +12,7 @@ export interface PanelPrefs {
   readonly y?: number;
   readonly w?: number;
   readonly h?: number;
+  readonly dockW?: number;
 }
 
 export interface PanelRoom {
@@ -25,14 +26,15 @@ const finite = (value: unknown): value is number => typeof value === "number" &&
 
 export const readPanelPrefs = (value: unknown): PanelPrefs => {
   if (typeof value !== "object" || value === null) return { mode: "float" };
-  const { mode, x, y, w, h } = value as Record<string, unknown>;
-  const read: { mode: PanelMode; x?: number; y?: number; w?: number; h?: number } = { mode: mode === "dock" ? "dock" : "float" };
+  const { mode, x, y, w, h, dockW } = value as Record<string, unknown>;
+  const read: { mode: PanelMode; x?: number; y?: number; w?: number; h?: number; dockW?: number } = { mode: mode === "dock" ? "dock" : "float" };
   if (finite(x) && finite(y)) {
     read.x = x;
     read.y = y;
   }
   if (finite(w)) read.w = w;
   if (finite(h)) read.h = h;
+  if (finite(dockW)) read.dockW = dockW;
   return read;
 };
 
@@ -51,4 +53,31 @@ export const panelSize = (want: { readonly w?: number | undefined; readonly h?: 
   const w = Math.round(between(want.w ?? PANEL_WIDTH, PANEL_MIN_WIDTH, Math.min(PANEL_MAX_WIDTH, room.w - 2 * PANEL_MARGIN)));
   if (want.h === undefined) return { w };
   return { w, h: Math.round(between(want.h, PANEL_MIN_HEIGHT, room.h - 2 * PANEL_MARGIN)) };
+};
+
+export type PanelEdge = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
+
+export interface PanelBox {
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+  readonly h: number;
+}
+
+export const resizePanel = (start: PanelBox, edge: PanelEdge, dx: number, dy: number, room: PanelRoom): PanelBox => {
+  const maxW = Math.min(PANEL_MAX_WIDTH, room.w - 2 * PANEL_MARGIN);
+  const right = start.x + start.w;
+  const bottom = start.y + start.h;
+  let { x, y, w, h } = start;
+  if (edge.includes("e")) w = between(start.w + dx, PANEL_MIN_WIDTH, Math.min(maxW, room.x + room.w - PANEL_MARGIN - start.x));
+  if (edge.includes("w")) {
+    x = between(start.x + dx, Math.max(room.x + PANEL_MARGIN, right - maxW), right - PANEL_MIN_WIDTH);
+    w = right - x;
+  }
+  if (edge.includes("s")) h = between(start.h + dy, PANEL_MIN_HEIGHT, room.y + room.h - PANEL_MARGIN - start.y);
+  if (edge.includes("n")) {
+    y = between(start.y + dy, room.y + PANEL_MARGIN, bottom - PANEL_MIN_HEIGHT);
+    h = bottom - y;
+  }
+  return { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
 };
