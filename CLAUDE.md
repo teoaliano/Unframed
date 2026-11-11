@@ -20,6 +20,7 @@ This codebase replaced an older Unframed (a React Flow canvas with output nodes)
 3. **Four test seams, no others** (defined in the index): the engine seam, the domain seam, the browser seam, and the shell seam for the desktop app in `apps/desktop` (`npm test` there: `node --test` against fakes of Electron and electron-updater, plus `e2e/update.mjs`, a real signed update on a Mac). Every behaviour is tested through one of them.
 4. **Changes land by pull request, never a direct push to `main`**, not even one-liners. The desktop shell ships builds from tags on `main`. During the first build everything lands on the local `build` branch and the person opens the pull requests.
 5. **When a spec's behaviour changes after it is built**, update the spec in the same PR, so the spec stays the description of the app.
+6. **Unreleased work lives on `dev` or behind a feature.** Work that should not reach users yet goes by pull request into the `dev` branch, which merges into `main` by pull request once it is ready, and takes `main` back in regularly. Nothing is tagged from `dev`. A feature already on `main` that should not ship is turned off by `UNFRAMED_FEATURES` (spec 01): production builds turn on none. `pnpm dev:app` builds "Unframed Dev" from the current checkout and installs it beside the production app, with its own data folder, no updates and every feature on.
 
 ## Commands
 

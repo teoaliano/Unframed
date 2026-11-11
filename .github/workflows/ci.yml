@@ -1,12 +1,12 @@
 name: CI
 
-# Every pull request (forks included) and every push to main. The engine tag workflow
+# Every pull request (forks included) and every push to main or dev. The engine tag workflow
 # calls this one too, with the tldraw license key. Nothing here creates a GitHub
 # Release: the desktop app's updater reads this repo's latest Release.
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, dev]
   workflow_call:
     secrets:
       TLDRAW_LICENSE_KEY:
