@@ -15,8 +15,10 @@ const openInTab = async (page: Page, engine: TestEngine, name: string) => {
   await expect(active(page)).toHaveText(name);
 };
 
-const macTabs = async (engine: TestEngine): Promise<unknown> =>
-  (await (await engine.rpc()).call("preferences.get", { keys: ["project.tabs"] })).values["project.tabs"];
+const macTabs = async (engine: TestEngine): Promise<unknown> => {
+  const saved = (await (await engine.rpc()).call("preferences.get", { keys: ["project.tabs"] })).values["project.tabs"] as { order: unknown; active: unknown };
+  return { order: saved.order, active: saved.active };
+};
 
 const ipadEngine = () => startSettingsEngine({ env: testIpad(), dotenv: `OPENROUTER_API_KEY=${KEY}\n${IPAD_DOTENV}` });
 

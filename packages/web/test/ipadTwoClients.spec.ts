@@ -1,7 +1,7 @@
 import type { Locator } from "@playwright/test";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { openCanvas, shapeOnScreen } from "./canvas.ts";
-import { createChat, expect, openRail, say, startAgentEngine, test } from "./agent.ts";
+import { createChat, expect, openRail, openSheetRail, say, startAgentEngine, test } from "./agent.ts";
 import { clickShape } from "./generation.ts";
 import { FIXTURE_KEY } from "./fixtures.ts";
 import { IPAD_DOTENV, openDevice, testIpad, type DeviceClient } from "./ipad.ts";
@@ -40,7 +40,7 @@ test("an approval answered on the device closes on the Mac and lets the turn fin
     await createChat(engine, { runtimeMode: "approval-required", title: "Cleanup" });
 
     const mac = await openRail(page);
-    const onDevice = await openRail(device.page);
+    const onDevice = await openSheetRail(device.page);
     await say(mac, "clean the build please");
     await expect(mac.getByTestId("approval-panel")).toBeVisible(SLOW);
     await expect(onDevice.getByTestId("approval-panel")).toBeVisible(SLOW);

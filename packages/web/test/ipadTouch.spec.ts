@@ -5,7 +5,7 @@ import { IPAD_DOTENV, openDevice, testIpad, touchHold, type DeviceClient } from 
 import { pngBytes } from "./images.ts";
 import { filledMedia } from "./media.ts";
 import { KEY, startSettingsEngine } from "./settings.ts";
-import { openRail, promptBox, scriptFolder, startAgentEngine } from "./agent.ts";
+import { openRail, openSheetRail, promptBox, scriptFolder, startAgentEngine } from "./agent.ts";
 import { FIXTURE_KEY } from "./fixtures.ts";
 
 const say = async (page: Page, rail: Locator): Promise<void> => {
@@ -76,7 +76,7 @@ test("a control that waits for a hover on the Mac is already there on the device
     await say(page, onMac);
     expect(await actionOpacity(onMac)).toBe("0");
 
-    const onDevice = await openRail(device.page);
+    const onDevice = await openSheetRail(device.page);
     await say(device.page, onDevice);
     expect(await actionOpacity(onDevice)).toBe("1");
   } finally {

@@ -92,12 +92,11 @@ test("a keyless device is offered the paste field but not Connect OpenRouter", a
   try {
     await openCanvas(page, engine);
     device = await openDevice(engine);
-    const dialog = device.page.getByTestId("settings-dialog");
-    await expect(dialog).toBeVisible();
+    const dialog = await openSettings(device.page);
     await expect(dialog.getByRole("button", { name: "Connect OpenRouter" })).toHaveCount(0);
     await dialog.getByRole("button", { name: "or paste a key instead" }).click();
-    await expect(dialog.getByLabel("API key")).toBeVisible();
-    await expect(page.getByTestId("settings-dialog").getByRole("button", { name: "Connect OpenRouter" })).toBeVisible();
+    await expect(dialog.getByLabel("API key", { exact: true })).toBeVisible();
+    await expect((await openSettings(page)).getByRole("button", { name: "Connect OpenRouter" })).toBeVisible();
   } finally {
     await device?.close();
     await engine.dispose();
