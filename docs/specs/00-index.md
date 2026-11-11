@@ -77,13 +77,14 @@ Use these words, and only these, for these things.
 
 ## Test seams
 
-There are exactly three. Every task in every spec names one of them.
+There are exactly four. Every task in every spec names one of them.
 
 1. **Engine seam.** The real engine process, forked by the test into a temporary data folder, on an OS-assigned port (`PORT=0`) with an OS-assigned preview port too (`UNFRAMED_PREVIEW_PORT=0`, so engines running side by side never compete for the fixed one), with every OpenRouter call (image, text, video, catalogue, pricing, key and auth endpoints) pointed at an in-test stub server through spec 01's single loopback-only `UNFRAMED_TEST_OPENROUTER_ORIGIN`, every ElevenLabs call (models, voices, speech, subscription) pointed at a second in-test stub through the equally loopback-only `UNFRAMED_TEST_ELEVENLABS_ORIGIN` (spec 15), every Vercel AI Gateway call (catalogue, images, chat, generation lookup, credits) pointed at a third through `UNFRAMED_TEST_VERCEL_ORIGIN` (spec 22), every other test hook set from spec 01's one table of test-only variables, and with the agent provider replaced by a scripted agent (a JSON script of turns, tool calls and failures, chosen by matching the first message). Tests drive it through its public interface only: the RPC socket, the sync socket, the plain HTTP routes, the IPC messages it sends its parent, and the files it writes. Nothing that spends money runs here.
 2. **Domain seam.** The pure modules in `domain`, called directly. Use it for rules with many cases: request composition from a selection, `@id` resolution, numbering and roles, Free-mode splitting, pricing estimates, dial shorthand, job-store pruning, `.env` editing, permission decisions.
 3. **Browser seam.** Playwright driving the built web client served by an engine running at the engine seam (stubbed upstreams, scripted agent). Use it for anything a person does on the canvas or in a dialog. Assert on what is on screen and on what the engine then holds.
+4. **Shell seam.** The desktop app's own modules in `apps/desktop/src`, run with `node --test` against fakes of Electron's `app` and of electron-updater (`apps/desktop/test`). Use it for the engine supervisor, the quit sequence and the update flow. The one behaviour fakes cannot prove, an installed copy updating itself, is proven by `apps/desktop/e2e/update.mjs`, which installs a signed build on a Mac, serves a newer one from a local feed and drives the update pill.
 
-A good test exercises behaviour through one of these interfaces and never reaches past it into internals. If a behaviour cannot be reached from any of the three, the design is wrong, not the seam list.
+A good test exercises behaviour through one of these interfaces and never reaches past it into internals. If a behaviour cannot be reached from any of the four, the design is wrong, not the seam list.
 
 ## Contracts no spec may break
 
