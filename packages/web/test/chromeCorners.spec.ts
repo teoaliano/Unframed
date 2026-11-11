@@ -171,7 +171,6 @@ const appRegions = (page: import("@playwright/test").Page) =>
       logo: region("[data-slot=top-bar-logo]"),
       start: region(".unframed-chrome-left"),
       tabs: region(".unframed-tabs"),
-      empty: region("[data-slot=top-bar-drag]"),
       end: region(".unframed-chrome-right"),
       tab: region("[role=tab]"),
       close: region("[data-close]"),
@@ -188,7 +187,6 @@ test("the bar is a window drag region, with its tabs, close buttons, All project
     logo: "drag",
     start: "drag",
     tabs: "drag",
-    empty: "drag",
     end: "drag",
     tab: "no-drag",
     close: "no-drag",
@@ -198,4 +196,41 @@ test("the bar is a window drag region, with its tabs, close buttons, All project
   expect(await appRegions(page)).toEqual(expected);
   await page.addStyleTag({ content: SHIPPED_SHELL_CSS });
   expect(await appRegions(page)).toEqual(expected);
+});
+
+const regionsAtPoints = (page: import("@playwright/test").Page) =>
+  page.evaluate(() => {
+    const at = (x: number, y: number) => {
+      let found = "none";
+      for (const element of document.querySelectorAll("*")) {
+        const value = getComputedStyle(element).getPropertyValue("-webkit-app-region");
+        if (value !== "drag" && value !== "no-drag") continue;
+        const box = element.getBoundingClientRect();
+        if (x >= box.left && x < box.right && y >= box.top && y < box.bottom) found = value;
+      }
+      return found;
+    };
+    const centre = (selector: string) => {
+      const box = document.querySelector(selector)!.getBoundingClientRect();
+      return at(box.left + box.width / 2, box.top + box.height / 2);
+    };
+    const plus = document.querySelector("[data-testid=all-projects] button")!.getBoundingClientRect();
+    const end = document.querySelector(".unframed-chrome-right")!.getBoundingClientRect();
+    return {
+      lights: at(40, 18),
+      logo: centre("[data-slot=top-bar-logo]"),
+      tab: centre("[role=tab]"),
+      close: centre("[data-close]"),
+      allProjects: centre("[data-testid=all-projects] button"),
+      empty: at((plus.right + end.left) / 2, 18),
+      settings: centre("[data-slot=top-bar-settings] button"),
+    };
+  });
+
+test("in document order, as Electron resolves overlapping regions, nothing declared after the tabs makes them drag again", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  const expected = { lights: "drag", logo: "drag", tab: "no-drag", close: "no-drag", allProjects: "no-drag", empty: "drag", settings: "no-drag" };
+  expect(await regionsAtPoints(page)).toEqual(expected);
+  await page.addStyleTag({ content: SHIPPED_SHELL_CSS });
+  expect(await regionsAtPoints(page)).toEqual(expected);
 });

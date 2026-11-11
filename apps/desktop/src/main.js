@@ -473,7 +473,7 @@ const CANVAS_COLOURS = `new Promise((resolve) => requestAnimationFrame(() => req
 const windowChrome = () => {
   const theme = palette();
   return mac
-    ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 20, y: 17 } }
+    ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 12, y: 11 } }
     : {
         titleBarStyle: 'hidden',
         // These three properties are the whole of it -- Chromium hard-codes the
@@ -494,13 +494,13 @@ const windowChrome = () => {
       };
 };
 
-// Every number here is derived from the top bar, which sits flush with the window's top edge and is 48 tall, so its row
-// centres on y 24.
+// Every number here is derived from the top bar, which sits flush with the window's top edge and is 36 tall, so its row
+// centres on y 18.
 //
 // The lights measure ~13 across, 23 centre to centre, ~60 for the group, and
 // trafficLightPosition.y lands about 6.75 above their centre -- measured from a
-// 2x screenshot, not taken from Apple's docs. So y 17 centres them on y 24, and
-// x 20 sets them 12 inside the card's left edge.
+// 2x screenshot, not taken from Apple's docs. So y 11 centres them on y 18, and
+// x 12 sets them as far from the window's left edge as from its top (spec 17).
 //
 // `!important` is load-bearing, not defensive. insertCSS lands its sheet with
 // *lower* cascade priority than the page's own, so an override that merely ties

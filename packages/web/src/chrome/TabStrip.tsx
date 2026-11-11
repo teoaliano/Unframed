@@ -65,11 +65,11 @@ const STATUS_LABEL: Record<TabStatus, string> = {
   none: "",
 };
 
-/** The kit's status mark for a tab (spec 17): a spinner while working, a check when finished unseen, a dot for a chat waiting on the person. */
+/** The kit's status mark for a tab (spec 17): a spinner while working, a check when finished unseen, a question bubble for a chat waiting on the person. */
 const kitStatus = (status: TabStatus): TopBarStatus | undefined => {
   if (status === "running") return "running";
   if (status === "finished") return "finished";
-  if (status === "needs-you") return "dot";
+  if (status === "needs-you") return "needs-you";
   return undefined;
 };
 

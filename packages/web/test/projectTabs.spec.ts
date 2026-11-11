@@ -85,7 +85,7 @@ test("Settings sits at the far right on macOS and Linux and on the left, after t
   else expect(box.x).toBeGreaterThan(viewport.width / 2);
 });
 
-test("the strip is the bar's own project tabs: full height, a divider before and after each, the active one on the accent fill, a 14 px close 8 px in, the plus 8 px after", async ({ page, engine }) => {
+test("the strip is the bar's own project tabs: full height, a divider before and after each, the bar's bottom border under each, the active one on the accent fill, a 14 px close 8 px in, the plus 8 px after", async ({ page, engine }) => {
   await openCanvas(page, engine, "default");
   await openInTab(page, engine, "beta");
   await expect(page.locator("[data-slot=tabs-list], [data-slot=tabs-indicator]")).toHaveCount(0);
@@ -99,6 +99,9 @@ test("the strip is the bar's own project tabs: full height, a divider before and
     color: getComputedStyle(element).color,
     background: getComputedStyle(element).backgroundColor,
     divider: getComputedStyle(element.parentElement!).borderRightWidth,
+    bottom: getComputedStyle(element.parentElement!).borderBottomWidth,
+    full: element.parentElement!.getBoundingClientRect().height,
+    weight: getComputedStyle(element).fontWeight,
   });
   await expect.poll(() => idleTab.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
   const [on, off] = [await tab.evaluate(look), await idleTab.evaluate(look)];
@@ -110,7 +113,8 @@ test("the strip is the bar's own project tabs: full height, a divider before and
     probe.remove();
     return value;
   });
-  expect([on.height, off.height, on.divider, off.divider]).toEqual([36, 36, "1px", "1px"]);
+  expect([on.full, off.full, on.height, off.height, on.divider, off.divider, on.bottom, off.bottom]).toEqual([36, 36, 35, 35, "1px", "1px", "1px", "1px"]);
+  expect([on.weight, off.weight]).toEqual(["500", "400"]);
   expect(on.background).toBe(accent);
   expect(off.background).toBe("rgba(0, 0, 0, 0)");
   expect(on.color).not.toBe(off.color);
@@ -119,6 +123,12 @@ test("the strip is the bar's own project tabs: full height, a divider before and
   expect(name!.x - box.x).toBe(8);
   const close = (await page.getByRole("button", { name: `Close ${await tab.textContent()}` }).boundingBox())!;
   expect([close.width, box.x + box.width - (close.x + close.width)]).toEqual([14, 8]);
+  const glyph = await page.getByRole("button", { name: `Close ${await tab.textContent()}` }).locator("svg").evaluate((element) => ({
+    size: element.getBoundingClientRect().width,
+    stroke: getComputedStyle(element.querySelector("path")!).strokeWidth,
+    effect: getComputedStyle(element.querySelector("path")!).vectorEffect,
+  }));
+  expect(glyph).toEqual({ size: 12, stroke: "1.3333px", effect: "non-scaling-stroke" });
   const plus = (await page.getByTestId("all-projects").getByRole("button").boundingBox())!;
   const strip = (await list.boundingBox())!;
   expect([plus.x - (strip.x + strip.width), plus.y]).toEqual([8, 6]);
