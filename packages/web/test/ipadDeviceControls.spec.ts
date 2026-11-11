@@ -74,11 +74,11 @@ test("a device's right-click menu on an image offers no Reveal and no Copy path"
 
     const onMac = await menuItems(page, await centre(shapeOnScreen(page, "shape:pic")));
     expect(onMac).toContain("Copy path");
-    expect(onMac.some((item) => /^(Reveal in Finder|Show in Explorer|Show in folder)/.test(item))).toBe(true);
+    expect(onMac.some((item) => /^(Reveal in Finder|Show in Explorer|Show in file manager)/.test(item))).toBe(true);
 
     const onDevice = await menuItems(device.page, await centre(shapeOnScreen(device.page, "shape:pic")));
     expect(onDevice).not.toContain("Copy path");
-    expect(onDevice.some((item) => /^(Reveal in Finder|Show in Explorer|Show in folder)/.test(item))).toBe(false);
+    expect(onDevice.some((item) => /^(Reveal in Finder|Show in Explorer|Show in file manager)/.test(item))).toBe(false);
     expect(onDevice).toContain("Copy as image");
   } finally {
     await device?.close();
