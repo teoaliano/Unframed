@@ -26,6 +26,7 @@
     "effect": "4.0.0-rc.115",
     "heic-to": "1.5.2",
     "lucide-react": "1.48.0",
+    "qrcode": "1.5.4",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-markdown": "10.1.0",
@@ -37,6 +38,7 @@
   "devDependencies": {
     "@shadcn/lint": "0.1.5",
     "@tailwindcss/vite": "4.3.3",
+    "@types/qrcode": "1.5.5",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",

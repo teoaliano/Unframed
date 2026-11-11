@@ -34,6 +34,11 @@ const messageOf = (error: unknown): string =>
 /** Something that must settle before the active project changes (the open canvas's pending edits). */
 export type BeforeSwitch = () => Promise<void>;
 
+export interface DeviceHooks {
+  readonly choose: (name: string) => void;
+  readonly reload: () => Promise<void>;
+}
+
 /** The tab state the strip and the canvas read. A new object on every change, so a subscriber can compare by identity. */
 export interface EditorTab {
   readonly title: string;
@@ -76,6 +81,7 @@ export class ProjectActivation {
   /** Counts activations, so an initial load that finishes after a switch does not override it. */
   private generation = 0;
   private readonly engine: EngineConnection;
+  private deviceHooks: DeviceHooks | undefined;
 
   constructor(engine: EngineConnection) {
     this.engine = engine;
@@ -91,6 +97,25 @@ export class ProjectActivation {
     this.listeners.add(listener);
     return () => void this.listeners.delete(listener);
   };
+
+  setDeviceHooks(hooks: DeviceHooks): void {
+    this.deviceHooks = hooks;
+  }
+
+  private get onDevice(): boolean {
+    return this.deviceHooks !== undefined;
+  }
+
+  async showTabs(order: ReadonlyArray<string>, active: string | undefined): Promise<void> {
+    if (active === this.state.active) {
+      this.update({ order: [...order], active, loaded: true });
+      return;
+    }
+    const started = ++this.generation;
+    await this.beforeSwitch?.();
+    if (this.generation !== started) return;
+    this.update({ order: [...order], active, loaded: true });
+  }
 
   /** The open canvas registers what must settle before it is closed. */
   setBeforeSwitch(hook: BeforeSwitch | undefined): void {
@@ -128,6 +153,7 @@ export class ProjectActivation {
   }
 
   private persistTabs(): void {
+    if (this.onDevice) return;
     const { order, active, pinned, editing, editors } = this.state;
     const open = order.filter(isEditorTab).map((key) => ({ key, title: editors.get(key)?.title ?? "", kind: editors.get(key)?.kind ?? "page" }));
     const value = { order: [...order], active: active ?? null, pinned: [...pinned], editing: editing ?? null, editors: open };
@@ -137,6 +163,10 @@ export class ProjectActivation {
   }
 
   async activate(key: string): Promise<void> {
+    if (this.deviceHooks !== undefined) {
+      this.deviceHooks.choose(projectOfTab(key));
+      return;
+    }
     const started = ++this.generation;
     const name = projectOfTab(key);
     const editing = isEditorTab(key) ? key : undefined;
@@ -179,7 +209,7 @@ export class ProjectActivation {
    * the neighbour; a background tab only leaves the strip. Closing deletes nothing.
    */
   async closeTab(name: string, options: { readonly remember?: boolean } = {}): Promise<void> {
-    if (!this.state.order.includes(name)) return;
+    if (this.onDevice || !this.state.order.includes(name)) return;
     const planned = closeTabRule(this.state.order, this.selectedTab(), name);
     const changesSelection = planned.active !== this.selectedTab();
     const started = changesSelection ? ++this.generation : this.generation;
@@ -205,7 +235,7 @@ export class ProjectActivation {
   }
 
   async closeAllTabs(): Promise<void> {
-    if (this.state.order.length === 0) return;
+    if (this.onDevice || this.state.order.length === 0) return;
     const started = ++this.generation;
     await this.leaveEditor(undefined);
     if (this.generation !== started) return;
@@ -220,26 +250,31 @@ export class ProjectActivation {
 
   /** Moves a tab to position `to` in the strip. Saved so the order survives a restart. */
   moveTab(name: string, to: number): void {
+    if (this.onDevice) return;
     this.update(moveTab(this.state, name, to));
     this.persistTabs();
   }
 
   stepTab(name: string, direction: -1 | 1): void {
+    if (this.onDevice) return;
     this.update(stepTab(this.state, name, direction));
     this.persistTabs();
   }
 
   pinTab(name: string): void {
+    if (this.onDevice) return;
     this.update(pinTab(this.state, name));
     this.persistTabs();
   }
 
   unpinTab(name: string): void {
+    if (this.onDevice) return;
     this.update(unpinTab(this.state, name));
     this.persistTabs();
   }
 
   async reopenClosed(): Promise<void> {
+    if (this.onDevice) return;
     const { name: entry, stack } = popClosed(this.state.closed);
     if (entry === undefined) return;
     this.update({ closed: stack });
@@ -281,6 +316,10 @@ export class ProjectActivation {
    */
   async reopen(): Promise<void> {
     this.update({ active: undefined, editing: undefined, editors: new Map(), order: [], pinned: [], closed: [], loaded: false });
+    if (this.deviceHooks !== undefined) {
+      await this.deviceHooks.reload();
+      return;
+    }
     await this.initialLoad();
   }
 

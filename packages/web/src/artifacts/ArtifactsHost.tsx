@@ -5,7 +5,9 @@ import { createPortal } from "react-dom";
 import { atom, react, useEditor, useValue, type Editor, type TLCamera, type TLShapeId } from "tldraw";
 import { registerSlot } from "../chrome/slots.ts";
 import { useActivation, useCanvasProject, useEngine, useSettings } from "../context.ts";
+import { isDeviceClient, useIsDevice } from "../deviceMode.ts";
 import type { ProjectActivation } from "../project/activation.ts";
+import { showNotice } from "../toasts.tsx";
 import { closeComposer } from "../generate/state.ts";
 import { KitModePicker } from "./KitMode.tsx";
 import { ParametersButton } from "./ParametersButton.tsx";
@@ -51,7 +53,13 @@ const aboutShape = (editor: Editor, shapeId: TLShapeId): { readonly title: strin
   return { title: artifactTitle(shape.props as ArtifactShapeProps), kind: shape.type };
 };
 
+const EDITOR_ON_MAC = "Open this on your Mac to edit or play it.";
+
 const openArtifactTab = (activation: ProjectActivation, project: string) => (editor: Editor, shapeId: TLShapeId) => {
+  if (isDeviceClient()) {
+    if (aboutShape(editor, shapeId)) showNotice(EDITOR_ON_MAC, "info");
+    return;
+  }
   const about = aboutShape(editor, shapeId);
   if (about) void activation.openEditor(project, shapeId, about);
 };
@@ -92,6 +100,7 @@ export const ArtifactsHost = () => {
   const project = useCanvasProject();
   const settings = useSettings();
   const activation = useActivation();
+  const device = useIsDevice();
 
   useEffect(() => {
     if (settings) previewPort.set(settings.previewPort);
@@ -108,7 +117,7 @@ export const ArtifactsHost = () => {
       watchComponentPins(engine, project),
       registerSlot("openArtifact", openArtifactTab(activation, project)),
       registerSlot("renderButton", RenderButton),
-      registerSlot("parametersButton", ParametersButton),
+      ...(device ? [] : [registerSlot("parametersButton", ParametersButton)]),
       registerSlot("scaleButton", ScaleMenu),
       registerSlot("kitModeButton", ({ shapeId }: { readonly shapeId: TLShapeId }) => <KitModePicker shapeId={shapeId} variant="toolbar" />),
       installTuningWatch(editor),
@@ -118,7 +127,7 @@ export const ArtifactsHost = () => {
       for (const stop of stops) stop();
       closeArtifactEditor(editor);
     };
-  }, [editor, engine, project, activation]);
+  }, [editor, engine, project, activation, device]);
 
   const editing = useValue("editing artifact", () => artifactsOf(editor).editing.get(), [editor]);
   const tuning = useValue("tuning artifact", () => artifactsOf(editor).tuning.get(), [editor]);

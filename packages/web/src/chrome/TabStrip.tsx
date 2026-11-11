@@ -4,6 +4,7 @@ import { KIND_LOOK } from "../artifacts/kinds.ts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { TopBar, type TopBarRegion, type TopBarStatus, type TopBarTab } from "~/components/ui/top-bar";
 import { useEngine, useActivation } from "../context.ts";
+import { useIsDevice } from "../deviceMode.ts";
 import { useTabState } from "../project/activation.ts";
 import { ProjectMenu } from "./ProjectMenu.tsx";
 import { PROJECT_ACTION, type ProjectActionDetail } from "./tabEvents.ts";
@@ -92,6 +93,7 @@ export const TabStrip = ({
   readonly regions: { readonly frame?: TopBarRegion; readonly start?: TopBarRegion; readonly tabs?: TopBarRegion; readonly end?: TopBarRegion };
 }) => {
   const activation = useActivation();
+  const device = useIsDevice();
   const { active, editing, editors, order, pinned } = useTabState(activation);
   const activity = useProjectActivity();
   const marks = useFinishedMarks(activity, active);
@@ -137,13 +139,17 @@ export const TabStrip = ({
         </div>
       }
       onActivate={(name) => void activation.activate(name)}
-      onClose={(name) => void activation.closeTab(name)}
-      onCloseAll={() => void activation.closeAllTabs()}
-      onRename={(name) => project("rename", name)}
-      onDelete={(name) => project("delete", name)}
-      onMove={(name, to) => activation.moveTab(name, to)}
-      onPin={(name) => activation.pinTab(name)}
-      onUnpin={(name) => activation.unpinTab(name)}
+      {...(device
+        ? {}
+        : {
+            onClose: (name: string) => void activation.closeTab(name),
+            onCloseAll: () => void activation.closeAllTabs(),
+            onRename: (name: string) => project("rename", name),
+            onDelete: (name: string) => project("delete", name),
+            onMove: (name: string, to: number) => activation.moveTab(name, to),
+            onPin: (name: string) => activation.pinTab(name),
+            onUnpin: (name: string) => activation.unpinTab(name),
+          })}
     />
   );
 };

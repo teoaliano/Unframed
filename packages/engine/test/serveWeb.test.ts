@@ -15,6 +15,8 @@ describe("serving the web", () => {
     await writeFile(join(dist, "assets", "index-a1b2c3.js"), "console.log('app')");
     await writeFile(join(dist, "assets", "index-d4e5f6.css"), "body{}");
     await writeFile(join(dist, "assets", "favicon-0a9b8c.svg"), "<svg/>");
+    await writeFile(join(dist, "manifest.webmanifest"), '{"name":"Unframed","display":"standalone"}');
+    await writeFile(join(dist, "apple-touch-icon.png"), "icon bytes");
     await writeFile(join(dist, "stray.txt"), "not served");
     await writeFile(join(dist, "..", "outside.txt"), "outside");
     engine = await startEngine({ clientDist: dist });
@@ -37,6 +39,18 @@ describe("serving the web", () => {
     expect(script.text).toBe("console.log('app')");
     expect((await engine.request("/assets/index-d4e5f6.css")).headers["content-type"]).toBe("text/css; charset=utf-8");
     expect((await engine.request("/assets/favicon-0a9b8c.svg")).headers["content-type"]).toBe("image/svg+xml");
+  });
+
+  it("serves the Home Screen files from the root, under their own names", async () => {
+    const manifest = await engine.request("/manifest.webmanifest");
+    expect(manifest.status).toBe(200);
+    expect(manifest.headers["content-type"]).toBe("application/manifest+json");
+    expect(manifest.headers["cache-control"]).toBe("public, max-age=3600");
+    expect(manifest.json().display).toBe("standalone");
+
+    const icon = await engine.request("/apple-touch-icon.png");
+    expect(icon.status).toBe(200);
+    expect(icon.headers["content-type"]).toBe("image/png");
   });
 
   it("answers 404 for anything else, with no SPA catch-all", async () => {

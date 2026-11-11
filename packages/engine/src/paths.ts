@@ -44,3 +44,7 @@ export const discoveryFilePath = (dataDir: string): string => join(dataDir, "mcp
 
 /** A project's one SQLite file, in its folder (spec 01). */
 export const DATABASE_FILE = "unframed.sqlite";
+
+export const ipadDirPath = (dataDir: string): string => join(dataDir, "ipad");
+
+export const ipadDevicesFilePath = (dataDir: string): string => join(dataDir, "ipad-devices.json");

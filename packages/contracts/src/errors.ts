@@ -7,6 +7,7 @@ export const ErrorCode = Schema.Literals([
   "unavailable",
   "upstream",
   "internal",
+  "mac_only",
 ]);
 export type ErrorCode = typeof ErrorCode.Type;
 
@@ -18,6 +19,7 @@ export const errorCodeStatus: Record<ErrorCode, number> = {
   unavailable: 501,
   upstream: 502,
   internal: 500,
+  mac_only: 403,
 };
 
 /**

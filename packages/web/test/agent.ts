@@ -74,6 +74,14 @@ export const openRail = async (page: Page): Promise<Locator> => {
   return panel;
 };
 
+/** Opens the rail on a window under 1280 px, where it is the Sheet and has no motion state of its own. */
+export const openSheetRail = async (page: Page): Promise<Locator> => {
+  await agentChromeButton(page).click();
+  const panel = rail(page);
+  await expect(panel).toBeVisible();
+  return panel;
+};
+
 /** The Agent tray's box, in the rail or the toolbar's composer. */
 export const promptBox = (scope: Locator): Locator => scope.getByRole("textbox", { name: "Message the agent" });
 

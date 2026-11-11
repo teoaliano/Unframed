@@ -1,7 +1,8 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { defineConfig, type ProxyOptions } from "vite";
+import { defineConfig, type Plugin, type ProxyOptions } from "vite";
 import { devShareHeaders, devShareOrigin } from "@unframed/domain";
 
 const clientPort = process.env.UNFRAMED_CLIENT_PORT;
@@ -32,8 +33,56 @@ const relay: ProxyOptions["configure"] = (proxy) => {
   proxy.on("proxyReqWs", readdress);
 };
 
+// The Home Screen files (spec 23), served at the root under fixed names so an iPad can
+// add the app to its Home Screen. The icon is read from assets/brand, which stays the one
+// place the mark lives; the engine serves both to an unpaired device.
+const HOME_SCREEN: ReadonlyArray<{ readonly name: string; readonly type: string; readonly read: () => string | Uint8Array }> = [
+  {
+    name: "manifest.webmanifest",
+    type: "application/manifest+json",
+    read: () =>
+      JSON.stringify(
+        {
+          name: "Unframed",
+          short_name: "Unframed",
+          display: "standalone",
+          start_url: "/",
+          scope: "/",
+          background_color: "#fcfcfc",
+          theme_color: "#fcfcfc",
+          icons: [{ src: "/apple-touch-icon.png", sizes: "1024x1024", type: "image/png", purpose: "any" }],
+        },
+        null,
+        2,
+      ),
+  },
+  {
+    name: "apple-touch-icon.png",
+    type: "image/png",
+    read: () => readFileSync(fileURLToPath(new URL("../../assets/brand/app-icon.png", import.meta.url))),
+  },
+];
+
+const homeScreen = (): Plugin => ({
+  name: "unframed-home-screen",
+  configureServer: (server) => {
+    server.middlewares.use((req, res, next) => {
+      const file = HOME_SCREEN.find((candidate) => (req.url ?? "").split("?")[0] === `/${candidate.name}`);
+      if (file === undefined) {
+        next();
+        return;
+      }
+      res.setHeader("content-type", file.type);
+      res.end(file.read());
+    });
+  },
+  generateBundle() {
+    for (const file of HOME_SCREEN) this.emitFile({ type: "asset", fileName: file.name, source: file.read() });
+  },
+});
+
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), homeScreen()],
   // t3code's UI kit imports itself through "~" (spec 12), kept so its files stay a mechanical merge.
   resolve: { alias: { "~": fileURLToPath(new URL("./src", import.meta.url)) } },
   // No .env files: the repo's .env holds the OpenRouter key, and nothing from it may

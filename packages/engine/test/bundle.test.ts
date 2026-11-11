@@ -110,12 +110,16 @@ describe("the published bundle", () => {
     expect(code).not.toMatch(/onTestFinished|startOpenRouterStub/);
     const client = await listFiles(join(bundle, "client"));
     expect(client).toContain("dist/index.html");
+    expect(client).toContain("dist/manifest.webmanifest");
+    expect(client).toContain("dist/apple-touch-icon.png");
     expect(client).toContain("package.json");
     expect(client).toContain("package-lock.json");
     expect(client.filter((file) => file.endsWith(".map"))).toEqual([]);
     const notices = await readFile(join(bundle, "THIRD_PARTY_NOTICES"), "utf8");
     expect(notices).toContain("t3code");
     expect(notices).toContain("MIT License");
+    expect(notices).toMatch(/^@peculiar\/x509 /m);
+    expect(notices).toMatch(/^qrcode /m);
   });
 
   it.skipIf(!existsSync(join(repoRoot, "LICENSE")))("carries the repository's LICENSE", async () => {

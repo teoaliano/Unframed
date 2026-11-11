@@ -1,3 +1,4 @@
+import { isIpadPort } from "./settings.ts";
 import { ELEVENLABS_MODEL_ID } from "./elevenLabsIds.ts";
 import { OPENROUTER_KEY, PROVIDER_KEYS } from "./providerKeys.ts";
 
@@ -16,6 +17,8 @@ export interface SettingsPatchInput {
   readonly claudePath?: string;
   readonly codexPath?: string;
   readonly claudeConfigDir?: string;
+  readonly ipadAccess?: string;
+  readonly ipadPort?: string;
 }
 
 type Field = keyof SettingsPatchInput;
@@ -33,6 +36,7 @@ const FIELDS: ReadonlyArray<{
   readonly pattern: RegExp;
   readonly message: string;
   readonly clearable: boolean;
+  readonly also?: (value: string) => boolean;
 }> = [
   ...PROVIDER_KEYS.map(({ field, variable, pattern, message }) => ({ field, variable, pattern, message, clearable: false })),
   { field: "imageModel", variable: "OPENROUTER_IMAGE_MODEL", pattern: MODEL, message: MODEL_MESSAGE, clearable: false },
@@ -63,6 +67,15 @@ const FIELDS: ReadonlyArray<{
     message: "The config folder has to be an absolute path.",
     clearable: true,
   },
+  { field: "ipadAccess", variable: "IPAD_ACCESS", pattern: /^on$/, message: "iPad access is either on or off.", clearable: true },
+  {
+    field: "ipadPort",
+    variable: "IPAD_PORT",
+    pattern: /^\d{4,5}$/,
+    also: isIpadPort,
+    message: "The iPad port has to be a whole number from 1024 to 65535.",
+    clearable: true,
+  },
 ];
 
 /** The setting each `.env` variable holds; the legacy `OPENROUTER_MODEL` is the image model. */
@@ -82,7 +95,7 @@ export type SettingsPatchResult =
  */
 export const normaliseSettingsPatch = (patch: SettingsPatchInput): SettingsPatchResult => {
   const changes: Record<string, string | null> = {};
-  for (const { field, variable, pattern, message, clearable } of FIELDS) {
+  for (const { field, variable, pattern, message, clearable, also } of FIELDS) {
     const raw = patch[field];
     if (raw === undefined) continue;
     const value = raw.trim();
@@ -90,7 +103,7 @@ export const normaliseSettingsPatch = (patch: SettingsPatchInput): SettingsPatch
       changes[variable] = null;
       continue;
     }
-    if (!pattern.test(value)) return { ok: false, message };
+    if (!pattern.test(value) || also?.(value) === false) return { ok: false, message };
     changes[variable] = value;
   }
   if (Object.keys(changes).length === 0) return { ok: false, message: "Nothing to save." };

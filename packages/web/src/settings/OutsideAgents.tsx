@@ -15,25 +15,14 @@ import { Spinner } from "~/components/ui/spinner";
 import { ConfirmDialog } from "../agent/ConfirmDialog.tsx";
 import { parseSpendLimit, SpendFields } from "./SpendFields.tsx";
 import { useEngine } from "../context.ts";
-import { SectionHeading } from "./fields.tsx";
+import { useIsDevice } from "../deviceMode.ts";
+import { lastUsedText, SectionHeading } from "./fields.tsx";
 
 const COPIED_MS = 1200;
 
 const CLIENTS: ReadonlyArray<ConnectionClient> = ["claude-code", "codex", "claude-desktop", "other"];
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
-
-/** "Last used 5 min ago", "Last used 2 h ago", "Last used 3 days ago"; "Never used" when no call was made. */
-export const lastUsedText = (lastUsedAt: string | null, now: number): string => {
-  if (lastUsedAt === null) return "Never used";
-  const minutes = Math.max(0, Math.round((now - Date.parse(lastUsedAt)) / 60_000));
-  if (minutes < 1) return "Last used just now";
-  if (minutes < 60) return `Last used ${minutes} min ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `Last used ${hours} h ago`;
-  const days = Math.round(hours / 24);
-  return `Last used ${days} ${days === 1 ? "day" : "days"} ago`;
-};
 
 const CodeBlock = ({ step }: { readonly step: SetupStep }) => {
   const [copied, setCopied] = useState(false);
@@ -254,6 +243,7 @@ export const NEEDS_KEY = "Connect OpenRouter to let agents generate.";
 
 export const OutsideAgents = ({ hasKey, onConnectOpenRouter }: { readonly hasKey: boolean; readonly onConnectOpenRouter: () => void }) => {
   const engine = useEngine();
+  const device = useIsDevice();
   const [connections, setConnections] = useState<ReadonlyArray<AgentConnection> | undefined>(undefined);
   const [connecting, setConnecting] = useState(false);
   const [revoking, setRevoking] = useState<AgentConnection | undefined>(undefined);
@@ -297,17 +287,21 @@ export const OutsideAgents = ({ hasKey, onConnectOpenRouter }: { readonly hasKey
               Limit
             </Button>
           )}
-          <Button variant="ghost" size="sm" onClick={() => setRevoking(connection)}>
-            Revoke
-          </Button>
+          {!device && (
+            <Button variant="ghost" size="sm" onClick={() => setRevoking(connection)}>
+              Revoke
+            </Button>
+          )}
         </div>
       ))}
-      <div>
-        <Button variant="outline" size="sm" onClick={() => setConnecting(true)}>
-          <Plug />
-          Connect an agent
-        </Button>
-      </div>
+      {!device && (
+        <div>
+          <Button variant="outline" size="sm" onClick={() => setConnecting(true)}>
+            <Plug />
+            Connect an agent
+          </Button>
+        </div>
+      )}
       <ConnectDialog open={connecting} hasKey={hasKey} onClose={() => setConnecting(false)} onMade={refresh} />
       <LimitDialog connection={limiting} onClose={() => setLimiting(undefined)} onSaved={refresh} />
       <ConfirmDialog

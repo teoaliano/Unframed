@@ -1,6 +1,6 @@
 import { UnframedError, type ProviderStatuses, type Settings, type SettingsPatch } from "@unframed/contracts";
 import { ELEVENLABS_KEY, elevenLabsStatusCopy, GENERATION_PROVIDERS, VERCEL_KEY_SAVED_MESSAGE, vercelCreditsCopy, keyStatusCopy, OPENROUTER_KEY, sendShortcutOf, VERCEL_KEY, type SendShortcut } from "@unframed/domain";
-import { Bot, CircleAlert, CircleCheck, FolderOpen, Plug, SlidersHorizontal, Sparkles, type LucideIcon } from "lucide-react";
+import { Bot, CircleAlert, CircleCheck, FolderOpen, Plug, SlidersHorizontal, Sparkles, Tablet, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
@@ -14,6 +14,8 @@ import { showNotice } from "../toasts.tsx";
 import { Copy, linkClass, ModelSelect, SectionHeading } from "./fields.tsx";
 import { FOLLOW_UP_KEY, LocalAgents, PLAN_MODE_KEY, SEND_SHORTCUT_KEY, type FollowUp } from "./LocalAgents.tsx";
 import { ConfirmDialog } from "../agent/ConfirmDialog.tsx";
+import { useIsDevice } from "../deviceMode.ts";
+import { IpadAccess, useIpadAvailable } from "./IpadAccess.tsx";
 import { OutsideAgents } from "./OutsideAgents.tsx";
 import type { SettingsSection } from "./settingsEvents.ts";
 import { useSettingsUi, type SettingsUi } from "./settingsUi.ts";
@@ -45,6 +47,7 @@ interface Draft {
   readonly claudePath: string;
   readonly codexPath: string;
   readonly claudeConfigDir: string;
+  readonly ipadPort: string;
 }
 
 const draftOf = (settings: Settings | undefined): Draft => ({
@@ -61,12 +64,14 @@ const draftOf = (settings: Settings | undefined): Draft => ({
   claudePath: settings?.claudePath ?? "",
   codexPath: settings?.codexPath ?? "",
   claudeConfigDir: settings?.claudeConfigDir ?? "",
+  ipadPort: settings === undefined ? "" : String(settings.ipadPort),
 });
 
 const SECTIONS: ReadonlyArray<{ readonly id: SettingsSection; readonly label: string; readonly icon: LucideIcon }> = [
   { id: "generation", label: "Generation", icon: Sparkles },
   { id: "agents", label: "Agents", icon: Bot },
   { id: "connections", label: "Connections", icon: Plug },
+  { id: "ipad", label: "iPad", icon: Tablet },
   { id: "general", label: "General", icon: SlidersHorizontal },
 ];
 
@@ -84,6 +89,8 @@ const SECTION_OF_FIELD: Record<keyof SettingsPatch, SettingsSection> = {
   claudePath: "agents",
   codexPath: "agents",
   claudeConfigDir: "agents",
+  ipadAccess: "ipad",
+  ipadPort: "ipad",
 };
 
 const sectionsWithChanges = (patch: SettingsPatch): ReadonlySet<SettingsSection> =>
@@ -105,6 +112,7 @@ const patchOf = (draft: Draft, settings: Settings): SettingsPatch => {
     if (value !== "" && value !== settings[field]) patch[field] = value;
   }
   for (const field of ["claudePath", "codexPath", "claudeConfigDir"] as const) if (draft[field] !== settings[field]) patch[field] = draft[field];
+  if (draft.ipadPort.trim() !== String(settings.ipadPort)) patch.ipadPort = draft.ipadPort.trim();
   return patch;
 };
 
@@ -117,6 +125,8 @@ const ModelGroup = ({ title, children }: { readonly title: string; readonly chil
 
 export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const engine = useEngine();
+  const device = useIsDevice();
+  const ipadHere = useIpadAvailable() && !device;
   const activation = useActivation();
   const state = useSettingsUi(ui);
   const { settings, open, section, connection, starting } = state;
@@ -368,6 +378,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const vercelCopy = vercelCreditsCopy({ hasKey: hasVercelKey, keyHint: vercelKeyHint, status: state.vercelStatus });
   const saves =
     section === "agents" ||
+    section === "ipad" ||
     section === "general" ||
     (section === "generation" && (showsKeySection || hasElevenLabsKey || hasVercelKey || draft.elevenLabsKey.trim() !== "" || draft.vercelKey.trim() !== ""));
 
@@ -384,7 +395,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
               </a>
               , which runs the model and bills your OpenRouter account per image (a few cents for most models). Connecting takes you there to approve Unframed; the key it gives back is saved on this machine and used only by your local server.
             </p>
-            <Button onClick={connect}>Connect OpenRouter</Button>
+            {!device && <Button onClick={connect}>Connect OpenRouter</Button>}
           </div>
         )}
 
@@ -440,7 +451,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
                 {copy.expiry}
               </p>
             )}
-            {copy.reconnect && !pending && (
+            {copy.reconnect && !pending && !device && (
               <Button className="self-start" onClick={connect}>
                 Reconnect OpenRouter
               </Button>
@@ -571,10 +582,12 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
       <p className="m-0 text-xs text-muted-foreground">Every project is a folder in here, with its files, sidecars and chats.</p>
       <div className="flex items-center gap-2">
         <Input aria-label="Output folder" placeholder="./output" font="mono" spellCheck={false} autoComplete="off" value={draft.outputDir} onChange={(event) => edit({ outputDir: event.target.value })} />
-        <Button variant="outline" onClick={() => void browse()}>
-          <FolderOpen aria-hidden />
-          Browse…
-        </Button>
+        {!device && (
+          <Button variant="outline" onClick={() => void browse()}>
+            <FolderOpen aria-hidden />
+            Browse…
+          </Button>
+        )}
       </div>
     </section>
   );
@@ -615,7 +628,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
           <Tabs orientation="vertical" value={section} onValueChange={(next) => showSection(next as SettingsSection)} className="min-h-0 flex-1 flex-row">
             <div className="w-48 shrink-0 border-e bg-muted/40 p-3">
               <TabsList aria-label="Settings sections" variant="sidebar">
-                {SECTIONS.map(({ id, label, icon: Icon }) => (
+                {SECTIONS.filter(({ id }) => id !== "ipad" || ipadHere).map(({ id, label, icon: Icon }) => (
                   <TabsTab key={id} value={id} data-section={id} data-unsaved={changed.has(id) ? "true" : undefined} aria-description={changed.has(id) ? "Unsaved changes" : undefined}>
                     <Icon aria-hidden />
                     {label}
@@ -632,6 +645,18 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
                 {section === "generation" && generation}
                 {section === "agents" && agents}
                 {section === "connections" && <OutsideAgents hasKey={hasKey} onConnectOpenRouter={() => showSection("generation")} />}
+                {section === "ipad" && ipadHere && settings !== undefined && (
+                  <IpadAccess
+                    access={settings.ipadAccess}
+                    onAccess={async (on) => {
+                      const next = await engine.call("settings.update", { ipadAccess: on ? "on" : "" });
+                      ui.setSettings(next);
+                      setDraft((current) => ({ ...current, ipadPort: String(next.ipadPort) }));
+                    }}
+                    port={draft.ipadPort}
+                    onPort={(value) => edit({ ipadPort: value })}
+                  />
+                )}
                 {section === "general" && general}
               </DialogPanel>
               {banner !== undefined && (

@@ -1,10 +1,11 @@
-const { app, autoUpdater: nativeUpdater, BrowserWindow, dialog, shell } = require('electron');
+const { app, autoUpdater: nativeUpdater, BrowserWindow, dialog, powerSaveBlocker, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { createLog, createRecordStore } = require('./log');
 const { createEngine } = require('./engine');
 const { createLifecycle } = require('./lifecycle');
 const { createWindow } = require('./window');
+const { createKeepAwake } = require('./keep-awake');
 const { createUpdater } = require('./updates/updater');
 const { createMacInstaller, relaunchedAfter, waitForExit } = require('./updates/mac-install');
 const { paintScript, DOWNLOAD_URL, INSTALL_URL } = require('./updates/pill');
@@ -49,6 +50,9 @@ function boot() {
     },
   });
 
+  const keepAwake = createKeepAwake(powerSaveBlocker);
+  app.on('before-quit', () => keepAwake.set(false));
+
   let win = null;
   const destroyWindows = () => BrowserWindow.getAllWindows().forEach((w) => w.destroy());
   const lifecycle = createLifecycle({ app, nativeUpdater, engine, log, destroyWindows });
@@ -77,7 +81,10 @@ function boot() {
     log,
     version: app.getVersion(),
     records: createRecordStore(path.join(userData, 'desktop-update-install.json')),
-    prepareInstall: () => engine.stop(),
+    prepareInstall: () => {
+      keepAwake.set(false);
+      return engine.stop();
+    },
     recoverInstall: async () => {
       if (!win || win.isDestroyed()) return;
       const port = await startEngine();
@@ -113,9 +120,11 @@ function boot() {
 
   engine.onMessage((msg) => {
     if (msg?.type === 'reveal') revealFiles(msg.files);
+    if (msg?.type === 'keep-awake') keepAwake.set(msg.on === true);
   });
 
   engine.onUnexpectedExit((code, signal) => {
+    keepAwake.set(false);
     if (lifecycle.quitting() || updates.state().status === 'installing') return;
     fatal(`The engine stopped unexpectedly (${signal || `code ${code}`}).`);
   });

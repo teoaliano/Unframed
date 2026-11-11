@@ -1,7 +1,7 @@
 import type http from "node:http";
 import type { Duplex } from "node:stream";
 import { UnframedRpcs, unframedError } from "@unframed/contracts";
-import { MAX_REQUEST_BYTES } from "@unframed/domain";
+import { allowedForDevice, MAX_REQUEST_BYTES } from "@unframed/domain";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -15,7 +15,11 @@ import type { FromClientEncoded, FromServerEncoded } from "effect/unstable/rpc/R
 import * as RpcServer from "effect/unstable/rpc/RpcServer";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
 import type { UpgradeRoute } from "../http/api.ts";
+import { CLIENT_HEADER, deviceOfRequest } from "../ipad/deviceSockets.ts";
+import { Presence } from "../ipad/presence.ts";
 import { logInfo } from "../log.ts";
+
+export const MAC_ONLY_MESSAGE = "This works only in Unframed on your Mac.";
 
 /** The inbound frame limit. A larger frame closes that socket with 1009. */
 export const MAX_FRAME_BYTES = MAX_REQUEST_BYTES;
@@ -67,10 +71,12 @@ const isMessage = (value: unknown): value is FromClientEncoded =>
 
 export const rpcSocketsLayer = Layer.effectContext(
   Effect.gen(function* () {
+    const presence = yield* Presence;
     const context = yield* Effect.context<never>();
     const runPromise = Effect.runPromiseWith(context);
     const disconnects = yield* Queue.unbounded<number>();
     const clients = new Map<number, WebSocket>();
+    const devices = new Map<number, string>();
     let nextClientId = 0;
 
     const codecs = new Map<string, RpcCodecs>();
@@ -131,11 +137,32 @@ export const rpcSocketsLayer = Layer.effectContext(
       return true;
     };
 
+    const refuseMacOnly = (clientId: number, message: FromClientEncoded): boolean => {
+      if (message._tag !== "Request" || !devices.has(clientId)) return false;
+      if (allowedForDevice(message.tag, message.payload)) return false;
+      const rpcCodecs = codecsFor(message.tag);
+      if (!rpcCodecs) return false;
+      const error = unframedError("mac_only", MAC_ONLY_MESSAGE);
+      void runPromise(send(clientId, { _tag: "Exit", requestId: message.id, exit: rpcCodecs.encodeExit(Exit.fail(error)) } as FromServerEncoded));
+      return true;
+    };
+
+    const stampClient = (clientId: number, message: FromClientEncoded): FromClientEncoded => {
+      if (message._tag !== "Request") return message;
+      const kind = devices.has(clientId) ? "device" : "mac";
+      return { ...message, headers: [...message.headers.filter(([name]) => name !== CLIENT_HEADER), [CLIENT_HEADER, kind]] };
+    };
+
     const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES, perMessageDeflate: false });
 
-    const onConnection = (socket: WebSocket) => {
+    const onConnection = (socket: WebSocket, request: http.IncomingMessage) => {
       const clientId = nextClientId++;
       clients.set(clientId, socket);
+      const deviceId = deviceOfRequest(request);
+      if (deviceId !== undefined) {
+        devices.set(clientId, deviceId);
+        presence.track(deviceId, socket);
+      }
       let queue: Promise<void> = Promise.resolve();
       socket.on("message", (data) => {
         let parsed: unknown;
@@ -153,13 +180,16 @@ export const rpcSocketsLayer = Layer.effectContext(
           return;
         }
         for (const message of messages) {
+          if (refuseMacOnly(clientId, message)) continue;
           if (refuseUndecodable(clientId, message)) continue;
-          queue = queue.then(() => runPromise(writeRequest(clientId, message))).catch(() => {});
+          const stamped = stampClient(clientId, message);
+          queue = queue.then(() => runPromise(writeRequest(clientId, stamped))).catch(() => {});
         }
       });
       socket.on("error", () => {});
       socket.on("close", () => {
         clients.delete(clientId);
+        devices.delete(clientId);
         Queue.offerUnsafe(disconnects, clientId);
       });
     };
