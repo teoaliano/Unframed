@@ -1,9 +1,34 @@
-const fsp = require('node:fs/promises');
-const fs = require('node:fs');
+const fs = process.versions.electron ? require('original-fs') : require('node:fs');
+const fsp = fs.promises;
 const path = require('node:path');
 const { execFile } = require('node:child_process');
 
 const STAGE_PREFIX = '.unframed-update-';
+const RELAUNCH_FLAG = '--unframed-relaunch-after=';
+
+function relaunchedAfter(argv) {
+  const arg = argv.find((a) => a.startsWith(RELAUNCH_FLAG));
+  const pid = arg ? Number(arg.slice(RELAUNCH_FLAG.length)) : NaN;
+  return Number.isInteger(pid) && pid > 0 ? pid : null;
+}
+
+function isAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === 'EPERM';
+  }
+}
+
+async function waitForExit(pid, { alive = isAlive, everyMs = 100, timeoutMs = 15000 } = {}) {
+  const end = Date.now() + timeoutMs;
+  while (alive(pid)) {
+    if (Date.now() >= end) return false;
+    await new Promise((r) => setTimeout(r, everyMs));
+  }
+  return true;
+}
 
 const execRun = (cmd, args) =>
   new Promise((resolve, reject) =>
@@ -88,7 +113,11 @@ function createMacInstaller({ appPath, run = execRun, log }) {
     }
   }
 
-  return { canInstall, install, cleanup };
+  async function relaunch(pid = process.pid) {
+    await run('open', ['-n', appPath, '--args', `${RELAUNCH_FLAG}${pid}`]);
+  }
+
+  return { canInstall, install, cleanup, relaunch };
 }
 
-module.exports = { createMacInstaller };
+module.exports = { createMacInstaller, relaunchedAfter, waitForExit };
