@@ -1,4 +1,3 @@
-import type { Locator, Page } from "@playwright/test";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { openCanvas, roomShapes } from "./canvas.ts";
 import { expect, openRail, rail, tabs, test } from "./agent.ts";
@@ -27,12 +26,8 @@ const session = async (engine: TestEngine, token: string) => {
 
 /** A tab's running spinner, read from inside the tab. */
 const DOT = "[data-testid='chat-status'][data-status='running']";
-/** The rail's tab of the chat that has no spinner: its turn has settled. */
-const settledTab = (page: Page): Locator => tabs(page).filter({ hasNot: page.locator(DOT) });
-/** The tab of the chat whose turn is still open. */
-const liveTab = (page: Page): Locator => tabs(page).filter({ has: page.locator(DOT) });
 
-test("two sessions of one connection: a live tab, a settled tab with its recap and revert, and the outside line", async ({ page, agent }) => {
+test("two sessions of one connection share a tab, which settles with its recap and revert when the last ends, and a later session reopens it", async ({ page, agent }) => {
   await openCanvas(page, agent, "default");
   const rpc = await agent.rpc();
   const made = await rpc.call("agentConnections.create", { name: "Laptop Claude", client: "claude-code" });
@@ -42,23 +37,29 @@ test("two sessions of one connection: a live tab, a settled tab with its recap a
   await two.call("canvas_write", { project: "default", ops: [{ type: "create", id: "new:note", kind: "prompt", x: 0, y: 0, props: { text: "from the second session" } }] });
 
   const panel = await openRail(page);
-  await expect(tabs(page)).toHaveCount(2);
-  await expect(panel.getByTestId("chat-status")).toHaveCount(2);
-  await expect(tabs(page).first()).toContainText("Laptop Claude · ");
+  await expect(tabs(page)).toHaveCount(1);
+  await expect(tabs(page).first()).toContainText("Laptop Claude");
+  await expect(tabs(page).first()).not.toContainText("·");
+  await tabs(page).first().click();
+  await expect(panel.getByText("Working from outside Unframed…")).toBeVisible();
+  await expect(panel.getByTestId("outside-line")).toContainText("works from outside Unframed. Talk to it where it runs.");
+  await expect(panel.getByTestId("outside-line").getByRole("button", { name: "New chat" })).toBeVisible();
 
   await two.end();
-  await expect(settledTab(page)).toHaveCount(1);
-  await settledTab(page).click();
+  await expect(tabs(page).first().locator(DOT)).toHaveCount(1);
+  await one.end();
+  await expect(tabs(page).first().locator(DOT)).toHaveCount(0);
   await expect(panel.getByText("This session ended.")).toBeVisible();
   await expect(panel.getByRole("button", { name: "Revert this turn" })).toBeVisible();
   await panel.getByRole("button", { name: "Revert this turn" }).click();
   await expect(panel.getByText("Reverted", { exact: true })).toBeVisible();
   await expect.poll(async () => JSON.stringify(await roomShapes(agent, "default", "prompt"))).not.toContain("from the second session");
 
-  await liveTab(page).click();
-  await expect(panel.getByText("Working from outside Unframed…")).toBeVisible();
-  await expect(panel.getByTestId("outside-line")).toContainText("works from outside Unframed. Talk to it where it runs.");
-  await expect(panel.getByTestId("outside-line").getByRole("button", { name: "New chat" })).toBeVisible();
+  const three = await session(agent, made.token as string);
+  await three.call("canvas_read", { project: "default" });
+  await expect(tabs(page)).toHaveCount(1);
+  await expect(tabs(page).first().locator(DOT)).toHaveCount(1);
+  await expect(panel.getByText("This session ended.")).toHaveCount(0);
 });
 
 test("a revoked connection's open chat says it is disconnected", async ({ page, agent }) => {

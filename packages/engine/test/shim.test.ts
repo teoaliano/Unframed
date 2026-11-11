@@ -142,7 +142,7 @@ describe("the stdio shim", () => {
     await engine.stop("SIGTERM");
   });
 
-  it("is one session: two shims with one token make two chats, and closing one ends only its session", async () => {
+  it("is one session: two shims with one token share a chat, and its turn ends when the last of them closes", async () => {
     const engine = await startEngine({ env: { UNFRAMED_TEST_OUTSIDE_TURN_IDLE_MS: "60000" } });
     const rpc = await engine.rpc();
     await rpc.call("projects.create", { name: PROJECT });
@@ -153,28 +153,27 @@ describe("the stdio shim", () => {
     await handshake(two);
     await one.request(2, "tools/call", { name: "canvas_read", arguments: { project: PROJECT } });
     await two.request(2, "tools/call", { name: "canvas_read", arguments: { project: PROJECT } });
-    expect(await chatsIn({ rpc: await engine.rpc() } as never, PROJECT)).toHaveLength(2);
+    const [chat, ...others] = await chatsIn({ rpc: await engine.rpc() } as never, PROJECT);
+    expect(others).toHaveLength(0);
 
-    await one.close();
-    // Each chat's thread, read whole: the one whose session closed says so, the other's turn stays open.
     const watcher = await engine.rpc();
-    const snapshots = async () => {
-      const found = [];
-      for (const chat of await chatsIn({ rpc: watcher } as never, PROJECT)) {
-        const sub = watcher.subscribe("orchestration.subscribeThread", { projectId: PROJECT, threadId: chat.id });
-        const first = (await sub.next(0)) as unknown as { snapshot: { thread: { latestTurn: { state: string } | null; activities: Array<{ kind: string }> } } };
-        await sub.close();
-        found.push(first.snapshot.thread);
-      }
-      return found;
+    const snapshot = async () => {
+      const sub = watcher.subscribe("orchestration.subscribeThread", { projectId: PROJECT, threadId: chat!.id });
+      const first = (await sub.next(0)) as unknown as { snapshot: { thread: { latestTurn: { state: string } | null; activities: Array<{ kind: string }> } } };
+      await sub.close();
+      return first.snapshot.thread;
     };
-    const after = await waitFor(async () => {
-      const threads = await snapshots();
-      return threads.some((thread) => thread.activities.some((row) => row.kind === "outside.session-ended")) ? threads : undefined;
-    }, "the closed session to end");
-    expect(after.filter((thread) => thread.activities.some((row) => row.kind === "outside.session-ended"))).toHaveLength(1);
-    expect(after.filter((thread) => thread.latestTurn?.state === "running")).toHaveLength(1);
+    await one.close();
+    const half = await snapshot();
+    expect(half.latestTurn?.state).toBe("running");
+    expect(half.activities.some((row) => row.kind === "outside.session-ended")).toBe(false);
+
     await two.close();
+    const after = await waitFor(async () => {
+      const thread = await snapshot();
+      return thread.activities.some((row) => row.kind === "outside.session-ended") ? thread : undefined;
+    }, "the last session to end");
+    expect(after.latestTurn?.state).toBe("completed");
     await engine.stop("SIGTERM");
   });
 
