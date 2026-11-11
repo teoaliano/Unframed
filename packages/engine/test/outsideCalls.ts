@@ -10,7 +10,12 @@ const rpcBody = (id: number, method: string, params: unknown = {}) => ({ jsonrpc
 export interface OutsideLink {
   readonly token: string;
   open(): Promise<string>;
-  call(session: string, name: string, args: Record<string, unknown>, roots?: ReadonlyArray<string>): Promise<{ value: any; isError: boolean; content: string[] }>;
+  call(
+    session: string,
+    name: string,
+    args: Record<string, unknown>,
+    roots?: ReadonlyArray<string>,
+  ): Promise<{ value: any; isError: boolean; content: string[]; images: Array<{ data: string; mimeType: string }> }>;
   list(session: string): Promise<Array<{ name: string; inputSchema: { required: string[] } }>>;
   end(session: string): Promise<number>;
   raw(session: string | undefined, body: unknown): Promise<{ status: number; headers: Record<string, unknown>; json(): any }>;
@@ -43,9 +48,10 @@ export const outsideLink = async (agent: AgentEngine, name = "Work laptop Claude
     },
     async call(session, toolName, args, roots) {
       const answer = await raw(session, rpcBody(2, "tools/call", { name: toolName, arguments: args }), roots);
-      const result = answer.json().result as { content: Array<{ text: string }>; isError?: boolean };
-      const content = result.content.map((item) => item.text);
-      return { value: JSON.parse(content.at(-1)!), isError: result.isError === true, content };
+      const result = answer.json().result as { content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>; isError?: boolean };
+      const content = result.content.filter((item) => item.type === "text").map((item) => item.text!);
+      const images = result.content.filter((item) => item.type === "image").map((item) => ({ data: item.data!, mimeType: item.mimeType! }));
+      return { value: JSON.parse(content.at(-1)!), isError: result.isError === true, content, images };
     },
     async list(session) {
       const answer = await raw(session, rpcBody(3, "tools/list"));

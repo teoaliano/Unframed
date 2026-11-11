@@ -5,6 +5,7 @@
 import type { Editor, TLShapeId } from "tldraw";
 import { roomShapeId } from "@unframed/domain";
 import type { EngineConnection } from "../rpc/engine.ts";
+import { renderSnapshot } from "./canvasSnapshot.ts";
 
 /** Reports wait this long after the last change, so a drag reports once. */
 const REPORT_DEBOUNCE_MS = 150;
@@ -29,6 +30,10 @@ export const installSelectionReporter = (editor: Editor, engine: EngineConnectio
   };
   const stopListening = editor.store.listen(schedule);
   const stopStream = engine.subscribe("selection.subscribe", { project, windowId }, (apply) => {
+    if (apply.kind === "snapshot") {
+      void renderSnapshot(editor, apply).then((result) => engine.call("selection.snapshotResult", result).catch(() => undefined));
+      return;
+    }
     const present = apply.shapeIds.map((id) => roomShapeId(id) as TLShapeId).filter((id) => editor.getShape(id) !== undefined);
     editor.setSelectedShapes(present);
     clearTimeout(timer);
