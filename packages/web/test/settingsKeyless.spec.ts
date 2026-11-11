@@ -75,7 +75,7 @@ test("without a key, Agents, Connections and General work: the local agents, out
     await expect(dialog.getByTestId("agents-generate-need-key")).toContainText("Connect OpenRouter to let agents generate.");
     await expect(dialog.getByRole("button", { name: "Save" })).toHaveCount(0);
     await dialog.getByRole("button", { name: "Connect an agent" }).click();
-    const connect = page.getByRole("dialog", { name: "Connect an agent" });
+    const connect = dialog.getByRole("region", { name: "Connect an agent" });
     await expect(connect.getByTestId("agents-generate-need-key")).toHaveText("Connect OpenRouter to let agents generate.");
     await expect(connect.getByLabel("Spend limit amount")).toHaveCount(0);
     await connect.getByRole("button", { name: "Create connection" }).click();

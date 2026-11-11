@@ -29,7 +29,7 @@ import { KitExportFile, KitUsage } from "./kits.ts";
 import { KitSaveToLibrary, KitUpdateInLibrary } from "./library.ts";
 import { LegacyImportMarkSeen, LegacyImportReport, LegacyImportRetry, LegacyImportStatus } from "./legacy.ts";
 import { AgentConnectionsCreate, AgentConnectionsCreateAnswer, AgentConnectionsListAnswer, AgentConnectionsRevoke, AgentConnectionsSetSpendLimit } from "./agentConnections.ts";
-import { SelectionApply, SelectionReport, SelectionSubscribe } from "./selection.ts";
+import { SelectionApply, SelectionReport, SelectionSnapshotResult, SelectionSubscribe } from "./selection.ts";
 import { IpadDevicesAnswer, IpadExportProfileAnswer, IpadPairStartAnswer, IpadRevoke, IpadSetAvailability, IpadStatus } from "./ipad.ts";
 import { ArtifactEdit, ArtifactImages, ArtifactPrepareEdit, ArtifactSourceTree } from "./elementEdits.ts";
 
@@ -60,6 +60,12 @@ export const AgentConnectionsRevokeRpc = Rpc.make("agentConnections.revoke", {
 
 export const SelectionReportRpc = Rpc.make("selection.report", {
   payload: SelectionReport,
+  success: Empty,
+  error: UnframedError,
+});
+
+export const SelectionSnapshotResultRpc = Rpc.make("selection.snapshotResult", {
+  payload: SelectionSnapshotResult,
   success: Empty,
   error: UnframedError,
 });
@@ -398,6 +404,7 @@ export const UnframedRpcs = RpcGroup.make(
   AgentConnectionsSetSpendLimitRpc,
   SelectionReportRpc,
   SelectionSubscribeRpc,
+  SelectionSnapshotResultRpc,
   IpadStatusRpc,
   IpadSetAvailabilityRpc,
   IpadPairStartRpc,
