@@ -80619,7 +80619,7 @@ var offTokenValues = (html, kit) => {
 };
 
 // packages/engine/src/agent/version.ts
-var ENGINE_VERSION = "0.8.4";
+var ENGINE_VERSION = "0.8.5";
 
 // packages/engine/src/log.ts
 var errorText = (error2) => error2 instanceof Error ? error2.message : String(error2);
