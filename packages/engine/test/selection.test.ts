@@ -107,6 +107,74 @@ describe("the live selection", () => {
     expect(answered.value).toEqual({ selection: [], missing: [], selectionNote: NO_WINDOW });
   });
 
+  it("asks the window to draw the area around the shapes, padded, and answers its PNG with the shapes in the picture", async () => {
+    const agent = await startAgentEngine();
+    const link = await outsideLink(agent);
+    const session = await link.open();
+    const made = await link.call(session, "canvas_write", {
+      project: PROJECT,
+      ops: [
+        { type: "create", id: "new:screen", kind: "mark", x: 100, y: 200, props: { type: "geo", w: 400, h: 300 } },
+        { type: "create", id: "new:far", kind: "mark", x: 5000, y: 5000, props: { type: "geo", w: 50, h: 50 } },
+      ],
+    });
+    const screen = (made.value.ids as Record<string, string>)["new:screen"]!;
+    const far = (made.value.ids as Record<string, string>)["new:far"]!;
+    const window = windowOf(agent, "window-1");
+    await window.report([]);
+
+    const call = link.call(session, "canvas_snapshot", { project: PROJECT, shapeIds: [screen] });
+    const asked = (await nextItem(window.stream)) as { kind: string; requestId: string; bounds: unknown; scale: number };
+    expect(asked).toMatchObject({ kind: "snapshot", bounds: { x: 52, y: 152, w: 496, h: 396 }, scale: 2 });
+    await agent.rpc.call("selection.snapshotResult", { requestId: asked.requestId, png: "iVBORw0KGgo=", width: 992, height: 792 });
+
+    const answered = await call;
+    expect(answered.isError).toBe(false);
+    expect(answered.value).toMatchObject({ area: { x: 52, y: 152, w: 496, h: 396 }, scale: 2, width: 992, height: 792 });
+    expect(answered.value.shapes).toContain(screen);
+    expect(answered.value.shapes).not.toContain(far);
+    expect(answered.images).toEqual([{ data: "iVBORw0KGgo=", mimeType: "image/png" }]);
+    await window.close();
+  });
+
+  it("draws a given area, scaling a large one down to 1600 pixels on its longer side and saying so", async () => {
+    const agent = await startAgentEngine();
+    const link = await outsideLink(agent);
+    const session = await link.open();
+    await seed(link, session);
+    const window = windowOf(agent, "window-1");
+    await window.report([]);
+    const call = link.call(session, "canvas_snapshot", { project: PROJECT, area: { x: 0, y: 0, w: 8000, h: 4000 } });
+    const asked = (await nextItem(window.stream)) as { requestId: string; scale: number };
+    expect(asked.scale).toBe(0.2);
+    await agent.rpc.call("selection.snapshotResult", { requestId: asked.requestId, png: "AA==", width: 1600, height: 800 });
+    expect((await call).value.note).toBe("This area is large, so the picture is scaled down. Snapshot fewer shapes to read the details.");
+    await window.close();
+  });
+
+  it("refuses an unknown shape, a bad area, a window's error, and a project with no window open", async () => {
+    const agent = await startAgentEngine();
+    const link = await outsideLink(agent);
+    const session = await link.open();
+    const { a } = await seed(link, session);
+    expect((await link.call(session, "canvas_snapshot", { project: PROJECT, shapeIds: ["nope"] })).value.error).toBe("no shape with the id nope; call canvas_read for the ids");
+    expect((await link.call(session, "canvas_snapshot", { project: PROJECT, area: { x: 0, y: 0, w: 0, h: 10 } })).value.error).toBe(
+      "area must be {x, y, w, h} with numbers, and w and h above zero",
+    );
+    expect((await link.call(session, "canvas_snapshot", { project: PROJECT, shapeIds: [a] })).value.error).toBe(
+      "Unframed has no window open on this project, so there is nothing to look at. Ask the person to open the project in Unframed.",
+    );
+    const window = windowOf(agent, "window-1");
+    await window.report([]);
+    const call = link.call(session, "canvas_snapshot", { project: PROJECT, shapeIds: [a] });
+    const asked = (await nextItem(window.stream)) as { requestId: string };
+    await agent.rpc.call("selection.snapshotResult", { requestId: asked.requestId, error: "Nothing is drawn in that area of the canvas." });
+    const refused = await call;
+    expect(refused.isError).toBe(true);
+    expect(refused.value.error).toBe("Nothing is drawn in that area of the canvas.");
+    await window.close();
+  });
+
   it("keeps canvas_select off the in-app tool list", async () => {
     const agent = await startAgentEngine();
     const link = await outsideLink(agent);
