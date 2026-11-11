@@ -1,4 +1,4 @@
-import { keepPanelOnScreen, PANEL_MARGIN, panelSize, type PanelPrefs, type PanelRoom } from "@unframed/domain";
+import { keepPanelOnScreen, PANEL_MARGIN, panelSize, resizePanel, type PanelEdge, type PanelPrefs, type PanelRoom } from "@unframed/domain";
 import { useLayoutEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
 import type { Editor, TLShapeId } from "tldraw";
 import { TOP_BAR_HEIGHT } from "~/components/ui/top-bar";
@@ -66,7 +66,8 @@ export const useFloatingPlacement = ({
   };
 
   const remember = (next: Floating) => {
-    const place: PanelPrefs = { mode: "float", x: next.x, y: next.y, w: next.w };
+    const dockW = prefsNow.current?.dockW;
+    const place: PanelPrefs = { mode: "float", x: next.x, y: next.y, w: next.w, ...(dockW === undefined ? {} : { dockW }) };
     saveNow.current(next.h === undefined ? place : { ...place, h: next.h });
   };
 
@@ -127,14 +128,17 @@ export const useFloatingPlacement = ({
     track(event, (start, dx, dy) => ({ ...start, x: start.x + dx, y: start.y + dy, h: keep }));
   };
 
-  const startResize = (event: ReactPointerEvent<HTMLElement>) => track(event, (start, dx, dy) => ({ ...start, w: start.w + dx, h: (start.h ?? 0) + dy }));
+  const startResize = (event: ReactPointerEvent<HTMLElement>, edge: PanelEdge) =>
+    track(event, (start, dx, dy) => resizePanel({ ...start, h: start.h ?? 0 }, edge, dx, dy, roomOf(editor)));
 
   const nudge = (key: string, kind: "move" | "resize"): boolean => {
     const step = ARROWS[key];
     const current = box.current;
     if (step === undefined || !current || !element) return false;
     const [dx, dy] = step;
-    box.current = settle(kind === "move" ? { ...current, x: current.x + dx, y: current.y + dy } : { ...current, w: current.w + dx, h: (current.h ?? element.offsetHeight) + dy });
+    box.current = settle(
+      kind === "move" ? { ...current, x: current.x + dx, y: current.y + dy } : resizePanel({ ...current, h: current.h ?? element.offsetHeight }, "se", dx, dy, roomOf(editor)),
+    );
     paint();
     remember(box.current);
     return true;

@@ -353,9 +353,10 @@ Keys in use, each owned by the spec named:
 | `agent.planMode` | 08 (control in spec 10's dialog) | `true` turns plan mode on; off when unset |
 | `agent.sendShortcut` | 08 (control in spec 10's dialog) | `"enter"`, `"mod-enter-multiline"` or `"mod-enter"`; Enter when unset |
 | `agent.stash.<project>` | 08 | that project's stashed prompts |
+| `agent.rail` | 08 | `{ w }`: the docked agent rail's width in pixels |
 | `agent.drafts.<project>` | 08 | that project's unsent composer drafts, by chat |
 | `agent.diffLayout` | 08 | `"stacked"` or `"split"` |
-| `parameters.panel` | 09 | `{ mode: "float" \| "dock", x?, y?, w?, h? }`: the canvas Parameters panel's mode, and its floating place (`x`, `y`: pixels from the canvas's top-left) and size (`w`, `h`) |
+| `parameters.panel` | 09 | `{ mode: "float" \| "dock", x?, y?, w?, h?, dockW? }`: the canvas Parameters panel's mode, its floating place (`x`, `y`: pixels from the canvas's top-left) and size (`w`, `h`), and the docked drawer's width (`dockW`) |
 
 A later spec that remembers something adds its key to this table.
 
