@@ -22,6 +22,7 @@ import { Separator } from "~/components/ui/separator";
 import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { Tip } from "../chrome/ui.tsx";
 import { useEngine } from "../context.ts";
+import { useFeature } from "../features.ts";
 import { showError } from "../toasts.tsx";
 import { builtInPresets } from "./systemPresets.ts";
 import { systemKitPresets } from "./systemKits.ts";
@@ -220,7 +221,8 @@ export const LibraryDialog = ({ onClose, onAdd, initialType = "all" }: { readonl
   }, [engine, load]);
 
   const change = (patch: Partial<LibraryControls>) => setControls((current) => changeLibrary(current, patch));
-  const shown = libraryView([...presets, ...builtInPresets(), ...kits], controls);
+  const nodesOn = useFeature("nodes");
+  const shown = libraryView([...presets, ...builtInPresets(), ...kits].filter((preset) => nodesOn || preset.kind !== "flow"), controls);
 
   const chooseView = (next: View) => {
     setView(next);
@@ -289,7 +291,7 @@ export const LibraryDialog = ({ onClose, onAdd, initialType = "all" }: { readonl
                   { value: "all", label: "All" },
                   { value: "recipe", label: "Recipes" },
                   { value: "group", label: "Groups" },
-                  { value: "flow", label: "Flows" },
+                  ...(nodesOn ? [{ value: "flow" as const, label: "Flows" }] : []),
                   { value: "kit", label: "Kits" },
                 ]}
               />

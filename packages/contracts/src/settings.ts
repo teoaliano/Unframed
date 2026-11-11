@@ -24,10 +24,15 @@ export const Settings = Schema.Struct({
 });
 export type Settings = typeof Settings.Type;
 
+export const FEATURES = ["nodes", "element-editing"] as const;
+export const Feature = Schema.Literals(FEATURES);
+export type Feature = typeof Feature.Type;
+
 export const Health = Schema.Struct({
   ...Settings.fields,
   ok: Schema.Literal(true),
   client: Schema.Literals(["mac", "device"]),
+  features: Schema.Array(Feature),
 });
 export type Health = typeof Health.Type;
 

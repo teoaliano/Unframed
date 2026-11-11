@@ -32,6 +32,7 @@ import { copyAsPrompt } from "../generate/copyAsPrompt.ts";
 import { isTextResult } from "../generate/facts.ts";
 import { useActivation, useEngine } from "../context.ts";
 import { useIsDevice } from "../deviceMode.ts";
+import { useFeatures } from "../features.ts";
 import { useActiveProject } from "../project/activation.ts";
 import { showError, showNotice } from "../toasts.tsx";
 import { addShape, kindOfAddAction } from "./addShapes.ts";
@@ -109,6 +110,7 @@ const UnframedSections = () => {
   const project = useActiveProject(useActivation()) ?? "";
   const actions = useActions();
   const device = useIsDevice();
+  const features = useFeatures();
   const [opened] = useState<Opened>(() => {
     const point = editor.inputs.getCurrentPagePoint().clone();
     return { point, clicked: shapeUnder(editor, point), selection: editor.getSelectedShapes() };
@@ -130,6 +132,7 @@ const UnframedSections = () => {
     platform: platform(),
     pinned: pinnedAtom(project).get(),
     device,
+    features,
   });
 
   const selectClickedWhenEmpty = () => {

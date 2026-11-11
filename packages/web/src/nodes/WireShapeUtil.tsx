@@ -6,6 +6,7 @@ import { Badge } from "~/components/ui/badge";
 import { Menu, MenuGroup, MenuGroupLabel, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuRadioItemIndicator, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
 import { controlEvents } from "../canvas/shapes/media.tsx";
 import { labelHue } from "../chrome/hue.ts";
+import { useFeature } from "../features.ts";
 import { noteRender } from "../fps/renders.ts";
 import { type WireShape } from "./facts.ts";
 import { inputOrder, nodeRequestOf, nodeView } from "./graph.ts";
@@ -89,6 +90,16 @@ const RoleChip = ({ wire, at }: { readonly wire: WireShape; readonly at: Vec }) 
   const offered = JSON.parse(offeredKey) as { page: boolean; roles: WireRole[] };
   const events = controlEvents(editor);
   const chosen = (wire.meta.unframed as { chosen?: boolean } | undefined)?.chosen === true;
+  const nodesOn = useFeature("nodes");
+  if (!nodesOn) {
+    return (
+      <div className="pointer-events-none absolute top-0 left-0" style={{ transform: `translate(${at.x}px, ${at.y}px) translate(-50%, -50%)` }} data-testid="wire-chip" data-wire-id={wire.id}>
+        <Badge variant="label" style={labelHue(label === "—" || label === "choose" ? "orange" : "blue")} aria-label={`Wire role: ${label}`} data-role={wire.props.role}>
+          {label === "choose" ? "Choose what it sends" : label}
+        </Badge>
+      </div>
+    );
+  }
   return (
     <div className="pointer-events-auto absolute top-0 left-0" style={{ transform: `translate(${at.x}px, ${at.y}px) translate(-50%, -50%)` }} data-testid="wire-chip" data-wire-id={wire.id} {...events}>
       <Menu>

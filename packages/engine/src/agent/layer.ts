@@ -135,6 +135,7 @@ export const agentsLayer = Layer.effect(
         book: connections.book,
       },
       testAgentScript: config.testAgentScript,
+      features: config.features,
       idleMs: config.testAgentIdleMs,
       outsideTurnIdleMs: config.outsideTurnIdleMs,
       uploadUrlTtlMs: config.testUploadUrlTtlMs,

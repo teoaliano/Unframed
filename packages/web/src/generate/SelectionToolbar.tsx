@@ -1,4 +1,5 @@
 import { resultMetaOf, UnframedError } from "@unframed/contracts";
+import { useFeature } from "../features.ts";
 import { audioLine, composeSelection, labelLevel, readRef, resultLine, toolbarState, type ToolbarState } from "@unframed/domain";
 import { audioDurationOf } from "../canvas/shapes/audio.tsx";
 import { renamingShape } from "../canvas/rename.ts";
@@ -392,7 +393,8 @@ export const SelectionToolbar = () => {
   }, [editor, selectionKey]);
 
   const collapse = useCallback(() => closeComposer(editor), [editor]);
-  const nodes = useValue("selected nodes", () => selectionNodeCount(editor), [editor]);
+  const nodesOn = useFeature("nodes");
+  const nodes = useValue("selected nodes", () => (nodesOn ? selectionNodeCount(editor) : 0), [editor, nodesOn]);
   const agent = agentTray ? <AgentButton onOpen={() => openComposer(editor, "agent")} /> : null;
 
   if (selectionKey === "") return null;

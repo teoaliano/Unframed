@@ -1,3 +1,4 @@
+import type { Features } from "@unframed/domain";
 import type { McpTool } from "./mcp.ts";
 import { ArtifactTools } from "../artifacts/artifactTools.ts";
 import { ComponentTools } from "../artifacts/componentTools.ts";
@@ -17,9 +18,9 @@ const inert: any = new Proxy(
   },
 );
 
-export const unframedToolCatalogue = (): Array<Pick<McpTool, "name" | "description" | "inputSchema">> => {
+export const unframedToolCatalogue = (features: Features): Array<Pick<McpTool, "name" | "description" | "inputSchema">> => {
   const tools: McpTool[] = [
-    ...new CanvasTools(inert).tools(),
+    ...new CanvasTools(inert, features).tools(),
     ...new ArtifactTools(inert, () => 0).tools(),
     ...new ComponentTools(inert, () => 0).tools(),
     ...new PreviewTools(inert).tools(),
