@@ -67,7 +67,7 @@ const claudeCodeSteps = (input: SetupInput): SetupStep[] => {
   const env = envPairs(input).map(([key, value]) => `--env ${key}=${value}`).join(" ");
   const { shell } = launch(input);
   return [
-    { text: "Run this in a terminal:", code: `claude mcp add --scope user ${env} ${OUTSIDE_SERVER_NAME} -- ${shell}`, language: "sh" },
+    { text: "Run this in a terminal:", code: `claude mcp add ${OUTSIDE_SERVER_NAME} --scope user ${env} -- ${shell}`, language: "sh" },
     { text: "The Claude desktop app's Code tab uses the same setup." },
   ];
 };
