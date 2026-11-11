@@ -1,6 +1,6 @@
 {
   "name": "@unframed/engine",
-  "version": "0.8.4",
+  "version": "0.8.5",
   "private": true,
   "type": "module",
   "engines": {
@@ -16,6 +16,7 @@
     "@hyperframes/parsers": "0.8.206",
     "@hyperframes/player": "0.8.206",
     "@hyperframes/producer": "0.8.206",
+    "@peculiar/x509": "1.14.0",
     "@tldraw/store": "5.4.2",
     "@tldraw/sync-core": "5.4.2",
     "@tldraw/tlschema": "5.4.2",

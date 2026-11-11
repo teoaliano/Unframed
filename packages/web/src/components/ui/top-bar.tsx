@@ -8,7 +8,7 @@ import { ProjectTab, ProjectTabs, ProjectTabsList } from "~/components/ui/projec
 import { useTabReorder, type TabPlan } from "~/components/ui/tab-reorder";
 import { cn } from "~/lib/utils";
 
-export type TopBarStatus = "running" | "finished" | "dot";
+export type TopBarStatus = "running" | "finished" | "needs-you";
 
 export interface TopBarTab {
   readonly name: string;
@@ -60,8 +60,9 @@ export interface TopBarProps {
   /** The control after the last tab, the plus. */
   readonly newProject: ReactNode;
   readonly onActivate: (name: string) => void;
-  readonly onClose: (name: string) => void;
-  readonly onCloseAll: () => void;
+  /** Absent leaves the tabs with no close button, no drag and no right-click menu. */
+  readonly onClose?: (name: string) => void;
+  readonly onCloseAll?: () => void;
   readonly onRename?: (name: string) => void;
   readonly onDelete?: (name: string) => void;
   /** Moves a dragged tab to position `to` in the order. */
@@ -150,6 +151,7 @@ export const TopBar = ({
   const pinned = tabs.filter((tab) => tab.pinned === true).map((tab) => tab.name);
   const reorder = useTabReorder({ list: scroller, names, pinned, plan: (name) => tabPlan(tabs, name), onMove });
   const windows = platform === "windows";
+  const manage = onClose !== undefined;
 
   useEffect(() => {
     if (active === undefined) return;
@@ -164,15 +166,15 @@ export const TopBar = ({
   const onListClick = (event: MouseEvent<HTMLDivElement>) => {
     if (!(event.target instanceof Element) || event.target.closest("[data-close]") === null) return;
     const name = tabOf(event.target);
-    if (name !== undefined) onClose(name);
+    if (name !== undefined) onClose?.(name);
   };
   const onListAux = (event: MouseEvent<HTMLDivElement>) => {
     const name = tabOf(event.target);
-    if (name !== undefined && event.button === 1 && !pinnedTab(name)) onClose(name);
+    if (name !== undefined && event.button === 1 && !pinnedTab(name)) onClose?.(name);
   };
   const onListContext = (event: MouseEvent<HTMLDivElement>) => {
     const name = tabOf(event.target);
-    if (name === undefined) return;
+    if (name === undefined || !manage) return;
     event.preventDefault();
     setMenu({ name, x: event.clientX, y: event.clientY });
   };
@@ -224,7 +226,7 @@ export const TopBar = ({
                 data-variant={tab.variant ?? "default"}
                 aria-label={tab.pinned === true ? tab.name : tab.context === undefined ? undefined : `${tab.label ?? tab.name}, ${tab.context}`}
                 title={tab.title ?? tab.name}
-                closable={tab.pinned !== true}
+                closable={manage && tab.pinned !== true}
                 closeLabel={`Close ${tab.label ?? tab.name}`}
                 className={
                   tab.pinned === true
@@ -258,7 +260,7 @@ export const TopBar = ({
           {newProject}
         </div>
       </div>
-      <div data-slot="top-bar-drag" className={`${positioned}h-9 min-w-8 flex-1 ${DRAG}`} />
+      {layout === "flow" && <div data-slot="top-bar-drag" className={`relative h-9 min-w-8 flex-1 ${DRAG}`} />}
       <div data-slot="top-bar-end" {...region(`${positioned}flex h-9 shrink-0 items-center ${DRAG}`, regions.end)}>
         {!windows && <span className="flex h-9 items-center pe-3">{settingsNode}</span>}
         {windows && controls !== "none" && (
@@ -279,8 +281,8 @@ export const TopBar = ({
           {tabMenu === "full" && pinnedTab(menu!.name) && onUnpin && <MenuItem onClick={() => onUnpin(menu!.name)}>Unpin tab</MenuItem>}
           {tabMenu === "full" && !pinnedTab(menu!.name) && onPin && <MenuItem onClick={() => onPin(menu!.name)}>Pin tab</MenuItem>}
           {tabMenu === "full" && (onPin || onUnpin) && <MenuSeparator />}
-          <MenuItem onClick={() => menu && onClose(menu.name)}>Close</MenuItem>
-          <MenuItem onClick={() => onCloseAll()}>Close all tabs</MenuItem>
+          <MenuItem onClick={() => menu && onClose?.(menu.name)}>Close</MenuItem>
+          <MenuItem onClick={() => onCloseAll?.()}>Close all tabs</MenuItem>
           {tabMenu === "full" && (onRename || onDelete) && <MenuSeparator />}
           {tabMenu === "full" && onRename && <MenuItem onClick={() => menu && onRename(menu.name)}>Rename project</MenuItem>}
           {tabMenu === "full" && onDelete && (

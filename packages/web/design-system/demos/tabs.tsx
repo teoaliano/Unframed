@@ -123,7 +123,7 @@ export default function TabsDemo() {
       </Section>
 
       <Section title="Status">
-        {(["dot", "running", "finished", "failed"] as const).map((status) => (
+        {(["needs-you", "running", "finished", "failed"] as const).map((status) => (
           <Row key={status} label={status}>
             <Tabs defaultValue="a" className="max-w-md">
               <TabsList variant="panel" aria-label={`Status ${status}`}>

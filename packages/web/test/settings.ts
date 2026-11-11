@@ -49,7 +49,7 @@ export const settingsDialog = (page: Page): Locator => page.getByTestId("setting
 
 export const settingsButton = (page: Page): Locator => page.getByRole("button", { name: "Settings", exact: true });
 
-export const showSection = async (dialog: Locator, name: "Generation" | "Agents" | "Connections" | "General"): Promise<void> => {
+export const showSection = async (dialog: Locator, name: "Generation" | "Agents" | "Connections" | "iPad" | "General"): Promise<void> => {
   const tab = dialog.getByRole("tab", { name, exact: true });
   await tab.click();
   await expect(tab).toHaveAttribute("aria-selected", "true");
@@ -63,6 +63,12 @@ export const openSettings = async (page: Page): Promise<Locator> => {
   await settingsButton(page).click();
   const dialog = settingsDialog(page);
   await expect(dialog).toBeVisible();
+  return dialog;
+};
+
+export const openIpadSettings = async (page: Page): Promise<Locator> => {
+  const dialog = await openSettings(page);
+  await showSection(dialog, "iPad");
   return dialog;
 };
 

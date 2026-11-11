@@ -19,12 +19,15 @@ export const Settings = Schema.Struct({
   codexPath: Schema.String,
   claudeConfigDir: Schema.String,
   previewPort: Schema.Number,
+  ipadAccess: Schema.Boolean,
+  ipadPort: Schema.Number,
 });
 export type Settings = typeof Settings.Type;
 
 export const Health = Schema.Struct({
   ...Settings.fields,
   ok: Schema.Literal(true),
+  client: Schema.Literals(["mac", "device"]),
 });
 export type Health = typeof Health.Type;
 
@@ -42,5 +45,7 @@ export const SettingsPatch = Schema.Struct({
   claudePath: Schema.optionalKey(Schema.String),
   codexPath: Schema.optionalKey(Schema.String),
   claudeConfigDir: Schema.optionalKey(Schema.String),
+  ipadAccess: Schema.optionalKey(Schema.String),
+  ipadPort: Schema.optionalKey(Schema.String),
 });
 export type SettingsPatch = typeof SettingsPatch.Type;

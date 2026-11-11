@@ -1,5 +1,5 @@
 import type { Settings } from "@unframed/contracts";
-import { effectiveSettings, PROVIDER_KEYS, providerKeyView, SETTING_OF_VARIABLE, type EffectiveSettings } from "@unframed/domain";
+import { effectiveSettings, PROVIDER_KEYS, providerKeyView, readIpadPort, SETTING_OF_VARIABLE, type EffectiveSettings } from "@unframed/domain";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -52,7 +52,7 @@ export class SettingsStore extends Context.Service<
 
 const KEY_FIELDS: ReadonlySet<string> = new Set(PROVIDER_KEYS.map((provider) => provider.field));
 
-export const toView = (settings: EffectiveSettings, dataDir: string, previewPort: number): Settings => ({
+export const toView = (settings: EffectiveSettings, dataDir: string, previewPort: number, options: { readonly allowZeroIpadPort?: boolean } = {}): Settings => ({
   ...providerKeyView(settings),
   imageModel: settings.imageModel,
   textModel: settings.textModel,
@@ -65,6 +65,8 @@ export const toView = (settings: EffectiveSettings, dataDir: string, previewPort
   codexPath: settings.codexPath,
   claudeConfigDir: settings.claudeConfigDir,
   previewPort,
+  ipadAccess: settings.ipadAccess === "on",
+  ipadPort: readIpadPort(settings.ipadPort, { allowZero: options.allowZeroIpadPort === true }),
 });
 
 export const settingsStoreLayer = (options: {
@@ -78,7 +80,8 @@ export const settingsStoreLayer = (options: {
       const config = yield* Config;
       const initial = effectiveSettings(options.fileVars, options.processEnv);
       let live = initial;
-      const view = (settings: EffectiveSettings) => toView(settings, config.dataDir, options.previewPort);
+      const view = (settings: EffectiveSettings) =>
+        toView(settings, config.dataDir, options.previewPort, { allowZeroIpadPort: config.testIpadName !== undefined });
       const published = yield* SubscriptionRef.make(view(initial));
       const writeEnv = makeEnvWriter(config.envPath);
 

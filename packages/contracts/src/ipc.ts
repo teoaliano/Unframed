@@ -7,4 +7,7 @@ export type ReadyMessage = { type: "ready"; port: number; previewPort: number };
 /** Sent only when hosted: the shell reveals these absolute paths natively. */
 export type RevealMessage = { type: "reveal"; files: string[] };
 
-export type EngineIpcMessage = ReadyMessage | RevealMessage;
+/** Hosting contract: the shell holds a power blocker while a device is connected. */
+export type KeepAwakeMessage = { type: "keep-awake"; on: boolean };
+
+export type EngineIpcMessage = ReadyMessage | RevealMessage | KeepAwakeMessage;

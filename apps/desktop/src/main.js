@@ -1,12 +1,13 @@
-const { app, autoUpdater: nativeUpdater, BrowserWindow, dialog, shell } = require('electron');
+const { app, autoUpdater: nativeUpdater, BrowserWindow, dialog, powerSaveBlocker, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { createLog, createRecordStore } = require('./log');
 const { createEngine } = require('./engine');
 const { createLifecycle } = require('./lifecycle');
 const { createWindow } = require('./window');
+const { createKeepAwake } = require('./keep-awake');
 const { createUpdater } = require('./updates/updater');
-const { createMacInstaller } = require('./updates/mac-install');
+const { createMacInstaller, relaunchedAfter, waitForExit } = require('./updates/mac-install');
 const { paintScript, DOWNLOAD_URL, INSTALL_URL } = require('./updates/pill');
 
 const mac = process.platform === 'darwin';
@@ -20,9 +21,18 @@ function boot() {
   const engineDir =
     process.env.UNFRAMED_ENGINE_DIR ||
     (app.isPackaged
-      ? path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'unframed')
+      ? path.join(process.resourcesPath, 'app.asar', 'node_modules', 'unframed')
       : path.join(__dirname, '..', 'node_modules', 'unframed'));
   const outputDir = path.join(app.getPath('pictures'), 'Unframed');
+  const esbuildDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', '@esbuild');
+  const esbuildBinary = app.isPackaged
+    ? {
+        ESBUILD_BINARY_PATH:
+          process.platform === 'win32'
+            ? path.join(esbuildDir, `win32-${process.arch}`, 'esbuild.exe')
+            : path.join(esbuildDir, `${process.platform}-${process.arch}`, 'bin', 'esbuild'),
+      }
+    : {};
 
   const engine = createEngine({
     script: path.join(engineDir, 'server', 'index.js'),
@@ -31,6 +41,7 @@ function boot() {
     // Hosting contract (spec 01): installed engines read these exact variable names.
     env: {
       ...process.env,
+      ...esbuildBinary,
       ELECTRON_RUN_AS_NODE: '1',
       UNFRAMED_DATA_DIR: userData,
       UNFRAMED_CLIENT_DIST: path.join(engineDir, 'client', 'dist'),
@@ -38,6 +49,9 @@ function boot() {
       PORT: '0',
     },
   });
+
+  const keepAwake = createKeepAwake(powerSaveBlocker);
+  app.on('before-quit', () => keepAwake.set(false));
 
   let win = null;
   const destroyWindows = () => BrowserWindow.getAllWindows().forEach((w) => w.destroy());
@@ -55,7 +69,10 @@ function boot() {
       return;
     }
     await macInstaller.install({ zipPath: file, version });
-    app.relaunch();
+    await macInstaller.relaunch().catch((err) => {
+      log.warn(`could not relaunch through LaunchServices, relaunching directly: ${err.message}`);
+      app.relaunch();
+    });
     app.quit();
   }
 
@@ -64,7 +81,10 @@ function boot() {
     log,
     version: app.getVersion(),
     records: createRecordStore(path.join(userData, 'desktop-update-install.json')),
-    prepareInstall: () => engine.stop(),
+    prepareInstall: () => {
+      keepAwake.set(false);
+      return engine.stop();
+    },
     recoverInstall: async () => {
       if (!win || win.isDestroyed()) return;
       const port = await startEngine();
@@ -100,9 +120,11 @@ function boot() {
 
   engine.onMessage((msg) => {
     if (msg?.type === 'reveal') revealFiles(msg.files);
+    if (msg?.type === 'keep-awake') keepAwake.set(msg.on === true);
   });
 
   engine.onUnexpectedExit((code, signal) => {
+    keepAwake.set(false);
     if (lifecycle.quitting() || updates.state().status === 'installing') return;
     fatal(`The engine stopped unexpectedly (${signal || `code ${code}`}).`);
   });
@@ -166,5 +188,8 @@ function boot() {
   });
 }
 
-if (app.requestSingleInstanceLock()) boot();
-else app.quit();
+const previousInstance = relaunchedAfter(process.argv);
+(previousInstance ? waitForExit(previousInstance) : Promise.resolve()).then(() => {
+  if (app.requestSingleInstanceLock()) boot();
+  else app.quit();
+});

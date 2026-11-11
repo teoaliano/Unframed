@@ -124,3 +124,4 @@ export * from "./components/title.ts";
 export * from "./components/prompts.ts";
 export * from "./nodes/index.ts";
 export * from "./storedBoxes.ts";
+export * from "./ipad/index.ts";

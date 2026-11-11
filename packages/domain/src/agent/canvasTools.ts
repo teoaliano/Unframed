@@ -158,11 +158,49 @@ const markOwner = (shapes: ReadonlyArray<CanvasShape>): Map<string, string> => {
   return owners;
 };
 
+const NEAR_GAP = 160;
+
+const gapBetween = (a: Box, b: Box): number => {
+  const dx = Math.max(0, a.x - (b.x + b.w), b.x - (a.x + a.w));
+  const dy = Math.max(0, a.y - (b.y + b.h), b.y - (a.y + a.h));
+  return Math.hypot(dx, dy);
+};
+
+const markNear = (shapes: ReadonlyArray<CanvasShape>, owners: ReadonlyMap<string, string>): Map<string, string> => {
+  const images = shapes.filter((shape) => shape.kind === "image" && shape.file !== undefined);
+  const near = new Map<string, string>();
+  for (const mark of shapes) {
+    if (mark.kind !== "mark" || owners.has(mark.id)) continue;
+    let best: { id: string; gap: number } | undefined;
+    for (const image of images) {
+      const gap = gapBetween(mark.bounds, image.bounds);
+      if (gap <= NEAR_GAP && (best === undefined || gap < best.gap)) best = { id: image.id, gap };
+    }
+    if (best !== undefined) near.set(mark.id, best.id);
+  }
+  return near;
+};
+
+const arrowEnds = (records: ReadonlyArray<CanvasRecord>): Map<string, { from?: string; to?: string }> => {
+  const ends = new Map<string, { from?: string; to?: string }>();
+  for (const record of records) {
+    if (record.typeName !== "binding" || record.type !== "arrow") continue;
+    const binding = record as unknown as { fromId?: unknown; toId?: unknown };
+    if (typeof binding.fromId !== "string" || typeof binding.toId !== "string") continue;
+    const terminal = obj(record.props).terminal;
+    const current = ends.get(binding.fromId) ?? {};
+    ends.set(binding.fromId, terminal === "start" ? { ...current, from: binding.toId } : terminal === "end" ? { ...current, to: binding.toId } : current);
+  }
+  return ends;
+};
+
 export const canvasView = (input: CanvasViewInput): CanvasView => {
   const byId = new Map(input.records.map((record) => [record.id, record]));
   const shapes = canvasShapesOf(input.records, input.boxes);
   const facts = new Map(shapes.map((shape) => [shape.id, shape]));
   const owners = markOwner(shapes);
+  const nearby = markNear(shapes, owners);
+  const ends = arrowEnds(input.records);
   const currentSheets = new Map<string, string>();
   for (const record of input.records) {
     if (record.type === "component" && typeof record.props?.tag === "string" && typeof record.props.file === "string") currentSheets.set(record.props.tag, record.props.file);
@@ -274,6 +312,11 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
         if (text !== "") entry.text = text;
         const on = owners.get(record.id);
         if (on !== undefined) entry.on = agentShapeId(on);
+        const near = nearby.get(record.id);
+        if (near !== undefined) entry.near = agentShapeId(near);
+        const end = ends.get(record.id);
+        if (end?.from !== undefined) entry.from = agentShapeId(end.from);
+        if (end?.to !== undefined) entry.to = agentShapeId(end.to);
         break;
       }
     }
@@ -388,7 +431,7 @@ const MARK_DEFAULTS: Record<string, (w: number, h: number) => Record<string, unk
     labelColor: "black",
     size: "m",
     font: "draw",
-    fontSizeAdjustment: 0,
+    fontSizeAdjustment: 1,
     align: "middle",
     verticalAlign: "middle",
     growY: 0,

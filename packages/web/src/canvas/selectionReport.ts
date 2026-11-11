@@ -5,6 +5,7 @@
 import type { Editor, TLShapeId } from "tldraw";
 import { roomShapeId } from "@unframed/domain";
 import type { EngineConnection } from "../rpc/engine.ts";
+import { renderSnapshot } from "./canvasSnapshot.ts";
 
 /** Reports wait this long after the last change, so a drag reports once. */
 const REPORT_DEBOUNCE_MS = 150;
@@ -14,9 +15,13 @@ const windowId = crypto.randomUUID();
 
 export const installSelectionReporter = (editor: Editor, engine: EngineConnection, project: string): (() => void) => {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const report = () => {
+  let last: string | undefined;
+  const report = (force = false) => {
     // Room ids, as the canvas holds them: the engine reads the selection against the room.
     const shapeIds: string[] = editor.getSelectedShapeIds().map((id) => String(id));
+    const reported = shapeIds.join(" ");
+    if (!force && reported === last) return;
+    last = reported;
     void engine.call("selection.report", { project, windowId, shapeIds }).catch(() => undefined);
   };
   const schedule = () => {
@@ -25,14 +30,22 @@ export const installSelectionReporter = (editor: Editor, engine: EngineConnectio
   };
   const stopListening = editor.store.listen(schedule);
   const stopStream = engine.subscribe("selection.subscribe", { project, windowId }, (apply) => {
+    if (apply.kind === "snapshot") {
+      void renderSnapshot(editor, apply).then((result) => engine.call("selection.snapshotResult", result).catch(() => undefined));
+      return;
+    }
     const present = apply.shapeIds.map((id) => roomShapeId(id) as TLShapeId).filter((id) => editor.getShape(id) !== undefined);
     editor.setSelectedShapes(present);
     clearTimeout(timer);
-    report();
+    report(true);
   });
-  report();
+  const stopState = engine.onStateChange((state) => {
+    if (state === "open") report(true);
+  });
+  report(true);
   return () => {
     clearTimeout(timer);
+    stopState();
     stopListening();
     stopStream();
   };

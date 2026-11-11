@@ -23,7 +23,7 @@ const CANVAS_COLOURS = `new Promise((resolve) => requestAnimationFrame(() => req
 const windowChrome = () => {
   const theme = palette();
   return mac
-    ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 20, y: 17 } }
+    ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 12, y: 11 } }
     : {
         titleBarStyle: 'hidden',
         titleBarOverlay: { color: theme.background, symbolColor: theme.symbol, height: 40 },

@@ -1,4 +1,4 @@
-export type SettingsSection = "generation" | "agents" | "connections" | "general";
+export type SettingsSection = "generation" | "agents" | "connections" | "ipad" | "general";
 
 export const OPEN_SETTINGS = "unframed:open-settings";
 

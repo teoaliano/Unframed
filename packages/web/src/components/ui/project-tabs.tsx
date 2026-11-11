@@ -42,19 +42,19 @@ interface ProjectTabProps extends TabsPrimitive.Tab.Props {
 }
 
 /**
- * One project: the full height of the bar, 96 to 160 px wide with the name truncating, a divider after it, and the
- * accent fill when active. Its 14 px close button sits 8 px from the right edge and shows on the active tab and on hover.
+ * One project: the full height of the bar, 96 to 160 px wide with the name truncating, a divider after it, the bar's
+ * bottom border under it, and the accent fill when active. Its 14 px close button sits 8 px from the right edge and shows on the active tab and on hover.
  */
 function ProjectTab({ className, children, status, onClose, closeLabel = "Close tab", item, closable = true, ...props }: ProjectTabProps) {
   return (
     <span
       data-slot="project-tab-group"
       data-tab-item={item}
-      className="group/tab relative inline-flex h-full shrink-0 border-e bg-background data-dragging:z-10 data-dragging:bg-popover data-dragging:shadow-md/10 data-dragging:ring-1 data-dragging:ring-border data-dragging:[&_[data-slot=project-tab]]:cursor-grabbing"
+      className="group/tab relative inline-flex h-full shrink-0 border-e border-b bg-background data-dragging:z-10 data-dragging:bg-popover data-dragging:shadow-md/10 data-dragging:ring-1 data-dragging:ring-border data-dragging:[&_[data-slot=project-tab]]:cursor-grabbing [&_svg]:[stroke-width:1.3333] [&_svg_*]:[vector-effect:non-scaling-stroke]"
     >
       <TabsPrimitive.Tab
         className={cn(
-          "peer relative inline-flex h-full min-w-24 max-w-40 shrink-0 cursor-pointer select-none items-center justify-start gap-1 whitespace-nowrap ps-2 pe-7 text-xs font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-active:bg-accent data-active:text-foreground [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+          "peer relative inline-flex h-full min-w-24 max-w-40 shrink-0 cursor-pointer select-none items-center justify-start gap-1 whitespace-nowrap ps-2 pe-7 text-xs font-normal text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-active:bg-accent data-active:font-medium data-active:text-foreground [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_[data-slot=tabs-status][data-status=running]]:text-foreground",
           className,
         )}
         data-slot="project-tab"
@@ -78,7 +78,7 @@ function ProjectTab({ className, children, status, onClose, closeLabel = "Close 
         data-close=""
         onClick={onClose}
       >
-        <X aria-hidden className="size-3.5" />
+        <X aria-hidden className="size-3" />
       </Button>
       )}
     </span>

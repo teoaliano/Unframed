@@ -1,6 +1,7 @@
 import { farOffscreen, isArtifactKind, liveArtifacts, LIVE_SELECTED_LIMIT, PIN_LIMIT, type DialsAnnouncement } from "@unframed/domain";
 import type { RenderStatus } from "@unframed/contracts";
 import { atom, computed, react, type Atom, type Computed, type Editor, type TLShapeId } from "tldraw";
+import { isDeviceClient } from "../deviceMode.ts";
 
 export const previewPort: Atom<number | undefined> = atom("preview port", undefined);
 
@@ -99,6 +100,7 @@ export const artifactsOf = (editor: Editor): CanvasArtifacts => {
 };
 
 export const isLive = (editor: Editor, id: TLShapeId): boolean => {
+  if (isDeviceClient()) return false;
   const state = artifactsOf(editor);
   if (!state.live.get().has(id)) return false;
   if (state.tuning.get() === id) return true;

@@ -1,7 +1,7 @@
 {
   "name": "unframed-app",
   "private": true,
-  "version": "0.0.21",
+  "version": "0.0.22",
   "description": "Desktop shell for Unframed.",
   "author": "teoaliano",
   "type": "commonjs",
@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "electron-updater": "^6.8.9",
-    "unframed": "github:teoaliano/Unframed#engine-v0.8.4-dist"
+    "unframed": "github:teoaliano/Unframed#engine-v0.8.5-dist"
   },
   "devDependencies": {
     "electron": "^44.4.5",
@@ -41,7 +41,9 @@
     ],
     "asar": true,
     "asarUnpack": [
-      "node_modules/**"
+      "node_modules/unframed/server/mcp.js",
+      "node_modules/@esbuild/**",
+      "node_modules/@img/**"
     ],
     "mac": {
       "target": [

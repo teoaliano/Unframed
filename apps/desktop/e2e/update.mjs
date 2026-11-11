@@ -122,9 +122,16 @@ const PILL = `(() => {
 const pill = () => cdp(PILL).catch(() => undefined);
 const clickPill = () => cdp(`document.querySelector('#unframed-update-pill [data-x="go"]').click()`);
 
+const localTime = (d) => {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+};
+
+const appLogSince = (offset) => (fs.existsSync(APP_LOG) ? fs.readFileSync(APP_LOG, 'utf8').slice(offset) : '');
+
 function systemLog(sinceIso) {
   const out = shQuiet('/usr/bin/log', [
-    'show', '--style', 'compact', '--start', sinceIso.replace('T', ' ').slice(0, 19),
+    'show', '--style', 'compact', '--start', localTime(new Date(sinceIso)),
     '--predicate', 'process == "loginwindow" OR process == "launchd" OR process == "ShipIt"',
   ]);
   return out
@@ -181,10 +188,18 @@ async function main() {
     result.installed = await waitFor(`version ${TO} on disk`, () => installedVersion() === TO, 120000).then(() => true, () => false);
     result.versionOnDisk = installedVersion();
     result.relaunched = await waitFor('a relaunch', () => appPids().length > 0, 20000).then(() => true, () => false);
+    const relaunchLog = () => appLogSince(appLogOffset).split(`Unframed ${TO} starting`)[1] ?? '';
+    result.engineStartedAfterRelaunch = await waitFor('the relaunched engine', () => /engine ready/.test(relaunchLog()), 30000).then(() => true, () => false);
+    await sleep(5000);
+    result.engineStillUpAfterRelaunch = result.engineStartedAfterRelaunch && !/engine stopped unexpectedly|engine exited/i.test(relaunchLog());
+    const leftovers = () => fs.readdirSync(path.dirname(appPath)).filter((n) => n.startsWith('.unframed-update-'));
+    result.stagingRemoved = await waitFor('the staging folder to be removed', () => leftovers().length === 0, 30000).then(() => true, () => false);
   } finally {
     server.close();
     await sleep(2000);
     for (const pid of appPids()) spawnSync('kill', [pid]);
+    await sleep(2000);
+    for (const pid of appPids()) spawnSync('kill', ['-9', pid]);
     const shipIt = fs.existsSync(SHIPIT_LOG)
       ? fs.readFileSync(SHIPIT_LOG, 'utf8').slice(shipItOffset).split('\n').filter((l) => l && !l.includes('Unrecognized attribute')).join('\n')
       : '';
@@ -199,7 +214,7 @@ async function main() {
     fs.writeFileSync(path.join(runDir, 'result.json'), JSON.stringify(result, null, 2));
     console.log(JSON.stringify(result, null, 2));
   }
-  process.exitCode = result.installed ? 0 : 1;
+  process.exitCode = result.installed && result.engineStillUpAfterRelaunch && result.stagingRemoved ? 0 : 1;
 }
 
 main().catch((err) => {

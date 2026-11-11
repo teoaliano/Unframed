@@ -99,7 +99,7 @@ describe("components on the outside list", () => {
     const link = await outsideLink(agent);
     const session = await link.open();
     const tools = await link.list(session);
-    expect(tools.map((tool) => tool.name)).toEqual(["projects_list", ...UNFRAMED_TOOLS, "canvas_select", "chat_note", "file_add"]);
+    expect(tools.map((tool) => tool.name)).toEqual(["projects_list", ...UNFRAMED_TOOLS, "canvas_select", "canvas_snapshot", "chat_note", "file_add"]);
     for (const name of ["component_write", "component_read"]) {
       expect(tools.find((tool) => tool.name === name)!.inputSchema.required).toContain("project");
     }

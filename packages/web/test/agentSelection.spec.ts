@@ -1,6 +1,7 @@
-import type { TestEngine } from "../../engine/test/engineProcess.ts";
+import { rm } from "node:fs/promises";
+import { makeTempDir, type TestEngine } from "../../engine/test/engineProcess.ts";
 import { openCanvas, shapeOnScreen } from "./canvas.ts";
-import { expect, test } from "./agent.ts";
+import { expect, startAgentEngine, test } from "./agent.ts";
 
 /** A cross-window selection lands after the window reports it; a loaded CI runner can take longer than the default 5 s. */
 const SLOW = { timeout: 15_000 };
@@ -72,4 +73,31 @@ test("canvas_select sets the window's selection, and the window's report comes b
   expect(answered).toEqual({ selection: [b], missing: ["not-a-shape"] });
   await expect(shapeOnScreen(page, `shape:${b}`)).toBeVisible();
   await expect.poll(async () => (await call("canvas_read", { project: "default" })).selection).toEqual([b]);
+});
+
+test("a window that reconnects to a restarted engine says again what it holds", async ({ page }) => {
+  test.setTimeout(90_000);
+  const dataDir = await makeTempDir();
+  const first = await startAgentEngine({ dataDir });
+  let second: TestEngine | undefined;
+  try {
+    await openCanvas(page, first, "default");
+    const made = await (await first.rpc()).call("agentConnections.create", { name: "Desk", client: "claude-code" });
+    const call = await session(first, made.token as string);
+    const { a } = await twoPrompts(first, call);
+    await expect(shapeOnScreen(page, `shape:${a}`)).toBeVisible();
+    await shapeOnScreen(page, `shape:${a}`).click();
+    await expect.poll(async () => (await call("canvas_read", { project: "default" })).selection, SLOW).toEqual([a]);
+
+    const port = first.port;
+    await first.stop();
+    second = await startAgentEngine({ dataDir, env: { PORT: String(port) } });
+    await expect(page.locator("[data-canvas-project='default'] .tl-canvas")).toBeVisible();
+    const after = await session(second, made.token as string);
+    await expect.poll(async () => (await after("canvas_read", { project: "default" })).selection, { timeout: 30_000 }).toEqual([a]);
+  } finally {
+    await second?.dispose();
+    await first.dispose();
+    await rm(dataDir, { recursive: true, force: true });
+  }
 });

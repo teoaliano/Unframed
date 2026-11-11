@@ -1,7 +1,7 @@
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { acceptTestOrigin, OUTSIDE_TURN_IDLE_MS, PROVIDER_KEYS, type ProviderId } from "@unframed/domain";
-import { agentConnectionsFilePath, discoveryFilePath, envFilePath, preferencesFilePath, resolveDataDir } from "./paths.ts";
+import { agentConnectionsFilePath, discoveryFilePath, envFilePath, ipadDevicesFilePath, ipadDirPath, preferencesFilePath, resolveDataDir } from "./paths.ts";
 
 const positiveInt = (value: string | undefined): number | undefined => {
   if (value === undefined || value.trim() === "") return undefined;
@@ -28,6 +28,8 @@ export interface EngineConfig {
   readonly preferencesPath: string;
   readonly agentConnectionsPath: string;
   readonly discoveryPath: string;
+  readonly ipadDir: string;
+  readonly ipadDevicesPath: string;
   /** How long an outside turn stays open after its last call: two minutes, or `UNFRAMED_TEST_OUTSIDE_TURN_IDLE_MS` (spec 14). */
   readonly outsideTurnIdleMs: number;
   /** The stdio shim the outside setups run: beside `main.ts` in a clone, beside the bundle's `index.js` when published. */
@@ -68,6 +70,7 @@ export interface EngineConfig {
   readonly testUploadUrlTtlMs: number | undefined;
   /** `UNFRAMED_TEST_RENDERER`: `ok`, `fail` or `no-chrome` stand in for the motion renderer and the Chrome search. */
   readonly testRenderer: TestRenderer | undefined;
+  readonly testIpadName: string | undefined;
   readonly platform: NodeJS.Platform;
 }
 
@@ -104,6 +107,8 @@ export const loadConfig = (
       preferencesPath: preferencesFilePath(dataDir),
       agentConnectionsPath: agentConnectionsFilePath(dataDir),
       discoveryPath: discoveryFilePath(dataDir),
+      ipadDir: ipadDirPath(dataDir),
+      ipadDevicesPath: ipadDevicesFilePath(dataDir),
       shimPath: shimEntryPath(),
       outsideTurnIdleMs: positiveInt(env.UNFRAMED_TEST_OUTSIDE_TURN_IDLE_MS) ?? OUTSIDE_TURN_IDLE_MS,
       runAsNode: env.ELECTRON_RUN_AS_NODE === "1",
@@ -127,6 +132,7 @@ export const loadConfig = (
       testAgentIdleMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_AGENT_IDLE_MS)),
       testUploadUrlTtlMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_UPLOAD_URL_TTL_MS)),
       testRenderer: renderer === "ok" || renderer === "fail" || renderer === "no-chrome" ? renderer : undefined,
+      testIpadName: nonEmpty(env.UNFRAMED_TEST_IPAD)?.toLowerCase(),
       platform,
     },
     warnings,

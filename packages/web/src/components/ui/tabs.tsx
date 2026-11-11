@@ -2,7 +2,7 @@
 
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
 import { cva, type VariantProps } from "class-variance-authority";
-import { Check, CircleAlert, X } from "lucide-react";
+import { Check, CircleAlert, MessageCircleQuestionMark, X } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "~/components/ui/button";
@@ -89,7 +89,7 @@ const TabsContext = React.createContext<{ readonly variant: TabsVariant; readonl
 });
 
 const STATUS_LABELS = {
-  dot: "New",
+  "needs-you": "Needs you",
   running: "Running",
   finished: "Finished",
   failed: "Failed",
@@ -150,7 +150,7 @@ const TabStatusIcon = ({ status }: { readonly status: TabsStatus | undefined }) 
   if (status === undefined) return null;
   return (
     <span role="img" aria-label={STATUS_LABELS[status]} data-slot="tabs-status" data-status={status} className="inline-flex shrink-0">
-      {status === "dot" && <span aria-hidden className="size-1.5 rounded-full bg-highlight" />}
+      {status === "needs-you" && <MessageCircleQuestionMark aria-hidden className="text-highlight" />}
       {status === "running" && <Spinner size="xs" aria-hidden />}
       {status === "finished" && <Check aria-hidden className="text-success" />}
       {status === "failed" && <CircleAlert aria-hidden className="text-destructive" />}
@@ -159,7 +159,7 @@ const TabStatusIcon = ({ status }: { readonly status: TabsStatus | undefined }) 
 };
 
 interface TabsTabProps extends TabsPrimitive.Tab.Props {
-  /** A status icon after the label: a dot for unread, a spinner while running, a check or a warning when done. */
+  /** A status icon after the label: a question bubble when it waits for the person, a spinner while running, a check or a warning when done. */
   readonly status?: TabsStatus;
   /** Shows a close button, on the active tab only. `onClose` runs when it is pressed. */
   readonly closable?: boolean;
