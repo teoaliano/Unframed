@@ -194,6 +194,8 @@ Decided from the selection by a pure function in the web (tested at the domain s
 | usable | hint, Agent, Generate (primary, last) |
 | not usable | Agent only |
 
+Whenever the selection holds a prompt or a mark, the bar for it (usable, not usable, result or recipe; never `Generating…` or a single artifact's bar) starts with spec 24's style row and its Design panel toggle, 12 px before the rest. The row is gone while the bar is grown into the composer.
+
 Whenever the selection holds more than one shape and at least one of them is a page, motion or component with a file, the bar for it (usable, not usable or recipe) starts with the same six-dot drag handle, which moves every selected shape together, the pointer's move on the page converted into each shape's own parent space so a shape inside a group (rotated or not) follows the pointer, since a live artifact's frame takes the pointer and would otherwise leave the selection with nothing to drag by.
 
 The hint is `@<name>` when the selection is exactly one group, otherwise `N selected` where N counts the selected shapes as tldraw counts them (a group is one). When the selection is exactly the members of one batch (spec 05), the hint is `4 images · $0.6720`.

@@ -36,7 +36,7 @@ test("an empty page's bar is Agent alone; its tray has one frame", async ({ page
   await openCanvas(page, agent);
   await putRecords(agent, [artifactShape({ id: "shape:empty", kind: "page", ref: "170", at: { x: 0, y: 0 } })]);
   await clickShape(page, "shape:empty");
-  await expect(toolbar(page).getByRole("button")).toHaveText(["Agent"]);
+  await expect(toolbar(page).locator("button:not([data-testid='style-row'] *)")).toHaveText(["Agent"]);
   await expect(toolbar(page).locator("[data-slot='separator']")).toBeHidden();
   // The same gap on every side of the button, inside the bar's border.
   const insets = await toolbar(page).evaluate((bar) => {

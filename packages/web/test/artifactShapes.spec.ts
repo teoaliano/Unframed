@@ -111,7 +111,7 @@ test("a selected page or motion moves by the six-dot handle in its toolbar, and 
     await expect(shapeOnScreen(page, id)).toHaveAttribute("data-label-active", "true");
     const handle = toolbar(page).getByRole("button", { name: "Drag to move" });
     await expect(handle).toBeVisible();
-    await expect(toolbar(page).getByRole("button")).toHaveText(id === "shape:intro" ? ["", "Editor", "Render", "Parameters", "100%", "Agent"] : ["", "Editor", "Parameters", "100%", "Agent"]);
+    await expect(toolbar(page).locator("button:not([data-testid='style-row'] *)")).toHaveText(id === "shape:intro" ? ["", "Editor", "Render", "Parameters", "100%", "Agent"] : ["", "Editor", "Parameters", "100%", "Agent"]);
     const grip = (await handle.boundingBox())!;
     await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
     await page.mouse.down();
@@ -140,7 +140,7 @@ test("several selected pages and motions keep the six-dot handle, which moves th
   await page.keyboard.press("ControlOrMeta+a");
   const handle = toolbar(page).getByRole("button", { name: "Drag to move" });
   await expect(handle).toBeVisible();
-  await expect(toolbar(page).getByRole("button")).toHaveText(["", "Agent", "Generate"]);
+  await expect(toolbar(page).locator("button:not([data-testid='style-row'] *)")).toHaveText(["", "Agent", "Generate"]);
   const grip = (await handle.boundingBox())!;
   await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
   await page.mouse.down();
@@ -195,7 +195,7 @@ test("a selected page scales on the canvas from its toolbar, keeping its layout 
   await page.mouse.click(box.x + 20, box.y - 8);
   const control = toolbar(page).getByTestId("artifact-scale");
   await expect(control).toHaveText("100%");
-  await expect(toolbar(page).getByRole("button")).toHaveText(["", "Editor", "Parameters", "100%", "Agent"]);
+  await expect(toolbar(page).locator("button:not([data-testid='style-row'] *)")).toHaveText(["", "Editor", "Parameters", "100%", "Agent"]);
   const viewport = async () => {
     try {
       const frame = await frameOf(page, "shape:landing").elementHandle();

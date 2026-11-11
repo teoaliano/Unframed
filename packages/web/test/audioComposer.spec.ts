@@ -165,7 +165,7 @@ test("a run lands as an audio result beside the selection with its line; its bar
   const title = (await card.getByTestId("audio-title").boundingBox())!;
   await page.mouse.click(title.x + title.width - 4, title.y + 4);
   await expect(toolbar(page).getByTestId("result-line")).toHaveText("eleven_v4 · 0:02 · 124 credits");
-  await expect(toolbar(page).getByRole("button")).toHaveText([/Regenerate/, /Agent/]);
+  await expect(toolbar(page).locator("button:not([data-testid='style-row'] *)")).toHaveText([/Regenerate/, /Agent/]);
   await expect(toolbar(page).getByRole("button", { name: "Generate", exact: true })).toHaveCount(0);
 
   await toolbar(page).getByRole("button", { name: "Regenerate" }).click();

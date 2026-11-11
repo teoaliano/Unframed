@@ -49,7 +49,7 @@ test("results land to the right of the selection, placeholder first, and a selec
   await expect(shapeOnScreen(page, placeholder!.id).locator("img")).toBeVisible();
   await page.mouse.click(10, 400);
   await clickShape(page, placeholder!.id);
-  await expect(toolbar(page).getByRole("button")).toHaveText(["Regenerate", "Agent", "Generate"]);
+  await expect(toolbar(page).locator("button:not([data-testid='style-row'] *)")).toHaveText(["Regenerate", "Agent", "Generate"]);
   await expect(toolbar(page).getByTestId("result-line")).toHaveText("gpt-image-2 · 96×64 · $0.1900");
   // Generate is the kit's primary Button, Regenerate its outline Button.
   await page.mouse.move(5, 500);

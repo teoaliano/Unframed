@@ -83,11 +83,18 @@ const select = async (page: Page, id: string) => {
   await page.mouse.click(at.x, at.y);
 };
 
+const openPanel = async (page: Page) => {
+  await page.getByTestId("selection-toolbar").getByRole("button", { name: "Design panel", exact: true }).click();
+  await expect(panel(page)).toBeVisible();
+};
+
 test("the Design panel replaces tldraw's style panel and sets a prompt's font, size, weight, align, colour and opacity exactly", async ({ page, engine }) => {
   await openCanvas(page, engine);
   await expect(panel(page)).toHaveCount(0);
   await select(page, "shape:starter-subject");
-  await expect(panel(page)).toBeVisible();
+  await expect(page.getByTestId("style-row")).toBeVisible();
+  await expect(panel(page)).toHaveCount(0);
+  await openPanel(page);
   await expect(page.locator(".tlui-style-panel")).toHaveCount(0);
   await expect(panel(page).getByRole("group", { name: "Text" })).toBeVisible();
 
@@ -121,6 +128,7 @@ test("a rectangle's label, fill, border and corners, and a sticky note's backgro
   await expect(shapeOnScreen(page, "shape:sticky")).toHaveCount(1);
   await page.keyboard.press("Shift+1");
   await select(page, "shape:box");
+  await openPanel(page);
   await expect(panel(page).getByText("Rectangle", { exact: true })).toBeVisible();
   await expect(panel(page).getByRole("button", { name: "Background", exact: true })).toHaveText("None");
 
@@ -153,6 +161,9 @@ test("a rectangle's label, fill, border and corners, and a sticky note's backgro
 test("the Design panel hides for media and sets a drawing tool's next stroke before it is drawn", async ({ page, engine }) => {
   await openCanvas(page, engine);
   await putRecords(engine, [emptyMedia("shape:still", "image", "180", { x: -400, y: 300 })]);
+  await select(page, "shape:starter-subject");
+  await openPanel(page);
+  await page.keyboard.press("Escape");
   await select(page, "shape:still");
   await expect(panel(page)).toHaveCount(0);
 

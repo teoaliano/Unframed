@@ -14,7 +14,7 @@ const group = (recipe: unknown, text = "a knight in silver armour") => [
 
 const IMAGE_RECIPE = { medium: "image", model: "openai/gpt-image-2", params: { quality: "high", aspect_ratio: "2:3" }, runs: 3 };
 
-const barButtons = (page: Page) => toolbar(page).getByRole("button");
+const barButtons = (page: Page) => toolbar(page).locator("button:not([data-testid='style-row'] *)");
 
 test("a recipe group's bar: Generate N×, its @name with the estimate, Recipe, Agent", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);

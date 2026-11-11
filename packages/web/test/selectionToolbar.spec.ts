@@ -17,7 +17,7 @@ test("a usable selection gets Generate and its count; a named group reads by its
   await expect(toolbar(page).getByRole("button", { name: "Generate" })).toBeVisible();
   await expect(toolbar(page).getByTestId("selection-hint")).toHaveText("1 selected");
   // The hint and Agent come before Generate, which ends the bar, once spec 08 registers the Agent tray. No dividers.
-  await expect(toolbar(page).getByRole("button")).toHaveText(["Agent", "Generate"]);
+  await expect(toolbar(page).locator("button:not([data-testid='style-row'] *)")).toHaveText(["Agent", "Generate"]);
   await expect(toolbar(page).locator("[data-slot='separator']")).toHaveCount(0);
 
   await page.keyboard.press("ControlOrMeta+a");
@@ -56,7 +56,7 @@ test("a selection with nothing to generate from shows Agent only; a filled page 
   const empty = (await shapeOnScreen(page, "shape:empty").boundingBox())!;
   await page.mouse.click(empty.x + 8, empty.y + 8);
   await expect(page.locator('[data-shape-id="shape:empty"]')).toBeVisible();
-  await expect(toolbar(page).getByRole("button")).toHaveText(["Agent"]);
+  await expect(toolbar(page).locator("button:not([data-testid='style-row'] *)")).toHaveText(["Agent"]);
 
   // A filled page's frame takes the pointer, so its bar leads with the drag handle, an icon button.
   await clickShape(page, "shape:page");
