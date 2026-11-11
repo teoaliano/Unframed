@@ -13,6 +13,8 @@ export const PROJECT = "board";
 export const UNFRAMED_TOOLS = [
   "canvas_read",
   "canvas_write",
+  "comments_read",
+  "comment_write",
   "kit_read",
   "kit_write",
   "page_write",

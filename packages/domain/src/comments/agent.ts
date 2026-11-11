@@ -1,5 +1,6 @@
 import type { Box } from "../grouping.ts";
 import { agentShapeId, roomShapeId } from "../agent/turnText.ts";
+import { COMMENT_MENTION_PROMPT } from "../agent/prompts.ts";
 import {
   authorIdOf,
   authorLabel,
@@ -47,7 +48,7 @@ export const commentId = (id: string): string => (id.startsWith("comment:") ? id
 export const commentsView = (input: CommentsViewInput): { threads: Record<string, unknown>[]; resolvedHidden: number } => {
   const all = commentThreads(input.records);
   const wanted = input.thread === undefined ? undefined : findThread(all, input.thread);
-  const chosen = wanted !== undefined ? [wanted] : all.filter((thread) => input.includeResolved || thread.resolved === null);
+  const chosen = input.thread !== undefined ? (wanted === undefined ? [] : [wanted]) : all.filter((thread) => input.includeResolved || thread.resolved === null);
   return {
     threads: chosen.map((thread) => ({
       thread: `#${thread.number}`,
@@ -62,7 +63,7 @@ export const commentsView = (input: CommentsViewInput): { threads: Record<string
         text: message.text,
       })),
     })),
-    resolvedHidden: wanted !== undefined || input.includeResolved ? 0 : all.length - chosen.length,
+    resolvedHidden: input.thread !== undefined || input.includeResolved ? 0 : all.length - chosen.length,
   };
 };
 
@@ -244,3 +245,16 @@ export const prepareCommentBatch = (ops: unknown, context: CommentBatchContext):
     threads: threadsOut,
   };
 };
+
+const whereOf = (thread: CommentThread, boxOf: (id: string) => Box | undefined): string => {
+  const anchor = thread.anchor;
+  if (anchor.type === "shape") return `on the shape ${agentShapeId(anchor.shapeId)}`;
+  if (anchor.type === "region") return `over the region ${round(anchor.x)}, ${round(anchor.y)}, ${round(anchor.w)} by ${round(anchor.h)}`;
+  const at = pinPoint(anchor, boxOf);
+  return at === null ? "on the canvas" : `at ${round(at.x)}, ${round(at.y)}`;
+};
+
+export const commentMentionMessage = (thread: CommentThread, boxOf: (id: string) => Box | undefined): string =>
+  COMMENT_MENTION_PROMPT.replaceAll("<thread>", `#${thread.number}`)
+    .replace("<where>", whereOf(thread, boxOf))
+    .replace("<messages>", thread.messages.map((message) => `> ${authorLabel(message.author)}: ${message.text.replace(/\n/g, "\n> ")}`).join("\n"));

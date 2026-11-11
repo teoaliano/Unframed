@@ -40,6 +40,14 @@ import {
   type ThreadSearchMatch,
   type TurnOutcome,
   type ChatProvider,
+  agentMention,
+  agentName,
+  commentMentionMessage,
+  commentText,
+  commentThreads,
+  PERSON_AUTHOR,
+  type CommentAuthor,
+  type CommentRecordLike,
 } from "@unframed/domain";
 import type { ArtifactDiffFile, ElementChip } from "@unframed/contracts";
 import type { TLRecord } from "@tldraw/tlschema";
@@ -51,6 +59,10 @@ import { scriptedAdapter } from "./adapters/scripted.ts";
 import { AttachmentStore } from "./attachmentStore.ts";
 import { KitTools } from "../kits/kitTools.ts";
 import { CanvasTools } from "./canvasTools.ts";
+import { CommentTools } from "./commentTools.ts";
+import { CommentChats } from "./commentChats.ts";
+import { shapeBoxes } from "../runs/shapeBounds.ts";
+import type { CommittedChange } from "../canvas/loggedStorage.ts";
 import { latestTurnId, OutsideChats } from "./outsideChats.ts";
 import { outsideSelectionTools } from "./selectionTools.ts";
 import { outsideAgentTools, type OutsideToolDeps } from "./outsideTools.ts";
@@ -113,6 +125,7 @@ interface AgentRuntimeDeps {
   readonly realAdapter: (provider: AgentProvider, context: AdapterContext) => ProviderAdapter;
   readonly extraTools?: (context: AgentToolContext) => ReadonlyArray<McpTool>;
   readonly onSessionClosed?: (project: string, chatId: string) => void;
+  readonly providerReady?: (provider: AgentProvider) => Promise<boolean>;
 }
 
 const runKey = (chatId: string, turn: number): string => `${chatId}:${turn}`;
@@ -139,6 +152,7 @@ class ProjectAgent {
   readonly folder: string;
   readonly engine: ChatEngine;
   readonly turnChanges: TurnChanges;
+  readonly commentChats: CommentChats;
   ingestion: Promise<unknown> = Promise.resolve();
   readonly subscriptions = new Set<() => void>();
   closed = false;
@@ -148,6 +162,7 @@ class ProjectAgent {
     this.folder = folder;
     this.engine = new ChatEngine(slug, db);
     this.turnChanges = new TurnChanges(db);
+    this.commentChats = new CommentChats(db);
   }
 }
 
@@ -203,6 +218,7 @@ export class AgentRuntime {
         ),
     };
     for (const tool of new CanvasTools(context).tools()) this.registry.register(tool);
+    for (const tool of new CommentTools({ ...context, author: (project, chatId) => this.commentAuthor(project, chatId) }).tools()) this.registry.register(tool);
     for (const tool of new KitTools(context).tools()) this.registry.register(tool);
     this.generation = new AgentGeneration({
       records: (project) => deps.rooms.read(project),
@@ -305,6 +321,56 @@ export class AgentRuntime {
       onIdleClose: (project, chatId) => void this.idleClosed(project, chatId),
       ...(deps.onSessionClosed === undefined ? {} : { onClosed: deps.onSessionClosed }),
     });
+  }
+
+  commentCommitted(project: string, change: CommittedChange): void {
+    if (change.origin.kind !== "session") return;
+    for (const id of change.created) {
+      if (!id.startsWith("comment:")) continue;
+      const comment = change.records.get(id) as unknown as CommentRecordLike | undefined;
+      if (comment === undefined || comment.authorId !== PERSON_AUTHOR || comment.isDeleted === true) continue;
+      const provider = agentMention(commentText(comment.body));
+      if (provider === null) continue;
+      void this.startCommentTurn(project, String(comment.threadId), provider).catch((error: unknown) => logError(`comment mention in ${project}: ${errorText(error)}`));
+    }
+  }
+
+  private async startCommentTurn(project: string, threadId: string, provider: AgentProvider): Promise<void> {
+    if (this.deps.testAgentScript === undefined && this.deps.providerReady !== undefined && !(await this.deps.providerReady(provider).catch(() => false))) return;
+    const agent = await this.project(project);
+    const records = await this.deps.rooms.read(agent.slug);
+    const thread = commentThreads(records as unknown as CommentRecordLike[]).find((candidate) => candidate.id === threadId);
+    if (thread === undefined) return;
+    const boxes = shapeBoxes(records);
+    const text = commentMentionMessage(thread, (shapeId) => boxes.get(shapeId)?.page);
+    const now = () => new Date().toISOString();
+    let chatId = agent.commentChats.get(threadId, provider);
+    if (chatId === undefined || agent.engine.chat(chatId)?.deletedAt !== null) {
+      chatId = randomUUID();
+      await this.dispatch({ type: "thread.create", commandId: randomUUID(), projectId: agent.slug, threadId: chatId, modelSelection: { provider, model: "", traits: {} }, createdAt: now() });
+      await this.dispatch({ type: "thread.meta.update", commandId: randomUUID(), projectId: agent.slug, threadId: chatId, title: `Comment #${thread.number}` });
+      agent.commentChats.set(threadId, provider, chatId);
+    }
+    const running = agent.engine.chat(chatId)?.latestTurn?.state === "running";
+    await this.dispatch({
+      type: "thread.turn.start",
+      commandId: randomUUID(),
+      projectId: agent.slug,
+      threadId: chatId,
+      message: { messageId: `comment:${randomUUID()}`, text, attachments: [] },
+      ...(running ? { steer: true } : {}),
+      createdAt: now(),
+    });
+  }
+
+  private commentAuthor(project: string, chatId: string): CommentAuthor {
+    const chat = this.settledAgents.get(projectSlug(project))?.engine.chat(chatId);
+    if (chat?.outside !== undefined) {
+      const connection = this.deps.generationRuns.book.list().find((entry) => entry.id === chat.outside!.connectionId);
+      return { kind: "agent", chatId, provider: "outside", name: agentName("outside", connection?.name) };
+    }
+    const provider = chat?.modelSelection.provider === "codex" ? "codex" : "claude";
+    return { kind: "agent", chatId, provider, name: agentName(provider) };
   }
 
   private async outsideNote(binding: McpBinding, text: string): Promise<void> {

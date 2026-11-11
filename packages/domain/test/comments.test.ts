@@ -186,3 +186,18 @@ describe("agent comment ops", () => {
     expect(batch.put).toEqual([]);
   });
 });
+
+describe("the message a comment mention starts a turn with", () => {
+  it("names the thread and where it sits, and quotes the thread so far", async () => {
+    const { commentMentionMessage } = await import("../src/index.ts");
+    const records = [
+      thread("a", 100, { meta: { number: 3 }, anchor: { type: "shape", shapeId: "shape:img", x: 0.5, y: 0.5, isPrecise: true } }),
+      message("a1", "a", 100, "@Claude darker sky\nplease"),
+    ];
+    const text = commentMentionMessage(commentThreads(records)[0]!, () => box);
+    expect(text).toContain("comment thread #3, on the shape img.");
+    expect(text).toContain("> You: @Claude darker sky\n> please");
+    expect(text).toContain('thread:"#3"');
+    expect(commentsView({ records, boxOf: () => box, includeResolved: false, thread: "#9" }).threads).toEqual([]);
+  });
+});

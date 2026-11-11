@@ -1,6 +1,6 @@
 # Canvas tool descriptions
 
-Used by spec 07's Unframed MCP server. These are the model-facing descriptions of the canvas tools. This file holds `canvas_read`, `canvas_write` and spec 16's `node_run`. The four artifact tools each have one home in spec 09's files, listed at the end; spec 07 uses those same files. Spec 09's preview tools are in `preview-tool-descriptions.md`.
+Used by spec 07's Unframed MCP server. These are the model-facing descriptions of the canvas tools. This file holds `canvas_read`, `canvas_write`, spec 16's `node_run`, and the comment tools `comments_read` and `comment_write`. The four artifact tools each have one home in spec 09's files, listed at the end; spec 07 uses those same files. Spec 09's preview tools are in `preview-tool-descriptions.md`.
 
 Source: the old app's `canvasTools` in `server/agentTools.js`. `canvas_read` and `canvas_write` are rewritten for tldraw shapes and spec 07's op vocabulary, with spec 16's nodes and wires in place of the old output nodes and edges. Each op names itself in a `type` field, as the old ops did. The `ops` argument description is verbatim.
 
@@ -9,7 +9,7 @@ Source: the old app's `canvasTools` in `server/agentTools.js`. `canvas_read` and
 No arguments.
 
 ```text
-Read the whole canvas: every shape with its id, kind, ref (its @id), position, size, text or file, and which shape ids the person had selected when they sent the latest message. A shape with parent sits inside that group, positioned relative to it. A result carries the recipe that made it. A component shape reports its tag, variants, properties and slots, and a page or motion that uses one lists it as `components`, with `current` false where an update waits. A page or motion with locked elements reports them as `lockedElements`. A page or motion drawn smaller or larger on the canvas reports its `scale`: it lays out at its size divided by that scale. A node reports its medium, model, provider (only when it is vercel), params, runs, instruction, status (not_run, running, failed, waiting, out_of_date or ready, with statusLine saying why), how many versions it holds and its current result; a wire reports from, to and its role. Call this before answering anything about what is on the canvas, and before any change.
+Read the whole canvas: every shape with its id, kind, ref (its @id), position, size, text or file, and which shape ids the person had selected when they sent the latest message. A shape with parent sits inside that group, positioned relative to it. A result carries the recipe that made it. A component shape reports its tag, variants, properties and slots, and a page or motion that uses one lists it as `components`, with `current` false where an update waits. A page or motion with locked elements reports them as `lockedElements`. A page or motion drawn smaller or larger on the canvas reports its `scale`: it lays out at its size divided by that scale. A node reports its medium, model, provider (only when it is vercel), params, runs, instruction, status (not_run, running, failed, waiting, out_of_date or ready, with statusLine saying why), how many versions it holds and its current result; a wire reports from, to and its role. When the canvas has open comment threads, `comments` says how many; read them with comments_read. Call this before answering anything about what is on the canvas, and before any change.
 ```
 
 ## canvas_write
@@ -33,6 +33,27 @@ Arguments:
 - `ids`: The node ids to run, as canvas_read names them.
 - `downstream`: Also run the nodes after it that failed, are waiting, are out of date or never ran.
 - `dryRun`: Only show each step's prompt, references and estimate.
+
+## comments_read
+
+Arguments:
+
+- `thread`: Read only this thread, by its number, as "#4".
+- `includeResolved`: Also list resolved threads.
+
+```text
+Read the comment threads pinned on the canvas. A thread is a conversation started at one spot: on a shape (`on` is that shape's id, as canvas_read names it), at a point, or over a region, and `at` is where its pin sits in canvas coordinates. Each thread has a number, written "#4", and its messages in order, each with its id, author ("You" is the person; `agent` marks an agent), time and text. Resolved threads are left out unless includeResolved is true; pass thread to read only that one. A comment from the person is a note to you about that spot, as a message is. Call this when canvas_read reports open comments, or when the person points you at one.
+```
+
+## comment_write
+
+```text
+Write in the canvas's comment threads, as one step of this turn that the person can revert. Ops: {op:"start", text, on?, at?, region?} pins a new thread -- on is a shape id from canvas_read and the pin follows that shape (add at, a canvas point on the shape, to place it there, or leave it out for the shape's top-right corner), at alone is a point on the canvas, region is {x, y, w, h} in canvas coordinates ; {op:"reply", thread, text} answers in a thread ; {op:"resolve", thread} and {op:"reopen", thread} ; {op:"edit", comment, text} and {op:"delete", comment} change or remove one of your own messages ; {op:"delete", thread} removes a thread you started, with its messages. thread is the thread's number, as "#4"; comment is a message id from comments_read. The person reads your replies in the thread, so when they asked in a comment, answer there, briefly and in plain text. Resolve a thread once what it asked for is done. Start a thread to point the person at something specific on the board, not to narrate your work. At most 50 ops per call, and at most 4000 characters of text each.
+```
+
+Arguments:
+
+- `ops`: The operations, in order.
 
 ## The artifact tools
 

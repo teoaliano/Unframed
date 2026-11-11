@@ -97,6 +97,18 @@
   --color-primary: var(--primary);
   --color-highlight: var(--highlight);
   --color-highlight-foreground: var(--highlight-foreground);
+  --color-comment: var(--comment);
+  --color-comment-foreground: var(--comment-foreground);
+  --color-comment-surface: var(--comment-surface);
+  --color-comment-field: var(--comment-field);
+  --color-comment-pin: var(--comment-pin);
+  --color-comment-pin-foreground: var(--comment-pin-foreground);
+  --color-comment-disabled: var(--comment-disabled);
+  --color-comment-avatar: var(--comment-avatar);
+  --color-comment-avatar-foreground: var(--comment-avatar-foreground);
+  --color-agent-claude: var(--agent-claude);
+  --color-agent-codex: var(--agent-codex);
+  --color-agent-codex-foreground: var(--agent-codex-foreground);
   --color-popover-foreground: var(--contrast-popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--contrast-card-foreground);
@@ -362,6 +374,19 @@
   /* Unframed: the highlight for focus, links, the canvas selection and live marks (sky-300 on dark; sky-600 reads on light). */
   --highlight: var(--color-sky-600);
   --highlight-foreground: var(--color-white);
+  /* Unframed: Figma's comment blue, for pending and selected pins, unread dots and the comment tool. */
+  --comment: #0d99ff;
+  --comment-foreground: var(--color-white);
+  --comment-surface: #e5f4ff;
+  --comment-field: #f5f5f5;
+  --comment-pin: var(--color-white);
+  --comment-pin-foreground: var(--color-zinc-800);
+  --comment-disabled: #d8d8d8;
+  --comment-avatar: var(--color-zinc-200);
+  --comment-avatar-foreground: var(--color-zinc-600);
+  --agent-claude: #d97757;
+  --agent-codex: var(--color-neutral-900);
+  --agent-codex-foreground: var(--color-white);
   --secondary: var(--color-zinc-50);
   --secondary-foreground: var(--color-zinc-800);
   --muted: var(--color-zinc-50);
@@ -408,6 +433,13 @@
     --primary-foreground: var(--color-neutral-950);
     --highlight: var(--color-sky-300);
     --highlight-foreground: var(--color-neutral-950);
+    --comment-surface: color-mix(in srgb, #0d99ff 18%, transparent);
+    --comment-field: --alpha(var(--color-white) / 6%);
+    --comment-disabled: var(--color-neutral-700);
+    --comment-avatar: var(--color-neutral-700);
+    --comment-avatar-foreground: var(--color-neutral-200);
+    --agent-codex: var(--color-white);
+    --agent-codex-foreground: var(--color-neutral-900);
     --secondary: --alpha(var(--color-white) / 3%);
     --secondary-foreground: var(--color-neutral-100);
     --muted: --alpha(var(--color-white) / 3%);

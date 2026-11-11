@@ -26,6 +26,8 @@ const stable = (value: unknown): string =>
       : item,
   );
 
+export const isCommentId = (id: string): boolean => id.startsWith("comment:") || id.startsWith("comment-thread:") || id.startsWith("comment-reaction:");
+
 const sameRecord = (a: TLRecord | null | undefined, b: TLRecord | null | undefined): boolean => stable(a ?? null) === stable(b ?? null);
 
 export class TurnChanges {
@@ -78,7 +80,7 @@ export class TurnChanges {
   }
 
   files(chatId: string, turn: number): TurnFile[] {
-    return this.rows(chatId, turn).filter((row) => !row.shapeId.startsWith("kit:")).map((row) => {
+    return this.rows(chatId, turn).filter((row) => !row.shapeId.startsWith("kit:") && !isCommentId(row.shapeId)).map((row) => {
       const record = row.after ?? row.before;
       const change = row.before === null ? "created" : row.after === null ? "deleted" : "updated";
       return {
@@ -121,7 +123,20 @@ export const planRevert = (
     }
     skipped.push({ id: row.shapeId, by: changedBy(chatId, row, log) });
   }
-  return { change: { put, remove }, restored, skipped };
+  const removing = new Set(remove);
+  const kept = remove.filter((id) => {
+    if (!id.startsWith("comment-thread:")) return true;
+    const others = [...current.values()]
+      .map((record) => record as unknown as { id: string; typeName: string; threadId?: string })
+      .filter((record) => record.typeName === "comment" && record.threadId === id && !removing.has(record.id));
+    if (others.length === 0) return true;
+    const at = restored.indexOf(id);
+    if (at >= 0) restored.splice(at, 1);
+    const row = rows.find((candidate) => candidate.shapeId === id)!;
+    skipped.push({ id, by: changedBy(chatId, { ...row, shapeId: others[0]!.id }, log) });
+    return false;
+  });
+  return { change: { put, remove: kept }, restored, skipped };
 };
 
 export const changedBy = (chatId: string, row: TurnChangeRow, log: ReadonlyArray<ChangeLogRow>): SkippedBy => {
