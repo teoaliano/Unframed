@@ -3,7 +3,7 @@
  * its label, catalogue, props, estimate, warnings and send. This spec registers `image`;
  * specs 04 and 05 register `video` and `text` the same way.
  */
-import type { Medium, ModelEntry, ResultRecipe } from "@unframed/contracts";
+import type { GenerationProvider, Medium, ModelEntry, ResultRecipe } from "@unframed/contracts";
 import type { CanvasShape, Composition, ModelParams } from "@unframed/domain";
 import type { ComponentType } from "react";
 import type { Editor } from "tldraw";
@@ -19,6 +19,7 @@ export interface TrayValues {
   /** The person picked the model in the model dialog (or it came back from last-used values). */
   readonly picked: boolean;
   readonly props: TrayProps;
+  readonly provider?: GenerationProvider | undefined;
 }
 
 export interface TrayStatus {
@@ -26,6 +27,8 @@ export interface TrayStatus {
   readonly warnings: ReadonlyArray<string>;
   /** Lines that disable send. */
   readonly blockers: ReadonlyArray<string>;
+  readonly needsKey?: boolean | undefined;
+  readonly keyMessage?: string | undefined;
 }
 
 /** What the run is made from: the live selection, or a result's recorded recipe. */
@@ -91,9 +94,22 @@ export interface MediumDefinition {
   /** The model's pricing, which the tray caches per model for the session. */
   readonly pricing: (engine: EngineConnection, model: string) => Promise<unknown>;
   /** The price beside the send button, when it is exact. `pricing` is what `pricing` answered, once it has. */
-  readonly estimate: (input: { readonly pricing: unknown; readonly props: TrayProps; readonly source: RunSource; readonly entry?: ModelEntry | undefined }) => string | undefined;
+  readonly estimate: (input: {
+    readonly pricing: unknown;
+    readonly props: TrayProps;
+    readonly source: RunSource;
+    readonly entry?: ModelEntry | undefined;
+    readonly provider?: GenerationProvider | undefined;
+  }) => string | undefined;
   /** `props` are the tray's, once it has values; `entry` is its model's catalogue entry (spec 04). */
-  readonly status: (input: { readonly source: RunSource; readonly hasKey: boolean; readonly props?: TrayProps | undefined; readonly entry?: ModelEntry | undefined }) => TrayStatus;
+  readonly status: (input: {
+    readonly source: RunSource;
+    readonly hasKey: boolean;
+    readonly hasElevenLabsKey?: boolean | undefined;
+    readonly props?: TrayProps | undefined;
+    readonly entry?: ModelEntry | undefined;
+    readonly model?: string | undefined;
+  }) => TrayStatus;
   readonly sendLabel: (values: TrayValues) => string;
   /** The send button's label while the engine acknowledges a send (spec 04: `Starting…`). */
   readonly sendingLabel?: string;
@@ -116,6 +132,16 @@ export interface MediumDefinition {
   readonly trayProps?: ReadonlyArray<TrayPropDefinition>;
   /** Rendered inside the tray, for a medium's own dialogs (spec 05's final prompt). */
   readonly Overlay?: ComponentType<TrayOverlayProps>;
+  readonly Lead?: ComponentType<LeadChipProps>;
+  readonly hint?: string;
+  readonly browseLabel?: string;
+  readonly modelColumns?: "openrouter" | "languages";
+}
+
+export interface LeadChipProps {
+  readonly props: TrayProps;
+  readonly onChange: (props: Record<string, PropValue>) => void;
+  readonly onMenuOpen: (key: string, open: boolean, close?: () => void) => void;
 }
 
 /** A tray prop that is not a model trait, so a model change leaves it. It draws its own chip and popup. */
@@ -124,6 +150,7 @@ export interface TrayPropDefinition {
   readonly label: string;
   /** Whether its chip shows. While its popup is open it shows regardless. */
   readonly inTray: (props: TrayProps) => boolean;
+  readonly offered?: (params: ModelParams) => boolean;
   /** The value `+ add prop` lists it with. */
   readonly addValue: (props: TrayProps) => string;
   /** The props once `+ add prop` adds it. */
@@ -133,6 +160,7 @@ export interface TrayPropDefinition {
 
 export interface TrayPropChipProps {
   readonly props: TrayProps;
+  readonly params: ModelParams;
   readonly onChange: (props: Record<string, PropValue>) => void;
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
@@ -154,7 +182,7 @@ export const registerMedium = (definition: MediumDefinition): void => {
 
 /** The registered media, in the order the medium switch shows them. */
 export const registeredMedia = (): ReadonlyArray<MediumDefinition> => {
-  const order: Medium[] = ["image", "video", "text"];
+  const order: Medium[] = ["image", "video", "text", "audio"];
   return [...registry].sort((a, b) => order.indexOf(a.medium) - order.indexOf(b.medium));
 };
 

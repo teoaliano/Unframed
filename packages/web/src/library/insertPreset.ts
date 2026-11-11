@@ -5,6 +5,7 @@
  * Nothing that reaches the room holds a `preset-file:` pointer, which the room refuses.
  */
 import {
+  flowInsert,
   instantiate,
   placeAt,
   PRESET_NOT_ONE_GROUP_MESSAGE,
@@ -17,7 +18,7 @@ import {
   type Preset,
   type PresetContent,
 } from "@unframed/domain";
-import { AssetRecordType, type Editor, type TLContent, type TLRecord } from "tldraw";
+import { AssetRecordType, createShapeId, type Editor, type TLContent, type TLRecord } from "tldraw";
 import { RefMinter } from "../canvas/refs.ts";
 import type { EngineConnection } from "../rpc/engine.ts";
 import { showError } from "../toasts.tsx";
@@ -60,13 +61,18 @@ export const insertPreset = async (input: {
   const content = migrated(editor, resolved.content);
   const minter = new RefMinter(editor);
   const taken = editor.getCurrentPageShapes().flatMap((shape) => readRef(shape) ?? []);
-  const made = instantiate(content, taken, () => minter.mint());
+  const instantiated = instantiate(content, taken, () => minter.mint());
+  const flow = preset.kind === "flow";
+  const made = flow ? (() => {
+    const fresh = flowInsert(instantiated.content, () => createShapeId());
+    return { content: fresh, rootId: fresh.rootShapeIds[0]! };
+  })() : instantiated;
   const group = made.content.shapes.find((shape) => shape.id === made.rootId);
   if (!group) throw new Error(PRESET_NOT_ONE_GROUP_MESSAGE);
   const at = placeAt({ x: group.x, y: group.y, w: Number(group.props.w), h: Number(group.props.h) }, editor.getViewportPageBounds().center);
   const placed = { ...made.content, shapes: made.content.shapes.map((shape) => (shape.id === made.rootId ? { ...shape, ...at } : shape)) };
 
   editor.markHistoryStoppingPoint("add preset");
-  editor.putContentOntoCurrentPage(placed as unknown as TLContent, { select: true, preservePosition: true });
+  editor.putContentOntoCurrentPage(placed as unknown as TLContent, { select: true, preservePosition: true, ...(flow ? { preserveIds: true } : {}) });
   if (resolved.missing > 0) showError(missingFilesMessage(resolved.missing, preset.name));
 };

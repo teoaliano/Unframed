@@ -9,12 +9,19 @@ import type { TurnChanges } from "./turnChanges.ts";
 const TOO_LARGE_BYTES = 2 * 1024 * 1024;
 export const TOO_LARGE = "This file is too large to diff.";
 
+const nodeLabel = (record: TLRecord | null): string | undefined => {
+  if (record?.typeName !== "shape") return undefined;
+  const ref = (record.meta as { ref?: unknown }).ref;
+  if (record.type === "node") return typeof ref === "string" ? `Node @${ref}` : "Node";
+  if (record.type === "wire") return `Wire, ${String((record.props as { role?: unknown }).role)}`;
+  return undefined;
+};
+
 const labelOf = (record: TLRecord | null, shapeId: string): string =>
-  shapeLabel((record?.typeName === "shape" ? record.props : {}) as { title?: unknown; fileName?: unknown }) ?? agentShapeId(shapeId);
+  nodeLabel(record) ?? shapeLabel((record?.typeName === "shape" ? record.props : {}) as { title?: unknown; fileName?: unknown }) ?? agentShapeId(shapeId);
 
-const isArtifact = (record: TLRecord | null): boolean => record?.typeName === "shape" && (record.type === "page" || record.type === "motion");
+const isArtifact = (record: TLRecord | null): boolean => record?.typeName === "shape" && (record.type === "page" || record.type === "motion" || record.type === "component");
 
-/** A project file's text, `""` for none, `undefined` when it is over the diff limit. */
 const contents = async (folder: string, file: string | null): Promise<string | undefined> => {
   if (file === null) return "";
   const path = join(folder, file);
@@ -23,12 +30,6 @@ const contents = async (folder: string, file: string | null): Promise<string | u
   return readFile(path, "utf8").catch(() => "");
 };
 
-/**
- * The pages and motions written in turns `from + 1` to `to` of a chat, read from its turn
- * changes: each one's file before the first of those turns and after the last, as a
- * unified diff with three lines of context. A new artifact diffs against empty. Every
- * write is a new file, so these checkpoints cost nothing.
- */
 export const artifactDiff = async (
   changes: TurnChanges,
   folder: string,
@@ -60,7 +61,6 @@ export const artifactDiff = async (
       files.push({ ...base, additions: 0, deletions: 0, patch: TOO_LARGE, tooLarge: true });
       continue;
     }
-    // Ignoring whitespace is git's `-w`: lines equal once every space is taken out, not only their ends.
     const patch = structuredPatch(span.before ?? "/dev/null", span.after ?? "/dev/null", before, after, undefined, undefined, {
       context: 3,
       ...(ignoreWhitespace ? { comparator: (left: string, right: string) => left.replace(/\s+/g, "") === right.replace(/\s+/g, "") } : {}),

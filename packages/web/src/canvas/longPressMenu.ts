@@ -4,7 +4,7 @@ const HOLD_MS = 500;
 const SLOP_PX = 10;
 
 /**
- * A long press opens the canvas's right-click menu (spec 22), so every item on it is
+ * A long press opens the canvas's right-click menu (spec 23), so every item on it is
  * reachable by touch. Touch only: the Pencil draws, and a pen resting still before a
  * stroke must not open a menu. The synthetic `contextmenu` is what the menu's own
  * trigger already listens for, so the menu opens where the finger is.

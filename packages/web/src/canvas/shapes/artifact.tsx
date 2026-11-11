@@ -1,13 +1,18 @@
-import type { ArtifactShapeProps } from "@unframed/contracts";
-import { artifactTitle, readRef, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
-import { AppWindow, Clapperboard } from "lucide-react";
-import { useCallback, useEffect } from "react";
-import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
-import { ArtifactFrame, type ArtifactFrameProps } from "../../artifacts/ArtifactFrame.tsx";
+import { artifactScaleProp, type ArtifactShapeProps } from "@unframed/contracts";
+import { artifactScale, artifactTitle, readRef, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
+import { AppWindow, Clapperboard, Component } from "lucide-react";
+import { forwardRef, useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape, type TLShapeId } from "tldraw";
+import { ArtifactFrame, type ArtifactFrameProps, type EditMessage } from "../../artifacts/ArtifactFrame.tsx";
+import { DropOutline, onFrameEdit } from "../../artifacts/imageDrop.tsx";
 import { ProblemLine, RenderRow } from "../../artifacts/RenderRow.tsx";
-import { snapshotsOf, snapshotUrl, stillOf } from "../../artifacts/snapshots.ts";
-import { forgetFrame, hearFrame, isInteractive, isLive, previewPort, reachFrame } from "../../artifacts/state.ts";
+import { Button } from "~/components/ui/button";
+import { fileChangesOf, snapshotsOf, snapshotUrl, stillOf } from "../../artifacts/snapshots.ts";
+import { kitOf } from "../../artifacts/kit.ts";
+import { artifactsOf, forgetEdit, forgetFrame, hearFrame, isInteractive, isLive, previewPort, reachEdit, reachFrame } from "../../artifacts/state.ts";
+import { Tip } from "../../chrome/ui.tsx";
 import { currentSlots } from "../../chrome/slots.ts";
+import { updateTagsOf } from "../../artifacts/updates.ts";
 import { useCanvasProject } from "../../context.ts";
 import { artifactCardClass } from "./looks.ts";
 import { nameOf, waitingLabel } from "./labels.ts";
@@ -15,33 +20,38 @@ import { ShapeLabel } from "./ShapeLabel.tsx";
 import { noteRender } from "../../fps/renders.ts";
 
 export const ARTIFACT_DEFAULT_SIZE = { w: 480, h: 320 };
-export const ARTIFACT_MIN = { w: 180, h: 96 };
+const ARTIFACT_MIN = { w: 180, h: 96 };
 
-type ArtifactShape = TLShape<"page"> | TLShape<"motion">;
+type ArtifactShape = TLShape<"page"> | TLShape<"motion"> | TLShape<"component">;
 
-const artifactProps: RecordProps<ArtifactShape> = {
+const artifactProps: RecordProps<TLShape<"page"> | TLShape<"motion">> = {
   w: T.nonZeroNumber,
   h: T.nonZeroNumber,
   file: T.string,
   title: T.string,
   fileName: T.string,
   dials: T.dict(T.string, T.jsonValue).optional(),
+  mode: T.string.optional(),
+  scale: artifactScaleProp.optional(),
 };
 
-/** The row under a motion (Render) is this tall; the status line goes below it. */
+const componentProps: RecordProps<TLShape<"component">> = { w: T.nonZeroNumber, h: T.nonZeroNumber, file: T.string, title: T.string, fileName: T.string, tag: T.string };
+
 const RENDER_ROW_HEIGHT = 34;
 
-/** An empty artifact: its frame, its kind tab and one Agent button, and why a drop onto it failed. */
+const KIND_NAMES: Record<ArtifactKind, string> = { page: "Page", motion: "Motion", component: "Component" };
+
 const EmptyArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readonly kind: ArtifactKind }) => {
   noteRender(shape.id);
-  const Icon = kind === "page" ? AppWindow : Clapperboard;
+  const word = KIND_NAMES[kind];
+  const Icon = kind === "page" ? AppWindow : kind === "component" ? Component : Clapperboard;
   const props = shape.props as ArtifactShapeProps;
   return (
     <>
       <HTMLContainer id={shape.id} className={artifactCardClass} data-testid="artifact-card" data-artifact-kind={kind} style={{ width: props.w, height: props.h }}>
-        <ShapeLabel shapeId={shape.id} kind={kind} name={readRef(shape)} width={props.w} text={waitingLabel(shape, kind === "page" ? "Page" : "Motion")} />
+        <ShapeLabel shapeId={shape.id} kind={kind} name={readRef(shape)} width={props.w} text={waitingLabel(shape, word)} />
         <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
-          <Icon className="size-7" strokeWidth={1.5} aria-label={kind === "page" ? "Page" : "Motion"} />
+          <Icon className="size-7" strokeWidth={1.5} aria-label={word} />
         </div>
       </HTMLContainer>
       <ProblemLine shapeId={shape.id} offset={props.h} width={props.w} />
@@ -49,10 +59,6 @@ const EmptyArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readonl
   );
 };
 
-/**
- * What a filled artifact that is not live shows: the newest snapshot of its file (the last
- * one it showed while none exists yet), else a card with its title that asks to be selected.
- */
 const Still = ({ shape, title }: { readonly shape: ArtifactShape; readonly title: string }) => {
   const project = useCanvasProject();
   const file = (shape.props as ArtifactShapeProps).file;
@@ -70,16 +76,76 @@ const Still = ({ shape, title }: { readonly shape: ArtifactShape; readonly title
   );
 };
 
-/** A canvas frame tells the canvas what it announces and how to reach it, so the Parameters panel can drive it. */
+const Scaled = forwardRef<HTMLDivElement, { readonly scale: number; readonly layout: { w: number; h: number }; readonly children: ReactNode }>(({ scale, layout, children }, ref) => (
+  <div ref={ref} data-artifact-scale={scale} className="relative origin-top-left" style={{ width: layout.w, height: layout.h, transform: scale === 1 ? undefined : `scale(${scale})` }}>
+    {children}
+  </div>
+));
+
+const HELD_CHECK_MS = 300;
+
+const frameHeld = (holder: HTMLElement | null): boolean => {
+  const active = document.activeElement;
+  return active instanceof HTMLIFrameElement && holder !== null && holder.contains(active);
+};
+
+const useLiveVersion = (stamp: number | undefined, holder: RefObject<HTMLElement | null>): number => {
+  const [shown, setShown] = useState({ stamp, version: 0 });
+  useEffect(() => {
+    if (stamp === undefined || (shown.stamp !== undefined && stamp <= shown.stamp)) return;
+    const apply = () => setShown((current) => ({ stamp, version: current.version + 1 }));
+    if (!frameHeld(holder.current)) {
+      apply();
+      return;
+    }
+    const timer = setInterval(() => {
+      if (frameHeld(holder.current)) return;
+      clearInterval(timer);
+      apply();
+    }, HELD_CHECK_MS);
+    return () => clearInterval(timer);
+  }, [stamp, shown.stamp, holder]);
+  return shown.version;
+};
+
 const CanvasFrame = ({ shapeId, ...props }: Omit<ArtifactFrameProps, "onAnnounce" | "onReady"> & { readonly shapeId: string }) => {
   const editor = useEditor();
   useEffect(() => () => forgetFrame(editor, shapeId), [editor, shapeId]);
   const onAnnounce = useCallback((announcement: DialsAnnouncement) => hearFrame(editor, shapeId, announcement), [editor, shapeId]);
   const onReady = useCallback((post: (values: unknown) => void) => reachFrame(editor, shapeId, post), [editor, shapeId]);
-  return <ArtifactFrame {...props} onAnnounce={onAnnounce} onReady={onReady} />;
+  useEffect(() => () => forgetEdit(editor, shapeId), [editor, shapeId]);
+  const onEdit = useCallback((message: EditMessage) => onFrameEdit(editor, shapeId, message), [editor, shapeId]);
+  const onEditReady = useCallback((post: (message: unknown) => void) => reachEdit(editor, shapeId, post), [editor, shapeId]);
+  return <ArtifactFrame {...props} onAnnounce={onAnnounce} onReady={onReady} onEdit={onEdit} onEditReady={onEditReady} />;
 };
 
-/** A filled artifact: no card, the title above its corner, and its frame while live, else its still. */
+const LiveFrame = ({ stamp, holder, ...props }: Parameters<typeof CanvasFrame>[0] & { readonly stamp: number | undefined; readonly holder: RefObject<HTMLElement | null> }) => {
+  const version = useLiveVersion(stamp, holder);
+  return <CanvasFrame key={version} {...props} />;
+};
+
+const UpdatesBadge = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
+  const editor = useEditor();
+  return (
+    <Tip label="Component updates available">
+      <Button
+        variant="outline"
+        size="xs"
+        data-testid="component-updates-badge"
+        aria-label="Component updates available"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={() => {
+          artifactsOf(editor).updatesOpen.set(shapeId);
+          currentSlots().openArtifact?.(editor, shapeId);
+        }}
+      >
+        <Component aria-hidden />
+        Updates
+      </Button>
+    </Tip>
+  );
+};
+
 const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readonly kind: ArtifactKind }) => {
   noteRender(shape.id);
   const editor = useEditor();
@@ -88,17 +154,26 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
   const live = useValue("artifact live", () => isLive(editor, shape.id), [editor, shape.id]);
   const interactive = useValue("artifact interactive", () => live && isInteractive(editor, shape.id), [editor, shape.id, live]);
   const port = useValue("preview port", () => previewPort.get(), []);
+  const kit = useValue("project kit", () => kitOf(editor), [editor]);
   const title = artifactTitle(props);
   const name = nameOf(shape);
+  const stamp = useValue("artifact file change", () => fileChangesOf(project).get().get(props.file), [project, props.file]);
+  const holder = useRef<HTMLDivElement>(null);
+  const scale = kind === "component" ? 1 : artifactScale(props);
+  const layout = { w: props.w / scale, h: props.h / scale };
+  const updates = useValue("component updates", () => updateTagsOf(editor, project, props.file).join(","), [editor, project, props.file]);
   return (
     <>
       <HTMLContainer id={shape.id} data-testid="artifact-card" data-artifact-kind={kind} data-live={live ? "true" : undefined} style={{ width: props.w, height: props.h }}>
-        <ShapeLabel shapeId={shape.id} kind={kind} name={readRef(shape)} width={props.w} text={name !== undefined ? `@${name}` : title} />
+        <ShapeLabel shapeId={shape.id} kind={kind} name={readRef(shape)} width={props.w} text={name !== undefined ? `@${name}` : title} end={kind !== "component" && updates !== "" ? <UpdatesBadge shapeId={shape.id} /> : undefined} />
         {live && port !== undefined ? (
-          <CanvasFrame key={props.file} shapeId={shape.id} project={project} kind={kind} file={props.file} previewPort={port} dials={props.dials} interactive={interactive} lazy />
+          <Scaled ref={holder} scale={scale} layout={layout}>
+            <LiveFrame key={props.file} stamp={stamp} holder={holder} shapeId={shape.id} project={project} kind={kind} file={props.file} previewPort={port} dials={props.dials} kit={kit} mode={props.mode} interactive={interactive} lazy />
+          </Scaled>
         ) : (
           <Still shape={shape} title={title} />
         )}
+        {live && <DropOutline shapeId={shape.id} scale={scale} />}
       </HTMLContainer>
       {kind === "motion" && <RenderRow shape={shape} />}
       <ProblemLine shapeId={shape.id} offset={props.h + (kind === "motion" ? RENDER_ROW_HEIGHT : 0)} width={props.w} />
@@ -106,14 +181,13 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
   );
 };
 
-/** A page or a motion: empty, it asks for the agent; filled, it shows its content. */
 const makeArtifactUtil = (kind: ArtifactKind) =>
   class ArtifactShapeUtil extends BaseBoxShapeUtil<ArtifactShape> {
     static override type = kind;
-    static override props = artifactProps;
+    static override props = kind === "component" ? componentProps : artifactProps;
 
     override getDefaultProps(): ArtifactShape["props"] {
-      return { ...ARTIFACT_DEFAULT_SIZE, file: "", title: "", fileName: "" };
+      return kind === "component" ? { ...ARTIFACT_DEFAULT_SIZE, file: "", title: "", fileName: "", tag: "" } : { ...ARTIFACT_DEFAULT_SIZE, file: "", title: "", fileName: "" };
     }
 
     override canEdit() {
@@ -135,11 +209,6 @@ const makeArtifactUtil = (kind: ArtifactKind) =>
       return resizeBox(shape, info, { minWidth: ARTIFACT_MIN.w, minHeight: ARTIFACT_MIN.h });
     }
 
-    /**
-     * Double-click opens the editor; it never enters tldraw's editing state. It answers an
-     * empty change, because answering none makes tldraw put a new prompt where it landed. A
-     * double-click on the label is a rename, which the label handles.
-     */
     override onDoubleClick(shape: ArtifactShape) {
       currentSlots().openArtifact?.(this.editor, shape.id);
       return { id: shape.id, type: shape.type };
@@ -148,3 +217,4 @@ const makeArtifactUtil = (kind: ArtifactKind) =>
 
 export const PageShapeUtil = makeArtifactUtil("page");
 export const MotionShapeUtil = makeArtifactUtil("motion");
+export const ComponentShapeUtil = makeArtifactUtil("component");

@@ -50,6 +50,7 @@ import { isShape, type Shape } from "../runs/placeholders.ts";
 import { fileStamp, mimeForFile, referenceName, writeResultFile, writeSidecar } from "../runs/resultFiles.ts";
 import { referenceMissingMessage } from "../runs/runs.ts";
 import { shapePageBoxes } from "../runs/shapeBounds.ts";
+import { applyNodeChange, failVersion, fillVersion, finishRun, isNode, nodeSidecarFields, startVersions, type NodeTarget } from "../nodes/versions.ts";
 import { Config } from "../services.ts";
 import { SettingsStore } from "../settingsStore.ts";
 import { ShareLinks } from "../share/shareLinks.ts";
@@ -83,7 +84,7 @@ export type FinishHandler = (outcome: FinishOutcome) => void;
 export class RenderJobs extends Context.Service<
   RenderJobs,
   {
-    readonly start: (request: VideoStartRequest) => Effect.Effect<{ jobId: string; status: string; shapeId: string }, UnframedError>;
+    readonly start: (request: VideoStartRequest, into?: NodeTarget) => Effect.Effect<{ jobId: string; status: string; shapeId: string }, UnframedError>;
     readonly poll: (request: { jobId: string; project: string; params: RenderParams }) => Effect.Effect<VideoPollAnswer, UnframedError>;
     readonly forget: (project: string, jobId: string) => Effect.Effect<Record<string, never>, UnframedError>;
     /** The job record's recipe for a render placeholder whose sidecar is not written yet. */
@@ -265,6 +266,12 @@ export const renderJobsLayer = Layer.effect(
     const markFailed = async (job: RenderJob, error: string) => {
       await revokeShares(job.id);
       const project = job.project ?? "";
+      const target = job.target;
+      if (target !== undefined) {
+        await applyNodeChange(rooms, runPromise, project, (get) => failVersion(get, target.shapeId, target.versionId, error), job.id);
+        await applyNodeChange(rooms, runPromise, project, (get) => finishRun(get, target.shapeId, job.id, [error]), job.id);
+        return;
+      }
       const records = await readRoom(project);
       const shape = records && markedBy(records, job.id);
       if (shape) await applyRoom(project, failChange(shape, error), job.id);
@@ -330,6 +337,7 @@ export const renderJobsLayer = Layer.effect(
         file,
         jobId: record.id,
         recipe,
+        ...(current.target === undefined ? {} : nodeSidecarFields({ shapeId: current.target.shapeId, chainId: current.target.chainId, step: current.target.step }, current.target.versionId)),
       };
       await writeSidecar(folder, base, sidecar).catch((error: unknown) => logError(`sidecar not written: ${errorText(error)}`));
       const done = await persistJob(dir, record.id, {
@@ -342,6 +350,14 @@ export const renderJobsLayer = Layer.effect(
         ...(record.refs === undefined ? {} : { refs: record.refs }),
       });
       await revokeShares(record.id);
+      const target = current.target;
+      if (target !== undefined) {
+        if (hadFolder) {
+          await applyNodeChange(rooms, runPromise, project, (get) => fillVersion(get, target.shapeId, target.versionId, { file, fileName: file }), record.id);
+          await applyNodeChange(rooms, runPromise, project, (get) => finishRun(get, target.shapeId, record.id, []), record.id);
+        }
+        return done;
+      }
 
       const landed: LandedClip = { file, sidecar: `${base}.json`, cost, bytes: bytes.length };
       const records = hadFolder ? await readRoom(project) : undefined;
@@ -393,7 +409,7 @@ export const renderJobsLayer = Layer.effect(
     /** A local clip is a video reference that is not an `https://` link; only one naming a project file can be shared. */
     type Inlined = { readonly entries: Record<string, unknown>[]; readonly local: Array<{ readonly index: number; readonly url: string; readonly file: string | undefined }> };
 
-    const start = async (request: VideoStartRequest) => {
+    const start = async (request: VideoStartRequest, into?: NodeTarget) => {
       const key = await currentKey();
       if (key === "") throw refusal("no_key", "unavailable", NO_KEY_MESSAGE);
       const project = projectSlug(request.project);
@@ -501,6 +517,32 @@ export const renderJobsLayer = Layer.effect(
         size: request.size ?? null,
       };
       const dir = await outputDir();
+      if (into !== undefined) {
+        let versionId: string | undefined;
+        await applyNodeChange(
+          rooms,
+          runPromise,
+          project,
+          (get) => {
+            const made = startVersions(get, into.shapeId, { runId: jobId, chainId: into.chainId, claim: into.claim, batchId: `b-${startedAt}`, count: 1, fingerprint: into.fingerprint, startedAt, durable: true });
+            versionId = made?.ids[0];
+            return made?.change;
+          },
+          jobId,
+        );
+        const target = { shapeId: into.shapeId, versionId: versionId ?? "", chainId: into.chainId, ...(into.step === undefined ? {} : { step: into.step }) };
+        await persistJob(dir, jobId, {
+          project,
+          params,
+          startedAt,
+          status: "pending",
+          refs,
+          recipe: { ...(request.recipe as object), ...nodeSidecarFields(into, versionId) },
+          target,
+          forgotten: versionId === undefined ? true : undefined,
+        } as Partial<RenderJob>).catch((error: unknown) => logError(`job store write failed: ${errorText(error)}`));
+        return { jobId, status: created.status ?? "pending", shapeId: into.shapeId };
+      }
       await persistJob(dir, jobId, {
         project,
         params,
@@ -531,7 +573,7 @@ export const renderJobsLayer = Layer.effect(
       if (stored?.status === "done") return completedAnswer(stored);
       if (stored?.status === "failed") return { status: "failed", error: stored.error ?? GENERATION_FAILED };
       const key = await currentKey();
-      if (key === "") throw refusal("no_key", "unavailable", "No OpenRouter key yet.");
+      if (key === "") throw refusal("no_key", "unavailable", NO_KEY_MESSAGE);
       const read = await readVideoStatus(config.openRouterOrigin, key, jobId);
       if (!read.answered) throw read.network ? refusal("unreachable", "upstream", `Could not reach OpenRouter: ${read.cause}`) : refusal("upstream", "upstream", read.message);
       const built: RenderJob = stored ?? { id: jobId, project: projectSlug(project), params, startedAt: Date.now(), status: "pending", refs: refsByJob.get(jobId) ?? null };
@@ -661,9 +703,27 @@ export const renderJobsLayer = Layer.effect(
 
     const durableIds = (records: ReadonlyArray<TLRecord>) => records.filter((record) => isShape(record) && runMarkerOf(record)?.durable !== undefined).map((record) => record.id);
 
+    const resolveNodeVersions = async (project: string, records: ReadonlyArray<TLRecord>) => {
+      const waiting = records.filter(isNode).flatMap((node) => node.props.versions.filter((version) => version.status === "running" && version.durable === true).map((version) => ({ node: node.id, version })));
+      if (waiting.length === 0) return;
+      const jobs = await readJobsLenient(await outputDir());
+      for (const { node, version } of waiting) {
+        const job = jobs.find((each) => each.id === version.runId);
+        if (job?.status === "failed") {
+          await applyNodeChange(rooms, runPromise, project, (get) => failVersion(get, node, version.id, job.error ?? GENERATION_FAILED), job.id);
+          await applyNodeChange(rooms, runPromise, project, (get) => finishRun(get, node, job.id, [job.error ?? GENERATION_FAILED]), job.id);
+        } else if (job?.status === "done" && job.savedPath !== undefined) {
+          const file = basename(job.savedPath);
+          await applyNodeChange(rooms, runPromise, project, (get) => fillVersion(get, node, version.id, { file, fileName: file }), job.id);
+          await applyNodeChange(rooms, runPromise, project, (get) => finishRun(get, node, job.id, []), job.id);
+        }
+      }
+    };
+
     yield* rooms.afterOpen((project, room) => {
       const ids = durableIds(room.read());
       if (ids.length > 0) void resolveDurable(project, ids).catch((error: unknown) => logError(`canvas ${project}: ${errorText(error)}`));
+      void resolveNodeVersions(project, room.read()).catch((error: unknown) => logError(`canvas ${project}: ${errorText(error)}`));
     });
 
     yield* rooms.afterCommit((project, change) => {
@@ -701,7 +761,7 @@ export const renderJobsLayer = Layer.effect(
       });
 
     return RenderJobs.of({
-      start: (request) => attempt(() => start(request)),
+      start: (request, into) => attempt(() => start(request, into)),
       poll: (request) => attempt(() => poll(request)),
       forget: (project, jobId) => attempt(() => forget(project, jobId)),
       onFinished: (jobId, handler) => {

@@ -182,3 +182,33 @@
   background: none;
   box-shadow: none;
 }
+
+/*
+ * The docked agent rail (spec 08) covers the canvas's left 380 px down to the window's bottom, so the bottom row (the
+ * zoom controls and the toolbar) starts beside it and centres in the canvas left uncovered. The rail sits next to
+ * tldraw's container, not in it.
+ */
+:root .tl-container:has(~ [data-slot="docked-rail"][data-state="open"]) .tlui-layout__bottom {
+  padding-left: 380px;
+}
+
+/* The zoom controls are placed against the whole layout, not the bottom row, so they move on their own. */
+:root .tl-container:has(~ [data-slot="docked-rail"][data-state="open"]) .tlui-navigation-panel {
+  left: 380px;
+}
+
+/*
+ * The Design panel (spec 18) docks to the canvas's right 320 px down to the window's bottom, so the bottom row centres in
+ * the canvas left uncovered. The panel sits in tldraw's container, under the watermark.
+ */
+:root .tl-container:has(> [data-unframed-design-panel]) .tlui-layout__bottom {
+  padding-right: 320px;
+}
+
+:root .tl-container[data-parameters-panel] {
+  --tl-layer-watermark: 251;
+}
+
+:root .tl-container[data-parameters-panel="dock"]:not(:has(~ [data-slot="docked-rail"][data-state="open"])) .tlui-layout__bottom {
+  padding-right: var(--parameters-dock-width);
+}

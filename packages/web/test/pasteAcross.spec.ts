@@ -46,7 +46,6 @@ test("pasting into another project copies every file in; a pasted page always ge
   await expect(shapeOnScreen(page, "shape:landing")).toHaveCount(1);
   await expect(shapeOnScreen(page, "shape:photo")).toHaveCount(1);
 
-  // Within one project, a pasted page gets its own copy of its file.
   await page.mouse.click(10, 400);
   await page.keyboard.press("ControlOrMeta+a");
   await copySelection(page, ["text/html", "image/png"]);
@@ -56,9 +55,10 @@ test("pasting into another project copies every file in; a pasted page always ge
     return pages.length === 2 ? pages.find((record) => record.id !== "shape:landing") : undefined;
   });
   expect(samePaste.props.file).not.toBe(pageFile);
-  expect(await readFile(join(engine.dataDir, "output", "alpha", samePaste.props.file), "utf8")).toBe("<h1>alpha</h1>");
+  const pasted = await readFile(join(engine.dataDir, "output", "alpha", samePaste.props.file), "utf8");
+  expect(pasted).toContain('<script src="unframed-dials.js"></script>');
+  expect(pasted).toMatch(/<h1 data-hf-id="hf-[a-z0-9]{4}">alpha<\/h1>/);
 
-  // Into another project, every file is copied in.
   await page.getByRole("button", { name: "All projects" }).click();
   await page.getByRole("menuitemradio", { name: "beta" }).click();
   await expect(page.locator("[data-canvas-project='beta'] .tl-canvas")).toBeVisible();
@@ -77,7 +77,6 @@ test("pasting into another project copies every file in; a pasted page always ge
   const betaPage = betaRecords.find((record) => record.typeName === "shape" && record.type === "page")!;
   expect(betaFiles).toContain(betaPage.props.file);
 
-  // A file that cannot be copied pastes its shape empty, and says so.
   await rm(join(engine.dataDir, "output", "alpha", pageFile));
   await rm(join(engine.dataDir, "output", "alpha", samePaste.props.file));
   const before = new Set(betaRecords.map((record) => record.id));

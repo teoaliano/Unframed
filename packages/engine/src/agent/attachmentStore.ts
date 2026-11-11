@@ -11,9 +11,11 @@ import {
 } from "@unframed/domain";
 import type { Route } from "../http/api.ts";
 import { sendError, sendJson } from "../http/respond.ts";
+import { sendFile } from "../http/sendFile.ts";
 
 export const UPLOAD_URL_TTL_MS = 10 * 60_000;
 const UPLOAD_PATH = /^\/api\/attachments\/upload\/([0-9a-f]{64})$/;
+const SERVE_PATH = /^\/api\/attachments\/([^/]+)$/;
 
 interface PendingUpload {
   readonly name: string;
@@ -90,6 +92,30 @@ export class AttachmentStore {
     } finally {
       await handle.close();
     }
+  }
+
+  /**
+   * `GET /api/attachments/<id>` (and `HEAD`): a stored image, for the composer's thumbnail
+   * of a draft restored by id. Only bytes that sniff as an image are served, typed from
+   * those bytes, so an uploaded page or script is never served from the app's origin.
+   */
+  serveRoute(): Route {
+    return async (req, res, url) => {
+      const match = SERVE_PATH.exec(url.pathname);
+      if (!match || (req.method !== "GET" && req.method !== "HEAD")) return false;
+      let id = "";
+      try {
+        id = decodeURIComponent(match[1]!);
+      } catch {
+        // A malformed escape names no file.
+      }
+      const stored = await this.resolve({ id, name: id }).catch(() => undefined);
+      const path = this.path(id);
+      if (stored?.kind !== "image" || path === undefined || !(await sendFile(req, res, path, { "content-type": stored.type, "cache-control": "private, max-age=31536000, immutable" }))) {
+        sendError(res, 404, "No such attachment.");
+      }
+      return true;
+    };
   }
 
   /** The upload route: `POST` the raw bytes to a path from `createUploadUrl`, exactly `sizeBytes` long. */

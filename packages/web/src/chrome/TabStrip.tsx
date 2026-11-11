@@ -1,5 +1,6 @@
 import type { ProjectActivity } from "@unframed/contracts";
-import { statusOf, type TabActivity, type TabStatus } from "@unframed/domain";
+import { isEditorTab, projectOfTab, statusOf, type TabActivity, type TabStatus } from "@unframed/domain";
+import { KIND_LOOK } from "../artifacts/kinds.ts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { TopBar, type TopBarRegion, type TopBarStatus, type TopBarTab } from "~/components/ui/top-bar";
 import { useEngine, useActivation } from "../context.ts";
@@ -65,11 +66,11 @@ const STATUS_LABEL: Record<TabStatus, string> = {
   none: "",
 };
 
-/** The kit's status mark for a tab (spec 17): a spinner while working, a check when finished unseen, a dot for a chat waiting on the person. */
+/** The kit's status mark for a tab (spec 17): a spinner while working, a check when finished unseen, a question bubble for a chat waiting on the person. */
 const kitStatus = (status: TabStatus): TopBarStatus | undefined => {
   if (status === "running") return "running";
   if (status === "finished") return "finished";
-  if (status === "needs-you") return "dot";
+  if (status === "needs-you") return "needs-you";
   return undefined;
 };
 
@@ -93,13 +94,29 @@ export const TabStrip = ({
 }) => {
   const activation = useActivation();
   const device = useIsDevice();
-  const { active, order } = useTabState(activation);
+  const { active, editing, editors, order, pinned } = useTabState(activation);
   const activity = useProjectActivity();
   const marks = useFinishedMarks(activity, active);
 
   const tabs: TopBarTab[] = order.map((name) => {
+    if (isEditorTab(name)) {
+      const about = editors.get(name);
+      const kind = about?.kind ?? "page";
+      const label = about?.title === undefined || about.title === "" ? "Untitled" : about.title;
+      const project = projectOfTab(name);
+      const { Icon, word } = KIND_LOOK[kind];
+      return {
+        name,
+        variant: "secondary",
+        attachedTo: project,
+        label,
+        context: project,
+        icon: <Icon aria-hidden data-kind={kind} className="size-3.5 shrink-0 text-muted-foreground" />,
+        title: `${label} · ${word} in ${project}`,
+      };
+    }
     const status = statusOf(activity.get(name), marks.has(name));
-    return { name, status: kitStatus(status), state: status, title: [name, STATUS_LABEL[status]].filter(Boolean).join(" · ") };
+    return { name, pinned: pinned.includes(name), status: kitStatus(status), state: status, title: [name, STATUS_LABEL[status]].filter(Boolean).join(" · ") };
   });
 
   const project = (action: ProjectActionDetail["action"], name: string) => {
@@ -112,12 +129,12 @@ export const TabStrip = ({
       layout="fixed"
       controls={controls}
       tabs={tabs}
-      active={active}
+      active={editing ?? active}
       logo={logo}
       settings={settings}
       regions={regions}
       newProject={
-        <div data-testid="all-projects">
+        <div data-testid="all-projects" className="flex">
           <ProjectMenu />
         </div>
       }
@@ -130,6 +147,8 @@ export const TabStrip = ({
             onRename: (name: string) => project("rename", name),
             onDelete: (name: string) => project("delete", name),
             onMove: (name: string, to: number) => activation.moveTab(name, to),
+            onPin: (name: string) => activation.pinTab(name),
+            onUnpin: (name: string) => activation.unpinTab(name),
           })}
     />
   );

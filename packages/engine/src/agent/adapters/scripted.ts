@@ -3,6 +3,7 @@ import { basename, join } from "node:path";
 import {
   checkCanvasTools,
   classifyToolItem,
+  isCompactCommand,
   parseScript,
   pickScript,
   preambleMismatch,
@@ -112,6 +113,12 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
       if (check.failure) return fail(check.failure);
     }
 
+    if (input.command && isCompactCommand(input.text)) {
+      const itemId = `compaction-${++items}`;
+      emit(chatId, { type: "item.started", ...turn, itemId, payload: { itemType: "context_compaction", status: "inProgress", title: "Compacting context" } });
+      emit(chatId, { type: "item.completed", ...turn, itemId, payload: { itemType: "context_compaction", status: "completed", title: "Context compacted" } });
+    }
+
     for (const retry of step.retries ?? []) {
       emit(chatId, { type: "runtime.retry", ...turn, payload: { ...retry } });
     }
@@ -139,6 +146,7 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
             turnId,
             runtimeMode: context.runtimeMode(chatId),
             interactionMode: input.interactionMode,
+            ...(call.permission === undefined ? {} : { signals: call.permission }),
             signal: abort.signal,
           });
       if (allowed.behavior === "allow") {
@@ -159,7 +167,7 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
       const itemId = `item-${++items}`;
       const toolName = `${UNFRAMED_TOOL_PREFIX}${call.name}`;
       emit(chatId, { type: "item.started", ...turn, itemId, payload: { itemType: "mcp_tool_call", status: "inProgress", title: toolName, data: { toolName, input: call.input } } });
-      const detail = toolName === "mcp__unframed__generate" ? await context.generationDetail?.(chatId, call.input) : undefined;
+      const detail = toolName === "mcp__unframed__generate" || toolName === "mcp__unframed__node_run" ? await context.generationDetail?.(chatId, call.input, toolName.slice("mcp__unframed__".length)) : undefined;
       const allowed = await session.gate.decide({
         toolName,
         input: call.input,

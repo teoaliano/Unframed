@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  answersWithFiles,
   buildPreamble,
+  isCompactCommand,
+  isProviderCommand,
   changeNote,
   checkCanvasTools,
   classifyOrigin,
@@ -118,5 +121,49 @@ describe("the preamble", () => {
     expect(selectionLabel({ title: "", fileName: "hero.png" })).toBe("hero.png");
     expect(selectionLabel({ text: "a".repeat(50) })).toBe("a".repeat(40));
     expect(selectionLabel({})).toBeUndefined();
+  });
+});
+
+describe("an answer's files", () => {
+  it("are added to the answer as the paths a provider can open, after any text (t3code's fallback: no provider takes files in an answer)", () => {
+    const files = {
+      look: [{ kind: "image", name: "ref.png", path: "/data/attachments/a1.png" }],
+      sections: [{ kind: "file", name: "brief.pdf", path: "/data/attachments/a2.pdf" }],
+      tone: [{ kind: "file", name: "notes.txt", path: "/data/attachments/a3.txt" }],
+    } as const;
+    expect(answersWithFiles({ look: "Warm", sections: ["Hero"], other: "kept" }, files)).toEqual({
+      look: 'Warm\n\nAttached image "ref.png": /data/attachments/a1.png',
+      sections: ["Hero", 'Attached file "brief.pdf": /data/attachments/a2.pdf'],
+      tone: 'Attached file "notes.txt": /data/attachments/a3.txt',
+      other: "kept",
+    });
+    expect(answersWithFiles({ look: "Warm" }, {})).toEqual({ look: "Warm" });
+  });
+});
+
+describe("provider commands", () => {
+  it("is a message with no attachments whose first word names one of the provider's commands", () => {
+    const commands = ["compact", "review"];
+    expect(isProviderCommand("/compact", 0, commands)).toBe(true);
+    expect(isProviderCommand("  /Review the diff", 0, commands)).toBe(true);
+    expect(isProviderCommand("/compact", 1, commands)).toBe(false);
+    expect(isProviderCommand("/Users/me/x.png explain", 0, commands)).toBe(false);
+    expect(isProviderCommand("/compactly", 0, commands)).toBe(false);
+    expect(isProviderCommand("compact", 0, commands)).toBe(false);
+  });
+
+  it("counts /compact as a command even when the provider's list leaves it out", () => {
+    expect(isProviderCommand("/compact keep the API notes", 0, [])).toBe(true);
+  });
+
+  it("falls back to t3code's rule, a slash and a letter or digit, when the provider's list is not known", () => {
+    expect(isProviderCommand("/Users/me/x.png explain", 0, undefined)).toBe(true);
+    expect(isProviderCommand("/ nothing", 0, undefined)).toBe(false);
+  });
+
+  it("matches compaction as the composer does: /compact alone or followed by instructions", () => {
+    expect(isCompactCommand(" /Compact ")).toBe(true);
+    expect(isCompactCommand("/compact keep the API notes")).toBe(true);
+    expect(isCompactCommand("/compactly")).toBe(false);
   });
 });

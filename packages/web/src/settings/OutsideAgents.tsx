@@ -7,7 +7,7 @@ import type { AgentConnection, SetupStep } from "@unframed/contracts";
 import { CircleAlert, Plug } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
-import { Button } from "~/components/ui/button";
+import { Button, InlineButton } from "~/components/ui/button";
 import { Dialog, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Radio, RadioGroup } from "~/components/ui/radio-group";
@@ -52,7 +52,7 @@ const CodeBlock = ({ step }: { readonly step: SetupStep }) => {
 };
 
 /** The Connect an agent dialog (spec 14, "Connect an agent"): the client, a name, the setup once. */
-const ConnectDialog = ({ open, onClose, onMade }: { readonly open: boolean; readonly onClose: () => void; readonly onMade: () => void }) => {
+const ConnectDialog = ({ open, hasKey, onClose, onMade }: { readonly open: boolean; readonly hasKey: boolean; readonly onClose: () => void; readonly onMade: () => void }) => {
   const engine = useEngine();
   const [client, setClient] = useState<ConnectionClient>("claude-code");
   // The name follows the client's label until the person types, then it is theirs.
@@ -112,7 +112,13 @@ const ConnectDialog = ({ open, onClose, onMade }: { readonly open: boolean; read
                 <span className="text-muted-foreground">Name</span>
                 <Input aria-label="Name" value={name} onChange={(event) => setTyped(event.target.value)} />
               </label>
-              <SpendFields amount={amount} period={period} onAmount={setAmount} onPeriod={setPeriod} />
+              {hasKey ? (
+                <SpendFields amount={amount} period={period} onAmount={setAmount} onPeriod={setPeriod} />
+              ) : (
+                <p className="text-sm text-muted-foreground" data-testid="agents-generate-need-key">
+                  {NEEDS_KEY}
+                </p>
+              )}
               {!limit.ok && (
                 <Alert variant="error">
                   <CircleAlert />
@@ -233,7 +239,9 @@ const LimitDialog = ({ connection, onClose, onSaved }: { readonly connection: Ag
   );
 };
 
-export const OutsideAgents = () => {
+export const NEEDS_KEY = "Connect OpenRouter to let agents generate.";
+
+export const OutsideAgents = ({ hasKey, onConnectOpenRouter }: { readonly hasKey: boolean; readonly onConnectOpenRouter: () => void }) => {
   const engine = useEngine();
   const device = useIsDevice();
   const [connections, setConnections] = useState<ReadonlyArray<AgentConnection> | undefined>(undefined);
@@ -260,6 +268,12 @@ export const OutsideAgents = () => {
     <section className="flex flex-col gap-3">
       <SectionHeading>Agents outside Unframed</SectionHeading>
       <p className="text-sm text-muted-foreground">Let Claude Code, Codex or another MCP client on this computer read and change your canvas while Unframed is open.</p>
+      {!hasKey && (
+        <p className="text-sm text-muted-foreground" data-testid="agents-generate-need-key">
+          A connection works without OpenRouter. Generating images, video and text from an agent, and its spend limit, need it.{" "}
+          <InlineButton onClick={onConnectOpenRouter}>{NEEDS_KEY.replace(/\.$/, "")}</InlineButton>.
+        </p>
+      )}
       {(connections ?? []).map((connection) => (
         <div key={connection.id} className="flex items-center gap-3 text-sm" data-testid="outside-connection">
           <span className="font-medium text-foreground">{connection.name}</span>
@@ -268,9 +282,11 @@ export const OutsideAgents = () => {
           <span className="text-muted-foreground" data-testid="outside-spend">
             {spendText(connection)}
           </span>
-          <Button variant="ghost" size="sm" onClick={() => setLimiting(connection)}>
-            Limit
-          </Button>
+          {hasKey && (
+            <Button variant="ghost" size="sm" onClick={() => setLimiting(connection)}>
+              Limit
+            </Button>
+          )}
           {!device && (
             <Button variant="ghost" size="sm" onClick={() => setRevoking(connection)}>
               Revoke
@@ -286,7 +302,7 @@ export const OutsideAgents = () => {
           </Button>
         </div>
       )}
-      <ConnectDialog open={connecting} onClose={() => setConnecting(false)} onMade={refresh} />
+      <ConnectDialog open={connecting} hasKey={hasKey} onClose={() => setConnecting(false)} onMade={refresh} />
       <LimitDialog connection={limiting} onClose={() => setLimiting(undefined)} onSaved={refresh} />
       <ConfirmDialog
         open={revoking !== undefined}

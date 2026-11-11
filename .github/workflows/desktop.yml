@@ -19,7 +19,21 @@ defaults:
     working-directory: apps/desktop
 
 jobs:
+  draft:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open a draft Release for the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" --repo teoaliano/Unframed >/dev/null 2>&1 \
+            || gh release create "$TAG" --repo teoaliano/Unframed --draft --title "$TAG" --notes ""
+
   build:
+    needs: draft
     strategy:
       fail-fast: false
       matrix:
@@ -71,11 +85,9 @@ jobs:
 
       - run: npm ci
 
-      # The keep-awake handler (spec 22) against a fake powerSaveBlocker. No Electron,
-      # so it runs on both platforms in seconds and gates every PR.
-      - name: Keep-awake smoke test
-        shell: bash
-        run: node test/keep-awake.smoke.js
+      - name: Shell tests
+        if: runner.os == 'macOS'
+        run: npm test
 
       # Fail loudly if the pin did not resolve to what package.json claims, since
       # that failure is otherwise silent -- npm honours a stale lockfile happily.
@@ -106,7 +118,7 @@ jobs:
       # so the Release got the unstapled DMG and a feed hashed from it. Mac uploads
       # happen in a later step, once the feed is re-hashed. Windows is unchanged.
       - name: Package
-        run: npx electron-builder --publish ${{ runner.os != 'macOS' && startsWith(github.ref, 'refs/tags/v') && 'always' || 'never' }}
+        run: npx electron-builder --publish never
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
           # electron-builder reads these two by default, which is why no config
@@ -134,26 +146,31 @@ jobs:
 
       # The check that would have caught 0.0.2, which signed, notarized, published
       # and then died on launch with ERR_MODULE_NOT_FOUND: Cannot find package
-      # 'express'. Every step above proves something about the BUNDLE; none of them
-      # ever ran the thing. npm hoists the engine's dependencies to the top-level
-      # node_modules, so unpacking only node_modules/unframed left them inside
-      # app.asar -- where a forked Node process cannot see them, and where ESM
-      # cannot look at all, since Electron patches require() for asar but not the
-      # ESM loader. So: start the packaged engine the way main.js forks it, and
-      # require its banner. asarUnpack is shared config, so proving it on mac
-      # proves the packing for Windows too. Runs on PRs -- that is the point.
+      # 'express'. The engine sat in app.asar.unpacked while npm had hoisted its
+      # dependencies into app.asar, and a module outside the archive cannot resolve
+      # one inside it. The engine now runs from inside app.asar beside them, and
+      # only native binaries and the MCP shim are unpacked. So: start the packaged
+      # engine the way main.js forks it and require its banner, run esbuild the way
+      # the engine reaches it, and check the shim path that existing Claude Code and
+      # Codex setups call. asarUnpack is shared config, so proving it on mac proves
+      # the packing for Windows too. Runs on PRs -- that is the point.
       - name: Prove the packaged engine actually starts
         if: runner.os == 'macOS'
         shell: bash
         run: |
           APP="$PWD/dist/mac-arm64/Unframed.app"
-          ENGINE="$APP/Contents/Resources/app.asar.unpacked/node_modules/unframed/server/index.js"
+          RES="$APP/Contents/Resources"
+          ESBUILD="$RES/app.asar.unpacked/node_modules/@esbuild/darwin-arm64/bin/esbuild"
+          test -f "$RES/app.asar.unpacked/node_modules/unframed/server/mcp.js"
+          ELECTRON_RUN_AS_NODE=1 ESBUILD_BINARY_PATH="$ESBUILD" "$APP/Contents/MacOS/Unframed" -e \
+            "require('$RES/app.asar/node_modules/esbuild').buildSync({ stdin: { contents: 'export const a: number = 1', loader: 'ts' }, write: false })"
           ELECTRON_RUN_AS_NODE=1 \
+          ESBUILD_BINARY_PATH="$ESBUILD" \
           UNFRAMED_DATA_DIR="$RUNNER_TEMP/engine-data" \
-          UNFRAMED_CLIENT_DIST="$APP/Contents/Resources/app.asar.unpacked/node_modules/unframed/client/dist" \
+          UNFRAMED_CLIENT_DIST="$RES/app.asar/node_modules/unframed/client/dist" \
           OUTPUT_DIR="$RUNNER_TEMP/engine-out" \
           PORT=0 \
-          "$APP/Contents/MacOS/Unframed" "$ENGINE" > "$RUNNER_TEMP/engine.log" 2>&1 &
+          "$APP/Contents/MacOS/Unframed" "$RES/app.asar/node_modules/unframed/server/index.js" > "$RUNNER_TEMP/engine.log" 2>&1 &
           ENGINE_PID=$!
           for i in $(seq 1 30); do
             if grep -q 'Unframed server' "$RUNNER_TEMP/engine.log" 2>/dev/null; then break; fi
@@ -196,16 +213,26 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          UNPACKED="dist/mac-arm64/Unframed.app/Contents/Resources/app.asar.unpacked"
-          test -f "$UNPACKED/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs"
-          if find "$UNPACKED" -path "*@anthropic-ai/claude-agent-sdk-*" -name claude | grep .; then
+          RES="dist/mac-arm64/Unframed.app/Contents/Resources"
+          npx asar list "$RES/app.asar" > "$RUNNER_TEMP/asar.txt"
+          find "$RES/app.asar.unpacked" -type f >> "$RUNNER_TEMP/asar.txt"
+          grep -q '/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs$' "$RUNNER_TEMP/asar.txt"
+          if grep -E '@anthropic-ai/claude-agent-sdk-[^/]+/claude$' "$RUNNER_TEMP/asar.txt"; then
             echo "The bundled CLI is back in the bundle; the files exclusion stopped matching." >&2
             exit 1
           fi
           # Sourcemaps and type declarations are read by debuggers and compilers, not
           # by a packaged app -- 78MB of them shipped until they were excluded.
-          if find "$UNPACKED" \( -name '*.js.map' -o -name '*.d.ts' \) | head -5 | grep .; then
+          if grep -E '\.(js\.map|d\.ts)$' "$RUNNER_TEMP/asar.txt" | head -5 | grep .; then
             echo "Build artifacts are back in the bundle; the files exclusions stopped matching." >&2
+            exit 1
+          fi
+          # Every unpacked file is unpacked, signature-checked and swapped on each
+          # update. Unpacking all of node_modules made that 5,000 files.
+          UNPACKED_FILES=$(find "$RES/app.asar.unpacked" -type f | wc -l)
+          echo "unpacked files: $UNPACKED_FILES"
+          if [ "$UNPACKED_FILES" -gt 100 ]; then
+            echo "asarUnpack has widened again; unpack only native binaries and the MCP shim." >&2
             exit 1
           fi
 
@@ -227,22 +254,26 @@ jobs:
         shell: bash
         run: ls -lh dist/*.dmg dist/*.zip dist/*.exe 2>/dev/null || ls -lh dist
 
-      # The mac uploads, after every check above has passed. Same shape electron-builder
-      # gives a Release: published rather than draft, on the PUBLIC repo, where the
-      # updater looks. A Windows job may create the Release first, so a failed create
-      # is tolerated when the Release then exists.
-      - name: Publish the mac installers to the public Release
+      - name: Attach the mac installers to the draft Release
         if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v')
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
-          gh release view "$TAG" --repo teoaliano/Unframed >/dev/null 2>&1 \
-            || gh release create "$TAG" --repo teoaliano/Unframed --title "$TAG" --notes "" \
-            || gh release view "$TAG" --repo teoaliano/Unframed >/dev/null
           gh release upload "$TAG" --repo teoaliano/Unframed --clobber \
-            dist/*.dmg dist/*.dmg.blockmap dist/*.zip dist/*.zip.blockmap dist/latest-mac.yml
+            dist/*.dmg dist/*.dmg.blockmap dist/*.zip dist/*.zip.blockmap
+          gh release upload "$TAG" --repo teoaliano/Unframed --clobber dist/latest-mac.yml
+
+      - name: Attach the Windows installer to the draft Release
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release upload "$TAG" --repo teoaliano/Unframed --clobber dist/*.exe dist/*.exe.blockmap
+          gh release upload "$TAG" --repo teoaliano/Unframed --clobber dist/latest.yml
 
       # Pre-release testing only, and deliberately short-lived: Actions storage is
       # 500MB and one installer is ~100MB. Real releases attach to the PUBLIC repo's
@@ -260,3 +291,25 @@ jobs:
             apps/desktop/dist/*.exe
           retention-days: 1
           if-no-files-found: error
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - name: Publish the Release once both platforms are attached
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          ASSETS=$(gh release view "$TAG" --repo teoaliano/Unframed --json assets --jq '.assets[].name')
+          echo "$ASSETS"
+          for f in latest-mac.yml latest.yml; do
+            echo "$ASSETS" | grep -qx "$f" || { echo "$f is missing from the draft" >&2; exit 1; }
+          done
+          echo "$ASSETS" | grep -q '\.zip$'
+          echo "$ASSETS" | grep -q '\.exe$'
+          gh release edit "$TAG" --repo teoaliano/Unframed --draft=false --latest

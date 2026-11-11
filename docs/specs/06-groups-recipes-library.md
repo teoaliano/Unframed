@@ -12,7 +12,7 @@ Three pieces, each built on the one before.
 
 1. **Groups.** A group is tldraw's frame, extended. It is a box with a dashed border whose label is its `@id`. Its members are prompts, images, videos and marks. Selecting the box selects its contents for a run: the members take one slot in the top-to-bottom order, in their own order inside the box. Writing `@character` in a prompt pulls in the group's prompt text and never attaches its pictures. Cmd-G wraps a selection in a new group, Cmd-Shift-G takes the box away, renaming rewrites every reference in the same undo step, and deleting the box deletes its contents as one step. Renaming is not only for groups: any prompt, image, video, page or motion can be named the same way, and the name is its `@id`.
 2. **Recipe groups.** A group can also hold standing settings: the medium, the model, the parameters and the runs (including Free). Its label then shows a chip such as `gpt-image-2 · 1024² · ×3`, its toolbar Generate runs with those settings in one click, and the composer opens on them. The person saves, updates and clears the recipe from the composer.
-3. **The library.** A preset is a saved group: the box, its members and its recipe if it has one. A flow (spec 16) is a preset that holds nodes and the wires between them. The person saves a selection with "Add to library", browses presets in the Library dialog (search, sort, view, filters, pages), inserts one into any project with fresh ids and rewritten references, and deletes their own. Two system presets ship with the app. Presets live in one `presets.json` at the root of the output folder, under a write rule that can never erase a preset still on disk.
+3. **The library.** A preset is a saved group: the box, its members and its recipe if it has one. A flow (spec 16) is a preset that holds nodes and the wires between them. The person saves a selection with "Add to library", browses presets in the Library dialog (search, sort, view, filters, pages), inserts one into any project with fresh ids and rewritten references, and deletes their own. Two system presets ship with the app, and spec 19 adds ten system kits. Presets live in one `presets.json` at the root of the output folder, under a write rule that can never erase a preset still on disk.
 
 ## User Stories
 
@@ -145,8 +145,9 @@ Spec 03's selection to request already expands a selected group in place (one sl
 - image: the exact size when set, as `1024²` when width equals height and `1024×1536` otherwise; else the aspect ratio (`2:3`);
 - video: the duration as `5s`, then the resolution (`720p`);
 - text: nothing beyond the model;
-- runs: `×N` when N is more than 1 (`×3`), `Free` for Free, nothing for 1.
-Example: `gpt-image-2 · 1024² · ×3`. Clicking the chip opens the composer on the recipe.
+- runs: `×N` when N is more than 1 (`×3`), `Free` for Free, nothing for 1;
+- provider (spec 22): `Vercel` last for a recipe that runs through the Vercel AI Gateway, nothing for OpenRouter.
+Example: `gpt-image-2 · 1024² · ×3`, or `flux-2-pro · Vercel`. The recipe's `provider` is saved by Save as recipe and Update recipe, compared by `recipeEquals` (absent and `openrouter` are the same), and kept in library presets with the rest of the recipe. Clicking the chip opens the composer on the recipe.
 
 **When a recipe applies.** When the selection contains exactly one recipe group, whatever else is selected. Other selected shapes join the run as sources in the usual order. With two or more recipe groups selected, no recipe applies and the composer opens on last-used values.
 
@@ -217,7 +218,7 @@ The view choice is stored in spec 01's preferences store under `library.view` as
 
 Card view: a grid of cards, each on `--card` with the kit's border and `rounded-xl` radius. Each card: the name (medium weight), the summary, the needs line when present (supporting ink), then a row of chips, then a footer strip under a divider holding "Add" (Button `outline` at `xs` size, as in list view). A user preset has a delete icon button in the top-right corner. List view: dense divided rows; the name and its chips on one line, the summary below clamped to three lines with the full text in a native tooltip, then "Add" and the delete button at the row's end.
 
-Chips (label = the value capitalised, each with an icon and a hue; each is the kit's Badge `label`, tinted from `--label` set to the Tailwind palette colour of its hue at 500): type `Recipe` (Workflow icon, purple) or `Group` (Group icon, blue); medium `Image` (Image icon, teal), `Video` (SquarePlay icon, orange), `Text` (Type icon, cyan), shown only for recipes; source `Custom` (UserRound icon, green) for user presets or `System` (Package icon, pink).
+Chips (label = the value capitalised, each with an icon and a hue; each is the kit's Badge `label`, tinted from `--label` set to the Tailwind palette colour of its hue at 500): type `Recipe` (Workflow icon, purple) or `Group` (Group icon, blue); medium `Image` (Image icon, teal), `Video` (SquarePlay icon, orange), `Text` (Type icon, cyan), `Audio` (AudioLines icon, yellow, spec 15), shown only for recipes; source `Custom` (UserRound icon, green) for user presets or `System` (Package icon, pink).
 
 Delete: an icon button (Button `ghost-destructive`) with accessible label "Delete <name>" and tooltip "Delete from your library", only on user presets. It opens an alert, the kit's AlertDialog: title "Delete preset?", body "This removes “<name>” from your library. Shapes already on the canvas are untouched. This can't be undone.", action "Delete preset" (Button `destructive`) beside "Cancel". A failed delete toasts "Could not delete that preset. Is the local server running?".
 
@@ -252,7 +253,7 @@ All on spec 01's RPC socket, all serialised through one write queue per output f
 
 ### System presets
 
-Both are recipe groups, built at startup by the preset rules. Their prompt text comes from assets, verbatim.
+Two are recipe groups, built at startup by the preset rules. Their prompt text comes from assets, verbatim. Spec 19 adds ten system kits (The kit in the library, System kits), listed after these two.
 
 **Layerize** (`id: "layerize"`). Name "Layerize". Summary "Split an image into its parts as separate generations". Needs "Drop your picture into the image, then Generate to write the plan. Then select the plan with your picture, set Runs to Free and Generate." A group `@layerize`, 420 wide, with a recipe `{ medium: "text", model: <the app's default text model at insert time>, params: {}, runs: 1 }`. Members, top to bottom: a prompt holding the text in `assets/prompts/preset-layerize-plan.md`, then an empty image shape. The first Generate writes the plan as a text result beside the box; the second run (Free, image) makes one generation per section, each with the picture as image 1. The planner's text leads with "plain prose only" and bans coordinates on purpose: asked bare, some vision models answer with bounding boxes instead of sections; and each section starts "From image 1, recreate" because a section written as a fresh scene description made the image model treat the picture as loose inspiration. Keep the text verbatim.
 
@@ -281,7 +282,7 @@ Prior art: the old app pinned exactly these rules (wrap, rename rewrite, fragmen
 7. Toolbar hint reads `@<name>` for one selected group; the composer's sources band shows one `@<name>` chip. Seam: browser.
 8. The `@` mention menu and "Copy @id" include groups. Seam: browser.
 9. `recipeFromTray` and `trayFromRecipe` round-trip spec 03's `GroupRecipe` for every medium, and never carry an instruction. Seam: domain.
-10. `recipeChip` formats model, size or ratio, duration and resolution, runs (`×N`, `Free`). Seam: domain.
+10. `recipeChip` formats model, size or ratio, duration and resolution, runs (`×N`, `Free`); an audio recipe reads the model then the voice name (spec 15). Seam: domain.
 11. "Save as recipe" in the composer stores the tray on the group as one undo step and the chip appears. Seam: browser.
 12. Composer opens with the tray set from the recipe when one recipe group is selected; with two, last-used values. Seam: browser.
 13. Composer recipe line shows "Recipe of @name" when matching and "Update recipe" when the tray differs; editing the tray alone never changes the group. Seam: browser.

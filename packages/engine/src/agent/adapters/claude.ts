@@ -8,6 +8,7 @@ import {
   claudePermissionMode,
   claudeTurnPermissionMode,
   initialClaudeState,
+  isCompactCommand,
   mapClaudeMessage,
   modelMessage,
   UNFRAMED_TOOL_PREFIX,
@@ -80,11 +81,13 @@ interface ClaudeSession {
   model: string;
   boundaries: string[];
   stopped: boolean;
+  compacting: boolean;
 }
 
 const IMAGE_TYPES = new Set(["image/gif", "image/jpeg", "image/png", "image/webp"]);
 
 const messageContent = async (input: TurnInput): Promise<SDKUserMessage["message"]["content"]> => {
+  if (input.command) return input.text.trim();
   const blocks: Array<Record<string, unknown>> = [{ type: "text", text: modelMessage(input.preamble, input.text) }];
   for (const attachment of input.attachments) {
     if (attachment.kind !== "image" || !IMAGE_TYPES.has(attachment.type)) continue;
@@ -127,6 +130,7 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
         const mapped = mapClaudeMessage(session.state, message, {
           turnId: session.turnId,
           registeredTools: context.registeredTools(),
+          compacting: session.compacting,
         });
         session.state = mapped.state;
         for (const event of mapped.events) {
@@ -134,6 +138,7 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
             if (session.state.lastAssistantUuid !== undefined) session.boundaries.push(session.state.lastAssistantUuid);
             emit(session.chatId, { type: "thread.started", payload: { providerThreadId: session.state.sessionId ?? "", resumeCursor: cursor(session) } });
             session.turnId = undefined;
+            session.compacting = false;
           }
           emit(session.chatId, event.type === "session.configured" ? { ...event, payload: { ...event.payload, grantedDirectories: [session.attachmentsDir] } } : event);
         }
@@ -182,7 +187,7 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
       let session: ClaudeSession | undefined;
       const gate = new PermissionGate((draft) => emit(input.chatId, draft));
       const canUseTool: CanUseTool = async (toolName, toolInput, options) => {
-        const detail = toolName === "mcp__unframed__generate" ? await context.generationDetail?.(input.chatId, toolInput) : undefined;
+        const detail = toolName === "mcp__unframed__generate" || toolName === "mcp__unframed__node_run" ? await context.generationDetail?.(input.chatId, toolInput, toolName.slice("mcp__unframed__".length)) : undefined;
         const answer = await gate.decide({
           toolName,
           input: toolInput,
@@ -192,6 +197,10 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
           interactionMode: session?.interactionMode ?? "default",
           ...(options.toolUseID ? { toolUseId: options.toolUseID } : {}),
           ...(options.suggestions ? { suggestions: options.suggestions as unknown as ReadonlyArray<{ type: string; destination: string }> } : {}),
+          signals: {
+            ...(options.decisionReason === undefined ? {} : { decisionReason: options.decisionReason }),
+            ...(options.suppressAlwaysAllowRule === true ? { suppressAlwaysAllowRule: true } : {}),
+          },
           signal: options.signal,
         });
         if (answer.behavior === "allow") {
@@ -248,6 +257,7 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
         model: input.modelSelection.model,
         boundaries: [...(stored.boundaries ?? [])],
         stopped: false,
+        compacting: false,
       };
       sessions.set(input.chatId, session);
       void run(session);
@@ -259,6 +269,7 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
       if (!session) throw new Error("The Claude session is not running.");
       if (!input.steer) {
         session.turnId = input.turnId;
+        session.compacting = input.command === true && isCompactCommand(input.text);
         session.interactionMode = input.interactionMode;
         if (input.modelSelection.model !== session.model) {
           await session.query.setModel(input.modelSelection.model === "" ? undefined : input.modelSelection.model);

@@ -13,7 +13,7 @@ import { Switch } from "~/components/ui/switch";
 import { useEngine } from "../context.ts";
 import { tldrawLicenseKey } from "../license.ts";
 import { showNotice } from "../toasts.tsx";
-import { lastUsedText, SectionHeading } from "./fields.tsx";
+import { lastUsedText } from "./fields.tsx";
 
 const COPIED_MS = 1200;
 const POLL_MS = 1000;
@@ -194,6 +194,25 @@ const DeviceRow = ({
   );
 };
 
+const coveredHere = (status: IpadStatus): boolean =>
+  availability({ platform: status.platform, hosted: status.hosted, localName: status.localName ?? undefined, hosts: status.testHosts ?? licenseHosts(tldrawLicenseKey) }).available;
+
+export const useIpadAvailable = (): boolean => {
+  const engine = useEngine();
+  const [available, setAvailable] = useState(false);
+  useEffect(() => {
+    let live = true;
+    engine.call("ipad.status").then(
+      (status) => live && setAvailable(coveredHere(status)),
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [engine]);
+  return available;
+};
+
 export const IpadAccess = ({
   access,
   onAccess,
@@ -222,10 +241,7 @@ export const IpadAccess = ({
   };
   useEffect(refresh, []);
 
-  if (status === undefined) return null;
-  const hosts = status.testHosts ?? licenseHosts(tldrawLicenseKey);
-  const covered = availability({ platform: status.platform, hosted: status.hosted, localName: status.localName ?? undefined, hosts });
-  if (!covered.available) return null;
+  if (status === undefined || !coveredHere(status)) return null;
   const localName = status.localName ?? "";
 
   const setAccess = (on: boolean) => {
@@ -249,8 +265,7 @@ export const IpadAccess = ({
   };
 
   return (
-    <section className="flex flex-col gap-3 border-t pt-4" data-testid="ipad-section">
-      <SectionHeading>iPad</SectionHeading>
+    <section className="flex flex-col gap-3" data-testid="ipad-section">
       <p className="m-0 text-sm text-muted-foreground">Draw on this canvas from your iPad over your home Wi-Fi. Only devices you pair can connect.</p>
       <div className="flex items-center gap-2">
         <Switch id="ipad-access" checked={access} disabled={switching} onCheckedChange={setAccess} />

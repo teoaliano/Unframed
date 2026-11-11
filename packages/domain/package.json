@@ -1,12 +1,23 @@
 {
   "name": "@unframed/domain",
-  "version": "0.8.3",
+  "version": "0.8.5",
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./html": "./src/html/index.ts",
+    "./motion": "./src/motion/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@hyperframes/parsers": "0.8.206",
+    "@unframed/contracts": "workspace:*",
+    "linkedom": "0.18.13",
+    "parse5": "8.0.1"
+  },
+  "devDependencies": {
+    "gsap": "3.15.0"
   }
 }

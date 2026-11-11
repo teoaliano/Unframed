@@ -25,3 +25,8 @@
   display: flex;
   visibility: visible;
 }
+
+/* A weight set in the Design panel reaches the label, which tldraw draws at normal weight. */
+.tl-container [data-uf-weight] .tl-rich-text-wrapper {
+  font-weight: var(--uf-weight);
+}

@@ -1,6 +1,6 @@
 import { TEST_NAME } from "../../engine/test/ipadClient.ts";
 import { expect, test } from "./fixtures.ts";
-import { openApp, openSettings, startSettingsEngine } from "./settings.ts";
+import { openApp, openIpadSettings, startSettingsEngine } from "./settings.ts";
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 
@@ -11,7 +11,7 @@ test("Copy puts the iPad address on the clipboard", async ({ page }) => {
   });
   try {
     await openApp(page, engine);
-    await openSettings(page);
+    await openIpadSettings(page);
     const section = page.getByTestId("ipad-section");
     const address = await section.getByTestId("ipad-address").innerText();
     expect(address).toMatch(new RegExp(`^https://${TEST_NAME}:\\d+$`));

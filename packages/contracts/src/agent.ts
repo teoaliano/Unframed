@@ -1,15 +1,10 @@
-/**
- * The agent runtime's wire shapes (spec 07): provider statuses, the chat commands the web
- * dispatches, the chat read model and the two subscriptions. Protocol names keep t3code's
- * `thread.*` spelling; everything a person reads says "chat".
- */
 import * as Schema from "effect/Schema";
 import { ConnectionClient } from "./agentConnections.ts";
+import { ElementChip } from "./elementEdits.ts";
 
 export const AgentProvider = Schema.Literals(["claude", "codex"]);
 export type AgentProvider = typeof AgentProvider.Type;
 
-/** A chat's provider: an in-app agent, or `outside` for a chat an outside agent made (spec 14). */
 export const ChatProvider = Schema.Literals(["claude", "codex", "outside"]);
 export type ChatProvider = typeof ChatProvider.Type;
 
@@ -34,16 +29,13 @@ export const ModelSelection = Schema.Struct({
 });
 export type ModelSelection = typeof ModelSelection.Type;
 
-/** A chat's stored selection: an outside chat's is `outside`, with no model (spec 14). Commands never carry it. */
-export const ChatModelSelection = Schema.Struct({
+const ChatModelSelection = Schema.Struct({
   provider: ChatProvider,
   model: Schema.String,
   traits: Traits,
 });
-export type ChatModelSelection = typeof ChatModelSelection.Type;
+type ChatModelSelection = typeof ChatModelSelection.Type;
 
-// ---------------------------------------------------------------------------------------
-// Provider statuses.
 
 export const ProviderStatusKind = Schema.Literals(["not_installed", "wont_run", "auth_unknown", "signed_out", "ready"]);
 
@@ -59,13 +51,11 @@ export const ProviderModel = Schema.Struct({
 });
 export type ProviderModel = typeof ProviderModel.Type;
 
-/** A slash command or a skill the composer offers (spec 08). */
-export const ProviderCommand = Schema.Struct({
+const ProviderCommand = Schema.Struct({
   name: Schema.String,
   description: Schema.String,
 });
 
-/** One provider as the web sees it. The executable path is never part of it. */
 export const ProviderStatus = Schema.Struct({
   kind: AgentProvider,
   name: Schema.String,
@@ -85,12 +75,9 @@ export type ProviderStatus = typeof ProviderStatus.Type;
 export const ProviderStatuses = Schema.Struct({ claude: ProviderStatus, codex: ProviderStatus });
 export type ProviderStatuses = typeof ProviderStatuses.Type;
 
-// ---------------------------------------------------------------------------------------
-// Attachments.
 
 export const AttachmentKind = Schema.Literals(["image", "file"]);
 
-/** What a stored message keeps per attachment: never bytes. */
 export const ChatAttachment = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
@@ -100,10 +87,6 @@ export const ChatAttachment = Schema.Struct({
 });
 export type ChatAttachment = typeof ChatAttachment.Type;
 
-/**
- * An attachment as a message names it. Only `id` names the file; the engine re-derives
- * the kind, type and size from the stored bytes, so any claimed here are ignored.
- */
 export const AttachmentRef = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
@@ -120,8 +103,6 @@ export const CreateUploadUrlInput = Schema.Struct({
 
 export const CreateUploadUrlAnswer = Schema.Struct({ relativeUrl: Schema.String, expiresAt: Schema.String });
 
-// ---------------------------------------------------------------------------------------
-// Commands the web dispatches.
 
 const Base = {
   commandId: Schema.String,
@@ -129,7 +110,10 @@ const Base = {
   threadId: Schema.String,
 };
 
-export const MessageContext = Schema.Struct({ selection: Schema.Array(Schema.String) });
+export const MessageContext = Schema.Struct({
+  selection: Schema.Array(Schema.String),
+  elements: Schema.optionalKey(Schema.Array(ElementChip)),
+});
 
 export const ApprovalDecision = Schema.Literals(["accept", "acceptForSession", "decline", "cancel"]);
 export type ApprovalDecision = typeof ApprovalDecision.Type;
@@ -139,7 +123,6 @@ export const ClientChatCommand = Schema.Union([
     type: Schema.Literal("thread.create"),
     ...Base,
     modelSelection: ModelSelection,
-    /** Full access when absent. */
     runtimeMode: Schema.optionalKey(RuntimeMode),
     interactionMode: Schema.optionalKey(InteractionMode),
     tags: Schema.optionalKey(Schema.Array(Schema.String)),
@@ -175,6 +158,7 @@ export const ClientChatCommand = Schema.Union([
     ...Base,
     requestId: Schema.String,
     answers: Schema.Record(Schema.String, Schema.Unknown),
+    attachmentsByQuestionId: Schema.optionalKey(Schema.Record(Schema.String, Schema.Array(AttachmentRef))),
   }),
   Schema.Struct({ type: Schema.Literal("thread.user-input.dismiss"), ...Base, requestId: Schema.String }),
   Schema.Struct({ type: Schema.Literal("thread.turn.revert"), ...Base, turnCount: Schema.Number }),
@@ -186,8 +170,6 @@ export const ClientChatCommand = Schema.Union([
 ]);
 export type ClientChatCommand = typeof ClientChatCommand.Type;
 
-// ---------------------------------------------------------------------------------------
-// The chat read model.
 
 export const ChatMessage = Schema.Struct({
   id: Schema.String,
@@ -224,7 +206,6 @@ export const ProposedPlan = Schema.Struct({
 
 export const TurnState = Schema.Literals(["running", "interrupted", "completed", "error"]);
 
-/** A shape a turn touched, as the recap lists it. `file` and `previousFile` are a page or motion's. */
 export const TurnFile = Schema.Struct({
   shapeId: Schema.String,
   kind: Schema.String,
@@ -272,7 +253,6 @@ export const ChatSession = Schema.Struct({
   lastError: Schema.NullOr(Schema.String),
 });
 
-/** The connection and session an outside chat shows calls from (spec 14). */
 export const OutsideChatRef = Schema.Struct({
   connectionId: Schema.String,
   sessionId: Schema.String,
@@ -322,7 +302,6 @@ export const ChatSummary = Schema.Struct({
 });
 export type ChatSummary = typeof ChatSummary.Type;
 
-/** One committed event, with t3code's base fields. Payloads are typed by the domain projector. */
 export const ChatEvent = Schema.Struct({
   sequence: Schema.Number,
   eventId: Schema.String,
@@ -352,8 +331,6 @@ export const ThreadStreamItem = Schema.Union([
 ]);
 export type ThreadStreamItem = typeof ThreadStreamItem.Type;
 
-// ---------------------------------------------------------------------------------------
-// Thread search and artifact diffs (spec 08).
 
 export const SearchThreadsInput = Schema.Struct({
   projectId: Schema.String,
@@ -388,7 +365,6 @@ export const FullThreadDiffInput = Schema.Struct({
   ignoreWhitespace: Schema.optionalKey(Schema.Boolean),
 });
 
-/** One page or motion a range of turns wrote: its file before the first and after the last, as a unified diff. */
 export const ArtifactDiffFile = Schema.Struct({
   shapeId: Schema.String,
   label: Schema.String,
@@ -398,7 +374,6 @@ export const ArtifactDiffFile = Schema.Struct({
   additions: Schema.Number,
   deletions: Schema.Number,
   patch: Schema.String,
-  /** The patch is the too-large sentence, not a diff. */
   tooLarge: Schema.optionalKey(Schema.Boolean),
 });
 export type ArtifactDiffFile = typeof ArtifactDiffFile.Type;

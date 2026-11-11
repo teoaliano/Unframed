@@ -1,3 +1,4 @@
+import type { ChainRef, NodeRef } from "./generation.ts";
 /**
  * Video generation's shared records (spec 04): the render job RPC payloads and the video
  * sidecar. The recipe, result meta and run marker are spec 03's.
@@ -84,7 +85,8 @@ export interface VideoSidecar {
   readonly createdAt: string;
   readonly file: string;
   readonly jobId: string;
-  readonly recipe: ResultRecipe;
+  readonly recipe: ResultRecipe;  readonly node?: NodeRef;
+  readonly chain?: ChainRef;
 }
 
 /**

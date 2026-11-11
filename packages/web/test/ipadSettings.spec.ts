@@ -6,7 +6,7 @@ import { deviceRequest, readAuthority } from "../../engine/test/ipadClient.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { expect, test } from "./fixtures.ts";
 import { testIpad, TEST_NAME } from "./ipad.ts";
-import { openApp, openSettings, startSettingsEngine } from "./settings.ts";
+import { openApp, openIpadSettings, openSettings, startSettingsEngine } from "./settings.ts";
 
 const section = (page: Page) => page.getByTestId("ipad-section");
 
@@ -50,7 +50,8 @@ test("the iPad section is absent when the tldraw key does not cover this Mac", a
   try {
     await openApp(page, engine);
     const dialog = await openSettings(page);
-    await expect(dialog.getByRole("heading", { name: "Agents outside Unframed" })).toBeVisible();
+    await expect(dialog.getByRole("tablist", { name: "Settings sections" }).getByRole("tab", { name: "Connections" })).toBeVisible();
+    await expect(dialog.getByRole("tab", { name: "iPad" })).toHaveCount(0);
     await expect(page.getByTestId("ipad-section")).toHaveCount(0);
   } finally {
     await engine.dispose();
@@ -61,8 +62,8 @@ test("the section shows with a covered name: the switch writes at once and the a
   const { engine } = await startSettingsEngine({ env: testIpad() });
   try {
     await openApp(page, engine);
-    await openSettings(page);
-    await expect(section(page).getByRole("heading", { name: "iPad" })).toBeVisible();
+    const dialog = await openIpadSettings(page);
+    await expect(dialog.getByTestId("settings-section-title")).toHaveText("iPad");
     await expect(section(page)).toContainText("Draw on this canvas from your iPad over your home Wi-Fi. Only devices you pair can connect.");
     await expect(section(page).getByTestId("ipad-address")).toHaveCount(0);
 
@@ -88,7 +89,7 @@ test("the port is saved with the other fields, and a bad one is refused", async 
   const { engine } = await startSettingsEngine({ env: testIpad(), dotenv: "OPENROUTER_API_KEY=sk-or-v1-test-key-0000abcd\nIPAD_ACCESS=on\n" });
   try {
     await openApp(page, engine);
-    const dialog = await openSettings(page);
+    const dialog = await openIpadSettings(page);
     await expect(section(page).getByLabel("Port", { exact: true })).toHaveValue("0");
 
     await section(page).getByLabel("Port", { exact: true }).fill("80");
@@ -116,7 +117,7 @@ test("a port another app holds shows the warning and leaves the switch on", asyn
   });
   try {
     await openApp(page, engine);
-    await openSettings(page);
+    await openIpadSettings(page);
     await expect(section(page).getByTestId("ipad-port-taken")).toContainText(`Port ${taken} is in use by another app. Choose another port and save.`);
     await expect(accessSwitch(page)).toBeChecked();
     await expect(section(page).getByTestId("ipad-address")).toHaveText(`https://${TEST_NAME}:${taken}`);
@@ -130,7 +131,7 @@ test("Export iPad profile writes the profile and reveals it", async ({ page }) =
   const { engine } = await startSettingsEngine({ env: testIpad(), dotenv: "OPENROUTER_API_KEY=sk-or-v1-test-key-0000abcd\nIPAD_ACCESS=on\n" });
   try {
     await openApp(page, engine);
-    await openSettings(page);
+    await openIpadSettings(page);
     await section(page).getByRole("button", { name: "Export iPad profile" }).click();
 
     const path = join(engine.dataDir, "ipad", `Unframed-${TEST_NAME}.mobileconfig`);
@@ -146,7 +147,7 @@ test("Pair an iPad shows a code and a QR, and closes itself when the iPad uses i
   const { engine } = await startSettingsEngine({ env: testIpad(), dotenv: "OPENROUTER_API_KEY=sk-or-v1-test-key-0000abcd\nIPAD_ACCESS=on\n" });
   try {
     await openApp(page, engine);
-    await openSettings(page);
+    await openIpadSettings(page);
     await section(page).getByRole("button", { name: "Pair an iPad" }).click();
 
     const dialog = page.getByTestId("ipad-pair-dialog");
@@ -175,7 +176,7 @@ test("Revoke asks first, then the device is gone and its cookie is refused", asy
   const { engine } = await startSettingsEngine({ env: testIpad(), dotenv: "OPENROUTER_API_KEY=sk-or-v1-test-key-0000abcd\nIPAD_ACCESS=on\n" });
   try {
     await openApp(page, engine);
-    await openSettings(page);
+    await openIpadSettings(page);
     const port = await ipadPort(engine);
     const ca = await readAuthority(engine.dataDir);
     const started = await (await engine.rpc()).call("ipad.pairStart");
@@ -187,7 +188,7 @@ test("Revoke asks first, then the device is gone and its cookie is refused", asy
     const token = /unframed_device=([0-9a-f]+)/.exec(String(paired.headers["set-cookie"]?.[0]))![1]!;
 
     await page.keyboard.press("Escape");
-    await openSettings(page);
+    await openIpadSettings(page);
     const row = section(page).getByTestId("ipad-device");
     await expect(row).toBeVisible();
 

@@ -5,7 +5,7 @@ import { errorText } from "../log.ts";
 import type { ChatEngine } from "./chatEngine.ts";
 import type { ChangeLogRow } from "../canvas/rooms.ts";
 import type { TurnChanges } from "./turnChanges.ts";
-import type { McpBinding, McpTool, ToolAnswer } from "./mcp.ts";
+import type { McpBinding, McpTool, OutsideSession, ToolAnswer } from "./mcp.ts";
 
 type Bare<C> = C extends unknown ? Omit<C, "commandId" | "projectId" | "threadId"> : never;
 
@@ -27,12 +27,13 @@ export interface OutsideHost {
 }
 
 export interface OutsideCall {
-  readonly connection: ConnectionRecord;
-  readonly sessionId: string;
+  readonly session: OutsideSession;
   readonly slug: string;
   readonly tool: McpTool;
   readonly args: Record<string, unknown>;
 }
+
+export const latestTurnId = (engine: ChatEngine, chatId: string): string | null => engine.chat(chatId)?.latestTurn?.turnId ?? null;
 
 /** The chat an outside session's calls into one project show in (spec 14, "The outside chat"). */
 export const outsideChatOf = (chats: ReadonlyArray<Chat>, connectionId: string, sessionId: string): Chat | undefined =>
@@ -68,14 +69,16 @@ export class OutsideChats {
 
   async call(input: OutsideCall): Promise<ToolAnswer> {
     const agent = await this.host.agent(input.slug);
-    const chatId = await this.bind(input.connection, input.sessionId, agent);
-    const turnId = agent.engine.chat(chatId)?.latestTurn?.turnId ?? null;
-    const binding: McpBinding = { project: input.slug, chatId, connectionId: input.connection.id };
+    const { connection, sessionId, roots } = input.session;
+    const chatId = await this.bind(connection, sessionId, agent);
+    const turnId = latestTurnId(agent.engine, chatId);
+    const binding: McpBinding = { project: input.slug, chatId, connectionId: connection.id, ...(roots === undefined ? {} : { roots }) };
+    const logged = input.tool.workLogRow !== false;
     const callId = randomUUID();
     const title = `mcp__unframed__${input.tool.name}`;
     const at = () => new Date(this.now()).toISOString();
     const note = await this.changeNoteFor(agent, chatId);
-    await this.host.activity(agent, chatId, {
+    if (logged) await this.host.activity(agent, chatId, {
       id: `${callId}:started`,
       tone: "tool",
       kind: "tool.started",
@@ -90,7 +93,7 @@ export class OutsideChats {
     } catch (error) {
       answer = { value: { error: errorText(error) }, isError: true };
     }
-    await this.host.activity(agent, chatId, {
+    if (logged) await this.host.activity(agent, chatId, {
       id: `${callId}:done`,
       tone: "tool",
       kind: answer.isError ? "tool.failed" : "tool.completed",

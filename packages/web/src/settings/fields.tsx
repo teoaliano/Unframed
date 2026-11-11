@@ -37,11 +37,13 @@ export const Copy = ({ parts }: { readonly parts: ReadonlyArray<CopyPart> }) => 
  */
 export const ModelSelect = ({
   label,
+  name = label,
   value,
   models,
   onChange,
 }: {
   readonly label: string;
+  readonly name?: string;
   readonly value: string;
   readonly models: ReadonlyArray<string> | undefined;
   readonly onChange: (value: string) => void;
@@ -57,8 +59,8 @@ export const ModelSelect = ({
       </Label>
       <Combobox items={items} value={value === "" ? null : value} onValueChange={(next) => typeof next === "string" && onChange(next)} open={open} onOpenChange={setOpen}>
         <ComboboxTrigger
-          aria-labelledby={id}
-          data-model-select={label}
+          {...(name === label ? { "aria-labelledby": id } : { "aria-label": name })}
+          data-model-select={name}
           render={<SelectButton />}
           onKeyDown={(event) => {
             // Until focus reaches the search field, an Escape lands here, and the settings

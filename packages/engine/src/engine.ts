@@ -18,6 +18,7 @@ import { presetStoreLayer } from "./library/presetStore.ts";
 import { shareLinksLayer } from "./share/shareLinks.ts";
 import { renderJobsLayer } from "./video/renderJobs.ts";
 import { artifactsLayer } from "./artifacts/layer.ts";
+import { nodeRunsLayer } from "./nodes/nodeRuns.ts";
 import { readEnvFileSync } from "./envFile.ts";
 import { createApiServer } from "./http/api.ts";
 import { clientRoute } from "./http/client.ts";
@@ -114,7 +115,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
     Layer.provideMerge(rpcHandlersLayer),
     Layer.provideMerge(Layer.mergeAll(rpcSocketsLayer, Layer.provideMerge(lifecycleLayer, oauthLayer))),
     Layer.provideMerge(Layer.provideMerge(agentsLayer, providerDetectionLayer)),
-    Layer.provideMerge(Layer.mergeAll(artifactsLayer, renderJobsLayer)),
+    Layer.provideMerge(Layer.provideMerge(nodeRunsLayer, Layer.mergeAll(artifactsLayer, renderJobsLayer))),
     Layer.provideMerge(shareLinksLayer),
     Layer.provideMerge(runsLayer),
     Layer.provideMerge(presetStoreLayer),
@@ -183,7 +184,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
   oauth.setApiPort(apiPort);
   await runtime.runPromise(
     ipad.install({
-      routes: [fileRoute, upload, agents.attachmentRoute, ...clientRoutes],
+      routes: [fileRoute, upload, ...agents.attachmentRoutes, ...clientRoutes],
       upgrades: upgrade,
     }),
   );

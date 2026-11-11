@@ -5,7 +5,9 @@ import { WorkerPoolContextProvider } from "@pierre/diffs/react";
 import DiffsWorker from "@pierre/diffs/worker/worker.js?worker";
 import { ChevronDown, Columns2, Pilcrow, Rows3, TextWrap, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
+import { Empty, EmptyDescription } from "~/components/ui/empty";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "~/components/ui/menu";
 import { Toggle } from "~/components/ui/toggle";
 import { Toggle as GroupToggle, ToggleGroup } from "~/components/ui/toggle-group";
@@ -19,13 +21,11 @@ const LAYOUT_PREFERENCE = "agent.diffLayout";
 type Layout = "stacked" | "split";
 type Scope = number | "all";
 
-/** Turns that have finished, oldest first: only they have a diff. */
 const completedTurns = (chat: Chat) => chat.turns.filter((turn) => turn.state !== "running").sort((a, b) => a.turnCount - b.turnCount);
 
 const POOL = { workerFactory: () => new DiffsWorker(), poolSize: 2 };
 const HIGHLIGHTER = { theme: { dark: "pierre-dark", light: "pierre-light" }, langs: ["html" as const] };
 
-/** The layout, remembered as the `agent.diffLayout` preference. */
 const useLayout = (client: ChatClient): [Layout, (next: Layout) => void] => {
   const [layout, setLayout] = useState<Layout>("stacked");
   useEffect(() => {
@@ -51,11 +51,6 @@ const useLayout = (client: ChatClient): [Layout, (next: Layout) => void] => {
 
 type Loaded = { readonly key: string; readonly files: ReadonlyArray<ArtifactDiffFile> } | { readonly key: string; readonly error: string };
 
-/**
- * The diff panel (t3code's): the pages and motions a turn, or the whole chat, rewrote.
- * A scope menu, the changed files down the side, each patch rendered by `@pierre/diffs`
- * in a worker. Read-only: taking a change back is Revert.
- */
 export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient; readonly chat: Chat; readonly diff: NonNullable<RailUi["diff"]> }) => {
   const [layout, setLayout] = useLayout(client);
   const [wrap, setWrap] = useState(false);
@@ -90,7 +85,6 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
   const current = loaded?.key === key ? loaded : undefined;
   const files = current && "files" in current ? current.files : undefined;
 
-  // Opened from a row's View diff: that artifact's patch comes into view.
   useEffect(() => {
     if (!files || diff.shapeId === undefined) return;
     root.current?.querySelector(`[data-diff-file="${CSS.escape(diff.shapeId)}"]`)?.scrollIntoView({ block: "start" });
@@ -100,10 +94,9 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
   const wrapLabel = wrap ? "Disable line wrapping" : "Enable line wrapping";
   const whitespaceLabel = ignoreWhitespace ? "Show whitespace changes" : "Hide whitespace changes";
   return (
-    // t3code's diff panel shell, beside the rail on its left and as tall as it.
     <section
       ref={root}
-      className="absolute top-14 left-[calc(100%+8px)] bottom-0 flex w-[min(760px,calc(100vw-540px))] min-w-0 flex-col overflow-hidden rounded-xl border bg-background text-sm shadow-lg/5 outline-none"
+      className="absolute top-2 left-[calc(100%+8px)] bottom-[52px] flex w-[min(760px,calc(100vw-540px))] min-w-0 flex-col overflow-hidden rounded-xl border bg-background text-sm shadow-lg/5 outline-none"
       role="dialog"
       aria-label="Changes"
       tabIndex={-1}
@@ -174,17 +167,23 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
         </div>
       </header>
       {!latest ? (
-        <p className={EMPTY_CLASS}>No completed turns yet.</p>
+        <Empty>
+          <EmptyDescription>No completed turns yet.</EmptyDescription>
+        </Empty>
       ) : current && "error" in current ? (
-        <p className={EMPTY_CLASS} role="alert">
-          {current.error}
-        </p>
+        <Empty>
+          <Alert variant="error">
+            <AlertDescription>{current.error}</AlertDescription>
+          </Alert>
+        </Empty>
       ) : !files ? (
-        <p className={EMPTY_CLASS} role="status">
-          Loading changes…
-        </p>
+        <Empty role="status">
+          <EmptyDescription>Loading changes…</EmptyDescription>
+        </Empty>
       ) : files.length === 0 ? (
-        <p className={EMPTY_CLASS}>No page or motion changed in this selection.</p>
+        <Empty>
+          <EmptyDescription>No page, motion or component changed in this selection.</EmptyDescription>
+        </Empty>
       ) : (
         <div className="flex min-h-0 flex-1">
           <nav className="flex w-45 shrink-0 flex-col gap-px overflow-auto border-r border-border/60 p-1.5" aria-label="Changed files">
@@ -215,7 +214,9 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
                     <span className="min-w-0 truncate font-mono text-2xs text-muted-foreground" data-testid="diff-names">{`${file.before ?? "new"} → ${file.after ?? "removed"}`}</span>
                   </header>
                   {file.tooLarge ? (
-                    <p className={EMPTY_CLASS}>{file.patch}</p>
+                    <Empty>
+                      <EmptyDescription>{file.patch}</EmptyDescription>
+                    </Empty>
                   ) : (
                     <PatchDiff
                       patch={file.patch}
@@ -240,10 +241,7 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
   );
 };
 
-/** t3code's empty and loading lines in the diff panel. */
-const EMPTY_CLASS = "m-0 flex flex-1 items-center justify-center px-5 py-6 text-center text-xs text-muted-foreground/70";
 
-/** Added and removed line counts, in t3code's diff colours. */
 const DiffStat = ({ additions, deletions }: { readonly additions: number; readonly deletions: number }) => (
   <span className="flex shrink-0 items-center gap-1 font-mono text-xs tabular-nums">
     <span className="text-diff-addition" data-testid="diff-additions">{`+${additions}`}</span>

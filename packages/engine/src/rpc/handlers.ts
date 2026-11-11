@@ -7,6 +7,8 @@ import type { SelectionApply } from "@unframed/contracts";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import { errorText } from "../log.ts";
+import { exportKit, kitUsage } from "../kits/kitFiles.ts";
+import { kitOf } from "../kits/tokensFile.ts";
 import type { TLRecord } from "@tldraw/tlschema";
 import * as Effect from "effect/Effect";
 import { CanvasRooms } from "../canvas/rooms.ts";
@@ -14,6 +16,10 @@ import { MediaStore } from "../media/mediaStore.ts";
 import { clearStoredModels } from "../lastUsed.ts";
 import { Native } from "../native.ts";
 import { Catalogue } from "../openRouter/catalogue.ts";
+import { ElevenLabsError, listAudioModels, listVoices, subscriptionStatus } from "../elevenLabs/client.ts";
+import { ELEVENLABS_NO_KEY, GENERATION_PROVIDERS, providerServesMessage } from "@unframed/domain";
+import { vercelCredits } from "../vercel/client.ts";
+import { providerCatalogues } from "../runs/providers.ts";
 import { VideoCatalogue } from "../openRouter/videoCatalogue.ts";
 import { Runs } from "../runs/runs.ts";
 import { RenderJobs } from "../video/renderJobs.ts";
@@ -37,6 +43,8 @@ import { IpadAccess } from "../ipad/layer.ts";
 import { CLIENT_HEADER } from "../ipad/deviceSockets.ts";
 
 const clientOf = (headers: Readonly<Record<string, string>>): "mac" | "device" => (headers[CLIENT_HEADER] === "device" ? "device" : "mac");
+import { NodeRuns } from "../nodes/nodeRuns.ts";
+import { flowContent } from "../nodes/flowSave.ts";
 
 const asUnframed = (error: unknown): UnframedError => (error instanceof UnframedError ? error : unframedError("internal", errorText(error)));
 
@@ -50,6 +58,10 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const media = yield* MediaStore;
     const config = yield* Config;
     const catalogue = yield* Catalogue;
+    const catalogues = providerCatalogues({
+      vercelOrigin: config.vercelOrigin,
+      openRouter: (medium) => Effect.runPromise(medium === "image" ? catalogue.listImageModels : catalogue.listTextModels),
+    });
     const videoCatalogue = yield* VideoCatalogue;
     const runs = yield* Runs;
     const renderJobs = yield* RenderJobs;
@@ -62,6 +74,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const connections = yield* AgentConnections;
     const selectionHub = yield* SelectionHub;
     const ipad = yield* IpadAccess;
+    const nodeRuns = yield* NodeRuns;
     const legacy = legacyImportMethods(yield* ProjectDatabase, projects);
     const context = yield* Effect.context<SettingsStore | Projects | Native>();
 
@@ -88,6 +101,32 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
         ),
       "settings.subscribe": () => settings.subscribe,
       "settings.removeKey": () => lifecycle.removeKey,
+      "settings.removeElevenLabsKey": () => lifecycle.removeElevenLabsKey,
+      "elevenlabs.status": () =>
+        Effect.flatMap(settings.read, (current) =>
+          Effect.tryPromise({
+            try: () => subscriptionStatus(config.elevenLabsOrigin, current.elevenLabsKey),
+            catch: (error) => unframedError("upstream", errorText(error)),
+          }),
+        ),
+      "settings.removeVercelKey": () => lifecycle.removeVercelKey,
+      "vercel.status": () =>
+        Effect.flatMap(settings.read, (current) =>
+          Effect.tryPromise({
+            try: () => vercelCredits(config.vercelOrigin, current.vercelKey),
+            catch: (error) => unframedError("upstream", errorText(error)),
+          }),
+        ),
+      "voices.list": (input) =>
+        Effect.flatMap(settings.read, (current) =>
+          current.elevenLabsKey === ""
+            ? Effect.fail(unframedError("unavailable", ELEVENLABS_NO_KEY))
+            : Effect.tryPromise({
+                try: () => listVoices(config.elevenLabsOrigin, current.elevenLabsKey, input),
+                catch: (error) => unframedError("upstream", error instanceof ElevenLabsError ? error.message : errorText(error)),
+              }),
+        ),
+      "run.audio": (request) => runs.audio(request),
       "oauth.start": () => oauth.start,
       "oauth.pending": () => oauth.pending,
       "oauth.cancel": () => lifecycle.cancelConnection,
@@ -152,14 +191,35 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "preferences.get": ({ keys }) => Effect.map(preferences.get(keys), (values) => ({ values })),
       "preferences.set": ({ key, value }) => Effect.as(preferences.set(key, value), {}),
       "preferences.subscribe": ({ keys }) => preferences.subscribe(keys),
-      "models.list": ({ medium }) =>
-        medium === "video" ? videoCatalogue.list : medium === "text" ? catalogue.listTextModels : catalogue.listImageModels,
+      "models.list": ({ medium, provider }) =>
+        provider !== undefined && provider !== "openrouter"
+          ? GENERATION_PROVIDERS[provider].media.includes(medium) && (medium === "image" || medium === "text")
+            ? Effect.flatMap(settings.read, (current) => Effect.promise(() => catalogues[provider](current, medium)))
+            : Effect.fail(unframedError("bad_request", providerServesMessage(provider, medium)))
+          : medium === "audio"
+          ? Effect.flatMap(settings.read, (current) => Effect.promise(() => listAudioModels(config.elevenLabsOrigin, current.elevenLabsKey, current.audioModel)))
+          : medium === "video"
+            ? videoCatalogue.list
+            : medium === "text"
+              ? catalogue.listTextModels
+              : catalogue.listImageModels,
       "models.imagePricing": ({ id }) => catalogue.imagePricing(id),
       "run.image": (request) => runs.image(request),
+      "node.run": ({ project, shapeId, downstream, scope, rendered, steps }) => nodeRuns.run({ project, ids: [shapeId], downstream, scope, rendered, expect: steps }),
+      "chain.run": ({ project, shapeIds, rendered, steps }) => nodeRuns.run({ project, ids: shapeIds, rendered, expect: steps }),
+      "node.useVersion": ({ project, shapeId, versionId }) => nodeRuns.useVersion(project, shapeId, versionId),
+      "node.removeVersion": ({ project, shapeId, versionId }) => nodeRuns.removeVersion(project, shapeId, versionId),
+      "node.renders": ({ project, files }) => nodeRuns.renders(project, files),
+      "flow.save": ({ project, shapeIds, name, summary }) =>
+        Effect.gen(function* () {
+          const made = flowContent(project, yield* rooms.read(project), shapeIds, name);
+          if ("error" in made) return yield* unframedError("bad_request", made.error);
+          const saved = yield* presets.save({ name, summary: summary ?? "", content: made.content });
+          return { preset: saved.preset, droppedWires: made.droppedWires };
+        }),
       "run.text": (request) => runs.text(request),
       "text.complete": (request) => runs.complete(request),
       "run.subscribe": ({ project }) => runs.subscribe(project),
-      // A render placeholder has no sidecar until its clip lands: its recipe is in the job record (spec 04).
       "recipe.read": ({ project, shapeId }) =>
         runs.recipe(project, shapeId).pipe(
           Effect.catchIf(
@@ -192,8 +252,54 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "motion.upload": (input) => artifacts.upload(input),
       "motion.renderStart": (input) => artifacts.renderStart(input),
       "motion.renderStatus": ({ project, id }) => artifacts.renderStatus(project, id),
+      "motion.timeline": ({ project, file }) => artifacts.timeline(project, file),
       "artifact.snapshots": ({ project }) => artifacts.snapshots(project),
+      "artifact.fileChanges": ({ project }) => artifacts.fileChanges(project),
+      "component.pins": ({ project }) => artifacts.componentPins(project),
+      "component.copy": (input) => artifacts.componentCopy(input),
+      "component.updates": ({ project, shapeId }) => artifacts.componentUpdates(project, shapeId),
       "artifact.openLive": ({ project, shapeId }) => artifacts.openLive(project, shapeId),
+      "kit.usage": ({ project }) =>
+        Effect.gen(function* () {
+          const records = yield* rooms.read(project);
+          const folder = yield* Effect.promise(() => media.folder(project));
+          if (folder === undefined) return yield* unframedError("not_found", `There is no project named "${projectSlug(project)}".`);
+          return yield* Effect.tryPromise({
+            try: () => kitUsage(records, folder),
+            catch: (error) => unframedError("internal", `Could not read the uses of the kit: ${errorText(error)}`),
+          });
+        }),
+      "kit.saveToLibrary": ({ project, name, summary }) =>
+        Effect.gen(function* () {
+          if (name.trim() === "") return yield* unframedError("bad_request", "Give it a name.");
+          const kit = kitOf(yield* rooms.read(project));
+          if (kit === null) return yield* unframedError("bad_request", "This project has no kit yet.");
+          const { from: _link, ...definition } = kit;
+          return yield* presets.saveKit({ name, summary, kit: definition });
+        }),
+      "kit.updateInLibrary": ({ project }) =>
+        Effect.gen(function* () {
+          const kit = kitOf(yield* rooms.read(project));
+          if (kit === null) return yield* unframedError("bad_request", "This project has no kit yet.");
+          if (kit.from === undefined) return yield* unframedError("bad_request", "This kit is not linked to your library.");
+          const { from, ...definition } = kit;
+          return yield* presets.updateKit({ id: from.presetId, kit: definition, knownRevision: from.revision });
+        }),
+      "kit.exportFile": ({ project, format }) =>
+        Effect.gen(function* () {
+          const kit = kitOf(yield* rooms.read(project));
+          if (kit === null) return yield* unframedError("bad_request", "This project has no kit yet.");
+          const folder = yield* Effect.promise(() => media.folder(project));
+          if (folder === undefined) return yield* unframedError("not_found", `There is no project named "${projectSlug(project)}".`);
+          return yield* Effect.tryPromise({
+            try: () => exportKit(folder, kit, format),
+            catch: (error) => unframedError("internal", `Could not write the export: ${errorText(error)}`),
+          });
+        }),
+      "artifact.sourceTree": ({ project, file }) => artifacts.sourceTree(project, file),
+      "artifact.prepareEdit": ({ project, shapeId }) => artifacts.prepareEdit(project, shapeId),
+      "artifact.edit": ({ project, shapeId, baseFile, edits }) => artifacts.edit(project, shapeId, baseFile, [...edits]),
+      "artifact.images": ({ project }) => artifacts.images(project),
       "legacyImport.status": ({ project }) => legacy.status(project),
       "legacyImport.report": ({ project }) => legacy.report(project),
       "legacyImport.markSeen": ({ project }) => legacy.markSeen(project),

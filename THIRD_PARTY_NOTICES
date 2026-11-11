@@ -50,9 +50,21 @@ HyperFrames, GSAP and DialKit (pages and motions, spec 09)
 --------------------------------------------------------------------------------
 
 Motions are HyperFrames compositions. HyperFrames (@hyperframes/core, @hyperframes/player,
-@hyperframes/producer, @hyperframes/engine) is used under the Apache License 2.0; the
-player's global build and the runtime build are copied into project folders, beside the
-compositions that load them, as hyperframes-player.js and hyperframes-runtime.js.
+@hyperframes/producer, @hyperframes/engine) is used under the Apache License 2.0
+(https://www.apache.org/licenses/LICENSE-2.0); the player's global build and the runtime build
+are copied into project folders, beside the compositions that load them, as
+hyperframes-player.js and hyperframes-runtime.js.
+@hyperframes/parsers (Apache License 2.0) is pinned for the element id scheme of spec 18.
+HyperFrames Studio (packages/studio in HyperFrames, Apache License 2.0, Copyright 2026 HeyGen,
+Inc.) is the source of the tween patcher in the edit bridge (spec 21). Its gsapRuntimePatch.ts is
+ported into unframed-edit.js and changed: the header of that part names the file, the licence and
+the changes. That part is used under the Apache License, Version 2.0
+(https://www.apache.org/licenses/LICENSE-2.0), and so is the rest of HyperFrames named above.
+The live-time, snapping and zoom patterns of the timeline are rewritten from the descriptions of
+Studio's, and are not copied.
+
+parse5 (MIT) reads an artifact's HTML in the engine, for element editing (spec 18). It is
+never bundled with the web client.
 
 GSAP (gsap) is used under the GSAP Standard "no charge" license
 (https://gsap.com/standard-license), free for commercial use since version 3.13. It is not
@@ -62,3 +74,27 @@ DialKit (dialkit) is used under the MIT License. It is bundled with the web clie
 is never copied into a project folder.
 
 The full licence texts of these packages are listed with the rest of the bundle's packages.
+
+--------------------------------------------------------------------------------
+fx0 (artifact edit tools and agent prompt lines, spec 09)
+--------------------------------------------------------------------------------
+
+The page_edit and motion_edit tools follow the edit_design tool of fx0
+(https://github.com/vercel-labs/fx0), which applies exact string replacements to an HTML
+document, and three lines of assets/prompts/agent-system.md (thinking in proportion to the
+change, no invented facts, the pixel density of attached screenshots) are adapted from
+fx0's design prompt. fx0 is used under the Apache License 2.0
+(https://www.apache.org/licenses/LICENSE-2.0). No fx0 code is carried.
+
+--------------------------------------------------------------------------------
+awesome-design-md (the library's system kits, spec 19)
+--------------------------------------------------------------------------------
+
+The ten DESIGN.md files in assets/design-md (apple, claude, vercel, notion, airbnb,
+linear.app, stripe, figma, bmw-m, coinbase) come from VoltAgent/awesome-design-md
+(https://github.com/VoltAgent/awesome-design-md, commit
+3b605329240ce735b510037cca322f1831fdd7f8), except one correction: stripe/DESIGN.md spells
+the brand "Stripi" three times upstream, and the copy here says "Stripe". The app turns each
+into a kit preset. They describe the visual language of those brands and are not affiliated
+with or endorsed by them. awesome-design-md is used under the MIT License; its text is in
+assets/design-md/LICENSE.

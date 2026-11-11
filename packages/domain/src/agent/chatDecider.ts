@@ -1,8 +1,3 @@
-/**
- * The chat decider (spec 07, t3code's shape): `decide(command, model, now)` answers the
- * events a command becomes, or the sentence it is refused with. It never does I/O; the
- * engine resolves attachments and tags against the stored files and the canvas first.
- */
 import { attachmentLimitError, promptLengthError } from "./attachments.ts";
 import type {
   Chat,
@@ -17,8 +12,9 @@ import type {
 } from "./chatModel.ts";
 import { DEFAULT_RUNTIME_MODE } from "./chatModel.ts";
 import { requestActivity } from "./chatProjector.ts";
+import { offersDecision } from "./permissionPolicy.ts";
 
-export const TITLE_MAX = 60;
+const TITLE_MAX = 60;
 
 export const NO_EVENTS = "Command produced no events.";
 
@@ -33,10 +29,8 @@ const event = (type: PendingEvent["type"], chatId: string, payload: Record<strin
   ...(metadata === undefined ? {} : { metadata }),
 });
 
-/** A name the person typed: trimmed and cut to 60 characters. */
-export const userTitle = (typed: string): string => typed.trim().slice(0, TITLE_MAX).trim();
+const userTitle = (typed: string): string => typed.trim().slice(0, TITLE_MAX).trim();
 
-/** The agent's name for a chat: the reply's first line, surrounding quotes stripped, trimmed, at most 60 characters. */
 export const agentTitle = (reply: string): string => {
   const first = reply.trim().split(/\r?\n/)[0] ?? "";
   const unquoted = first.trim().replace(/^["'“‘`]+|["'”’`]+$/g, "");
@@ -52,10 +46,8 @@ const sameSelection = (a: ModelSelection, b: ModelSelection): boolean =>
 
 const isRunning = (chat: Chat): boolean => chat.latestTurn?.state === "running";
 
-/** The sentence a web command on an outside chat gets (spec 14, "Chat record changes"). */
 export const OUTSIDE_CHAT_REFUSAL = "This chat belongs to an agent outside Unframed. Talk to it where it runs.";
 
-/** The web commands an outside chat refuses: it has no Unframed agent and no model to change. */
 const outsideRefused = (command: ChatCommand): boolean =>
   command.type === "thread.turn.start" ||
   command.type === "thread.runtime-mode.set" ||
@@ -63,7 +55,6 @@ const outsideRefused = (command: ChatCommand): boolean =>
   command.type === "thread.checkpoint.revert" ||
   (command.type === "thread.meta.update" && command.modelSelection !== undefined);
 
-/** Checks a model change; `undefined` when it may be applied. */
 const modelChangeRefusal = (chat: Chat, selection: ModelSelection): Decision | undefined => {
   if (selection.provider !== chat.modelSelection.provider) return reject("conflict", "A chat stays on the provider it started on.");
   if (isRunning(chat) && !sameSelection(selection, chat.modelSelection)) {
@@ -77,7 +68,6 @@ const isResolvedAttachment = (value: unknown): value is MessageAttachment => {
   return typeof record.type === "string" && (record.kind === "image" || record.kind === "file") && typeof record.size === "number";
 };
 
-/** A question that was cleared by an interrupt or a restart, never answered. */
 const isCancelled = (activity: { readonly kind: string; readonly payload: unknown }): boolean =>
   activity.kind === "user-input.resolved" && (activity.payload as { cancelled?: unknown } | null)?.cancelled === true;
 
@@ -85,10 +75,8 @@ const answered = (value: unknown): boolean =>
   (typeof value === "string" && value.trim() !== "") ||
   (Array.isArray(value) && value.some((entry) => typeof entry === "string" && entry.trim() !== ""));
 
-/** Decides one command against a project's chats. */
 export const decide = (command: ChatCommand, model: ProjectChats, now: string): Decision => {
   if (command.type === "project.chats.clear") {
-    // Decided here, in the queue, not from the web's view: a chat that started a turn since the person asked is kept.
     const chats = Object.values(model.chats).filter((chat) => chat.deletedAt === null);
     if (chats.length === 0) return reject("not_found", "This project has no chats to delete.");
     const idle = chats.filter((chat) => !isRunning(chat));
@@ -206,7 +194,7 @@ export const decide = (command: ChatCommand, model: ProjectChats, now: string): 
           turnId,
           streaming: false,
           attachments: attachments.map(({ id: attachmentId, name, type, kind, size }) => ({ id: attachmentId, name, type, kind, size })),
-          ...(message.context ? { context: { selection: [...message.context.selection] } } : {}),
+          ...(message.context ? { context: { selection: [...message.context.selection], ...(message.context.elements ? { elements: [...message.context.elements] } : {}) } } : {}),
           createdAt: command.createdAt,
         }),
         event("thread.turn-start-requested", id, {
@@ -241,6 +229,7 @@ export const decide = (command: ChatCommand, model: ProjectChats, now: string): 
     case "thread.approval.respond": {
       const request = requestActivity(chat, "approval", command.requestId);
       if (request?.kind !== "approval.requested") return reject("not_found", "That request is no longer waiting for an answer.");
+      if (!offersDecision((request.payload as { options?: unknown }).options, command.decision)) return reject("bad_request", "That answer is not offered for this request.");
       return accept(
         event("thread.approval-response-requested", id, { requestId: command.requestId, decision: command.decision }, { requestId: command.requestId }),
       );
@@ -251,9 +240,24 @@ export const decide = (command: ChatCommand, model: ProjectChats, now: string): 
       if (request === undefined || isCancelled(request)) return reject("not_found", "This question is no longer pending.");
       if (request.kind === "user-input.resolved") return reject("conflict", "This question has already been answered.");
       const questions = ((request.payload as { questions?: Array<{ id?: unknown }> }).questions ?? []).map((question) => String(question.id));
-      if (questions.some((question) => !answered(command.answers[question]))) return reject("bad_request", "Answer each question before sending.");
+      const files = command.attachmentsByQuestionId ?? {};
+      if (Object.keys(files).some((question) => !questions.includes(question))) return reject("bad_request", "That question is not part of this request.");
+      for (const attached of Object.values(files)) {
+        const unread = attached.find((attachment) => !isResolvedAttachment(attachment));
+        if (unread) return reject("bad_request", `'${unread.name}' is empty or could not be read.`);
+        const overLimit = attachmentLimitError(attached as ReadonlyArray<MessageAttachment>);
+        if (overLimit) return reject("bad_request", overLimit);
+      }
+      if (questions.some((question) => !answered(command.answers[question]) && (files[question]?.length ?? 0) === 0)) {
+        return reject("bad_request", "Answer each question before sending.");
+      }
       return accept(
-        event("thread.user-input-response-requested", id, { requestId: command.requestId, answers: command.answers }, { requestId: command.requestId }),
+        event(
+          "thread.user-input-response-requested",
+          id,
+          { requestId: command.requestId, answers: command.answers, ...(Object.keys(files).length === 0 ? {} : { attachmentsByQuestionId: files }) },
+          { requestId: command.requestId },
+        ),
       );
     }
 
@@ -293,8 +297,6 @@ export const decide = (command: ChatCommand, model: ProjectChats, now: string): 
       if (!Number.isInteger(command.turnCount) || command.turnCount < 0 || command.turnCount > count) {
         return reject("bad_request", "That turn is not in this chat.");
       }
-      // The later turns leave the chat at once, so a message sent right after the rewind is
-      // numbered after the kept turns; the canvas and the provider catch up in the reactor.
       const later = chat.turns.filter((turn) => turn.turnCount > command.turnCount).sort((a, b) => b.turnCount - a.turnCount);
       return accept(
         event("thread.checkpoint-revert-requested", id, {

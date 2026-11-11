@@ -1,31 +1,38 @@
-import { artifactUrl, defaultDialValues, liveViewerUrl, normaliseDials, type ArtifactKind, type DialsAnnouncement } from "@unframed/domain";
-import { useEffect, useRef } from "react";
+import { artifactUrl, defaultDialValues, liveViewerUrl, normaliseDials, type ArtifactKind, type DialsAnnouncement, type Kit } from "@unframed/domain";
+import { useEffect, useRef, useState } from "react";
 
 export interface ArtifactFrameProps {
   readonly project: string;
   readonly kind: ArtifactKind;
   readonly file: string;
   readonly previewPort: number;
-  /** The shape's saved parameter values, sent to the frame whenever it announces and whenever they change. */
   readonly dials: Readonly<Record<string, unknown>> | undefined;
+  readonly kit?: Kit | null | undefined;
+  readonly mode?: string | undefined;
   readonly interactive: boolean;
-  /** The canvas loads its frames lazily; the editor's frame is live from the start. */
   readonly lazy: boolean;
   readonly onAnnounce?: (announcement: DialsAnnouncement) => void;
-  /** Hands the parent a way to post `unframed:dials:set` to this frame. */
   readonly onReady?: (post: (values: unknown) => void) => void;
+  readonly editable?: boolean;
+  readonly onEdit?: (message: EditMessage) => void;
+  readonly onEditReady?: (post: (message: unknown) => void) => void;
+  readonly onSwapped?: () => void;
+  readonly onPlayer?: (message: unknown) => void;
+  readonly onPlayerReady?: (post: (message: unknown) => void) => void;
+}
+
+const SWAP_WAIT_MS = 2_000;
+
+export interface EditMessage {
+  readonly type: string;
+  readonly [key: string]: unknown;
 }
 
 const nonEmpty = (dials: Readonly<Record<string, unknown>> | undefined) => dials !== undefined && Object.keys(dials).length > 0;
 
-/** An artifact's URL on the preview origin, under the loopback name the app is not using. */
-export const urlOf = (project: string, kind: ArtifactKind, file: string, port: number): string =>
-  artifactUrl({ appHostname: window.location.hostname, previewPort: port, project, file, kind });
+export const urlOf = (project: string, kind: ArtifactKind, file: string, port: number, editor = false): string =>
+  artifactUrl({ appHostname: window.location.hostname, previewPort: port, project, file, kind, editor });
 
-/**
- * What "Open in a new tab" opens: the shape's live viewer, which follows its newest file and
- * dials, or the file itself for a shape id the viewer cannot be named by.
- */
 export const outsideUrlOf = (project: string, shapeId: string, kind: ArtifactKind, file: string, port: number): string =>
   liveViewerUrl({ appHostname: window.location.hostname, previewPort: port, project, shapeId }) ?? urlOf(project, kind, file, port);
 
@@ -45,11 +52,6 @@ interface FrameWheel {
 
 const isWheel = (data: unknown): data is FrameWheel => typeof data === "object" && data !== null && (data as { type?: unknown }).type === "unframed:wheel";
 
-/**
- * A pinch the frame's bridge kept from zooming the app: replayed on the canvas under the
- * frame, at the same point on screen, so the canvas zooms. In the editor there is no canvas
- * under the frame, and the pinch does nothing.
- */
 const zoomCanvas = (frame: HTMLIFrameElement, wheel: FrameWheel) => {
   const canvas = canvasUnder(frame);
   if (!canvas) return;
@@ -76,24 +78,25 @@ interface FrameMenu {
   readonly clientY: number;
 }
 
+const isEdit = (data: unknown): data is EditMessage =>
+  typeof data === "object" && data !== null && typeof (data as { type?: unknown }).type === "string" && (data as { type: string }).type.startsWith("unframed:edit:");
+
+const isScroll = (data: unknown): data is { readonly type: "unframed:edit:scroll"; readonly x: number; readonly y: number } =>
+  typeof data === "object" && data !== null && (data as { type?: unknown }).type === "unframed:edit:scroll" && typeof (data as { x?: unknown }).x === "number" && typeof (data as { y?: unknown }).y === "number";
+
+const isEditReady = (data: unknown): boolean => typeof data === "object" && data !== null && (data as { type?: unknown }).type === "unframed:edit:ready";
+
 const isMenu = (data: unknown): data is FrameMenu =>
   typeof data === "object" && data !== null && (data as { type?: unknown }).type === "unframed:contextmenu" && typeof (data as FrameMenu).clientX === "number" && typeof (data as FrameMenu).clientY === "number";
 
-/** The canvas under a frame, when the frame is on the canvas rather than in the editor. */
 const canvasUnder = (frame: HTMLIFrameElement): Element | null | undefined => frame.closest(".tl-container")?.querySelector(".tl-canvas");
 
-/** A point in the frame's document, on the app's screen. */
 const onScreen = (frame: HTMLIFrameElement, x: number, y: number) => {
   const rect = frame.getBoundingClientRect();
   const scale = frame.offsetWidth > 0 ? rect.width / frame.offsetWidth : 1;
   return { clientX: rect.left + x * scale, clientY: rect.top + y * scale };
 };
 
-/**
- * A right-click the frame's bridge kept from the page (a selected frame takes the pointer):
- * replayed on the canvas as the press and release a right-click makes there, so the shape's
- * menu opens at the same point.
- */
 const openShapeMenu = (frame: HTMLIFrameElement, menu: FrameMenu) => {
   const canvas = canvasUnder(frame);
   if (!canvas) return;
@@ -103,49 +106,104 @@ const openShapeMenu = (frame: HTMLIFrameElement, menu: FrameMenu) => {
   canvas.dispatchEvent(new PointerEvent("pointerup", { ...init, buttons: 0 }));
 };
 
-/**
- * An artifact document, framed from the preview origin in a sandbox. It says hello at mount
- * and on load, answers an announcement with the shape's saved values, and sends them again
- * the moment they change. It accepts `unframed:dials` only from its own frame's window.
- */
-export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interactive, lazy, onAnnounce, onReady }: ArtifactFrameProps) => {
-  const frame = useRef<HTMLIFrameElement>(null);
-  const url = urlOf(project, kind, file, previewPort);
+export const ArtifactFrame = ({ project, kind, file, previewPort, dials, kit, mode, interactive, lazy, onAnnounce, onReady, editable = false, onEdit, onEditReady, onSwapped, onPlayer, onPlayerReady }: ArtifactFrameProps) => {
+  const url = urlOf(project, kind, file, previewPort, editable);
+  const [shownUrl, setShownUrl] = useState(url);
+  const displayed = editable ? shownUrl : url;
+  const incoming = editable && url !== shownUrl ? url : undefined;
   const target = new URL(url).origin;
+  const frames = useRef(new Map<string, HTMLIFrameElement>());
+  const displayedRef = useRef(displayed);
+  displayedRef.current = displayed;
   const saved = useRef(dials);
   saved.current = dials;
   const announce = useRef(onAnnounce);
   announce.current = onAnnounce;
   const heard = useRef<DialsAnnouncement | undefined>(undefined);
+  const editing = useRef(editable);
+  editing.current = editable;
+  const onEditMessage = useRef(onEdit);
+  onEditMessage.current = onEdit;
+  const swapped = useRef(onSwapped);
+  swapped.current = onSwapped;
+  const playerMessages = useRef(onPlayer);
+  playerMessages.current = onPlayer;
+  const scrolled = useRef<{ x: number; y: number } | undefined>(undefined);
+  const announcedBy = useRef<string | undefined>(undefined);
+  const swappingTo = useRef<string | undefined>(undefined);
+  const playhead = useRef<{ time: number; playing: boolean } | undefined>(undefined);
 
-  const post = (message: unknown) => {
+  const post = (frame: HTMLIFrameElement | undefined, message: unknown) => {
     try {
-      frame.current?.contentWindow?.postMessage(message, target);
+      frame?.contentWindow?.postMessage(message, target);
     } catch {
-      // A frame mid-navigation has no window to post to.
     }
   };
-  // On the canvas the frame also asks for right-clicks, so a selected frame still opens its shape's menu.
-  const hello = () => post({ type: "unframed:dials:hello", ...(frame.current && canvasUnder(frame.current) ? { menus: true } : {}) });
-  const set = (values: unknown) => post({ type: "unframed:dials:set", values });
+  const shown = () => frames.current.get(displayedRef.current);
+  const postAll = (message: unknown) => frames.current.forEach((frame) => post(frame, message));
+  const hello = (frame: HTMLIFrameElement) => {
+    post(frame, { type: "unframed:dials:hello", ...(canvasUnder(frame) ? { menus: true } : {}) });
+    if (editing.current) post(frame, { type: "unframed:edit:hello" });
+    if (editing.current && kind === "motion") post(frame, { type: "unframed:player:hello" });
+    post(frame, { type: "unframed:tokens:mode", mode: mode ?? null });
+  };
+  const set = (values: unknown) => post(shown(), { type: "unframed:dials:set", values });
 
   useEffect(() => {
     onReady?.(set);
-    hello();
+    onEditReady?.((message) => post(shown(), message));
+    onPlayerReady?.((message) => post(shown(), message));
+    const current = shown();
+    if (current) hello(current);
+    swappingTo.current = undefined;
+  }, [displayed]);
+
+  const swapTo = (src: string) => {
+    const frame = frames.current.get(src);
+    if (!frame || src === displayedRef.current || swappingTo.current === src) return;
+    swappingTo.current = src;
+    if (scrolled.current !== undefined) post(frame, { type: "unframed:edit:hello", scroll: scrolled.current });
+    if (announcedBy.current !== src) swapped.current?.();
+    setShownUrl(src);
+  };
+
+  useEffect(() => {
     const onMessage = (event: MessageEvent) => {
-      if (!frame.current || event.source !== frame.current.contentWindow) return;
-      if (isWheel(event.data)) return zoomCanvas(frame.current, event.data);
-      if (isMenu(event.data)) return openShapeMenu(frame.current, event.data);
+      const found = [...frames.current].find(([, frame]) => frame.contentWindow === event.source);
+      if (!found) return;
+      const [src, frame] = found;
+      const isShown = src === displayedRef.current;
+      if (isShown && isWheel(event.data)) return zoomCanvas(frame, event.data);
+      if (isShown && isMenu(event.data)) return openShapeMenu(frame, event.data);
+      if (isShown && isScroll(event.data)) {
+        scrolled.current = { x: event.data.x, y: event.data.y };
+        return;
+      }
+      const message = event.data as { type?: unknown; time?: unknown; playing?: unknown } | null;
+      if (isShown && typeof message?.type === "string" && message.type.startsWith("unframed:player:")) {
+        if (message.type === "unframed:player:state" && typeof message.time === "number") {
+          playhead.current = { time: message.time, playing: typeof message.playing === "boolean" ? message.playing : playhead.current?.playing === true };
+        }
+        playerMessages.current?.(event.data);
+        return;
+      }
+      if (!isShown && editing.current && message?.type === "unframed:player:timeline" && playhead.current !== undefined) {
+        post(frame, { type: "unframed:player:control", action: "seek", seconds: playhead.current.time });
+        if (playhead.current.playing) post(frame, { type: "unframed:player:control", action: "play" });
+        return;
+      }
+      if (isShown && isEdit(event.data)) return onEditMessage.current?.(event.data);
+      if (!isShown && editing.current && isEditReady(event.data)) return swapTo(src);
       const data = event.data as DialsAnnouncement | null;
       if (typeof data !== "object" || data === null || data.type !== "unframed:dials") return;
+      if (!isShown) announcedBy.current = src;
       heard.current = data;
-      if (nonEmpty(saved.current)) set(saved.current);
+      if (nonEmpty(saved.current)) post(frame, { type: "unframed:dials:set", values: saved.current });
       announce.current?.(data);
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-    // A new file is a fresh document, keyed by the parent.
-  }, [url]);
+  }, []);
 
   const serialised = JSON.stringify(dials ?? null);
   const first = useRef(true);
@@ -158,25 +216,63 @@ export const ArtifactFrame = ({ project, kind, file, previewPort, dials, interac
       set(dials);
       return;
     }
-    // Cleared, by an undo of the first change: back to the defaults the artifact declared.
     const declared = heard.current === undefined ? undefined : normaliseDials(heard.current.config);
     if (declared?.ok) set(defaultDialValues(declared.schema));
   }, [serialised]);
 
+  const modeFirst = useRef(true);
+  useEffect(() => {
+    if (modeFirst.current) {
+      modeFirst.current = false;
+      return;
+    }
+    postAll({ type: "unframed:tokens:mode", mode: mode ?? null });
+  }, [mode]);
+
+  const kitText = JSON.stringify(kit ?? null);
+  const kitFirst = useRef(true);
+  useEffect(() => {
+    if (kitFirst.current) {
+      kitFirst.current = false;
+      return;
+    }
+    postAll({ type: "unframed:tokens:set", kit: kit ? { format: kit.format, name: kit.name, modes: kit.modes, tokens: kit.tokens } : null });
+  }, [kitText]);
+
+  const loaded = (src: string) => {
+    const frame = frames.current.get(src);
+    if (!frame) return;
+    hello(frame);
+    if (nonEmpty(saved.current)) post(frame, { type: "unframed:dials:set", values: saved.current });
+    if (src !== displayedRef.current) window.setTimeout(() => swapTo(src), SWAP_WAIT_MS);
+  };
+
+  const stack = incoming === undefined ? [displayed] : [displayed, incoming];
   return (
-    <iframe
-      ref={frame}
-      className="block size-full border-0 bg-artifact-page"
-      data-artifact-frame=""
-      title={file}
-      src={url}
-      sandbox="allow-scripts allow-same-origin"
-      referrerPolicy="no-referrer"
-      allow=""
-      {...(lazy ? { loading: "lazy" as const } : {})}
-      data-interactive={interactive ? "true" : undefined}
-      style={{ pointerEvents: interactive ? "auto" : "none" }}
-      onLoad={hello}
-    />
+    <>
+      {stack.map((src) => {
+        const showing = src === displayed;
+        return (
+          <iframe
+            key={src}
+            ref={(frame) => {
+              if (frame) frames.current.set(src, frame);
+              else frames.current.delete(src);
+            }}
+            className={showing ? "block size-full border-0 bg-artifact-page" : "invisible absolute inset-0 block size-full border-0 bg-artifact-page"}
+            {...(showing ? { "data-artifact-frame": "" } : { "data-artifact-frame-incoming": "" })}
+            title={file}
+            src={src}
+            sandbox="allow-scripts allow-same-origin"
+            referrerPolicy="no-referrer"
+            allow=""
+            {...(lazy ? { loading: "lazy" as const } : {})}
+            data-interactive={interactive && showing ? "true" : undefined}
+            style={{ pointerEvents: interactive && showing ? "auto" : "none" }}
+            onLoad={() => loaded(src)}
+          />
+        );
+      })}
+    </>
   );
 };

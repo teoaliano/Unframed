@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, renameSync, writeFileSync } from "node:fs";
-import { copyFile, mkdir, open, readFile, rename, rm, stat } from "node:fs/promises";
+import { constants, existsSync, renameSync, writeFileSync } from "node:fs";
+import { copyFile, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isBareFileName, projectFileMarker, UnframedError, unframedError } from "@unframed/contracts";
 import {
+  compiledFileName,
   copyFileName,
   mediaFileName,
   projectSlug,
+  readPins,
   sidecarFileName,
   sidecarText,
   UPLOAD_BODY_LIMIT,
@@ -21,23 +23,21 @@ import * as Layer from "effect/Layer";
 import { CanvasRooms, type CommittedChange } from "../canvas/rooms.ts";
 import { errorText, logError } from "../log.ts";
 import { SettingsStore } from "../settingsStore.ts";
+import { byteSize, isHtmlFileName, kindOfArtifactHtml, prepareArtifactHtml } from "../artifacts/artifactHtml.ts";
+import { ensureBridge, ensureLibrary } from "../artifacts/artifactStore.ts";
+import { pinComponents } from "../artifacts/componentRegistry.ts";
 
-/** What the upload route answers. */
-export interface SavedFile {
+interface SavedFile {
   readonly file: string;
   readonly fileName: string;
   readonly bytes: number;
   readonly mime: string;
 }
 
-/** The only preview sizes: WebP at longest side 512 and 2048. */
-
 export const PREVIEW_FOLDER = join(".cache", "previews");
 
-/** A preview's name in the cache folder. */
 export const previewFileName = (file: string, size: PreviewSize): string => `${file}-${size}.webp`;
 
-/** Why a save was refused: the route maps each to its status. */
 export class SaveRefused extends Error {
   readonly status: 400 | 404 | 413 | 500;
   constructor(status: 400 | 404 | 413 | 500, message: string) {
@@ -46,32 +46,32 @@ export class SaveRefused extends Error {
   }
 }
 
-export const EMPTY_BODY_MESSAGE = "No file bytes in the request body.";
+const EMPTY_BODY_MESSAGE = "No file bytes in the request body.";
 
-/**
- * Project media files: saves uploaded bytes as a project file with a sidecar, copies a
- * file within or across projects, and rewrites any data URL that reaches a room into a
- * file (a blob URL, which cannot be recovered, loses its source).
- */
 export class MediaStore extends Context.Service<
   MediaStore,
   {
-    /**
-     * Streams `body` into a new project file and writes its sidecar, whose source is
-     * `upload` unless `source` says otherwise. Rejects with `SaveRefused`.
-     */
     readonly save: (
       project: string,
-      input: { originalName: string; mime: string; body: AsyncIterable<Buffer>; rendered?: RenderedSidecar | undefined; source?: MediaSidecar["source"] },
+      input: { originalName: string; mime: string; body: AsyncIterable<Buffer>; rendered?: RenderedSidecar | undefined; source?: MediaSidecar["source"]; of?: string; chat?: string },
     ) => Promise<SavedFile>;
-    /** Writes a regenerable display preview of `file` into the cache folder. No sidecar. */
     readonly savePreview: (project: string, file: string, size: PreviewSize, body: AsyncIterable<Buffer>) => Promise<{ bytes: number }>;
-    /** `ofProject` names the source project in the copy's sidecar (spec 06's preset copies). */
     readonly copy: (project: string, file: string, from?: string, ofProject?: string) => Effect.Effect<string, UnframedError>;
-    /** The absolute project folder, when the project exists. */
     readonly folder: (project: string) => Promise<string | undefined>;
   }
 >()("unframed/engine/MediaStore") {}
+
+const copyPinnedComponents = async (sourceDir: string, targetDir: string, file: string): Promise<void> => {
+  if (!file.endsWith(".html")) return;
+  const html = await readFile(join(sourceDir, file), "utf8").catch(() => undefined);
+  if (html === undefined) return;
+  for (const pin of readPins(html)) {
+    for (const name of [pin.sheet, compiledFileName(pin.sheet), sidecarFileName(pin.sheet)]) {
+      if (existsSync(join(targetDir, name))) continue;
+      await copyFile(join(sourceDir, name), join(targetDir, name), constants.COPYFILE_EXCL).catch(() => undefined);
+    }
+  }
+};
 
 const isDirectory = (path: string) =>
   stat(path).then(
@@ -116,11 +116,6 @@ export const mediaStoreLayer = Layer.effect(
 
     const taken = (dir: string) => (name: string) => existsSync(join(dir, name)) || existsSync(join(dir, sidecarFileName(name)));
 
-    /**
-     * Writes `body` to a temp file, then, in one synchronous step, picks a name that is free
-     * (file and sidecar), moves the file there and writes its sidecar, so two uploads never
-     * pick the same name.
-     */
     const writeNew = async (
       dir: string,
       originalName: string,
@@ -147,31 +142,56 @@ export const mediaStoreLayer = Layer.effect(
         await rm(temp, { force: true });
         throw new SaveRefused(400, EMPTY_BODY_MESSAGE);
       }
+      let renamed: string | undefined;
       try {
         const file = mediaFileName({ originalName, mime, now: Date.now(), exists: taken(dir) });
         renameSync(temp, join(dir, file));
+        renamed = file;
         writeFileSync(join(dir, sidecarFileName(file)), sidecarText(sidecar(bytes)));
         return { file, bytes };
       } catch (error) {
         await rm(temp, { force: true });
+        if (renamed !== undefined) {
+          await rm(join(dir, renamed), { force: true });
+          await rm(join(dir, sidecarFileName(renamed)), { force: true });
+        }
         throw error;
       }
     };
 
+    const artifactBody = async (project: string, dir: string, name: string, body: AsyncIterable<Buffer>): Promise<AsyncIterable<Buffer>> => {
+      if (!isHtmlFileName(name)) return body;
+      const chunks: Buffer[] = [];
+      let read = 0;
+      for await (const chunk of body) {
+        read += chunk.length;
+        if (read > UPLOAD_BODY_LIMIT) throw new SaveRefused(413, "That file is larger than the 500MB upload limit.");
+        chunks.push(chunk);
+      }
+      const raw = Buffer.concat(chunks);
+      if (raw.length === 0) return once(raw);
+      const html = (await pinComponents(dir, await runPromise(rooms.read(project)), prepareArtifactHtml(raw.toString("utf8"), "page"))).html;
+      await ensureBridge(dir);
+      return once(Buffer.from(html, "utf8"));
+    };
+
     const save = async (
       project: string,
-      input: { originalName: string; mime: string; body: AsyncIterable<Buffer>; rendered?: RenderedSidecar | undefined; source?: MediaSidecar["source"] },
+      input: { originalName: string; mime: string; body: AsyncIterable<Buffer>; rendered?: RenderedSidecar | undefined; source?: MediaSidecar["source"]; of?: string; chat?: string },
     ) => {
       const dir = await folder(project);
       if (dir === undefined) throw new SaveRefused(404, `There is no project named "${projectSlug(project)}".`);
       const mime = input.mime || "application/octet-stream";
       try {
-        const { file, bytes } = await writeNew(dir, input.originalName, mime, input.body, (bytes) => ({
+        const body = await artifactBody(project, dir, input.originalName, input.body);
+        const { file, bytes } = await writeNew(dir, input.originalName, mime, body, (bytes) => ({
           source: input.source ?? "upload",
           fileName: input.originalName,
           mime,
           bytes,
           at: new Date().toISOString(),
+          ...(input.of === undefined ? {} : { of: input.of }),
+          ...(input.chat === undefined ? {} : { chat: input.chat }),
           ...input.rendered,
         }));
         return { file, fileName: input.originalName, bytes, mime };
@@ -221,28 +241,39 @@ export const mediaStoreLayer = Layer.effect(
           if (targetDir === undefined) throw unframedError("not_found", `There is no project named "${projectSlug(project)}".`);
           const source = join(sourceDir, file);
           let info;
+          let bytes: number;
           try {
             info = await stat(source);
           } catch (error) {
             throw unframedError("not_found", `Could not copy the file: ${errorText(error)}`);
           }
           if (!info.isFile()) throw unframedError("bad_request", "That is not a file in this project.");
+          bytes = info.size;
           let mime = "application/octet-stream";
           try {
             const sidecar = JSON.parse(await readFile(join(sourceDir, sidecarFileName(file)), "utf8")) as { mime?: unknown };
             if (typeof sidecar.mime === "string" && sidecar.mime !== "") mime = sidecar.mime;
           } catch {
-            // no sidecar: the copy's type is unknown
           }
           const fileName = copyFileName(file);
           const temp = join(targetDir, `.copy-${randomUUID()}.tmp`);
-          await copyFile(source, temp);
+          if (isHtmlFileName(file)) {
+            if (sourceDir !== targetDir) await copyPinnedComponents(sourceDir, targetDir, file);
+            const text = await readFile(source, "utf8");
+            const kind = kindOfArtifactHtml(text);
+            const prepared = (await pinComponents(targetDir, await runPromise(rooms.read(project)), prepareArtifactHtml(text, kind))).html;
+            await (kind === "motion" ? ensureLibrary(targetDir) : ensureBridge(targetDir));
+            await writeFile(temp, prepared, "utf8");
+            bytes = byteSize(prepared);
+          } else {
+            await copyFile(source, temp);
+          }
           try {
             const target = mediaFileName({ originalName: fileName, mime, now: Date.now(), exists: taken(targetDir) });
             renameSync(temp, join(targetDir, target));
             writeFileSync(
               join(targetDir, sidecarFileName(target)),
-              sidecarText({ source: "copy", fileName, mime, bytes: info.size, at: new Date().toISOString(), of: file, ...(ofProject === undefined ? {} : { ofProject }) }),
+              sidecarText({ source: "copy", fileName, mime, bytes, at: new Date().toISOString(), of: file, ...(ofProject === undefined ? {} : { ofProject }) }),
             );
             return target;
           } catch (error) {
@@ -254,7 +285,6 @@ export const mediaStoreLayer = Layer.effect(
           error instanceof UnframedError ? error : unframedError("internal", `Could not copy the file: ${errorText(error)}`),
       });
 
-    /** Saves a data URL that reached a room, and answers the marker that replaces it. */
     const saveDataUrl = async (project: string, url: string, name: string) => {
       const decoded = decodeDataUrl(url);
       if (!decoded) return undefined;
@@ -289,7 +319,6 @@ export const mediaStoreLayer = Layer.effect(
 
     yield* rooms.afterCommit((project, change, room) => {
       const worth = [...change.records.values()].some((record) => {
-        // A shape's own url prop is a link URL in tldraw's schema, so only asset sources can hold these.
         const src = record.typeName === "asset" ? (record.props as { src?: unknown }).src : undefined;
         return typeof src === "string" && (src.startsWith("data:") || src.startsWith("blob:"));
       });

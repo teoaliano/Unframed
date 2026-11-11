@@ -3,42 +3,51 @@ import { dialsBridgeSource } from "../../src/index.ts";
 
 type Listener = (event: { source: unknown; origin: string; data: unknown }) => void;
 
-/** A window for the shipped bridge to run against: a parent that records what it is sent. */
 const stubWindow = (options: { origin?: string; framed?: boolean; variables?: unknown } = {}) => {
   const posted: Array<{ message: any; targetOrigin: string }> = [];
   const errors: unknown[][] = [];
   const listeners: Listener[] = [];
   const wheels: Array<(event: unknown) => void> = [];
   const menus: Array<(event: unknown) => void> = [];
+  const tokenEvents: Array<() => void> = [];
   const parent = { postMessage: (message: unknown, targetOrigin: string) => posted.push({ message, targetOrigin }) };
+  const loaded: Array<{ tag: string; src?: string }> = [];
   const win: any = {
     location: { origin: options.origin ?? "http://127.0.0.1:5001" },
-    addEventListener: (type: string, listener: Listener) =>
-      type === "wheel" ? wheels.push(listener as (event: unknown) => void) : type === "contextmenu" ? menus.push(listener as (event: unknown) => void) : listeners.push(listener),
+    document: {
+      createElement: (tag: string) => ({ tag, src: undefined as string | undefined }),
+      head: { appendChild: (node: { tag: string; src?: string }) => loaded.push(node) },
+    },
+    addEventListener: (type: string, listener: unknown) => {
+      if (type === "wheel") wheels.push(listener as (event: unknown) => void);
+      else if (type === "contextmenu") menus.push(listener as (event: unknown) => void);
+      else if (type === "unframed:tokens") tokenEvents.push(listener as () => void);
+      else listeners.push(listener as Listener);
+    },
     console: { error: (...args: unknown[]) => errors.push(args) },
     ...(options.variables === undefined ? {} : { __hfVariables: options.variables }),
   };
   win.parent = options.framed === false ? win : parent;
-  // The shipped file, evaluated as a browser would run it.
   new Function("window", dialsBridgeSource())(win);
   const send = (data: unknown, from: { source?: unknown; origin?: string } = {}) => {
     for (const listener of listeners) listener({ source: from.source ?? parent, origin: from.origin ?? "http://localhost:8787", data });
   };
-  /** A wheel over the document; answers whether the bridge kept it from the browser. */
   const wheel = (init: Partial<Record<"ctrlKey" | "metaKey", boolean>> & { deltaY?: number }) => {
     let prevented = false;
     const event = { ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, deltaX: 0, deltaY: 0, deltaZ: 0, deltaMode: 0, clientX: 40, clientY: 30, ...init, preventDefault: () => (prevented = true) };
     for (const listener of wheels) listener(event);
     return prevented;
   };
-  /** A right-click in the document; answers whether the bridge kept it from the browser. */
   const rightClick = () => {
     let prevented = false;
     const event = { clientX: 40, clientY: 30, preventDefault: () => (prevented = true) };
     for (const listener of menus) listener(event);
     return prevented;
   };
-  return { win, parent, posted, errors, send, wheel, rightClick };
+  const tokensChanged = () => {
+    for (const listener of tokenEvents) listener();
+  };
+  return { win, parent, posted, errors, send, wheel, rightClick, loaded, tokensChanged };
 };
 
 describe("the built bridge", () => {
@@ -48,6 +57,24 @@ describe("the built bridge", () => {
     expect(typeof win.unframed.dials).toBe("function");
     expect(win.unframed.defaultDials({ speed: [2, 0, 5], label: "x" })).toEqual({ speed: 2, label: "x" });
     expect(win.unframed.defaultDials("bad")).toBeNull();
+  });
+
+  it("takes a descriptions map as a fourth argument, announces it with the schema carrying each description, and applies plain values", () => {
+    const { win, posted } = stubWindow();
+    const applied: unknown[] = [];
+    win.unframed.dials("Scene", { speed: [1, 0.5, 2], accent: "#a78bfa" }, (values: unknown) => applied.push(values), { speed: "How fast it plays" });
+    expect(applied).toEqual([{ speed: 1, accent: "#a78bfa" }]);
+    expect(posted[0]?.message.descriptions).toEqual({ speed: "How fast it plays" });
+    expect(posted[0]?.message.schema).toEqual({
+      speed: { kind: "range", value: 1, min: 0.5, max: 2, description: "How fast it plays" },
+      accent: { kind: "color", value: "#a78bfa" },
+    });
+  });
+
+  it("announces no descriptions for a declaration without them", () => {
+    const { win, posted } = stubWindow();
+    win.unframed.dials("Scene", { speed: [1, 0.5, 2] }, () => {});
+    expect(posted[0]?.message.descriptions).toBeNull();
   });
 
   it("applies the values before announcing them, then returns them", () => {
@@ -63,6 +90,7 @@ describe("the built bridge", () => {
           type: "unframed:dials",
           name: "Scene",
           config: { accent: "#a78bfa", speed: [1, 0.5, 2] },
+          descriptions: null,
           schema: { accent: { kind: "color", value: "#a78bfa" }, speed: { kind: "range", value: 1, min: 0.5, max: 2 } },
           values: { accent: "#a78bfa", speed: 1 },
         },
@@ -77,6 +105,21 @@ describe("the built bridge", () => {
     let applied: unknown;
     win.unframed.dials("Scene", { accent: "#a78bfa", speed: [1, 0.5, 2] }, (values: unknown) => (applied = values));
     expect(applied).toEqual({ accent: "#a78bfa", speed: 1.5 });
+  });
+
+  it("applies its last declaration again, with its current values, on the unframed:tokens event", () => {
+    const { win, send, tokensChanged } = stubWindow();
+    const applied: unknown[] = [];
+    win.unframed.dials("Scene", { speed: [1, 0, 5] }, (values: unknown) => applied.push(values));
+    send({ type: "unframed:dials:set", values: { speed: 3 } });
+    tokensChanged();
+    expect(applied).toEqual([{ speed: 1 }, { speed: 3 }, { speed: 3 }]);
+  });
+
+  it("does nothing on the unframed:tokens event before any declaration", () => {
+    const { tokensChanged, errors } = stubWindow();
+    tokensChanged();
+    expect(errors).toEqual([]);
   });
 
   it("refuses a bad config with a console error and null, and applies nothing", () => {
@@ -142,9 +185,7 @@ describe("the built bridge", () => {
 
   it("hands a right-click to a canvas that asked for menus, and leaves it to the page otherwise", () => {
     const { posted, send, rightClick } = stubWindow();
-    // No canvas has asked: the page keeps its own menu.
     expect(rightClick()).toBe(false);
-    // The editor's frame says hello without asking: still the page's.
     send({ type: "unframed:dials:hello" });
     expect(rightClick()).toBe(false);
     send({ type: "unframed:dials:hello", menus: true });
@@ -157,7 +198,6 @@ describe("the built bridge", () => {
 
   it("keeps a pinch from zooming the app and hands it to the canvas that said hello; a plain scroll passes", () => {
     const { posted, send, wheel } = stubWindow();
-    // Before any hello there is no canvas to hand it to: the pinch is still kept from the browser.
     expect(wheel({ ctrlKey: true, deltaY: -10 })).toBe(true);
     expect(posted).toEqual([]);
     send({ type: "unframed:dials:hello" });
@@ -168,5 +208,23 @@ describe("the built bridge", () => {
       ["unframed:wheel", -10, true, 40, "http://localhost:8787"],
       ["unframed:wheel", 4, false, 40, "http://localhost:8787"],
     ]);
+  });
+
+  it("loads unframed-edit.js once, on the first edit hello from its parent, and remembers who said it", () => {
+    const { win, loaded, send, errors } = stubWindow();
+    send({ type: "unframed:edit:hello" }, { source: {}, origin: "http://localhost:8787" });
+    send({ type: "unframed:edit:hello" }, { origin: "https://evil.example" });
+    expect(loaded).toEqual([]);
+    send({ type: "unframed:edit:hello" }, { origin: "http://localhost:8787" });
+    send({ type: "unframed:edit:hello" }, { origin: "http://localhost:8787" });
+    expect(loaded).toEqual([{ tag: "script", src: "unframed-edit.js" }]);
+    expect(win.unframedEditPeer).toBe("http://localhost:8787");
+    expect(errors).toEqual([]);
+  });
+
+  it("does not load the edit bridge on a dials hello", () => {
+    const { loaded, send } = stubWindow();
+    send({ type: "unframed:dials:hello" }, { origin: "http://localhost:8787" });
+    expect(loaded).toEqual([]);
   });
 });

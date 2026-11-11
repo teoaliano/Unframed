@@ -1,5 +1,6 @@
 import { resultMetaOf, UnframedError } from "@unframed/contracts";
-import { composeSelection, labelLevel, readRef, resultLine, toolbarState, type ToolbarState } from "@unframed/domain";
+import { audioLine, composeSelection, labelLevel, readRef, resultLine, toolbarState, type ToolbarState } from "@unframed/domain";
+import { audioDurationOf } from "../canvas/shapes/audio.tsx";
 import { renamingShape } from "../canvas/rename.ts";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useEditor, useValue, type Editor, type TLShapeId } from "tldraw";
@@ -10,20 +11,21 @@ import { groupRecipeOf } from "../canvas/groupRecipes.ts";
 import { Tip } from "../chrome/ui.tsx";
 import { useSlots } from "../chrome/slots.ts";
 import { useCanvasProject, useEngine, useSettings } from "../context.ts";
-import { showError } from "../toasts.tsx";
+import { showError, showErrorAction } from "../toasts.tsx";
+import { openSettings } from "../settings/settingsEvents.ts";
 import { useKnownCatalogue, usePricing } from "./catalogue.ts";
 import { Composer } from "./composer/Composer.tsx";
 import { assetOf, canvasShapes, resultShapes, toolbarShape } from "./facts.ts";
 import { canvasRoom, placeFloating, type ScreenBox } from "./floating.ts";
 import { mediumDefinition, type RunSource } from "./mediumRegistry.ts";
-import { openOnRecipe, recipeProps, recipeRunProgress, runGroupRecipe } from "./recipeRuns.ts";
+import { NoKeyError, openOnRecipe, recipeProps, recipeRunProgress, runGroupRecipe } from "./recipeRuns.ts";
 import { closeComposer, composerState, leaveRecipeMode, openComposer } from "./state.ts";
 import { composerGlassClass } from "../chrome/composerSurface.ts";
 import { useWheelToCanvas } from "../canvas/wheelToCanvas.ts";
+import { NodeRunButtons, selectionNodeCount } from "../nodes/NodeChrome.tsx";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
-/** The gestures the bar hides for: dragging a shape or its handles, dragging the canvas, box selection. */
 const GESTURES = [
   "select.translating",
   "select.resizing",
@@ -39,14 +41,8 @@ const GESTURES = [
 const hiddenByGesture = (editor: Editor): boolean =>
   editor.isInAny(...GESTURES) || (editor.inputs.getIsPanning() && editor.inputs.getIsPointing());
 
-/** The band a shape's label takes above its top edge, in canvas units (spec 02). */
 const LABEL_BAND = 22;
 
-/**
- * The selection's bounds on screen, relative to the canvas, with the band of its labels on
- * top while a selected shape has a shown label, so the bar never covers the label of what it
- * is about.
- */
 const selectionOnScreen = (editor: Editor): ScreenBox | undefined => {
   const bounds = editor.getSelectionPageBounds();
   if (!bounds) return undefined;
@@ -57,18 +53,11 @@ const selectionOnScreen = (editor: Editor): ScreenBox | undefined => {
   return { x: topLeft.x, y: topLeft.y, w: bottomRight.x - topLeft.x, h: bottomRight.y - topLeft.y };
 };
 
-
-/**
- * The floating element that is the bar and grows into the composer on the same centre and
- * bottom edge (top edge when flipped below the selection). It measures its content and
- * animates to that size and place.
- */
 const Floating = ({ target, hidden, expanded, framed, children }: { target: ScreenBox | undefined; hidden: boolean; expanded: boolean; framed: boolean; children: ReactNode }) => {
   const editor = useEditor();
   const root = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<{ w: number; h: number }>();
-  // Only the morph between bar and composer animates; following the selection never lags.
   const [morphing, setMorphing] = useState(false);
   const wasExpanded = useRef(expanded);
   useWheelToCanvas(editor, root);
@@ -84,7 +73,6 @@ const Floating = ({ target, hidden, expanded, framed, children }: { target: Scre
     const element = content.current;
     if (!element) return;
     const measure = () => {
-      // The floating element's own border sits outside its content, else it clips the content's far edges.
       const outer = root.current;
       const border = outer ? outer.offsetWidth - outer.clientWidth : 0;
       const w = element.offsetWidth + border;
@@ -97,8 +85,6 @@ const Floating = ({ target, hidden, expanded, framed, children }: { target: Scre
     return () => observer.disconnect();
   }, []);
 
-  // The room reads the DOM (the chrome cards, tldraw's style panel), which mounts a frame after the selection
-  // changes; reading it again once that frame is painted keeps the toolbar clear of a panel it could not see.
   const [roomTick, setRoomTick] = useState(0);
   useEffect(() => {
     const frame = requestAnimationFrame(() => requestAnimationFrame(() => setRoomTick((tick) => tick + 1)));
@@ -112,7 +98,6 @@ const Floating = ({ target, hidden, expanded, framed, children }: { target: Scre
       ref={root}
       className={cn(
         "pointer-events-auto absolute z-[500] box-border overflow-hidden font-sans text-foreground data-[morphing=true]:transition-[left,top,width,height,border-radius,background-color,box-shadow] data-[morphing=true]:duration-200 data-[morphing=true]:ease-out motion-reduce:data-[morphing=true]:transition-none",
-        // The bar is a glass card and the Generate composer t3code's composer shell. The Agent tray draws its own shell.
         !expanded ? "rounded-xl border shadow-lg/5 surface-glass" : framed ? `${composerGlassClass} rounded-3xl border shadow-composer dark:shadow-none` : "rounded-3xl",
       )}
       data-testid="selection-toolbar"
@@ -130,7 +115,6 @@ const Floating = ({ target, hidden, expanded, framed, children }: { target: Scre
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
     >
-      {/* Bar and composer are different children, so under reduced motion each fades in as it replaces the other. */}
       <div
         ref={content}
         className="absolute left-0 top-0 data-[side=above]:top-auto data-[side=above]:bottom-0 motion-reduce:*:transition-opacity motion-reduce:*:duration-[120ms] motion-reduce:*:ease-linear motion-reduce:*:starting:opacity-0"
@@ -142,19 +126,13 @@ const Floating = ({ target, hidden, expanded, framed, children }: { target: Scre
   );
 };
 
-/** The bar's row of buttons and hint; `barClass` pads it inside the floating element. */
 const rowClass = "flex items-center gap-1.5";
 const barClass = `${rowClass} whitespace-nowrap p-1`;
 const hintClass = "px-1 text-xs text-muted-foreground";
 
-/**
- * The six-dot handle on a filled page or motion: its frame takes the pointer, so the shape
- * moves by this instead. A drag moves the selection with the pointer, and one undo takes
- * the whole move back.
- */
 const DragHandle = () => {
   const editor = useEditor();
-  const drag = useRef<{ readonly from: { x: number; y: number }; readonly shapes: ReadonlyArray<{ id: TLShapeId; type: string; x: number; y: number }> }>(undefined);
+  const drag = useRef<{ readonly from: { x: number; y: number }; readonly shapes: ReadonlyArray<{ id: TLShapeId; type: string; page: { x: number; y: number } }> }>(undefined);
   return (
     <Tip label="Drag to move" side="top">
       <Button
@@ -169,7 +147,7 @@ const DragHandle = () => {
           editor.markHistoryStoppingPoint("drag handle");
           drag.current = {
             from: editor.screenToPage({ x: event.clientX, y: event.clientY }),
-            shapes: editor.getSelectedShapes().map((shape) => ({ id: shape.id, type: shape.type, x: shape.x, y: shape.y })),
+            shapes: editor.getSelectedShapes().map((shape) => ({ id: shape.id, type: shape.type, page: editor.getShapePageTransform(shape).point() })),
           };
         }}
         onPointerMove={(event) => {
@@ -178,7 +156,12 @@ const DragHandle = () => {
           const now = editor.screenToPage({ x: event.clientX, y: event.clientY });
           const dx = now.x - start.from.x;
           const dy = now.y - start.from.y;
-          editor.updateShapes(start.shapes.map((shape) => ({ id: shape.id, type: shape.type, x: shape.x + dx, y: shape.y + dy })) as Parameters<typeof editor.updateShapes>[0]);
+          editor.updateShapes(
+            start.shapes.map((shape) => {
+              const local = editor.getPointInParentSpace(shape.id, { x: shape.page.x + dx, y: shape.page.y + dy });
+              return { id: shape.id, type: shape.type, x: local.x, y: local.y };
+            }) as Parameters<typeof editor.updateShapes>[0],
+          );
         }}
         onPointerUp={() => {
           drag.current = undefined;
@@ -208,10 +191,6 @@ const AgentButton = ({ onOpen }: { onOpen: () => void }) => {
   );
 };
 
-/**
- * The bar of one result: Generate takes the result as the input like any selection, and
- * Regenerate opens the composer in recipe mode on the run that made it.
- */
 const ResultBar = ({ state, onGenerate, agent }: { state: Extract<ToolbarState, { kind: "result" }>; onGenerate: () => void; agent: ReactNode }) => {
   const editor = useEditor();
   const engine = useEngine();
@@ -223,8 +202,12 @@ const ResultBar = ({ state, onGenerate, agent }: { state: Extract<ToolbarState, 
       const shape = editor.getShape(shapeId);
       const result = shape ? resultMetaOf(shape) : undefined;
       if (!shape || !result) return undefined;
+      if (result.medium === "audio") {
+        const seconds = audioDurationOf(shape.id);
+        return audioLine({ model: result.model, durationMs: seconds === undefined ? undefined : seconds * 1000, credits: result.credits });
+      }
       const asset = assetOf(editor, shape)?.props as { w?: number; h?: number } | undefined;
-      return resultLine({ model: result.model, width: asset?.w, height: asset?.h, cost: result.cost });
+      return resultLine({ model: result.model, width: asset?.w, height: asset?.h, cost: result.cost, provider: result.provider, listPrice: result.listPrice });
     },
     [editor, shapeId],
   );
@@ -241,7 +224,6 @@ const ResultBar = ({ state, onGenerate, agent }: { state: Extract<ToolbarState, 
   return (
     <div className="flex flex-col gap-0.5 whitespace-nowrap p-1">
       <div className={rowClass}>
-        {/* Without Generate (a failed render), Regenerate is the primary action. */}
         <Button variant={state.generate ? "outline" : "default"} size="sm" onClick={() => void regenerate()}>
           Regenerate
         </Button>
@@ -261,11 +243,6 @@ const ResultBar = ({ state, onGenerate, agent }: { state: Extract<ToolbarState, 
   );
 };
 
-/**
- * The bar of a selection holding one recipe group: Generate runs the recipe at once (a
- * Free recipe stops at the final prompt), the hint names the group and the estimate, and
- * Recipe opens the composer on it.
- */
 const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "recipe" }>; agent: ReactNode }) => {
   const editor = useEditor();
   const engine = useEngine();
@@ -296,9 +273,10 @@ const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "rec
     if (busy || !recipe) return;
     setBusy(true);
     try {
-      await runGroupRecipe({ editor, engine, project, groupId, recipe, hasKey: settings?.hasKey ?? true });
+      await runGroupRecipe({ editor, engine, project, groupId, recipe, keys: settings ?? { hasKey: true, hasVercelKey: false }, hasElevenLabsKey: settings?.hasElevenLabsKey ?? true });
     } catch (error) {
-      showError(messageOf(error));
+      if (error instanceof NoKeyError) showErrorAction(error.message, "Open Settings", () => openSettings("generation"));
+      else showError(messageOf(error));
     } finally {
       setBusy(false);
     }
@@ -308,6 +286,7 @@ const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "rec
   const Overlay = definition?.Overlay;
   return (
     <div className={barClass}>
+      {state.drag && <DragHandle />}
       <Button size="sm" disabled={busy || progress !== undefined} onClick={() => void generate()}>
         {label}
       </Button>
@@ -323,9 +302,9 @@ const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "rec
   );
 };
 
-const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind: "none" }>; onGenerate: () => void; agent: ReactNode }) => {
+const Bar = ({ state, onGenerate, agent, nodes }: { state: Exclude<ToolbarState, { kind: "none" }>; onGenerate: () => void; agent: ReactNode; nodes: number }) => {
   const editor = useEditor();
-  const { openArtifact, renderButton: Render, parametersButton: ParametersToggle } = useSlots();
+  const { openArtifact, renderButton: Render, parametersButton: ParametersToggle, kitModeButton: KitModeToggle, scaleButton: Scale } = useSlots();
   switch (state.kind) {
     case "recipe":
       return <RecipeBar state={state} agent={agent} />;
@@ -346,37 +325,47 @@ const Bar = ({ state, onGenerate, agent }: { state: Exclude<ToolbarState, { kind
             Editor
           </Button>
           {Render && editor.getShape(state.shapeId as TLShapeId)?.type === "motion" && <Render shapeId={state.shapeId as TLShapeId} />}
-          {ParametersToggle && <ParametersToggle shapeId={state.shapeId as TLShapeId} />}
+          {ParametersToggle && editor.getShape(state.shapeId as TLShapeId)?.type !== "component" && <ParametersToggle shapeId={state.shapeId as TLShapeId} />}
+          {KitModeToggle && <KitModeToggle shapeId={state.shapeId as TLShapeId} />}
+          {Scale && editor.getShape(state.shapeId as TLShapeId)?.type !== "component" && <Scale shapeId={state.shapeId as TLShapeId} />}
           {agent}
         </div>
       );
     case "generate":
       return (
         <div className={barClass}>
+          {state.drag && <DragHandle />}
           <span className={hintClass} data-testid="selection-hint">
             {state.hint}
           </span>
           {agent}
+          <NodeRunButtons primary={false} />
           <Button size="sm" onClick={onGenerate}>
             Generate
           </Button>
         </div>
       );
     case "agent":
-      return agent === null ? null : <div className={barClass}>{agent}</div>;
+      return agent === null && !state.drag && nodes === 0 ? null : (
+        <div className={barClass}>
+          {state.drag && <DragHandle />}
+          {nodes > 1 && (
+            <span className={hintClass} data-testid="selection-hint">
+              {`${nodes} nodes`}
+            </span>
+          )}
+          {agent}
+          <NodeRunButtons primary />
+        </div>
+      );
   }
 };
 
-/**
- * The selection toolbar: over every selection, its buttons decided from the selection, and
- * the composer it grows into. It hides while a gesture is under way.
- */
 export const SelectionToolbar = () => {
   const editor = useEditor();
   const project = useCanvasProject();
   const { agentTray } = useSlots();
   const composer = useValue("composer", () => composerState(editor).get(), [editor]);
-  // A name field sits in a label, right under the bar: the bar steps aside while it is open.
   const hidden = useValue("toolbar hidden", () => hiddenByGesture(editor) || renamingShape(editor).get() !== undefined, [editor]);
   const selectionKey = useValue("selection", () => editor.getSelectedShapeIds().join(" "), [editor]);
   const expanded = composer.mode !== "bar";
@@ -396,7 +385,6 @@ export const SelectionToolbar = () => {
   const lastTarget = useRef<ScreenBox>(undefined);
   if (target) lastTarget.current = target;
 
-  // Clicking empty canvas closes the composer; a changed selection leaves recipe mode.
   useEffect(() => {
     const { mode, recipe } = composerState(editor).get();
     if (selectionKey === "" && mode !== "bar") closeComposer(editor);
@@ -404,17 +392,18 @@ export const SelectionToolbar = () => {
   }, [editor, selectionKey]);
 
   const collapse = useCallback(() => closeComposer(editor), [editor]);
+  const nodes = useValue("selected nodes", () => selectionNodeCount(editor), [editor]);
   const agent = agentTray ? <AgentButton onOpen={() => openComposer(editor, "agent")} /> : null;
 
   if (selectionKey === "") return null;
-  if (!expanded && (state === undefined || state.kind === "none" || (state.kind === "agent" && agent === null))) return null;
+  if (!expanded && (state === undefined || state.kind === "none" || (state.kind === "agent" && agent === null && !state.drag && nodes === 0))) return null;
 
   return (
     <Floating target={target ?? lastTarget.current} hidden={hidden} expanded={expanded} framed={composer.mode !== "agent"}>
       {expanded ? (
         <Composer mode={composer.mode === "agent" ? "agent" : "generate"} project={project} recipe={composer.recipe} onCollapse={collapse} />
       ) : state && state.kind !== "none" ? (
-        <Bar state={state} onGenerate={() => openComposer(editor, "generate")} agent={agent} />
+        <Bar state={state} onGenerate={() => openComposer(editor, "generate")} agent={agent} nodes={nodes} />
       ) : null}
     </Floating>
   );

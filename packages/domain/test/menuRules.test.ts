@@ -164,12 +164,12 @@ describe("contextMenu", () => {
 
   it("offers the add menu's items on empty canvas, and paste when there is something to paste", () => {
     expect(outline(contextMenu({ ...base, target: { kind: "canvas" }, selection: [] }))).toEqual([
-      ["inputs", ["Prompt", "Image", "Video", "Group"]],
+      ["inputs", ["Prompt", "Image", "Video", "Audio", "Group", "Node"]],
       ["artifacts", ["Page", "Motion"]],
     ]);
     expect(outline(contextMenu({ ...base, clipboard: true, target: { kind: "canvas" }, selection: [] }))).toEqual([
       ["edit", ["Paste ⌘V"]],
-      ["inputs", ["Prompt", "Image", "Video", "Group"]],
+      ["inputs", ["Prompt", "Image", "Video", "Audio", "Group", "Node"]],
       ["artifacts", ["Page", "Motion"]],
     ]);
   });

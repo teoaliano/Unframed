@@ -1,11 +1,7 @@
 import type { CSSProperties } from "react";
 
-/**
- * The palette hues Unframed's categories take (spec 12): provider tokens, library kind
- * chips, role badges. Each colour is written out whole, because Tailwind emits a palette
- * variable only when it finds its name in the source.
- */
 const HUES = {
+  amber: "var(--color-amber-500)",
   blue: "var(--color-blue-500)",
   orange: "var(--color-orange-500)",
   purple: "var(--color-purple-500)",
@@ -21,5 +17,4 @@ const HUES = {
 
 export type Hue = keyof typeof HUES;
 
-/** The style a kit Badge `label` variant tints from: the hue's Tailwind palette colour as `--label`. */
 export const labelHue = (hue: Hue): CSSProperties => ({ "--label": HUES[hue] }) as CSSProperties;

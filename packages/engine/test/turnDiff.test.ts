@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { PROJECT, scriptFolder, startAgentEngine } from "./agent.ts";
 import { motionShape, seed } from "./agentCanvas.ts";
-import { pageShape } from "./canvasRecords.ts";
+import { componentShape, pageShape } from "./canvasRecords.ts";
 
 const point = (id: string, file: string) => ({ name: "canvas_write", input: { ops: [{ type: "update", id, props: { file } }] } });
 
@@ -60,20 +60,17 @@ describe("artifact diffs", () => {
     const second = await agent.rpc.call("orchestration.getTurnDiff", { projectId: PROJECT, threadId: chatId, fromTurnCount: 1, toTurnCount: 2 });
     expect(second.files.map((file) => [file.shapeId, file.before, file.after, file.additions, file.deletions])).toEqual([["shape:pg1", "landing-v2.html", "landing-v3.html", 1, 1]]);
 
-    // The whole chat: each artifact from before the first turn to after the last.
     const all = await agent.rpc.call("orchestration.getFullThreadDiff", { projectId: PROJECT, threadId: chatId, toTurnCount: 2 });
     expect(all.files.map((file) => [file.shapeId, file.before, file.after, file.additions, file.deletions])).toEqual([
       ["shape:pg1", "landing-v1.html", "landing-v3.html", 3, 2],
       ["shape:m1", "intro-v1.html", "intro-v2.html", 1, 1],
     ]);
 
-    // A file over 2 MiB is named but not diffed.
     await agent.send(chatId, "rewrite with the big one");
     await agent.settled(chatId, 3);
     const big = await agent.rpc.call("orchestration.getTurnDiff", { projectId: PROJECT, threadId: chatId, fromTurnCount: 2, toTurnCount: 3 });
     expect(big.files).toEqual([expect.objectContaining({ shapeId: "shape:pg1", after: "huge.html", tooLarge: true, patch: "This file is too large to diff.", additions: 0, deletions: 0 })]);
 
-    // A change of whitespace only counts unless whitespace is ignored.
     await agent.send(chatId, "rewrite the spacing");
     await agent.settled(chatId, 4);
     const range = { projectId: PROJECT, threadId: chatId, fromTurnCount: 3, toTurnCount: 4 };
@@ -89,5 +86,31 @@ describe("artifact diffs", () => {
     });
     await expect(agent.rpc.call("orchestration.getTurnDiff", { projectId: PROJECT, threadId: "no-such-chat", fromTurnCount: 0, toTurnCount: 1 })).rejects.toMatchObject({ code: "not_found" });
     expect((await agent.rpc.call("orchestration.getTurnDiff", { projectId: PROJECT, threadId: chatId, fromTurnCount: 0, toTurnCount: 0 })).files).toEqual([]);
+  });
+});
+
+describe("component diffs", () => {
+  const BUTTON = `<!doctype html><html><head>
+<script type="application/json" data-uf-component>{"tag":"uf-button","variants":{"kind":["primary","secondary"]},"props":{"label":"text"},"slots":[]}</script>
+<style type="text/x-uf-component" data-uf-component-style>:host { display: inline-block; }</style>
+</head><body><div data-uf-template hidden><button data-uf-prop="label">Buy</button></div></body></html>`;
+
+  it("diffs a component sheet a turn wrote, as it diffs a page", async () => {
+    const script = await scriptFolder({
+      sheets: { when: "^relabel", turns: [{ text: "Relabelled it.", tools: [{ name: "component_write", input: { shapeId: "c1", html: BUTTON.replace("Buy", "Buy now") } }] }] },
+    });
+    const agent = await startAgentEngine({ script });
+    await writeFile(join(agent.folder, "1-button.html"), BUTTON);
+    await seed(agent, [componentShape("c1", "uf-button", { file: "1-button.html", title: "Button" })]);
+    const chatId = await agent.createChat();
+    await agent.send(chatId, "relabel it");
+    await agent.settled(chatId, 1);
+
+    const diff = await agent.rpc.call("orchestration.getTurnDiff", { projectId: PROJECT, threadId: chatId, fromTurnCount: 0, toTurnCount: 1 });
+    expect(diff.files).toHaveLength(1);
+    const [file] = diff.files;
+    expect(file).toMatchObject({ shapeId: "shape:c1", label: "Button", kind: "component", before: "1-button.html", additions: 5, deletions: 2 });
+    expect(file!.after).toMatch(/^\d+-button\.html$/);
+    expect(file!.patch).toMatch(/<button data-hf-id="hf-[a-z0-9]+" data-uf-prop="label">Buy now<\/button>/);
   });
 });

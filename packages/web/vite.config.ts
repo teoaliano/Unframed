@@ -33,7 +33,7 @@ const relay: ProxyOptions["configure"] = (proxy) => {
   proxy.on("proxyReqWs", readdress);
 };
 
-// The Home Screen files (spec 22), served at the root under fixed names so an iPad can
+// The Home Screen files (spec 23), served at the root under fixed names so an iPad can
 // add the app to its Home Screen. The icon is read from assets/brand, which stays the one
 // place the mark lives; the engine serves both to an unpaired device.
 const HOME_SCREEN: ReadonlyArray<{ readonly name: string; readonly type: string; readonly read: () => string | Uint8Array }> = [

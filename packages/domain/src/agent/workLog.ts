@@ -1,16 +1,8 @@
-/**
- * The work log (spec 08, after t3code's `deriveWorkLogEntries`): a turn's tool calls, merged
- * by tool call id into rows with a label, a tone and a lifecycle state, consecutive rows
- * folded into a group whose summary counts what was done, sub-agents folded into one row
- * per spawn, and errors standing alone. Also the activity line's words for what the agent
- * is doing now.
- */
 import type { ChatActivity } from "./chatModel.ts";
 
-export type WorkTone = "thinking" | "tool" | "info" | "error";
-export type WorkState = "inProgress" | "completed" | "failed" | "declined" | "stopped";
-/** What a row counts as in its group's summary. */
-export type WorkAction = "read" | "change" | "command" | "web" | "code" | "tool" | "canvas" | "browser";
+type WorkTone = "thinking" | "tool" | "info" | "error";
+type WorkState = "inProgress" | "completed" | "failed" | "declined" | "stopped";
+type WorkAction = "read" | "change" | "command" | "web" | "code" | "tool" | "canvas" | "browser";
 
 export interface WorkRow {
   readonly kind: "row";
@@ -26,7 +18,7 @@ export interface WorkRow {
   readonly image?: string;
 }
 
-export interface SubagentTask {
+interface SubagentTask {
   readonly taskId: string;
   readonly title: string;
   readonly state: "working" | "completed" | "failed";
@@ -57,7 +49,6 @@ const text = (value: unknown): string | undefined => (typeof value === "string" 
 
 const UNFRAMED = "mcp__unframed__";
 
-/** Unframed's own tool, by its short name, else undefined. */
 const unframedTool = (name: string): string | undefined => (name.startsWith(UNFRAMED) ? name.slice(UNFRAMED.length) : undefined);
 
 const program = (command: string): string => {
@@ -67,8 +58,40 @@ const program = (command: string): string => {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-const artifactTitle = (input: Record<string, unknown>, result: Record<string, unknown>, kind: string): string =>
-  text(input.title) ?? text(result.title) ?? text(input.shapeId) ?? text(result.shapeId) ?? kind;
+export type TitleOf = (shapeId: string) => string | undefined;
+
+const artifactTitle = (input: Record<string, unknown>, result: Record<string, unknown>, kind: string, titleOf?: TitleOf): string => {
+  const id = text(input.shapeId) ?? text(result.shapeId);
+  return text(input.title) ?? text(result.title) ?? (id === undefined ? undefined : titleOf?.(id)) ?? id ?? kind;
+};
+
+const parsed = (value: string): unknown => {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+};
+
+export const toolResult = (result: unknown): Record<string, unknown> => {
+  if (typeof result === "string") return record(parsed(result));
+  if (Array.isArray(result)) {
+    for (const part of [...result].reverse()) {
+      const found = typeof part === "string" ? record(parsed(part)) : {};
+      if (Object.keys(found).length > 0) return found;
+    }
+    return {};
+  }
+  return record(result);
+};
+
+const errorOf = (result: unknown): string | undefined => {
+  const refusal = text(toolResult(result).error);
+  if (refusal !== undefined) return refusal;
+  if (typeof result === "string") return text(result);
+  if (Array.isArray(result)) return text(result.filter((part): part is string => typeof part === "string").join("\n"));
+  return undefined;
+};
 
 const pathsOf = (input: Record<string, unknown>, data: Record<string, unknown>): string[] => {
   const paths: string[] = [];
@@ -89,16 +112,16 @@ interface Described {
   readonly image?: string;
 }
 
-/** A tool call's label and what it counts as, for the state it is in. */
-export const describeTool = (input: { readonly toolName: string; readonly itemType: string; readonly toolInput: Record<string, unknown>; readonly data: Record<string, unknown>; readonly result: Record<string, unknown>; readonly state: WorkState }): Described => {
-  const { toolName, itemType, toolInput, data, result, state } = input;
+export const describeTool = (input: { readonly toolName: string; readonly itemType: string; readonly toolInput: Record<string, unknown>; readonly data: Record<string, unknown>; readonly result: Record<string, unknown>; readonly state: WorkState; readonly titleOf?: TitleOf | undefined }): Described => {
+  const { toolName, itemType, toolInput, data, result, state, titleOf } = input;
   const own = unframedTool(toolName);
   if (own !== undefined) {
+    const title = (kind: string) => artifactTitle(toolInput, result, kind, titleOf);
+    if (state === "failed") return { label: failedLabel(own, toolInput, title), action: actionOf(own) };
     switch (own) {
       case "canvas_read":
         return { label: "Read the canvas", action: "tool" };
       case "canvas_select": {
-        // A selection is not part of the canvas, so the row says Revert leaves it alone (spec 14).
         const count = Array.isArray(toolInput.shapeIds) ? toolInput.shapeIds.length : 0;
         return { label: count === 0 ? "Cleared the selection. Revert does not undo a selection." : `Selected ${plural(count, "shape")}. Revert does not undo a selection.`, action: "tool" };
       }
@@ -107,22 +130,41 @@ export const describeTool = (input: { readonly toolName: string; readonly itemTy
         return { label: `Changed the canvas (${plural(ops, "change")})`, action: "canvas" };
       }
       case "generate": {
-        // The row is the start of a paid generation; its landing is an activity of the turn (spec 14, "Cost shown").
         const medium = toolInput.medium === "video" ? "a video generation" : toolInput.medium === "text" ? "a text generation" : "an image generation";
         return { label: `Started ${medium}`, action: "tool" };
       }
+      case "node_run": {
+        const count = Array.isArray(toolInput.ids) ? toolInput.ids.length : 0;
+        if (toolInput.dryRun === true) return { label: count === 1 ? "Priced a node run" : `Priced a chain of ${count} nodes`, action: "tool" };
+        return { label: count === 1 && toolInput.downstream !== true ? "Ran a node" : "Ran a chain of nodes", action: "tool" };
+      }
+      case "file_add": {
+        const name = typeof result.fileName === "string" ? result.fileName : typeof toolInput.path === "string" ? toolInput.path.split(/[\\/]/).pop() : undefined;
+        return { label: name ? `Added ${name} to the project` : "Added a file to the project", action: "tool" };
+      }
       case "page_write":
-        return { label: `Wrote page ${artifactTitle(toolInput, result, "page")}`, action: "canvas" };
+        return { label: `Wrote page ${title("page")}`, action: "canvas" };
       case "page_read":
-        return { label: `Read page ${artifactTitle(toolInput, result, "page")}`, action: "read" };
+        return { label: `Read page ${title("page")}`, action: "read" };
       case "motion_write":
-        return { label: `Wrote motion ${artifactTitle(toolInput, result, "motion")}`, action: "canvas" };
+        return { label: `Wrote motion ${title("motion")}`, action: "canvas" };
+      case "page_edit":
+        return { label: `Edited page ${title("page")}`, action: "canvas" };
+      case "motion_edit":
+        return { label: `Edited motion ${title("motion")}`, action: "canvas" };
       case "motion_read":
-        return { label: `Read motion ${artifactTitle(toolInput, result, "motion")}`, action: "read" };
+        return { label: `Read motion ${title("motion")}`, action: "read" };
+      case "component_write":
+        return { label: `Wrote component ${title("component")}`, action: "canvas" };
+      case "component_read":
+        return { label: `Read component ${title("component")}`, action: "read" };
       default:
-        if (own.startsWith("preview")) return { label: `Looked at ${artifactTitle(toolInput, result, "the page")} in a browser`, action: "browser" };
+        if (own.startsWith("preview")) return { label: `Looked at ${title("the page")} in a browser`, action: "browser" };
         return { label: own, action: "tool" };
     }
+  }
+  if (itemType === "context_compaction") {
+    return { label: state === "inProgress" ? "Compacting the context" : state === "failed" ? "Couldn't compact the context" : "Compacted the context", action: "tool" };
   }
   const name = toolName.toLowerCase();
   const command = text(toolInput.command) ?? text(toolInput.cmd) ?? text(data.command);
@@ -159,6 +201,37 @@ export const describeTool = (input: { readonly toolName: string; readonly itemTy
   return { label: toolName, action: "tool" };
 };
 
+const actionOf = (own: string): WorkAction => {
+  if (own.startsWith("preview")) return "browser";
+  if (own === "canvas_write" || /^(page|motion|component)_(write|edit)$/.test(own)) return "canvas";
+  if (/^(page|motion|component)_read$/.test(own)) return "read";
+  return "tool";
+};
+
+const failedLabel = (own: string, toolInput: Record<string, unknown>, title: (kind: string) => string): string => {
+  const artifact = /^(page|motion|component)_(write|read|edit)$/.exec(own);
+  if (artifact) return `Couldn't ${artifact[2]} ${artifact[1]} ${title(artifact[1]!)}`;
+  if (own.startsWith("preview")) return `Couldn't look at ${title("the page")} in a browser`;
+  switch (own) {
+    case "canvas_read":
+      return "Couldn't read the canvas";
+    case "file_add":
+      return "Couldn't add a file to the project";
+    case "canvas_write":
+      return "Couldn't change the canvas";
+    case "canvas_select": {
+      const count = Array.isArray(toolInput.shapeIds) ? toolInput.shapeIds.length : 0;
+      return count === 0 ? "Couldn't clear the selection" : `Couldn't select ${plural(count, "shape")}`;
+    }
+    case "node_run":
+      return Array.isArray(toolInput.ids) && toolInput.ids.length === 1 && toolInput.downstream !== true ? "Couldn't run the node" : "Couldn't run the chain";
+    case "generate":
+      return `Couldn't start ${toolInput.medium === "video" ? "a video generation" : toolInput.medium === "text" ? "a text generation" : "an image generation"}`;
+    default:
+      return `Couldn't run ${own}`;
+  }
+};
+
 const SUMMARY: Record<WorkAction, (n: number) => string> = {
   read: (n) => `Read ${plural(n, "file")}`,
   change: (n) => `Changed ${plural(n, "file")}`,
@@ -170,7 +243,6 @@ const SUMMARY: Record<WorkAction, (n: number) => string> = {
   browser: (n) => `Used the browser ${plural(n, "time")}`,
 };
 
-/** A group's summary: what its rows did, counted, as one sentence ("Read 2 files, ran 3 commands, and changed 1 file"). */
 export const workSummary = (rows: ReadonlyArray<Pick<WorkRow, "action">>): string => {
   const counts = new Map<WorkAction, number>();
   for (const row of rows) counts.set(row.action, (counts.get(row.action) ?? 0) + 1);
@@ -183,7 +255,6 @@ export const workSummary = (rows: ReadonlyArray<Pick<WorkRow, "action">>): strin
   return `${parts.slice(0, -1).join(", ")}, and ${parts.at(-1)}`;
 };
 
-/** A duration as 1.2s, 12s, 1m 5s. */
 export const formatWorkDuration = (ms: number): string => {
   const seconds = Math.max(0, ms) / 1000;
   if (seconds < 10) return `${(Math.round(seconds * 10) / 10).toFixed(1).replace(/\.0$/, "")}s`;
@@ -192,25 +263,21 @@ export const formatWorkDuration = (ms: number): string => {
   return `${Math.floor(whole / 60)}m ${whole % 60}s`;
 };
 
-const TOOL_KINDS = new Set(["tool.started", "tool.updated", "tool.completed"]);
+const TOOL_KINDS = new Set(["tool.started", "tool.updated", "tool.completed", "tool.failed"]);
 const TASK_KINDS = new Set(["task.started", "task.progress", "task.completed"]);
 
 const stateOf = (status: unknown, kind: string): WorkState => {
-  if (status === "failed") return "failed";
+  if (status === "failed" || kind === "tool.failed") return "failed";
   if (status === "declined") return "declined";
   if (status === "completed" || kind === "tool.completed") return "completed";
   return "inProgress";
 };
 
-/**
- * The work log of a stretch of activities, in order. With `settled`, a call still in
- * progress is shown as stopped: its turn is over.
- */
-export const workLog = (activities: ReadonlyArray<ChatActivity>, options: { readonly settled?: boolean } = {}): WorkEntry[] => {
+export const workLog = (activities: ReadonlyArray<ChatActivity>, options: { readonly settled?: boolean; readonly titleOf?: TitleOf | undefined } = {}): WorkEntry[] => {
   const ordered = [...activities].sort((a, b) => a.sequence - b.sequence);
   const turnsWithTasks = new Set(ordered.filter((activity) => TASK_KINDS.has(activity.kind)).map((activity) => activity.turnId));
 
-  type Pending = { kind: "tool"; id: string; turnId: string | null; toolName: string; itemType: string; input: Record<string, unknown>; data: Record<string, unknown>; result: Record<string, unknown>; status: unknown; last: string; detail?: string } | { kind: "row"; row: WorkRow } | { kind: "spawn"; key: string };
+  type Pending = { kind: "tool"; id: string; turnId: string | null; toolName: string; itemType: string; input: Record<string, unknown>; data: Record<string, unknown>; result: unknown; status: unknown; last: string; detail?: string } | { kind: "row"; row: WorkRow } | { kind: "spawn"; key: string };
   const items: Pending[] = [];
   const tools = new Map<string, Extract<Pending, { kind: "tool" }>>();
   const spawns = new Map<string, { turnId: string | null; id: string; tasks: Map<string, { title: string; started: number; ended?: number; failed: boolean; done: boolean }> }>();
@@ -231,7 +298,7 @@ export const workLog = (activities: ReadonlyArray<ChatActivity>, options: { read
       }
       if (Object.keys(record(data.input)).length > 0) tool.input = record(data.input);
       tool.data = { ...tool.data, ...data };
-      if (data.result !== undefined) tool.result = record(data.result);
+      if (data.result !== undefined) tool.result = data.result;
       tool.status = payload.status ?? tool.status;
       tool.last = activity.kind;
       if (typeof payload.detail === "string" && payload.detail !== "") tool.detail = payload.detail;
@@ -276,8 +343,8 @@ export const workLog = (activities: ReadonlyArray<ChatActivity>, options: { read
     if (item.kind === "tool") {
       let state = stateOf(item.status, item.last);
       if (state === "inProgress" && options.settled) state = "stopped";
-      const described = describeTool({ toolName: item.toolName, itemType: item.itemType, toolInput: item.input, data: item.data, result: item.result, state });
-      const detail = described.detail ?? (state === "declined" || state === "failed" ? item.detail : undefined);
+      const described = describeTool({ toolName: item.toolName, itemType: item.itemType, toolInput: item.input, data: item.data, result: toolResult(item.result), state, titleOf: options.titleOf });
+      const detail = described.detail ?? (state === "declined" || state === "failed" ? (item.detail ?? (state === "failed" ? errorOf(item.result) : undefined)) : undefined);
       if (run.length > 0 && run[0]!.turnId !== item.turnId) flush();
       run.push({ kind: "row", id: item.id, turnId: item.turnId, tone: "tool", state, ...described, ...(detail === undefined ? {} : { detail }) });
       continue;
@@ -309,16 +376,17 @@ export const workLog = (activities: ReadonlyArray<ChatActivity>, options: { read
   return entries;
 };
 
-// ---------------------------------------------------------------------------------------
-// The activity line.
-
 const ACTIVITY_BY_TOOL: ReadonlyArray<readonly [RegExp, string]> = [
   [/^mcp__unframed__canvas_read$/, "Reading the canvas…"],
   [/^mcp__unframed__canvas_write$/, "Changing the canvas…"],
   [/^mcp__unframed__page_write$/, "Writing the page…"],
   [/^mcp__unframed__page_read$/, "Reading the page…"],
   [/^mcp__unframed__motion_write$/, "Writing the motion…"],
+  [/^mcp__unframed__page_edit$/, "Editing the page…"],
+  [/^mcp__unframed__motion_edit$/, "Editing the motion…"],
   [/^mcp__unframed__motion_read$/, "Reading the motion…"],
+  [/^mcp__unframed__component_write$/, "Writing the component…"],
+  [/^mcp__unframed__component_read$/, "Reading the component…"],
   [/^read$/i, "Reading a file…"],
   [/^write$/i, "Writing a file…"],
   [/^(edit|multiedit|notebookedit)$/i, "Editing a file…"],
@@ -332,11 +400,6 @@ const ACTIVITY_BY_TOOL: ReadonlyArray<readonly [RegExp, string]> = [
   [/toolsearch/i, "Looking for a tool…"],
 ];
 
-/**
- * What the activity line says while a turn runs: the label for the latest tool call of the
- * turn (kept after it returns, since the gap after a tool is where the model thinks), else
- * "Thinking…".
- */
 export const activityLabel = (activities: ReadonlyArray<ChatActivity>, turnId: string | null): string => {
   let latest: ChatActivity | undefined;
   for (const activity of activities) {

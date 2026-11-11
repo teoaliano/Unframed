@@ -1,12 +1,12 @@
 import { mkdir, readdir, readFile, stat, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { BRIDGE_TAG, dialsBridgeSource, RUNTIME_TAG } from "@unframed/domain";
+import { BRIDGE_TAG, dialsBridgeSource, RUNTIME_TAG, TOKENS_TAG } from "@unframed/domain";
 import { describe, expect, it } from "vitest";
 import { FIXTURES, scriptFolder, startAgentEngine, type AgentEngine } from "./agent.ts";
 import { geoMark, motionShape, roomRecords, roomShape, seed, toolResults } from "./agentCanvas.ts";
 import { imageShape, pageShape } from "./canvasRecords.ts";
 
-const LIBRARY = ["gsap.js", "hyperframes-player.js", "hyperframes-runtime.js", "hyperframes-viewer.html", "unframed-dials.js"];
+const LIBRARY = ["gsap.js", "hyperframes-player.js", "hyperframes-runtime.js", "hyperframes-viewer.html", "unframed-dials.js", "unframed-edit.js", "unframed-tokens.js"];
 
 const script = (turns: Array<{ text?: string; tools: Array<{ name: string; input: Record<string, unknown> }> }>) =>
   scriptFolder({ artifacts: { when: "^go", turns: turns.map((turn) => ({ text: turn.text ?? "Done.", tools: turn.tools })) } });
@@ -32,7 +32,7 @@ describe("page_write", () => {
     expect(created).toMatchObject({ x: 360, y: 120, parentId: "page:page", props: { w: 480, h: 320, title: "Landing", fileName: "" }, meta: { ref: expect.stringMatching(/^\d+$/) } });
     const file = created.props.file as string;
     expect(file).toMatch(/^\d+-landing\.html$/);
-    expect(await readFile(join(agent.folder, file), "utf8")).toBe(`<html><head><title>x</title>${BRIDGE_TAG}\n</head><body>Hi</body></html>`);
+    expect(await readFile(join(agent.folder, file), "utf8")).toBe(`<html><head>${TOKENS_TAG}\n<title>x</title>${BRIDGE_TAG}\n</head><body>Hi</body></html>`);
     const sidecar = JSON.parse(await readFile(join(agent.folder, file.replace(/\.html$/, ".json")), "utf8"));
     expect(sidecar).toEqual({
       source: "agent",
@@ -41,17 +41,26 @@ describe("page_write", () => {
       turn: 1,
       shapeId: null,
       title: "Landing",
-      bytes: Buffer.byteLength(`<html><head><title>x</title>${BRIDGE_TAG}\n</head><body>Hi</body></html>`),
+      bytes: Buffer.byteLength(`<html><head>${TOKENS_TAG}\n<title>x</title>${BRIDGE_TAG}\n</head><body>Hi</body></html>`),
       at: expect.stringMatching(/^\d{4}-\d\d-\d\dT/),
     });
-    // The engine writes the bridge from the domain module; its source text is the engine process's own.
     expect((await readFile(join(agent.folder, "unframed-dials.js"), "utf8")).split("\n")[0]).toBe(dialsBridgeSource().split("\n")[0]);
     const present = new Set(await readdir(agent.folder));
-    for (const name of LIBRARY.filter((name) => name !== "unframed-dials.js")) expect(present.has(name), name).toBe(false);
+    expect(present.has("unframed-tokens.js")).toBe(true);
+    expect(present.has("unframed-edit.js")).toBe(true);
+    for (const name of LIBRARY.filter((name) => !["unframed-dials.js", "unframed-tokens.js", "unframed-edit.js"].includes(name))) expect(present.has(name), name).toBe(false);
+  });
+
+  it("writes a page that already has the bridge tag and every id exactly as given", async () => {
+    const ready = `<!doctype html>${TOKENS_TAG}\n${BRIDGE_TAG}\n<h1 data-hf-id="hf-aaaa">Ready</h1>`;
+    const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "page_write", input: { title: "Ready", html: ready } }] }]) });
+    await run(agent);
+    const created = (await roomRecords(agent)).find((record) => record.type === "page");
+    expect(await readFile(join(agent.folder, created.props.file), "utf8")).toBe(ready);
   });
 
   it("puts a new page at (80, 80) with nothing selected", async () => {
-    const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "page_write", input: { html: "<p>x</p>" } }] }]) });
+    const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "page_write", input: { html: "<!doctype html><p>x</p>" } }] }]) });
     await run(agent);
     const created = (await roomRecords(agent)).find((record) => record.type === "page");
     expect(created).toMatchObject({ x: 80, y: 80, props: { title: "" } });
@@ -60,7 +69,7 @@ describe("page_write", () => {
 
   it("with shapeId writes a new file and points the shape at it, keeps the old file and title, and the turn's Revert points it back", async () => {
     const agent = await startAgentEngine({
-      script: await script([{ tools: [{ name: "page_write", input: { shapeId: "pg1", html: "<body>v2</body>" } }] }]),
+      script: await script([{ tools: [{ name: "page_write", input: { shapeId: "pg1", html: "<!doctype html><body>v2</body>" } }] }]),
     });
     await writeFile(join(agent.folder, "1-landing.html"), "<body>v1</body>");
     await seed(agent, [pageShape("pg1", "100", { file: "1-landing.html", title: "Landing" })]);
@@ -72,7 +81,7 @@ describe("page_write", () => {
     expect(shape.props.title).toBe("Landing");
     expect(write?.result).toMatchObject({ ok: true, shapeId: "pg1", file: shape.props.file, title: "Landing" });
     expect(await readFile(join(agent.folder, "1-landing.html"), "utf8")).toBe("<body>v1</body>");
-    expect(await readFile(join(agent.folder, shape.props.file), "utf8")).toBe(`<body>\n${BRIDGE_TAG}v2</body>`);
+    expect(await readFile(join(agent.folder, shape.props.file), "utf8")).toBe(`<!doctype html><body>\n${TOKENS_TAG}\n${BRIDGE_TAG}v2</body>`);
     expect(JSON.parse(await readFile(join(agent.folder, shape.props.file.replace(/\.html$/, ".json")), "utf8"))).toMatchObject({ shapeId: "pg1", title: "Landing" });
     expect(chat.turns[0]?.files).toEqual([{ shapeId: "shape:pg1", kind: "page", change: "updated", file: shape.props.file, previousFile: "1-landing.html" }]);
 
@@ -86,8 +95,8 @@ describe("page_write", () => {
       script: await script([
         {
           tools: [
-            { name: "page_write", input: { shapeId: "pg1", html: "<p>a</p>", title: "  Landing  " } },
-            { name: "page_write", input: { shapeId: "pg2", html: "<p>b</p>", title: "x".repeat(130) } },
+            { name: "page_write", input: { shapeId: "pg1", html: "<!doctype html><p>a</p>", title: "  Landing  " } },
+            { name: "page_write", input: { shapeId: "pg2", html: "<!doctype html><p>b</p>", title: "x".repeat(130) } },
           ],
         },
       ]),
@@ -103,8 +112,8 @@ describe("page_write", () => {
       script: await script([
         {
           tools: [
-            { name: "page_write", input: { shapeId: "pg1", html: "<p>a</p>", title: "Pricing" } },
-            { name: "motion_write", input: { shapeId: "m1", html: "<div id=root></div>", title: "Outro" } },
+            { name: "page_write", input: { shapeId: "pg1", html: "<!doctype html><p>a</p>", title: "Pricing" } },
+            { name: "motion_write", input: { shapeId: "m1", html: "<!doctype html><div id=root></div>", title: "Outro" } },
           ],
         },
       ]),
@@ -119,9 +128,8 @@ describe("page_write", () => {
   });
 
   it("refuses empty html, a page over 2 MiB once tagged, an unknown shape and the wrong kind, and writes nothing", async () => {
-    // The bridge tag and its newline take the page from exactly the limit to over it.
-    const nearly = `<p>${"a".repeat(2_097_152 - 7)}</p>`;
-    const tagged = Buffer.byteLength(`${BRIDGE_TAG}\n${nearly}`);
+    const nearly = `<!doctype html><p>${"a".repeat(2_097_152 - 22)}</p>`;
+    const tagged = Buffer.byteLength(`${TOKENS_TAG}\n${BRIDGE_TAG}\n<!doctype html><p data-hf-id="hf-aaaa">${"a".repeat(2_097_152 - 22)}</p>`);
     const agent = await startAgentEngine({
       script: await script([
         {
@@ -157,8 +165,8 @@ describe("page_write", () => {
       script: await script([
         {
           tools: [
-            { name: "page_write", input: { title: "Landing", html: "<p>new</p>" } },
-            { name: "page_write", input: { shapeId: "pg1", html: "<p>again</p>" } },
+            { name: "page_write", input: { title: "Landing", html: "<!doctype html><p>new</p>" } },
+            { name: "page_write", input: { shapeId: "pg1", html: "<!doctype html><p>again</p>" } },
           ],
         },
       ]),
@@ -183,9 +191,8 @@ describe("page_write", () => {
       ["Created page · Landing", { artifact: { shapeId: created, file: first!.result.file, title: "Landing", kind: "page", created: true } }, chat.turns[0]!.turnId],
       ["Updated page", { artifact: { shapeId: "pg1", file: second!.result.file, title: "", kind: "page", created: false } }, chat.turns[0]!.turnId],
     ]);
-    // The preview URL answers on the preview origin.
     const served = await agent.engine.request(new URL(first!.result.previewUrl).pathname, { port: agent.engine.previewPort, headers: { host: `127.0.0.1:${agent.engine.previewPort}` } });
-    expect(served.text).toContain("<p>new</p>");
+    expect(served.text).toMatch(/<p data-hf-id="hf-[0-9a-z]{4}">new<\/p>/);
   });
 });
 
@@ -239,29 +246,30 @@ describe("motion_write", () => {
     expect(toolResults(chat, "motion_write")[0]?.status).toBe("completed");
     const shape = await roomShape(agent, "m1");
     const html = await readFile(join(agent.folder, shape.props.file), "utf8");
-    expect(html.startsWith(`<html><head><style>`)).toBe(true);
+    expect(html.startsWith(`<html><head>${TOKENS_TAG}\n<style>`)).toBe(true);
     expect(html).toContain(`</style>${RUNTIME_TAG}\n${BRIDGE_TAG}\n</head>`);
     for (const name of LIBRARY) expect((await stat(join(agent.folder, name))).size, name).toBeGreaterThan(0);
     const viewer = await readFile(join(agent.folder, "hyperframes-viewer.html"), "utf8");
     expect(viewer).toContain("<title>motion</title>");
     expect(viewer).toContain('<script src="hyperframes-player.js"></script>');
-    expect(viewer).toContain('<hyperframes-player runtime-src="hyperframes-runtime.js" controls muted autoplay></hyperframes-player>');
+    expect(viewer).toContain('document.createElement("hyperframes-player")');
+    expect(viewer).toContain('player.setAttribute("runtime-src", "hyperframes-runtime.js")');
     expect(JSON.parse(await readFile(join(agent.folder, shape.props.file.replace(/\.html$/, ".json")), "utf8"))).toMatchObject({ source: "agent", kind: "motion", shapeId: "m1", title: "Intro" });
   });
 
   it("creates a motion at the agent size of 480 by 300", async () => {
-    const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "motion_write", input: { title: "Sequence", html: "<div id=root></div>" } }] }]) });
+    const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "motion_write", input: { title: "Sequence", html: "<!doctype html><div id=root></div>" } }] }]) });
     await run(agent);
     const created = (await roomRecords(agent)).find((record) => record.type === "motion");
     expect(created).toMatchObject({ x: 80, y: 80, props: { w: 480, h: 300, title: "Sequence", fileName: "" } });
-    expect(await readFile(join(agent.folder, created.props.file), "utf8")).toBe(`${RUNTIME_TAG}\n${BRIDGE_TAG}\n<div id=root></div>`);
+    expect(await readFile(join(agent.folder, created.props.file), "utf8")).toMatch(new RegExp(`^${[TOKENS_TAG, RUNTIME_TAG, BRIDGE_TAG].join("\n").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\n<!doctype html><div data-hf-id="hf-[0-9a-z]{4}" id=root></div>$`));
   });
 
   it("rewrites a library file whose size differs from its source and leaves the unchanged ones alone", async () => {
     const agent = await startAgentEngine({
       script: await script([
-        { tools: [{ name: "motion_write", input: { html: "<div id=root></div>" } }] },
-        { tools: [{ name: "motion_write", input: { html: "<div id=root>2</div>" } }] },
+        { tools: [{ name: "motion_write", input: { html: "<!doctype html><div id=root></div>" } }] },
+        { tools: [{ name: "motion_write", input: { html: "<!doctype html><div id=root>2</div>" } }] },
       ]),
     });
     const chatId = await agent.createChat();
@@ -283,7 +291,7 @@ describe("motion_write", () => {
   });
 
   it("refuses when the library cannot be written, and writes no composition", async () => {
-    const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "motion_write", input: { html: "<div id=root></div>" } }] }]) });
+    const agent = await startAgentEngine({ script: await script([{ tools: [{ name: "motion_write", input: { html: "<!doctype html><div id=root></div>" } }] }]) });
     await mkdir(join(agent.folder, "hyperframes-player.js"));
     const { chat } = await run(agent);
     const [write] = toolResults(chat, "motion_write");
@@ -299,8 +307,8 @@ describe("artifact diffs through the artifact tools", () => {
       script: await script([
         {
           tools: [
-            { name: "page_write", input: { shapeId: "pg1", html: "<h1>Landing</h1>\n<p>Two, changed</p>\n" } },
-            { name: "motion_write", input: { title: "Sequence", html: "<div id=root>seq</div>\n" } },
+            { name: "page_write", input: { shapeId: "pg1", html: "<!doctype html>\n<h1>Landing</h1>\n<p>Two, changed</p>\n" } },
+            { name: "motion_write", input: { title: "Sequence", html: "<!doctype html>\n<div id=root>seq</div>\n" } },
           ],
         },
       ]),
@@ -316,10 +324,10 @@ describe("artifact diffs through the artifact tools", () => {
       [`shape:${motion!.result.shapeId}`, "motion", null, motion!.result.file],
     ]);
     const [pageDiff, motionDiff] = diff.files;
-    expect(pageDiff!.patch).toContain("-<p>Two</p>");
-    expect(pageDiff!.patch).toContain("+<p>Two, changed</p>");
+    expect(pageDiff!.patch).toContain('-<p>Two</p>');
+    expect(pageDiff!.patch).toMatch(/\+<p data-hf-id="hf-[0-9a-z]{4}">Two, changed<\/p>/);
     expect(motionDiff!.deletions).toBe(0);
     expect(motionDiff!.additions).toBeGreaterThan(0);
-    expect(motionDiff!.patch).toContain("+<div id=root>seq</div>");
+    expect(motionDiff!.patch).toMatch(/\+<div data-hf-id="hf-[0-9a-z]{4}" id=root>seq<\/div>/);
   });
 });

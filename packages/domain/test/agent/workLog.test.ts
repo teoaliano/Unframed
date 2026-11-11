@@ -14,7 +14,6 @@ const activity = (kind: string, payload: Record<string, unknown>, fields: Partia
   ...fields,
 });
 
-/** One call's started and completed activities, as the runtime ingests them. */
 const call = (itemId: string, toolName: string, input: Record<string, unknown>, end: { status?: string; itemType?: string; result?: unknown } = {}) => {
   const itemType = end.itemType ?? (toolName.startsWith("mcp__") ? "mcp_tool_call" : toolName === "Bash" ? "command_execution" : toolName === "Edit" ? "file_change" : "dynamic_tool_call");
   return [
@@ -36,6 +35,20 @@ describe("the work log", () => {
     expect(label({ status: "failed" })).toBe("Failed git");
     expect(label({ status: "declined" })).toBe("Declined git");
     expect((workLog(call("i", "Bash", { command: "ls" }, { status: "running" }), { settled: true })[0] as WorkRow).state).toBe("stopped");
+  });
+
+  it("labels an outside agent's file_add by the file it added, and its refusal", () => {
+    const added = workLog(call("f", "mcp__unframed__file_add", { path: "/work/repo/fox.png" }, { result: { file: "1-fox.png", fileName: "fox.png" } }));
+    expect((added[0] as WorkRow).label).toBe("Added fox.png to the project");
+    const refused = workLog(call("g", "mcp__unframed__file_add", { path: "/etc/passwd" }, { status: "failed", result: { error: "outside" } }));
+    expect((refused[0] as WorkRow).label).toBe("Couldn't add a file to the project");
+  });
+
+  it("labels a context compaction while it runs and once it is done", () => {
+    const label = (end: Parameters<typeof call>[3]) => (workLog(call("k", "Context compacted", {}, { itemType: "context_compaction", ...end }))[0] as WorkRow).label;
+    expect(label({ status: "running", itemType: "context_compaction" })).toBe("Compacting the context");
+    expect(label({ itemType: "context_compaction" })).toBe("Compacted the context");
+    expect(label({ status: "failed", itemType: "context_compaction" })).toBe("Couldn't compact the context");
   });
 
   it("labels an edit by its path, or its first path and how many more", () => {
@@ -66,6 +79,109 @@ describe("the work log", () => {
       "Looked at Landing in a browser",
     ]);
     expect((labels[0] as WorkGroup).summary).toBe("Used 1 tool, changed the canvas 4 times, read 2 files, and used the browser 1 time");
+  });
+
+  it("labels the edit tools by the title their result gives, and names them in the activity line", () => {
+    const labels = workLog([
+      ...call("1", "mcp__unframed__page_edit", { shapeId: "p1", edits: [] }, { result: { ok: true, title: "Landing" } }),
+      ...call("2", "mcp__unframed__motion_edit", { shapeId: "m1", edits: [] }, { result: { ok: true, title: "Intro" } }),
+      ...call("3", "mcp__unframed__page_edit", { shapeId: "p2", edits: [] }, { result: {} }),
+    ]);
+    expect((labels[0] as WorkGroup).rows.map((row) => row.label)).toEqual(["Edited page Landing", "Edited motion Intro", "Edited page p2"]);
+    expect((labels[0] as WorkGroup).summary).toBe("Changed the canvas 3 times");
+    expect(activityLabel(call("4", "mcp__unframed__page_edit", {}, { status: "running" }), "t1")).toBe("Editing the page…");
+    expect(activityLabel(call("5", "mcp__unframed__motion_edit", {}, { status: "running" }), "t1")).toBe("Editing the motion…");
+  });
+
+  it("labels the component tools by their title and names them in the activity line", () => {
+    const labels = workLog([
+      ...call("1", "mcp__unframed__component_write", { title: "Button" }),
+      ...call("2", "mcp__unframed__component_read", { shapeId: "c1" }, { result: { title: "Button" } }),
+      ...call("3", "mcp__unframed__component_read", { shapeId: "c2" }, { result: {} }),
+    ]);
+    expect((labels[0] as WorkGroup).rows.map((row) => row.label)).toEqual(["Wrote component Button", "Read component Button", "Read component c2"]);
+    expect(activityLabel(call("4", "mcp__unframed__component_write", {}, { status: "running" }), "t1")).toBe("Writing the component…");
+    expect(activityLabel(call("5", "mcp__unframed__component_read", {}, { status: "running" }), "t1")).toBe("Reading the component…");
+  });
+
+  it("says what a refused Unframed tool call tried, by the shape's title, and opens to the error the agent received", () => {
+    const refused = (itemId: string, toolName: string, input: Record<string, unknown>) => call(itemId, toolName, input, { status: "failed", result: { error: `${toolName} was refused` } });
+    const titles: Record<string, string> = { pg1: "Landing", mo1: "Intro", co1: "Button" };
+    const entries = workLog(
+      [
+        ...refused("1", "mcp__unframed__page_write", { shapeId: "pg1", html: "" }),
+        ...refused("2", "mcp__unframed__page_read", { shapeId: "pg1" }),
+        ...refused("3", "mcp__unframed__motion_write", { title: "Outro" }),
+        ...refused("4", "mcp__unframed__motion_write", { shapeId: "mo1" }),
+        ...refused("5", "mcp__unframed__motion_read", { shapeId: "gone" }),
+        ...refused("6", "mcp__unframed__component_write", { shapeId: "co1" }),
+        ...refused("7", "mcp__unframed__component_read", { shapeId: "co1" }),
+        ...refused("8", "mcp__unframed__canvas_read", {}),
+        ...refused("9", "mcp__unframed__canvas_write", { ops: [{ type: "move" }] }),
+        ...refused("10", "mcp__unframed__canvas_select", { shapeIds: ["a", "b"] }),
+        ...refused("11", "mcp__unframed__canvas_select", { shapeIds: [] }),
+        ...refused("12", "mcp__unframed__generate", { medium: "video" }),
+        ...refused("13", "mcp__unframed__preview_open", { shapeId: "pg1" }),
+        ...refused("14", "mcp__unframed__kit_write", {}),
+        ...refused("15", "mcp__unframed__page_edit", { shapeId: "pg1", edits: [{ old_string: "a", new_string: "b" }] }),
+        ...refused("16", "mcp__unframed__motion_edit", { shapeId: "mo1", edits: [{ old_string: "a", new_string: "b" }] }),
+      ],
+      { titleOf: (id) => titles[id] },
+    );
+    const rows = (entries[0] as WorkGroup).rows;
+    expect(rows.map((row) => row.label)).toEqual([
+      "Couldn't write page Landing",
+      "Couldn't read page Landing",
+      "Couldn't write motion Outro",
+      "Couldn't write motion Intro",
+      "Couldn't read motion gone",
+      "Couldn't write component Button",
+      "Couldn't read component Button",
+      "Couldn't read the canvas",
+      "Couldn't change the canvas",
+      "Couldn't select 2 shapes",
+      "Couldn't clear the selection",
+      "Couldn't start a video generation",
+      "Couldn't look at Landing in a browser",
+      "Couldn't run kit_write",
+      "Couldn't edit page Landing",
+      "Couldn't edit motion Intro",
+    ]);
+    expect(rows.every((row) => row.state === "failed")).toBe(true);
+    expect(rows[0]!.detail).toBe("mcp__unframed__page_write was refused");
+    expect(rows[12]!.detail).toBe("mcp__unframed__preview_open was refused");
+    // A refused call counts as what it tried, so its group's summary reads the same as for a call that went through.
+    expect(rows.slice(0, 2).map((row) => row.action)).toEqual(["canvas", "read"]);
+    expect(rows.slice(14).map((row) => row.action)).toEqual(["canvas", "canvas"]);
+  });
+
+  it("names a shape by its title when the call succeeded too, and reads a result the provider sent as text", () => {
+    const [row] = workLog(call("1", "mcp__unframed__page_write", { shapeId: "pg1" }), { titleOf: (id) => (id === "pg1" ? "Landing" : undefined) }) as WorkRow[];
+    expect(row!.label).toBe("Wrote page Landing");
+    // Claude hands an MCP result over as its text parts: notes first, then the JSON.
+    const [claude] = workLog(call("2", "mcp__unframed__page_write", { shapeId: "pg9" }, { result: ["Note: the canvas changed.", '{"shapeId":"pg9","title":"Pricing"}'] })) as WorkRow[];
+    expect(claude!.label).toBe("Wrote page Pricing");
+    const [refused] = workLog(call("3", "mcp__unframed__page_write", { shapeId: "pg9" }, { status: "failed", result: ['{"error":"html must be a non-empty string"}'] })) as WorkRow[];
+    expect(refused).toMatchObject({ label: "Couldn't write page pg9", detail: "html must be a non-empty string" });
+  });
+
+  it("logs an outside chat's refused call, which ends as tool.failed", () => {
+    const entries = workLog(
+      [
+        activity("tool.started", { itemId: "o1", itemType: "mcp_tool_call", status: "inProgress", title: "mcp__unframed__page_write", data: { toolName: "mcp__unframed__page_write", input: { shapeId: "pg1" } } }),
+        activity("tool.failed", { itemId: "o1", itemType: "mcp_tool_call", status: "failed", title: "mcp__unframed__page_write", data: { toolName: "mcp__unframed__page_write", input: { shapeId: "pg1" }, result: { error: "No such page." } } }),
+      ],
+      { settled: true },
+    );
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ label: "Couldn't write page pg1", state: "failed", detail: "No such page." });
+  });
+
+  it("opens any failed call to the error text it returned", () => {
+    const [row] = workLog(call("1", "WebFetch", { url: "https://example.com" }, { status: "failed", result: "Request failed with status 404" })) as WorkRow[];
+    expect(row).toMatchObject({ state: "failed", detail: "Request failed with status 404" });
+    const [parts] = workLog(call("2", "Read", { file_path: "a.md" }, { status: "failed", result: ["File does not exist.", "Check the path."] })) as WorkRow[];
+    expect(parts).toMatchObject({ state: "failed", detail: "File does not exist.\nCheck the path." });
   });
 
   it("folds consecutive calls into a group whose summary counts what they did", () => {

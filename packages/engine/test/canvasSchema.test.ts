@@ -1,10 +1,9 @@
 import type { TLRecord } from "@tldraw/tlschema";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { groupShape, pageShape, promptShape, videoShape } from "./canvasRecords.ts";
+import { componentShape, groupShape, pageShape, promptShape, videoShape } from "./canvasRecords.ts";
 import { startEngine, type TestEngine } from "./harness.ts";
 import { connectTab } from "./syncClient.ts";
 
-/** Pushes one record as a tab and reports whether the room kept it. */
 const pushOne = async (engine: TestEngine, record: TLRecord) => {
   const tab = await connectTab(engine.port, "board");
   await tab.loaded;
@@ -50,6 +49,40 @@ describe("the canvas schema in the room", () => {
     ];
     for (const record of records) expect(await pushOne(engine, record)).toBe("committed");
     expect(await stored(engine, "shape:m")).toMatchObject({ type: "motion", props: { dials: { speed: 2 } } });
+  });
+
+  it("keeps a component shape whose tag follows the tag rule, and refuses one that breaks it", async () => {
+    expect(await pushOne(engine, componentShape("c-ok", "uf-price-card", { file: "1-price-card.html", title: "Price card" }))).toBe("committed");
+    expect(await stored(engine, "shape:c-ok")).toMatchObject({ type: "component", props: { tag: "uf-price-card" } });
+    for (const file of ['x.html" onload="alert(1)" x="', "../secret.html", "1-price-card.js", ""]) {
+      const expected = file === "" ? "committed" : { closed: "INVALID_RECORD" };
+      expect(await pushOne(engine, componentShape(`c-file-${file.length}`, "uf-file-check", { file, title: "File" }))).toEqual(expected);
+    }
+    for (const tag of ["button", "uf-Button", "uf-", "uf-a--b", `uf-${"a".repeat(50)}`]) {
+      const record = componentShape(`c-${tag.length}`, tag);
+      expect(await pushOne(engine, record)).toEqual({ closed: "INVALID_RECORD" });
+      expect(await stored(engine, record.id)).toBeUndefined();
+    }
+  });
+
+  it("keeps a page with its locked element ids and refuses locks that are not a list of strings", async () => {
+    const locked = pageShape("locked", "107", { file: "1-x.html", lockedElements: ["hf-aaaa", "hf-bbbb"] });
+    expect(await pushOne(engine, locked)).toBe("committed");
+    expect(await stored(engine, "shape:locked")).toMatchObject({ props: { lockedElements: ["hf-aaaa", "hf-bbbb"] } });
+    const notList = pageShape("locked-bad", "108", { lockedElements: "hf-aaaa" });
+    expect(await pushOne(engine, notList)).toEqual({ closed: "INVALID_RECORD" });
+    expect(await stored(engine, "shape:locked-bad")).toBeUndefined();
+  });
+
+  it("keeps a page's scale on the canvas, reads a page without one as unscaled, and refuses a scale outside 10 % to 400 %", async () => {
+    expect(await pushOne(engine, pageShape("scaled", "109", { file: "1-x.html", scale: 0.5 }))).toBe("committed");
+    expect(await stored(engine, "shape:scaled")).toMatchObject({ props: { scale: 0.5 } });
+    expect(await pushOne(engine, pageShape("unscaled", "110", { file: "1-x.html" }))).toBe("committed");
+    expect((await stored(engine, "shape:unscaled"))?.props).not.toHaveProperty("scale");
+    for (const [id, scale] of [["tiny", 0.01], ["huge", 8], ["word", "half"]] as const) {
+      expect(await pushOne(engine, pageShape(id, "111", { scale }))).toEqual({ closed: "INVALID_RECORD" });
+      expect(await stored(engine, `shape:${id}`)).toBeUndefined();
+    }
   });
 
   it("refuses a prompt with no ref, a page whose file is a path, a meta field outside meta.unframed and an embed", async () => {

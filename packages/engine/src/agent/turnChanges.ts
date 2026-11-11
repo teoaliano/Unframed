@@ -14,12 +14,11 @@ export interface TurnChangeRow {
 }
 
 const fileOf = (record: TLRecord | null | undefined): string | null => {
-  if (!record || record.typeName !== "shape" || (record.type !== "page" && record.type !== "motion")) return null;
+  if (!record || record.typeName !== "shape" || (record.type !== "page" && record.type !== "motion" && record.type !== "component")) return null;
   const file = (record.props as { file?: unknown }).file;
   return typeof file === "string" && file !== "" ? file : null;
 };
 
-/** JSON with its object keys sorted, so a record read back from the room compares equal to the one stored. */
 const stable = (value: unknown): string =>
   JSON.stringify(value, (_key, item: unknown) =>
     typeof item === "object" && item !== null && !Array.isArray(item)
@@ -27,13 +26,8 @@ const stable = (value: unknown): string =>
       : item,
   );
 
-export const sameRecord = (a: TLRecord | null | undefined, b: TLRecord | null | undefined): boolean => stable(a ?? null) === stable(b ?? null);
+const sameRecord = (a: TLRecord | null | undefined, b: TLRecord | null | undefined): boolean => stable(a ?? null) === stable(b ?? null);
 
-/**
- * Turn changes (spec 07): per turn, every shape its tool calls touched, with the record
- * before the turn first touched it and after it last did. Several writes in one turn to
- * one shape collapse into one row. Only the engine writes `turn_changes`.
- */
 export class TurnChanges {
   private readonly db: DatabaseSync;
 
@@ -64,7 +58,6 @@ export class TurnChanges {
     }
   }
 
-  /** Forgets the turns past `keep`, which Edit from here dropped: their numbers are used again. */
   dropAfter(chatId: string, keep: number): void {
     this.db.prepare("DELETE FROM turn_changes WHERE chat_id = ? AND turn > ?").run(chatId, keep);
   }
@@ -84,9 +77,8 @@ export class TurnChanges {
       }));
   }
 
-  /** The recap's rows for a turn: each shape it touched, how, and a page or motion's files. */
   files(chatId: string, turn: number): TurnFile[] {
-    return this.rows(chatId, turn).map((row) => {
+    return this.rows(chatId, turn).filter((row) => !row.shapeId.startsWith("kit:")).map((row) => {
       const record = row.after ?? row.before;
       const change = row.before === null ? "created" : row.after === null ? "deleted" : "updated";
       return {
@@ -100,18 +92,12 @@ export class TurnChanges {
   }
 }
 
-export interface RevertPlan {
+interface RevertPlan {
   readonly change: CanvasChange;
   readonly restored: string[];
   readonly skipped: Array<{ id: string; by: SkippedBy }>;
 }
 
-/**
- * Revert's skip rule: a shape whose current record still equals what the turn left is put
- * back as it was before the turn (removed when the turn created it, recreated when it
- * deleted it); any other shape is skipped and named with who changed it since, read from
- * the change log.
- */
 export const planRevert = (
   chatId: string,
   rows: ReadonlyArray<TurnChangeRow>,
@@ -138,11 +124,12 @@ export const planRevert = (
   return { change: { put, remove }, restored, skipped };
 };
 
-const changedBy = (chatId: string, row: TurnChangeRow, log: ReadonlyArray<ChangeLogRow>): SkippedBy => {
+export const changedBy = (chatId: string, row: TurnChangeRow, log: ReadonlyArray<ChangeLogRow>): SkippedBy => {
   let by: SkippedBy = "person";
   for (const entry of log) {
     if (entry.clock <= row.lastClock) continue;
-    if (!entry.put.includes(row.shapeId) && !entry.removed.includes(row.shapeId)) continue;
+    const id = row.shapeId.startsWith("kit:") ? "document:document" : row.shapeId;
+    if (!entry.put.includes(id) && !entry.removed.includes(id)) continue;
     const author = classifyOrigin(entry.origin);
     if (author.kind === "system") continue;
     by = author.kind === "chat" ? (author.chatId === chatId ? "a later turn" : "another chat") : "person";

@@ -9,6 +9,7 @@ import "./canvas.css";
 import "../generate/imageMedium.ts";
 import "../generate/videoMedium.ts";
 import "../generate/textMedium.ts";
+import "../generate/audioMedium.tsx";
 import { DotGrid } from "../chrome/DotGrid.tsx";
 import { installLabelActivity, installLabelLevel } from "../chrome/labelLevel.ts";
 import { OVERLAY_UTILS } from "../chrome/selectionLook.ts";
@@ -19,7 +20,7 @@ import { RoleBadges } from "../generate/overlays.tsx";
 import { installRenderPolls } from "../generate/renderPolls.ts";
 import { watchRunReports } from "../generate/runReports.ts";
 import { LicenseKeyContext } from "../license.ts";
-import type { ProjectActivation } from "../project/activation.ts";
+import { SETTLE_BEFORE_SWITCH_MS, type ProjectActivation } from "../project/activation.ts";
 import { showError } from "../toasts.tsx";
 import { createAssetStore, Previews } from "./assetStore.ts";
 import { clipboardOptions, installExternalContent, type ContentContext } from "./externalContent.ts";
@@ -29,20 +30,27 @@ import { overrides } from "./overrides.ts";
 import { installRefMinting, RefMinter } from "./refs.ts";
 import { installRename } from "./rename.ts";
 import { watchRunProgress } from "../generate/recipeRuns.ts";
-import { MotionShapeUtil, PageShapeUtil } from "./shapes/artifact.tsx";
+import { ComponentShapeUtil, MotionShapeUtil, PageShapeUtil } from "./shapes/artifact.tsx";
+import { AudioShapeUtil } from "./shapes/audio.tsx";
+import { NodeShapeUtil } from "../nodes/NodeShapeUtil.tsx";
+import { WireShapeUtil } from "../nodes/WireShapeUtil.tsx";
+import { installNodeSideEffects } from "../nodes/sideEffects.ts";
+import { installWireCopies } from "../nodes/copies.ts";
+import { watchMotionRenders, watchNodeCatalogues } from "../nodes/facts.ts";
+import { bindNodeCatalogues } from "../nodes/operations.ts";
+import { watchChainReports } from "../nodes/reports.ts";
 import { GroupShapeUtil } from "./shapes/group.tsx";
 import { ImageMediaUtil, VideoMediaUtil } from "./shapes/media.tsx";
 import { PromptShapeUtil } from "./shapes/prompt.tsx";
+import { DESIGNED_SHAPE_UTILS } from "./shapes/designed.tsx";
+import { installNextShapeDesign } from "./nextShapeDesign.ts";
 import { SyncSocket } from "./syncSocket.ts";
 import { recalledCamera, rememberCamera } from "../project/tabMemory.ts";
 import { TLDRAW_ASSET_URLS, TLDRAW_CHROME, TLDRAW_OPTIONS } from "./tldrawChrome.tsx";
 
-/** How long a project switch waits for the room to acknowledge this tab's pending edits. */
-const SETTLE_BEFORE_SWITCH_MS = 2000;
 
-const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil];
+const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, AudioShapeUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil, ComponentShapeUtil, NodeShapeUtil, WireShapeUtil, ...DESIGNED_SHAPE_UTILS];
 
-/** Unframed's tldraw chrome, and the canvas's own parts: the dot grid behind, badges and overlays on top, the context menu. */
 const COMPONENTS: TLComponents = {
   ...TLDRAW_CHROME,
   InFrontOfTheCanvas: InFront,
@@ -56,7 +64,6 @@ const syncUrl = (project: string, sessionId: string): string => {
   return `${scheme}://${window.location.host}/sync/${encodeURIComponent(project)}?sessionId=${encodeURIComponent(sessionId)}`;
 };
 
-/** Opening a project fits the view to its shapes, never closer than 100 %. */
 const fitToShapes = (editor: Editor) => {
   editor.zoomToFit({ animation: { duration: 0 } });
   if (editor.getZoomLevel() > 1) {
@@ -70,11 +77,6 @@ const REFUSALS: Record<string, string> = {
   "unknown project": "There is no project with that name.",
 };
 
-/**
- * Mounts tldraw for the active project: the sync client, the connection monitor's view of
- * the sync socket, the camera limits and the asset store. Callers never see tldraw's
- * configuration.
- */
 export const CanvasHost = ({ project, activation }: { readonly project: string; readonly activation: ProjectActivation }) => {
   const licenseKey = useContext(LicenseKeyContext);
   const engine = useEngine();
@@ -99,6 +101,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
   const store = useSync({ connect, assets, schema: canvasSchema() });
 
   useEffect(() => watchRunReports(engine, project), [engine, project]);
+  useEffect(() => watchChainReports(engine, project), [engine, project]);
 
   useEffect(() => {
     activation.setBeforeSwitch(() => socket.current?.settled(SETTLE_BEFORE_SWITCH_MS) ?? Promise.resolve());
@@ -110,7 +113,6 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
   }, [activation, previews]);
 
   const onMount = useCallback((editor: Editor) => {
-    // tldraw otherwise follows the browser's language, and its menu rows would sit beside English ones.
     editor.user.updateUserPreferences({ locale: "en" });
     const minter = new RefMinter(editor);
     const stopMinting = installRefMinting(editor, minter);
@@ -121,10 +123,15 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     const stopRename = installRename(editor);
     const stopRunProgress = watchRunProgress(editor, engine, project);
     const stopSelection = installSelectionReporter(editor, engine, project);
+    const stopNextShapeDesign = installNextShapeDesign(editor);
+    const stopNodes = installNodeSideEffects(editor);
+    const stopWireCopies = installWireCopies(editor);
+    const stopRenders = watchMotionRenders(editor, engine, project);
+    bindNodeCatalogues(editor);
+    const stopCatalogues = watchNodeCatalogues(editor, engine);
     const stopLongPress = installLongPressMenu(editor);
     content.current = { project, engine, minter };
     installExternalContent(editor, content.current);
-    // A tab that comes back to the front keeps the view it had (spec 17); a first open fits.
     const camera = recalledCamera(project);
     if (camera) editor.setCamera(camera, { animation: { duration: 0 } });
     else fitToShapes(editor);
@@ -138,6 +145,11 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
       stopRename();
       stopRunProgress();
       stopSelection();
+      stopNextShapeDesign();
+      stopNodes();
+      stopWireCopies();
+      stopRenders();
+      stopCatalogues();
       stopLongPress();
       content.current = undefined;
     };

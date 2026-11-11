@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { BRIDGE_TAG, RUNTIME_TAG } from "@unframed/domain";
+import { BRIDGE_TAG, RUNTIME_TAG, TOKENS_TAG } from "@unframed/domain";
 import { describe, expect, it } from "vitest";
 import { renderConfigFor } from "../src/artifacts/renderer.ts";
 import { motionShape } from "./agentCanvas.ts";
@@ -9,7 +9,7 @@ import { makeTempDir, startEngine, type TestEngine } from "./harness.ts";
 import type { TestRpcClient } from "./rpcClient.ts";
 
 const COMPOSITION = '<html><body><div id="root" data-composition-id="main" data-start="0" data-duration="2" data-width="640" data-height="360"></div></body></html>';
-const LIBRARY = ["gsap.js", "hyperframes-player.js", "hyperframes-runtime.js", "hyperframes-viewer.html", "unframed-dials.js"];
+const LIBRARY = ["gsap.js", "hyperframes-player.js", "hyperframes-runtime.js", "hyperframes-viewer.html", "unframed-dials.js", "unframed-edit.js", "unframed-tokens.js"];
 
 interface Rendering {
   readonly engine: TestEngine;
@@ -33,7 +33,6 @@ const startRendering = async (renderer: "ok" | "fail" | "no-chrome" = "ok"): Pro
 
 const room = async (rpc: TestRpcClient): Promise<any[]> => (await rpc.call("testCanvas.read", { project: "board" })).records as any[];
 
-/** Polls a render until it settles, answering every status it passed through. */
 const follow = async (rpc: TestRpcClient, id: string) => {
   const seen: any[] = [];
   for (let i = 0; i < 400; i++) {
@@ -53,7 +52,7 @@ describe("motion.upload", () => {
     const saved = await rpc.call("motion.upload", { project: "board", fileName: "../elsewhere/My Intro.html", html: "<head></head><div id=root></div>" });
     expect(saved).toEqual({ file: expect.stringMatching(/^\d+-my-intro\.html$/), fileName: "My Intro.html", bytes: expect.any(Number), mime: "text/html" });
     const html = await readFile(join(folder, saved.file), "utf8");
-    expect(html).toBe(`<head>${RUNTIME_TAG}\n${BRIDGE_TAG}\n</head><div id=root></div>`);
+    expect(html).toBe(`<head>${TOKENS_TAG}\n${RUNTIME_TAG}\n${BRIDGE_TAG}\n</head><div data-hf-id="hf-aph5" id=root></div>`);
     expect(saved.bytes).toBe(Buffer.byteLength(html));
     expect(JSON.parse(await readFile(join(folder, saved.file.replace(/\.html$/, ".json")), "utf8"))).toEqual({
       source: "upload",
@@ -67,6 +66,14 @@ describe("motion.upload", () => {
     expect(unnamed.fileName).toBe("motion.html");
     expect(unnamed.file).toMatch(/^\d+-motion\.html$/);
   });
+
+  const LIMIT = 20 * 1_048_576;
+  const atLimit = () => "<div id=root>" + "a".repeat(LIMIT - "<div id=root>".length - "</div>".length) + "</div>";
+
+  it("refuses a body one byte over 20 MB", async () => {
+    const { rpc } = await startRendering();
+    await expect(rpc.call("motion.upload", { project: "board", fileName: "x.html", html: atLimit() + "a" })).rejects.toMatchObject({ code: "bad_request" });
+  }, 120_000);
 
   it("refuses an empty body and one over 20 MB", async () => {
     const { rpc, folder } = await startRendering();
@@ -157,6 +164,21 @@ describe("motion.renderStart and motion.renderStatus", () => {
     }
   });
 
+  it("hands a kit mode to the producer as unframedMode, and records the mode and the kit in the sidecar", async () => {
+    const { rpc, folder } = await startRendering();
+    const kit = { format: 1, name: "Brand", modes: ["light", "dark"], tokens: [{ path: "color/brand/primary", type: "color", values: { light: "#1a73e8", dark: "#8ab4f8" } }] };
+    await rpc.call("testCanvas.apply", { project: "board", change: { put: [{ id: "document:document", typeName: "document", gridSize: 10, name: "", meta: { unframed: { kit } } }], remove: [] }, origin: { kind: "server", id: "kit:r1" } });
+    const dark = await rpc.call("motion.renderStart", { project: "board", file: "1-intro.html", title: "Intro", shapeId: "shape:m1", mode: "dark" });
+    const done = (await follow(rpc, dark.id)).at(-1);
+    expect(done.message).toBe('variables: {"unframedMode":"dark"}');
+    expect(JSON.parse(await readFile(join(folder, done.output.replace(/\.mp4$/, ".json")), "utf8"))).toMatchObject({ mode: "dark", kit: { name: "Brand", stamp: expect.stringMatching(/^[0-9a-f]{8}$/) } });
+
+    const defaultMode = await rpc.call("motion.renderStart", { project: "board", file: "1-intro.html", shapeId: "shape:m1", mode: "light" });
+    const settled = (await follow(rpc, defaultMode.id)).at(-1);
+    expect(settled.message).toBe("variables: null");
+    expect(JSON.parse(await readFile(join(folder, settled.output.replace(/\.mp4$/, ".json")), "utf8"))).not.toHaveProperty("mode");
+  });
+
   it("leaves no file behind when a render fails, reports why, and removes its placeholder", async () => {
     const { rpc, folder } = await startRendering("fail");
     const started = await rpc.call("motion.renderStart", { project: "board", file: "1-intro.html", shapeId: "shape:m1" });
@@ -188,7 +210,6 @@ describe("lifecycle changes while a motion renders", () => {
     expect(existsSync(join(engine.dataDir, "output", "board"))).toBe(true);
     await follow(rpc, started.id);
     expect(await rpc.call("projects.rename", { name: "board", to: "renamed" })).toEqual({ name: "renamed", movedRenders: 0 });
-    // Closing the project stopped tracking its renders.
     await expect(rpc.call("motion.renderStatus", { project: "board", id: started.id })).rejects.toMatchObject({ message: "No such render." });
   });
 });

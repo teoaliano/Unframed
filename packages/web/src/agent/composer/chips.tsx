@@ -1,5 +1,6 @@
+import type { ElementChip } from "@unframed/contracts";
 import { shapeKind, shapeLabel, type ShapeKind } from "@unframed/domain";
-import { AlignLeft, AppWindow, Clapperboard, Group, Image, PenLine, SquarePlay, X, type LucideIcon } from "lucide-react";
+import { AlignLeft, AppWindow, AudioLines, Cable, Clapperboard, Component, Group, Image, PenLine, SquareMousePointer, SquarePlay, Workflow, X, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useValue, type Editor, type TLShapeId } from "tldraw";
 import { Badge } from "~/components/ui/badge";
@@ -9,9 +10,13 @@ export const KIND_ICONS: Record<ShapeKind, LucideIcon> = {
   prompt: AlignLeft,
   image: Image,
   video: SquarePlay,
+  audio: AudioLines,
   group: Group,
   page: AppWindow,
   motion: Clapperboard,
+  component: Component,
+  node: Workflow,
+  wire: Cable,
   mark: PenLine,
 };
 
@@ -19,20 +24,22 @@ const KIND_NOUNS: Record<ShapeKind, string> = {
   prompt: "prompt",
   image: "image",
   video: "video",
+  audio: "audio",
   group: "group",
   page: "page",
   motion: "motion",
+  component: "component",
+  node: "node",
+  wire: "wire",
   mark: "mark",
 };
 
-export interface ChipShape {
+interface ChipShape {
   readonly id: string;
   readonly kind: ShapeKind;
   readonly label: string;
 }
 
-
-/** A shape as a chip names it: an artifact by its title, else its file name without `.html`, else its kind. */
 export const describeShape = (editor: Editor, id: string): ChipShape | undefined => {
   const shape = editor.getShape(id as TLShapeId);
   if (!shape) return undefined;
@@ -44,7 +51,6 @@ export const describeShape = (editor: Editor, id: string): ChipShape | undefined
 
 export type Chip = { readonly kind: "artifact"; readonly shape: ChipShape } | { readonly kind: "count"; readonly ids: ReadonlyArray<string>; readonly label: string };
 
-/** One chip per artifact; everything else collapsed into one count chip ("3 inputs", or "1 image" when all the same kind). */
 export const chipsOf = (shapes: ReadonlyArray<ChipShape>): Chip[] => {
   const artifacts = shapes.filter((shape) => shape.kind === "page" || shape.kind === "motion");
   const rest = shapes.filter((shape) => shape.kind !== "page" && shape.kind !== "motion");
@@ -57,11 +63,6 @@ export const chipsOf = (shapes: ReadonlyArray<ChipShape>): Chip[] => {
   return chips;
 };
 
-/**
- * The message's context, as chips: the selection when the tray opens and whenever it
- * changes while the draft is empty; once the person has typed, a selection change only
- * adds. Removing a chip trims the context and leaves the canvas selection alone.
- */
 export const useSelectionChips = (editor: Editor | null, draftEmpty: boolean) => {
   const selectionKey = useValue("selection", () => (editor ? editor.getSelectedShapeIds().join(" ") : ""), [editor]);
   const [ids, setIds] = useState<ReadonlyArray<string>>(() => (selectionKey === "" ? [] : selectionKey.split(" ")));
@@ -81,13 +82,11 @@ export const useSelectionChips = (editor: Editor | null, draftEmpty: boolean) =>
     shapes,
     remove: (removed: ReadonlyArray<string>) => setIds((current) => current.filter((id) => !removed.includes(id))),
     add: (added: ReadonlyArray<string>) => setIds((current) => [...current, ...added.filter((id) => !current.includes(id))]),
-    /** Replaces the chips, for a message put back into the composer. */
     set: (next: ReadonlyArray<string>) => setIds(next),
     clear: () => setIds([]),
   };
 };
 
-/** The context a message carries: the chips' shapes, and every member of a chip that is a group. */
 export const contextSelection = (editor: Editor | null, shapes: ReadonlyArray<ChipShape>): string[] => {
   const ids: string[] = [];
   const add = (id: string) => {
@@ -98,6 +97,28 @@ export const contextSelection = (editor: Editor | null, shapes: ReadonlyArray<Ch
     if (shape.kind === "group" && editor) for (const member of editor.getSortedChildIdsForParent(shape.id as TLShapeId)) add(member);
   }
   return ids;
+};
+
+export const ElementChipRow = ({ chips, onRemove }: { readonly chips: ReadonlyArray<ElementChip>; readonly onRemove: (chip: ElementChip) => void }) => {
+  if (chips.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1" role="list" aria-label="Pointed-at elements">
+      {chips.map((chip) => {
+        const text = `${chip.tag} · ${chip.label}`;
+        return (
+          <Badge key={`${chip.shapeId} ${chip.selector}`} variant="outline" size="lg" className="max-w-full" role="listitem" data-chip="element">
+            <SquareMousePointer aria-hidden />
+            <span className="min-w-0 truncate" data-testid="chip-label">
+              {text}
+            </span>
+            <Button variant="ghost-muted" size="icon-tiny" aria-label={`Remove ${text}`} onClick={() => onRemove(chip)}>
+              <X aria-hidden />
+            </Button>
+          </Badge>
+        );
+      })}
+    </div>
+  );
 };
 
 export const ChipRow = ({ shapes, onRemove }: { readonly shapes: ReadonlyArray<ChipShape>; readonly onRemove: (ids: ReadonlyArray<string>) => void }) => {

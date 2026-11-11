@@ -1,16 +1,13 @@
 import type { McpTool } from "./mcp.ts";
 import { ArtifactTools } from "../artifacts/artifactTools.ts";
+import { ComponentTools } from "../artifacts/componentTools.ts";
 import { PreviewTools } from "../artifacts/previewTools.ts";
 import { CanvasTools } from "./canvasTools.ts";
+import { KitTools } from "../kits/kitTools.ts";
 import { outsideSelectionTools } from "./selectionTools.ts";
 import { generateTool } from "./generateTool.ts";
+import { outsideAgentTools } from "./outsideTools.ts";
 
-/**
- * The Unframed tool list, as the tool definitions give it: name, description and input schema.
- * The engine registers these same definitions, and the stdio shim answers `tools/list` from this
- * function while Unframed is closed, so the two cannot drift. The handlers are never called here;
- * the dependencies throw if one is.
- */
 const inert: any = new Proxy(
   {},
   {
@@ -24,9 +21,12 @@ export const unframedToolCatalogue = (): Array<Pick<McpTool, "name" | "descripti
   const tools: McpTool[] = [
     ...new CanvasTools(inert).tools(),
     ...new ArtifactTools(inert, () => 0).tools(),
+    ...new ComponentTools(inert, () => 0).tools(),
     ...new PreviewTools(inert).tools(),
+    ...new KitTools(inert).tools(),
     generateTool(inert),
     ...outsideSelectionTools({ hub: inert, read: inert.read }),
+    ...outsideAgentTools(inert),
   ];
   return tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
 };

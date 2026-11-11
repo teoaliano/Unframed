@@ -40,6 +40,8 @@ export interface EngineOptions {
   openRouterStub?: boolean;
   /** How the stub answers, from the start. */
   stub?: StubHandler;
+  elevenLabs?: StubHandler | true;
+  vercel?: StubHandler | true;
 }
 
 export interface Exited {
@@ -64,6 +66,8 @@ export interface TestEngine {
   /** The origin a same-machine browser would use. */
   readonly origin: string;
   readonly stub: OpenRouterStub | undefined;
+  readonly elevenLabs: OpenRouterStub | undefined;
+  readonly vercel: OpenRouterStub | undefined;
   stdout(): string;
   stderr(): string;
   /** Every IPC message received so far. */
@@ -169,6 +173,30 @@ export const startOpenRouterStub = async (initial?: StubHandler): Promise<OpenRo
 let registerCleanup: (cleanup: () => Promise<void>) => void = () => {};
 
 /**
+ * Each engine leads a process group of its own, so killing the group also ends what the
+ * engine spawned (agent CLIs, fakes). Its headless Chrome and reaper are in groups of their own
+ * and end with the engine anyway.
+ */
+const groups = process.platform !== "win32";
+const killEngine = (child: ChildProcess, signal: NodeJS.Signals) => {
+  if (groups && child.pid !== undefined) {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch {
+      // the group is gone; fall back to the process
+    }
+  }
+  child.kill(signal);
+};
+
+/** Engines not disposed yet. A runner that exits without disposing one (a failed beforeAll, a killed test) kills it here. */
+const running = new Set<ChildProcess>();
+process.on("exit", () => {
+  for (const child of running) killEngine(child, "SIGKILL");
+});
+
+/**
  * How a test runner hears about cleanups: the Vitest harness registers each with the
  * running test. Without one (Playwright, scripts) the caller disposes.
  */
@@ -215,11 +243,13 @@ export const startEngine = async (options: EngineOptions = {}): Promise<TestEngi
   const nativeLogPath = join(dataDir, ".native-log.jsonl");
   if (options.dotenv !== undefined) await writeFile(join(dataDir, ".env"), options.dotenv);
   const stub = options.openRouterStub === false ? undefined : await startOpenRouterStub(options.stub);
+  const elevenLabs = options.elevenLabs === undefined ? undefined : await startOpenRouterStub(options.elevenLabs === true ? undefined : options.elevenLabs);
+  const vercel = options.vercel === undefined ? undefined : await startOpenRouterStub(options.vercel === true ? undefined : options.vercel);
 
   const env: Record<string, string> = {};
   for (const [name, value] of Object.entries(process.env)) {
     if (value === undefined) continue;
-    if (name.startsWith("UNFRAMED_") || name.startsWith("OPENROUTER_") || name === "OUTPUT_DIR") continue;
+    if (name.startsWith("UNFRAMED_") || name.startsWith("OPENROUTER_") || name.startsWith("ELEVENLABS_") || name.startsWith("AI_GATEWAY_") || name === "OUTPUT_DIR") continue;
     if (name === "PORT" || name === "CLAUDE_PATH" || name === "CODEX_PATH" || name === "CLAUDE_CONFIG_DIR") continue;
     if (name.startsWith("VITEST") || name === "NODE_OPTIONS") continue;
     env[name] = value;
@@ -232,6 +262,8 @@ export const startEngine = async (options: EngineOptions = {}): Promise<TestEngi
     UNFRAMED_TEST_NATIVE_LOG: nativeLogPath,
   });
   if (stub) env.UNFRAMED_TEST_OPENROUTER_ORIGIN = stub.origin;
+  if (elevenLabs) env.UNFRAMED_TEST_ELEVENLABS_ORIGIN = elevenLabs.origin;
+  if (vercel) env.UNFRAMED_TEST_VERCEL_ORIGIN = vercel.origin;
   if (options.clientDist !== undefined) env.UNFRAMED_CLIENT_DIST = options.clientDist;
   for (const [name, value] of Object.entries(options.env ?? {})) {
     if (value === undefined) delete env[name];
@@ -248,12 +280,15 @@ export const startEngine = async (options: EngineOptions = {}): Promise<TestEngi
         ...(options.execPath === undefined ? {} : { execPath: options.execPath }),
         stdio: ["ignore", "pipe", "pipe", "ipc"],
         serialization: "json",
+        detached: groups,
       })
     : spawn(options.execPath ?? process.execPath, [...(options.execArgv ?? []), entry], {
         env,
         cwd: dataDir,
         stdio: ["ignore", "pipe", "pipe"],
+        detached: groups,
       });
+  running.add(child);
   let stdout = "";
   let stderr = "";
   child.stdout?.setEncoding("utf8").on("data", (chunk: string) => (stdout += chunk));
@@ -262,7 +297,10 @@ export const startEngine = async (options: EngineOptions = {}): Promise<TestEngi
   child.on("message", (message) => messages.push(message as EngineIpcMessage));
   const exited = new Promise<Exited>((done) => child.on("exit", (code, signal) => done({ code, signal })));
   let hasExited = false;
-  void exited.then(() => (hasExited = true));
+  void exited.then(() => {
+    hasExited = true;
+    running.delete(child);
+  });
 
   const clients = new Set<TestRpcClient>();
   const sockets = new Set<WebSocket>();
@@ -299,6 +337,8 @@ export const startEngine = async (options: EngineOptions = {}): Promise<TestEngi
       return `http://localhost:${port}`;
     },
     stub,
+    elevenLabs,
+    vercel,
     stdout: () => stdout,
     stderr: () => stderr,
     messages,
@@ -335,24 +375,32 @@ export const startEngine = async (options: EngineOptions = {}): Promise<TestEngi
       for (const client of clients) await client.close().catch(() => {});
       for (const socket of sockets) socket.terminate();
       if (!hasExited) {
-        child.kill("SIGKILL");
+        killEngine(child, "SIGKILL");
         await exited;
       }
       await stub?.close();
+      await elevenLabs?.close();
+      await vercel?.close();
       if (ownsDataDir) await rm(dataDir, { recursive: true, force: true });
     },
   };
   registerCleanup(() => engine.dispose());
 
   if (options.waitForReady !== false) {
-    await waitForOutput("  output:   ");
-    if (ipc) {
-      const ready = (await waitForMessage((message) => message.type === "ready")) as ReadyMessage;
-      port = ready.port;
-      previewPort = ready.previewPort;
-    } else {
-      port = Number(/Unframed server {2}→ {2}http:\/\/localhost:(\d+)/.exec(stdout)?.[1]);
-      previewPort = Number(/preview: {2}http:\/\/127\.0\.0\.1:(\d+)/.exec(stdout)?.[1]);
+    try {
+      await waitForOutput("  output:   ");
+      if (ipc) {
+        const ready = (await waitForMessage((message) => message.type === "ready")) as ReadyMessage;
+        port = ready.port;
+        previewPort = ready.previewPort;
+      } else {
+        port = Number(/Unframed server {2}→ {2}http:\/\/localhost:(\d+)/.exec(stdout)?.[1]);
+        previewPort = Number(/preview: {2}http:\/\/127\.0\.0\.1:(\d+)/.exec(stdout)?.[1]);
+      }
+    } catch (error) {
+      // The caller never gets the engine, so it can never dispose it.
+      await engine.dispose().catch(() => undefined);
+      throw error;
     }
   }
   return engine;

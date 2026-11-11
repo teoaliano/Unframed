@@ -46,10 +46,10 @@ describe("outside turns: revert, change notes, session end, revoke, restart and 
     const [chat] = await chatsIn(agent);
     const before = (await shapeIds(agent)).length;
 
+    const watched = await agent.watch(chat!.id);
     await agent.dispatch({ type: "thread.turn.revert", threadId: chat!.id, turnCount: 1 });
-    const after = await agent.settled(chat!.id, 1);
+    const after = await watched.until((each) => each.turns[0]?.reverted !== undefined, "the outside turn to be reverted").finally(() => watched.close());
     expect(after.latestTurn).toMatchObject({ turnCount: 1, state: "completed" });
-    expect(after.turns[0]!.reverted).toBeDefined();
     await waitForCount(agent, before - 1);
   });
 

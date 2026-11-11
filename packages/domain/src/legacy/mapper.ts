@@ -31,7 +31,7 @@ import { baseName, extractedFileName, fileOfResultUrl, mimeByExtension, parseDat
 import { RefMinter } from "./minter.ts";
 import { legacyPromptTexts } from "./normalise.ts";
 import { OUTPUT_MEDIUM, outputRecipe, sidecarKind, sidecarNumber, sidecarParams, sidecarString, type LegacyDefaults } from "./recipes.ts";
-import { reportText, type ImportCounts, type ImportReport, type ImportSource, type ReportItem } from "./report.ts";
+import { reportText, type ImportCounts, type ImportReport, type ImportSource, type LegacyMedium, type ReportItem } from "./report.ts";
 
 /** One record of `jobs.json`, as the old store wrote it. */
 export interface LegacyJob {
@@ -293,7 +293,7 @@ export const mapProject = (graph: LegacyGraph, facts: ProjectFacts, options: Map
 
   /** Where an output's recipe goes: rule 1 (its one group), rule 2 (a box around its sources) or rule 3 (where it stood). */
   const placeRecipe = (output: LegacyNode, recipe: GroupRecipe, sources: ReadonlyArray<LegacyNode>, instructions: string | undefined) => {
-    const medium = recipe.medium;
+    const medium = recipe.medium as LegacyMedium;
     const groupRef = () => (medium === "text" ? minter.mint() : output.id);
     const only = sources.length === 1 ? sources[0]! : undefined;
     if (only?.type === "group" && shapes.get(`node:${only.id}`)?.recipe === undefined && feedsOnlyOne(only) && instructions === undefined) {

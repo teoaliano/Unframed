@@ -24,6 +24,8 @@ Spec 12's run on `build`, with the dev server stopped: `pnpm typecheck` exit 0 (
 
 ## Specs
 
+Specs 18 to 21 are merged to `main` through PRs #165, #172, #175, #177 and #178, with fixes in #179 to #183, #187 and #188.
+
 | # | Spec | Wave | State | Merge commit | Note |
 | --- | --- | --- | --- | --- | --- |
 | 01 | engine foundation | 1 | merged | f480398 | 54/54 tasks |
@@ -39,13 +41,54 @@ Spec 12's run on `build`, with the dev server stopped: `pnpm typecheck` exit 0 (
 | 11 | legacy import | 9 | merged | c264c38 | 46/46 tasks; covers spec 03's imported-recipe Regenerate and Recipe |
 | 12 | design system | 10 | merged | 4935b8b to 834be6d (merges 2d7b5fa, 39a1d4a, f15d45f), review fixes 2d7627f to bde5664 | 25/25 tasks. Written after the first build, at the person's request. Decisions settled during the run are under "Decisions" |
 | 13 | design-system catalogue | 11 | merged | see git log | 4/4 tasks. Written after spec 12's live review, at the person's request: a dev-only page at `/design-system/` on the web dev server |
-| 14 | external agents | 12 | not built | | 0/27 tasks. Written for issue #93 at the person's request, with every open question decided |
-| 15 | audio | 13 | not built | | 0/43 tasks. Written for issue #63 at the person's request; its questions are answered in the spec, and two facts await a paid call (Further Notes) |
-| 18 | element editing | | not built | | 0/41 tasks. Written at the person's request after the Figma-clone and HyperFrames Studio research; every open question decided |
-| 19 | kits and tokens | | not built | | 0/43 tasks (one is the person's step). Written with 18 |
-| 20 | components | | not built | | 0/47 tasks. Written with 18 |
-| 21 | motion timeline | | not built | | 0/40 tasks (two are the person's steps); task 1 upgrades HyperFrames on its own PR |
-| 22 | iPad access | | built, not merged | `t3/ipad-mirror-local-dev-server`: 9bb3ac74, 99c7d6f3, 0f74881d and the fourth commit on that branch | 32/33 tasks, in four PRs: the rules, the certificates and the listener; the Settings section and pairing; device mode in the web; touch, the Home Screen and the shell. Task 33 is the person's check on the real iPad. The build also fixed a spec 14 defect: a window reported its selection on any store change, so the Mac took the live selection back the moment the iPad connected |
+| 14 | external agents | 12 | merged | PR #110, amended in #130, built in #131 to #142 | 46 tasks in the spec. Built after the first build; the commit log shows the series, and it was not re-verified task by task |
+| 15 | audio | 13 | built, PR open | | 43/43 tasks built. Every task is tested at the seam it names, except one case: the 120 s speech timeout and the 30 s timeout of the other ElevenLabs calls are in the code, with their sentences tested at the domain seam, but no engine test waits them out (spec 15 allows no per-call test override). Still open, awaiting the person's paid call (Further Notes): whether `character-cost` is credits after the model's rate, and whether Eleven v4 takes WAV. Spec 14's `file_add` takes MP3, WAV and M4A |
+| 16 | nodes | | built, PR open | | 30 of 32 tasks tested at the seam each names; see "Spec 16 tests" below for where. Open: task 27's snapshot of a node's page version (the node shows a title card; the version drags out as a page shape with spec 09's snapshot and live rules), and task 31, the page-input evaluation, the person's paid step (`pageSendDefaults` stays empty, so a page wire refuses its run until its choices are made). Audio is a node medium; audio is never a wire source. The node page writer closes spec 18 task 2, spec 19 task 10 and spec 20 tasks 16 and 44 |
+| 17 | project tabs | | merged | PRs #143, #146, #148, #149, #150 | 21 tasks. Its ten-tab budget runs in the isolated project of `pnpm test:browser` |
+| 18 | element editing | | merged | PR #172; fixes #180, #183 | 41/41 tasks. Task 2's node page writer came with spec 16. Built by parallel Haiku agents, on `build/18-element-editing` |
+| 19 | kits and tokens | | merged | PR #175; fix #181 | 42/43 tasks. Task 43 is the person's step (rendering outside Unframed). Task 10's node page writer came with spec 16 |
+| 20 | components | | merged | PR #177; fix #179 | 47 of 47 tasks. Task 44 (`wireRefusal` refuses a component) and task 16's node page writer came with spec 16. Written with 18 |
+| 21 | motion timeline | | merged | PRs #165 (task 1), #178; fixes #187, #188 | Every task is built except task 4, the probe report (`docs/research/motion-editability.md`), which is the person's step and is not done. Task 2, the render comparison, was run on PR #165. Task 40 is the budget in `motionPerformance.spec.ts`, which `pnpm test:perf` runs; the strip mounts only the rows in view. The fix PRs also close the build's gaps (a set's diamond moves, hidden rows are greyed, the label column collapses under 900 px, quick frame steps all count) and the review's polish (Design tab names for values, a dashed snap guide, overlapping bars in lanes, the Design tab header wraps) |
+| 22 | Vercel AI Gateway | | merged | PR #213 (merge 42b84b1) | 15 tasks, each tested at the seam it names: domain (`vercel.test.ts`), engine (`vercel.test.ts`, 25 tests against a loopback Vercel stub), browser (`vercel.spec.ts`, 8 tests). Research in `docs/research/vercel-ai-gateway.md`. Video stays OpenRouter-only (Vercel documents video only through SDKs); the open decisions are listed in the spec. No paid call was made: Vercel's answers come from its docs and its public model list |
+| 23 | iPad access | | built, PR open | `t3/ipad-mirror-local-dev-server`, merged with main | 32/33 tasks, built in four commits: the rules, the certificates and the listener; the Settings section and pairing; device mode in the web; touch, the Home Screen and the shell. Task 33 is the person's check on the real iPad. Numbered 23 because spec 22 went to the Vercel AI Gateway while this was being built. The build also fixed a spec 14 defect: a window reported its selection on any store change, so the Mac took the live selection back the moment the iPad connected |
+
+## Spec 16 tests
+
+| Task | Seam | Where |
+| --- | --- | --- |
+| 1 wire rules | domain | `packages/domain/test/nodes/wires.test.ts` |
+| 2 role by source | domain | `packages/domain/test/nodes/request.test.ts` ("role by source") |
+| 3 node request | domain | `packages/domain/test/nodes/request.test.ts` ("node request") |
+| 4 fingerprint and status | domain | `packages/domain/test/nodes/status.test.ts` (marks on a wired picture and member order included) |
+| 5 chain planner | domain | `packages/domain/test/nodes/chain.test.ts` |
+| 6 flow rules | domain | `packages/domain/test/nodes/flowsPages.test.ts` ("flows") |
+| 7 contracts, the room and wire ends | engine | `packages/engine/test/wireEnds.test.ts` (a wire whose ends are not shape ids refused; one naming a missing shape dropped; wires dropped after Revert and after any removal) |
+| 8 node run service | engine | `packages/engine/test/nodeRuns.test.ts` ("node.run"), `nodeAudio.test.ts` |
+| 9 boot resolution | engine | `packages/engine/test/nodeBoot.test.ts` |
+| 10 chain runner | engine | `packages/engine/test/nodeRuns.test.ts` ("chain.run", "one run at a time", "what was confirmed is what runs"), `nodeVideo.test.ts` |
+| 11 spend in chains | engine | `packages/engine/test/agentNodes.test.ts` (summed limit naming the step, real cost settled), `agentNodeApproval.test.ts` (once per chain, plan mode) |
+| 12 Run downstream | engine | `packages/engine/test/nodeRuns.test.ts` (the pending choice, the all choice, the node itself first); the menu counts at the browser seam in `nodeRuns.spec.ts` |
+| 13 version operations | engine | `packages/engine/test/nodeRuns.test.ts` ("versions") |
+| 14 agent tools | engine | `packages/engine/test/agentNodes.test.ts` |
+| 15 flow save | engine | `packages/engine/test/nodeWriters.test.ts` ("flow.save"); insert is the tab's, in task 24 |
+| 16 node shape util | browser | `packages/web/test/nodeCard.spec.ts` (summary and live, size limits, header kept while the body scrolls, label); `vercel.spec.ts` (default size with the provider switch and versions: header, status and Run row in the card while the middle scrolls) |
+| 17 node composer | browser | `packages/web/test/nodeCard.spec.ts` (instruction persists, Cmd+Enter, last-used values on a new node) |
+| 18 wire drawing | browser | `packages/web/test/wires.spec.ts`, `wireCopies.spec.ts` |
+| 19 role chips | browser | `packages/web/test/wires.spec.ts` |
+| 20 versions strip | browser | `packages/web/test/nodeRuns.spec.ts` ("versions") |
+| 21 status and runs | browser | `packages/web/test/nodeCard.spec.ts` |
+| 22 chains on the canvas | browser | `packages/web/test/nodeRuns.spec.ts` |
+| 23 undo | browser | `packages/web/test/nodeCard.spec.ts` ("Undo") |
+| 24 library | browser | `packages/web/test/nodeFlows.spec.ts` |
+| 25 page output, domain | domain | `packages/domain/test/nodes/flowsPages.test.ts` ("page answer") |
+| 26 page output, engine | engine | `packages/engine/test/nodeRuns.test.ts` ("pages"), `nodeWriters.test.ts` (tags, ids, tokens, pins) |
+| 27 page output, browser | browser | `packages/web/test/nodePages.spec.ts` (title card preview and drag out; no snapshot, open) |
+| 28 page inputs, domain | domain | `packages/domain/test/nodes/flowsPages.test.ts` ("page inputs") |
+| 29 page inputs, engine | engine | `packages/engine/test/nodeWriters.test.ts` (capture, reuse, retake, linked files, no Chrome) |
+| 30 page inputs, browser | browser | `packages/web/test/wires.spec.ts` (HTML, Picture, Both, Files) |
+| 31 evaluation | the person | not run |
+| 32 node provider | domain, engine, browser | `packages/domain/test/nodes/status.test.ts` ("a node's provider"), `packages/domain/test/agent/canvasBatch.test.ts` ("a node's provider"); `packages/engine/test/nodeVercel.test.ts` (image and text through the Vercel stub, no key, `node_run` estimate and refusal under a limit); `packages/web/test/vercel.spec.ts` (the node's switch and run, a chain priced from Vercel) |
+| frame budget | browser | `packages/web/test/nodePerformance.spec.ts`, in `pnpm test:perf` |
 
 ## Performance budgets
 
@@ -110,15 +153,20 @@ Open for the person:
 
 ## Deferred items
 
+- Spec 16 is not built, so its node page writer does not stamp element ids or inject the bridge tag yet (spec 18, Element ids). Spec 16's build adds it.
+- Spec 18: an element chip's excerpt rebuilds the start tag from the tag, `data-hf-id`, `data-uf-name`, `src` and inline style, because the web holds no source bytes; it can differ from the file.
+- Spec 18: the Image section shows for one selected element only.
+- Spec 19: token chips are missing for border colour, padding and margin sides, and shadow; those fields show the computed value.
+- Spec 19: a text style's off-token Use token writes all five longhands.
+- Spec 19: the Used by count path has no browser test.
+- Spec 20: a token written inside a shorthand in a component rule (`background: var(...)`) is not offered as a token rule edit; only a rule's own longhand declaration is.
+- Spec 20: `component.updates` can answer empty right after an undo, because the engine reads the room before the undo syncs; the editor retries up to 8 times at 250 ms instead of the engine waiting.
 - Spec 01: the Electron 44 boot and the `dist` branch publish run only in the tag workflow. `scripts/electronSmoke.ts` ran with plain Node as the binary; `scripts/publishDist.sh` never ran.
-- Spec 04, task 21: the test moves the image through the room, not with a mouse drag, because dragging a selected shape moves the whole selection.
 - Spec 05: logic duplicated between `textRuns.ts` and spec 03's `runs.ts` (run-id minting, the `of` lookup, top-index lookup), and between the image and text catalogue functions.
 - Spec 05: a text result whose sidecar could not be written gets `sidecar: null`; duplicating it drops its result meta.
-- Spec 06: review smells left alone, 10 copies of `messageOf` and a paste fix-up that overlaps domain `instantiate`.
-- Spec 07: the Claude adapter and the zero-token probe never ran against a real CLI (spec 07 makes that a manual acceptance test). The Codex adapter ran end to end against a fake `codex app-server` only.
-- Spec 07: `runtime.ts` is 800 lines, and some contract and domain types are defined twice (a compile-time check in `layer.ts` catches drift).
-- Spec 08: `AgentTray.tsx` is 686 lines.
-- Spec 09: the real HyperFrames render is untested; tests use the `UNFRAMED_TEST_RENDERER` stub.
+- Spec 06: review smells left alone: 16 copies of `messageOf` and a paste fix-up that overlaps domain `instantiate`.
+- Spec 07: `packages/engine/src/agent/runtime.ts` is 1093 lines, and some contract and domain types are defined twice (a compile-time check in `layer.ts` catches drift).
+- Spec 08: `AgentTray.tsx` is 1303 lines.
 - Spec 09: `The render failed.` (a failure with no message) is unreachable in tests, because the stub's `fail` mode always carries a message.
 - Spec 09: `sharp`, a native addon, is installed through `@hyperframes/studio-server`. The render path never loads it today (spec 01 forbids native addons on runtime paths). Recheck on a HyperFrames upgrade.
 - Spec 09: a shape's last live still is kept for the session only.
@@ -128,6 +176,7 @@ Open for the person:
 - Spec 12: a few tests find elements by third-party class names that spec 12's test hooks section does not exempt (lucide icon classes in `addMenu.spec.ts` and `toasts.spec.ts`, DialKit's classes in `artifactDials.spec.ts`).
 - Spec 12: the sweep does not open the legacy import screens; `legacyImport.spec.ts` checks their kit slots.
 - The context-menu fix in `packages/web/src/canvas/ContextMenu.tsx` cancels the menu library's delayed refocus through an internal event name that tldraw bundles. A tldraw upgrade that renames it brings the bug back without failing anything else.
+- Undo and selection: tldraw records selection changes as undo steps, so after opening an editor (which selects the shape) and closing it, the first Cmd-Z restores the earlier selection and the next one undoes the edit before it. This is canvas-wide tldraw behaviour, not specific to spec 20; changing it would change undo everywhere.
 
 ## Needs you
 

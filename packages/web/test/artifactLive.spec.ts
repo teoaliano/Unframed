@@ -1,19 +1,17 @@
 import type { Page } from "@playwright/test";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
-import { centre, shapeOnScreen } from "./canvas.ts";
+import { centre, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { expect, startHostedEngine, test } from "./fixtures.ts";
 import { clickShape } from "./generation.ts";
-import { filledArtifact } from "./artifacts.ts";
+import { filledArtifact, insideFrame, writeProjectFile } from "./artifacts.ts";
 
 const frames = (page: Page) => page.locator(".tl-shape iframe[data-artifact-frame]");
 
-/** Opens the app the way the desktop shell loads it: served by the engine, on 127.0.0.1. */
 const openHosted = async (page: Page, engine: TestEngine) => {
   await page.goto(`http://127.0.0.1:${engine.port}/`);
   await expect(page.locator("[data-canvas-project] .tl-canvas")).toBeVisible({ timeout: 20_000 });
 };
 
-/** Six small pages in a row, fit to view. */
 const sixPages = async (page: Page, engine: TestEngine) => {
   for (let index = 0; index < 6; index++) {
     await filledArtifact(engine, {
@@ -40,7 +38,6 @@ test("artifact frames load under the other loopback name, and in the hosted shap
   for (const src of await frames(page).evaluateAll((items) => items.map((item) => (item as HTMLIFrameElement).src))) {
     expect(new URL(src).host).toBe(`localhost:${engine.previewPort}`);
   }
-  // Out-of-process frames are targets of their own in the browser.
   const session = await page.context().newCDPSession(page);
   await expect
     .poll(async () => {
@@ -50,7 +47,6 @@ test("artifact frames load under the other loopback name, and in the hosted shap
     .toBe(2);
   await session.detach();
 
-  // Opened on localhost, the app frames artifacts from 127.0.0.1 instead.
   await page.goto(engine.origin);
   await expect(page.locator("[data-canvas-project] .tl-canvas")).toBeVisible({ timeout: 20_000 });
   await expect(shapeOnScreen(page, "shape:p5")).toHaveCount(1);
@@ -67,7 +63,6 @@ test("only selected artifacts (three at most), pinned ones (three at most) and t
   await expect(frames(page)).toHaveCount(0);
   await expect(shapeOnScreen(page, "shape:p0").getByText("Select to preview")).toBeVisible();
 
-  // Six selected: the three nearest the middle of the view run.
   const viewport = page.viewportSize()!;
   const distances = await Promise.all(
     [0, 1, 2, 3, 4, 5].map(async (index) => {
@@ -83,7 +78,6 @@ test("only selected artifacts (three at most), pinned ones (three at most) and t
   await page.mouse.click(640, 120);
   await expect(frames(page)).toHaveCount(0);
 
-  // Keep playing pins up to three; the fourth is refused, saying why.
   const pin = async (id: string) => {
     const at = await centre(shapeOnScreen(page, id));
     await page.mouse.click(at.x, at.y, { button: "right" });
@@ -100,16 +94,13 @@ test("only selected artifacts (three at most), pinned ones (three at most) and t
   await expect(refused).toHaveAttribute("aria-disabled", "true");
   await expect(refused).toHaveAttribute("title", "Three are already playing. Stop one first.");
   await page.keyboard.press("Escape");
-  // A pinned one runs whatever is selected; selecting another adds its frame.
   await page.mouse.click(640, 120);
   await clickShape(page, "shape:p2");
   await expect(frames(page)).toHaveCount(4);
-  // Unpinning stops it.
   await page.mouse.click(640, 120);
   const unpin = await pin("shape:p0");
   await expect(unpin).toHaveAttribute("aria-checked", "true");
   await unpin.click();
-  // The menu may stay open after its checkbox: close it, then leave nothing selected.
   if (await unpin.isVisible()) await page.keyboard.press("Escape");
   await page.mouse.click(640, 120);
   await expect(frames(page)).toHaveCount(2);
@@ -123,7 +114,6 @@ test("a live frame far off screen unmounts, and mounts again on return", async (
   await expect(shapeOnScreen(page, "shape:p0").locator("iframe")).toHaveCount(1);
   const width = page.viewportSize()!.width;
   await page.mouse.move(640, 360);
-  // Pan well over two view widths away, a little at a time.
   for (let step = 0; step < 30; step++) {
     await page.mouse.wheel(width / 10, 0);
     await page.waitForTimeout(16);
@@ -144,15 +134,12 @@ test("an artifact that is not live shows its snapshot once the engine has made o
     await filledArtifact(engine, { ...stillShape, html: "<h1>Still</h1>" });
     const shape = shapeOnScreen(page, "shape:still");
     const still = shape.locator("img[data-testid='artifact-snapshot']");
-    // The hint shows only until the first snapshot exists, and the stub renderer can finish
-    // before the shape first paints, so either one is a correct first state.
     await expect(shape.getByText("Select to preview").or(still)).toBeVisible({ timeout: 10_000 });
     await expect(still).toHaveCount(1, { timeout: 10_000 });
-    expect(await still.getAttribute("src")).toMatch(/^\/api\/file\/default\/[^?]+\?snapshot=300x200&v=\d+$/);
+    expect(await still.getAttribute("src")).toMatch(/^\/api\/file\/default\/[^?]+\?snapshot=300x200&mode=none&kit=none&v=\d+$/);
     await expect.poll(() => still.evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
     await expect(shape.locator("iframe")).toHaveCount(0);
 
-    // Live while the agent writes a new version, then still again: the previous picture, never the card.
     const first = await still.getAttribute("src");
     await clickShape(page, "shape:still");
     await expect(shape.locator("iframe")).toHaveCount(1);
@@ -166,4 +153,81 @@ test("an artifact that is not live shows its snapshot once the engine has made o
   } finally {
     await engine.dispose();
   }
+});
+
+test("a live page reloads when its own file or a file it loads changes on disk, keeping its file", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await writeProjectFile(engine, "live-app.js", "document.getElementById('out').textContent = 'Script one';");
+  const { file } = await filledArtifact(engine, {
+    id: "shape:live",
+    kind: "page",
+    ref: "150",
+    at: { x: 420, y: 60 },
+    title: "Live",
+    html: `<!doctype html><html><body><h1 id="out">Loading</h1><script src="live-app.js?v=1"></script></body></html>`,
+  });
+  await clickShape(page, "shape:live");
+  const heading = insideFrame(page, "shape:live").getByRole("heading");
+  await expect(heading).toHaveText("Script one");
+
+  await writeProjectFile(engine, "live-app.js", "document.getElementById('out').textContent = 'Script two';");
+  await expect(heading).toHaveText("Script two", { timeout: 10_000 });
+
+  await writeProjectFile(engine, file, `<!doctype html><html><body><h1 id="out">Edited in place</h1></body></html>`);
+  await expect(heading).toHaveText("Edited in place", { timeout: 10_000 });
+  await writeProjectFile(engine, "unrelated.js", "1");
+  await page.waitForTimeout(1500);
+  await expect(heading).toHaveText("Edited in place");
+});
+
+const counted = (label: string) =>
+  `sessionStorage.loads = String(Number(sessionStorage.loads || 0) + 1); document.getElementById('out').textContent = ${JSON.stringify(label)};`;
+
+const loadsOf = async (page: Page, id: string): Promise<number> => {
+  const frame = await shapeOnScreen(page, id).locator("iframe[data-artifact-frame]").elementHandle();
+  return Number(await (await frame!.contentFrame())!.evaluate(() => sessionStorage.loads ?? 0));
+};
+
+test("a script written in chunks reloads a live page once, after the writes go quiet", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await writeProjectFile(engine, "chunked.js", counted("Chunk 0"));
+  await filledArtifact(engine, { id: "shape:chunked", kind: "page", ref: "150", at: { x: 420, y: 60 }, title: "Chunked", html: `<!doctype html><html><body><h1 id="out">Loading</h1><script src="chunked.js"></script></body></html>` });
+  await clickShape(page, "shape:chunked");
+  const heading = insideFrame(page, "shape:chunked").getByRole("heading");
+  await expect(heading).toHaveText("Chunk 0");
+  await expect.poll(() => loadsOf(page, "shape:chunked")).toBe(1);
+
+  for (let chunk = 1; chunk <= 6; chunk++) {
+    await writeProjectFile(engine, "chunked.js", counted(`Chunk ${chunk}`));
+    await page.waitForTimeout(300);
+  }
+  await expect(heading).toHaveText("Chunk 6", { timeout: 10_000 });
+  await page.waitForTimeout(2000);
+  expect(await loadsOf(page, "shape:chunked")).toBe(2);
+});
+
+test("a live page with the focus inside it waits to reload until the focus leaves, keeping what the person typed", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await writeProjectFile(engine, "form.js", "document.getElementById('out').textContent = 'Form one';");
+  await filledArtifact(engine, {
+    id: "shape:form",
+    kind: "page",
+    ref: "150",
+    at: { x: 420, y: 60 },
+    title: "Form",
+    html: `<!doctype html><html><body><h1 id="out">Loading</h1><input aria-label="Name"><script src="form.js"></script></body></html>`,
+  });
+  await clickShape(page, "shape:form");
+  const inside = insideFrame(page, "shape:form");
+  await expect(inside.getByRole("heading")).toHaveText("Form one");
+  await inside.getByRole("textbox", { name: "Name" }).fill("kept");
+  await inside.getByRole("textbox", { name: "Name" }).focus();
+
+  await writeProjectFile(engine, "form.js", "document.getElementById('out').textContent = 'Form two';");
+  await page.waitForTimeout(3000);
+  await expect(inside.getByRole("heading")).toHaveText("Form one");
+  await expect(inside.getByRole("textbox", { name: "Name" })).toHaveValue("kept");
+
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await expect(inside.getByRole("heading")).toHaveText("Form two", { timeout: 5_000 });
 });

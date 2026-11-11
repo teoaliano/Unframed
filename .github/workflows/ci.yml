@@ -16,7 +16,8 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  unit:
+    name: unit and bundle
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -35,11 +36,6 @@ jobs:
 
       - run: pnpm test
 
-      - name: Install Playwright's Chromium
-        run: pnpm exec playwright install --with-deps chromium
-
-      - run: pnpm test:browser
-
       - name: Build the bundle
         run: pnpm build
         env:
@@ -57,3 +53,46 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 7
+
+  browser:
+    name: browser ${{ matrix.shard }} of 3
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright's Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      # One invocation per project, so the clipboard and isolated projects keep their one-worker
+      # rule: each project's own config runs them alone.
+      - run: pnpm exec playwright test --project=canvas --shard=${{ matrix.shard }}/3
+
+      - run: pnpm exec playwright test --project=clipboard --shard=${{ matrix.shard }}/3
+
+      - run: pnpm exec playwright test --project=isolated --shard=${{ matrix.shard }}/3
+
+  # The required check. It passes only when the unit and bundle job and all three browser shards passed.
+  test:
+    name: test
+    needs: [unit, browser]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every job to pass
+        run: |
+          test "${{ needs.unit.result }}" = success || { echo "unit and bundle: ${{ needs.unit.result }}"; exit 1; }
+          test "${{ needs.browser.result }}" = success || { echo "browser shards: ${{ needs.browser.result }}"; exit 1; }

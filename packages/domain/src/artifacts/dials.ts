@@ -1,46 +1,29 @@
-/**
- * Dials (spec 09): the parameters an artifact declares with `unframed.dials(name, config,
- * apply)`, in the shorthand the agent writes. Normalising, default values and the merge
- * rule live here, and so does the bridge that ships as `unframed-dials.js`: the engine
- * writes that file from `dialsBridgeSource()`, which embeds these very functions, so the
- * shipped copy and the tested definition are one.
- */
 
-export type DialEntry =
+type DialEntry = (
   | { readonly kind: "number"; readonly value: number }
   | { readonly kind: "boolean"; readonly value: boolean }
   | { readonly kind: "color"; readonly value: string }
   | { readonly kind: "text"; readonly value: string }
   | { readonly kind: "range"; readonly value: number; readonly min: number; readonly max: number; readonly step?: number }
   | { readonly kind: "select"; readonly value: string; readonly options: ReadonlyArray<string> }
-  | { readonly kind: "folder"; readonly of: DialSchema };
+  | { readonly kind: "folder"; readonly of: DialSchema }
+) & { readonly description?: string };
 
 export type DialSchema = { readonly [key: string]: DialEntry };
 
-/** Parameter values: a plain nested object, folders as nested objects. */
-export type DialValues = { [key: string]: unknown };
+type DialValues = { [key: string]: unknown };
 
 export type Normalised =
   | { readonly ok: true; readonly schema: DialSchema; readonly dialkit: Record<string, unknown> }
   | { readonly ok: false; readonly error: string };
 
-export interface DialRules {
-  /** Reads each value of `config` by its shape. The first malformed value stops it, named by its path from `dials`. */
-  readonly normalise: (config: unknown) => Normalised;
+interface DialRules {
+  readonly normalise: (config: unknown, descriptions?: unknown) => Normalised;
   readonly defaults: (schema: DialSchema) => DialValues;
-  /**
-   * For each key the schema names: the saved value when present and of the same JS type as
-   * the default, else the default. Folders recurse; keys the schema does not name are dropped.
-   */
   readonly merge: (schema: DialSchema, saved: unknown) => DialValues;
-  /** `next` over `current`, one level deep per folder, so a partial set keeps what it does not name. */
   readonly assign: (current: DialValues, next: unknown) => DialValues;
 }
 
-/**
- * The dial rules. Self-contained on purpose: the bridge embeds this function's source text,
- * so nothing inside it may refer to anything outside it.
- */
 export function dialRules(): DialRules {
   const isObject = (value: unknown): value is Record<string, unknown> =>
     typeof value === "object" && value !== null && !Array.isArray(value);
@@ -93,10 +76,23 @@ export function dialRules(): DialRules {
     return { schema, dialkit };
   };
 
-  const normalise = (config: unknown): Normalised => {
+  const describe = (schema: DialSchema, descriptions: Record<string, unknown>, prefix: string): DialSchema => {
+    const described: Record<string, DialEntry> = {};
+    for (const key of Object.keys(schema)) {
+      const path = prefix === "" ? key : prefix + "." + key;
+      const entry = schema[key]!;
+      const text = Object.prototype.hasOwnProperty.call(descriptions, path) && typeof descriptions[path] === "string" ? (descriptions[path] as string).trim() : "";
+      const inner = entry.kind === "folder" ? { ...entry, of: describe(entry.of, descriptions, path) } : entry;
+      described[key] = text === "" ? inner : { ...inner, description: text };
+    }
+    return described;
+  };
+
+  const normalise = (config: unknown, descriptions?: unknown): Normalised => {
     if (!isObject(config)) return { ok: false, error: "dials: the parameters must be an object" };
     const built = build(config, "dials");
-    return "error" in built ? { ok: false, error: built.error } : { ok: true, schema: built.schema, dialkit: built.dialkit };
+    if ("error" in built) return { ok: false, error: built.error };
+    return { ok: true, schema: isObject(descriptions) ? describe(built.schema, descriptions, "") : built.schema, dialkit: built.dialkit };
   };
 
   const defaults = (schema: DialSchema): DialValues => {
@@ -143,17 +139,16 @@ export const defaultDialValues = rules.defaults;
 export const mergeDialValues = rules.merge;
 export const assignDialValues = rules.assign;
 
-/** What a framed artifact announces to its framer. */
 export interface DialsAnnouncement {
   readonly type: "unframed:dials";
   readonly name: string;
   readonly config: unknown;
   readonly schema: DialSchema;
   readonly values: DialValues;
+  readonly descriptions?: unknown;
 }
 
-/** The parts of a wheel event the bridge reads and forwards. */
-export interface BridgeWheel {
+interface BridgeWheel {
   readonly ctrlKey: boolean;
   readonly metaKey: boolean;
   readonly shiftKey: boolean;
@@ -167,39 +162,35 @@ export interface BridgeWheel {
   preventDefault(): void;
 }
 
-/** The parts of a right-click the bridge reads and forwards. */
-export interface BridgeMenuEvent {
+interface BridgeMenuEvent {
   readonly clientX: number;
   readonly clientY: number;
   preventDefault(): void;
 }
 
-/** The window the bridge runs against: a browser's, or a test's stub. */
-export interface BridgeWindow {
-  /** The framer; the window itself when nothing frames it. */
+interface BridgeWindow {
   parent: { postMessage(message: unknown, targetOrigin: string): void };
   location: { readonly origin: string };
   addEventListener(type: "message", listener: (event: { source: unknown; origin: string; data: unknown }) => void): void;
   addEventListener(type: "wheel", listener: (event: BridgeWheel) => void, options: { passive: boolean }): void;
   addEventListener(type: "contextmenu", listener: (event: BridgeMenuEvent) => void): void;
+  addEventListener(type: "unframed:tokens", listener: () => void): void;
   __hfVariables?: { unframedDials?: unknown };
   unframed?: unknown;
   console: { error(...args: unknown[]): void };
+  document?: { head: { appendChild(node: unknown): unknown }; createElement(tag: "script"): { src: string } };
+  unframedEditPeer?: unknown;
+  unframedDialsApplied?: () => void;
 }
 
-/**
- * The bridge: defines `window.unframed.dials` and `window.unframed.defaultDials`. Self-
- * contained on purpose, like `dialRules`: the shipped file is this function's source text.
- */
-export function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
+function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
   const LOOPBACK = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
   const framed = (win.parent as unknown) !== win;
-  type State = { name: string; config: unknown; schema: DialSchema; values: DialValues; apply: (values: DialValues) => void };
+  type State = { name: string; config: unknown; descriptions: unknown; schema: DialSchema; values: DialValues; apply: (values: DialValues) => void };
   let state: State | undefined;
-  // The canvas that said hello: later declarations are announced to it too.
   let asker: string | undefined;
-  // The canvas that asked for right-clicks, so a selected frame's shape menu still opens.
   let menuAsker: string | undefined;
+  let editLoaded = false;
 
   const run = (current: State) => {
     try {
@@ -207,11 +198,12 @@ export function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
     } catch (error) {
       win.console.error("[unframed] applying parameters failed", error);
     }
+    win.unframedDialsApplied?.();
   };
 
   const announce = (to?: string) => {
     if (!framed || state === undefined) return;
-    const message = { type: "unframed:dials", name: state.name, config: state.config, schema: state.schema, values: state.values };
+    const message = { type: "unframed:dials", name: state.name, config: state.config, descriptions: state.descriptions, schema: state.schema, values: state.values };
     try {
       win.parent.postMessage(message, to ?? asker ?? win.location.origin);
     } catch (error) {
@@ -225,8 +217,8 @@ export function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
     run(state);
   };
 
-  const declare = (name: unknown, config: unknown, apply: unknown) => {
-    const normalised = dials.normalise(config);
+  const declare = (name: unknown, config: unknown, apply: unknown, descriptions?: unknown) => {
+    const normalised = dials.normalise(config, descriptions);
     if (!normalised.ok) {
       win.console.error("[unframed] " + normalised.error);
       return null;
@@ -234,6 +226,7 @@ export function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
     const current: State = {
       name: name === null || name === undefined ? "Parameters" : String(name),
       config,
+      descriptions: typeof descriptions === "object" && descriptions !== null && !Array.isArray(descriptions) ? descriptions : null,
       schema: normalised.schema,
       values: dials.merge(normalised.schema, win.__hfVariables?.unframedDials ?? null),
       apply: typeof apply === "function" ? (apply as (values: DialValues) => void) : () => {},
@@ -265,11 +258,21 @@ export function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
       announce(event.origin);
     } else if (data.type === "unframed:dials:set") {
       set(data.values);
+    } else if (data.type === "unframed:edit:hello") {
+      win.unframedEditPeer = event.origin;
+      if (!editLoaded && win.document !== undefined) {
+        editLoaded = true;
+        const script = win.document.createElement("script");
+        script.src = "unframed-edit.js";
+        win.document.head.appendChild(script);
+      }
     }
   });
 
-  // A pinch (Ctrl or Cmd with the wheel) over a framed artifact would zoom the whole app:
-  // the frame keeps it and hands it to the canvas that said hello, which zooms instead.
+  win.addEventListener("unframed:tokens", () => {
+    if (state !== undefined) run(state);
+  });
+
   if (framed) {
     win.addEventListener(
       "wheel",
@@ -288,7 +291,6 @@ export function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
     );
   }
 
-  // A right-click in a selected frame on the canvas opens the shape's menu, not the page's.
   if (framed) {
     win.addEventListener("contextmenu", (event) => {
       if (menuAsker === undefined) return;
@@ -305,7 +307,6 @@ export function installDialsBridge(win: BridgeWindow, dials: DialRules): void {
   win.unframed = { ...existing, dials: declare, defaultDials };
 }
 
-/** `unframed-dials.js`, as the engine writes it beside every artifact that carries the bridge. */
 export const dialsBridgeSource = (): string =>
   [
     "/* unframed-dials.js: generated by Unframed and rewritten on every write. Do not edit it here: changes are lost. */",

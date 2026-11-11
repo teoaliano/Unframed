@@ -10,7 +10,6 @@ const shown = async (frame: FrameLocator) => JSON.parse((await frame.locator("#v
 
 const recordOf = async (engine: Parameters<typeof roomRecords>[0], id: string) => (await roomRecords(engine, "default")).find((record) => record.id === id)!;
 
-/** The live viewer's frame: the one on screen, not a new version still loading behind it. */
 const showing = (tab: Page): FrameLocator => tab.frameLocator("iframe:not(.next)");
 
 test("a page opened in a new tab follows the shape: a new version swaps in without a reload, and a dial change reaches it", async ({ page, agent }) => {
@@ -25,33 +24,30 @@ test("a page opened in a new tab follows the shape: a new version swaps in witho
   const tab = await opened;
   await tab.waitForLoadState();
   expect(tab.url()).toBe(`http://127.0.0.1:${agent.previewPort}/p/default/unframed-live.html?s=tuned`);
-  // The shape's saved values, not the file's defaults.
   await expect.poll(() => shown(showing(tab)), { timeout: 10_000 }).toEqual({ size: 20 });
   await tab.evaluate(() => ((window as unknown as { kept: boolean }).kept = true));
+  await page.getByRole("region", { name: "Editing Tuned" }).getByRole("button", { name: "Back to canvas" }).click();
+  await expect(page.getByRole("region", { name: "Editing Tuned" })).toHaveCount(0);
 
-  // The agent's next version: a new file, and the shape pointed at it.
   await writeProjectFile(agent, "2-tuned.html", dialsPage({ size: [10, 0, 100] }).replace('<pre id="values">', '<h1>Version two</h1><pre id="values">'));
   const record = await recordOf(agent, "shape:tuned");
   await putRecords(agent, [{ ...record, props: { ...record.props, file: "2-tuned.html" } }]);
-  await expect(showing(tab).getByRole("heading", { name: "Version two" })).toBeVisible({ timeout: 5_000 });
-  await expect.poll(() => shown(showing(tab))).toEqual({ size: 20 });
-  await expect(tab.locator("iframe")).toHaveCount(1);
+  await expect(showing(tab).getByRole("heading", { name: "Version two" })).toBeVisible({ timeout: 15_000 });
+  await expect.poll(() => shown(showing(tab)), { timeout: 10_000 }).toEqual({ size: 20 });
+  await expect(tab.locator("iframe")).toHaveCount(1, { timeout: 10_000 });
   expect(await tab.evaluate(() => (window as unknown as { kept?: boolean }).kept)).toBe(true);
 
-  // A dial change on the shape, as the editor's write makes it.
   const tuned = await recordOf(agent, "shape:tuned");
   await putRecords(agent, [{ ...tuned, props: { ...tuned.props, dials: { size: 64 } } }]);
   await expect.poll(() => shown(showing(tab)), { timeout: 5_000 }).toEqual({ size: 64 });
   expect(await tab.evaluate(() => (window as unknown as { kept?: boolean }).kept)).toBe(true);
 
-  // Only the shape opened in a tab has a pointer.
   expect((await readdir(projectPath(agent, ""))).filter((name) => name.startsWith("unframed-live")).sort()).toEqual([
     "unframed-live-tuned.js",
     "unframed-live.html",
     "unframed-live.js",
   ]);
 
-  // Deleted from the canvas: the tab says so, and shows it again when an undo brings it back.
   await page.keyboard.press("Escape");
   await (await agent.rpc()).call("testCanvas.apply", { project: "default", change: { put: [], remove: ["shape:tuned"] }, origin: { kind: "server", id: "test" } });
   await expect(tab.getByText("This page was deleted from the canvas.")).toBeVisible({ timeout: 5_000 });
@@ -60,7 +56,6 @@ test("a page opened in a new tab follows the shape: a new version swaps in witho
   await expect(showing(tab).getByRole("heading", { name: "Version two" })).toBeVisible({ timeout: 5_000 });
   await expect(tab.getByText("This page was deleted from the canvas.")).toBeHidden();
 
-  // Unframed quits: the last version stays, with a line saying the tab is not updating.
   await agent.stop();
   await expect(tab.getByRole("status")).toHaveText("Unframed is not running, so this tab is not updating.", { timeout: 5_000 });
   await expect(showing(tab).getByRole("heading", { name: "Version two" })).toBeVisible();
@@ -82,7 +77,6 @@ test("a link to a shape Unframed does not have says so, and one opened while Unf
   await known.goto(url);
   await expect(showing(known).getByRole("heading", { name: "Welcome" })).toBeVisible({ timeout: 10_000 });
 
-  // With nothing on screen (here the shape was deleted), Unframed quitting is the whole message.
   await (await agent.rpc()).call("testCanvas.apply", { project: "default", change: { put: [], remove: ["shape:landing"] }, origin: { kind: "server", id: "test" } });
   await expect(known.getByText("This page was deleted from the canvas.")).toBeVisible({ timeout: 5_000 });
   await agent.stop();

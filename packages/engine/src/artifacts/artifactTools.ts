@@ -1,25 +1,27 @@
-/**
- * The four artifact tools (spec 09): `page_write`, `page_read`, `motion_write` and
- * `motion_read`, on spec 07's Unframed MCP server. Both kinds are built from one definition,
- * so the new-file rule, placement, result and event cannot drift between them.
- */
 import { randomUUID } from "node:crypto";
 import {
   AGENT_ARTIFACT_SIZE,
   agentShapeId,
+  applyArtifactEdits,
+  artifactCheckRefusal,
+  ARTIFACT_EDITS_MAX,
   ARTIFACT_PERFORMANCE,
   ARTIFACT_SIZE_LIMIT,
   ARTIFACT_TITLE_MAX,
   artifactUrl,
   DIALS_CONTRACT,
   DIALS_TIMELINE,
-  injectTags,
   isMintedRef,
+  MOTION_EDIT_ARGUMENTS,
+  MOTION_EDIT_TEXT,
   MOTION_READ_SHAPE_ID,
   MOTION_READ_TEXT,
   MOTION_WRITE_ARGUMENTS,
   MOTION_WRITE_TEXT,
   nextRef,
+  offTokenNote,
+  PAGE_EDIT_ARGUMENTS,
+  PAGE_EDIT_TEXT,
   PAGE_READ_SHAPE_ID,
   PAGE_READ_TEXT,
   PAGE_WRITE_ARGUMENTS,
@@ -34,42 +36,42 @@ import {
   type ArtifactKind,
   type InteractionMode,
 } from "@unframed/domain";
+import { offTokenValues } from "@unframed/domain/html";
 import type { TLRecord } from "@tldraw/tlschema";
 import type { Applied, CanvasChange, ChangeOrigin } from "../canvas/rooms.ts";
 import { refusal as refuse, type McpBinding, type McpTool, type ToolAnswer } from "../agent/mcp.ts";
 import type { TurnChanges } from "../agent/turnChanges.ts";
 import { indexOnTop } from "../runs/placeholders.ts";
 import { shapeBoxes } from "../runs/shapeBounds.ts";
+import { lockRefusal, sourceTreeOf } from "@unframed/domain/html";
+import { byteSize, prepareArtifactHtml } from "./artifactHtml.ts";
+import { pinComponents } from "./componentRegistry.ts";
 import { ensureBridge, ensureLibrary, readArtifact, writeAgentArtifact } from "./artifactStore.ts";
+import { ensureTokens, kitOf } from "../kits/tokensFile.ts";
 
 const PAGE_ID = "page:page";
 
-/** What the agent's tools reach of the rest of the engine; the agent runtime supplies it. */
 export interface AgentToolContext {
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;
   readonly apply: (project: string, change: CanvasChange, origin: ChangeOrigin) => Promise<Applied>;
   readonly folder: (project: string) => Promise<string>;
   readonly turnChanges: (project: string) => Promise<TurnChanges>;
-  /** The chat's running turn and the selection its latest message was sent with. */
   readonly chatTurn: (
     project: string,
     chatId: string,
   ) => { turnCount: number | undefined; turnId: string | undefined; interactionMode: InteractionMode; selection: ReadonlyArray<string> };
-  /** Tags the chat with artifacts a write touched (the tag reactor). */
   readonly tag: (project: string, chatId: string, ids: ReadonlyArray<string>) => void;
   readonly activity: (project: string, chatId: string, activity: ActivityInput) => void;
-  /** Whether the chat is an outside one (spec 14). */
   readonly isOutside: (project: string, chatId: string) => boolean;
-  /** The live selection of a project's windows, for an outside read (spec 14). */
   readonly liveSelection: (project: string) => { shapeIds: string[]; note?: string };
 }
 
 type Shape = TLRecord & { type: string; props: Record<string, unknown>; meta: Record<string, unknown> };
 
+export const lockedOf = (shape: Shape): string[] => (Array.isArray(shape.props.lockedElements) ? shape.props.lockedElements.filter((id): id is string => typeof id === "string") : []);
+
 const isShape = (record: TLRecord | undefined): record is Shape => record?.typeName === "shape";
 
-
-/** Finds the shape an argument names, as the agent names it, and refuses the wrong kind. */
 const findArtifact = (records: ReadonlyArray<TLRecord>, shapeId: string, kind: ArtifactKind): { shape: Shape } | { error: string } => {
   const shape = records.find((record) => record.id === roomShapeId(shapeId));
   if (!isShape(shape)) return { error: `no shape ${shapeId}` };
@@ -92,10 +94,6 @@ export class ArtifactTools {
     const turn = context.chatTurn(binding.project, binding.chatId);
     if (turn.interactionMode === "plan") return refuse(PLAN_NO_WRITES_MESSAGE);
     if (typeof args.html !== "string" || args.html.trim() === "") return refuse("html must be a non-empty string");
-    const html = injectTags(args.html, kind);
-    const size = Buffer.byteLength(html, "utf8");
-    if (size > ARTIFACT_SIZE_LIMIT) return refuse(`the ${kind} is too large (${size} bytes; the limit is ${ARTIFACT_SIZE_LIMIT})`);
-
     const records = await context.read(binding.project);
     const shapeId = typeof args.shapeId === "string" && args.shapeId.trim() !== "" ? args.shapeId.trim() : undefined;
     let target: Shape | undefined;
@@ -104,16 +102,63 @@ export class ArtifactTools {
       if ("error" in found) return refuse(found.error);
       target = found.shape;
     }
+    const checks = artifactCheckRefusal({ html: args.html, kind });
+    if (checks !== null) return refuse(checks);
+    return this.commit(kind, binding, { turn, records, target, source: args.html, title: args.title });
+  }
+
+  async edit(kind: ArtifactKind, binding: McpBinding, args: Record<string, unknown>): Promise<ToolAnswer> {
+    const { context } = this;
+    const turn = context.chatTurn(binding.project, binding.chatId);
+    if (turn.interactionMode === "plan") return refuse(PLAN_NO_WRITES_MESSAGE);
+    const shapeId = typeof args.shapeId === "string" ? args.shapeId.trim() : "";
+    if (shapeId === "") return refuse(`shapeId must name the ${kind} to edit`);
+    const records = await context.read(binding.project);
+    const found = findArtifact(records, shapeId, kind);
+    if ("error" in found) return refuse(found.error);
+    const file = typeof found.shape.props.file === "string" ? found.shape.props.file : "";
+    if (file === "") return refuse(`${kind} ${shapeId} has no file yet; write it with ${kind}_write`);
+    let before: string;
+    try {
+      before = await readArtifact(await context.folder(binding.project), file);
+    } catch {
+      return refuse(`the file ${file} could not be read`);
+    }
+    const edited = applyArtifactEdits(before, args.edits, kind);
+    if ("error" in edited) return refuse(edited.error);
+    const checks = artifactCheckRefusal({ html: edited.html, kind, before });
+    if (checks !== null) return refuse(checks);
+    return this.commit(kind, binding, { turn, records, target: found.shape, source: edited.html, title: args.title });
+  }
+
+  private async commit(
+    kind: ArtifactKind,
+    binding: McpBinding,
+    input: { turn: ReturnType<AgentToolContext["chatTurn"]>; records: ReadonlyArray<TLRecord>; target: Shape | undefined; source: string; title: unknown },
+  ): Promise<ToolAnswer> {
+    const { context } = this;
+    const { turn, records, target } = input;
+    const folder = await context.folder(binding.project);
+    const pinned = await pinComponents(folder, records, prepareArtifactHtml(input.source, kind));
+    const html = pinned.html;
+    const size = byteSize(html);
+    if (size > ARTIFACT_SIZE_LIMIT) return refuse(`the ${kind} is too large (${size} bytes; the limit is ${ARTIFACT_SIZE_LIMIT})`);
+
     const current = typeof target?.props.title === "string" ? target.props.title : "";
-    // A page or motion the person named keeps their name: its title is that name (spec 09).
     const named = target !== undefined && !isMintedRef(readRef(target) ?? "0");
-    const given = typeof args.title === "string" && !named ? args.title.slice(0, ARTIFACT_TITLE_MAX) : undefined;
+    const given = typeof input.title === "string" && !named ? input.title.slice(0, ARTIFACT_TITLE_MAX) : undefined;
     const title = (given ?? current).trim();
 
-    const folder = await context.folder(binding.project);
+    if (target !== undefined && lockedOf(target).length > 0) {
+      const currentFile = typeof target.props.file === "string" ? target.props.file : "";
+      const current = currentFile === "" ? undefined : await readArtifact(folder, currentFile).catch(() => undefined);
+      const refusal = current === undefined ? null : lockRefusal({ current, next: html, locked: lockedOf(target), tree: sourceTreeOf(current), kind });
+      if (refusal !== null) return refuse(refusal);
+    }
     let written: { file: string; bytes: number };
     try {
       await (kind === "motion" ? ensureLibrary(folder) : ensureBridge(folder));
+      await ensureTokens(folder, kitOf(records));
       written = await writeAgentArtifact(folder, {
         kind,
         html,
@@ -174,6 +219,8 @@ export class ArtifactTools {
       turnId: turn.turnId ?? null,
       createdAt: new Date().toISOString(),
     });
+    const kit = kitOf(records);
+    const offToken = kit === null ? undefined : offTokenNote(offTokenValues(html, kit));
     return {
       value: {
         ok: true,
@@ -182,6 +229,8 @@ export class ArtifactTools {
         title,
         previewUrl: artifactUrl({ appHostname: "localhost", previewPort: this.previewPort(), project: projectSlug(binding.project), file: written.file, kind }),
         clock: applied.clock,
+        ...(offToken === undefined ? {} : { offToken }),
+        ...(pinned.pinned.length + pinned.unknownTags.length === 0 ? {} : { components: { pinned: pinned.pinned, olderVersions: pinned.olderVersions, unknownTags: pinned.unknownTags } }),
       },
     };
   }
@@ -201,7 +250,6 @@ export class ArtifactTools {
     }
   }
 
-  /** The four tools, as the MCP server registers them. */
   tools(): McpTool[] {
     const writeSchema = (args: Readonly<Record<"html" | "shapeId" | "title", string>>) => ({
       type: "object",
@@ -211,6 +259,25 @@ export class ArtifactTools {
         title: { type: "string", maxLength: ARTIFACT_TITLE_MAX, description: args.title },
       },
       required: ["html"],
+    });
+    const editSchema = (args: Readonly<Record<"shapeId" | "edits" | "old_string" | "new_string" | "title", string>>) => ({
+      type: "object",
+      properties: {
+        shapeId: { type: "string", description: args.shapeId },
+        edits: {
+          type: "array",
+          minItems: 1,
+          maxItems: ARTIFACT_EDITS_MAX,
+          description: args.edits,
+          items: {
+            type: "object",
+            properties: { old_string: { type: "string", description: args.old_string }, new_string: { type: "string", description: args.new_string } },
+            required: ["old_string", "new_string"],
+          },
+        },
+        title: { type: "string", maxLength: ARTIFACT_TITLE_MAX, description: args.title },
+      },
+      required: ["shapeId", "edits"],
     });
     const readSchema = (description: string) => ({
       type: "object",
@@ -225,6 +292,12 @@ export class ArtifactTools {
         call: (binding, args) => this.write("page", binding, args),
       },
       {
+        name: "page_edit",
+        description: PAGE_EDIT_TEXT,
+        inputSchema: editSchema(PAGE_EDIT_ARGUMENTS),
+        call: (binding, args) => this.edit("page", binding, args),
+      },
+      {
         name: "page_read",
         description: PAGE_READ_TEXT,
         inputSchema: readSchema(PAGE_READ_SHAPE_ID),
@@ -235,6 +308,12 @@ export class ArtifactTools {
         description: `${MOTION_WRITE_TEXT} ${DIALS_CONTRACT} ${DIALS_TIMELINE} ${ARTIFACT_PERFORMANCE}`,
         inputSchema: writeSchema(MOTION_WRITE_ARGUMENTS),
         call: (binding, args) => this.write("motion", binding, args),
+      },
+      {
+        name: "motion_edit",
+        description: MOTION_EDIT_TEXT,
+        inputSchema: editSchema(MOTION_EDIT_ARGUMENTS),
+        call: (binding, args) => this.edit("motion", binding, args),
       },
       {
         name: "motion_read",

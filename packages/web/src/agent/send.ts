@@ -1,26 +1,24 @@
-import type { ChatAttachment, ModelSelection } from "@unframed/contracts";
+import type { ChatAttachment, ElementChip, ModelSelection } from "@unframed/contracts";
 import type { InteractionMode, RuntimeMode } from "@unframed/domain";
 import { newId, type ChatClient } from "./store.ts";
 
-/** A message ready to go: the text the model reads, its context and its uploaded attachments. */
-export interface Outgoing {
+interface Outgoing {
   readonly text: string;
   readonly selection: ReadonlyArray<string>;
   readonly attachments: ReadonlyArray<ChatAttachment>;
+  readonly elements?: ReadonlyArray<ElementChip>;
 }
 
-export interface NewChat {
+interface NewChat {
   readonly modelSelection: ModelSelection;
   readonly runtimeMode: RuntimeMode;
   readonly interactionMode: InteractionMode;
-  /** The selected artifacts; the engine keeps only those the canvas says are artifacts. */
   readonly tags: ReadonlyArray<string>;
   readonly title?: string;
 }
 
 export { messageOf } from "./store.ts";
 
-/** Creates a chat and makes it the rail's active one before the engine answers, so its tab shows at once. */
 export const createChat = async (client: ChatClient, chat: NewChat, preview = ""): Promise<string> => {
   const threadId = newId("chat");
   const now = new Date().toISOString();
@@ -60,7 +58,6 @@ export const createChat = async (client: ChatClient, chat: NewChat, preview = ""
   return threadId;
 };
 
-/** Sends one message into a chat, shown at once as the person's message. */
 export const sendMessage = async (
   client: ChatClient,
   threadId: string,
@@ -69,6 +66,7 @@ export const sendMessage = async (
 ): Promise<void> => {
   const messageId = newId("message");
   const now = new Date().toISOString();
+  const elements = message.elements ?? [];
   client.addOptimistic(threadId, {
     id: messageId,
     role: "user",
@@ -78,7 +76,7 @@ export const sendMessage = async (
     createdAt: now,
     updatedAt: now,
     ...(message.attachments.length > 0 ? { attachments: message.attachments } : {}),
-    ...(message.selection.length > 0 ? { context: { selection: message.selection } } : {}),
+    ...(message.selection.length > 0 || elements.length > 0 ? { context: { selection: message.selection, ...(elements.length > 0 ? { elements } : {}) } } : {}),
   });
   try {
     await client.dispatch({
@@ -88,7 +86,7 @@ export const sendMessage = async (
         messageId,
         text: message.text,
         attachments: message.attachments.map((attachment) => ({ id: attachment.id, name: attachment.name })),
-        ...(message.selection.length > 0 ? { context: { selection: [...message.selection] } } : {}),
+        ...(message.selection.length > 0 || elements.length > 0 ? { context: { selection: [...message.selection], ...(elements.length > 0 ? { elements: [...elements] } : {}) } } : {}),
       },
       ...(options.steer ? { steer: true } : {}),
       ...(options.sourceProposedPlan ? { sourceProposedPlan: options.sourceProposedPlan } : {}),

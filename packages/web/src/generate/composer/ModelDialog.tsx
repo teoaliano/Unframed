@@ -13,13 +13,24 @@ import { labelHue, type Hue } from "../../chrome/hue.ts";
 const PROVIDER_HUES = ["blue", "orange", "purple", "green", "pink", "teal", "red", "cyan", "yellow", "gray", "neutral"] as const satisfies ReadonlyArray<Hue>;
 
 /** One column layout for the header table and the rows table, so their columns line up. */
-const Columns = () => (
-  <colgroup>
-    <col />
-    <col className="w-44" />
-    <col className="w-[130px]" />
-  </colgroup>
-);
+const Columns = ({ languages }: { readonly languages: boolean }) =>
+  languages ? (
+    <colgroup>
+      <col />
+      <col className="w-[110px]" />
+    </colgroup>
+  ) : (
+    <colgroup>
+      <col />
+      <col className="w-44" />
+      <col className="w-[130px]" />
+    </colgroup>
+  );
+
+const languageCount = (model: ModelEntry): number | undefined => {
+  const languages = (model.params as { languages?: unknown } | null | undefined)?.languages;
+  return Array.isArray(languages) && languages.length > 0 ? languages.length : undefined;
+};
 
 /** A slug's provider key: the part before `/`, without a leading `~`. */
 const providerKey = (id: string): string => id.split("/")[0]!.replace(/^~/, "");
@@ -46,6 +57,8 @@ export interface ModelDialogProps {
   readonly onOpenChange: (open: boolean) => void;
   readonly title: string;
   readonly browseUrl: string;
+  readonly browseLabel?: string;
+  readonly columns?: "openrouter" | "languages";
   readonly models: ReadonlyArray<ModelEntry>;
   readonly current: string | undefined;
   readonly onPick: (id: string) => void;
@@ -57,7 +70,8 @@ export interface ModelDialogProps {
  * The model dialog: a searchable table of the catalogue, newest first, each provider in its
  * own colour. It takes Escape itself, in the capture phase, so Esc closes only the dialog.
  */
-export const ModelDialog = ({ open, onOpenChange, title, browseUrl, models, current, onPick, finalFocus }: ModelDialogProps) => {
+export const ModelDialog = ({ open, onOpenChange, title, browseUrl, browseLabel = "Browse on OpenRouter", columns = "openrouter", models, current, onPick, finalFocus }: ModelDialogProps) => {
+  const byLanguages = columns === "languages";
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<Sort>({ column: "released", direction: "desc" });
   const search = useRef<HTMLInputElement>(null);
@@ -89,6 +103,7 @@ export const ModelDialog = ({ open, onOpenChange, title, browseUrl, models, curr
       return model.created ?? Number.NEGATIVE_INFINITY;
     };
     const sign = sort.direction === "asc" ? 1 : -1;
+    if (byLanguages) return matching;
     return [...matching].sort((a, b) => {
       const left = value(a);
       const right = value(b);
@@ -96,7 +111,7 @@ export const ModelDialog = ({ open, onOpenChange, title, browseUrl, models, curr
       if (left > right) return sign;
       return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     });
-  }, [models, query, sort, byProvider]);
+  }, [models, query, sort, byProvider, byLanguages]);
 
   const header = (column: Column, label: string) => {
     const active = sort.column === column;
@@ -136,7 +151,7 @@ export const ModelDialog = ({ open, onOpenChange, title, browseUrl, models, curr
             <DialogTitle>{title}</DialogTitle>
             <span className="text-xs">
               <InlineButton tone="muted" render={<a href={browseUrl} target="_blank" rel="noreferrer" />}>
-                Browse on OpenRouter
+                {browseLabel}
                 <ExternalLink aria-hidden className="size-3" />
               </InlineButton>
             </span>
@@ -156,19 +171,26 @@ export const ModelDialog = ({ open, onOpenChange, title, browseUrl, models, curr
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="shrink-0 overflow-y-hidden [scrollbar-gutter:stable]">
                 <Table className="table-fixed">
-                  <Columns />
+                  <Columns languages={byLanguages} />
                   <TableHeader>
-                    <TableRow>
-                      {header("model", "Model")}
-                      {header("provider", "Provider")}
-                      {header("released", "Released")}
-                    </TableRow>
+                    {byLanguages ? (
+                      <TableRow>
+                        <TableHead>Model</TableHead>
+                        <TableHead className="text-right">Languages</TableHead>
+                      </TableRow>
+                    ) : (
+                      <TableRow>
+                        {header("model", "Model")}
+                        {header("provider", "Provider")}
+                        {header("released", "Released")}
+                      </TableRow>
+                    )}
                   </TableHeader>
                 </Table>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
                 <Table className="table-fixed">
-                  <Columns />
+                  <Columns languages={byLanguages} />
                   <TableBody>
                     {rows.map((model) => {
                       const provider = byProvider.get(providerKey(model.id));
@@ -177,16 +199,21 @@ export const ModelDialog = ({ open, onOpenChange, title, browseUrl, models, curr
                         <TableRow key={model.id} data-model={model.id}>
                           <TableCell>
                             <InlineButton
-                              title={model.id}
+                              title={byLanguages ? model.name : model.id}
                               onClick={() => {
                                 onPick(model.id);
                                 onOpenChange(false);
                               }}
                             >
-                              <span className={isCurrent ? "font-bold" : undefined}>{modelPart(model.id)}</span>
+                              <span className={isCurrent ? "font-bold" : undefined}>{byLanguages ? model.id : modelPart(model.id)}</span>
                               {isCurrent && <Check aria-label="Current model" className="size-3.5" />}
                             </InlineButton>
                           </TableCell>
+                          {byLanguages ? (
+                            <TableCell>
+                              <span className="block text-right tabular-nums">{languageCount(model) ?? ""}</span>
+                            </TableCell>
+                          ) : (
                           <TableCell>
                             {provider && (
                               <Badge variant="label" data-hue={provider.hue} style={labelHue(provider.hue)}>
@@ -194,9 +221,12 @@ export const ModelDialog = ({ open, onOpenChange, title, browseUrl, models, curr
                               </Badge>
                             )}
                           </TableCell>
+                          )}
+                          {!byLanguages && (
                           <TableCell>
                             <span className="block text-right tabular-nums">{released(model.created)}</span>
                           </TableCell>
+                          )}
                         </TableRow>
                       );
                     })}

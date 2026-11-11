@@ -2,60 +2,46 @@ import { membersOf, readingOrder, type CanvasShape, type Crop } from "./canvasSh
 import { boxesOverlap, type Box } from "./grouping.ts";
 import { createResolver } from "./references.ts";
 
-export type Medium = "image" | "video" | "text";
+export type Medium = "image" | "video" | "text" | "audio";
 
-/** What a reference slot sends: a project file, a link, or a picture the web renders at send time. */
 export type SlotSource =
   | { readonly type: "file"; readonly file: string }
   | { readonly type: "link"; readonly url: string }
-  /** An image with its owned marks and crop, rendered at the image's native resolution. */
   | { readonly type: "composite"; readonly image: string; readonly file: string; readonly marks: ReadonlyArray<string>; readonly crop: Crop | null }
-  /** Every loose selected mark, rendered on white as one picture. */
-  | { readonly type: "sketch"; readonly marks: ReadonlyArray<string>; readonly bounds: Box };
+  | { readonly type: "sketch"; readonly marks: ReadonlyArray<string>; readonly bounds: Box }
+  | { readonly type: "page"; readonly file: string; readonly files: "entry" | "linked" };
 
 export interface Slot {
   readonly kind: "image" | "video";
-  /** 1-based, per kind. */
   readonly number: number;
-  /** The shape the slot comes from; `SKETCH_ROLE` for the sketch. */
   readonly shapeId: string;
   readonly source: SlotSource;
 }
 
-/** The key the sketch's badge has in `roles`: it belongs to no one shape. */
 export const SKETCH_ROLE = "sketch";
 
-/** The badge of a selected shape that sends nothing: U+2014. */
 export const UNUSED_ROLE = "\u2014";
 
 export interface CompositionInput {
-  /** Every shape on the canvas: references and mark ownership read all of them. */
   readonly shapes: ReadonlyArray<CanvasShape>;
   readonly selected: ReadonlyArray<string>;
   readonly instruction: string;
   readonly medium: Medium;
-  /** The model's `input_references` maximum, for the over-cap warning. */
   readonly referenceCap?: number | undefined;
 }
 
 export interface Composition {
-  /** The resolved text of each contributing shape, in order. */
   readonly promptParts: ReadonlyArray<string>;
-  /** The parts, then the instruction, joined with a blank line. */
   readonly prompt: string;
-  /** The instruction, resolved and trimmed. */
   readonly instruction: string;
   readonly references: ReadonlyArray<Slot>;
-  /** Badge text by shape id (and `SKETCH_ROLE`). */
   readonly roles: Readonly<Record<string, string>>;
   readonly usable: boolean;
-  /** Every shape that contributed, in order: for the recipe and the tether. */
   readonly sources: ReadonlyArray<string>;
   readonly warnings: ReadonlyArray<string>;
   readonly error?: string;
 }
 
-/** A crop that leaves the whole picture visible is no crop. */
 const isCropped = (crop: Crop | null | undefined): crop is Crop =>
   crop !== null &&
   crop !== undefined &&
@@ -69,11 +55,7 @@ const union = (boxes: ReadonlyArray<Box>): Box => {
   return { x: left, y: top, w: right - left, h: bottom - top };
 };
 
-/**
- * The image each mark belongs to: the topmost image with a file that it overlaps and sits
- * above. Computed against every image on the canvas, not only the selection.
- */
-const markOwners = (shapes: ReadonlyArray<CanvasShape>): Map<string, string> => {
+export const markOwners = (shapes: ReadonlyArray<CanvasShape>): Map<string, string> => {
   const images = shapes.filter((shape) => shape.kind === "image" && shape.file !== undefined);
   const owners = new Map<string, string>();
   for (const mark of shapes) {
@@ -88,11 +70,6 @@ const markOwners = (shapes: ReadonlyArray<CanvasShape>): Map<string, string> => 
   return owners;
 };
 
-/**
- * Every selected shape in the one order: by top edge, then left edge, then z rank. A
- * selected group takes one place and its members fill it in their own order; a member
- * selected with its group counts in the group's place only.
- */
 export const selectionOrder = (shapes: ReadonlyArray<CanvasShape>, selected: ReadonlyArray<string>): CanvasShape[] => {
   const byId = new Map(shapes.map((shape) => [shape.id, shape]));
   const chosen = new Set(selected.filter((id) => byId.has(id)));
@@ -103,7 +80,6 @@ export const selectionOrder = (shapes: ReadonlyArray<CanvasShape>, selected: Rea
   return top.flatMap((shape) => (shape.kind === "group" ? membersOf(shapes, shape.id) : [shape]));
 };
 
-/** Prompt parts as a run sends them: each trimmed, empties dropped, joined with one blank line. */
 export const joinPromptParts = (...parts: ReadonlyArray<string>): string =>
   parts
     .map((part) => part.trim())
@@ -112,16 +88,11 @@ export const joinPromptParts = (...parts: ReadonlyArray<string>): string =>
 
 const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
 
-/** How many of a kind go with a run: those selected (the sketch counts as selected) and those named by `@`. */
 interface Counted {
   readonly selected: number;
   readonly named: number;
 }
 
-/**
- * What the warnings say goes with the run: "selected" when nothing was named by `@`, "named
- * with @" when everything was, and both counts when the run mixes them.
- */
 const whatGoes = ({ selected, named }: Counted, one: string, many: string): string => {
   const total = selected + named;
   if (named === 0) return total === 1 ? `${one} is selected` : `${total} ${many} are selected`;
@@ -144,16 +115,6 @@ const imageWarnings = (videos: Counted, images: Counted, cap: number | undefined
   return warnings;
 };
 
-/**
- * The selection to request rule: the one path from what is selected to what a run sends.
- * The composer, the role badges and the send path all call it, so a badge always says what
- * is sent. It never renders, never touches the network and never throws: a circular
- * reference comes back as `error`.
- *
- * Selected media and the sketch take their slots first, in list order, so naming a picture
- * by `@` never renumbers the badges of what is selected. A picture named by `@` and not
- * selected takes the next slot of its kind, and its token reads as that slot.
- */
 export const composeSelection = (input: CompositionInput): Composition => {
   const { shapes, medium } = input;
   const owners = markOwners(shapes);
@@ -178,7 +139,6 @@ export const composeSelection = (input: CompositionInput): Composition => {
   let images = 0;
   let videos = 0;
   const slots = new Map<string, Slot>();
-  /** What each slot's shape adds to the sources: an image brings the marks composited into it. */
   const contributes = new Map<string, ReadonlyArray<string>>();
   const take = (shape: CanvasShape, slot: Slot, from: ReadonlyArray<string>) => {
     references.push(slot);
@@ -187,7 +147,6 @@ export const composeSelection = (input: CompositionInput): Composition => {
     contributes.set(shape.id, from);
     return slot;
   };
-  /** The slot of a filled image or video, made on first use; an empty one has none. */
   const mediaSlot = (shape: CanvasShape): Slot | undefined => {
     const known = slots.get(shape.id);
     if (known) return known;
@@ -216,7 +175,12 @@ export const composeSelection = (input: CompositionInput): Composition => {
         break;
       case "page":
       case "motion":
+      case "component":
+      case "audio":
+      case "node":
         roles[shape.id] = UNUSED_ROLE;
+        break;
+      case "wire":
         break;
       case "mark": {
         if (shape !== loose[0]) break;
@@ -237,7 +201,6 @@ export const composeSelection = (input: CompositionInput): Composition => {
     }
   }
 
-  /** Pictures named by `@` that were not selected, in the order they were first named. */
   const named: string[] = [];
   const resolver = createResolver(shapes, (shape) => {
     const selected = slots.has(shape.id);

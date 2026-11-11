@@ -10,7 +10,7 @@ const rpcBody = (id: number, method: string, params: unknown = {}) => ({ jsonrpc
 export interface OutsideLink {
   readonly token: string;
   open(): Promise<string>;
-  call(session: string, name: string, args: Record<string, unknown>): Promise<{ value: any; isError: boolean; content: string[] }>;
+  call(session: string, name: string, args: Record<string, unknown>, roots?: ReadonlyArray<string>): Promise<{ value: any; isError: boolean; content: string[] }>;
   list(session: string): Promise<Array<{ name: string; inputSchema: { required: string[] } }>>;
   end(session: string): Promise<number>;
   raw(session: string | undefined, body: unknown): Promise<{ status: number; headers: Record<string, unknown>; json(): any }>;
@@ -20,10 +20,15 @@ export interface OutsideLink {
 export const outsideLink = async (agent: AgentEngine, name = "Work laptop Claude Code", spendLimit?: SpendLimit): Promise<OutsideLink> => {
   const made = await agent.rpc.call("agentConnections.create", { name, client: "claude-code", ...(spendLimit === undefined ? {} : { spendLimit }) });
   const token = made.token as string;
-  const raw = (session: string | undefined, body: unknown) =>
+  const raw = (session: string | undefined, body: unknown, roots?: ReadonlyArray<string>) =>
     agent.engine.request("/mcp", {
       method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${token}`, "mcp-session-id": session },
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+        "mcp-session-id": session,
+        ...(roots === undefined ? {} : { "unframed-mcp-roots": encodeURIComponent(JSON.stringify(roots)) }),
+      },
       body: JSON.stringify(body),
     });
   return {
@@ -36,8 +41,8 @@ export const outsideLink = async (agent: AgentEngine, name = "Work laptop Claude
       });
       return answer.headers["mcp-session-id"] as string;
     },
-    async call(session, toolName, args) {
-      const answer = await raw(session, rpcBody(2, "tools/call", { name: toolName, arguments: args }));
+    async call(session, toolName, args, roots) {
+      const answer = await raw(session, rpcBody(2, "tools/call", { name: toolName, arguments: args }), roots);
       const result = answer.json().result as { content: Array<{ text: string }>; isError?: boolean };
       const content = result.content.map((item) => item.text);
       return { value: JSON.parse(content.at(-1)!), isError: result.isError === true, content };

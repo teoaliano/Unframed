@@ -1,0 +1,20 @@
+<html><head><style>
+#root{position:relative;overflow:hidden;background:#111}
+.clip{position:absolute;inset:0;display:flex;gap:20px;align-items:center;justify-content:center}
+.dot{width:24px;height:24px;background:#60a5fa;border-radius:50%}
+#title{font:700 48px system-ui;color:#fff}
+</style></head><body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="3" data-width="640" data-height="360">
+  <div id="c" class="clip" data-start="0" data-duration="3">
+    <span id="title">Dots</span><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+  </div>
+</div>
+<script src="gsap.js"></script>
+<script>
+window.__timelines = window.__timelines || {};
+window.__timelines.main = gsap.timeline({ paused: true });
+window.__timelines.main.fromTo('#title', { opacity: 0 }, { opacity: 1, duration: 0.5 }, 0);
+for (var i = 0; i < 3; i++) {
+  window.__timelines.main.to('.dot', { y: -12, duration: 0.3 }, 0.5 + i * 0.1);
+}
+</script></body></html>

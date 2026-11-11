@@ -10,6 +10,8 @@ const chunk = (syncCore as unknown as { chunk: (message: string) => string[] }).
 
 type Message = { type?: string; data?: unknown } & Record<string, unknown>;
 
+const SEND_FRAMES = 3;
+
 export interface SyncSocketHooks {
   /** The socket went up or down. A refusal (4099) is not "down": nothing is reconnecting. */
   readonly onHealth: (health: "up" | "down") => void;
@@ -124,16 +126,21 @@ export class SyncSocket implements TLPersistentClientSocket<Message, Message> {
     this.open();
   }
 
-  /** Resolves once every push sent has been answered, or after `timeoutMs`. */
   settled(timeoutMs: number): Promise<void> {
     return new Promise((resolve) => {
       const started = Date.now();
+      setTimeout(resolve, timeoutMs);
       const check = () => {
         if (this.pending === 0 || this.ws === null || Date.now() - started >= timeoutMs) return resolve();
         setTimeout(check, 25);
       };
-      // Let tldraw's per-frame send throttle flush first.
-      setTimeout(check, 50);
+      const frames = (left: number) => {
+        if (Date.now() - started >= timeoutMs) return resolve();
+        if (left === 0) return check();
+        if (document.hidden) return void setTimeout(check, 50);
+        requestAnimationFrame(() => frames(left - 1));
+      };
+      frames(SEND_FRAMES);
     });
   }
 

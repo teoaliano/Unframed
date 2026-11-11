@@ -1,7 +1,7 @@
 {
   "name": "unframed-app",
   "private": true,
-  "version": "0.0.20",
+  "version": "0.0.22",
   "description": "Desktop shell for Unframed.",
   "author": "teoaliano",
   "type": "commonjs",
@@ -9,11 +9,12 @@
   "scripts": {
     "start": "electron .",
     "spike": "electron spike/run-engine.js",
-    "pack": "electron-builder --publish never"
+    "pack": "electron-builder --publish never",
+    "test": "node --test 'test/*.test.js'"
   },
   "dependencies": {
     "electron-updater": "^6.8.9",
-    "unframed": "github:teoaliano/Unframed#engine-v0.8.3-dist"
+    "unframed": "github:teoaliano/Unframed#engine-v0.8.5-dist"
   },
   "devDependencies": {
     "electron": "^44.4.5",
@@ -40,7 +41,9 @@
     ],
     "asar": true,
     "asarUnpack": [
-      "node_modules/**"
+      "node_modules/unframed/server/mcp.js",
+      "node_modules/@esbuild/**",
+      "node_modules/@img/**"
     ],
     "mac": {
       "target": [

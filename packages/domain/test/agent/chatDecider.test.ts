@@ -194,6 +194,32 @@ describe("requests and questions", () => {
     });
   });
 
+  it("refuses a decision the request does not offer, and takes any of the fixed four when it names none", () => {
+    const withApproval = (options?: unknown) =>
+      run(started(), {
+        type: "thread.activity.append",
+        activity: {
+          id: "a1",
+          tone: "approval",
+          kind: "approval.requested",
+          summary: "Approval requested",
+          payload: { requestId: "r1", requestType: "command_execution_approval", ...(options === undefined ? {} : { options }) },
+          turnId: "turn:m1",
+          createdAt: NOW,
+        },
+      });
+    const offered = withApproval([
+      { decision: "decline", label: "Decline" },
+      { decision: "accept", label: "Approve" },
+    ]);
+    expect(rejection(decideOn(offered, { type: "thread.approval.respond", requestId: "r1", decision: "acceptForSession" }))).toEqual({
+      code: "bad_request",
+      message: "That answer is not offered for this request.",
+    });
+    expect(rejection(decideOn(offered, { type: "thread.approval.respond", requestId: "r1", decision: "accept" }))).toBeUndefined();
+    expect(rejection(decideOn(withApproval(), { type: "thread.approval.respond", requestId: "r1", decision: "acceptForSession" }))).toBeUndefined();
+  });
+
   it("refuses incomplete, stale and repeated answers", () => {
     expect(rejection(decideOn(withQuestion(), { type: "thread.user-input.respond", requestId: "r1", answers: { "Which look?": "Warm" } }))).toEqual({
       code: "bad_request",
@@ -211,6 +237,42 @@ describe("requests and questions", () => {
       rejection(decideOn(answered, { type: "thread.user-input.respond", requestId: "r1", answers: { "Which look?": "Warm", "Which sections?": ["Hero"] } })),
     ).toEqual({ code: "conflict", message: "This question has already been answered." });
     expect(decideOn(withQuestion(), { type: "thread.user-input.respond", requestId: "r1", answers: { "Which look?": "Warm", "Which sections?": ["Hero"] } }).ok).toBe(true);
+  });
+
+  it("takes files on an answer: a question answered by a file alone counts, and an unread file or an unknown question is refused", () => {
+    const image = { id: "a1", name: "ref.png", type: "image/png", kind: "image", size: 10 } as const;
+    const decided = decideOn(withQuestion(), {
+      type: "thread.user-input.respond",
+      requestId: "r1",
+      answers: { "Which sections?": ["Hero"] },
+      attachmentsByQuestionId: { "Which look?": [image] },
+    });
+    expect(decided.ok && decided.events[0]?.payload).toEqual({
+      threadId: "chat-1",
+      requestId: "r1",
+      answers: { "Which sections?": ["Hero"] },
+      attachmentsByQuestionId: { "Which look?": [image] },
+    });
+    expect(
+      rejection(
+        decideOn(withQuestion(), {
+          type: "thread.user-input.respond",
+          requestId: "r1",
+          answers: { "Which look?": "Warm", "Which sections?": ["Hero"] },
+          attachmentsByQuestionId: { "Which look?": [{ id: "gone", name: "gone.png" }] },
+        }),
+      ),
+    ).toEqual({ code: "bad_request", message: "'gone.png' is empty or could not be read." });
+    expect(
+      rejection(
+        decideOn(withQuestion(), {
+          type: "thread.user-input.respond",
+          requestId: "r1",
+          answers: { "Which look?": "Warm", "Which sections?": ["Hero"] },
+          attachmentsByQuestionId: { "Which colour?": [image] },
+        }),
+      ),
+    ).toEqual({ code: "bad_request", message: "That question is not part of this request." });
   });
 
   it("reads a question cleared by an interrupt or a restart as no longer pending, not as answered", () => {

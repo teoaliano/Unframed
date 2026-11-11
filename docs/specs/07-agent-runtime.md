@@ -192,7 +192,7 @@ One MCP server, hosted by the engine over streamable HTTP on loopback, is how bo
 
 Claude sessions get it as an `http` MCP server named `unframed` with an `Authorization: Bearer <token>` header. Codex sessions get it through `-c` config overrides naming the URL and a `bearer_token_env_var` whose variable the engine sets in the app-server's environment.
 
-This spec builds the server with two tools, `canvas_read` and `canvas_write` (provider-side names `mcp__unframed__<name>` on Claude). Spec 14 adds `generate` to the in-app list and the outside list, and `canvas_select` and `projects_list` to the outside list only. Spec 16 adds `node_run` to the server, on both lists. It does not build the artifact tools: spec 09 adds `page_write`, `page_read`, `motion_write` and `motion_read`, and the preview tools, to this same server. Their descriptions are model-facing text: use the `canvas_read` and `canvas_write` text in `assets/prompts/tool-descriptions.md`; the artifact and preview tools' text is spec 09's.
+This spec builds the server with two tools, `canvas_read` and `canvas_write` (provider-side names `mcp__unframed__<name>` on Claude). Spec 14 adds `generate` to the in-app list and the outside list, and `canvas_select` and `projects_list` to the outside list only. Spec 16 adds `node_run` to the server, on both lists. It does not build the artifact tools: spec 09 adds `page_write`, `page_edit`, `page_read`, `motion_write`, `motion_edit` and `motion_read`, and the preview tools, to this same server. Their descriptions are model-facing text: use the `canvas_read` and `canvas_write` text in `assets/prompts/tool-descriptions.md`; the artifact and preview tools' text is spec 09's.
 
 **The init handshake is load-bearing.** A Claude session's initialization lists its tools. The required list is every tool the Unframed server registers, so it is the two canvas tools in this spec and grows to include the artifact and preview tools when spec 09 registers them. If any required `mcp__unframed__*` name is missing, the turn fails before the model speaks with: "The agent session started without the canvas tools (<missing names>). This is a bug in Unframed, not your setup." A Codex session checks the MCP server's startup status the same way. Tools from the person's own MCP servers are allowed and reported on the session event as `foreign`, never refused.
 
@@ -209,6 +209,7 @@ Every id the agent reads or writes is tldraw's shape id without its `shape:` pre
 - `shapes`: every shape, in z-order, as `{id, kind, x, y, w, h, parent?, ref?}` plus per kind. `ref` is the shape's `@id` on every shape that has one (every kind but a mark): a number the canvas minted, or the name a person gave it (spec 06).
   - prompt: `text`
   - image, video: `file` (a project file name), `fileName` (the original name), `aspect`, `crop` when cropped; a linked clip gives `url` (its https link) instead of `file`
+  - audio (spec 15): `file` (omitted when empty) and `fileName`
   - group: `members` (ids, in their order inside the box), `recipe` when it carries standing settings (spec 06)
   - page, motion: `file`, `title`, `dials` when the shape has any saved dial values (spec 09 explains why the agent must see these)
   - result shapes also carry `recipe`, spec 03's result recipe read from the sidecar, and `running: true` while they carry spec 03's run marker
@@ -224,7 +225,7 @@ A member's `x, y` is relative to its group, as the document holds it, and `paren
 
 | Op | Fields | Does |
 | --- | --- | --- |
-| `create` | `id`, `kind`, `x`, `y`, `w?`, `h?`, `parent?`, `props` | adds a shape. `kind` is `prompt` (`props.text`), `image` or `video` (`props.file`, or `props.url` for a clip link), `group` (`props.name`), `mark` (`props.type` one of `geo`, `note`, `arrow`, `line`, plus that tldraw type's own props), `node` (`props.medium` and spec 16's optional settings) or `wire` (`props.from`, `props.to`, `props.role`, spec 16) |
+| `create` | `id`, `kind`, `x`, `y`, `w?`, `h?`, `parent?`, `props` | adds a shape. `kind` is `prompt` (`props.text`), `image` or `video` (`props.file`, or `props.url` for a clip link), `audio` (`props.file` only, spec 15), `group` (`props.name`), `mark` (`props.type` one of `geo`, `note`, `arrow`, `line`, plus that tldraw type's own props), `node` (`props.medium` and spec 16's optional settings) or `wire` (`props.from`, `props.to`, `props.role`, spec 16) |
 | `update` | `id`, `props` | a shallow patch onto the shape's props; `null` deletes an optional key. A node's `versions`, `currentVersionId`, `run`, `status` and `error` are written by runs and refused (spec 16) |
 | `move` | `id`, `x`, `y` | |
 | `resize` | `id`, `w`, `h` | media keeps its aspect lock (spec 02) |
@@ -250,7 +251,7 @@ Stripped, not refused: spec 03's `meta.unframed.run` and `meta.unframed.runError
 
 `new:<name>` provisional ids: every id starting `new:` is replaced by a fresh engine id everywhere the batch names it (as `id`, `parent`, or a group member). A new prompt gets its `@id` from the canvas's own id counter (spec 02), never from the agent, so an agent can never capture an existing `@` reference. Structural failures the canvas reports (a missing id, a group rule of spec 02 or 06) come back as the error. Success returns `{ok: true, ids: {"new:<name>": "<id>", ...}, clock}`, where `clock` is the room's clock after the write.
 
-**Artifact tools.** `page_write`, `page_read`, `motion_write` and `motion_read` are spec 09's. They join this server when spec 09 lands, write through the same `apply` path with origin `chat:<chatId>`, record turn changes like `canvas_write`, and tag the chat through the tag reactor below. This spec only reserves their names in the plan-mode rule and the refusal that sends page and motion creation to them.
+**Artifact tools.** `page_write`, `page_edit`, `page_read`, `motion_write`, `motion_edit` and `motion_read` are spec 09's. They join this server when spec 09 lands, write through the same `apply` path with origin `chat:<chatId>`, record turn changes like `canvas_write`, and tag the chat through the tag reactor below. This spec only reserves their names in the plan-mode rule and the refusal that sends page and motion creation to them.
 
 ### Provider adapters
 
@@ -357,13 +358,15 @@ The pure **permission policy** module (in `domain`) answers what the Claude `can
 
 1. `AskUserQuestion`, in every mode: open a question (`user-input.requested`, each question's id is its text, because the SDK matches answers by it), wait, and allow with the answers. A cancel denies with the cancel message.
 2. `ExitPlanMode`: capture `input.plan` (trimmed) as the turn's proposed plan (`turn.proposed.completed`, de-duplicated by tool id or text) and deny with the text in `assets/prompts/plan-captured.md`, which tells the agent to stop and wait.
-3. Unframed's own tools (`mcp__unframed__*`): allowed in every runtime mode without asking, except `generate` (spec 14), which is a paid call: in Supervised mode it asks, with the medium and the estimate in the request's detail, and in Full access it runs. They are scoped to this project, and every canvas change is revertable. In plan interaction mode `canvas_write`, `generate` and, from spec 09, `page_write` and `motion_write` are denied with the text in `assets/prompts/plan-no-writes.md`; the read tools and preview tools stay allowed.
+3. Unframed's own tools (`mcp__unframed__*`): allowed in every runtime mode without asking, except `generate` (spec 14), which is a paid call: in Supervised mode it asks, with the medium and the estimate in the request's detail, and in Full access it runs. They are scoped to this project, and every canvas change is revertable. In plan interaction mode `canvas_write`, `generate` and, from spec 09, `page_write`, `motion_write`, `page_edit` and `motion_edit` are denied with the text in `assets/prompts/plan-no-writes.md`; the read tools and preview tools stay allowed.
 4. `full-access`: allow.
 5. Anything else: open a request (`request.opened` with the request type classified from the tool: read-only tools are `file_read_approval`, shell-like `command_execution_approval`, file-writing `file_change_approval`, else `dynamic_tool_call`), wait for the answer, then:
    - `accept`: allow.
    - `acceptForSession`: allow, with `updatedPermissions` built from the SDK's own permission suggestions with their destination set to `session` (or, when there are none, one `addRules` rule for the tool name, behaviour allow, destination session).
    - `decline`: deny with the text in `assets/prompts/declined.md` ("The person declined this. Do not try it again; say what you would have done, or find another way.").
    - `cancel`: deny with "User cancelled tool execution." and interrupt the turn.
+
+**What a request offers** (t3code's `claudeApprovalPresentation`). A request may carry `reason` and `options`, both optional, so a request stored before them reads as offering the fixed four. `reason` is Claude's `canUseTool` `decisionReason` with terminal escapes stripped and trimmed, left out when empty or equal to the target; for Codex it is a command approval's `reason` when the request also names the command. `options` is a list of `{decision, label, warning?}`: when Claude sets `suppressAlwaysAllowRule` (a standing grant would allow more than this ask), it is Decline and Approve only; otherwise none is sent, and the fixed four apply (t3code's order: Cancel, Decline, Always allow this session, Approve). Codex's command and file approvals name no options, as in t3code. `thread.approval.respond` with a decision the request's `options` leave out is refused with "That answer is not offered for this request." (`bad_request`). There is no full-access override explanation: Full access allows every call that reaches the policy, so no request opens there.
 
 A pending request is chat state: it is an activity, so it survives a reload and a reconnecting rail reads it from the projection. One chat has at most one open request at a time, because the turn is blocked on it. A session that closes answers its open request as `cancel`. A request's target (the command, path, pattern or URL) is stored in full; spec 08 shows it and says how much it clipped.
 
@@ -443,8 +446,8 @@ A chat's summary, for the rail's tabs, is `{id, title, titledBy, preview (first 
 | `thread.interaction-mode.set` | `interactionMode` | |
 | `thread.turn.start` | `message {messageId, text, attachments, context}`, `steer?: boolean`, `modelSelection?`, `sourceProposedPlan?`, `createdAt` | a turn is running and `steer` is not set: "The agent is still answering the previous message." (with `steer: true` the message joins the running turn); no text and no attachments: "Say something first."; over the text or attachment limits (the t3code messages under Attachments) |
 | `thread.turn.interrupt` | `turnId?` | |
-| `thread.approval.respond` | `requestId`, `decision` (`accept`, `acceptForSession`, `decline`, `cancel`) | no such pending request: "That request is no longer waiting for an answer." |
-| `thread.user-input.respond` | `requestId`, `answers` | already answered: "This question has already been answered."; not pending: "This question is no longer pending."; an unanswered question: "Answer each question before sending." |
+| `thread.approval.respond` | `requestId`, `decision` (`accept`, `acceptForSession`, `decline`, `cancel`) | no such pending request: "That request is no longer waiting for an answer."; a decision the request's `options` leave out: "That answer is not offered for this request." |
+| `thread.user-input.respond` | `requestId`, `answers`, `attachmentsByQuestionId?` (attachment refs per question id, resolved by the engine like a message's) | already answered: "This question has already been answered."; not pending: "This question is no longer pending."; an unanswered question (no answer and no file): "Answer each question before sending."; a file for a question the request does not ask: "That question is not part of this request."; a file that is not stored: "'<name>' is empty or could not be read."; over the limits: the attachment limit sentences |
 | `thread.user-input.dismiss` | `requestId` | the question blocks the turn: "This question needs an answer. Answer it or stop the turn." |
 | `thread.turn.revert` | `turnCount` | a turn of this chat is running: "Wait for the turn to finish before reverting."; already reverted: "That turn is already reverted." |
 | `thread.checkpoint.revert` | `turnCount`, `restoreCanvas: boolean` | a turn is running; `turnCount` beyond the current count |
@@ -472,7 +475,7 @@ Projector rules worth stating:
 
 **Reactors**:
 
-- **Provider command reactor**: on `thread.turn-start-requested`, build the preamble (see below), start or reuse the chat's provider session, send the turn; a failure to start becomes a `provider.turn.start.failed` error activity and session `error`. It also forwards interrupts, approval and question answers, mode changes (a live session is told the new mode) and session stops.
+- **Provider command reactor**: on `thread.turn-start-requested`, build the preamble (see below), start or reuse the chat's provider session, send the turn; a failure to start becomes a `provider.turn.start.failed` error activity and session `error`. It also forwards interrupts, approval and question answers (an answer's files as t3code's `appendUserInputAttachmentPaths` does it, since no provider takes a file in an answer: each file's attachment line, `Attached image|file "<name>": <path>`, after the answer's text, or as one more entry of a multiple choice, or as the whole answer when it has no text), mode changes (a live session is told the new mode) and session stops.
 - **Provider runtime ingestion**: turns the adapter's canonical runtime events into internal commands. Text deltas become `thread.message.assistant.delta` (message id `assistant:<itemId>`); reasoning deltas become reasoning messages; a plan becomes `thread.proposed-plan.upsert` (plan id `plan:<chatId>:turn:<n>`); lifecycle becomes `thread.session.set`; tool items, requests, questions, retries, rate limits and errors become `thread.activity.append`.
 - **Turn settle reactor**: when a turn leaves `running`, it stamps `lastClock`, writes the turn's file list (`thread.turn.files.complete`, from the turn changes), writes the sidecar, and on the chat's first completed turn asks for a title.
 - **Tag reactor**: tags from the first message and from every artifact write (see Tags).
@@ -529,7 +532,7 @@ The person's own Cmd-Z is tldraw's local undo (spec 02) and walks only their edi
 A chat's `tags` are the shape ids of the artifacts (pages and motions) it has touched. They come from exactly two places:
 
 1. The first message: the engine asks the canvas which of the message's selected ids are artifacts (it never trusts the web to say) and adds those.
-2. Every artifact a tool call writes to or edits: spec 09's `page_write` and `motion_write`, created or updated, and every `canvas_write` op whose target (or created shape) is a page or motion, including `move`, `resize`, `delete` and a deletion that cascades from a group. This closes the old gap where a plain canvas edit to an artifact did not tag the chat.
+2. Every artifact a tool call writes to or edits: spec 09's `page_write` and `motion_write`, created or updated, and its `page_edit` and `motion_edit`, and every `canvas_write` op whose target (or created shape) is a page or motion, including `move`, `resize`, `delete` and a deletion that cascades from a group. This closes the old gap where a plain canvas edit to an artifact did not tag the chat.
 
 Adding a tag the chat already has is a no-op and emits nothing.
 
@@ -547,7 +550,12 @@ The model's copy of a message is the person's text preceded by a preamble; the s
 
 `lastClock` is stamped when a turn settles, and nowhere else.
 
-The system prompt tells the agent how to read the selection. Selection is context, never a target field: one artifact selected is what the message is about unless the sentence says otherwise; nothing selected means something new should be made when the sentence asks for something; several selected means the agent decides from the sentence (the same edit to all, an edit to one, a different edit to each, a new artifact made from copies of them, or a question) and asks in its reply only when the sentence is genuinely ambiguous. It never asks which mode was meant, and it never changes what is selected. There is no `target` anywhere in the protocol.
+**Provider commands.** A message is a provider command when it has no attachments and its first word is `/` followed by the name of one of the provider's commands: the commands its provider status lists (Claude's `/compact` plus the ones its initialization listed, Codex's `compact` and `feedback`), with `/compact` always counted (`/compact` alone or followed by instructions, the composer's own rule). Only when the engine has no command list for the provider does it fall back to t3code's rule, any `/` followed by a letter or digit. So `/Users/me/x.png explain` keeps its preamble. A provider command gets no preamble and goes to the provider as typed, so the provider runs it as its own command instead of reading it as a prompt (with a selection or change note in front, Claude answers `/compact` with "that is a Claude Code command"). Its turn settles without stamping `lastClock`, so the change note it skipped reaches the next message.
+
+- Claude gets the command as the message's plain text content, not as content blocks, instructions included (`/compact keep the API notes` reaches Claude as typed, and Claude Code uses the instructions for its summary).
+- Codex has no slash commands in its app-server. `/compact` becomes `thread/compact/start {threadId}`, which takes no instructions: any text after `/compact` is dropped, as in t3code, which compacts Codex threads the same way. Checked once against a real `codex` (0.166.0): the request answers `{}`, then `turn/started`, a `contextCompaction` item (started, completed), `thread/tokenUsage/updated` and `turn/completed` arrive and map as any turn's notifications do. A refused `thread/compact/start` becomes a failed turn with a failed compaction item carrying Codex's error. Any other command goes to `turn/start` as text.
+
+**Compaction** is a `context_compaction` item. Claude's `system` `status: "compacting"` opens it ("Compacting context") and its `compact_boundary` completes it ("Context compacted", with `{preTokens, postTokens}` from `compact_metadata`); the context used reported at the end of that turn is `post_tokens` when Claude gives it. A Claude `/compact` turn that ends without a compact boundary (Claude found nothing to compact, or failed) completes the item as `failed` ("Context not compacted", its detail Claude's result text) before the turn completes, so no compaction row stays in progress. Codex's `contextCompaction` item maps to the same item type.
 
 ### Attachments
 
@@ -558,6 +566,7 @@ t3code's flow and limits. The pure classification and limit checks live in `doma
 - **Limits**: at most 100 attachments per message; an image at most 10 MiB (the browser downscales a larger one before upload, spec 08); all images in one message together at most 80 MiB; any other file at most 50 MiB; nothing empty. The message text itself is at most 120,000 characters.
 - **Messages** (t3code's): `You can attach up to 100 files per message.`; `'<name>' is empty or could not be read.`; `'<name>' exceeds the <N> MB attachment limit.`; `Images can total up to 80 MiB per message or question response. Use smaller images or send fewer at once.`; `Prompt is <N> character(s) over the 120,000-character limit. Shorten or split it before sending.`
 - **Storage**: `<data folder>/attachments/<id>`, where `id` is the first 32 hex characters of the SHA-256 of the bytes plus an extension (the name's own when it matches `^\.[a-z0-9]{1,10}$`, else the image type's, else `.bin`). Written with exclusive create, so the same bytes twice are one file with one id. An id containing `..`, `/`, `\` or NUL is refused.
+- **Serving back**: `GET /api/attachments/<id>` (and `HEAD`) answers a stored image, typed from its bytes with `nosniff`, so the composer can show the thumbnail of a draft restored by id (spec 08). A stored file that is not an image, a refused id or a missing file is a 404: an uploaded page or script is never served from the app's origin.
 - **Reaching the model**: a message names attachments by id only; the engine re-derives kind and type from the stored file, so a message cannot claim a file is something it is not, and cannot name a file elsewhere on the machine. The absolute path goes in the preamble. Images are also read at the provider boundary and sent natively (base64 image blocks for Claude, `localImage` inputs for Codex); an unreadable one keeps only its path line.
 - **Access**: the attachments folder is the one directory granted beyond the project folder (Claude `additionalDirectories`). Its siblings (`.env`, the job store) are never granted. The granted list is reported on the session event. A path in a prompt grants nothing by itself; the provider's sandbox and the runtime mode still decide.
 - **Records**: a stored message keeps `{id, name, type, kind, size}` per attachment, never bytes.
@@ -600,7 +609,8 @@ The variable names a JSON file (one script) or a folder (every `*.json` in it, s
 { when?: "<regex>", turns: [ Turn, ... ] }        // a bare array means { turns }
 Turn = { text: string,
          tools?: [{name, input}],          // Unframed tools, run through the real handlers
-         provider?: [{name, input}],       // provider tools: permission decision only, never executed
+         provider?: [{name, input, permission?}],  // provider tools: permission decision only, never executed;
+                                           // permission {decisionReason?, suppressAlwaysAllowRule?, options?} is what the provider says about the ask
          retries?: [{attempt, maxRetries, delayMs, status}],
          question?: {questions: [...]},    // asks the person, waits for the answer
          tasks?: [{title, status}],        // sub-agents started and finished during the turn
@@ -613,6 +623,7 @@ Turn = { text: string,
 
 - `when` is matched case-insensitively against a chat's first message. The chosen script sticks to that chat for its whole life. Fallbacks: a script with no `when`, then the only script when just one was loaded. With several and no match the turn fails with `no agent script matches "<first 60 characters>"`.
 - Turn N answers the chat's Nth message; past the end the turn fails with `agent script <name> has <n> turn(s); the chat is on turn <m>`.
+- A `/compact` turn (a provider command) reports a `context_compaction` item, started and completed, before the turn's `usage` and text, as Claude and Codex do; the script still needs a turn for it (its `text` may be empty).
 - `expectPreamble` must match the preamble the turn was given, or the turn fails with `agent script <name> turn <n>: preamble did not match /<re>/: it was "<preamble>"`.
 - Order within a turn: on turn 1, the canvas tools check and the session event; then retries and the rate-limit notice; then sub-agent tasks; then the question, if any, waiting for the answer; then each `provider` call goes through the real permission decision for the chat's mode (asking the person when the mode says so, and waiting); a decline stops the rest of the turn and the answer is `refusedText`; then each `tools` call runs the real handler; then `usage`, when given, is reported as `thread.token-usage.updated`; then the text streams as one delta and the turn settles.
 - `title` is used as the chat's name on turn 1 instead of asking a model; empty means no name.
@@ -673,9 +684,9 @@ The test-only variables this spec uses, `UNFRAMED_TEST_AGENT_SCRIPT`, `UNFRAMED_
 36. **Pending request survives reconnect.** A subscriber that connects while a turn is parked on a request sees it in the snapshot and can answer it. Seam: engine.
 37. **Mode change mid-turn.** Switching a parked chat from Supervised to Full access applies to its next tool call. Seam: engine.
 38. **Plan mode.** In plan interaction mode a scripted `plan` becomes the turn's proposed plan, and a scripted `canvas_write` is refused with the plan message while `canvas_read` still runs. Seam: engine.
-39. **Questions.** A scripted `question` opens a user-input request; `thread.user-input.respond` releases the turn; the rejection strings for answered, not pending and incomplete answers. Seam: engine.
+39. **Questions.** A scripted `question` opens a user-input request; `thread.user-input.respond` releases the turn; the rejection strings for answered, not pending and incomplete answers; a file on an answer reaches the provider as its path after the answer. Seam: engine.
 40. **Attachment rules.** Classification with type inference, the per-image, total-image, per-file and count limits, and every message string. Seam: domain.
-41. **Attachment upload.** `attachments.createUploadUrl` then `POST` stores the file under the data folder, never the project; the same bytes twice give one file and one id; a body whose length differs from `sizeBytes`, an expired URL and a reused URL are refused. Seam: engine.
+41. **Attachment upload.** `attachments.createUploadUrl` then `POST` stores the file under the data folder, never the project; the same bytes twice give one file and one id; a body whose length differs from `sizeBytes`, an expired URL and a reused URL are refused. `GET /api/attachments/<id>` serves a stored image back and nothing else. Seam: engine.
 42. **Attachments reach the turn.** A message with an attached image puts its path line in the preamble (the attachment fixture) and stores the attachment's name, type, kind and size on the message, never bytes. Seam: engine.
 43. **Failure messages.** Each known subtype, an unknown subtype, no subtype, and the Codex fallbacks. Seam: domain.
 44. **A failed turn.** The failure fixture keeps any text already streamed, appends the failure sentence, records the retry activity, marks the turn `error` and the chat `failed`. Seam: engine.

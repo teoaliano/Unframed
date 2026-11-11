@@ -67,10 +67,11 @@ test("Edit from here rewinds the chat and puts the message back; only Revert can
   await expect(panel.locator("[data-role='assistant']")).toHaveCount(2);
   await expect.poll(() => title(agent)).toBe("Intro (blue)");
 
-  // Revert and keep changes: the chat rewinds, the canvas stays as it is.
+  // Revert and keep changes: the chat rewinds, the canvas stays as it is, and the message joins what is being typed.
+  await promptBox(panel).pressSequentially("half a thought");
   await editFrom(page, 1, "Revert and keep changes");
   await expect(panel.locator("[data-role='user']")).toHaveCount(1);
-  await expect(promptBox(panel)).toHaveText("retitle it blue");
+  await expect(panel.locator(".ProseMirror p")).toHaveText(["half a thought", "", "retitle it blue"]);
   await expect.poll(() => userTexts(agent, summary!.id)).toEqual(["retitle it red"]);
   expect(await title(agent)).toBe("Intro (blue)");
 

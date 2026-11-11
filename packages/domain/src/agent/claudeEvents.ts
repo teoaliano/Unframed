@@ -11,6 +11,11 @@ export interface ClaudeMapState {
   readonly streamingMessageId: string | undefined;
   /** Text blocks that already streamed as deltas, by `<message id>:<index>`. */
   readonly streamedBlocks: ReadonlyArray<string>;
+  /**
+   * Blocks already delivered, by API message id. The CLI sends each block of a message as its
+   * own assistant message, so a block's index in the stream is this count plus its array index.
+   */
+  readonly deliveredBlocks: Readonly<Record<string, number>>;
   /** Each open tool use: its item type and name. */
   readonly tools: Readonly<Record<string, { readonly itemType: ItemType; readonly toolName: string; readonly agentId?: string }>>;
   /** The session id, once a message reported it. */
@@ -22,15 +27,26 @@ export interface ClaudeMapState {
    * The result's usage cannot say this, because it sums every call of the turn.
    */
   readonly lastCallTokens: number | undefined;
+  readonly compaction: "none" | "started" | "done";
 }
 
-export const initialClaudeState = (): ClaudeMapState => ({ streamingMessageId: undefined, streamedBlocks: [], tools: {}, sessionId: undefined, lastAssistantUuid: undefined, lastCallTokens: undefined });
+export const initialClaudeState = (): ClaudeMapState => ({
+  streamingMessageId: undefined,
+  streamedBlocks: [],
+  deliveredBlocks: {},
+  tools: {},
+  sessionId: undefined,
+  lastAssistantUuid: undefined,
+  lastCallTokens: undefined,
+  compaction: "none",
+});
 
 export interface ClaudeMapContext {
   /** The chat's turn these messages belong to. */
   readonly turnId: string | undefined;
   /** The names the Unframed MCP server registers. */
   readonly registeredTools: ReadonlyArray<string>;
+  readonly compacting?: boolean;
 }
 
 export interface ClaudeMapped {
@@ -111,6 +127,25 @@ export const mapClaudeMessage = (state: ClaudeMapState, message: unknown, contex
           if (check.failure) toolsFailure = check.failure;
           break;
         }
+        case "status":
+          if (m.status === "compacting") {
+            next = { ...next, compaction: "started" };
+            events.push({ type: "item.started", ...turn, itemId: `compaction:${context.turnId ?? "turn"}`, payload: { itemType: "context_compaction", status: "inProgress", title: "Compacting context" } });
+          }
+          break;
+        case "compact_boundary": {
+          const metadata = obj(m.compact_metadata);
+          const before = num(metadata.pre_tokens);
+          const after = num(metadata.post_tokens);
+          events.push({
+            type: "item.completed",
+            ...turn,
+            itemId: `compaction:${context.turnId ?? "turn"}`,
+            payload: { itemType: "context_compaction", status: "completed", title: "Context compacted", data: { ...(before === undefined ? {} : { preTokens: before }), ...(after === undefined ? {} : { postTokens: after }) } },
+          });
+          next = { ...next, lastCallTokens: after, compaction: "done" };
+          break;
+        }
         case "api_retry":
           events.push({
             type: "runtime.retry",
@@ -185,9 +220,12 @@ export const mapClaudeMessage = (state: ClaudeMapState, message: unknown, contex
       const callTokens = usageTotal(claudeUsage(body));
       if (agentId === undefined && body.model !== "<synthetic>" && callTokens > 0) next = { ...next, lastCallTokens: callTokens };
       const content: unknown[] = Array.isArray(body.content) ? body.content : [];
+      const messageId = String(body.id ?? "message");
+      const offset = next.deliveredBlocks[messageId] ?? 0;
+      next = { ...next, deliveredBlocks: { ...next.deliveredBlocks, [messageId]: offset + content.length } };
       for (const [index, raw] of content.entries()) {
         const block = obj(raw);
-        const itemId = `${String(body.id ?? "message")}:${index}`;
+        const itemId = `${messageId}:${offset + index}`;
         if (block.type === "tool_use") {
           const toolName = String(block.name ?? "tool");
           const input = obj(block.input);
@@ -262,6 +300,12 @@ export const mapClaudeMessage = (state: ClaudeMapState, message: unknown, contex
         payload: { usage: { usedTokens: next.lastCallTokens ?? processed, ...(window === undefined ? {} : { maxTokens: window }), totalProcessedTokens: processed, ...usage } },
       });
       const errors: string[] = Array.isArray(m.errors) ? m.errors.filter((error: unknown): error is string => typeof error === "string") : [];
+      if (context.compacting === true && next.compaction !== "done") {
+        const itemId = `compaction:${context.turnId ?? "turn"}`;
+        const reason = typeof m.result === "string" && m.result.trim() !== "" ? m.result.trim() : (errors[0] ?? "Claude ended the turn without compacting.");
+        if (next.compaction === "none") events.push({ type: "item.started", ...turn, itemId, payload: { itemType: "context_compaction", status: "inProgress", title: "Compacting context" } });
+        events.push({ type: "item.completed", ...turn, itemId, payload: { itemType: "context_compaction", status: "failed", title: "Context not compacted", detail: reason } });
+      }
       events.push({
         type: "turn.completed",
         ...turn,
@@ -274,7 +318,7 @@ export const mapClaudeMessage = (state: ClaudeMapState, message: unknown, contex
           ...(overloaded ? { errorMessage: "Claude's API is overloaded (529). Try again shortly." } : failed && errors[0] ? { errorMessage: errors[0] } : failed && typeof m.result === "string" && m.result !== "" ? { errorMessage: m.result } : {}),
         },
       });
-      next = { ...next, streamedBlocks: [], streamingMessageId: undefined, lastCallTokens: undefined };
+      next = { ...next, streamedBlocks: [], deliveredBlocks: {}, streamingMessageId: undefined, lastCallTokens: undefined, compaction: "none" };
       break;
     }
 

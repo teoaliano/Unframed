@@ -1,13 +1,13 @@
+import type { ElementChip } from "@unframed/contracts";
 import { rememberDrafts, takeDrafts } from "../project/tabMemory.ts";
 import { UnframedError, type ChatAttachment, type ChatSummary, type ClientChatCommand, type ProviderStatuses, type ShellStreamItem, type ThreadStreamItem } from "@unframed/contracts";
-import { projectChat, type Chat, type ChatEvent, type ChatMessage } from "@unframed/domain";
+import { projectChat, readStoredDrafts, sendShortcutOf, storedDraftsValue, type Chat, type ChatEvent, type ChatMessage, type SendShortcut } from "@unframed/domain";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import type { EngineConnection } from "../rpc/engine.ts";
 
 export const messageOf = (error: unknown): string => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
 type Distributive<T> = T extends unknown ? Omit<T, "commandId" | "projectId"> : never;
-/** A command as the rail builds it: the client adds the command id and the project. */
 export type CommandInput = Distributive<ClientChatCommand>;
 
 export const newId = (prefix: string): string => `${prefix}-${crypto.randomUUID()}`;
@@ -19,63 +19,62 @@ interface ThreadEntry {
   stop: () => void;
 }
 
-/** What the rail remembers while the canvas is mounted: never persisted. */
 export interface RailUi {
   readonly open: boolean;
-  /** The chat last chosen in the strip. */
   readonly chosen: string | null;
-  /** A chat chosen from search, shown even when the selection filter hides it, until the selection next changes. */
   readonly pinned: string | null;
   readonly searchOpen: boolean;
-  /** The diff panel, when open. */
   readonly diff: { readonly threadId: string; readonly turnCount: number | "all"; readonly shapeId?: string } | undefined;
-  /** A line under the transcript for failures the transcript cannot show. */
   readonly error: string | undefined;
 }
 
-/** The rail's choice when New chat was pressed: no tab is active and the next message starts a chat. */
 export const NEW_CHAT = "new-chat";
 
 const INITIAL_UI: RailUi = { open: false, chosen: null, pinned: null, searchOpen: false, diff: undefined, error: undefined };
 
 type Key = "shell" | "providers" | "ui" | "queues" | "handoff" | `thread:${string}` | `queue:${string}` | `draft:${string}`;
 
-/** A message waiting for the running turn: sent after its next tool call, or when it ends. */
 export interface QueuedMessage {
   readonly id: string;
-  readonly message: { readonly text: string; readonly selection: ReadonlyArray<string>; readonly attachments: ReadonlyArray<ChatAttachment> };
-  /** The latest completed tool call when it was queued: the next one is its boundary. */
+  readonly message: { readonly text: string; readonly selection: ReadonlyArray<string>; readonly attachments: ReadonlyArray<ChatAttachment>; readonly elements?: ReadonlyArray<ElementChip> };
   readonly after: string | null;
   readonly state: "waiting" | "sending";
+  readonly chips?: ReadonlyArray<string>;
 }
 
-/** A draft put back into a chat's composer. */
-/** A chat's unsent text, and the shapes its @ mentions put among the context chips. */
 export interface ChatDraft {
   readonly text: string;
   readonly mentions: ReadonlyArray<string>;
+  readonly attachments: ReadonlyArray<ChatAttachment>;
+  readonly elements?: ReadonlyArray<ElementChip>;
 }
 
-export const EMPTY_DRAFT: ChatDraft = { text: "", mentions: [] };
+export const EMPTY_DRAFT: ChatDraft = { text: "", mentions: [], attachments: [] };
+
+const sameIds = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) => a.length === b.length && a.every((id, index) => b[index] === id);
 
 export const sameDraft = (a: ChatDraft, b: ChatDraft): boolean =>
-  a.text === b.text && a.mentions.length === b.mentions.length && a.mentions.every((id, index) => b.mentions[index] === id);
+  a.text === b.text &&
+  sameIds(a.mentions, b.mentions) &&
+  sameIds(
+    a.attachments.map((item) => item.id),
+    b.attachments.map((item) => item.id),
+  ) &&
+  JSON.stringify(a.elements ?? []) === JSON.stringify(b.elements ?? []);
 
-export interface Handoff {
+export const TOOLBAR_DRAFT = "toolbar";
+
+const DRAFT_WRITE_MS = 400;
+
+interface Handoff {
   readonly text: string;
   readonly selection: ReadonlyArray<string>;
   readonly attachments: ReadonlyArray<ChatAttachment>;
+  readonly elements?: ReadonlyArray<ElementChip>;
 }
 
 const EMPTY_QUEUE: ReadonlyArray<QueuedMessage> = [];
 
-/**
- * The chat client state (spec 08, t3code's client-runtime shape): the project's chat
- * summaries from `subscribeShell`, the chats on screen from `subscribeThread` folded with
- * the domain projector and de-duplicated by sequence, optimistic user messages, the
- * provider statuses, and a `dispatch` that stamps command ids. Reconnects resubscribe and
- * start again from a snapshot.
- */
 export class ChatClient {
   readonly engine: EngineConnection;
   readonly project: string;
@@ -83,9 +82,7 @@ export class ChatClient {
   private shellSequence = -1;
   private synced = false;
   private readonly threads = new Map<string, ThreadEntry>();
-  /** User messages sent but not yet in the chat, by chat. */
   private readonly optimistic = new Map<string, ChatMessage[]>();
-  /** Chats created here that the shell has not reported yet. */
   private readonly pendingChats = new Map<string, ChatSummary>();
   private readonly creating = new Set<string>();
   private readonly listeners = new Map<Key, Set<() => void>>();
@@ -97,37 +94,54 @@ export class ChatClient {
   private readonly queues = new Map<string, ReadonlyArray<QueuedMessage>>();
   private readonly handoffs = new Map<string, Handoff[]>();
   private readonly drafts_ = new Map<string, ChatDraft>();
+  private readonly draftsKey: string;
+  private readonly stopDrafts: () => void;
+  private draftsTimer: ReturnType<typeof setTimeout> | undefined;
+  private draftWrites = 0;
+  private readonly writtenDrafts: string[] = [];
+  private draftsRead = false;
+  private readonly knownAttachments = new Map<string, ChatAttachment>();
   private followUpValue: "queue" | "steer" = "queue";
   private followUpWatch: (() => void) | undefined;
   private planModeValue = false;
   private planModeWatch: (() => void) | undefined;
+  private sendShortcutValue: SendShortcut = "enter";
+  private sendShortcutWatch: (() => void) | undefined;
   private readonly stopShell: () => void;
 
   constructor(engine: EngineConnection, project: string) {
     this.engine = engine;
     this.project = project;
     this.stopShell = engine.subscribe("orchestration.subscribeShell", { projectId: project }, (item) => this.onShell(item));
+    this.draftsKey = `agent.drafts.${project}`;
+    this.stopDrafts = engine.subscribe("preferences.subscribe", { keys: [this.draftsKey] }, (change) => {
+      if (change.key === this.draftsKey) this.onStoredDrafts(change.value);
+    });
+    if (typeof window !== "undefined") window.addEventListener("pagehide", this.flushDrafts);
   }
 
-  /** The unsent drafts, for a project tab that goes to the background (spec 17). */
   drafts(): ReadonlyArray<readonly [string, ChatDraft]> {
     return [...this.drafts_];
   }
 
   restoreDrafts(entries: ReadonlyArray<readonly [string, ChatDraft]>): void {
-    for (const [key, draft] of entries) this.drafts_.set(key, draft);
+    for (const [key, draft] of entries) {
+      this.drafts_.set(key, draft);
+      this.rememberAttachments(draft.attachments);
+    }
   }
 
   dispose(): void {
+    this.flushDrafts();
+    if (typeof window !== "undefined") window.removeEventListener("pagehide", this.flushDrafts);
+    this.stopDrafts();
     this.stopShell();
     this.followUpWatch?.();
     this.planModeWatch?.();
+    this.sendShortcutWatch?.();
     for (const entry of this.threads.values()) entry.stop();
     this.threads.clear();
   }
-
-  // -------------------------------------------------------------------------------------
-  // Change notification, by key, so a streaming reply re-renders only its chat.
 
   subscribe(key: Key, listener: () => void): () => void {
     let set = this.listeners.get(key);
@@ -148,9 +162,6 @@ export class ChatClient {
     for (const listener of [...(this.listeners.get(key) ?? [])]) listener();
   }
 
-  // -------------------------------------------------------------------------------------
-  // The shell: every chat of the project as a summary.
-
   private onShell(item: ShellStreamItem): void {
     if (item.kind === "snapshot") {
       this.summaries = new Map(item.chats.map((chat) => [chat.id, chat]));
@@ -158,7 +169,6 @@ export class ChatClient {
     } else if (item.kind === "synchronized") {
       this.synced = true;
     } else {
-      // One commit that changes several chats (Clear all chats) sends one item per chat, all with its sequence: only older items are stale.
       if (item.sequence < this.shellSequence) return;
       this.shellSequence = item.sequence;
       if (item.kind === "chat-upserted") this.summaries.set(item.chat.id, item.chat);
@@ -168,14 +178,12 @@ export class ChatClient {
     this.changed("shell");
   }
 
-  /** Every chat of the project, newest first. */
   chats(): ChatSummary[] {
     const all = new Map(this.pendingChats);
     for (const [id, chat] of this.summaries) all.set(id, chat);
     return [...all.values()].sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
   }
 
-  /** Resolves once the shell has delivered every change up to `sequence`, such as a command's answer. */
   shellReached(sequence: number): Promise<void> {
     if (this.shellSequence >= sequence) return Promise.resolve();
     return new Promise((resolve) => {
@@ -191,9 +199,6 @@ export class ChatClient {
     return this.synced;
   }
 
-  // -------------------------------------------------------------------------------------
-  // Threads: one subscription per chat on screen, shared by every reader.
-
   private open(threadId: string, entry: ThreadEntry): void {
     entry.stop = this.engine.subscribe("orchestration.subscribeThread", { projectId: this.project, threadId }, (item) => this.onThread(threadId, entry, item));
   }
@@ -202,7 +207,6 @@ export class ChatClient {
     let entry = this.threads.get(threadId);
     if (!entry) {
       const created: ThreadEntry = { chat: undefined, sequence: -1, watchers: 0, stop: () => {} };
-      // A chat still being created has nothing to subscribe to yet: `created` opens it.
       if (!this.creating.has(threadId)) this.open(threadId, created);
       this.threads.set(threadId, created);
       entry = created;
@@ -212,7 +216,6 @@ export class ChatClient {
     return () => {
       held.watchers--;
       if (held.watchers > 0) return;
-      // A chat looked away from keeps its subscription briefly, so switching tabs back is instant.
       setTimeout(() => {
         if (held.watchers > 0 || this.threads.get(threadId) !== held) return;
         held.stop();
@@ -242,7 +245,6 @@ export class ChatClient {
     this.changed(`thread:${threadId}`);
   }
 
-  /** A chat as the transcript shows it: the engine's projection plus the messages sent from here and not yet in it. */
   thread(threadId: string): Chat | undefined {
     const chat = this.threads.get(threadId)?.chat;
     const pending = this.optimistic.get(threadId) ?? [];
@@ -252,13 +254,9 @@ export class ChatClient {
     return { ...chat, messages: [...chat.messages, ...pending.filter((message) => !known.has(message.id))] };
   }
 
-  /** Whether the chat's subscription has delivered its snapshot. */
   loaded(threadId: string): boolean {
     return this.threads.get(threadId)?.chat !== undefined;
   }
-
-  // -------------------------------------------------------------------------------------
-  // Commands.
 
   dispatch(command: CommandInput): Promise<{ sequence: number }> {
     return this.engine.call("orchestration.dispatchCommand", {
@@ -268,7 +266,6 @@ export class ChatClient {
     } as ClientChatCommand);
   }
 
-  /** Records a chat the shell will report, so its tab shows at once. */
   expectChat(summary: ChatSummary): void {
     if (this.summaries.has(summary.id)) return;
     this.creating.add(summary.id);
@@ -276,7 +273,6 @@ export class ChatClient {
     this.changed("shell");
   }
 
-  /** The engine acknowledged the chat: whoever watches it now subscribes. */
   created(id: string): void {
     if (!this.creating.delete(id)) return;
     const entry = this.threads.get(id);
@@ -288,7 +284,6 @@ export class ChatClient {
     if (this.pendingChats.delete(id)) this.changed("shell");
   }
 
-  /** Shows a user message at once; it leaves this list when the chat holds it. */
   addOptimistic(threadId: string, message: ChatMessage): void {
     this.optimistic.set(threadId, [...(this.optimistic.get(threadId) ?? []), message]);
     this.changed(`thread:${threadId}`);
@@ -300,9 +295,6 @@ export class ChatClient {
     else this.optimistic.set(threadId, left);
     this.changed(`thread:${threadId}`);
   }
-
-  // -------------------------------------------------------------------------------------
-  // Provider statuses: asked for only when the agent's UI is used, then kept.
 
   get providers(): ProviderStatuses | undefined {
     return this.statuses;
@@ -333,14 +325,9 @@ export class ChatClient {
     return request;
   }
 
-  /** Whether a message sent from here has not reached the chat yet. */
   inFlight(threadId: string): boolean {
     return (this.optimistic.get(threadId)?.length ?? 0) > 0;
   }
-
-  // -------------------------------------------------------------------------------------
-  // Queued messages: kept here, not in the engine, since they are not sent yet. A reload
-  // loses them harmlessly.
 
   queue(threadId: string): ReadonlyArray<QueuedMessage> {
     return this.queues.get(threadId) ?? EMPTY_QUEUE;
@@ -350,8 +337,8 @@ export class ChatClient {
     return [...this.queues.keys()];
   }
 
-  enqueue(threadId: string, message: QueuedMessage["message"], after: string | null): void {
-    this.queues.set(threadId, [...this.queue(threadId), { id: newId("queued"), message, after, state: "waiting" }]);
+  enqueue(threadId: string, message: QueuedMessage["message"], after: string | null, chips?: ReadonlyArray<string>): void {
+    this.queues.set(threadId, [...this.queue(threadId), { id: newId("queued"), message, after, state: "waiting", ...(chips !== undefined ? { chips } : {}) }]);
     this.changed(`queue:${threadId}`);
     this.changed("queues");
   }
@@ -364,31 +351,22 @@ export class ChatClient {
     this.changed("queues");
   }
 
-  /** Takes queued messages out (one, or all of them) and answers them. */
   takeQueued(threadId: string, id?: string): QueuedMessage[] {
     const taken = this.queue(threadId).filter((item) => id === undefined || item.id === id);
     this.updateQueue(threadId, (queue) => queue.filter((item) => !taken.includes(item)));
     return taken;
   }
 
-  // -------------------------------------------------------------------------------------
-  // Handing a draft back to a chat's composer (a cancelled queued message, Edit from here).
-
   handOff(threadId: string, draft: Handoff): void {
     this.handoffs.set(threadId, [...(this.handoffs.get(threadId) ?? []), draft]);
     this.changed("handoff");
   }
 
-  /** The drafts handed to a chat's composer since it last took them. */
   takeHandoffs(threadId: string): Handoff[] {
     const drafts = this.handoffs.get(threadId) ?? [];
     this.handoffs.delete(threadId);
     return drafts;
   }
-
-  // -------------------------------------------------------------------------------------
-  // Each chat's unsent text (or `NEW_CHAT`'s), so the canvas rail and the editor's rail show
-  // the same draft and closing the editor loses nothing. In memory only: a reload drops it.
 
   draft(key: string): ChatDraft {
     return this.drafts_.get(key) ?? EMPTY_DRAFT;
@@ -396,13 +374,49 @@ export class ChatClient {
 
   setDraft(key: string, draft: ChatDraft): void {
     if (sameDraft(this.draft(key), draft)) return;
-    if (draft.text === "" && draft.mentions.length === 0) this.drafts_.delete(key);
+    if (draft.text === "" && draft.mentions.length === 0 && draft.attachments.length === 0 && (draft.elements ?? []).length === 0) this.drafts_.delete(key);
     else this.drafts_.set(key, draft);
+    this.rememberAttachments(draft.attachments);
     this.changed(`draft:${key}`);
+    clearTimeout(this.draftsTimer);
+    this.draftsTimer = setTimeout(this.flushDrafts, DRAFT_WRITE_MS);
   }
 
-  // -------------------------------------------------------------------------------------
-  // The Follow-up behavior preference (spec 10 shows its control): Queue unless set.
+  rememberAttachments(attachments: ReadonlyArray<ChatAttachment>): void {
+    for (const attachment of attachments) this.knownAttachments.set(attachment.id, attachment);
+  }
+
+  knownAttachment(id: string): ChatAttachment | undefined {
+    return this.knownAttachments.get(id);
+  }
+
+  private readonly flushDrafts = (): void => {
+    if (this.draftsTimer === undefined) return;
+    clearTimeout(this.draftsTimer);
+    this.draftsTimer = undefined;
+    const keep = (key: string) => !this.synced || key === NEW_CHAT || key === TOOLBAR_DRAFT || this.summaries.has(key) || this.pendingChats.has(key);
+    const value = storedDraftsValue(this.drafts_, keep);
+    const json = JSON.stringify(value);
+    this.writtenDrafts.push(json);
+    if (this.writtenDrafts.length > 50) this.writtenDrafts.shift();
+    this.draftWrites++;
+    void this.engine
+      .call("preferences.set", { key: this.draftsKey, value })
+      .catch(() => undefined)
+      .finally(() => this.draftWrites--);
+  };
+
+  private onStoredDrafts(value: unknown): void {
+    if (this.draftWrites > 0 || this.draftsTimer !== undefined || this.writtenDrafts.includes(JSON.stringify(value ?? null))) return;
+    const first = !this.draftsRead;
+    this.draftsRead = true;
+    for (const [key, draft] of readStoredDrafts(value)) {
+      if (sameDraft(this.draft(key), draft) || (first && this.drafts_.has(key))) continue;
+      this.drafts_.set(key, draft);
+      this.rememberAttachments(draft.attachments);
+      this.changed(`draft:${key}`);
+    }
+  }
 
   get followUp(): "queue" | "steer" {
     if (!this.followUpWatch) {
@@ -415,7 +429,17 @@ export class ChatClient {
     return this.followUpValue;
   }
 
-  /** The Plan mode preference (spec 10 shows its control): off unless set, as in t3code. */
+  get sendShortcut(): SendShortcut {
+    if (!this.sendShortcutWatch) {
+      this.sendShortcutWatch = this.engine.subscribe("preferences.subscribe", { keys: ["agent.sendShortcut"] }, (change) => {
+        if (change.key !== "agent.sendShortcut") return;
+        this.sendShortcutValue = sendShortcutOf(change.value);
+        this.changed("ui");
+      });
+    }
+    return this.sendShortcutValue;
+  }
+
   get planMode(): boolean {
     if (!this.planModeWatch) {
       this.planModeWatch = this.engine.subscribe("preferences.subscribe", { keys: ["agent.planMode"] }, (change) => {
@@ -427,14 +451,10 @@ export class ChatClient {
     return this.planModeValue;
   }
 
-  // -------------------------------------------------------------------------------------
-  // The rail's own state.
-
   get ui(): RailUi {
     return this.uiState;
   }
 
-  /** A refused command or a failed call, in the rail's error line (and the toolbar tray's). */
   reportError(error: unknown): void {
     this.setUi({ error: messageOf(error) });
   }
@@ -454,12 +474,10 @@ interface ClientEntry {
 
 const clients = new Map<string, ClientEntry>();
 
-/** Disposes a client nobody holds, a moment later, so a remount keeps its subscriptions. */
 const disposeIfIdle = (project: string, entry: ClientEntry) =>
   setTimeout(() => {
     if (entry.holders > 0 || clients.get(project) !== entry) return;
     clients.delete(project);
-    // The drafts outlive the client, so a tab that comes back shows what the person typed (spec 17).
     rememberDrafts(project, entry.client.drafts());
     entry.client.dispose();
   }, 1000);
@@ -480,10 +498,6 @@ const entryFor = (engine: EngineConnection, project: string): ClientEntry => {
   return entry;
 };
 
-/**
- * The one chat client of a project, shared by the rail, the toolbar's Agent tray and the
- * editor, held for as long as the component is mounted.
- */
 export const useChatClient = (engine: EngineConnection, project: string): ChatClient => {
   const client = useMemo(() => entryFor(engine, project).client, [engine, project]);
   useEffect(() => {
@@ -508,7 +522,7 @@ export const useChats = (client: ChatClient): ChatSummary[] => {
   return client.chats();
 };
 
-export const useThread = (client: ChatClient, threadId: string | null | undefined): Chat | undefined => {
+const useThread = (client: ChatClient, threadId: string | null | undefined): Chat | undefined => {
   useKey(client, `thread:${threadId ?? ""}`);
   return threadId ? client.thread(threadId) : undefined;
 };
@@ -523,7 +537,6 @@ export const useRailUi = (client: ChatClient): RailUi => {
   return client.ui;
 };
 
-/** Subscribes to a chat while the component shows it, and answers it. */
 export const useQueue = (client: ChatClient, threadId: string | null | undefined): ReadonlyArray<QueuedMessage> => {
   useKey(client, `queue:${threadId ?? ""}`);
   return threadId ? client.queue(threadId) : EMPTY_QUEUE;
@@ -534,19 +547,20 @@ export const useQueuedThreads = (client: ChatClient): string[] => {
   return client.queuedThreads();
 };
 
-/** Changes whenever the chat's draft changes. */
 export const useDraftVersion = (client: ChatClient, key: string): number => useKey(client, `draft:${key}`);
 
-/** Changes whenever a draft is handed to a composer. */
 export const useHandoffVersion = (client: ChatClient): number => useKey(client, "handoff");
 
-/** The Plan mode preference, live. */
 export const usePlanMode = (client: ChatClient): boolean => {
   useKey(client, "ui");
   return client.planMode;
 };
 
-/** The Follow-up behavior preference, live. */
+export const useSendShortcut = (client: ChatClient): SendShortcut => {
+  useKey(client, "ui");
+  return client.sendShortcut;
+};
+
 export const useFollowUp = (client: ChatClient): "queue" | "steer" => {
   useKey(client, "ui");
   return client.followUp;

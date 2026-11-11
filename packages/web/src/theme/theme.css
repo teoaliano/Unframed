@@ -61,6 +61,9 @@
   --animate-skeleton: skeleton 2.4s infinite;
   --animate-status-pulse: status-pulse 2s infinite;
   --animate-status-ping: status-ping 2s infinite;
+  --animate-stash-pulse-row: stash-pulse-row 1400ms;
+  --animate-stash-pulse-row-alt: stash-pulse-row-alt 1400ms;
+  --animate-stash-pulse-count: stash-pulse-count 1400ms step-start;
   --color-warning-foreground: var(--warning-foreground);
   --color-warning: var(--warning);
   --color-warning-surface: var(--warning-surface);
@@ -127,6 +130,24 @@
     }
     100% {
       opacity: 1;
+    }
+  }
+  @keyframes stash-pulse-row {
+    from,
+    85.7% {
+      color: var(--color-foreground);
+    }
+  }
+  @keyframes stash-pulse-row-alt {
+    from,
+    85.7% {
+      color: var(--color-foreground);
+    }
+  }
+  @keyframes stash-pulse-count {
+    from,
+    85.7% {
+      color: var(--color-primary);
     }
   }
   @keyframes status-pulse {
@@ -487,10 +508,20 @@
   --artifact-page: var(--color-white);
   /* Unframed: bottom-left toasts sit above tldraw's zoom controls (spec 02). */
   --toast-footer-offset: 2rem;
+  --parameters-dock-width: 380px;
+  /* Unframed: while the docked agent rail is open, bottom-left toasts start past its 380 px, clear of its composer (spec 08). */
+  &:has([data-slot="docked-rail"][data-state="open"]) {
+    --toast-start-offset: 380px;
+  }
 
   @variant dark {
     --canvas-dot: color-mix(in srgb, var(--foreground) 22%, var(--background));
   }
+}
+
+/* Unframed: with the chat rail docked open, bottom-left toasts start past it, so they never cover the composer (spec 08). */
+body:has(aside[aria-label="Agent"][data-state="open"]:not([data-embedded])) [data-slot="toast-viewport"][data-position*="left"] {
+  left: calc(380px + var(--toast-inset));
 }
 
 @theme inline {
@@ -747,11 +778,12 @@ code {
  * layered CSS with no !important, so unlayered shell styles win.
  */
 @layer components {
+  /* The bar's ends sit with its body (Corners.tsx) above the docked rail, or the body's fill covers them. */
   .unframed-chrome-left,
   .unframed-chrome-right {
     position: fixed;
     top: 0;
-    z-index: 400;
+    z-index: 650;
   }
 
   .unframed-chrome-left {
@@ -764,7 +796,7 @@ code {
 
   /*
    * The project tab strip (spec 17) sits in the chrome row. It keeps its place with the rail open, so it sits above the
-   * docked rail (600) and under the docked top-left card (700). The chrome cards are 400.
+   * docked rail (600) and under the docked top-left card (700).
    */
   .unframed-tabs {
     position: fixed;

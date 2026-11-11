@@ -1,4 +1,4 @@
-// The engine's keep-awake message (spec 22). One blocker at most, whatever the
+// The engine's keep-awake message (spec 23). One blocker at most, whatever the
 // engine sends: `prevent-app-suspension` lets the display sleep and keeps the
 // process running, so the canvas a paired iPad is drawing on stays live.
 function createKeepAwake(blocker) {

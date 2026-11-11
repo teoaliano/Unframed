@@ -6,7 +6,7 @@ import { Checkbox } from "~/components/ui/checkbox";
 import { Label } from "~/components/ui/label";
 import type { MediumStatusProps } from "../mediumRegistry.ts";
 import { videoCounts } from "../videoPlan.ts";
-import { StatusBand, StatusLine } from "./StatusLine.tsx";
+import { NoKeyLine, StatusBand, StatusLine } from "./StatusLine.tsx";
 
 export const SHARE_LABEL = "Share via temporary link while generating";
 export const SHARE_NOTE = "What sharing does";
@@ -46,7 +46,7 @@ const ShareBlock = ({ on, onChange }: { readonly on: boolean; readonly onChange:
 /** The video tray's status band: its warnings in order with the share block among them, then the blockers and the last start error. */
 export const VideoStatus = ({ status, failure, values, source, entry, setProps }: MediumStatusProps) => {
   const lines = videoStatusLines({ counts: videoCounts(source, values.props, entry), entry, shareLocalVideos: values.props.shareLocalVideos });
-  if (lines.length === 0 && status.blockers.length === 0 && failure === undefined) return null;
+  if (lines.length === 0 && status.blockers.length === 0 && status.needsKey !== true && failure === undefined) return null;
   return (
     <StatusBand>
       {lines.map((line) =>
@@ -63,6 +63,7 @@ export const VideoStatus = ({ status, failure, values, source, entry, setProps }
           {line}
         </StatusLine>
       ))}
+      {status.needsKey === true && <NoKeyLine message={status.keyMessage} />}
       {failure !== undefined && <StatusLine kind="error">{failure}</StatusLine>}
     </StatusBand>
   );

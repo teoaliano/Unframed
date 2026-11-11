@@ -173,7 +173,7 @@ export const mapCodexNotification = (method: string, params: unknown, turnId: st
 };
 
 export type CodexRequest =
-  | { readonly kind: "approval"; readonly requestType: RequestType; readonly detail: string; readonly args: Readonly<Record<string, unknown>> }
+  | { readonly kind: "approval"; readonly requestType: RequestType; readonly detail: string; readonly reason?: string; readonly args: Readonly<Record<string, unknown>> }
   | { readonly kind: "question"; readonly questions: ReadonlyArray<UserQuestion> }
   | { readonly kind: "elicitation"; readonly server: string }
   | { readonly kind: "unknown" };
@@ -184,7 +184,8 @@ export const readCodexRequest = (method: string, params: unknown): CodexRequest 
   switch (method) {
     case "item/commandExecution/requestApproval": {
       const command = typeof p.command === "string" ? p.command : Array.isArray(p.command) ? p.command.join(" ") : "";
-      return { kind: "approval", requestType: "command_execution_approval", detail: command || String(p.reason ?? "a command"), args: { toolName: "command", input: p } };
+      const reason = typeof p.reason === "string" && command !== "" ? { reason: p.reason } : {};
+      return { kind: "approval", requestType: "command_execution_approval", detail: command || String(p.reason ?? "a command"), ...reason, args: { toolName: "command", input: p } };
     }
     case "item/fileChange/requestApproval":
       return { kind: "approval", requestType: "file_change_approval", detail: String(p.grantRoot ?? p.reason ?? "a file change"), args: { toolName: "file change", input: p } };

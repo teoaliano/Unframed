@@ -1,4 +1,4 @@
-import { openCanvas, shapeOnScreen } from "./canvas.ts";
+import { clearOfDesignPanel, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { clickShape, composer, instructionBox, openComposer, sendButton, sendRun, settled, toolbar } from "./generation.ts";
 import { pngBytes } from "./images.ts";
 import { filledMedia, promptRecord, putRecords } from "./media.ts";
@@ -12,6 +12,7 @@ test("Regenerate on a Free output reopens with Runs at 1 and sends that run's ow
   }
   await putRecords(engine, [promptRecord("shape:list", "302", "images: 2\n[1] alone\n---\nboth together", { x: 40, y: -80 })]);
   await expect(shapeOnScreen(page, "shape:list")).toBeVisible();
+  await clearOfDesignPanel(page);
 
   await page.mouse.click(10, 400);
   await clickShape(page, "shape:list");
@@ -25,7 +26,7 @@ test("Regenerate on a Free output reopens with Runs at 1 and sends that run's ow
   const sent = generation.requests.find((request) => request.body.prompt === "image 1 alone")!;
 
   await page.mouse.click(10, 400);
-  // One zoom step out, so the results clear the style panel.
+  // One zoom step out, so the results clear the Design panel.
   await page.keyboard.press("-");
   await settled(shapeOnScreen(page, first.id));
   await clickShape(page, first.id);

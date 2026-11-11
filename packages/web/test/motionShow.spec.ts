@@ -1,0 +1,74 @@
+import type { Page } from "@playwright/test";
+import { centre, openCanvas, shapeOnScreen } from "./canvas.ts";
+import { expect, test } from "./agent.ts";
+import { filledArtifact } from "./artifacts.ts";
+import { editSummaries } from "./motionHelpers.ts";
+
+const FADE = `<!doctype html><html><head><style>#root{position:relative;width:640px;height:360px;background:#000;overflow:hidden}#dot{position:absolute;left:20px;top:120px;width:60px;height:60px;background:#f00}</style></head><body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="4" data-width="640" data-height="360"><div id="dot" data-uf-name="Dot" class="clip" data-start="0" data-duration="4"></div></div>
+<script src="gsap.js"></script><script>
+const tl = gsap.timeline({ paused: true });
+tl.to("#dot", { x: 300, duration: 1 }, 0);
+tl.to("#dot", { opacity: 0.2, duration: 2 }, 1);
+window.__timelines = { main: tl };
+</script></body></html>`;
+
+const SHAPE = "shape:intro";
+const timeline = (page: Page) => page.getByRole("region", { name: "Timeline for Intro" });
+const region = (page: Page) => page.getByRole("region", { name: "Editing Intro" });
+
+test.setTimeout(150_000);
+
+test("Show on timeline opens the strip, expands the element's row and selects the tween that animates the property", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await filledArtifact(agent, { id: SHAPE, kind: "motion", ref: "150", at: { x: -520, y: -40 }, size: { w: 480, h: 270 }, title: "Intro", html: FADE });
+  await expect(shapeOnScreen(page, SHAPE)).toBeVisible();
+  await page.mouse.click(640, 600);
+  const at = await centre(shapeOnScreen(page, SHAPE));
+  await page.mouse.dblclick(at.x, at.y);
+  await expect(region(page)).toBeVisible();
+  await expect(timeline(page).getByTestId("timeline-row").first()).toBeVisible({ timeout: 40_000 });
+
+  await timeline(page).getByRole("button", { name: "Select Dot" }).click();
+  await timeline(page).getByRole("button", { name: "Hide timeline" }).click();
+  await expect(timeline(page)).toHaveAttribute("data-open", "false");
+
+  const link = page.getByRole("button", { name: "Show on timeline" }).first();
+  await expect(link).toBeVisible({ timeout: 15_000 });
+  await link.click();
+
+  await expect(timeline(page)).toHaveAttribute("data-open", "true");
+  await expect(timeline(page).getByRole("button", { name: "Collapse Dot" })).toBeVisible();
+  const selected = timeline(page).locator('[data-testid="timeline-bar"][data-selected="true"]');
+  await expect.poll(() => selected.count()).toBeGreaterThan(0);
+  for (const bar of await selected.all()) await expect(bar).toHaveAttribute("data-tween", "1");
+});
+
+test("Show on timeline selects the tween as the editor's tween selection, so a pending drag commits at once", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await filledArtifact(agent, { id: SHAPE, kind: "motion", ref: "150", at: { x: -520, y: -40 }, size: { w: 480, h: 270 }, title: "Intro", html: FADE });
+  await expect(shapeOnScreen(page, SHAPE)).toBeVisible();
+  await page.mouse.click(640, 600);
+  const at = await centre(shapeOnScreen(page, SHAPE));
+  await page.mouse.dblclick(at.x, at.y);
+  await expect(region(page)).toBeVisible();
+  await expect(timeline(page).getByTestId("timeline-row").first()).toBeVisible({ timeout: 40_000 });
+  await expect.poll(async () => Number(await timeline(page).getByTestId("timeline-track").getAttribute("data-px-per-second"))).toBeGreaterThan(0);
+  await timeline(page).getByRole("button", { name: "Select Dot" }).click();
+
+  const bar0 = timeline(page).locator('[data-testid="timeline-bar"][data-tween="0"]').first();
+  const box = (await bar0.boundingBox())!;
+  const pxPerSecond = Number(await timeline(page).getByTestId("timeline-track").getAttribute("data-px-per-second"));
+  const before = (await editSummaries(agent)).length;
+  await page.mouse.move(box.x + box.width * 0.25, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.25 + 0.5 * pxPerSecond, box.y + box.height / 2, { steps: 8 });
+  await page.mouse.up();
+
+  const link = page.getByRole("button", { name: "Show on timeline" }).first();
+  await expect(link).toBeVisible({ timeout: 15_000 });
+  await link.click();
+  await expect.poll(async () => (await editSummaries(agent)).length, { timeout: 1000 }).toBe(before + 1);
+  expect((await editSummaries(agent)).at(-1)).toEqual(["Moved Dot position to 0.5 s"]);
+  await expect(timeline(page).locator('[data-testid="timeline-bar"][data-selected="true"]').first()).toHaveAttribute("data-tween", "1");
+});

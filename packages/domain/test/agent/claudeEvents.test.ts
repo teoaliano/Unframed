@@ -69,6 +69,23 @@ describe("Claude event mapping", () => {
     ]);
   });
 
+  it("does not repeat streamed text when the CLI sends each block of the message as its own assistant message", () => {
+    const { events } = replay([
+      { type: "stream_event", session_id: SESSION, parent_tool_use_id: null, event: { type: "message_start", message: { id: "msg_1" } } },
+      { type: "stream_event", session_id: SESSION, parent_tool_use_id: null, event: { type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "Hmm." } } },
+      { type: "assistant", session_id: SESSION, uuid: "u1", parent_tool_use_id: null, message: { id: "msg_1", content: [{ type: "thinking", thinking: "Hmm." }] } },
+      { type: "stream_event", session_id: SESSION, parent_tool_use_id: null, event: { type: "content_block_delta", index: 1, delta: { type: "text_delta", text: "Reading the canvas." } } },
+      { type: "assistant", session_id: SESSION, uuid: "u2", parent_tool_use_id: null, message: { id: "msg_1", content: [{ type: "text", text: "Reading the canvas." }] } },
+      { type: "assistant", session_id: SESSION, uuid: "u3", parent_tool_use_id: null, message: { id: "msg_1", content: [{ type: "tool_use", id: "toolu_1", name: "Read", input: {} }] } },
+    ]);
+    expect(events.slice(1).filter((event) => event.type !== "item.started")).toEqual([
+      { type: "content.delta", turnId: "turn:1", itemId: "msg_1:0", payload: { streamKind: "reasoning_summary_text", delta: "Hmm." } },
+      { type: "item.completed", turnId: "turn:1", itemId: "msg_1:0", payload: { itemType: "reasoning", status: "completed" } },
+      { type: "content.delta", turnId: "turn:1", itemId: "msg_1:1", payload: { streamKind: "assistant_text", delta: "Reading the canvas." } },
+      { type: "item.completed", turnId: "turn:1", itemId: "msg_1:1", payload: { itemType: "assistant_message", status: "completed" } },
+    ]);
+  });
+
   it("uses the assistant message's own text when there were no partial messages", () => {
     const { events, state } = replay([{ type: "assistant", uuid: "u9", parent_tool_use_id: null, message: { id: "msg_2", content: [{ type: "text", text: "Whole." }] } }]);
     expect(events[0]).toEqual({ type: "content.delta", turnId: "turn:1", itemId: "msg_2:0", payload: { streamKind: "assistant_text", delta: "Whole." } });
@@ -121,6 +138,37 @@ describe("Claude event mapping", () => {
     expect(events).toEqual([
       expect.objectContaining({ type: "item.started", itemId: "s1", payload: expect.objectContaining({ agentId: "t5", parentToolUseId: "t5", itemType: "dynamic_tool_call" }) }),
     ]);
+  });
+
+  it("maps /compact's status and compact boundary to one context compaction item, and the context left after it", () => {
+    const { events } = replay([
+      { type: "system", subtype: "status", status: "compacting", session_id: SESSION },
+      { type: "system", subtype: "compact_boundary", session_id: SESSION, compact_metadata: { trigger: "manual", pre_tokens: 214000, post_tokens: 12000 } },
+      { type: "result", subtype: "success", session_id: SESSION, is_error: false, result: "", usage: { input_tokens: 0, output_tokens: 0 }, modelUsage: { opus: { contextWindow: 200000 } } },
+    ]);
+    const items = events.filter((event) => event.type.startsWith("item."));
+    expect(items).toEqual([
+      { type: "item.started", turnId: "turn:1", itemId: "compaction:turn:1", payload: { itemType: "context_compaction", status: "inProgress", title: "Compacting context" } },
+      { type: "item.completed", turnId: "turn:1", itemId: "compaction:turn:1", payload: { itemType: "context_compaction", status: "completed", title: "Context compacted", data: { preTokens: 214000, postTokens: 12000 } } },
+    ]);
+    expect(events.find((event) => event.type === "thread.token-usage.updated")?.payload).toMatchObject({ usage: { usedTokens: 12000, maxTokens: 200000 } });
+  });
+
+  it("fails the compaction of a /compact turn that ends without a compact boundary, with Claude's reason", () => {
+    const messages = [{ type: "result", subtype: "success", session_id: SESSION, is_error: false, result: "Not enough messages to compact.", usage: { input_tokens: 0, output_tokens: 0 } }];
+    let state = initialClaudeState();
+    const events: RuntimeEventDraft[] = [];
+    for (const message of messages) {
+      const mapped = mapClaudeMessage(state, message, { ...context, compacting: true });
+      state = mapped.state;
+      events.push(...mapped.events);
+    }
+    expect(events.filter((event) => event.type.startsWith("item."))).toEqual([
+      { type: "item.started", turnId: "turn:1", itemId: "compaction:turn:1", payload: { itemType: "context_compaction", status: "inProgress", title: "Compacting context" } },
+      { type: "item.completed", turnId: "turn:1", itemId: "compaction:turn:1", payload: { itemType: "context_compaction", status: "failed", title: "Context not compacted", detail: "Not enough messages to compact." } },
+    ]);
+    expect(events.at(-1)?.type).toBe("turn.completed");
+    expect(replay(messages).events.some((event) => event.type.startsWith("item."))).toBe(false);
   });
 
   it("maps api_retry, a rate limit event and the task messages", () => {

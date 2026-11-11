@@ -33,6 +33,24 @@ function isSignedForDistribution(appPath) {
   return /Authority=Developer ID Application/.test((r.stdout || '') + (r.stderr || ''));
 }
 
+const STAPLE_ATTEMPTS = 6;
+const STAPLE_WAIT_MS = 20000;
+
+function staple(dmg, name) {
+  for (let attempt = 1; ; attempt++) {
+    console.log(`  • stapling DMG  file=${name} attempt=${attempt}`);
+    const r = spawnSync('xcrun', ['stapler', 'staple', dmg], { encoding: 'utf8' });
+    process.stdout.write(r.stdout || '');
+    process.stderr.write(r.stderr || '');
+    if (r.status === 0) {
+      execFileSync('xcrun', ['stapler', 'validate', dmg], { stdio: 'inherit' });
+      return;
+    }
+    if (attempt === STAPLE_ATTEMPTS) throw new Error(`Stapling ${name} failed after ${attempt} attempts`);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, STAPLE_WAIT_MS);
+  }
+}
+
 exports.default = async function notarizeDmg(buildResult) {
   if (process.platform !== 'darwin') return [];
 
@@ -91,8 +109,7 @@ exports.default = async function notarizeDmg(buildResult) {
       throw new Error(`Notarization was not accepted for ${name}`);
     }
 
-    console.log(`  • stapling DMG  file=${name}`);
-    execFileSync('xcrun', ['stapler', 'staple', dmg], { stdio: 'inherit' });
+    staple(dmg, name);
 
     // Same command electron-builder ran to write this blockmap, now against the
     // stapled bytes. Overwrites the file in place; the upload reads it afterwards.

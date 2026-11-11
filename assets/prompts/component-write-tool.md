@@ -1,0 +1,15 @@
+# component_write
+
+Used by spec 07's Unframed MCP server and spec 20. The model-facing description of `component_write` and its three arguments. No placeholders.
+
+The description is the one text block below. The sheet's four parts, the declaration's limits and the rules for tokens, fonts, scripts and nested components are all in it, so the agent can write a valid sheet from the description alone.
+
+```text
+Write a component: a shared custom element that pages and motions use as instances, such as <uf-button kind="primary">. Write it as a component sheet: one complete HTML document with four marked parts. The declaration is one <script type="application/json" data-uf-component> holding JSON such as {"tag":"uf-button","variants":{"kind":["primary","secondary"]},"props":{"label":"text"},"slots":[""]}. The tag starts with uf-, has lowercase words joined by hyphens, and is at most 50 characters. There are at most 4 variants, each 1 to 12 distinct values with the first as its default; at most 16 properties, each "text", "boolean" or "image"; and at most 8 slots, where "" is the default slot. Variant and property names are lowercase letters, digits and hyphens, and may not be id, class, style, slot, part, hidden, is, tabindex, or any data- or aria- name. The style is one <style type="text/x-uf-component" data-uf-component-style>, written with :host, :host([kind="secondary"]) and ordinary selectors. The markup is one <div data-uf-template hidden> whose children every instance copies; use an ordinary div, not a template element. A text property binds to the element it sets with data-uf-prop="label"; an image property binds to an img with data-uf-prop; a boolean property binds to nothing, so style it with :host([disabled]). A named slot is <slot name="icon"> in the template and the default slot is <slot>; every declared slot must appear there. An optional <div data-uf-example hidden> holds sample content for the board. When the project has a kit, use its tokens as var() for every colour, size, radius, shadow and font, so a token change restyles every instance. The page loads fonts, not the component, because @font-face does not work inside a shadow root. The template holds no script and no other component: put behaviour in the page that uses the component, and to place one component inside another, give the outer one a slot and put the inner one in that slot in the page. The engine compiles the sheet into a script and adds the pin to every page and motion that uses the tag, so write instances with the tag and never write the pin yourself. Every write is a new version the person can undo. A person accepts updates for each page and motion, so name the artifacts that will wait for an update rather than rewriting them, unless the person asks you to.
+```
+
+## Arguments
+
+- `html`: The whole component sheet: one HTML document with its declaration, style, template and optional examples.
+- `shapeId`: The component shape to write a new version of. Omit to create a component.
+- `title`: A short name for the component, shown on the canvas and in the editor. Defaults to its tag, without uf-, as words.

@@ -237,10 +237,58 @@ describe("canvas_write batches", () => {
     expect(error([{ type: "rename", id: "p1", name: "42" }], [prompt("p1", "100", "a fox")])).toBe("rename: A name needs a letter.");
   });
 
+  it("scales a page or motion on the canvas keeping its layout size, null putting it back to 100 %, and refuses a scale outside 10 % to 400 %", () => {
+    const half = prepareBatch([{ type: "update", id: "m1", props: { scale: 0.5 } }], context([motion("m1", "Intro")]));
+    if (!half.ok) throw new Error(half.error);
+    expect(half.put[0]!.props).toMatchObject({ w: 320, h: 180, scale: 0.5 });
+    const scaled = { ...motion("m1", "Intro"), props: { ...motion("m1", "Intro").props, w: 320, h: 180, scale: 0.5 } };
+    const back = prepareBatch([{ type: "update", id: "m1", props: { scale: null } }], context([scaled]));
+    if (!back.ok) throw new Error(back.error);
+    expect(back.put[0]!.props).toMatchObject({ w: 640, h: 360 });
+    expect(back.put[0]!.props).not.toHaveProperty("scale");
+    expect(error([{ type: "update", id: "m1", props: { scale: 9 } }], [motion("m1", "Intro")])).toBe("update: scale must be a number from 0.1 to 4");
+    const tiny = prepareBatch([{ type: "update", id: "m1", props: { w: 480, h: 270, scale: 0.1 } }], context([motion("m1", "Intro")]));
+    if (!tiny.ok) throw new Error(tiny.error);
+    expect(tiny.put[0]!.props!.scale).toBeCloseTo(480 / 4096, 10);
+  });
+
   it("keeps media's aspect on resize", () => {
     const image: CanvasRecord = { id: "shape:i1", typeName: "shape", type: "image", x: 0, y: 0, parentId: PAGE, index: "a1", props: { w: 200, h: 100 }, meta: { ref: "100" } };
     const result = prepareBatch([{ type: "resize", id: "i1", w: 400, h: 400 }], context([image]));
     if (!result.ok) throw new Error(result.error);
     expect(result.put[0]!.props).toMatchObject({ w: 400, h: 200 });
+  });
+});
+
+describe("canvas_write and a node's provider", () => {
+  const made = (props: Record<string, unknown>) => {
+    const result = prepareBatch([{ type: "create", id: "new:n", kind: "node", x: 0, y: 0, props }], context([]));
+    if (!result.ok) return result.error;
+    return (result.put.find((record) => record.type === "node") as { props: Record<string, unknown> }).props;
+  };
+
+  it("writes vercel on an image or text node, and nothing for openrouter", () => {
+    expect(made({ medium: "image", provider: "vercel" })).toMatchObject({ provider: "vercel" });
+    expect(made({ medium: "text", provider: "vercel" })).toMatchObject({ provider: "vercel" });
+    expect(made({ medium: "image", provider: "openrouter" })).not.toHaveProperty("provider");
+  });
+
+  it("refuses a provider on a medium it does not serve, and a value that is not one", () => {
+    expect(made({ medium: "video", provider: "vercel" })).toBe("create: The Vercel AI Gateway serves image and text runs only. Video runs through OpenRouter.");
+    expect(made({ medium: "page", provider: "vercel" })).toBe("create: A page node runs through OpenRouter.");
+    expect(made({ medium: "image", provider: "fal" })).toBe('create: provider has to be "openrouter" or "vercel".');
+  });
+
+  it("drops the provider when an update moves the node to a medium it does not serve, and clears it with null", () => {
+    const node: CanvasRecord = { id: "shape:n", typeName: "shape", type: "node", x: 0, y: 0, index: "a1", parentId: PAGE, props: { w: 380, h: 360, medium: "image", model: "", provider: "vercel", params: {}, instruction: "", versions: [], currentVersionId: null }, meta: { ref: "101" } };
+    const update = (patch: Record<string, unknown>) => {
+      const result = prepareBatch([{ type: "update", id: "n", props: patch }], context([node]));
+      if (!result.ok) return result.error;
+      return (result.put[0] as { props: Record<string, unknown> }).props;
+    };
+    expect(update({ medium: "video" })).not.toHaveProperty("provider");
+    expect(update({ provider: null })).not.toHaveProperty("provider");
+    expect(update({ provider: "openrouter" })).not.toHaveProperty("provider");
+    expect(update({ medium: "text" })).toMatchObject({ provider: "vercel" });
   });
 });

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { isBareFileName, resultMetaOf } from "@unframed/contracts";
 import {
   canvasView,
@@ -10,40 +10,41 @@ import {
   imageDimensions,
   PLAN_NO_WRITES_MESSAGE,
   prepareBatch,
+  readComponentSheet,
+  readPins,
   type CanvasRecord,
+  type ComponentDeclaration,
+  type Pin,
   type FileFacts,
   type InteractionMode,
 } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import { getIndexAbove, type IndexKey } from "@tldraw/utils";
+import { lockRefusal, sourceTreeOf } from "@unframed/domain/html";
+import { readArtifact } from "../artifacts/artifactStore.ts";
 import type { Applied, CanvasChange, ChangeOrigin } from "../canvas/rooms.ts";
 import { readResultSidecar } from "../runs/sidecars.ts";
 import { shapeBoxes } from "../runs/shapeBounds.ts";
 import type { McpBinding, McpTool, ToolAnswer } from "./mcp.ts";
 import type { TurnChanges } from "./turnChanges.ts";
+import { kitOf } from "../kits/tokensFile.ts";
 
 const PAGE_ID = "page:page";
 
-/** What the canvas tool service needs from the rest of the engine. */
-export interface CanvasToolDeps {
+interface CanvasToolDeps {
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;
   readonly apply: (project: string, change: CanvasChange, origin: ChangeOrigin) => Promise<Applied>;
   readonly folder: (project: string) => Promise<string>;
   readonly turnChanges: (project: string) => Promise<TurnChanges>;
-  /** The chat's running turn and the selection its latest message was sent with. */
   readonly chatTurn: (project: string, chatId: string) => { turnCount: number | undefined; interactionMode: InteractionMode; selection: ReadonlyArray<string> };
-  /** Whether the chat is an outside one, whose read answers the live selection (spec 14). */
   readonly isOutside: (project: string, chatId: string) => boolean;
-  /** The live selection of a project's windows, for an outside read. */
   readonly liveSelection: (project: string) => { shapeIds: string[]; note?: string };
-  /** Tags the chat with artifacts a write touched (the tag reactor). */
   readonly tag: (project: string, chatId: string, ids: ReadonlyArray<string>) => void;
 }
 
 const error = (message: string): ToolAnswer => ({ value: { error: message }, isError: true });
 
-/** A project file's facts: its original name, type and natural size, from its sidecar and header. */
-export const fileFacts = async (folder: string, name: string): Promise<FileFacts | undefined> => {
+const fileFacts = async (folder: string, name: string): Promise<FileFacts | undefined> => {
   if (!isBareFileName(name) || name.endsWith(".json") || name.startsWith("unframed.sqlite")) return undefined;
   const path = join(folder, name);
   const info = await stat(path).catch(() => undefined);
@@ -65,6 +66,50 @@ export const fileFacts = async (folder: string, name: string): Promise<FileFacts
   return { fileName, ...(mime === undefined ? {} : { mime }), ...(size ? { w: size.w, h: size.h } : {}), bytes: info.size };
 };
 
+const componentFacts = async (folder: string, records: ReadonlyArray<TLRecord>) => {
+  const declarations = new Map<string, ComponentDeclaration>();
+  const pins = new Map<string, Pin[]>();
+  for (const record of records) {
+    if (record.typeName !== "shape") continue;
+    const file = (record.props as { file?: unknown }).file;
+    if (typeof file !== "string" || file === "") continue;
+    if (record.type !== "component" && record.type !== "page" && record.type !== "motion") continue;
+    const html = await readFile(join(folder, basename(file)), "utf8").catch(() => undefined);
+    if (html === undefined) continue;
+    if (record.type === "component") {
+      const read = readComponentSheet(html);
+      if (read.ok) declarations.set(record.id, read.sheet.declaration);
+    } else {
+      const found = readPins(html);
+      if (found.length > 0) pins.set(record.id, found);
+    }
+  }
+  return { declarations, pins };
+};
+
+const lockedOf = (record: TLRecord | undefined): string[] => {
+  const locked = (record as { props?: { lockedElements?: unknown } } | undefined)?.props?.lockedElements;
+  return Array.isArray(locked) ? locked.filter((id): id is string => typeof id === "string") : [];
+};
+
+const fileLockRefusal = async (folder: string, put: ReadonlyArray<TLRecord>, before: ReadonlyMap<string, TLRecord | undefined>): Promise<string | undefined> => {
+  for (const record of put) {
+    const old = before.get(record.id as string);
+    const kind = (record as { type?: string }).type;
+    if (old === undefined || (kind !== "page" && kind !== "motion")) continue;
+    const from = (old as { props?: { file?: unknown } }).props?.file;
+    const to = (record as { props?: { file?: unknown } }).props?.file;
+    const locked = lockedOf(old);
+    if (typeof from !== "string" || from === "" || from === to || locked.length === 0) continue;
+    const current = await readArtifact(folder, from).catch(() => undefined);
+    if (current === undefined) continue;
+    const next = typeof to === "string" && to !== "" ? await readArtifact(folder, to).catch(() => "") : "";
+    const refusal = lockRefusal({ current, next, locked, tree: sourceTreeOf(current), kind });
+    if (refusal !== null) return refusal;
+  }
+  return undefined;
+};
+
 const collectFiles = (ops: unknown): string[] => {
   if (!Array.isArray(ops)) return [];
   const files: string[] = [];
@@ -75,11 +120,6 @@ const collectFiles = (ops: unknown): string[] => {
   return files;
 };
 
-/**
- * The canvas tool service (spec 07): `canvas_read` and `canvas_write` over the project's
- * sync room. A write is one batch and one room change with origin `chat:<chatId>`, and
- * records its turn changes; every artifact it touches tags the chat.
- */
 export class CanvasTools {
   private readonly deps: CanvasToolDeps;
 
@@ -103,6 +143,7 @@ export class CanvasTools {
       const sidecar = await readResultSidecar(folder, result.sidecar);
       if (sidecar) recipes.set(record.id, sidecar.recipe);
     }
+    const { declarations, pins } = await componentFacts(folder, records);
     const outside = this.deps.isOutside(binding.project, binding.chatId);
     const live = outside ? this.deps.liveSelection(binding.project) : undefined;
     const selection = live ? live.shapeIds : this.deps.chatTurn(binding.project, binding.chatId).selection;
@@ -111,8 +152,12 @@ export class CanvasTools {
       boxes: shapeBoxes(records),
       recipes,
       selection,
+      declarations,
+      pins,
     });
-    return { value: live?.note === undefined ? view : { ...view, selectionNote: live.note } };
+    const kit = kitOf(records);
+    const withKit = { ...view, kit: kit === null ? null : { name: kit.name, tokens: kit.tokens.length, modes: kit.modes } };
+    return { value: live?.note === undefined ? withKit : { ...withKit, selectionNote: live.note } };
   }
 
   async write(binding: McpBinding, args: Record<string, unknown>): Promise<ToolAnswer> {
@@ -130,11 +175,14 @@ export class CanvasTools {
       indexAbove: (below) => getIndexAbove((below ?? null) as IndexKey | null),
       pageId: records.find((record) => record.typeName === "page")?.id ?? PAGE_ID,
       boxes: shapeBoxes(records),
+      modes: kitOf(records)?.modes ?? [],
     });
     if (!prepared.ok) return error(prepared.error);
     const before = new Map<string, TLRecord | undefined>();
     const byId = new Map(records.map((record) => [record.id as string, record]));
     for (const id of prepared.touched) before.set(id, byId.get(id));
+    const locked = await fileLockRefusal(folder, prepared.put as unknown as TLRecord[], before);
+    if (locked !== undefined) return error(locked);
     let applied: Applied;
     try {
       applied = await this.deps.apply(
@@ -159,7 +207,6 @@ export class CanvasTools {
     return { value: { ok: true, ids: prepared.ids, clock: applied.clock } };
   }
 
-  /** The two canvas tools, as the MCP server registers them. */
   tools(): McpTool[] {
     return [
       {

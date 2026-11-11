@@ -82,7 +82,7 @@ Root scripts:
 
 | Script | Does |
 | --- | --- |
-| `pnpm dev` | runs the engine from source with restart on change (default port 8787) and the Vite dev server (default port 5173) together |
+| `pnpm dev` | runs the engine from source with restart on change (default port 8787) and the Vite dev server (default port 5173) together; when either stops, both stop, and both stop when the script gets SIGHUP, loses its parent or is killed outright |
 | `pnpm dev:share` | `pnpm dev`, plus the Vite port served on this machine's tailnet with `tailscale serve` (see Dev share relay); removes the mapping on exit |
 | `pnpm engine` | engine only |
 | `pnpm web` | Vite dev server only |
@@ -108,13 +108,18 @@ Settings variables (may appear in `.env`; `.env` values override the process env
 | `OPENROUTER_IMAGE_MODEL` | `openai/gpt-image-2` | `^[\w.-]+\/[\w.:-]+$` | yes | no |
 | `OPENROUTER_TEXT_MODEL` | `google/gemini-3.5-flash-lite` | same as image | yes | no |
 | `OPENROUTER_VIDEO_MODEL` | `bytedance/seedance-2.0` | same as image | yes | no |
+| `AI_GATEWAY_API_KEY` (spec 22) | none | `^[\w-]{16,200}$` | yes | no (removal is its own action) |
+| `AI_GATEWAY_IMAGE_MODEL` (spec 22) | `bfl/flux-kontext-pro` | the model slug rule | yes | no |
+| `AI_GATEWAY_TEXT_MODEL` (spec 22) | `google/gemini-3.5-flash-lite` | the model slug rule | yes | no |
+| `ELEVENLABS_API_KEY` (spec 15) | none | `^[\w-]{20,200}$` | yes | no (removal is its own action) |
+| `ELEVENLABS_AUDIO_MODEL` (spec 15) | `eleven_v4` | `^[\w.-]{1,100}$` | yes | no |
 | `OUTPUT_DIR` | `./output` | `^[^\n\r"'#]{1,400}$` | yes | no |
 | `CLAUDE_PATH` | empty (found on PATH) | `^[^\n\r"'#;&|$`<>(){}\s][^\n\r"'#;&|$`<>(){}]{0,399}$` | yes | yes |
 | `CODEX_PATH` | empty (found on PATH) | same as `CLAUDE_PATH` | yes | yes |
 | `CLAUDE_CONFIG_DIR` | empty (default `~/.claude`) | `^(\/|[A-Za-z]:\\)[^\n\r"'#]{0,399}$` | yes | yes |
 | `PORT` | `8787` | integer 0 to 65535; `0` means OS-assigned | no | no |
-| `IPAD_ACCESS` | `off` | `on` or `off` (spec 22) | yes | no |
-| `IPAD_PORT` | `18790` | integer 1 to 65535 (spec 22) | yes | no |
+| `IPAD_ACCESS` | `off` | `on` or `off` (spec 23) | yes | no |
+| `IPAD_PORT` | `18790` | integer 1 to 65535 (spec 23) | yes | no |
 | `OPENROUTER_MODEL` | none | legacy, read only | no | deleted on first image model write |
 
 An empty value in `.env` counts as unset. The image model is read as `OPENROUTER_IMAGE_MODEL`, else `OPENROUTER_MODEL`, else the default.
@@ -135,7 +140,7 @@ Why hosting variables stay out of `.env.example`: `.env` overrides the environme
 
 Client dev variables: `UNFRAMED_CLIENT_PORT` (Vite port, default 5173; when set the port is strict), `UNFRAMED_SERVER_PORT` (the engine port the Vite proxy targets, default 8787) and `UNFRAMED_DEV_SHARE_ORIGIN` (the dev share relay's https origin; `pnpm dev:share` sets it). None of them is part of the hosting contract.
 
-`.env.example` at the repo root contains exactly: `OPENROUTER_API_KEY=` (empty), `OPENROUTER_IMAGE_MODEL=openai/gpt-image-2`, `OPENROUTER_TEXT_MODEL=google/gemini-3.5-flash-lite`, `OPENROUTER_VIDEO_MODEL=bytedance/seedance-2.0`, `OUTPUT_DIR=./output`, `PORT=8787`, each on its own line, with a one-line comment header saying the app writes this file itself and copying it is optional.
+`.env.example` at the repo root contains exactly: `OPENROUTER_API_KEY=` (empty), `OPENROUTER_IMAGE_MODEL=openai/gpt-image-2`, `OPENROUTER_TEXT_MODEL=google/gemini-3.5-flash-lite`, `OPENROUTER_VIDEO_MODEL=bytedance/seedance-2.0`, `AI_GATEWAY_API_KEY=` (empty), `AI_GATEWAY_IMAGE_MODEL=bfl/flux-kontext-pro`, `AI_GATEWAY_TEXT_MODEL=google/gemini-3.5-flash-lite`, `ELEVENLABS_API_KEY=` (empty), `ELEVENLABS_AUDIO_MODEL=eleven_v4`, `OUTPUT_DIR=./output`, `PORT=8787`, each on its own line, with a one-line comment header saying the app writes this file itself and copying it is optional.
 
 ### Test-only variables
 
@@ -144,6 +149,9 @@ This is the one table of every test-only variable in the build. A spec that uses
 | Variable | Used by | Effect |
 | --- | --- | --- |
 | `UNFRAMED_TEST_OPENROUTER_ORIGIN` | 01, 03, 04, 05, 10 | replaces `https://openrouter.ai` in every OpenRouter URL the engine builds: image generation and the image catalogue and pricing endpoints (spec 03), video create, status and catalogue and the unofficial `/api/frontend/v1/models/find` endpoint (spec 04), chat completions and the models listing (spec 05), the OAuth authorize page, the key exchange and the key status endpoint (spec 10). There is no per-URL override: every OpenRouter call goes through this one origin. Accepted only when it is an `http://127.0.0.1:<port>` or `http://localhost:<port>` origin; any other value is ignored and the engine logs `  test origin ignored: <value> is not a loopback origin` at boot, so the variable can never send the key anywhere but this machine |
+| `UNFRAMED_TEST_VERCEL_ORIGIN` | 22 | replaces `https://ai-gateway.vercel.sh` in every Vercel AI Gateway URL the engine builds, under the same loopback rule as `UNFRAMED_TEST_OPENROUTER_ORIGIN` |
+| `UNFRAMED_TEST_VERCEL_LOOKUP_MS` | 22 | the wait between Vercel AI Gateway generation lookups, in place of 1500 ms |
+| `UNFRAMED_TEST_ELEVENLABS_ORIGIN` | 15 | replaces `https://api.elevenlabs.io` in every ElevenLabs URL the engine builds: models, voices, speech and subscription. Accepted only under the same loopback rule as `UNFRAMED_TEST_OPENROUTER_ORIGIN` (one domain function for both); any other value is ignored with `  test origin ignored: <value> is not a loopback origin` |
 | `UNFRAMED_TEST_NATIVE_LOG` | 01 | a file path. When set, reveal and the folder picker never spawn OS commands. Each command the engine would have run is appended as one JSON line `{"cmd": string, "args": string[]}` |
 | `UNFRAMED_TEST_PICK_FOLDER` | 01, 10 | with `UNFRAMED_TEST_NATIVE_LOG` set, the folder picker's answer: `none` behaves as "no picker on this machine", `cancel` as a cancelled dialog, any other value as the chosen path |
 | `UNFRAMED_TEST_SHUTDOWN_HOOK_MS` | 01 | registers one extra shutdown hook that takes this many milliseconds, so a test can watch a hook finish inside the budget or be abandoned at 1.5 seconds |
@@ -157,7 +165,8 @@ This is the one table of every test-only variable in the build. A spec that uses
 | `UNFRAMED_TEST_OUTSIDE_TURN_IDLE_MS` | 14 | the idle time after which an outside turn settles, in milliseconds, in place of 2 min (spec 14) |
 | `UNFRAMED_TEST_UPLOAD_URL_TTL_MS` | 07 | an attachment upload URL's lifetime in milliseconds, in place of 10 min |
 | `UNFRAMED_TEST_RENDERER` | 09 | replaces the motion renderer and the Chrome search: `ok`, `fail` or `no-chrome`, each behaving as spec 09 states |
-| `UNFRAMED_TEST_IPAD` | 22 | a local name, which must be a loopback name (the tests use `localhost`; see spec 22). The engine then uses it as the local name on any platform, answers `ipad.status` as a hosted Mac, treats itself as available without the web's call and answers `testHosts: [<name>]`, shortens the keep-awake release from 30 s to 500 ms and the certificate check from 24 h to 1 s, accepts `IPAD_PORT=0` (OS-assigned, reported by `ipad.status`), and lets the iPad listener accept loopback connections in place of private ones. It never widens what the listener accepts beyond loopback |
+| `UNFRAMED_TEST_IPAD` | 23 | a local name, which must be a loopback name (the tests use `localhost`; see spec 23). The engine then uses it as the local name on any platform, answers `ipad.status` as a hosted Mac, treats itself as available without the web's call and answers `testHosts: [<name>]`, shortens the keep-awake release from 30 s to 500 ms and the certificate check from 24 h to 1 s, accepts `IPAD_PORT=0` (OS-assigned, reported by `ipad.status`), and lets the iPad listener accept loopback connections in place of private ones. It never widens what the listener accepts beyond loopback |
+| `UNFRAMED_TEST_UNCAUGHT` | 01, 09 | `1` makes SIGUSR2 throw an uncaught exception, so a test can watch the crash path run the shutdown hooks, close the headless Chrome and exit with code 1 |
 
 Anything that redirects network traffic follows the loopback-only rule of the origin override.
 
@@ -167,7 +176,7 @@ Boot order:
 
 1. Resolve the data folder, read `.env` from it, merge settings over the process environment.
 2. Start the preview origin listener on `127.0.0.1` at the preview port: 18787, or `UNFRAMED_PREVIEW_PORT` when set. The port is fixed so a link to an artifact opened in the person's own browser still works after a restart (spec 09). When another program holds it (on `127.0.0.1`, or on `[::1]` where spec 09's second listener goes), the engine takes an OS-assigned port for this run instead, prints `  preview port <port> is taken, so this run uses <port>.`, and boots normally: a taken preview port never stops the boot. In this spec it applies the same Host check as the API (below) and answers 404 to every path; spec 09 adds its one route and a second listener on `[::1]` at the same port. An `UNFRAMED_PREVIEW_PORT` that is not a whole number from 0 to 65535 stops the boot like a bad `PORT`, with `  UNFRAMED_PREVIEW_PORT has to be a whole number from 0 to 65535, not "<value>".`
-3. Start the API listener on `127.0.0.1:<PORT>`. Never `0.0.0.0`, never `::1`. There is no option to widen the bind, except the iPad listener (spec 22), which is a second listener of its own with its own guard and leaves this one untouched.
+3. Start the API listener on `127.0.0.1:<PORT>`. Never `0.0.0.0`, never `::1`. There is no option to widen the bind, except the iPad listener (spec 23), which is a second listener of its own with its own guard and leaves this one untouched.
 4. Print the banner, then send the ready message.
 
 The banner, on stdout, exactly (two-space indent, a blank line before and after):
@@ -186,13 +195,15 @@ The shell's CI greps for `Unframed server`. That phrase must never change. Every
 
 Ready: when the process has an IPC channel, it sends `{ "type": "ready", "port": <API port>, "previewPort": <preview port> }` once, after both listeners are bound. Without a channel it sends nothing and runs identically.
 
-Keep awake (spec 22): hosted, the engine sends `{ "type": "keep-awake", "on": true }` when a paired device's first socket opens and `{ "type": "keep-awake", "on": false }` 30 seconds after the last one closes. Gated on hosting like the reveal message. The shell holds one `powerSaveBlocker` at most and stops it on quit. A shell that does not know the message ignores it, which is why the hosting contract only ever grows.
+Keep awake (spec 23): hosted, the engine sends `{ "type": "keep-awake", "on": true }` when a paired device's first socket opens and `{ "type": "keep-awake", "on": false }` 30 seconds after the last one closes. Gated on hosting like the reveal message. The shell holds one `powerSaveBlocker` at most and stops it on quit. A shell that does not know the message ignores it, which is why the hosting contract only ever grows.
 
 Listen failure (port in use, permission): print the error and exit with code 1, so the shell's "engine exited" path fires. A `PORT` that is not a whole number from 0 to 65535 stops the boot the same way, before anything binds, with `  PORT has to be a whole number from 0 to 65535, not "<value>".`
 
 Shutdown: on SIGTERM or SIGINT the engine stops accepting connections, closes every WebSocket with close code 1001, runs every registered shutdown hook (later specs register: flush sync rooms and databases, close the share tunnel, stop the render sweep, end agent sessions), and exits with code 0. The whole sequence must finish within 2 seconds, because the shell waits 2 seconds before giving up. A hook that has not finished by 1.5 seconds is abandoned and the engine exits anyway. Timers the engine starts (sweeps, TTL checks) never keep the process alive on their own.
 
-Crash safety: an unhandled promise rejection is logged as `  unhandled rejection: <stack>` and does not exit the process. An uncaught exception is logged and exits with code 1. No request handler may let either happen: every operation that can fail is inside Effect's typed error channel and answered (see error model).
+Parent death: the engine stops the same way, exiting with code 0, when the process that started it goes away, since nothing could stop it any more: with an IPC channel, when the channel closes; without one, when its parent pid changes or stops existing (checked every second; an engine whose parent is already pid 1 is not watched this way). It logs `  the process that started the engine is gone; stopping`. This is what keeps a crashed shell, a killed test runner or a killed `pnpm dev` from leaving engines behind.
+
+Crash safety: an unhandled promise rejection is logged as `  unhandled rejection: <stack>` and does not exit the process. An uncaught exception is logged, runs the shutdown sequence above within the same 2 seconds, and exits with code 1. No request handler may let either happen: every operation that can fail is inside Effect's typed error channel and answered (see error model).
 
 ### Loopback guards
 
@@ -204,7 +215,7 @@ One pure decision in domain, used by the API listener, the WebSocket upgrade pat
 
 Case-insensitive on purpose: `LOCALHOST` is the same machine. The anchors and the digits-only port are what refuse `localhost.evil.example`.
 
-The iPad listener (spec 22) is the one listener this decision does not serve: it is reachable from the home network by design, and runs its own device guard, which checks the same two headers against this Mac's local name and the iPad port instead of loopback. The API listener and the preview origin are unchanged.
+The iPad listener (spec 23) is the one listener this decision does not serve: it is reachable from the home network by design, and runs its own device guard, which checks the same two headers against this Mac's local name and the iPad port instead of loopback. The API listener and the preview origin are unchanged.
 
 The guard runs before any handler, static file or upgrade. No response ever carries `Access-Control-Allow-Origin` or any other CORS allow header, for any origin, including loopback ones. An `OPTIONS` preflight is answered 204 with no allow headers, so the browser blocks the real request. This costs nothing: the web is always same-origin with the engine (Vite proxies server-side in dev; the engine serves the web when hosted).
 
@@ -226,7 +237,7 @@ Error model. Every method's failure schema is one tagged error:
 UnframedError { _tag: "UnframedError", code: "bad_request" | "not_found" | "conflict" | "unavailable" | "upstream" | "internal" | "mac_only", message: string, details?: Record<string, unknown> }
 ```
 
-This is the only failure shape any RPC method in any spec answers. A later spec lists its failures as `code: message` pairs; when the web needs to tell two failures with the same code apart, the spec names a `details.reason` string (spec 04 does this for video starts), never a second error shape. `message` is a full sentence meant for the person, and is what the web shows. `code` maps to the HTTP status the same failure would have on an HTTP route (400, 404, 409, 501, 502, 500, 403). `upstream` means OpenRouter, or another service the engine called, failed or answered with an error. `mac_only` (spec 22) means the method works only for a client on this Mac, and is refused in the RPC layer before the handler; it maps to 403. A payload that fails schema decoding is answered `bad_request` with a message naming the field. A defect (an unexpected throw inside a handler) is caught at the RPC server boundary, logged as `  <method> failed: <stack>`, and answered `internal` with `Something went wrong: <message>`.
+This is the only failure shape any RPC method in any spec answers. A later spec lists its failures as `code: message` pairs; when the web needs to tell two failures with the same code apart, the spec names a `details.reason` string (spec 04 does this for video starts), never a second error shape. `message` is a full sentence meant for the person, and is what the web shows. `code` maps to the HTTP status the same failure would have on an HTTP route (400, 404, 409, 501, 502, 500, 403). `upstream` means OpenRouter, or another service the engine called, failed or answered with an error. `mac_only` (spec 23) means the method works only for a client on this Mac, and is refused in the RPC layer before the handler; it maps to 403. A payload that fails schema decoding is answered `bad_request` with a message naming the field. A defect (an unexpected throw inside a handler) is caught at the RPC server boundary, logged as `  <method> failed: <stack>`, and answered `internal` with `Something went wrong: <message>`.
 
 Web client: connects to `ws(s)://<location.host>/ws`. On a drop it reconnects with backoff starting at 1 s, doubling, capped at 10 s. Subscriptions re-subscribe after reconnect. On a close other than 1009, calls in flight fail with `unavailable`: `The connection to the local engine was lost.` Both failures carry `details.reason` (`too_large` for the 1009 one, `connection_lost` otherwise), which is how the web tells them from failures the engine answered. A call made while the socket is down waits for the next one. What a person sees while the socket is down is spec 02's connection-lost notice; this spec shows no notice of its own.
 
@@ -252,7 +263,7 @@ Health   = Settings & { ok: true, client: "mac" | "device" }
 SettingsPatch { key?, imageModel?, textModel?, videoModel?, outputDir?, claudePath?, codexPath?, claudeConfigDir?: string }
 ```
 
-`client` (spec 22) says which listener this socket came through: `"mac"` for the API listener, `"device"` for the iPad listener. It is how the web learns it is a device client; it is stamped by the engine and never read from a payload. `keyHint` is the last 4 characters of the key, or `''`. `outputDir` is the resolved absolute path. No response anywhere carries the key itself. The preferences methods (`preferences.get`, `preferences.set`, `preferences.subscribe`) are defined under "Preferences store" below. Later specs add methods to the same group (spec 10 adds `settings.removeKey`, the `oauth.*` methods, `projects.rename`, `projects.delete`).
+`client` (spec 23) says which listener this socket came through: `"mac"` for the API listener, `"device"` for the iPad listener. It is how the web learns it is a device client; it is stamped by the engine and never read from a payload. `keyHint` is the last 4 characters of the key, or `''`. `outputDir` is the resolved absolute path. No response anywhere carries the key itself. The preferences methods (`preferences.get`, `preferences.set`, `preferences.subscribe`) are defined under "Preferences store" below. Later specs add methods to the same group (spec 10 adds `settings.removeKey`, the `oauth.*` methods, `projects.rename`, `projects.delete`).
 
 ### Settings store
 
@@ -335,13 +346,16 @@ Keys in use, each owned by the spec named:
 | Key | Owner | Value |
 | --- | --- | --- |
 | `project.active` | 02 | the active project's name, kept for the outside-agent view (spec 14) |
-| `project.tabs` | 17 | `{ order: string[], active: string \| null }`: the open project tabs and the active one, read at boot (spec 17) |
+| `project.tabs` | 17 | `{ order: string[], active: string \| null, pinned: string[], editing: string \| null, editors: { key, title, kind }[] }`: the open project tabs and editor tabs, the active project, the pinned ones, the selected editor tab and each editor tab's label, read at boot (spec 17). `editing` and `editors` are optional, so a value saved before editor tabs still reads |
 | `lastUsed.image`, `lastUsed.video`, `lastUsed.text` | 03 (04 and 05 add fields) | the composer's last-used values for that medium |
 | `library.view` | 06 | `"card"` or `"list"` |
 | `agent.followUp` | 08 (control in spec 10's dialog) | `"queue"` or `"steer"` |
 | `agent.planMode` | 08 (control in spec 10's dialog) | `true` turns plan mode on; off when unset |
+| `agent.sendShortcut` | 08 (control in spec 10's dialog) | `"enter"`, `"mod-enter-multiline"` or `"mod-enter"`; Enter when unset |
 | `agent.stash.<project>` | 08 | that project's stashed prompts |
+| `agent.drafts.<project>` | 08 | that project's unsent composer drafts, by chat |
 | `agent.diffLayout` | 08 | `"stacked"` or `"split"` |
+| `parameters.panel` | 09 | `{ mode: "float" \| "dock", x?, y?, w?, h? }`: the canvas Parameters panel's mode, and its floating place (`x`, `y`: pixels from the canvas's top-left) and size (`w`, `h`) |
 
 A later spec that remembers something adds its key to this table.
 
@@ -351,7 +365,7 @@ A later spec that remembers something adds its key to this table.
 
 ### Serving the web
 
-When `UNFRAMED_CLIENT_DIST` is set, the engine serves that directory at `/`: `index.html` for `/` with `Cache-Control: no-cache`, hashed assets with `Cache-Control: public, max-age=31536000, immutable`, the two Home Screen files at the root under their own names (`/manifest.webmanifest` and `/apple-touch-icon.png`, `Cache-Control: public, max-age=3600`, spec 22), 404 for anything else that is not `/ws` or `/api/...`. No SPA catch-all. When unset, `/` answers 404, and the web is served by Vite in dev.
+When `UNFRAMED_CLIENT_DIST` is set, the engine serves that directory at `/`: `index.html` for `/` with `Cache-Control: no-cache`, hashed assets with `Cache-Control: public, max-age=31536000, immutable`, the two Home Screen files at the root under their own names (`/manifest.webmanifest` and `/apple-touch-icon.png`, `Cache-Control: public, max-age=3600`, spec 23), 404 for anything else that is not `/ws` or `/api/...`. No SPA catch-all. When unset, `/` answers 404, and the web is served by Vite in dev.
 
 Vite dev server: proxies `/ws` (WebSocket) and `/api` to `http://localhost:<UNFRAMED_SERVER_PORT or 8787>` without changing the origin, so the forwarded `Host` stays `localhost:5173` and the browser's `Origin` is loopback; both pass the guards.
 
@@ -397,13 +411,15 @@ A contract with the desktop shell. Renaming any of these is a breaking change th
 | Hook | Contract |
 | --- | --- |
 | `.unframed-chrome-left` | exactly one element: the top-left floating chrome card (logo and project menu, filled by spec 02). Its position comes from ordinary CSS properties with no `!important`, so the shell's injected CSS can move it |
-| `.unframed-chrome-right` | exactly one element: the top-right chrome card. It holds the Settings button on macOS and Linux and stays empty on Windows, where Settings sits at the far left of the top-left card (spec 17). The shell's CSS still finds it. Same rule |
+| `.unframed-chrome-right` | exactly one element: the top-right chrome card. It holds the Settings button on macOS and Linux and stays empty on Windows, where Settings sits in the top-left card, after the logo (spec 17). The shell's CSS still finds it. Same rule |
 | `.unframed-tabs` | the project tab strip (spec 17), one element between the two cards. Added by spec 17; the shell's Windows caption inset applies to it |
 | `data-unframed-theme` on `<html>` | `"light"` or `"dark"`: the theme currently shown, updated live when it changes |
 | `--unframed-text-secondary` on `<html>` | the secondary text colour of the current theme, readable with `getComputedStyle(document.documentElement)` |
 | `<body>` background | an explicit, opaque `background-color` equal to the canvas background of the current theme |
 | `<title>` | `Unframed`, set once in `index.html`. The web never changes `document.title` afterwards, so the shell's override sticks |
 | `<body>` children | the web mounts into `#root` and never removes or reorders other children of `<body>`, so an element the shell appends (its update pill) survives |
+
+The page owns the window drag region of the top bar (spec 17). The bar, its regions, the window controls' space, the logo and the empty space declare `-webkit-app-region: drag`, and every control in it declares `no-drag`. The shell's injected CSS still sets `.unframed-chrome-left` to `drag` and every child of it to `no-drag`; the page beats that rule on the controls' space and the logo with `!important`, because an unlayered injected rule wins over the page's layered one. A shell must not set `-webkit-app-region` on the bar or its children; the rules it injects today are harmless and can be removed in a later shell release.
 | external links | opened with `target="_blank"` or `window.open(url, "_blank")`, which the shell routes to the system browser. The `unframed-update://` scheme belongs to the shell and the web never uses it |
 
 In this spec the web renders an app frame with both chrome cards present (empty), the theme attribute and variable set from the ported theme values in `assets/theme/`, following the system light or dark preference. Spec 02 fills the cards and owns the theme.
@@ -419,7 +435,7 @@ Built by `pnpm build`, published by CI. Layout at the bundle root:
 - `package.json`: `name` exactly `unframed` (the shell's dependency key depends on it), `version` equal to the engine package version, `"type": "module"`, `main` `server/index.js`, `dependencies` limited to runtime packages that cannot be inlined (packages that locate their own files on disk at runtime or spawn binaries, such as the Claude Agent SDK, the HyperFrames packages and GSAP), no `devDependencies`, no `workspaces`, no lifecycle scripts. It also carries `"puppeteer": { "skipDownload": true }`: puppeteer comes in under the HyperFrames producer and downloads a browser on install unless told not to, and renders use the browser already on the machine (spec 09). Puppeteer reads that key from the nearest manifest above its own folder, so it covers an install run inside the bundle; an app that installs the bundle as its own dependency carries the same key in its manifest, or installs with `PUPPETEER_SKIP_DOWNLOAD=1`.
 - `server/mcp.js` (spec 14): plain ESM JavaScript, the stdio shim an outside client runs through the Electron binary with `ELECTRON_RUN_AS_NODE=1`. It is a second entry beside `index.js`, bundled the same way, and the shell never runs it.
 - `server/index.js`: plain ESM JavaScript, the fork entry. All workspace code and every inlinable dependency are bundled into it (plus sibling chunk files under `server/` if the bundler splits). No TypeScript, no workspace references, no source maps, no test files.
-- `client/dist/`: the built web, including `manifest.webmanifest` and `apple-touch-icon.png` at its root (spec 22).
+- `client/dist/`: the built web, including `manifest.webmanifest` and `apple-touch-icon.png` at its root (spec 23).
 - `client/package.json` and `client/package-lock.json`: a compatibility shim for a shell that still runs `npm --prefix <engine>/client ci && npm --prefix <engine>/client run build`. The manifest has no dependencies and a `build` script that does nothing and exits 0, and the lockfile matches it, so that command succeeds and leaves `client/dist` untouched. It can be removed once the shell stops building the client.
 - `LICENSE` (the repository root `LICENSE`: MIT) and `THIRD_PARTY_NOTICES` (crediting t3code, MIT, among the rest).
 
@@ -436,7 +452,7 @@ The bundle's Node floor is the Node inside the Electron release the shell ships.
 A good test drives the system through one of the three seams in 00-index and asserts on what comes out: RPC answers, HTTP responses, IPC messages, stdout, files on disk, and what a person sees. It never imports engine internals or reads engine state directly.
 
 - **Domain seam** for the pure rules with many cases: the slug rule, reading `PORT` and `UNFRAMED_PREVIEW_PORT`, the loopback guard decision, `.env` upsert, the validators and clearable-field normalising, the reveal and folder-picker command plans.
-- **Engine seam** for everything the process does. This spec builds the harness every later spec reuses: fork the engine (from source in `pnpm test`, from the built bundle in the bundle smoke test) with a fresh temp data folder, `PORT=0`, `UNFRAMED_PREVIEW_PORT=0`, an IPC channel, `UNFRAMED_TEST_OPENROUTER_ORIGIN` pointed at an in-test stub HTTP server, and `UNFRAMED_TEST_NATIVE_LOG` pointed at a temp file; wait for the ready message; expose an RPC client, an HTTP client, the captured stdout and IPC messages, and the data folder; kill and clean up. Tests that need a variant (no IPC channel, hosted marker, a pre-written `.env`) take options.
+- **Engine seam** for everything the process does. This spec builds the harness every later spec reuses: fork the engine (from source in `pnpm test`, from the built bundle in the bundle smoke test) with a fresh temp data folder, `PORT=0`, `UNFRAMED_PREVIEW_PORT=0`, an IPC channel, `UNFRAMED_TEST_OPENROUTER_ORIGIN` pointed at an in-test stub HTTP server, and `UNFRAMED_TEST_NATIVE_LOG` pointed at a temp file; wait for the ready message; expose an RPC client, an HTTP client, the captured stdout and IPC messages, and the data folder; kill and clean up. Each engine leads a process group of its own, and disposing it kills the group, so whatever the engine spawned goes with it. An engine whose start times out is disposed before the error reaches the test, and a test runner that exits with engines still running kills them on its way out. Tests that need a variant (no IPC channel, hosted marker, a pre-written `.env`) take options.
 - **Browser seam** for the web frame: Playwright against the built web served by an engine at the engine seam with `UNFRAMED_CLIENT_DIST` set.
 - Nothing that spends money runs in any seam. There is no prior art in this repo (it starts empty); follow t3code's server tests for driving Effect RPC over a real socket.
 

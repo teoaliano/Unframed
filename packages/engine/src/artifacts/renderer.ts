@@ -1,10 +1,3 @@
-/**
- * Motion renders (spec 09): a composition to an MP4 with HyperFrames' producer and the
- * person's own Chrome, in the engine. Renders are an in-memory map, not a durable store: a
- * render is free local compute on files still on disk, so one lost to a restart costs a
- * click. Each joins spec 03's run registry, so its placeholder is resolved like any
- * non-durable run.
- */
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { copyFile, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -17,37 +10,37 @@ import type { Applied, CanvasChange, ChangeOrigin } from "../canvas/rooms.ts";
 import { errorText, logError, logInfo } from "../log.ts";
 import { clearChange, fillFor, indexOnTop, isShape, PLACEHOLDER_WIDTH, videoPlaceholder, type LandedClip, type RunOutcome } from "../runs/placeholders.ts";
 import { shapePageBoxes } from "../runs/shapeBounds.ts";
-import { ensureLibrary, placeRenderOutput } from "./artifactStore.ts";
+import { ensureLibrary, ensurePinnedComponents, placeRenderOutput } from "./artifactStore.ts";
+import { kitStamp } from "@unframed/domain";
+import { ensureTokens, kitOf } from "../kits/tokensFile.ts";
 
 const COMPOSITION_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.html?$/;
 
-/** One render's work handed to the producer: everything it reads and where it writes. */
-export interface ProducerRun {
-  /** The project folder, which the composition's relative names resolve against. */
+interface ProducerRun {
   readonly folder: string;
   readonly entry: string;
   readonly outputPath: string;
-  /** `{ unframedDials }` when the render has tuned values, else `null`. */
   readonly variables: Record<string, unknown> | null;
   readonly chromePath: string;
   readonly onProgress: (progress: number, message: string) => void;
 }
 
-/** The seam the test hook replaces: the producer and the Chrome search. */
-export interface RenderBackend {
+const renderVariables = (dials: Record<string, unknown> | null, mode: string | undefined): Record<string, unknown> | null => {
+  const variables: Record<string, unknown> = {};
+  if (dials !== null && Object.keys(dials).length > 0) variables.unframedDials = dials;
+  if (mode !== undefined) variables.unframedMode = mode;
+  return Object.keys(variables).length === 0 ? null : variables;
+};
+
+interface RenderBackend {
   readonly findChrome: () => Promise<string | undefined>;
   readonly produce: (run: ProducerRun) => Promise<void>;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** How long each stage of the `ok` stub takes, so a poll every 700 ms sees them. */
 const STUB_STAGE_MS = 450;
 
-/**
- * `UNFRAMED_TEST_RENDERER=ok`: 25, 50 and 75 with their messages, then a small fixture MP4,
- * and a last message naming the variables it received. `fail` fails at once.
- */
 export const stubBackend = (mode: "ok" | "fail", fixture: string): RenderBackend => ({
   findChrome: async () => "stub-chrome",
   produce: async (run) => {
@@ -69,7 +62,6 @@ export const stubBackend = (mode: "ok" | "fail", fixture: string): RenderBackend
   },
 });
 
-/** The producer's own logging, silenced except for errors. */
 const quietLogger = {
   error: (message: string) => logError(`render: ${message}`),
   warn: () => {},
@@ -78,16 +70,11 @@ const quietLogger = {
   isLevelEnabled: (level: string) => level === "error",
 };
 
-/**
- * The producer's config for a render. Static-frame dedup is off: HyperFrames would otherwise
- * copy one capture glitch through every static frame after it.
- */
 export const renderConfigFor = async (chromePath: string) => {
   const engine = await import("@hyperframes/engine");
   return engine.resolveConfig({ chromePath, fps: 30, quality: "standard", staticFrameDedup: false });
 };
 
-/** HyperFrames' producer, imported only when a render starts: 30 fps, standard quality, MP4. */
 export const producerBackend = (findChrome: () => Promise<string | undefined>): RenderBackend => ({
   findChrome,
   produce: async (run) => {
@@ -114,16 +101,13 @@ export class RenderRefused extends Error {
   }
 }
 
-export interface RendererDeps {
+interface RendererDeps {
   readonly backend: RenderBackend;
-  /** The project folder, or `undefined` when there is none. */
   readonly folder: (project: string) => Promise<string | undefined>;
   readonly slug: (project: string) => string;
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;
   readonly apply: (project: string, change: CanvasChange, origin: ChangeOrigin) => Promise<Applied>;
-  /** Spec 03's run registry. */
   readonly track: (runId: string, project: string) => { settle: (outcome: RunOutcome<LandedClip>) => void; forget: () => void };
-  /** Spec 01's open-project registry: answers the closer's unregister function. */
   readonly registerCloser: (project: string, close: () => Promise<void>) => Promise<unknown>;
 }
 
@@ -133,12 +117,10 @@ interface RenderJob extends RenderStatus {
 
 const origin = (id: string): ChangeOrigin => ({ kind: "server", id: `run:${id}` });
 
-
 const isPlainObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
 export class Renderer {
   private readonly renders = new Map<string, RenderJob>();
-  /** Projects whose closer is registered with the open-project registry. */
   private readonly tracked = new Set<string>();
   private readonly deps: RendererDeps;
 
@@ -162,7 +144,7 @@ export class Renderer {
     });
   }
 
-  async start(input: { project: string; file: string; title?: string | undefined; dials?: unknown; shapeId: string }): Promise<{ id: string; status: "queued"; placeholder: string }> {
+  async start(input: { project: string; file: string; title?: string | undefined; dials?: unknown; mode?: string | undefined; shapeId: string }): Promise<{ id: string; status: "queued"; placeholder: string }> {
     if (!COMPOSITION_FILE.test(input.file)) throw new RenderRefused("bad_request", "Which composition? Pass its .html file name.");
     const project = this.deps.slug(input.project);
     const folder = await this.deps.folder(input.project);
@@ -171,16 +153,22 @@ export class Renderer {
     if (!(await stat(path).then((info) => info.isFile(), () => false))) throw new RenderRefused("not_found", `No file ${input.file} in this project.`);
     try {
       await ensureLibrary(folder);
+      await ensurePinnedComponents(folder, input.file);
     } catch (error) {
       throw new RenderRefused("internal", `Could not prepare the motion library: ${errorText(error)}`);
     }
     const title = (input.title ?? "").slice(0, ARTIFACT_TITLE_MAX);
     const dials = isPlainObject(input.dials) ? input.dials : null;
+    const kit = kitOf(await this.deps.read(project));
+    const mode = input.mode !== undefined && kit !== null && kit.modes.includes(input.mode) && input.mode !== kit.modes[0] ? input.mode : undefined;
     const startedAt = Date.now();
     const id = `r-${startedAt.toString(36)}-${[...randomBytes(6)].map((byte) => (byte % 36).toString(36)).join("")}`;
 
     const size = compositionSize(await readFile(path, "utf8").catch(() => ""));
     const records = await this.deps.read(project);
+    await ensureTokens(folder, kitOf(records)).catch((error) => {
+      throw new RenderRefused("internal", `Could not prepare the tokens script: ${errorText(error)}`);
+    });
     const pageId = records.find((record) => record.typeName === "page")?.id ?? "page:page";
     const boxes = shapePageBoxes(records);
     const anchor = boxes.find((entry) => entry.id === input.shapeId)?.box ?? { x: 0, y: 0, w: 0, h: 0 };
@@ -204,7 +192,7 @@ export class Renderer {
     }
     await this.track(project);
     this.renders.set(id, { id, project, file: input.file, status: "queued", progress: 0, message: "", output: null, error: null });
-    void this.run({ id, project, folder, file: input.file, title, dials, placeholder: placeholder.id, size, run });
+    void this.run({ id, project, folder, file: input.file, title, dials, mode, kit: kit === null ? undefined : { name: kit.name, stamp: kitStamp(kit) }, placeholder: placeholder.id, size, run });
     return { id, status: "queued", placeholder: placeholder.id };
   }
 
@@ -215,6 +203,8 @@ export class Renderer {
     file: string;
     title: string;
     dials: Record<string, unknown> | null;
+    mode: string | undefined;
+    kit: { name: string; stamp: string } | undefined;
     placeholder: string;
     size: { w: number; h: number };
     run: { settle: (outcome: RunOutcome<LandedClip>) => void };
@@ -230,11 +220,11 @@ export class Renderer {
         folder: job.folder,
         entry: job.file,
         outputPath,
-        variables: job.dials !== null && Object.keys(job.dials).length > 0 ? { unframedDials: job.dials } : null,
+        variables: renderVariables(job.dials, job.mode),
         chromePath,
         onProgress: (progress, message) => this.update(job.id, { progress, message }),
       });
-      const placed = await placeRenderOutput(job.folder, { from: outputPath, of: job.file, title: job.title, dials: job.dials });
+      const placed = await placeRenderOutput(job.folder, { from: outputPath, of: job.file, title: job.title, dials: job.dials, mode: job.mode, kit: job.kit });
       outcome = { ok: true, landed: { kind: "clip", file: placed.file, bytes: placed.bytes, w: job.size.w, h: job.size.h } };
     } catch (error) {
       outcome = { ok: false, error: errorText(error) };

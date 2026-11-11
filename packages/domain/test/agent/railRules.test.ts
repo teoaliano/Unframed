@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clearAllChats, clearedNotice, continuableChat, inlineTabs, linkedArtifacts, nextActive, recapRows, revertSkipLine, tabLabel, tabTooltip, visibleChats, type ChatActivity, type RailChat } from "../../src/index.ts";
+import { clearAllChats, clearedNotice, continuableChat, inlineTabs, linkedArtifacts, nextActive, railShown, recapRows, revertSkipLine, tabLabel, tabTooltip, visibleChats, type ChatActivity, type RailChat } from "../../src/index.ts";
 
 describe("inline tabs", () => {
   const widths = [100, 80, 60, 120];
@@ -11,13 +11,11 @@ describe("inline tabs", () => {
   });
 
   it("shows the newest that fit beside More, and the rest wait under it", () => {
-    // 100 + 80 + gap 4 + More (50 + gap 4) = 238; a third tab would need 302.
     expect(inline({ room: 238 })).toEqual([0, 1]);
     expect(inline({ room: 237 })).toEqual([0]);
   });
 
   it("keeps the active chat inline, in its place, when it is not among the newest that fit", () => {
-    // Chat 3 beside chat 0: 100 + 120 + gap 4 + More 54 = 278.
     expect(inline({ active: 3, room: 278 })).toEqual([0, 3]);
     expect(inline({ active: 3, room: 277 })).toEqual([3]);
     expect(inline({ active: 2, room: 238 })).toEqual([0, 2]);
@@ -148,7 +146,6 @@ describe("the recap rows", () => {
     sequence,
     createdAt: new Date(Date.UTC(2026, 8, 29, 10, 0, sequence)).toISOString(),
   });
-  /** A call as the runtime ingests it: the input on its start, the result on its end. */
   const call = (toolName: string, input: Record<string, unknown>, result: unknown = {}) => {
     const itemId = `i${++sequence}`;
     return [
@@ -179,6 +176,31 @@ describe("the recap rows", () => {
     expect(rows.some((row) => row.shapeId === "shape:p9")).toBe(false);
   });
 
+  it("leaves out calls that failed: a refused write touched nothing", () => {
+    const refused = (toolName: string, input: Record<string, unknown>) => {
+      const itemId = `i${++sequence}`;
+      return [
+        activity("tool.started", { itemId, itemType: "mcp_tool_call", status: "inProgress", data: { toolName, input } }),
+        activity("tool.completed", { itemId, itemType: "mcp_tool_call", status: "failed", data: { toolName, result: { error: "refused" } } }),
+      ];
+    };
+    const activities = [
+      ...refused("mcp__unframed__page_write", { shapeId: "g1", html: "" }),
+      ...refused("mcp__unframed__motion_write", { shapeId: "m1", html: "<p>" }),
+      ...refused("mcp__unframed__page_edit", { shapeId: "g1", edits: [{ old_string: "a", new_string: "b" }] }),
+      ...refused("mcp__unframed__motion_edit", { shapeId: "m1", edits: [{ old_string: "a", new_string: "b" }] }),
+      ...refused("mcp__unframed__canvas_write", { ops: [{ type: "move", id: "p1", x: 0, y: 0 }] }),
+    ];
+    const shapes = [{ id: "shape:g1", kind: "page", title: "Landing" }];
+    expect(recapRows(activities, [], shapes)).toEqual([]);
+    expect(recapRows([...activities, ...call("mcp__unframed__page_read", { shapeId: "g1" })], [], shapes).map((row) => row.label)).toEqual(["Landing"]);
+  });
+
+  it("reads a created shape's id from a result Claude sent as text parts", () => {
+    const activities = call("mcp__unframed__canvas_write", { ops: [{ type: "create", id: "new:note", kind: "prompt", x: 0, y: 0 }] }, ["Note: the canvas changed.", '{"ok":true,"ids":{"new:note":"p7"}}']);
+    expect(recapRows(activities, [], [{ id: "shape:p7", kind: "prompt", title: "Note" }]).map((row) => row.label)).toEqual(["Note"]);
+  });
+
   it("adds the turn changes after the tool calls, and offers a diff for a page or motion whose file the turn wrote", () => {
     const activities = call("mcp__unframed__motion_write", { shapeId: "m1", title: "Intro" });
     const rows = recapRows(
@@ -198,6 +220,33 @@ describe("the recap rows", () => {
       ["Intro", true],
       ["Fox", false],
       ["New", true],
+    ]);
+  });
+
+  it("lists the component a turn wrote as a component row, offering a diff when its sheet changed", () => {
+    const rows = recapRows(
+      call("mcp__unframed__component_write", { shapeId: "c1", title: "Button" }),
+      [{ shapeId: "shape:c1", kind: "component", change: "updated", file: "2-button.html", previousFile: "1-button.html" }],
+      [{ id: "shape:c1", kind: "component", title: "Button" }],
+    );
+    expect(rows).toEqual([{ shapeId: "shape:c1", kind: "component", label: "Button", deleted: false, rewritten: true }]);
+  });
+
+  it("lists the page and motion a turn edited, offering a diff for each", () => {
+    const rows = recapRows(
+      [...call("mcp__unframed__page_edit", { shapeId: "g1", edits: [] }, { ok: true, shapeId: "g1", title: "Landing" }), ...call("mcp__unframed__motion_edit", { shapeId: "m1", edits: [] })],
+      [
+        { shapeId: "shape:g1", kind: "page", change: "updated", file: "2-landing.html", previousFile: "1-landing.html" },
+        { shapeId: "shape:m1", kind: "motion", change: "updated", file: "2-intro.html", previousFile: "1-intro.html" },
+      ],
+      [
+        { id: "shape:g1", kind: "page", title: "Landing" },
+        { id: "shape:m1", kind: "motion", title: "Intro" },
+      ],
+    );
+    expect(rows).toEqual([
+      { shapeId: "shape:g1", kind: "page", label: "Landing", deleted: false, rewritten: true },
+      { shapeId: "shape:m1", kind: "motion", label: "Intro", deleted: false, rewritten: true },
     ]);
   });
 
@@ -280,5 +329,27 @@ describe("linked artifacts", () => {
     expect(visibleChats(before, ["shape:p1"]).map((each) => each.id)).toEqual(["a"]);
     expect(visibleChats(after, ["shape:p1"])).toEqual([]);
     expect(continuableChat(after, ["shape:p1"])).toBeUndefined();
+  });
+});
+
+describe("the chat the rail shows", () => {
+  const chat = (id: string, tags: string[], createdAt: string): RailChat => ({ id, title: id, preview: "", tags, status: "idle", createdAt });
+  const chats = [chat("a", ["shape:one"], "2026-01-01"), chat("b", ["shape:two"], "2026-01-02"), chat("c", ["shape:one"], "2026-01-03")];
+  const shown = (fields: { selected?: string[]; chosen?: string | null; pinned?: string | null; drafting?: boolean }) =>
+    railShown({ chats, selected: fields.selected ?? [], chosen: fields.chosen ?? null, pinned: fields.pinned ?? null, drafting: fields.drafting ?? false });
+
+  it("shows the chosen chat when the selection's chats hold it, else the newest of them", () => {
+    expect(shown({ selected: ["shape:one"], chosen: "a" })).toEqual({ visible: [chats[2], chats[0]], active: "a" });
+    expect(shown({ selected: ["shape:one"], chosen: "b" }).active).toBe("c");
+    expect(shown({ chosen: "b" }).active).toBe("b");
+  });
+
+  it("shows a pinned chat even outside the selection's chats", () => {
+    expect(shown({ selected: ["shape:one"], pinned: "b" })).toEqual({ visible: [chats[1], chats[2], chats[0]], active: "b" });
+  });
+
+  it("shows no chat while a new one is being drafted, or when the selection has none", () => {
+    expect(shown({ selected: ["shape:one"], chosen: "a", drafting: true }).active).toBeNull();
+    expect(shown({ selected: ["shape:three"] }).active).toBeNull();
   });
 });

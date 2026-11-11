@@ -20,11 +20,13 @@ test("the Library dialog: both rows of controls, the system presets, and the emp
   await expect(dialog.getByRole("group", { name: "View" }).getByRole("button")).toHaveCount(2);
   await expect(toggle(page, "View", "Cards")).toHaveAttribute("aria-pressed", "true");
   await expect(toggle(page, "View", "List")).toBeVisible();
-  await expect(dialog.getByRole("group", { name: "Type" }).getByRole("button")).toHaveText(["All", "Recipes", "Groups"]);
+  await expect(dialog.getByRole("group", { name: "Type" }).getByRole("button")).toHaveText(["All", "Recipes", "Groups", "Flows", "Kits"]);
   await expect(dialog.getByRole("group", { name: "Source" }).getByRole("button")).toHaveText(["Any", "Custom", "System"]);
-  expect(await shownNames(page)).toEqual(["Layerize", "Prose to JSON"]);
-  // Ten presets or fewer need no pages.
+  expect(await shownNames(page)).toEqual(["Layerize", "Prose to JSON", "Apple", "Claude", "Vercel", "Notion", "Airbnb", "Linear", "Stripe", "Figma"]);
+  await expect(dialog.getByRole("navigation", { name: "Pages" }).getByTestId("library-range")).toHaveText("1–10 of 12");
+  await toggle(page, "Type", "Recipes").click();
   await expect(dialog.getByRole("navigation", { name: "Pages" })).toHaveCount(0);
+  await toggle(page, "Type", "All").click();
 
   await search.fill("nothing like this");
   await expect(dialog).toContainText("Nothing here yet. Try another category or clear the search.");
@@ -47,16 +49,15 @@ test("user presets come first by the sort, are filtered and searched, and page b
   expect(names).toHaveLength(10);
   expect(names.slice(0, 3)).toEqual(["Preset 12", "Preset 11", "Preset 10"]);
   const pages = dialog.getByRole("navigation", { name: "Pages" });
-  await expect(pages.getByTestId("library-range")).toHaveText("1–10 of 16");
+  await expect(pages.getByTestId("library-range")).toHaveText("1–10 of 26");
   await pages.getByRole("button", { name: "Next page" }).click();
-  await expect(pages.getByTestId("library-range")).toHaveText("11–16 of 16");
-  expect(await shownNames(page)).toEqual(["Preset 02", "Preset 01", "Preset 00", "A recipe", "Layerize", "Prose to JSON"]);
+  await expect(pages.getByTestId("library-range")).toHaveText("11–20 of 26");
+  expect(await shownNames(page)).toEqual(["Preset 02", "Preset 01", "Preset 00", "A recipe", "Layerize", "Prose to JSON", "Apple", "Claude", "Vercel", "Notion"]);
 
-  // A new sort goes back to page 1.
   await dialog.getByRole("combobox", { name: "Sort" }).click();
   await page.getByRole("option", { name: "A–Z" }).click();
-  await expect(pages.getByTestId("library-range")).toHaveText("1–10 of 16");
-  expect((await shownNames(page)).slice(0, 2)).toEqual(["A recipe", "Layerize"]);
+  await expect(pages.getByTestId("library-range")).toHaveText("1–10 of 26");
+  expect((await shownNames(page)).slice(0, 2)).toEqual(["A recipe", "Airbnb"]);
 
   await toggle(page, "Type", "Recipes").click();
   expect(await shownNames(page)).toEqual(["A recipe", "Layerize", "Prose to JSON"]);
@@ -91,7 +92,8 @@ test("cards and rows show the name, summary, needs and chips, Add, and delete on
   await expect(libraryDialog(page)).toHaveAttribute("data-view", "list");
   const row = presetItem(page, "Portrait retouch");
   await expect(row.getByTestId("preset-chips").locator("[data-chip]")).toHaveText(["Recipe", "Image", "Custom"]);
-  await expect(row.getByText("Soft light for faces")).toHaveAttribute("title", "Soft light for faces");
+  await row.getByText("Soft light for faces").hover();
+  await expect(page.locator("[data-slot='tooltip-popup']")).toHaveText("Soft light for faces");
   await expect(row.getByRole("button", { name: "Add" })).toBeVisible();
   await expect(row.getByRole("button", { name: "Delete Portrait retouch" })).toBeVisible();
   await expect(presetItem(page, "Prose to JSON").getByRole("button", { name: /^Delete/ })).toHaveCount(0);
@@ -183,10 +185,9 @@ test("delete asks first, removes the preset, and says so when it fails", async (
 
   await presetItem(page, "Drop me").getByRole("button", { name: "Delete Drop me" }).click();
   await alert.getByRole("button", { name: "Delete preset" }).click();
-  await expect.poll(() => shownNames(page)).toEqual(["Keep me", "Layerize", "Prose to JSON"]);
+  await expect.poll(async () => (await shownNames(page)).slice(0, 3)).toEqual(["Keep me", "Layerize", "Prose to JSON"]);
   expect(JSON.parse(await readFile(presetsFile(engine), "utf8")).map((entry: any) => entry.id)).toEqual(["user-a"]);
 
-  // The file goes bad behind the dialog's back: the engine refuses, and the dialog says so.
   await writePresets(engine, "[ not json");
   await presetItem(page, "Keep me").getByRole("button", { name: "Delete Keep me" }).click();
   await alert.getByRole("button", { name: "Delete preset" }).click();
@@ -196,18 +197,17 @@ test("delete asks first, removes the preset, and says so when it fails", async (
 test("the dialog reads the file every time it opens, and says so, keeping the system presets, when it cannot", async ({ page, engine }) => {
   await openCanvas(page, engine);
   await openLibrary(page);
-  expect(await shownNames(page)).toEqual(["Layerize", "Prose to JSON"]);
+  expect((await shownNames(page)).slice(0, 3)).toEqual(["Layerize", "Prose to JSON", "Apple"]);
   await page.keyboard.press("Escape");
   await expect(libraryDialog(page)).toHaveCount(0);
 
-  // Saved in another tab, or written by another engine.
   await writePresets(engine, [userPreset("user-a", "From elsewhere")]);
   await openLibrary(page);
-  expect(await shownNames(page)).toEqual(["From elsewhere", "Layerize", "Prose to JSON"]);
+  expect((await shownNames(page)).slice(0, 3)).toEqual(["From elsewhere", "Layerize", "Prose to JSON"]);
   await page.keyboard.press("Escape");
 
   await writePresets(engine, "[ not json");
   await openLibrary(page);
   await expect(libraryDialog(page).getByRole("alert")).toHaveText("Your presets could not be read: presets.json is not valid JSON.");
-  expect(await shownNames(page)).toEqual(["Layerize", "Prose to JSON"]);
+  expect((await shownNames(page)).slice(0, 3)).toEqual(["Layerize", "Prose to JSON", "Apple"]);
 });

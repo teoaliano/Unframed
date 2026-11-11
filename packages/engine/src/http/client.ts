@@ -5,7 +5,7 @@ import { sendFile } from "./sendFile.ts";
 const ASSETS_PREFIX = "/assets/";
 
 /**
- * The Home Screen files (spec 22), served from the dist root under their own names
+ * The Home Screen files (spec 23), served from the dist root under their own names
  * because a manifest and an apple-touch-icon are looked for at fixed paths. The iPad
  * listener serves these to an unpaired device, so they hold nothing about a project.
  */

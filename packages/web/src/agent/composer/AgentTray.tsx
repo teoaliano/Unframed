@@ -1,56 +1,100 @@
-import type { ChatAttachment, ModelSelection } from "@unframed/contracts";
+import type { ChatAttachment, ElementChip, ModelSelection } from "@unframed/contracts";
 import {
   actionablePlan,
   agentSelectionOf,
+  appendRestoredPrompt,
+  attachmentChip,
+  chipRefs,
+  COMPACTION_SUGGESTION_MIN_TOKENS,
+  compactsBeforeSend,
+  RESUME_MESSAGE,
+  resumableTurn,
+  composerKeyIntent,
+  composerRequiresModifier,
   continuableChat,
   DEFAULT_RUNTIME_MODE,
+  ensureChips,
+  followUpAction,
+  formatTokens,
   implementPlanText,
   implementPlanTitle,
+  mergeRestored,
+  offersCompactBeforeSend,
   pasteBecomesFile,
   pastedTextFileName,
+  promptHistoryEntries,
+  promptLengthError,
+  restingImagePreviewCounts,
+  queuedEditBlockedReason,
+  queuedEditChanged,
+  resolveQueuedEditExit,
+  type QueuedEditContent,
+  stepPromptHistory,
   tabLabel,
+  withoutChips,
   type InteractionMode,
+  type PromptHistoryPosition,
   type RuntimeMode,
 } from "@unframed/domain";
-import { ArrowLeft, Paperclip } from "lucide-react";
+import { ArrowLeft, Check, CircleAlert, CornerUpRight, ListPlus, Minimize2, Paperclip, Play } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { AgentTrayProps as SlotProps } from "../../chrome/slots.ts";
 import { useEngine } from "../../context.ts";
 import { effectiveModel, noProviderReady, providerName, readyProviders } from "../providers.ts";
 import { createChat, sendMessage } from "../send.ts";
-import { EMPTY_DRAFT, NEW_CHAT, sameDraft, useChatClient, useChats, useDraftVersion, useFollowUp, useHandoffVersion, usePlanMode, useProviders, useRailUi, useWatchedThread, type ChatClient } from "../store.ts";
+import {
+  EMPTY_DRAFT,
+  NEW_CHAT,
+  sameDraft,
+  TOOLBAR_DRAFT,
+  useChatClient,
+  useChats,
+  useDraftVersion,
+  useFollowUp,
+  useHandoffVersion,
+  usePlanMode,
+  useProviders,
+  useQueue,
+  useRailUi,
+  useSendShortcut,
+  useWatchedThread,
+  type ChatClient,
+  type ChatDraft,
+  type QueuedMessage,
+} from "../store.ts";
 import { latestCompletedTool, returnQueued, sendQueued } from "../queue.tsx";
-import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Tip } from "../../chrome/ui.tsx";
 import { MessageAction, SendArrow, StopSquare } from "../../chrome/MessageAction.tsx";
 import { formatSize, useAttachments } from "./attachments.ts";
-import { StashMenu, useStash } from "./stash.tsx";
-import { ApprovalPanel, choiceOnly, PlanActions, PlanReady, useQuestionAnswers, waitingRequests } from "./panels.tsx";
+import { StashBadge, StashDrawer, useStash } from "./stash.tsx";
+import { NoticeStack, type ComposerNotice } from "./notices.tsx";
+import { ApprovalPanel, choiceOnly, openQuestion, PlanActions, PlanReady, requestIdOf, useQuestionAnswers, waitingRequests } from "./panels.tsx";
+import { useTypingGuard } from "./typingGuard.ts";
+import { pasteIntoComposer, pastesInline, typesIntoComposer } from "./focusRedirect.ts";
 import { platform } from "../../canvas/platform.ts";
 import { showNotice } from "../../toasts.tsx";
 import { AttachmentShelf } from "./AttachmentShelf.tsx";
-import { ChipRow, contextSelection, useSelectionChips } from "./chips.tsx";
+import { ChipRow, ElementChipRow, contextSelection, useSelectionChips } from "./chips.tsx";
 import { ComposerMenu, type MenuItem } from "./ComposerMenu.tsx";
 import { mentionItems } from "./mentions.tsx";
 import { slashItems, skillMenuItems } from "./commands.tsx";
 import { CompactControlsMenu, ContextMeter, declaredTraits, latestUsage, ModelPicker, TraitsPicker } from "./pickers.tsx";
-import { PromptEditor, type PromptEditorHandle, type Trigger } from "./PromptEditor.tsx";
+import { chipOfToken, PromptEditor, type CaretMark, type PromptEditorHandle, type Trigger } from "./PromptEditor.tsx";
+import { UpNext } from "./UpNext.tsx";
+import { useRestingComposer, useRestingTransition } from "./resting.ts";
 import { useMaybeEditor, useValue } from "tldraw";
+import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Input } from "~/components/ui/input";
 import { composerGlassClass } from "../../chrome/composerSurface.ts";
 
-export const PROMPT_LABEL = "Message the agent";
+const PROMPT_LABEL = "Message the agent";
 
-/**
- * t3code's composer shell (ComposerSurface): a rounded glass box with the composer shadow
- * and a hairline outline, the outline turning to the ring while files are dragged over.
- */
 const COMPOSER_SHELL =
   `${composerGlassClass} relative isolate flex flex-col gap-1.5 rounded-3xl px-3 pt-2.5 pb-2 shadow-composer dark:shadow-none after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-border data-dragging:after:border-ring`;
 
-export const PLACEHOLDERS = {
+const PLACEHOLDERS = {
   approval: "Resolve this approval request to continue",
   choiceOnly: "Choose an option above",
   customAnswer: "Type your own answer, or leave this blank to use the selected option",
@@ -62,23 +106,33 @@ export const PLACEHOLDERS = {
 export interface AgentTrayProps {
   readonly client: ChatClient;
   readonly variant: "rail" | "toolbar";
-  /** The chat the next message goes to; `null` starts one. */
   readonly chatId: string | null;
-  /** What a new chat is tagged with: the selected artifacts. */
   readonly newChatTags: ReadonlyArray<string>;
-  /** Called with the target chat before the message goes out (the toolbar opens the rail on it). */
   readonly beforeSend?: (chatId: string) => void;
-  /** Called once the message was accepted. */
   readonly onSent?: () => void;
-  /** A line under the chips (the toolbar's "continues" line). */
   readonly underChips?: ReactNode;
-  /** A line beside Send (the toolbar's provider note). */
   readonly note?: (provider: string) => ReactNode;
-  /** Tells the composer shell a menu of the tray is open, so Esc closes the menu first. */
   readonly onMenuOpen?: (key: string, open: boolean) => void;
-  /** The element files may be dropped on (the whole rail); the tray itself when absent. */
   readonly dropTarget?: RefObject<HTMLElement | null>;
+  readonly notices?: ReadonlyArray<ComposerNotice>;
 }
+
+const useModifiersHeld = (): { readonly command: boolean; readonly shift: boolean } => {
+  const [held, setHeld] = useState({ command: false, shift: false });
+  useEffect(() => {
+    const update = (event: KeyboardEvent) => setHeld({ command: event.metaKey || event.ctrlKey, shift: event.shiftKey });
+    const reset = () => setHeld({ command: false, shift: false });
+    window.addEventListener("keydown", update, true);
+    window.addEventListener("keyup", update, true);
+    window.addEventListener("blur", reset);
+    return () => {
+      window.removeEventListener("keydown", update, true);
+      window.removeEventListener("keyup", update, true);
+      window.removeEventListener("blur", reset);
+    };
+  }, []);
+  return held;
+};
 
 interface OpenMenu {
   readonly label: string;
@@ -88,12 +142,13 @@ interface OpenMenu {
   readonly pick: (item: MenuItem) => void;
 }
 
-/**
- * The composer's Agent tray (spec 08), built on t3code's composer: a Tiptap box, the
- * footer's pickers, Stop and Send. The rail's composer and the toolbar's are this one
- * component; only where a message goes differs.
- */
-export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, onSent, underChips, note, onMenuOpen, dropTarget }: AgentTrayProps) => {
+const elementKey = (chip: ElementChip): string => `${chip.shapeId}\u0000${chip.selector}`;
+
+const markAt = (at: CaretMark | undefined) => (at === undefined ? {} : { at });
+
+const withElements = (elements: ReadonlyArray<ElementChip>) => (elements.length > 0 ? { elements } : {});
+
+export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, onSent, underChips, note, onMenuOpen, dropTarget, notices = [] }: AgentTrayProps) => {
   const ui = useRailUi(client);
   const { statuses } = useProviders(client);
   const chat = useWatchedThread(client, chatId);
@@ -102,39 +157,90 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const ready = readyProviders(statuses);
   const canvas = useMaybeEditor();
   const box = useRef<PromptEditorHandle>(null);
-  // A rail's draft lives on the client, one per chat, so the editor's rail and the canvas
-  // rail show the same text whichever is mounted. The toolbar's tray keeps its own.
-  const draftKey = variant === "rail" ? (chatId ?? NEW_CHAT) : undefined;
+  const draftKey: string | undefined = variant === "rail" ? (chatId ?? NEW_CHAT) : TOOLBAR_DRAFT;
   const [initialDraft] = useState(() => (draftKey === undefined ? EMPTY_DRAFT : client.draft(draftKey)));
-  const [text, setText] = useState(initialDraft.text);
+  const [initialText] = useState(() => (variant === "rail" && openQuestion(chat) !== undefined ? "" : initialDraft.text));
+  const [text, setText] = useState(initialText);
   const draftKeyRef = useRef(draftKey);
+  const attachmentsRef = useRef<ReturnType<typeof useAttachments>>(null!);
   const draftVersion = useDraftVersion(client, draftKey ?? "");
   const chips = useSelectionChips(canvas, text.trim() === "");
-  /** The context chips this draft's @ mentions added: they belong to the draft, not to the canvas selection. */
   const mentionIds = useRef<ReadonlyArray<string>>([]);
-  const saveDraft = (value: string) => {
-    if (draftKeyRef.current !== undefined) client.setDraft(draftKeyRef.current, { text: value, mentions: mentionIds.current });
+  const answeringRef = useRef(false);
+  const [editing, setEditing] = useState<{ readonly id: string; readonly chatId: string; readonly original: QueuedEditContent } | null>(null);
+  const editingRef = useRef(editing);
+  const aside = useRef<{ readonly chips: ReadonlyArray<string>; readonly mentions: ReadonlyArray<string> }>({ chips: [], mentions: [] });
+  const setEdit = (next: typeof editing) => {
+    editingRef.current = next;
+    setEditing(next);
   };
-  const onDraftChange = (value: string) => {
+  const [elements, setElementsState] = useState<ReadonlyArray<ElementChip>>(initialDraft.elements ?? []);
+  const elementsRef = useRef(elements);
+  const setElements = (next: ReadonlyArray<ElementChip>) => {
+    elementsRef.current = next;
+    setElementsState(next);
+  };
+  const guard = useTypingGuard(
+    chatId ?? NEW_CHAT,
+    variant === "rail" && chat ? [...waitingRequests(chat, "approval"), ...waitingRequests(chat, "user-input")].map(requestIdOf) : [],
+  );
+  const ownDraft = useRef<ChatDraft | undefined>(undefined);
+  const shownKey = useRef<string | undefined>(undefined);
+  const saveDraft = (value: string) => {
+    if (draftKeyRef.current === undefined || answeringRef.current || editingRef.current !== null) return;
+    ownDraft.current = { text: value, mentions: mentionIds.current, attachments: attachmentsRef.current.ready(), elements: elementsRef.current };
+    client.setDraft(draftKeyRef.current, ownDraft.current);
+  };
+  const chipped = useRef<ReadonlyArray<string>>(chipRefs(initialText));
+  const expandResting = useRef(() => {});
+  const onDraftChange = (value: string, typed: boolean) => {
     setText(value);
+    if (typed) expandResting.current();
+    if (answeringRef.current) return;
+    const refs = chipRefs(value);
+    const before = chipped.current;
+    chipped.current = refs;
+    if (typed) {
+      guard.onType();
+      const staged = attachmentsRef.current.staged;
+      for (const item of staged) {
+        const id = item.attachment?.id;
+        if (id !== undefined && item.kind === "file" && before.includes(id) && !refs.includes(id)) attachmentsRef.current.remove(item.key);
+      }
+      const held = new Set(staged.flatMap((item) => (item.attachment ? [item.attachment.id] : [])));
+      const missing = refs.filter((ref) => !held.has(ref)).flatMap((ref) => client.knownAttachment(ref) ?? []);
+      if (missing.length > 0) attachmentsRef.current.restore(missing);
+    }
     saveDraft(value);
   };
-  /** After a send or a stash the chips go back to the selection, and no mention is the draft's any more. */
   const forgetMentions = () => {
     mentionIds.current = [];
   };
-  // Declared before the handoff effect: on a chat switch the chat's draft lands first, then any handoff joins it.
   useEffect(() => {
+    const sameChat = draftKeyRef.current === draftKey;
     draftKeyRef.current = draftKey;
-    if (draftKey === undefined) return;
+    let chipIds = chips.shapes.map((shape) => shape.id);
+    if (editingRef.current !== null && editingRef.current.chatId !== chatId) {
+      setEdit(null);
+      chipIds = [...aside.current.chips];
+      mentionIds.current = aside.current.mentions;
+    }
+    if (draftKey === undefined || editingRef.current !== null) return;
     const stored = client.draft(draftKey);
-    const shown = { text: box.current?.text() ?? "", mentions: mentionIds.current };
+    if (shownKey.current === draftKey && stored === ownDraft.current) return;
+    shownKey.current = draftKey;
+    const shown = { text: box.current?.text() ?? "", mentions: mentionIds.current, attachments: attachmentsRef.current.ready(), elements: elementsRef.current };
     if (sameDraft(shown, stored)) return;
-    const kept = chips.shapes.map((shape) => shape.id).filter((id) => !mentionIds.current.includes(id));
-    // Set first: the text below fires a change, which saves the draft with these mentions.
+    if (!answeringRef.current && !sameDraft({ ...EMPTY_DRAFT, attachments: shown.attachments }, { ...EMPTY_DRAFT, attachments: stored.attachments }))
+      attachmentsRef.current.replace(stored.attachments);
+    const kept = chipIds.filter((id) => !mentionIds.current.includes(id));
     mentionIds.current = stored.mentions;
     chips.set([...kept, ...stored.mentions.filter((id) => !kept.includes(id))]);
-    if (shown.text !== stored.text) box.current?.setText(stored.text, { focus: false, undoable: false });
+    const incoming = stored.elements ?? [];
+    const added = incoming.some((chip) => !shown.elements.some((shownChip) => shownChip.shapeId === chip.shapeId && shownChip.selector === chip.selector));
+    if (!answeringRef.current) setElements(incoming);
+    if (shown.text !== stored.text && !answeringRef.current) box.current?.setText(stored.text, { focus: false, undoable: false });
+    if (added && sameChat && !answeringRef.current) box.current?.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, draftKey, draftVersion]);
   const [trigger, setTrigger] = useState<Trigger>();
@@ -144,16 +250,15 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const [draftInteraction, setDraftInteraction] = useState<InteractionMode>("default");
   const showError = useCallback((message: string) => client.setUi({ error: message }), [client]);
   const [modelOpen, setModelOpen] = useState(false);
+  const [traitsOpen, setTraitsOpen] = useState(false);
   const [modeOpen, setModeOpen] = useState(false);
 
-  /** The model a message runs on: the chat's, or for a new chat the one picked here, else the first ready provider's default. */
   const selection: ModelSelection = useMemo(
     () => (chat ? agentSelectionOf(chat.modelSelection) : undefined) ?? draftModel ?? { provider: ready[0] ?? "claude", model: "", traits: {} },
     [chat?.modelSelection, draftModel, ready],
   );
   const runtimeMode = chat?.runtimeMode ?? draftRuntime;
   const planMode = usePlanMode(client);
-  // With plan mode off, as t3code ships it, every chat runs in build mode.
   const interactionMode = planMode ? (chat?.interactionMode ?? draftInteraction) : "default";
   const model = effectiveModel(statuses, selection.provider, selection.model);
   const status = statuses?.[selection.provider];
@@ -171,7 +276,47 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   };
   const usage = latestUsage(chat);
   const compactable = (status?.commands ?? []).some((command) => command.name === "compact");
-  const attachments = useAttachments(client.engine, showError);
+  const attachments = useAttachments(client.engine, showError, {
+    onReady: (item, attachment) => {
+      client.rememberAttachments([attachment]);
+      const chip = chipOfToken(attachmentChip(attachment));
+      if (item.chip && chip && !answeringRef.current) box.current?.insertChip(chip, item.at);
+    },
+    onMoved: (owner, attachment, chip) => {
+      client.rememberAttachments([attachment]);
+      const draft = client.draft(owner);
+      client.setDraft(owner, { ...draft, text: chip ? ensureChips(draft.text, [attachmentChip(attachment)]) : draft.text, attachments: [...draft.attachments, attachment] });
+    },
+  });
+  attachmentsRef.current = attachments;
+  const stagedOnce = useRef(false);
+  useEffect(() => {
+    if (!stagedOnce.current) {
+      stagedOnce.current = true;
+      return;
+    }
+    if (box.current?.element()) saveDraft(box.current.text());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attachments.staged]);
+  const intake = (chip: boolean) =>
+    answeringRef.current
+      ? { chip: false }
+      : {
+          ...(draftKeyRef.current !== undefined && editingRef.current === null ? { owner: draftKeyRef.current } : {}),
+          ...(chip && withoutChips(box.current?.text() ?? "").trim() !== "" ? { chip: true, ...markAt(box.current?.caretMark()) } : { chip: false }),
+        };
+  const refusesFiles = useRef(false);
+  const addFiles = (chosen: ReadonlyArray<File>, chip: boolean) => {
+    if (refusesFiles.current) return;
+    void attachments.add(chosen, intake(chip));
+  };
+  const addFilesRef = useRef(addFiles);
+  addFilesRef.current = addFiles;
+  const removeAttachment = (key: string) => {
+    const item = attachments.staged.find((known) => known.key === key);
+    attachments.remove(key);
+    if (item?.attachment) box.current?.removeChips(item.attachment.id);
+  };
   const files = useRef<HTMLInputElement>(null);
   const root = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -206,7 +351,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       event.stopPropagation();
       depth = 0;
       setDragging(false);
-      void attachments.add([...(event.dataTransfer?.files ?? [])]);
+      addFilesRef.current([...(event.dataTransfer?.files ?? [])], true);
     };
     element.addEventListener("dragenter", enter);
     element.addEventListener("dragover", over);
@@ -218,35 +363,35 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       element.removeEventListener("dragleave", leave);
       element.removeEventListener("drop", drop);
     };
-  }, [dropElement, attachments]);
+  }, [dropElement]);
 
-  /** Cmd+Shift+V (Ctrl+Shift+V off Mac) keeps the next large paste inline. */
   const inlineNext = useRef(0);
 
-  /**
-   * A paste of files attaches them (text pasted with them stays text); a large text paste
-   * becomes a text file attachment, unless Cmd+Shift+V asked for it inline.
-   */
+  const attachLargePaste = (pastedText: string): boolean => {
+    const inline = Date.now() - inlineNext.current < 1500;
+    inlineNext.current = 0;
+    if (pastedText === "" || inline || refusesFiles.current || !pasteBecomesFile(pastedText, text.length)) return false;
+    const name = pastedTextFileName(attachments.staged.map((item) => item.name));
+    const file = new File([pastedText], name, { type: "text/plain;charset=utf-8" });
+    addFiles([file], true);
+    showNotice(`Large paste attached as ${name}`, "info", `${formatSize(file.size)} · Use ${platform() === "darwin" ? "⌘⇧V" : "Ctrl+Shift+V"} to keep a large paste inline.`);
+    return true;
+  };
+
   const onPaste = (event: ClipboardEvent): boolean => {
     const data = event.clipboardData;
     const pasted = [...(data?.files ?? [])];
     const pastedText = data?.getData("text/plain") ?? "";
     if (pasted.length > 0) {
-      void attachments.add(pasted);
+      addFiles(pasted, true);
       if (pastedText === "") {
         event.preventDefault();
         return true;
       }
       return false;
     }
-    const inline = Date.now() - inlineNext.current < 1500;
-    inlineNext.current = 0;
-    if (pastedText === "" || inline || !pasteBecomesFile(pastedText, text.length)) return false;
+    if (!attachLargePaste(pastedText)) return false;
     event.preventDefault();
-    const name = pastedTextFileName(attachments.staged.map((item) => item.name));
-    const file = new File([pastedText], name, { type: "text/plain;charset=utf-8" });
-    void attachments.add([file]);
-    showNotice(`Large paste attached as ${name}`, "info", `${formatSize(file.size)} · Use ${platform() === "darwin" ? "⌘⇧V" : "Ctrl+Shift+V"} to keep a large paste inline.`);
     return true;
   };
 
@@ -258,7 +403,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const [highlight, setHighlight] = useState(0);
   const [dismissedAt, setDismissedAt] = useState<number>();
   useEffect(() => setHighlight(0), [trigger?.char, trigger?.query, trigger?.from]);
-  // Reactive, so a shape that lands while the menu is open is offered.
   const mentionRows = useValue("mentions", () => (trigger?.char === "@" && canvas ? mentionItems(canvas, trigger.query) : undefined), [canvas, trigger]);
   const menu = useMemo((): OpenMenu | undefined => {
     if (!trigger || dismissedAt === trigger.from) return undefined;
@@ -324,50 +468,28 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     onMenuOpen?.("agent-menu", menu !== undefined);
   }, [onMenuOpen, menu]);
   useEffect(() => () => onMenuOpen?.("agent-menu", false), [onMenuOpen]);
-  // The More menu too: an Escape in it closes the menu, not the toolbar's composer.
   useEffect(() => {
     onMenuOpen?.("more-controls", modeOpen);
   }, [onMenuOpen, modeOpen]);
   useEffect(() => () => onMenuOpen?.("more-controls", false), [onMenuOpen]);
 
-  // ArrowUp in an empty box recalls this chat's earlier messages, newest first; editing one ends the recall.
-  const recall = useRef<{ index: number; text: string } | undefined>(undefined);
+  const historyPosition = useRef<PromptHistoryPosition | null>(null);
   useEffect(() => {
-    recall.current = undefined;
+    historyPosition.current = null;
   }, [chatId]);
-  const history = (direction: "up" | "down"): boolean => {
-    const earlier = (chat?.messages ?? []).filter((message) => message.role === "user").map((message) => message.text).reverse();
+  const history = (direction: "backward" | "forward"): boolean => {
+    if (answeringRef.current || attachments.staged.length > 0) return false;
     const current = box.current?.text() ?? "";
-    const recalled = recall.current;
-    if (recalled && recalled.text !== current) recall.current = undefined;
-    const line = box.current?.caretLine() ?? { first: true, last: true };
-    if (!recall.current) {
-      if (direction === "down" || current !== "" || earlier.length === 0) return false;
-      recall.current = { index: 0, text: earlier[0]! };
-      box.current?.setText(earlier[0]!);
-      return true;
-    }
-    if (direction === "up") {
-      if (!line.first) return false;
-      const index = recall.current.index + 1;
-      if (index >= earlier.length) return true;
-      recall.current = { index, text: earlier[index]! };
-      box.current?.setText(earlier[index]!);
-      return true;
-    }
-    if (!line.last) return false;
-    const index = recall.current.index - 1;
-    if (index < 0) {
-      recall.current = undefined;
-      box.current?.clear();
-      return true;
-    }
-    recall.current = { index, text: earlier[index]! };
-    box.current?.setText(earlier[index]!);
+    const position = historyPosition.current;
+    if (position === null && current.length > 0) return false;
+    if (!box.current?.caretOnVisualEdge(direction === "backward" ? "start" : "end")) return false;
+    const step = stepPromptHistory({ direction, entries: promptHistoryEntries(chat?.messages ?? []), position, currentPrompt: current });
+    if (!step) return false;
+    historyPosition.current = step.position;
+    box.current?.setText(step.prompt);
     return true;
   };
 
-  /** Keys the box gives the tray first: an open menu takes its arrows, Enter, Tab and Esc. */
   const onKey = (event: KeyboardEvent): boolean => {
     const command = platform() === "darwin" ? event.metaKey : event.ctrlKey;
     if (command && event.shiftKey && event.key.toLowerCase() === "v") {
@@ -375,32 +497,42 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       return false;
     }
     if (command && !event.shiftKey && event.key.toLowerCase() === "s") {
-      stashKey();
+      if (editingRef.current === null) stashKey();
       return true;
     }
-    // The stash menu opened from the keyboard may not have the focus yet: Esc in the box still closes it.
-    if (event.key === "Escape" && stashOpen) {
-      event.stopPropagation();
-      setStashOpen(false);
+    if (command && event.shiftKey && !event.altKey && event.key.toLowerCase() === "a") {
+      setModeOpen(true);
       return true;
     }
-    if (command && event.shiftKey && event.key === "Enter" && chat) {
+    if (command && event.shiftKey && !event.altKey && event.key.toLowerCase() === "m") {
+      if (!event.repeat && !running) setModelOpen((open) => !open);
+      return true;
+    }
+    if (command && event.shiftKey && !event.altKey && event.key.toLowerCase() === "e") {
+      if (!event.repeat && !running) setTraitsOpen(true);
+      return true;
+    }
+    if (!menu && event.altKey && !event.shiftKey && !event.metaKey && !event.ctrlKey && event.key === "ArrowUp" && variant === "rail" && chatId !== null) {
+      const latest = client.queue(chatId).at(-1);
+      if (!latest || latest.state !== "waiting" || editingRef.current !== null || answeringRef.current || !box.current?.caretAtStart()) return false;
+      if (!event.repeat) beginEdit(latest);
+      return true;
+    }
+    const intent = composerKeyIntent({ key: event, mac: platform() === "darwin", sendShortcut, prompt: box.current?.text() ?? "", running, newChat: chatId === null });
+    if (intent === "steer-queued") {
+      if (!chat) return false;
       const oldest = client.queue(chat.id)[0];
       if (oldest) void sendQueued(client, chat.id, oldest.id);
       return true;
     }
-    if (command && event.shiftKey && event.key.toLowerCase() === "a") {
-      setModeOpen(true);
-      return true;
-    }
     if (!menu && !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
-      return history(event.key === "ArrowUp" ? "up" : "down");
+      return history(event.key === "ArrowUp" ? "backward" : "forward");
     }
     if (planMode && event.key === "Tab" && event.shiftKey && !menu) {
       setInteraction(interactionMode === "plan" ? "default" : "plan");
       return true;
     }
-    if (menu) {
+    if (menu && intent !== "alternate" && intent !== "background") {
       const count = menu.items.length;
       if (event.key === "ArrowDown" && count > 0) setHighlight((highlight + 1) % count);
       else if (event.key === "ArrowUp" && count > 0) setHighlight((highlight - 1 + count) % count);
@@ -413,13 +545,41 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       } else return false;
       return true;
     }
-    return false;
+    if (intent === null) return false;
+    void send(intent === "alternate", intent === "background" && variant === "rail");
+    return true;
   };
 
-  // What waits on the person in this chat: an approval, a question, a plan to implement.
-  const approvalPending = variant === "rail" && chat !== undefined && waitingRequests(chat, "approval").length > 0;
-  const questions = useQuestionAnswers(client, variant === "rail" ? chat : undefined, box, text);
+  const approvalPending = variant === "rail" && chat !== undefined && waitingRequests(chat, "approval").some((request) => !guard.held.has(requestIdOf(request)));
+  const questions = useQuestionAnswers(client, variant === "rail" ? chat : undefined, box, text, guard.held, attachments);
   const { question, answering } = questions;
+  answeringRef.current = answering;
+  refusesFiles.current = answering && choiceOnly(question);
+  const questionKey = answering ? `${chatId}:${questions.requestId}` : undefined;
+  const shownQuestion = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const was = shownQuestion.current;
+    shownQuestion.current = questionKey;
+    if (questionKey === was) return;
+    if (questionKey !== undefined) {
+      if (editingRef.current !== null) {
+        chips.set(aside.current.chips);
+        mentionIds.current = aside.current.mentions;
+      }
+      setEdit(null);
+      box.current?.setText("", { focus: false, undoable: false });
+      attachments.replace([]);
+      setElements([]);
+      return;
+    }
+    if (draftKeyRef.current === undefined) return;
+    const draft = client.draft(draftKeyRef.current);
+    if ((box.current?.text() ?? "") !== draft.text) box.current?.setText(draft.text, { focus: false, undoable: false });
+    attachments.replace(draft.attachments);
+    setElements(draft.elements ?? []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionKey]);
+  const lengthError = answering ? undefined : promptLengthError(text);
   const planFollowUp = variant === "rail" && chat !== undefined && !running && !answering && interactionMode === "plan" && attachments.staged.length === 0 ? actionablePlan(chat) : undefined;
 
   const placeholder = approvalPending
@@ -434,14 +594,31 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           ? PLACEHOLDERS.noProvider
           : PLACEHOLDERS.default;
 
-  const canSend = answering ? questions.ready : planFollowUp ? !sending : !noProvider && !sending && (text.trim() !== "" || attachments.staged.length > 0);
+  const canSend = answering
+    ? questions.ready
+    : editing !== null
+      ? lengthError === undefined && !sending && (text.trim() !== "" || attachments.staged.length > 0)
+      : lengthError === undefined && (planFollowUp ? !sending : !noProvider && !sending && (text.trim() !== "" || attachments.staged.length > 0));
 
-  /** Implement: the chat back to building, then the plan after t3code's prefix; or the same in a new chat named after it. */
+  const showResume =
+    variant === "rail" && chat !== undefined && !running && !answering && editing === null && !noProvider && resumableTurn(chat) && text.trim() === "" && attachments.staged.length === 0;
+  const resume = async () => {
+    if (!chat || sending) return;
+    setSending(true);
+    client.setUi({ error: undefined });
+    try {
+      await sendMessage(client, chat.id, { text: RESUME_MESSAGE, selection: [], attachments: [] });
+    } catch (error) {
+      client.reportError(error);
+    } finally {
+      setSending(false);
+    }
+  };
+
   const implementPlan = async (inNewChat: boolean) => {
     if (!chat || !planFollowUp || sending) return;
     const message = { text: implementPlanText(planFollowUp.planMarkdown), selection: [], attachments: [] };
     const source = { sourceProposedPlan: { threadId: chat.id, planId: planFollowUp.id } };
-    // A plan belongs to an in-app chat; an outside chat has no plan to implement.
     const planSelection = agentSelectionOf(chat.modelSelection);
     if (planSelection === undefined) return;
     setSending(true);
@@ -466,98 +643,315 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   };
 
   const followUp = useFollowUp(client);
+  const sendShortcut = useSendShortcut(client);
   const stash = useStash(client.engine, client.project);
   const [stashOpen, setStashOpen] = useState(false);
-  const restoreDraft = (draft: { readonly text: string; readonly selection: ReadonlyArray<string>; readonly attachments: ReadonlyArray<ChatAttachment> }) => {
-    box.current?.setText(draft.text);
-    chips.set(draft.selection);
+  const [stashPulse, setStashPulse] = useState(0);
+  useEffect(() => {
+    onMenuOpen?.("stash", stashOpen);
+  }, [onMenuOpen, stashOpen]);
+  useEffect(() => () => onMenuOpen?.("stash", false), [onMenuOpen]);
+  const closeStash = () => {
+    setStashOpen(false);
+    box.current?.focus();
+  };
+  const restoreDraft = (draft: { readonly text: string; readonly selection: ReadonlyArray<string>; readonly attachments: ReadonlyArray<ChatAttachment>; readonly elements?: ReadonlyArray<ElementChip> }) => {
+    const key = draftKeyRef.current;
+    if (editingRef.current !== null && key !== undefined) {
+      const current = client.draft(key);
+      client.setDraft(key, {
+        ...current,
+        text: appendRestoredPrompt(current.text, draft.text),
+        attachments: mergeRestored(current.attachments, draft.attachments, (item) => `${item.kind}\u0000${item.size}\u0000${item.name}`),
+        elements: mergeRestored(current.elements ?? [], draft.elements ?? [], elementKey),
+      });
+      aside.current = { ...aside.current, chips: mergeRestored(aside.current.chips, draft.selection, (id) => id) };
+      return;
+    }
+    const setAside = answeringRef.current ? key : undefined;
+    if (setAside !== undefined) {
+      const current = client.draft(setAside);
+      client.setDraft(setAside, { ...current, text: appendRestoredPrompt(current.text, draft.text), mentions: mentionIds.current, elements: mergeRestored(current.elements ?? [], draft.elements ?? [], elementKey) });
+    } else {
+      setElements(mergeRestored(elementsRef.current, draft.elements ?? [], elementKey));
+      box.current?.setText(appendRestoredPrompt(box.current.text(), draft.text));
+    }
+    chips.add(draft.selection);
     attachments.restore(draft.attachments);
   };
-  /** Cmd+S: a draft goes to the stash; with an empty box the only entry comes back, or the menu opens. */
   const stashKey = () => {
     const draft = box.current?.text() ?? "";
-    if (draft.trim() !== "" || attachments.staged.length > 0) {
-      stash.push({ text: draft, selection: chips.shapes.map((shape) => shape.id), attachments: attachments.staged.flatMap((item) => (item.attachment ? [item.attachment] : [])) });
+    if (draft.trim() !== "" || attachments.staged.length > 0 || elementsRef.current.length > 0) {
+      stash.push({ text: draft, selection: chips.shapes.map((shape) => shape.id), attachments: attachments.ready(), elements: elementsRef.current });
+      setStashPulse((pulse) => pulse + 1);
       forgetMentions();
-      box.current?.clear();
+      setElements([]);
       attachments.clear();
+      box.current?.clear();
       chips.set(canvas?.getSelectedShapeIds() ?? []);
     } else if (stash.entries.length === 1) {
       restoreDraft(stash.entries[0]!);
       stash.remove(stash.entries[0]!.id);
     } else {
-      setStashOpen(true);
+      setStashOpen((open) => !open);
     }
   };
-  const send = async (invert = false) => {
-    if (answering) return questions.answer();
+  const send = async (invert = false, thenNewChat = false) => {
+    if (answering) {
+      guard.onSend();
+      return questions.answer();
+    }
+    if (editingRef.current !== null) return saveEdit();
     const message = box.current?.text() ?? "";
     const sentFrom = draftKeyRef.current;
+    if (promptLengthError(message) !== undefined) return;
+    guard.onSend();
     if (planFollowUp && message.trim() === "") return implementPlan(false);
-    if (noProvider || (message.trim() === "" && attachments.staged.length === 0) || sending) return;
+    const pointed = elementsRef.current;
+    if (noProvider || (message.trim() === "" && attachments.staged.length === 0 && pointed.length === 0) || sending) return;
     setSending(true);
     client.setUi({ error: undefined });
     try {
+      const uploaded = await attachments.settle();
+      const context = [...new Set([...contextSelection(canvas, chips.shapes), ...pointed.map((chip) => chip.shapeId)])];
+      const chipIds = chips.shapes.map((shape) => shape.id);
       let target = chatId;
       if (target === null) {
         target = await createChat(client, { modelSelection: selection, runtimeMode: draftRuntime, interactionMode, tags: newChatTags }, message);
       }
       beforeSend?.(target);
-      const context = contextSelection(canvas, chips.shapes);
-      const uploaded = await attachments.settle();
       forgetMentions();
+      setElements([]);
       box.current?.clear();
-      // A new chat's send switches this tray to the chat it made, so the draft it came from is cleared by key.
       if (sentFrom !== undefined) client.setDraft(sentFrom, EMPTY_DRAFT);
       attachments.clear();
       chips.set(canvas?.getSelectedShapeIds() ?? []);
-      const outgoing = { text: message, selection: context, attachments: uploaded };
+      const outgoing = { text: message, selection: context, attachments: uploaded, ...(pointed.length > 0 ? { elements: pointed } : {}) };
       const current = client.thread(target);
       if (!planMode && current?.interactionMode === "plan") await client.dispatch({ type: "thread.interaction-mode.set", threadId: target, interactionMode: "default" });
       if (current?.latestTurn?.state === "running") {
-        // Queue waits for the turn's next tool call or its end; Steer joins the turn now. Cmd+Enter flips it once.
-        const steer = (followUp === "steer") !== invert;
-        if (steer) await sendMessage(client, target, outgoing, { steer: true });
-        else client.enqueue(target, outgoing, latestCompletedTool(current));
+        if (followUpAction(followUp, invert) === "steer") await sendMessage(client, target, outgoing, { steer: true });
+        else client.enqueue(target, outgoing, latestCompletedTool(current), chipIds);
+      } else if (target === chatId && compactsBeforeSend({ tokens: compactTokens, keepFullHistory: keepFull, text: message })) {
+        await sendMessage(client, target, { text: "/compact", selection: [], attachments: [] });
+        client.enqueue(target, outgoing, latestCompletedTool(client.thread(target)), chipIds);
       } else {
         await sendMessage(client, target, outgoing);
       }
+      setFullHistory(target, false);
       onSent?.();
+      if (thenNewChat) client.setUi({ chosen: NEW_CHAT, pinned: null });
     } catch (error) {
       client.reportError(error);
       if ((box.current?.text() ?? "") === "") box.current?.setText(message);
+      if (elementsRef.current.length === 0) setElements(pointed);
     } finally {
       setSending(false);
     }
   };
 
-  // A draft handed back to this chat (a cancelled queued message, Edit from here) lands in the box.
   const handoffs = useHandoffVersion(client);
   useEffect(() => {
     if (chatId === null) return;
     const drafts = client.takeHandoffs(chatId);
     if (drafts.length === 0) return;
-    const current = box.current?.text() ?? "";
-    const returned = drafts.map((draft) => draft.text).join("\n\n");
-    box.current?.setText(current.trim() === "" ? returned : `${current}\n\n${returned}`);
-    chips.set([...new Set(drafts.flatMap((draft) => draft.selection))]);
-    attachments.restore(drafts.flatMap((draft) => draft.attachments));
+    restoreDraft({
+      text: drafts.map((draft) => draft.text).join("\n\n"),
+      selection: drafts.flatMap((draft) => draft.selection),
+      attachments: drafts.flatMap((draft) => draft.attachments),
+      elements: drafts.flatMap((draft) => draft.elements ?? []),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handoffs, chatId, client]);
 
+  const queue = useQueue(client, variant === "rail" ? chatId : null);
+
+  const [, setMinute] = useState(0);
+  const mayGoStale = selection.provider === "claude" && (usage?.usedTokens ?? 0) >= COMPACTION_SUGGESTION_MIN_TOKENS;
+  useEffect(() => {
+    if (!mayGoStale) return;
+    const timer = window.setInterval(() => setMinute((minute) => minute + 1), 60_000);
+    return () => window.clearInterval(timer);
+  }, [mayGoStale]);
+  const [fullHistoryChats, setFullHistoryChats] = useState<ReadonlySet<string>>(() => new Set());
+  const keepFull = chatId !== null && fullHistoryChats.has(chatId);
+  const setFullHistory = (id: string, keep: boolean) =>
+    setFullHistoryChats((current) => {
+      if (current.has(id) === keep) return current;
+      const next = new Set(current);
+      if (keep) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  const compactTokens =
+    chat !== undefined &&
+    usage !== undefined &&
+    compactable &&
+    !running &&
+    editing === null &&
+    !approvalPending &&
+    !answering &&
+    planFollowUp === undefined &&
+    client.queue(chat.id).length === 0 &&
+    chat.messages.some((message) => message.role === "user" && (message.text.trim().toLowerCase() !== "/compact" || (message.attachments?.length ?? 0) > 0)) &&
+    offersCompactBeforeSend({ provider: selection.provider, usedTokens: usage.usedTokens, updatedAt: usage.updatedAt, now: new Date().toISOString() })
+      ? usage.usedTokens
+      : null;
+  const editContent = (): QueuedEditContent => ({
+    text: box.current?.text() ?? "",
+    chips: chips.shapes.map((shape) => shape.id),
+    attachments: attachments.ready().map((attachment) => attachment.id),
+  });
+  const beginEdit = (item: QueuedMessage) => {
+    if (chatId === null || answeringRef.current) return;
+    historyPosition.current = null;
+    if (editingRef.current === null) aside.current = { chips: chips.shapes.map((shape) => shape.id), mentions: mentionIds.current };
+    const itemChips = item.chips ?? item.message.selection;
+    setEdit({ id: item.id, chatId, original: { text: item.message.text, chips: itemChips, attachments: item.message.attachments.map((attachment) => attachment.id) } });
+    mentionIds.current = [];
+    attachments.replace(item.message.attachments);
+    chips.set(itemChips);
+    setElements(item.message.elements ?? []);
+    box.current?.setText(item.message.text);
+  };
+  const endEdit = (options?: { readonly focus?: boolean }) => {
+    setEdit(null);
+    const draft = draftKeyRef.current === undefined ? EMPTY_DRAFT : client.draft(draftKeyRef.current);
+    mentionIds.current = draft.mentions;
+    attachments.replace(draft.attachments);
+    chips.set(aside.current.chips);
+    setElements(draft.elements ?? []);
+    box.current?.setText(draft.text, options);
+  };
+  const stillQueued = (edit: { readonly id: string; readonly chatId: string }) => client.queue(edit.chatId).some((item) => item.id === edit.id && item.state === "waiting");
+  const updateQueued = (edit: { readonly id: string; readonly chatId: string }, message: QueuedMessage["message"], chipIds: ReadonlyArray<string>) =>
+    client.updateQueue(edit.chatId, (current) => current.map((item) => (item.id === edit.id ? { ...item, message, chips: chipIds } : item)));
+  const saveEdit = async () => {
+    const edit = editingRef.current;
+    const message = box.current?.text() ?? "";
+    if (!edit || sending || promptLengthError(message) !== undefined || (message.trim() === "" && attachments.staged.length === 0)) return;
+    if (!stillQueued(edit)) return;
+    setSending(true);
+    try {
+      const uploaded = await attachments.settle();
+      if (editingRef.current !== edit || !stillQueued(edit)) return;
+      if (attachmentsRef.current.staged.some((item) => item.status === "failed")) return showError("Retry or remove failed uploads before saving.");
+      updateQueued(edit, { text: message, selection: contextSelection(canvas, chips.shapes), attachments: uploaded, ...withElements(elementsRef.current) }, chips.shapes.map((shape) => shape.id));
+      endEdit();
+    } finally {
+      setSending(false);
+    }
+  };
+  useEffect(() => {
+    const edit = editingRef.current;
+    if (!edit || edit.chatId !== chatId || queue.some((item) => item.id === edit.id && item.state === "waiting")) return;
+    const draft = draftKeyRef.current === undefined ? EMPTY_DRAFT : client.draft(draftKeyRef.current);
+    const recovery = resolveQueuedEditExit({
+      editChanged: queuedEditChanged(edit.original, editContent()) || attachments.staged.some((item) => item.status !== "ready"),
+      threadDraftEmpty: draft.text.trim() === "" && draft.mentions.length === 0 && draft.attachments.length === 0,
+    });
+    if (recovery === "kept") {
+      setEdit(null);
+      saveDraft(box.current?.text() ?? "");
+    } else {
+      endEdit({ focus: false });
+    }
+    if (recovery === "clean") return;
+    showNotice(
+      "Queued message is no longer queued",
+      recovery === "kept" ? "info" : "warning",
+      recovery === "kept" ? "Your unsaved edit was kept in the composer." : "Your unsaved edit was discarded.",
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue, chatId]);
+
+  const trayNotices: ReadonlyArray<ComposerNotice> =
+    variant === "toolbar" && ui.error !== undefined
+      ? [...notices, { id: "error", variant: "error", icon: <CircleAlert />, title: ui.error, dismissLabel: "Dismiss error", onDismiss: () => client.setUi({ error: undefined }) }]
+      : notices;
+
+  const resting = useRestingComposer({
+    enabled: variant === "rail" && chatId !== null,
+    chatId,
+    rail: dropElement,
+    shell: boxElement,
+    text,
+    expandedChrome:
+      approvalPending ||
+      answering ||
+      planFollowUp !== undefined ||
+      menu !== undefined ||
+      stashOpen ||
+      dragging ||
+      noProvider ||
+      trayNotices.length > 0 ||
+      lengthError !== undefined ||
+      editing !== null ||
+      attachments.staged.some((item) => item.status !== "ready"),
+  });
+  expandResting.current = resting.expand;
+  useRestingTransition(boxElement, resting.resting);
+  const restingImages = resting.resting ? attachments.staged.filter((item) => item.kind === "image") : [];
+  const restingCounts = restingImagePreviewCounts(restingImages.length);
+
   const interrupt = () => {
     if (!chat?.latestTurn) return;
-    // Stop gives every queued message back to the composer.
+    const edit = editingRef.current;
+    if (edit !== null) {
+      const message = box.current?.text() ?? "";
+      if (message.trim() !== "" || attachments.ready().length > 0)
+        updateQueued(edit, { text: message, selection: contextSelection(canvas, chips.shapes), attachments: attachments.ready(), ...withElements(elementsRef.current) }, chips.shapes.map((shape) => shape.id));
+      endEdit();
+    }
     returnQueued(client, chat.id);
     void client.dispatch({ type: "thread.turn.interrupt", threadId: chat.id, turnId: chat.latestTurn.turnId }).catch((error: unknown) => client.reportError(error));
   };
 
+  const boxTakesText = !(answering && choiceOnly(question));
+  const redirect = useRef({ attachLargePaste, boxTakesText });
+  redirect.current = { attachLargePaste, boxTakesText };
+  useEffect(() => {
+    const rail = variant === "rail" ? dropElement : null;
+    if (!rail) return;
+    const mac = platform() === "darwin";
+    const onRailKey = (event: KeyboardEvent) => {
+      if (pastesInline(event, rail, mac)) inlineNext.current = Date.now();
+      else if (typesIntoComposer(event, rail) && box.current?.insertTextAtEnd(event.key)) event.preventDefault();
+    };
+    const onRailPaste = (event: ClipboardEvent) => {
+      const pasted = pasteIntoComposer(event, rail);
+      if (pasted === null || !redirect.current.boxTakesText) return;
+      if (!redirect.current.attachLargePaste(pasted) && !box.current?.insertTextAtEnd(pasted)) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    rail.addEventListener("keydown", onRailKey);
+    rail.addEventListener("paste", onRailPaste);
+    return () => {
+      rail.removeEventListener("keydown", onRailKey);
+      rail.removeEventListener("paste", onRailPaste);
+    };
+  }, [variant, dropElement]);
 
   return (
-    <div className="flex flex-col gap-1.5" data-variant={variant} data-testid="agent-tray" ref={root}>
-      {approvalPending && chat && <ApprovalPanel client={client} chat={chat} />}
-      {questions.panel}
-      {planFollowUp && <PlanReady plan={planFollowUp} />}
+    <div className="flex min-h-0 flex-col gap-1.5" data-variant={variant} data-testid="agent-tray" ref={root}>
+      <div className="-mx-1 flex min-h-0 shrink flex-col gap-1.5 overflow-y-auto overscroll-contain px-1 empty:hidden">
+        <NoticeStack items={trayNotices} />
+        {variant === "rail" && chatId !== null && (
+          <UpNext
+            client={client}
+            chatId={chatId}
+            running={running}
+            editingId={editing?.chatId === chatId ? editing.id : null}
+            editBlockedReason={queuedEditBlockedReason({ openQuestionCount: answering ? 1 : 0 })}
+            onEdit={beginEdit}
+            onCancelEdit={() => endEdit()}
+          />
+        )}
+        {approvalPending && chat && <ApprovalPanel client={client} chat={chat} held={guard.held} />}
+        {questions.panel}
+        {planFollowUp && <PlanReady plan={planFollowUp} />}
+      </div>
       {dragging &&
         dropElement &&
         createPortal(
@@ -569,40 +963,109 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           </div>,
           dropElement,
         )}
-      <div className={COMPOSER_SHELL} ref={boxElement} data-testid="agent-composer" data-dragging={dragging ? "" : undefined}>
-        <AttachmentShelf staged={attachments.staged} onRemove={attachments.remove} onRetry={attachments.retry} />
-        <ChipRow
-          shapes={chips.shapes}
-          onRemove={(ids) => {
-            chips.remove(ids);
-            if (mentionIds.current.some((id) => ids.includes(id))) {
-              mentionIds.current = mentionIds.current.filter((id) => !ids.includes(id));
-              saveDraft(box.current?.text() ?? "");
-            }
-            box.current?.focus();
-          }}
-        />
-        {underChips}
-        <PromptEditor
-          placeholder={placeholder}
-          label={PROMPT_LABEL}
-          onChange={onDraftChange}
-          initialText={initialDraft.text}
-          onTrigger={setTrigger}
-          onKey={onKey}
-          onSubmit={(event) => void send(platform() === "darwin" ? event.metaKey : event.ctrlKey)}
-          onPaste={onPaste}
-          handle={box}
-          disabled={answering && choiceOnly(question)}
-          autofocus={variant === "toolbar"}
-        />
+      {(stashOpen || stash.entries.length > 0) && (
+        <div className="flex items-end gap-1.5">
+          <div className="min-w-0 flex-1">
+            {stashOpen && (
+              <StashDrawer
+                entries={stash.entries}
+                box={() => box.current?.element() ?? null}
+                onRestore={(entry) => {
+                  restoreDraft(entry);
+                  stash.remove(entry.id);
+                  closeStash();
+                }}
+                onDelete={(entry) => stash.remove(entry.id)}
+                onClose={closeStash}
+              />
+            )}
+          </div>
+          <StashBadge count={stash.entries.length} open={stashOpen} pulse={stashPulse} onToggle={() => (stashOpen ? closeStash() : setStashOpen(true))} />
+        </div>
+      )}
+      <div
+        className={`${COMPOSER_SHELL} ${resting.resting ? "grid! grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1.5 gap-y-1 pt-1.5! pb-1!" : ""}`}
+        ref={boxElement}
+        data-testid="agent-composer"
+        data-dragging={dragging ? "" : undefined}
+        data-resting={resting.resting ? "true" : undefined}
+        {...resting.shellProps}
+      >
+        <div className={resting.resting ? "col-span-2 row-start-1 flex flex-col gap-1.5 empty:hidden" : "contents"}>
+          <AttachmentShelf staged={resting.resting ? attachments.staged.filter((item) => item.kind === "file") : attachments.staged} onRemove={removeAttachment} onRetry={attachments.retry} />
+          {!answering && (
+            <ElementChipRow
+              chips={elements}
+              onRemove={(removed) => {
+                setElements(elementsRef.current.filter((chip) => elementKey(chip) !== elementKey(removed)));
+                saveDraft(box.current?.text() ?? "");
+                box.current?.focus();
+              }}
+            />
+          )}
+          <ChipRow
+            shapes={chips.shapes}
+            onRemove={(ids) => {
+              chips.remove(ids);
+              if (mentionIds.current.some((id) => ids.includes(id))) {
+                mentionIds.current = mentionIds.current.filter((id) => !ids.includes(id));
+                saveDraft(box.current?.text() ?? "");
+              }
+              box.current?.focus();
+            }}
+          />
+          {underChips}
+        </div>
+        <div className={resting.resting ? "col-start-1 row-start-2 flex min-w-0 items-center gap-1" : "min-w-0"} data-composer-prompt>
+          <PromptEditor
+            resting={resting.resting}
+            placeholder={placeholder}
+            label={PROMPT_LABEL}
+            onChange={onDraftChange}
+            onFocus={guard.onFocus}
+            onBlur={guard.onBlur}
+            initialText={initialText}
+            onTrigger={setTrigger}
+            onKey={onKey}
+            onPaste={onPaste}
+            handle={box}
+            disabled={answering && choiceOnly(question)}
+            autofocus={variant === "toolbar"}
+          />
+          {restingImages.length > 0 && (
+            <div className="flex shrink-0 items-center gap-1" data-testid="resting-images">
+              {restingImages.slice(0, restingCounts.visibleCount).map((item) => (
+                <img key={item.key} src={item.preview} alt={item.name} className="size-7 rounded-md border border-border/80 object-cover" />
+              ))}
+              {restingCounts.overflowCount > 0 && (
+                <Button variant="ghost-muted" size="xs" aria-label={`Show ${restingCounts.overflowCount} more images`} onClick={() => box.current?.focus()}>
+                  {`+${restingCounts.overflowCount}`}
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+        {lengthError !== undefined && (
+          <div className="mx-1 mt-1">
+            <Alert variant="error" data-testid="prompt-length-error">
+              <AlertDescription>{lengthError}</AlertDescription>
+            </Alert>
+          </div>
+        )}
         {menu && <ComposerMenu label={menu.label} items={menu.items} highlight={highlight} empty={menu.empty} anchor={boxElement} onPick={menu.pick} onHighlight={setHighlight} />}
-        {/* One line: the access and plan controls sit in the More menu, as in t3code's compact footer. */}
-        {/* Nothing overlaps: the tools share the line's width, the traits and then the model label truncate first, and Send's group keeps its size. */}
-        <div className="flex items-center gap-1">
-          <div className="flex min-w-0 flex-1 items-center gap-0.5">
+        <div className={resting.resting ? "contents" : "flex items-center gap-1"}>
+          <div
+            className={
+              resting.resting
+                ? "col-span-2 row-start-3 -mx-1 flex min-w-0 items-center gap-0.5 text-muted-foreground [&_button]:text-xs!"
+                : "flex min-w-0 flex-1 items-center gap-0.5"
+            }
+            data-composer-controls
+            data-resting-controls={resting.resting ? "" : undefined}
+            data-testid={resting.resting ? "resting-controls" : undefined}
+          >
             <Tip label="Attach files" side="top">
-              <Button variant="ghost-muted" size="icon-sm" aria-label="Attach files" onClick={() => files.current?.click()}>
+              <Button variant="ghost-muted" size="icon-sm" aria-label="Attach files" disabled={answering && choiceOnly(question)} onClick={() => files.current?.click()}>
                 <Paperclip aria-hidden />
               </Button>
             </Tip>
@@ -618,7 +1081,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
               onChange={(event) => {
                 const chosen = [...(event.currentTarget.files ?? [])];
                 event.currentTarget.value = "";
-                if (chosen.length > 0) void attachments.add(chosen);
+                if (chosen.length > 0) addFiles(chosen, false);
               }}
             />
             <ModelPicker
@@ -637,6 +1100,8 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
               model={model}
               traits={selection.traits}
               disabled={running}
+              open={traitsOpen}
+              onOpenChange={setTraitsOpen}
               onChange={(traits) => setModelSelection({ ...selection, traits: declaredTraits(model, traits) })}
             />
             <CompactControlsMenu
@@ -654,21 +1119,8 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
               />
             )}
           </div>
-          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          <div className={`ml-auto flex shrink-0 items-center gap-1.5 ${resting.resting ? "col-start-2 row-start-2" : ""}`} data-composer-actions>
             {note?.(providerName(selection.provider))}
-            <StashMenu
-              entries={stash.entries}
-              open={stashOpen}
-              onOpenChange={(open) => {
-                setStashOpen(open);
-                if (!open) box.current?.focus();
-              }}
-              onRestore={(entry) => {
-                restoreDraft(entry);
-                stash.remove(entry.id);
-              }}
-              onDelete={(entry) => stash.remove(entry.id)}
-            />
             {running && (
               <MessageAction tone="stop" aria-label="Stop generation" onClick={interrupt}>
                 <StopSquare />
@@ -685,33 +1137,115 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
                   {questions.submitting ? "Submitting..." : !questions.lastQuestion ? "Next question" : questions.index > 0 ? "Submit answers" : "Submit answer"}
                 </MessageAction>
               </>
-            ) : planFollowUp ? (
+            ) : showResume ? (
+              <Tip label="Resume thread" side="top">
+                <span className="inline-flex">
+                  <MessageAction tone="send" aria-label="Resume thread" disabled={sending} onClick={() => void resume()}>
+                    <Play aria-hidden className="size-4 fill-current" />
+                  </MessageAction>
+                </span>
+              </Tip>
+            ) : planFollowUp && editing === null ? (
               <PlanActions refine={text.trim() !== ""} busy={sending} onSend={() => void send()} onNewChat={() => void implementPlan(true)} />
             ) : (
-              <MessageAction tone="send" aria-label={running ? "Queue message" : "Send"} disabled={!canSend} onClick={() => void send()}>
-                <SendArrow />
-              </MessageAction>
+              <>
+                {compactTokens !== null && chat && (
+                  <CompactChip tokens={compactTokens} keepFull={keepFull} onToggle={() => setFullHistory(chat.id, !keepFull)} />
+                )}
+                <SendButton
+                  running={running}
+                  compacts={compactsBeforeSend({ tokens: compactTokens, keepFullHistory: keepFull, text })}
+                  editing={editing !== null}
+                  followUp={followUp}
+                  alternateNeedsShift={composerRequiresModifier(sendShortcut, text)}
+                  disabled={!canSend}
+                  onSend={(alternate) => void send(alternate)}
+                />
+              </>
             )}
           </div>
         </div>
       </div>
-      {/* The rail is closed while the toolbar's tray is open: its errors show here. */}
-      {variant === "toolbar" && ui.error !== undefined && (
-        <Alert variant="error">
-          <AlertDescription>{ui.error}</AlertDescription>
-        </Alert>
-      )}
     </div>
+  );
+};
+
+const SendButton = ({
+  running,
+  compacts,
+  editing,
+  followUp,
+  alternateNeedsShift,
+  disabled,
+  onSend,
+}: {
+  readonly running: boolean;
+  readonly compacts: boolean;
+  readonly editing: boolean;
+  readonly followUp: "queue" | "steer";
+  readonly alternateNeedsShift: boolean;
+  readonly disabled: boolean;
+  readonly onSend: (alternate: boolean) => void;
+}) => {
+  const held = useModifiersHeld();
+  if (editing) {
+    return (
+      <MessageAction tone="send" aria-label="Update queued message" disabled={disabled} onClick={() => onSend(false)}>
+        <Check aria-hidden className="size-4" />
+      </MessageAction>
+    );
+  }
+  if (!running) {
+    return (
+      <MessageAction tone="send" aria-label={compacts ? "Compact and send" : "Send"} disabled={disabled} onClick={() => onSend(false)}>
+        <SendArrow />
+      </MessageAction>
+    );
+  }
+  const action = followUpAction(followUp, held.command && (held.shift || !alternateNeedsShift));
+  const mac = platform() === "darwin";
+  const chord = alternateNeedsShift ? (mac ? "⇧⌘Enter" : "Ctrl+Shift+Enter") : mac ? "⌘Enter" : "Ctrl+Enter";
+  const tip = `Click to ${followUp}, ${mac ? "⌘" : "Ctrl"}-click or ${chord} to ${followUpAction(followUp, true)}`;
+  return (
+    <Tip label={tip} side="top">
+      <span className="inline-flex">
+        <MessageAction tone="send" aria-label={action === "queue" ? "Queue message" : "Steer message"} disabled={disabled} onClick={(event) => onSend(event.metaKey || event.ctrlKey)}>
+          {action === "queue" ? <ListPlus aria-hidden className="size-4" /> : <CornerUpRight aria-hidden className="size-4" />}
+        </MessageAction>
+      </span>
+    </Tip>
+  );
+};
+
+const CompactChip = ({ tokens, keepFull, onToggle }: { readonly tokens: number; readonly keepFull: boolean; readonly onToggle: () => void }) => {
+  const count = formatTokens(tokens);
+  return (
+    <Tip
+      side="top"
+      label={
+        <>
+          <div>{keepFull ? `Next send keeps all ${count} tokens.` : `Next send compacts ${count} tokens first.`}</div>
+          <div>{keepFull ? "Click to compact first" : "Click to keep full history"}</div>
+        </>
+      }
+    >
+      <Button
+        variant={keepFull ? "outline" : "warning-outline"}
+        size="compact"
+        aria-pressed={!keepFull}
+        aria-label={`Compact ${count} tokens of history before sending`}
+        onClick={onToggle}
+      >
+        <Minimize2 aria-hidden />
+        {keepFull ? "Full" : "Compact"}
+        <span className="tabular-nums">{count}</span>
+      </Button>
+    </Tip>
   );
 };
 
 const ARTIFACT_TYPES = new Set(["page", "motion"]);
 
-/**
- * The toolbar composer's Agent tray: the message continues the newest chat that has seen
- * every selected artifact, or starts one tagged with them, and says which; Send opens the
- * rail on that chat before the message goes out.
- */
 export const ToolbarAgentTray = ({ project, close, onMenuOpen }: SlotProps) => {
   const client = useChatClient(useEngine(), project);
   const canvas = useMaybeEditor();
@@ -723,7 +1257,6 @@ export const ToolbarAgentTray = ({ project, close, onMenuOpen }: SlotProps) => {
   );
   const artifacts = useMemo(() => (artifactKey === "" ? [] : artifactKey.split(" ")), [artifactKey]);
   const continuable = continuableChat(chats, artifacts);
-  // An error the rail showed earlier is not about this message.
   useEffect(() => client.setUi({ error: undefined }), [client]);
   const [fresh, setFresh] = useState(false);
   const target = fresh || !continuable ? null : continuable.id;

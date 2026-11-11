@@ -1,5 +1,5 @@
 import { extname, join } from "node:path";
-import { snapshotFileName } from "@unframed/domain";
+import { AUDIO_SERVED_TYPES, snapshotFileName } from "@unframed/domain";
 import { PREVIEW_FOLDER, previewFileName } from "../media/mediaStore.ts";
 import { SNAPSHOT_FOLDER } from "../artifacts/snapshots.ts";
 import { fileNameOf } from "../paths.ts";
@@ -9,10 +9,6 @@ import { sendFile } from "./sendFile.ts";
 
 const FILE_PREFIX = "/api/file/";
 
-/**
- * Anything a browser could run as a page or a script is served as plain text: a page is
- * never rendered from the app's origin.
- */
 const CONTENT_TYPES: Record<string, string> = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -25,9 +21,7 @@ const CONTENT_TYPES: Record<string, string> = {
   ".m4v": "video/mp4",
   ".webm": "video/webm",
   ".mov": "video/quicktime",
-  ".mp3": "audio/mpeg",
-  ".wav": "audio/wav",
-  ".m4a": "audio/mp4",
+  ...Object.fromEntries(Object.entries(AUDIO_SERVED_TYPES).map(([ext, mime]) => [`.${ext}`, mime])),
   ".json": "application/json; charset=utf-8",
   ".pdf": "application/pdf",
   ".txt": "text/plain; charset=utf-8",
@@ -40,17 +34,9 @@ const CONTENT_TYPES: Record<string, string> = {
   ".mjs": "text/plain; charset=utf-8",
 };
 
-export const contentTypeFor = (name: string): string =>
+const contentTypeFor = (name: string): string =>
   CONTENT_TYPES[extname(name).toLowerCase()] ?? "application/octet-stream";
 
-/**
- * `GET /api/file/<project>/<name>` (and `HEAD`). `projectFolder` slugs the project and
- * `fileNameOf` keeps only the name's basename, so neither can escape the project folder.
- * With `preview=512` or `preview=2048` it serves that file's display preview from the
- * cache folder instead, or 404 when there is none (the web then falls back to the original).
- * With `snapshot=<w>x<h>` it serves an artifact's still at that size from the cache folder
- * (spec 09): a picture, never the page itself.
- */
 export const projectFileRoute =
   (projectFolder: (project: string) => Promise<string | undefined>): Route =>
   async (req, res, url) => {
@@ -64,18 +50,18 @@ export const projectFileRoute =
         folder = await projectFolder(decodeURIComponent(rest.slice(0, slash)));
         name = fileNameOf(decodeURIComponent(rest.slice(slash + 1)));
       } catch {
-        // A malformed escape names no file.
       }
     }
     const preview = url.searchParams.get("preview");
     const size = preview === "512" ? 512 : preview === "2048" ? 2048 : undefined;
     const snapshot = url.searchParams.get("snapshot");
     const still = snapshot === null ? undefined : /^(\d{1,5})x(\d{1,5})$/.exec(snapshot);
+    const stillKit = { mode: url.searchParams.get("mode"), kit: url.searchParams.get("kit") };
     const path =
       folder === undefined || name === undefined
         ? undefined
         : still
-          ? join(folder, SNAPSHOT_FOLDER, snapshotFileName(name, { w: Number(still[1]), h: Number(still[2]) }))
+          ? join(folder, SNAPSHOT_FOLDER, snapshotFileName(name, { w: Number(still[1]), h: Number(still[2]) }, stillKit))
           : size !== undefined
             ? join(folder, PREVIEW_FOLDER, previewFileName(name, size))
             : preview === null && snapshot === null
@@ -91,7 +77,6 @@ export const projectFileRoute =
         {
           "content-type": still ? "image/png" : size === undefined ? contentTypeFor(name) : "image/webp",
           "cache-control": "no-cache",
-          // Opened as a document, the file gets no script and no origin.
           "content-security-policy": "sandbox",
         },
         { ranges: true },

@@ -4,7 +4,7 @@ import { expect, test } from "./fixtures.ts";
 import { IPAD_DOTENV, openDevice, testIpad, type DeviceClient } from "./ipad.ts";
 import { pngBytes } from "./images.ts";
 import { filledMedia } from "./media.ts";
-import { KEY, openSettings, startSettingsEngine } from "./settings.ts";
+import { KEY, openSettings, showSection, startSettingsEngine } from "./settings.ts";
 
 const menuItems = async (page: Page, at: { x: number; y: number }): Promise<string[]> => {
   await page.mouse.move(at.x, at.y);
@@ -27,15 +27,21 @@ test("the settings controls only the Mac can run are absent on a device, and pre
     device = await openDevice(engine);
 
     const mac = await openSettings(page);
+    await showSection(mac, "General");
     await expect(mac.getByRole("button", { name: /^Browse/ })).toBeVisible();
+    await showSection(mac, "iPad");
     await expect(mac.getByTestId("ipad-section")).toBeVisible();
+    await showSection(mac, "Connections");
     await expect(mac.getByRole("button", { name: "Connect an agent" })).toBeVisible();
     await expect(mac.getByTestId("outside-connection").getByRole("button", { name: "Revoke" })).toBeVisible();
 
     const onDevice = await openSettings(device.page);
+    await expect(onDevice.getByRole("tab", { name: "iPad" })).toHaveCount(0);
+    await showSection(onDevice, "General");
     await expect(onDevice.getByRole("heading", { name: "Output folder" })).toBeVisible();
-    await expect(onDevice.getByTestId("outside-connection")).toBeVisible();
     await expect(onDevice.getByRole("button", { name: /^Browse/ })).toHaveCount(0);
+    await showSection(onDevice, "Connections");
+    await expect(onDevice.getByTestId("outside-connection")).toBeVisible();
     await expect(onDevice.getByTestId("ipad-section")).toHaveCount(0);
     await expect(onDevice.getByRole("button", { name: "Connect an agent" })).toHaveCount(0);
     await expect(onDevice.getByRole("button", { name: "Revoke" })).toHaveCount(0);
