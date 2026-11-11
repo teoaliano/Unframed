@@ -38,7 +38,7 @@ describe("agent connections over RPC", () => {
     const { rpc, connection, token, setup } = await connect(engine);
     expect(token).toMatch(/^ufx_[0-9a-f]{64}$/);
     expect(connection).toMatchObject({ name: "Work laptop Claude Code", client: "claude-code", lastUsedAt: null });
-    expect(setup[0]!.code).toContain(`--env UNFRAMED_MCP_TOKEN=${token} unframed-app`);
+    expect(setup[0]!.code).toContain(`claude mcp add unframed-app --scope user --env UNFRAMED_MCP_TOKEN=${token} -- `);
     expect(setup[0]!.code).not.toContain("ELECTRON_RUN_AS_NODE");
 
     const listed = await rpc.call("agentConnections.list");
@@ -49,7 +49,7 @@ describe("agent connections over RPC", () => {
   it("adds ELECTRON_RUN_AS_NODE to the setup only when the engine runs as Node through Electron", async () => {
     const engine = await startEngine({ env: { ELECTRON_RUN_AS_NODE: "1" } });
     const made = await (await engine.rpc()).call("agentConnections.create", { name: "Hosted", client: "claude-code" });
-    expect(made.setup[0]!.code).toContain(`--env UNFRAMED_MCP_TOKEN=${made.token} --env ELECTRON_RUN_AS_NODE=1 unframed-app`);
+    expect(made.setup[0]!.code).toContain(`claude mcp add unframed-app --scope user --env UNFRAMED_MCP_TOKEN=${made.token} --env ELECTRON_RUN_AS_NODE=1 -- `);
   });
 
   it("keeps only the token's hash in a 0600 file", async () => {

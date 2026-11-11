@@ -318,3 +318,12 @@ describe("canvas_write with nodes off", () => {
     expect(deleted.ok && deleted.remove).toEqual(["shape:n", "shape:w"]);
   });
 });
+
+describe("canvas_write marks", () => {
+  it("makes a note whose text shows at its full size", () => {
+    const result = prepareBatch([{ type: "create", id: "new:n", kind: "mark", x: 0, y: 0, props: { type: "note", text: "Use the new dropdown" } }], context([]));
+    if (!result.ok) throw new Error(result.error);
+    const note = result.put.find((record) => record.type === "note")!;
+    expect(note.props).toMatchObject({ fontSizeAdjustment: 1 });
+  });
+});

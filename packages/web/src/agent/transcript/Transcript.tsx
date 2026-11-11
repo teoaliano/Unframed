@@ -84,9 +84,10 @@ interface TranscriptProps {
   readonly onOpenEditor?: (shapeId: string) => void;
 }
 
-const OutsideNote = ({ activities }: { readonly activities: Chat["activities"] }) => {
+const OutsideNote = ({ activities, latestTurn }: { readonly activities: Chat["activities"]; readonly latestTurn: Chat["latestTurn"] }) => {
   const last = [...activities].reverse().find((activity) => activity.kind === "outside.disconnected" || activity.kind === "outside.session-ended");
   if (!last) return null;
+  if (last.kind === "outside.session-ended" && latestTurn !== null && latestTurn.requestedAt > last.createdAt) return null;
   const text = last.kind === "outside.disconnected" ? "Disconnected. This connection was revoked in Settings." : "This session ended.";
   return <p className="m-0 text-xs text-muted-foreground" data-testid="outside-note">{text}</p>;
 };
@@ -217,7 +218,7 @@ export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }:
         {running && !streaming && latest && (
           <ActivityLine label={chat.outside === undefined ? activityLabel(chat.activities, latest.turnId) : "Working from outside Unframed…"} since={latest.startedAt ?? latest.requestedAt} />
         )}
-        {chat.outside !== undefined && <OutsideNote activities={chat.activities} />}
+        {chat.outside !== undefined && <OutsideNote activities={chat.activities} latestTurn={chat.latestTurn} />}
         {chat.messages.length === 0 && <p className="m-0 mt-auto text-xs text-muted-foreground">{EMPTY_CHAT}</p>}
       </div>
       {pill && (

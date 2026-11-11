@@ -158,6 +158,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
           Effect.sync(() => selectionHub.report(projectSlug(project), windowId, shapeIds)),
           {},
         ),
+      "selection.snapshotResult": (result) => Effect.as(Effect.sync(() => selectionHub.snapshotResult(result)), {}),
       "selection.subscribe": ({ project, windowId }) =>
         Stream.callback<SelectionApply, UnframedError>((queue) =>
           Effect.gen(function* () {

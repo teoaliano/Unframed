@@ -10,8 +10,11 @@ test("Connect an agent sets a spend limit, the row shows it, and Limit changes i
 
     // Neither field is filled in by default; an amount needs a period before the connection can be made.
     await dialog.getByRole("button", { name: "Connect an agent" }).click();
-    const connect = page.getByRole("dialog", { name: "Connect an agent" });
+    const connect = dialog.getByRole("region", { name: "Connect an agent" });
     await expect(connect.getByLabel("Spend limit amount")).toHaveValue("");
+    await expect(connect.getByLabel("Spend limit amount")).toHaveAccessibleDescription(
+      "Counts only the images, video and text this agent generates. Its own Claude or Codex usage and Unframed's built-in agents are not counted.",
+    );
     await expect(connect.getByRole("combobox", { name: "Limit period" })).toHaveText("Choose a period");
     await connect.getByLabel("Spend limit amount").fill("5");
     await expect(connect.getByText("Choose a period for the limit.")).toBeVisible();
@@ -29,7 +32,7 @@ test("Connect an agent sets a spend limit, the row shows it, and Limit changes i
 
     // Limit changes the amount and the period, and the row says so at once.
     await row.getByRole("button", { name: "Limit" }).click();
-    const limit = page.getByRole("dialog", { name: "Limit for Claude Code" });
+    const limit = dialog.getByRole("region", { name: "Limit for Claude Code" });
     await expect(limit.getByLabel("Spend limit amount")).toHaveValue("5");
     await limit.getByLabel("Spend limit amount").fill("12.5");
     await limit.getByRole("combobox", { name: "Limit period" }).click();
