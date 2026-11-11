@@ -1,3 +1,4 @@
+import { httpsPeerOrigins, isTrustedPeerOrigin } from "../devShare.ts";
 
 export interface ViewerWindow {
   readonly location: { readonly origin: string; readonly search: string };
@@ -25,8 +26,7 @@ interface ViewerPlayer {
   readonly iframeElement?: { readonly contentWindow?: unknown; readonly offsetWidth?: number; readonly style?: { pointerEvents: string }; getBoundingClientRect?(): ViewerRect } | null;
 }
 
-export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
-  const LOOPBACK = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+export function viewerRelay(win: ViewerWindow, player: ViewerPlayer, peers: readonly string[] = [], trust: typeof isTrustedPeerOrigin = isTrustedPeerOrigin): void {
   const COMPOSITION = /^[A-Za-z0-9][A-Za-z0-9._-]*\.html?$/;
   type Target = { postMessage(message: unknown, targetOrigin: string): void };
   type Frame = { readonly x: number; readonly y: number; readonly scale: number };
@@ -168,7 +168,7 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
       if (canvas !== undefined) canvas.window.postMessage(outward(data as Loose, frameNow()), canvas.origin);
       return;
     }
-    if (!LOOPBACK.test(event.origin) || event.source === composition || event.source === playerFrame()) return;
+    if (!trust(event.origin, own, peers) || event.source === composition || event.source === playerFrame()) return;
     if (data.type === "unframed:dials:hello") {
       canvas = { window: event.source as Target, origin: event.origin };
       if (announcement !== undefined) canvas.window.postMessage(announcement, canvas.origin);
@@ -203,7 +203,7 @@ export function viewerRelay(win: ViewerWindow, player: ViewerPlayer): void {
   });
 }
 
-export const viewerPageSource = (): string =>
+export const viewerPageSource = (peers: readonly string[] = []): string =>
   [
     "<!doctype html>",
     '<html lang="en">',
@@ -223,7 +223,7 @@ export const viewerPageSource = (): string =>
     '  if (editor) player.setAttribute("disable-click-to-play", "");',
     '  else { player.setAttribute("controls", ""); player.setAttribute("autoplay", ""); }',
     "  document.body.appendChild(player);",
-    `  (${viewerRelay.toString()})(win, player);`,
+    `  (${viewerRelay.toString()})(win, player, ${JSON.stringify(httpsPeerOrigins(peers))}, ${isTrustedPeerOrigin.toString()});`,
     "})(window);",
     "</script>",
     "</body>",

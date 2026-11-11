@@ -12,6 +12,7 @@ import {
   COMPONENT_HELPER_FILE,
   dialsBridgeSource,
   editBridgeSource,
+  sharePeerOrigins,
   LIVE_CHECK_FILE,
   LIVE_VIEWER_FILE,
   liveCheckSource,
@@ -41,11 +42,13 @@ const installed = (resolve: () => string) => {
   };
 };
 
-const BRIDGE: LibraryFile = { name: BRIDGE_FILE, bytes: async () => Buffer.from(dialsBridgeSource(), "utf8") };
-const EDIT: LibraryFile = { name: EDIT_BRIDGE_FILE, bytes: async () => Buffer.from(editBridgeSource(), "utf8") };
+const bridgePeers = (): readonly string[] => sharePeerOrigins(process.env.UNFRAMED_DEV_SHARE_ORIGIN);
+
+const BRIDGE: LibraryFile = { name: BRIDGE_FILE, bytes: async () => Buffer.from(dialsBridgeSource(bridgePeers()), "utf8") };
+const EDIT: LibraryFile = { name: EDIT_BRIDGE_FILE, bytes: async () => Buffer.from(editBridgeSource(bridgePeers()), "utf8") };
 
 const LIBRARY: ReadonlyArray<LibraryFile> = [
-  { name: "hyperframes-viewer.html", bytes: async () => Buffer.from(viewerPageSource(), "utf8") },
+  { name: "hyperframes-viewer.html", bytes: async () => Buffer.from(viewerPageSource(bridgePeers()), "utf8") },
   BRIDGE,
   EDIT,
   { name: "hyperframes-player.js", bytes: installed(() => join(dirname(require.resolve("@hyperframes/player")), "hyperframes-player.global.js")) },

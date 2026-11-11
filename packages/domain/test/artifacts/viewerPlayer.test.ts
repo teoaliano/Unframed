@@ -71,6 +71,35 @@ describe("the viewer's player relay (spec 21, task 18)", () => {
     expect(canvasPosted).toEqual([]);
   });
 
+  it("gives control to one configured https peer, and not to a different https origin", () => {
+    const peer = "https://homebox.tail1234.ts.net:5173";
+    const listeners: Listener[] = [];
+    const calls: string[] = [];
+    const composition = { postMessage() {} };
+    const canvas = { postMessage() {} };
+    const player = {
+      attributes: {} as Record<string, string>,
+      setAttribute() {},
+      play: () => calls.push("play"),
+      pause: () => calls.push("pause"),
+      iframeElement: { contentWindow: composition, style: { pointerEvents: "" } },
+    };
+    const win = {
+      location: { origin: OWN, search: "?c=comp.html" },
+      addEventListener: (_type: string, listener: Listener) => listeners.push(listener),
+    };
+    viewerRelay(win, player, [peer]);
+    const from = (source: unknown, origin: string, data: unknown) => {
+      for (const listener of listeners) listener({ source, origin, data });
+    };
+    from(canvas, "https://other.example", { type: "unframed:player:hello" });
+    from(canvas, "https://other.example", control("play"));
+    expect(calls).toEqual([]);
+    from(canvas, peer, { type: "unframed:player:hello" });
+    from(canvas, peer, control("play"));
+    expect(calls).toEqual(["play"]);
+  });
+
   it("gives control only to the origin that said hello, from its own window, and only to loopback origins", () => {
     const { canvas, from, calls } = stub();
     from(canvas, OTHER, control("pause"));
