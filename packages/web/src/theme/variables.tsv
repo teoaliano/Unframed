@@ -592,11 +592,11 @@ Theme	shadow/app/dialog-glass/2/color	COLOR	#000000a6	#000000e5
 Theme	shadow/app/dialog-glass/2/spread	FLOAT	-24	-20	
 Theme	shadow/app/dialog-glass/2/x	FLOAT	0		
 Theme	shadow/app/dialog-glass/2/y	FLOAT	24		
-Theme	shadow/app/dropdown/blur	FLOAT	40	44	
-Theme	shadow/app/dropdown/color	COLOR	#0000008c	#000000cc	
+Theme	shadow/app/dropdown/blur	FLOAT	32	44	
+Theme	shadow/app/dropdown/color	COLOR	#00000014	#000000cc	
 Theme	shadow/app/dropdown/spread	FLOAT	-18		
 Theme	shadow/app/dropdown/x	FLOAT	0		
-Theme	shadow/app/dropdown/y	FLOAT	16	18	
+Theme	shadow/app/dropdown/y	FLOAT	12	18	
 Theme	shadow/app/edge/color	COLOR	#0000000a	#ffffff0f	
 Theme	shadow/app/edge/y	FLOAT	1	-1	
 Theme	shadow/app/floating/blur	FLOAT	28	32	
@@ -2134,7 +2134,7 @@ Components	toast/expand/foreground	COLOR	{text/muted}
 Components	toast/expand/foreground-hover	COLOR	{text/default}		
 Components	toast/footer-offset	FLOAT	32		
 Components	toast/foreground	COLOR	{text/default}		
-Components	toast/header-offset	FLOAT	36		
+Components	toast/header-offset	FLOAT	{top-bar/height}		
 Components	toast/info/icon	COLOR	{status/info}		
 Components	toast/loading/icon-opacity	FLOAT	{opacity/80}		
 Components	toast/ring-focus	COLOR	{border/focus}		
@@ -2254,6 +2254,7 @@ Components	tooltip/glass/foreground	COLOR	{text/default}
 Components	tooltip/glass/shadow	COLOR	{color-alpha/black/25}		
 Components	tooltip/glass/surface	COLOR	{surface/glass-popover}		
 Components	top-bar/border	COLOR	{border/default}		
+Components	top-bar/height	FLOAT	{size/9}		
 Components	top-bar/lights-zone	FLOAT	81		
 Components	top-bar/logo	COLOR	{text/default}		
 Components	top-bar/logo-inset	FLOAT	94		

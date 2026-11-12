@@ -190,9 +190,9 @@ export const TopBar = ({
   const lights = !windows && controls !== "none";
 
   return (
-    <div data-slot="top-bar" data-platform={platform} {...region(`relative box-border flex h-9 w-full min-w-0 items-stretch ${DRAG}`, regions.frame)}>
+    <div data-slot="top-bar" data-platform={platform} {...region(`relative box-border flex h-(--top-bar-height) w-full min-w-0 items-stretch ${DRAG}`, regions.frame)}>
       <div data-slot="top-bar-body" aria-hidden className="pointer-events-none absolute inset-0 box-border border-b border-(--top-bar-border) bg-(--top-bar-surface)" />
-      <div data-slot="top-bar-start" {...region(cn(positioned, "flex h-9 shrink-0 items-center", DRAG, windows ? "pe-3" : "pe-4", lights && LIGHTS_INSET), regions.start)}>
+      <div data-slot="top-bar-start" {...region(cn(positioned, "flex h-(--top-bar-height) shrink-0 items-center", DRAG, windows ? "pe-3" : "pe-4", lights && LIGHTS_INSET), regions.start)}>
         {lights && (
           <div data-slot="top-bar-controls" aria-hidden className="pointer-events-none absolute inset-y-0 left-0 [-webkit-app-region:drag]!">
             {controls === "stand-ins" && <WindowDots />}
@@ -203,7 +203,7 @@ export const TopBar = ({
         </span>
         {windows && <span className="flex shrink-0 items-center ps-3">{settingsNode}</span>}
       </div>
-      <div data-slot="top-bar-tabs" {...region(`${positioned}flex h-9 min-w-0 shrink items-stretch ${DRAG}`, regions.tabs)}>
+      <div data-slot="top-bar-tabs" {...region(`${positioned}flex h-(--top-bar-height) min-w-0 shrink items-stretch ${DRAG}`, regions.tabs)}>
         <ProjectTabs className="w-fit min-w-0 shrink" value={active ?? null} onValueChange={(name) => onActivate(String(name))}>
           <ProjectTabsList
             ref={scroller}
@@ -256,15 +256,15 @@ export const TopBar = ({
             ))}
           </ProjectTabsList>
         </ProjectTabs>
-        <div data-slot="top-bar-new" className={cn("flex h-9 shrink-0 items-center ps-2", NO_DRAG_CONTROLS)}>
+        <div data-slot="top-bar-new" className={cn("flex h-(--top-bar-height) shrink-0 items-center ps-2", NO_DRAG_CONTROLS)}>
           {newProject}
         </div>
       </div>
-      {layout === "flow" && <div data-slot="top-bar-drag" className={`relative h-9 min-w-8 flex-1 ${DRAG}`} />}
-      <div data-slot="top-bar-end" {...region(`${positioned}flex h-9 shrink-0 items-center ${DRAG}`, regions.end)}>
-        {!windows && <span className="flex h-9 items-center pe-3">{settingsNode}</span>}
+      {layout === "flow" && <div data-slot="top-bar-drag" className={`relative h-(--top-bar-height) min-w-8 flex-1 ${DRAG}`} />}
+      <div data-slot="top-bar-end" {...region(`${positioned}flex h-(--top-bar-height) shrink-0 items-center ${DRAG}`, regions.end)}>
+        {!windows && <span className="flex h-(--top-bar-height) items-center pe-3">{settingsNode}</span>}
         {windows && controls !== "none" && (
-          <div data-slot="top-bar-controls" aria-hidden className="pointer-events-none h-9 w-(--top-bar-window-controls-width) shrink-0 [-webkit-app-region:drag]!">
+          <div data-slot="top-bar-controls" aria-hidden className="pointer-events-none h-(--top-bar-height) w-(--top-bar-window-controls-width) shrink-0 [-webkit-app-region:drag]!">
             {controls === "stand-ins" && <WindowDots />}
           </div>
         )}
