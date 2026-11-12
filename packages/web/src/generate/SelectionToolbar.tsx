@@ -225,7 +225,7 @@ const ResultBar = ({ state, onGenerate, agent, style }: { state: Extract<Toolbar
   };
 
   return (
-    <div className="flex flex-col gap-0.5 whitespace-nowrap p-1">
+    <div className="flex flex-col gap-1 whitespace-nowrap p-1">
       <div className={rowClass}>
         {style}
         <Button variant={state.generate ? "outline" : "default"} size="sm" onClick={() => void regenerate()}>
@@ -239,7 +239,7 @@ const ResultBar = ({ state, onGenerate, agent, style }: { state: Extract<Toolbar
         )}
       </div>
       {line !== undefined && (
-        <div className="px-1.5 py-0.5 text-xs text-muted-foreground tabular-nums" data-testid="result-line">
+        <div className="px-1.5 text-xs text-muted-foreground tabular-nums" data-testid="result-line">
           {line}
         </div>
       )}
@@ -295,7 +295,7 @@ const RecipeBar = ({ state, agent, style }: { state: Extract<ToolbarState, { kin
       <Button size="sm" disabled={busy || progress !== undefined} onClick={() => void generate()}>
         {label}
       </Button>
-      <span className={hintClass} data-testid="selection-hint">
+      <span className={cn(hintClass, "ps-2.5 pe-0")} data-testid="selection-hint">
         {`@${state.name}${estimate === undefined ? "" : ` · ${estimate.replace(/^est\. /, "")}`}`}
       </span>
       <Button variant="ghost" size="sm" onClick={() => recipe && openOnRecipe(editor, groupId, recipe)}>
