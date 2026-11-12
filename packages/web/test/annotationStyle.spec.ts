@@ -80,13 +80,6 @@ const pickSwatch = async (page: Page, control: string, swatch: string) => {
   await page.getByRole("group", { name: `${control} swatches` }).getByRole("button", { name: swatch, exact: true }).click();
 };
 
-const openStyle = async (page: Page, scope: ReturnType<Page["getByTestId"]>, control: string) => {
-  await scope.getByRole("button", { name: control, exact: true }).click();
-  const popup = page.getByRole("dialog", { name: control });
-  await expect(popup.locator("[data-unframed-dial-fields]")).toBeVisible();
-  return popup;
-};
-
 const field = (scope: ReturnType<Page["getByTestId"]>, label: string) => scope.getByLabel(label, { exact: true });
 
 const typeInto = async (scope: ReturnType<Page["getByTestId"]>, label: string, value: string) => {
@@ -275,7 +268,7 @@ test("stroke width is a number field with a stepper on hover, and the stroke sty
   await expect(field(row(page), "Stroke width")).toHaveValue("3");
 });
 
-test("font, size, bold and align on a prompt write as the panel writes them", async ({ page, engine }) => {
+test("font, size, bold and align on a prompt write as the panel writes them, and Align cycles left, centre, right", async ({ page, engine }) => {
   await openCanvas(page, engine);
   await select(page, "shape:starter-subject");
   const id = "shape:starter-subject";
@@ -303,8 +296,18 @@ test("font, size, bold and align on a prompt write as the panel writes them", as
   await waitForRoom(engine, "default", (records) => shapeNamed(records, id)?.meta?.unframed?.design?.fontWeight === "700");
   await expect(row(page).getByRole("button", { name: "Bold", exact: true })).toHaveAttribute("aria-pressed", "true");
 
-  await (await openStyle(page, row(page), "Align")).getByRole("radio", { name: "Centre" }).click();
+  const align = row(page).getByRole("button", { name: "Align", exact: true });
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await align.click();
   await waitForRoom(engine, "default", (records) => shapeNamed(records, id)?.props?.textAlign === "middle");
+  await expect(page.getByRole("dialog", { name: "Align" })).toHaveCount(0);
+  await expect(align).toHaveAccessibleDescription("Centre");
+  await align.click();
+  await waitForRoom(engine, "default", (records) => shapeNamed(records, id)?.props?.textAlign === "end");
+  await expect(align).toHaveAccessibleDescription("Right");
+  await align.click();
+  await waitForRoom(engine, "default", (records) => shapeNamed(records, id)?.props?.textAlign === "start");
+  await expect(align).toHaveAccessibleDescription("Left");
 });
 
 test("two notes that differ read as Mixed and one choice evens them out", async ({ page, engine }) => {

@@ -10,7 +10,7 @@ import { Toggle } from "~/components/ui/toggle";
 import { cn } from "~/lib/utils";
 import { Tip } from "../chrome/ui.tsx";
 import { MIXED, numberOf } from "../design/controls.tsx";
-import { DialColour, DialScope, DialSegmented } from "./dialLazy.tsx";
+import { DialColour, DialScope } from "./dialLazy.tsx";
 import { useDesignPanelOpen } from "./designPanelPref.ts";
 import { ALIGN_OPTIONS, alignChange, alignOf, designValue, fillChange, fillOf, FONT_NAMES, fontChange, fontOf, props, shared, toHex, SIZE_RANGE, STROKE_WIDTH_RANGE, weightOf, writeDesign, type DesignChange, type DesignTarget, type Subject } from "./designTarget.ts";
 
@@ -54,16 +54,12 @@ const SwatchFace = ({ kind, view }: { readonly kind: "fill" | "stroke" | "text";
 const StylePopover = ({
   label,
   control,
-  icon,
   trigger,
-  width = "normal",
   children,
 }: {
   readonly label: string;
   readonly control: StyleControl;
-  readonly icon: boolean;
   readonly trigger: ReactNode;
-  readonly width?: "fit" | "normal";
   readonly children: (close: () => void) => ReactNode;
 }) => {
   const editor = useEditor();
@@ -71,9 +67,9 @@ const StylePopover = ({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <Tip label={label} side="top">
-        <PopoverTrigger render={<Button variant="ghost" size={icon ? "icon-sm" : "sm"} aria-label={label} data-style-control={control} />}>{trigger}</PopoverTrigger>
+        <PopoverTrigger render={<Button variant="ghost" size="icon-sm" aria-label={label} data-style-control={control} />}>{trigger}</PopoverTrigger>
       </Tip>
-      <PopoverPopup side="top" align="center" padding="compact" className={width === "fit" ? "w-fit" : "w-64"} aria-label={label} initialFocus={false} finalFocus={canvasFocus(editor)} onKeyDown={keepEscape(editor)}>
+      <PopoverPopup side="top" align="center" padding="compact" className="w-fit" aria-label={label} initialFocus={false} finalFocus={canvasFocus(editor)} onKeyDown={keepEscape(editor)}>
         {open && (
           <Suspense fallback={null}>
             <DialScope>{children(() => setOpen(false))}</DialScope>
@@ -107,7 +103,7 @@ const ColourButton = ({
 }) => {
   const current = view.mixed ? undefined : view.value;
   return (
-    <StylePopover label={label} control={kind === "text" ? "textColor" : kind} icon trigger={<SwatchFace kind={kind} view={view} />} width="fit">
+    <StylePopover label={label} control={kind === "text" ? "textColor" : kind} trigger={<SwatchFace kind={kind} view={view} />}>
       {(close) => (
         <>
           <div className="grid grid-cols-[repeat(7,--spacing(6))] gap-1 pb-1.5" role="group" aria-label={`${label} swatches`}>
@@ -370,21 +366,26 @@ const controlFor = (editor: Editor, target: DesignTarget, control: StyleControl)
     }
     case "align": {
       const view = values(alignOf);
-      const Icon = ALIGN_ICONS[(view.mixed ? "left" : view.value) as keyof typeof ALIGN_ICONS] ?? AlignLeft;
+      const at = ALIGN_OPTIONS.findIndex((option) => !view.mixed && option.value === view.value);
+      const current = ALIGN_OPTIONS[Math.max(0, at)]!;
+      const next = ALIGN_OPTIONS[at < 0 ? 0 : (at + 1) % ALIGN_OPTIONS.length]!;
+      const Icon = ALIGN_ICONS[current.value as keyof typeof ALIGN_ICONS] ?? AlignLeft;
       return (
-        <StylePopover key={control} label="Align" control={control} icon trigger={<Icon aria-hidden />}>
-          {() => (
-            <DialSegmented
-              label="Align"
-              value={view.mixed ? "" : view.value}
-              options={ALIGN_OPTIONS}
-              onChange={(picked) => {
-                const change = alignChange(picked);
-                if (change !== undefined) write(change);
-              }}
-            />
-          )}
-        </StylePopover>
+        <Tip key={control} label={view.mixed ? "Align" : `Align ${current.label.toLowerCase()}`} side="top">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Align"
+            aria-description={view.mixed ? "Mixed" : current.label}
+            data-style-control={control}
+            onClick={() => {
+              const change = alignChange(next.value);
+              if (change !== undefined) write(change);
+            }}
+          >
+            <Icon aria-hidden />
+          </Button>
+        </Tip>
       );
     }
   }
