@@ -4,8 +4,8 @@ import { basename, join } from "node:path";
 import { isBareFileName, resultMetaOf } from "@unframed/contracts";
 import {
   canvasView,
-  CANVAS_READ_DESCRIPTION,
-  CANVAS_WRITE_DESCRIPTION,
+  canvasReadDescription,
+  canvasWriteDescription,
   CANVAS_WRITE_OPS_ARGUMENT,
   imageDimensions,
   PLAN_NO_WRITES_MESSAGE,
@@ -13,6 +13,7 @@ import {
   readComponentSheet,
   readPins,
   type CanvasRecord,
+  type Features,
   type ComponentDeclaration,
   type Pin,
   type FileFacts,
@@ -122,9 +123,11 @@ const collectFiles = (ops: unknown): string[] => {
 
 export class CanvasTools {
   private readonly deps: CanvasToolDeps;
+  private readonly features: Features;
 
-  constructor(deps: CanvasToolDeps) {
+  constructor(deps: CanvasToolDeps, features: Features) {
     this.deps = deps;
+    this.features = features;
   }
 
   async read(binding: McpBinding): Promise<ToolAnswer> {
@@ -176,6 +179,7 @@ export class CanvasTools {
       pageId: records.find((record) => record.typeName === "page")?.id ?? PAGE_ID,
       boxes: shapeBoxes(records),
       modes: kitOf(records)?.modes ?? [],
+      features: this.features,
     });
     if (!prepared.ok) return error(prepared.error);
     const before = new Map<string, TLRecord | undefined>();
@@ -211,13 +215,13 @@ export class CanvasTools {
     return [
       {
         name: "canvas_read",
-        description: CANVAS_READ_DESCRIPTION,
+        description: canvasReadDescription(this.features),
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
         call: (binding) => this.read(binding),
       },
       {
         name: "canvas_write",
-        description: CANVAS_WRITE_DESCRIPTION,
+        description: canvasWriteDescription(this.features),
         inputSchema: {
           type: "object",
           properties: { ops: { type: "array", description: CANVAS_WRITE_OPS_ARGUMENT, items: { type: "object" } } },

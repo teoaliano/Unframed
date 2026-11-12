@@ -96,7 +96,7 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
   return (
     <section
       ref={root}
-      className="absolute top-2 left-[calc(100%+8px)] bottom-[52px] flex w-[min(760px,calc(100vw-540px))] min-w-0 flex-col overflow-hidden rounded-xl border bg-background text-sm shadow-lg/5 outline-none"
+      className="absolute top-2 left-[calc(100%+8px)] bottom-[52px] flex w-[min(760px,calc(100vw-var(--agent-rail-width)-160px))] min-w-0 flex-col overflow-hidden rounded-xl border bg-background text-sm shadow-lg/5 outline-none"
       role="dialog"
       aria-label="Changes"
       tabIndex={-1}

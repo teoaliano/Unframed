@@ -77,26 +77,56 @@ test("the floating panel starts beside its page, stays put while the canvas pans
   expect(await boxOf(page)).toEqual(edge);
 });
 
-test("the floating panel resizes from its corner, by pointer and by arrow keys, and remembers its size", async ({ page, agent }) => {
+const edgeOf = (page: Page, edge: string) => panel(page).locator(`[data-panel-edge="${edge}"]`);
+const middleOf = async (locator: ReturnType<typeof edgeOf>) => {
+  const box = (await locator.boundingBox())!;
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+};
+
+test("the floating panel resizes from every edge and corner with no visible grip, by Shift and the arrow keys, and remembers its size", async ({ page, agent }) => {
   await onBoard(page, agent);
   await openPanel(page);
+  const start = await boxOf(page);
+  await dragBy(page, { x: start.x + 60, y: start.y + 24 }, 600 - start.x, 200 - start.y);
   const before = await boxOf(page);
+  expect(Math.round(before.x)).toBe(600);
   expect(Math.round(before.width)).toBe(320);
-  const handle = panel(page).getByRole("separator", { name: "Resize parameters" });
-  const grip = (await handle.boundingBox())!;
-  await dragBy(page, { x: grip.x + grip.width / 2, y: grip.y + grip.height / 2 }, 120, 140);
+  await expect(panel(page).getByRole("separator")).toHaveCount(0);
+
+  await dragBy(page, await middleOf(edgeOf(page, "e")), 80, 0);
+  let box = await boxOf(page);
+  expect(Math.round(box.width)).toBe(400);
+  expect(box.x).toBe(before.x);
+
+  await dragBy(page, await middleOf(edgeOf(page, "w")), -40, 0);
+  box = await boxOf(page);
+  expect(Math.round(box.width)).toBe(440);
+  expect(Math.round(box.x)).toBe(Math.round(before.x) - 40);
+  expect(Math.round(box.x + box.width)).toBe(Math.round(before.x + 400));
+
+  await dragBy(page, await middleOf(edgeOf(page, "s")), 0, 60);
+  const tall = await boxOf(page);
+  expect(Math.round(tall.height)).toBe(Math.round(before.height + 60));
+
+  await dragBy(page, await middleOf(edgeOf(page, "n")), 0, -30);
+  box = await boxOf(page);
+  expect(Math.round(box.y)).toBe(Math.round(tall.y) - 30);
+  expect(Math.round(box.y + box.height)).toBe(Math.round(tall.y + tall.height));
+
+  await dragBy(page, await middleOf(edgeOf(page, "se")), -40, 20);
   const after = await boxOf(page);
-  expect(Math.round(after.width)).toBe(440);
-  expect(Math.round(after.height)).toBe(Math.round(before.height + 140));
-  expect(after.x).toBe(before.x);
-  await handle.focus();
-  await page.keyboard.press("ArrowLeft");
-  await expect.poll(async () => Math.round((await boxOf(page)).width)).toBe(424);
-  await expect.poll(() => savedPanel(agent)).toMatchObject({ w: 424, h: Math.round(after.height) });
+  expect(Math.round(after.width)).toBe(400);
+  expect(Math.round(after.height)).toBe(Math.round(box.height + 20));
+
+  await panel(page).getByRole("button", { name: "Move parameters" }).focus();
+  await page.keyboard.press("Shift+ArrowLeft");
+  await expect.poll(async () => Math.round((await boxOf(page)).width)).toBe(384);
+  expect(Math.round((await boxOf(page)).x)).toBe(Math.round(after.x));
+  await expect.poll(() => savedPanel(agent)).toMatchObject({ w: 384, h: Math.round(after.height) });
   await page.keyboard.press("Escape");
   await expect(panel(page)).toHaveCount(0);
   await openPanel(page);
-  expect(Math.round((await boxOf(page)).width)).toBe(424);
+  expect(Math.round((await boxOf(page)).width)).toBe(384);
 });
 
 test("the header toggle docks the panel as a right drawer under the top bar, remembered, and floats it back where it was", async ({ page, agent }) => {
@@ -112,7 +142,7 @@ test("the header toggle docks the panel as a right drawer under the top bar, rem
   expect(Math.round(docked.y)).toBe(36);
   expect(Math.round(docked.y + docked.height)).toBe(viewport.height);
   await expect(panel(page).getByRole("slider", { name: "Size" })).toBeVisible();
-  await expect(panel(page).getByRole("separator", { name: "Resize parameters" })).toHaveCount(0);
+  await expect(panel(page).locator("[data-panel-edge]")).toHaveCount(0);
   expect(await watermarkOnTop(page)).toBe(true);
   await expect.poll(() => savedPanel(agent)).toMatchObject({ mode: "dock" });
 
@@ -123,6 +153,36 @@ test("the header toggle docks the panel as a right drawer under the top bar, rem
   await panel(page).getByRole("button", { name: "Float parameters" }).click();
   await expect(panel(page)).toHaveAttribute("data-mode", "float");
   await expect.poll(async () => (await boxOf(page)).x).toBe(floating.x);
+});
+
+test("the docked drawer resizes from its left edge by pointer and arrow keys from 320 to 640 px, remembered, and a double-click restores 380 px", async ({ page, agent }) => {
+  await page.setViewportSize({ width: 1920, height: 900 });
+  await onBoard(page, agent);
+  await openPanel(page);
+  await panel(page).getByRole("button", { name: "Dock parameters to the right" }).click();
+  await expect(panel(page)).toHaveAttribute("data-shown", "dock");
+  const grip = panel(page).getByRole("separator", { name: "Resize parameters drawer" });
+  const docked = await boxOf(page);
+  await dragBy(page, await middleOf(grip), -100, 0);
+  await expect.poll(async () => Math.round((await boxOf(page)).width)).toBe(480);
+  expect(Math.round((await boxOf(page)).x + (await boxOf(page)).width)).toBe(1920);
+  await expect.poll(() => savedPanel(agent)).toMatchObject({ mode: "dock", dockW: 480 });
+  await dragBy(page, await middleOf(grip), -1000, 0);
+  await expect.poll(async () => Math.round((await boxOf(page)).width)).toBe(640);
+  await dragBy(page, await middleOf(grip), 1000, 0);
+  await expect.poll(async () => Math.round((await boxOf(page)).width)).toBe(320);
+  await grip.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect.poll(async () => Math.round((await boxOf(page)).width)).toBe(336);
+  await expect(grip).toHaveAttribute("aria-valuenow", "336");
+  await expect.poll(() => savedPanel(agent)).toMatchObject({ dockW: 336 });
+
+  await page.reload();
+  await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible({ timeout: 20_000 });
+  await openPanel(page);
+  await expect.poll(async () => Math.round((await boxOf(page)).width)).toBe(336);
+  await panel(page).getByRole("separator", { name: "Resize parameters drawer" }).dblclick();
+  await expect.poll(async () => Math.round((await boxOf(page)).width)).toBe(Math.round(docked.width));
 });
 
 test("the first float of a page scaled to 50 % starts 12 px right of the page as drawn, level with its top", async ({ page, agent }) => {
@@ -145,8 +205,7 @@ test("the watermark stays over the floating panel pushed into the bottom-right c
   await openPanel(page);
   const first = await boxOf(page);
   await dragBy(page, { x: first.x + 60, y: first.y + 24 }, 3000, 3000);
-  const corner = (await panel(page).getByRole("separator", { name: "Resize parameters" }).boundingBox())!;
-  await dragBy(page, { x: corner.x + 8, y: corner.y + 8 }, 400, 400);
+  await dragBy(page, await middleOf(edgeOf(page, "se")), 400, 400);
   const placed = await boxOf(page);
   const host = await page.locator(".tl-watermark_SEE-LICENSE").boundingBox();
   expect(placed.x + placed.width).toBeGreaterThan(host!.x);

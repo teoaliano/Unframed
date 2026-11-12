@@ -9,6 +9,7 @@ import { useCanvasProject, useEngine } from "../context.ts";
 import { downstreamCounts, selectionNodes } from "./graph.ts";
 import { chainConfirmation, chainTotal, runNodes, stepEstimate, stepLabel, type ChainStep } from "./runs.ts";
 import { WireHandles } from "./WireHandles.tsx";
+import { featureOn, useFeature } from "../features.ts";
 
 export const ChainConfirm = () => {
   const pending = useValue("chain confirmation", () => chainConfirmation.get(), []);
@@ -83,7 +84,8 @@ export const NodeRunButtons = ({ primary }: { readonly primary: boolean }) => {
   const selection = JSON.parse(selectionKey) as { nodes: string[]; only?: string; running: boolean; pending: number; all: number };
   const steps = useChainSteps(selection.only === undefined ? selection.nodes : []);
   const [busy, setBusy] = useState(false);
-  if (selection.nodes.length === 0) return null;
+  const nodesOn = useFeature("nodes");
+  if (!nodesOn || selection.nodes.length === 0) return null;
   const run = async (ids: ReadonlyArray<string>, downstream?: "pending" | "all") => {
     if (busy) return;
     setBusy(true);
@@ -126,6 +128,6 @@ export const NodeRunButtons = ({ primary }: { readonly primary: boolean }) => {
   );
 };
 
-export const selectionNodeCount = (editor: ReturnType<typeof useEditor>): number => selectionNodes(editor, editor.getSelectedShapeIds()).length;
+export const selectionNodeCount = (editor: ReturnType<typeof useEditor>): number => (featureOn("nodes") ? selectionNodes(editor, editor.getSelectedShapeIds()).length : 0);
 
 export { NO_NODES_MESSAGE };

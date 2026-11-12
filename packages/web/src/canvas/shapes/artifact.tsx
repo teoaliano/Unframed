@@ -18,6 +18,7 @@ import { artifactCardClass } from "./looks.ts";
 import { nameOf, waitingLabel } from "./labels.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
 import { noteRender } from "../../fps/renders.ts";
+import { useFeature } from "../../features.ts";
 
 export const ARTIFACT_DEFAULT_SIZE = { w: 480, h: 320 };
 const ARTIFACT_MIN = { w: 180, h: 96 };
@@ -162,6 +163,7 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
   const scale = kind === "component" ? 1 : artifactScale(props);
   const layout = { w: props.w / scale, h: props.h / scale };
   const updates = useValue("component updates", () => updateTagsOf(editor, project, props.file).join(","), [editor, project, props.file]);
+  const editing = useFeature("element-editing");
   return (
     <>
       <HTMLContainer id={shape.id} data-testid="artifact-card" data-artifact-kind={kind} data-live={live ? "true" : undefined} style={{ width: props.w, height: props.h }}>
@@ -173,7 +175,7 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
         ) : (
           <Still shape={shape} title={title} />
         )}
-        {live && <DropOutline shapeId={shape.id} scale={scale} />}
+        {live && editing && <DropOutline shapeId={shape.id} scale={scale} />}
       </HTMLContainer>
       {kind === "motion" && <RenderRow shape={shape} />}
       <ProblemLine shapeId={shape.id} offset={props.h + (kind === "motion" ? RENDER_ROW_HEIGHT : 0)} width={props.w} />

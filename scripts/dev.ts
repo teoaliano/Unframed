@@ -124,7 +124,7 @@ const webEnv: NodeJS.ProcessEnv = {
   ...process.env,
   UNFRAMED_SERVER_PORT: process.env.UNFRAMED_SERVER_PORT ?? process.env.PORT ?? "8787",
 };
-const engineEnv: NodeJS.ProcessEnv = { ...process.env };
+const engineEnv: NodeJS.ProcessEnv = { ...process.env, UNFRAMED_FEATURES: process.env.UNFRAMED_FEATURES ?? "all" };
 
 if (sharing) {
   let dnsName: string;
@@ -156,7 +156,7 @@ if (sharing) {
     stop(1);
   }
 } else {
-  start(["--watch", join(repoRoot, "packages/engine/src/main.ts")], repoRoot, process.env);
+  start(["--watch", join(repoRoot, "packages/engine/src/main.ts")], repoRoot, engineEnv);
 }
 
 if (exitCode === undefined) start([viteBin], webRoot, webEnv);

@@ -260,6 +260,7 @@ export const startEngine = async (options: EngineOptions = {}): Promise<TestEngi
     UNFRAMED_PREVIEW_PORT: "0",
     UNFRAMED_DATA_DIR: dataDir,
     UNFRAMED_TEST_NATIVE_LOG: nativeLogPath,
+    UNFRAMED_FEATURES: "all",
   });
   if (stub) env.UNFRAMED_TEST_OPENROUTER_ORIGIN = stub.origin;
   if (elevenLabs) env.UNFRAMED_TEST_ELEVENLABS_ORIGIN = elevenLabs.origin;

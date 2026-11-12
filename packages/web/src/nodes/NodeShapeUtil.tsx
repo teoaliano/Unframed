@@ -8,6 +8,7 @@ import { fileUrl } from "../canvas/assetStore.ts";
 import { ShapeLabel } from "../canvas/shapes/ShapeLabel.tsx";
 import { useCanvasProject, useEngine } from "../context.ts";
 import { useKnownCatalogue } from "../generate/catalogue.ts";
+import { useFeature } from "../features.ts";
 import { noteRender } from "../fps/renders.ts";
 import { type NodeShape } from "./facts.ts";
 import { nodeStatusOf } from "./graph.ts";
@@ -127,7 +128,8 @@ const NodeCard = ({ shape }: { readonly shape: NodeShape }) => {
   noteRender(shape.id);
   useFreshValues(shape);
   const editor = useEditor();
-  const live = useValue("node live", () => editor.getOnlySelectedShapeId() === shape.id, [editor, shape.id]);
+  const nodesOn = useFeature("nodes");
+  const live = useValue("node live", () => nodesOn && editor.getOnlySelectedShapeId() === shape.id, [editor, shape.id, nodesOn]);
   const scroller = useRef<HTMLDivElement>(null);
   const [footer, setFooter] = useState<HTMLDivElement | null>(null);
   useEffect(() => {

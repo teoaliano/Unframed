@@ -1,5 +1,5 @@
 import type { ArtifactShapeProps } from "@unframed/contracts";
-import { artifactTitle, isArtifactKind, type ArtifactKind, type PanelPrefs } from "@unframed/domain";
+import { artifactTitle, isArtifactKind, type ArtifactKind, type PanelEdge, type PanelPrefs } from "@unframed/domain";
 import { GripVertical, PanelRight, PictureInPicture2, SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useEditor, useValue, type TLShapeId } from "tldraw";
@@ -8,6 +8,7 @@ import { Sheet, SheetPopup } from "~/components/ui/sheet";
 import { TOP_BAR_HEIGHT } from "~/components/ui/top-bar";
 import { cn } from "~/lib/utils";
 import { useWheelToCanvasOn } from "../canvas/wheelToCanvas.ts";
+import { DrawerGrip, useDrawerWidth } from "../chrome/drawerGrip.tsx";
 import { useNarrowWindow } from "../chrome/narrowWindow.ts";
 import { Tip } from "../chrome/ui.tsx";
 import { useEngine } from "../context.ts";
@@ -25,6 +26,19 @@ const FLOAT_CLASS =
 
 const DOCK_CLASS =
   "pointer-events-auto absolute right-0 bottom-0 z-[500] box-border flex w-(--parameters-dock-width) flex-col border-l bg-background font-sans text-foreground [transform:none] opacity-100 [transition:transform_260ms_var(--ease-drawer),opacity_200ms_ease-out] starting:[transform:translateX(100%)] starting:opacity-0 motion-reduce:[transition:opacity_160ms_ease-out] motion-reduce:starting:[transform:none]";
+
+const DOCK_WIDTH_VAR = "--parameters-dock-width";
+
+const EDGES: ReadonlyArray<readonly [PanelEdge, string]> = [
+  ["n", "inset-x-3 top-0 h-1.5 cursor-ns-resize"],
+  ["s", "inset-x-3 bottom-0 h-1.5 cursor-ns-resize"],
+  ["w", "inset-y-3 start-0 w-1.5 cursor-ew-resize"],
+  ["e", "inset-y-3 end-0 w-1.5 cursor-ew-resize"],
+  ["nw", "top-0 start-0 size-3 cursor-nwse-resize"],
+  ["se", "bottom-0 end-0 size-3 cursor-nwse-resize"],
+  ["ne", "top-0 end-0 size-3 cursor-nesw-resize"],
+  ["sw", "bottom-0 start-0 size-3 cursor-nesw-resize"],
+];
 
 const SHEET_CLASS = "relative box-border flex size-full min-h-0 flex-col bg-background font-sans text-foreground";
 
@@ -48,6 +62,7 @@ export const ParametersPanel = ({ shapeId }: { readonly shapeId: TLShapeId }) =>
   const close = () => artifactsOf(editor).tuning.set(undefined);
   const shown: Shown | undefined = prefs === undefined ? undefined : prefs.mode === "float" ? "float" : narrow ? "sheet" : "dock";
   const placement = useFloatingPlacement({ editor, element, shapeId, floating: shown === "float", prefs, save: savePrefs });
+  useDrawerWidth(DOCK_WIDTH_VAR, prefs?.dockW);
   const live = useRef({ close, placement });
   live.current = { close, placement };
   useWheelToCanvasOn(editor, shown === "sheet" ? null : element);
@@ -67,7 +82,7 @@ export const ParametersPanel = ({ shapeId }: { readonly shapeId: TLShapeId }) =>
       event.stopPropagation();
       if (event.type !== "keydown" || event.defaultPrevented) return;
       const handle = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-panel-handle]")?.dataset.panelHandle : undefined;
-      if ((handle === "move" || handle === "resize") && live.current.placement.nudge(event.key, handle)) {
+      if (handle === "move" && live.current.placement.nudge(event.key, event.shiftKey ? "resize" : "move")) {
         event.preventDefault();
         return;
       }
@@ -115,12 +130,12 @@ export const ParametersPanel = ({ shapeId }: { readonly shapeId: TLShapeId }) =>
         onPointerDown={onHeaderDown}
       >
         {floating && (
-          <Tip label="Move (drag, or arrow keys)">
+          <Tip label="Move (drag, or arrow keys; Shift resizes)">
             <span
               role="button"
               tabIndex={0}
               aria-label="Move parameters"
-              aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
+              aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight"
               data-panel-handle="move"
               className="-ms-1 flex h-6 w-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
@@ -144,21 +159,20 @@ export const ParametersPanel = ({ shapeId }: { readonly shapeId: TLShapeId }) =>
       <div className={cn("min-h-0 flex-1 overflow-y-auto overflow-x-hidden", announcement === undefined && "pb-2.5", shown === "dock" && "pb-16")} data-scrolls="true">
         <ParametersContent shapeId={shapeId} kind={facts.kind} title={title} announcement={announcement} saved={facts.dials} post={post} place="canvas" />
       </div>
-      {floating && (
-        <div
-          role="separator"
-          aria-label="Resize parameters"
-          aria-orientation="vertical"
-          aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
-          tabIndex={0}
-          data-panel-handle="resize"
-          className="absolute end-0 bottom-0 size-4 cursor-nwse-resize touch-none rounded-br-xl outline-none after:absolute after:end-1 after:bottom-1 after:size-2 after:rounded-br-[3px] after:border-e-2 after:border-b-2 after:border-muted-foreground/40 hover:after:border-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          onPointerDown={(event) => {
-            stop(event);
-            placement.startResize(event);
-          }}
-        />
-      )}
+      {floating &&
+        EDGES.map(([edge, place]) => (
+          <div
+            key={edge}
+            aria-hidden
+            data-panel-edge={edge}
+            className={cn("absolute z-10 touch-none", place)}
+            onPointerDown={(event) => {
+              stop(event);
+              placement.startResize(event, edge);
+            }}
+          />
+        ))}
+      {shown === "dock" && <DrawerGrip edge="left" label="Resize parameters drawer" cssVar={DOCK_WIDTH_VAR} onCommit={(dockW) => savePrefs({ ...prefs, dockW })} />}
     </section>
   );
 
