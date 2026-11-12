@@ -157,7 +157,7 @@ const StyleNumber = ({
   return (
     <NumberField
       size="sm"
-      className="w-auto shrink-0"
+      className="mx-1.5 w-auto shrink-0"
       value={draft}
       min={range.min}
       max={range.max}
