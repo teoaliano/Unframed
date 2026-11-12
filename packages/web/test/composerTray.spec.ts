@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { openCanvas } from "./canvas.ts";
 import { clickShape, composer, expect, openAndEscape, openComposer, sendRun, startGeneration, test, toolbar } from "./generation.ts";
-import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
+import { expectSlot, inBothSchemes, resolvedColor, styleOf, tokenColor } from "./kit.ts";
 
 const openOnSubject = async (page: Page) => {
   await clickShape(page, "shape:starter-subject");
@@ -74,7 +74,6 @@ test("the tray: the model chip, the default props the model declares, value menu
   await page.keyboard.press("Escape");
 });
 
-const MENU_GLASS = "color-mix(in srgb, var(--popover) 18%, color-mix(in srgb, var(--popover) var(--glass-opacity), transparent))";
 
 test("the tray's chips are one chip recipe on the kit's outline Button, and its menus are kit menus with radio items", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
@@ -89,12 +88,13 @@ test("the tray's chips are one chip recipe on the kit's outline Button, and its 
     await page.mouse.move(5, 500);
     for (const chip of [model, low]) {
       expect((await chip.boundingBox())!.height).toBe(28);
-      await expectToken(chip, "border-top-color", "--color-input");
+      // The outline Button's ring is drawn by its ::after, painted with the border token.
+      expect(await chip.evaluate((element) => getComputedStyle(element, "::after").backgroundColor)).toBe(await tokenColor(page, "--button-outline-border"));
     }
     await low.click();
     const menu = page.getByRole("menu", { name: "Quality" });
     await expectSlot(menu, "menu-popup");
-    expect(await styleOf(menu, "background-color")).toBe(await resolvedColor(page, MENU_GLASS));
+    expect(await styleOf(menu, "background-color")).toBe(await resolvedColor(page, "var(--menu-surface)"));
     for (const item of await menu.getByRole("menuitemradio").all()) await expectSlot(item, "menu-radio-item");
     await expectSlot(menu.getByRole("menuitem", { name: "Remove" }), "menu-item");
     await expect(menu.locator("[data-slot='menu-separator']")).toHaveCount(1);
@@ -186,9 +186,9 @@ test("the model dialog is the kit's Dialog at 680 px with the kit's search field
   await expectSlot(box.getByRole("button", { name: "flux-2", exact: true }), "inline-button");
   const openai = box.locator('tr[data-model="openai/gpt-image-2"] [data-hue]');
   await expectSlot(openai, "badge");
-  await inBothSchemes(page, async (scheme) => {
-    expect(await resolvedColor(page, "var(--color-purple-500)")).not.toBe("rgba(0, 0, 0, 0)");
-    const tint = `color-mix(in srgb, var(--color-purple-500) ${scheme === "light" ? 30 : 45}%, var(--color-foreground))`;
+  await inBothSchemes(page, async () => {
+    expect(await resolvedColor(page, "var(--label-hue-purple)")).not.toBe("rgba(0, 0, 0, 0)");
+    const tint = "color-mix(in srgb, var(--label-hue-purple) var(--badge-label-foreground-tint), var(--badge-label-foreground))";
     await expect.poll(async () => (await styleOf(openai, "color")) === (await resolvedColor(page, tint))).toBe(true);
   });
 });

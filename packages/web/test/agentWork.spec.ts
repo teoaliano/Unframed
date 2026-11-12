@@ -137,20 +137,20 @@ test("the transcript is t3code's timeline: the person's bubble, the reply in cha
     await inBothSchemes(page, async () => {
       await page.mouse.move(10, 400);
       const bubble = panel.getByTestId("message-bubble");
-      await expectToken(bubble, "background-color", "--message-surface");
-      await expectToken(bubble, "color", "--color-message-foreground");
+      await expectToken(bubble, "background-color", "--user-message-surface");
+      await expectToken(bubble, "color", "--user-message-foreground");
       await expectSlot(panel.locator("[data-role='user']").getByRole("button", { name: "Edit from here" }), "button");
       const reply = panel.locator("[data-role='assistant'] .chat-markdown");
       expect(await styleOf(reply, "font-size")).toBe("14px");
-      await expectToken(panel.locator("[data-role='assistant'] header"), "color", "--color-muted-foreground");
+      await expectToken(panel.locator("[data-role='assistant'] header"), "color", "--assistant-message-author");
 
       // A timeline row: the muted heading, and the expanded body on the muted fill.
-      await expectToken(command.getByTestId("work-row-label"), "color", "--color-secondary-label");
-      expect(await styleOf(command.getByTestId("work-row-body"), "background-color")).toBe(await resolvedColor(page, "color-mix(in oklab, var(--muted) 40%, transparent)"));
+      await expectToken(command.getByTestId("work-row-label"), "color", "--work-log-label");
+      expect(await styleOf(command.getByTestId("work-row-body"), "background-color")).toBe(await resolvedColor(page, "color-mix(in oklab, var(--work-log-body-surface) var(--work-log-body-surface-opacity), transparent)"));
 
       const recap = panel.getByTestId("recap-card");
-      await expectToken(recap, "background-color", "--card");
-      await expectToken(recap, "border-top-color", "--color-border");
+      await expectToken(recap, "background-color", "--recap-card-surface");
+      await expectToken(recap, "border-top-color", "--recap-card-border");
       await expectSlot(recap.getByRole("button", { name: "Revert this turn" }), "button");
     });
   } finally {

@@ -96,7 +96,7 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
   return (
     <section
       ref={root}
-      className="absolute top-2 left-[calc(100%+8px)] bottom-[52px] flex w-[min(760px,calc(100vw-var(--agent-rail-width)-160px))] min-w-0 flex-col overflow-hidden rounded-xl border bg-background text-sm shadow-lg/5 outline-none"
+      className="absolute top-2 left-full ml-2 bottom-(--diff-panel-offset) flex w-(--diff-panel-width) max-w-[calc(100vw-var(--agent-rail-width)-var(--diff-panel-viewport-inset))] min-w-0 flex-col overflow-hidden rounded-xl border border-(--diff-panel-border) bg-(--diff-panel-surface) text-sm shadow-lg/5 outline-none"
       role="dialog"
       aria-label="Changes"
       tabIndex={-1}
@@ -107,7 +107,7 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
         close();
       }}
     >
-      <header className="flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-border/60 bg-background px-2">
+      <header className="flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-(--diff-panel-divider)/(--diff-panel-divider-opacity) bg-(--diff-panel-surface) px-2">
         <Menu>
           <MenuTrigger render={<Button variant="secondary" size="xs" className="max-w-full" />} aria-label={`Diff scope: ${scopeLabel}`} disabled={!latest}>
             <span className="truncate">{scopeLabel}</span>
@@ -186,7 +186,7 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
         </Empty>
       ) : (
         <div className="flex min-h-0 flex-1">
-          <nav className="flex w-45 shrink-0 flex-col gap-px overflow-auto border-r border-border/60 p-1.5" aria-label="Changed files">
+          <nav className="flex w-45 shrink-0 flex-col gap-px overflow-auto border-r border-(--diff-panel-divider)/(--diff-panel-divider-opacity) p-1.5" aria-label="Changed files">
             {files.map((file) => (
               <Button
                 key={file.shapeId}
@@ -208,10 +208,10 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
           <WorkerPoolContextProvider poolOptions={POOL} highlighterOptions={HIGHLIGHTER}>
             <div className="min-w-0 flex-1 overflow-auto">
               {files.map((file) => (
-                <article key={file.shapeId} className="border-border/60 not-first:border-t" data-diff-file={file.shapeId} aria-label={file.label}>
-                  <header className="sticky top-0 z-1 flex h-8 items-center gap-2 border-b border-border/60 bg-background px-3">
-                    <span className="min-w-0 truncate text-sm font-medium">{file.label}</span>
-                    <span className="min-w-0 truncate font-mono text-2xs text-muted-foreground" data-testid="diff-names">{`${file.before ?? "new"} → ${file.after ?? "removed"}`}</span>
+                <article key={file.shapeId} className="border-(--diff-panel-divider)/(--diff-panel-divider-opacity) not-first:border-t" data-diff-file={file.shapeId} aria-label={file.label}>
+                  <header className="sticky top-0 z-1 flex h-8 items-center gap-2 border-b border-(--diff-panel-divider)/(--diff-panel-divider-opacity) bg-(--diff-panel-surface) px-3">
+                    <span className="min-w-0 truncate text-sm font-medium text-(--diff-panel-file-title)">{file.label}</span>
+                    <span className="min-w-0 truncate font-mono text-2xs text-(--diff-panel-file-names)" data-testid="diff-names">{`${file.before ?? "new"} → ${file.after ?? "removed"}`}</span>
                   </header>
                   {file.tooLarge ? (
                     <Empty>
@@ -244,7 +244,7 @@ export const DiffPanel = ({ client, chat, diff }: { readonly client: ChatClient;
 
 const DiffStat = ({ additions, deletions }: { readonly additions: number; readonly deletions: number }) => (
   <span className="flex shrink-0 items-center gap-1 font-mono text-xs tabular-nums">
-    <span className="text-diff-addition" data-testid="diff-additions">{`+${additions}`}</span>
-    <span className="text-diff-deletion" data-testid="diff-deletions">{`−${deletions}`}</span>
+    <span className="text-(--diff-panel-addition)" data-testid="diff-additions">{`+${additions}`}</span>
+    <span className="text-(--diff-panel-deletion)" data-testid="diff-deletions">{`−${deletions}`}</span>
   </span>
 );

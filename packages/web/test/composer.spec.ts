@@ -67,17 +67,14 @@ test("the composer is t3code's composer shell, with the kit's segmented medium s
   for (const option of await media.getByRole("radio").all()) await expectSlot(option, "toggle");
   await expectSlot(sendButton(page), "message-action");
   await expect.poll(async () => Math.round((await shell.boundingBox())!.width)).toBe(420);
-  await inBothSchemes(page, async (scheme) => {
+  await inBothSchemes(page, async () => {
     await page.mouse.move(5, 500);
     await expect.poll(() => styleOf(shell, "border-top-left-radius")).toBe("22px");
-    const glass = scheme === "light" ? "var(--card)" : "var(--surface-raised)";
-    expect(await styleOf(shell, "background-color")).toBe(await resolvedColor(page, `color-mix(in oklab, ${glass} var(--glass-opacity), transparent)`));
-    // Light carries t3code's composer shadow; dark drops it, as t3code does.
-    const composerShadow = await shadowOf(page, "var(--shadow-composer)");
-    if (scheme === "light") expect(await styleOf(shell, "box-shadow")).toContain(composerShadow);
-    else expect(await styleOf(shell, "box-shadow")).not.toContain(composerShadow);
+    expect(await styleOf(shell, "background-color")).toBe(await resolvedColor(page, "color-mix(in oklab, var(--composer-surface) var(--composer-surface-opacity), transparent)"));
+    // The floating panels' shadow, at each scheme's own value.
+    expect(await styleOf(shell, "box-shadow")).toContain(await shadowOf(page, "var(--shadow-app-floating)"));
     await expectToken(sendButton(page), "background-color", "--message-action");
-    await expectToken(composer(page).getByTestId("source-count"), "color", "--color-muted-foreground");
+    await expectToken(composer(page).getByTestId("source-count"), "color", "--generate-tray-note");
   });
 });
 
@@ -99,7 +96,8 @@ test("clicking a shape while the composer is open adds it; clicking empty canvas
   await openComposer(page);
   await expect(composer(page).getByTestId("source-count")).toHaveText("1 selected");
 
-  await clickShape(page, "shape:starter-scene");
+  const scene = (await shapeOnScreen(page, "shape:starter-scene").boundingBox())!;
+  await page.mouse.click(scene.x + scene.width / 2, scene.y + 8);
   await expect(composer(page).getByTestId("source-count")).toHaveText("2 selected");
   await expect(composer(page)).toBeVisible();
 
@@ -210,7 +208,7 @@ test("warnings and the states that disable send", async ({ page, generation }) =
   // A video in an image run is warned about but still allowed.
   await clickShape(page, "shape:clip");
   await expect(status).toHaveText("A video is selected, but image models do not take video input. It will be sent and probably ignored.");
-  await expectToken(status.locator("[data-kind='warning']"), "color", "--color-muted-foreground");
+  await expectToken(status.locator("[data-kind='warning']"), "color", "--generate-tray-note");
   await expect(sendButton(page)).toBeEnabled();
   await page.keyboard.press("Escape");
 

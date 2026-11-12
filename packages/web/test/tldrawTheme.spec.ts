@@ -18,11 +18,11 @@ test("tldraw's toolbar, the Design panel, zoom controls, menus and shortcuts dia
   await expect(stylePanel).toBeVisible();
 
   await inBothSchemes(page, async () => {
-    await expectToken(toolbar, "background-color", "--popover");
+    await expectToken(toolbar, "background-color", "--bottom-toolbar-surface");
     await expect(selectTool).toHaveAttribute("aria-pressed", "true");
-    expect(await afterStyle(selectTool, "background-color")).toBe(await tokenColor(page, "--primary"));
+    expect(await afterStyle(selectTool, "background-color")).toBe(await tokenColor(page, "--tldraw-selected"));
     expect(await afterStyle(selectTool, "border-top-left-radius")).toBe("8px");
-    await expectToken(stylePanel, "background-color", "--background");
+    await expectToken(stylePanel, "background-color", "--design-panel-surface");
     expect(await styleOf(stylePanel, "border-top-left-radius")).toBe("0px");
     // tldraw's UI chrome is in the kit's system font; the canvas keeps tldraw's shape font.
     const kitFont = await styleOf(page.locator("body"), "font-family");
@@ -31,17 +31,17 @@ test("tldraw's toolbar, the Design panel, zoom controls, menus and shortcuts dia
 
     await page.getByTestId("minimap.zoom-menu-button").click();
     const zoomMenu = page.locator(".tlui-menu").filter({ has: page.getByRole("menuitem", { name: /^Zoom in/ }) });
-    await expectToken(zoomMenu, "background-color", "--popover");
+    await expectToken(zoomMenu, "background-color", "--tldraw-panel");
     const row = zoomMenu.getByRole("menuitem", { name: /^Zoom in/ });
     await row.hover();
-    expect(await afterStyle(row, "background-color")).toBe(await tokenColor(page, "--accent"));
+    expect(await afterStyle(row, "background-color")).toBe(await tokenColor(page, "--tldraw-muted-2"));
     await page.keyboard.press("Escape");
 
     await page.mouse.click(5, 400);
     await page.keyboard.press("ControlOrMeta+Alt+/");
     const dialog = page.locator(".tlui-dialog__content");
     await expect(dialog).toBeVisible();
-    await expectToken(dialog, "background-color", "--popover");
+    await expectToken(dialog, "background-color", "--tldraw-panel");
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
     await page.mouse.click(subject.x, subject.y);

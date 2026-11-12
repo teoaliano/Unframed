@@ -34,7 +34,9 @@ function DialogBackdrop({
     <DialogPrimitive.Backdrop
       forceRender
       className={cn(
-        variant === "media" ? DIALOG_MEDIA_BACKDROP_CLASS : DIALOG_BACKDROP_CLASS,
+        variant === "media"
+          ? DIALOG_MEDIA_BACKDROP_CLASS
+          : cn(DIALOG_BACKDROP_CLASS, "bg-(--dialog-backdrop)"),
         className,
       )}
       data-slot="dialog-backdrop"
@@ -81,8 +83,10 @@ function DialogPopup({
       >
         <DialogPrimitive.Popup
           className={cn(
-            variant === "media" ? DIALOG_MEDIA_POPUP_CLASS : DIALOG_POPUP_CLASS,
-            "row-start-2 text-popover-foreground",
+            variant === "media"
+              ? DIALOG_MEDIA_POPUP_CLASS
+              : cn(DIALOG_POPUP_CLASS, "border-(--dialog-border) bg-(--dialog-surface)"),
+            "row-start-2 text-(--dialog-foreground)",
             variant === "default" && "max-h-full max-w-lg",
             bottomStickOnMobile && DIALOG_MOBILE_SHEET_CLASS,
             className,
@@ -129,8 +133,8 @@ function DialogFooter({
   return (
     <div
       className={cn(
-        "flex flex-col-reverse gap-2 px-6 sm:flex-row sm:justify-end sm:rounded-b-[calc(var(--radius-2xl)-1px)]",
-        variant === "default" && "border-t bg-muted/72 py-4",
+        "flex flex-col-reverse gap-2 px-6 sm:flex-row sm:justify-end sm:rounded-b-2xl",
+        variant === "default" && "border-t border-(--dialog-footer-border) bg-(--dialog-footer-surface)/(--dialog-footer-surface-opacity) py-4",
         variant === "bare" && "py-4",
         className,
       )}
@@ -143,7 +147,7 @@ function DialogFooter({
 function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
   return (
     <DialogPrimitive.Title
-      className={cn("wrap-anywhere font-semibold text-xl leading-none", className)}
+      className={cn("wrap-anywhere font-semibold text-(--dialog-title) text-xl leading-none", className)}
       data-slot="dialog-title"
       {...props}
     />
@@ -153,7 +157,7 @@ function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
 function DialogDescription({ className, ...props }: DialogPrimitive.Description.Props) {
   return (
     <DialogPrimitive.Description
-      className={cn("text-muted-foreground text-sm", className)}
+      className={cn("text-(--dialog-description) text-sm", className)}
       data-slot="dialog-description"
       {...props}
     />

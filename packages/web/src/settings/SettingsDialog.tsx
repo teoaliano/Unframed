@@ -118,7 +118,7 @@ const patchOf = (draft: Draft, settings: Settings): SettingsPatch => {
 
 const ModelGroup = ({ title, children }: { readonly title: string; readonly children: ReactNode }) => (
   <div className="flex flex-col gap-3" role="group" aria-label={`${title} default models`}>
-    <p className="m-0 text-xs font-medium text-muted-foreground">{title}</p>
+    <p className="m-0 text-xs font-medium text-(--settings-dialog-label)">{title}</p>
     {children}
   </div>
 );
@@ -390,7 +390,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
         <SectionHeading>OpenRouter</SectionHeading>
         {!hasKey && !pending && (
           <div className="flex flex-col items-start gap-3">
-            <p className="m-0 text-sm leading-relaxed text-muted-foreground">
+            <p className="m-0 text-sm leading-relaxed text-(--settings-dialog-description)">
               Unframed has no image model of its own. It sends your prompts to{" "}
               <a href="https://openrouter.ai" target="_blank" rel="noreferrer" className={linkClass}>
                 OpenRouter
@@ -403,9 +403,9 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
 
         {pending && (
           <div className="flex flex-col items-start gap-2" data-testid="settings-waiting">
-            <p className="m-0 text-sm text-foreground">Waiting for OpenRouter in your browser…</p>
+            <p className="m-0 text-sm text-(--settings-dialog-foreground)">Waiting for OpenRouter in your browser…</p>
             {connection !== undefined && (
-              <p className="m-0 text-xs text-muted-foreground">
+              <p className="m-0 text-xs text-(--settings-dialog-description)">
                 Didn't open?{" "}
                 <a href={connection.authorizeUrl} target="_blank" rel="noreferrer" className={linkClass}>
                   Approve Unframed at OpenRouter
@@ -427,7 +427,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
 
         {showsKeySection && (
           <div className="flex flex-col gap-2">
-            {!hasKey && <h4 className="m-0 text-xs font-medium text-muted-foreground">API key</h4>}
+            {!hasKey && <h4 className="m-0 text-xs font-medium text-(--settings-dialog-label)">API key</h4>}
             <div className="flex items-center gap-2">
               <Input
                 ref={keyField}
@@ -445,11 +445,11 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
               />
               {hasKey && <RemoveKeyButton removal={openRouterRemoval} />}
             </div>
-            <p className="m-0 text-xs text-muted-foreground" data-testid="key-status">
+            <p className="m-0 text-xs text-(--settings-dialog-description)" data-testid="key-status">
               <Copy parts={copy.line} />
             </p>
             {copy.expiry !== undefined && (
-              <p className="m-0 text-xs text-foreground" data-testid="key-expiry">
+              <p className="m-0 text-xs text-(--settings-dialog-foreground)" data-testid="key-expiry">
                 {copy.expiry}
               </p>
             )}
@@ -463,10 +463,10 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
         )}
       </section>
 
-      <section className="flex flex-col gap-3 border-t pt-4" aria-label="Vercel AI Gateway">
+      <section className="flex flex-col gap-3 border-t border-(--settings-dialog-divider) pt-4" aria-label="Vercel AI Gateway">
         <SectionHeading>Vercel AI Gateway</SectionHeading>
         {!hasKey && (
-          <p className="m-0 text-xs text-muted-foreground" data-testid="vercel-instead">
+          <p className="m-0 text-xs text-(--settings-dialog-description)" data-testid="vercel-instead">
             No OpenRouter account? Images and text can run through the Vercel AI Gateway instead. Video still needs OpenRouter.
           </p>
         )}
@@ -486,17 +486,17 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
             />
             {hasVercelKey && <RemoveKeyButton removal={vercelRemoval} />}
           </div>
-          <p className="m-0 text-xs text-muted-foreground" data-testid="vercel-status">
+          <p className="m-0 text-xs text-(--settings-dialog-description)" data-testid="vercel-status">
             {vercelCopy}
           </p>
           <KeyWarning removal={vercelRemoval} testId="vercel-warning" />
         </div>
       </section>
 
-      <section className="flex flex-col gap-3 border-t pt-4" aria-label="ElevenLabs">
+      <section className="flex flex-col gap-3 border-t border-(--settings-dialog-divider) pt-4" aria-label="ElevenLabs">
         <SectionHeading>ElevenLabs</SectionHeading>
         {!hasKey && !hasVercelKey && (
-          <p className="m-0 text-xs text-muted-foreground" data-testid="elevenlabs-only-audio">
+          <p className="m-0 text-xs text-(--settings-dialog-description)" data-testid="elevenlabs-only-audio">
             Only want audio? Paste an ElevenLabs key here. Images and text need OpenRouter or the Vercel AI Gateway, and video needs OpenRouter.
           </p>
         )}
@@ -516,14 +516,14 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
             />
             {hasElevenLabsKey && <RemoveKeyButton removal={elevenLabsRemoval} />}
           </div>
-          <p className="m-0 text-xs text-muted-foreground" data-testid="elevenlabs-status">
+          <p className="m-0 text-xs text-(--settings-dialog-description)" data-testid="elevenlabs-status">
             {elevenLabsCopy}
           </p>
           <KeyWarning removal={elevenLabsRemoval} testId="elevenlabs-warning" />
         </div>
       </section>
 
-      <section className="flex flex-col gap-3 border-t pt-4" aria-label="Default models">
+      <section className="flex flex-col gap-3 border-t border-(--settings-dialog-divider) pt-4" aria-label="Default models">
         <SectionHeading>Default models</SectionHeading>
         {(hasKey || hasVercelKey || hasElevenLabsKey) && settings !== undefined ? (
           <>
@@ -544,7 +544,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
               <ModelGroup title="ElevenLabs">
                 <ModelSelect label="Audio" value={draft.audioModel} models={catalogues.audio} onChange={(value) => edit({ audioModel: value })} />
                 {audioModelsProblem !== undefined && (
-                  <p className="m-0 text-xs text-muted-foreground" data-testid="audio-models-problem">
+                  <p className="m-0 text-xs text-(--settings-dialog-description)" data-testid="audio-models-problem">
                     {audioModelsProblem}
                   </p>
                 )}
@@ -552,7 +552,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
             )}
           </>
         ) : (
-          <p className="m-0 text-xs text-muted-foreground" data-testid="models-need-key">
+          <p className="m-0 text-xs text-(--settings-dialog-description)" data-testid="models-need-key">
             Connect OpenRouter or paste a Vercel AI Gateway key to choose the models Generate starts on.
           </p>
         )}
@@ -581,7 +581,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const general = (
     <section className="flex flex-col gap-2">
       <SectionHeading>Output folder</SectionHeading>
-      <p className="m-0 text-xs text-muted-foreground">Every project is a folder in here, with its files, sidecars and chats.</p>
+      <p className="m-0 text-xs text-(--settings-dialog-description)">Every project is a folder in here, with its files, sidecars and chats.</p>
       <div className="flex items-center gap-2">
         <Input aria-label="Output folder" placeholder="./output" font="mono" spellCheck={false} autoComplete="off" value={draft.outputDir} onChange={(event) => edit({ outputDir: event.target.value })} />
         {!device && (
@@ -613,7 +613,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
         initialFocus={section === "generation" && showsKeySection ? keyField : undefined}
         data-testid="settings-dialog"
         data-section={section}
-        className="h-[min(640px,calc(100dvh-3rem))] max-w-[760px] overflow-hidden"
+        className="h-[min(var(--settings-dialog-height),calc(100dvh-(--spacing(12))))] max-w-(--settings-dialog-width) overflow-hidden"
         render={
           <form
             onSubmit={(event) => {
@@ -626,22 +626,22 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
-        <div className="flex min-h-0 flex-1 border-t">
+        <div className="flex min-h-0 flex-1 border-t border-(--settings-dialog-divider)">
           <Tabs orientation="vertical" value={section} onValueChange={(next) => showSection(next as SettingsSection)} className="min-h-0 flex-1 flex-row">
-            <div className="w-48 shrink-0 border-e bg-muted/40 p-3">
+            <div className="w-48 shrink-0 border-e border-(--settings-dialog-nav-border) bg-(--settings-dialog-nav-surface)/(--settings-dialog-nav-surface-opacity) p-3">
               <TabsList aria-label="Settings sections" variant="sidebar">
                 {SECTIONS.filter(({ id }) => id !== "ipad" || ipadHere).map(({ id, label, icon: Icon }) => (
                   <TabsTab key={id} value={id} data-section={id} data-unsaved={changed.has(id) ? "true" : undefined} aria-description={changed.has(id) ? "Unsaved changes" : undefined}>
                     <Icon aria-hidden />
                     {label}
-                    {changed.has(id) && <span aria-hidden data-testid="unsaved-mark" className="ms-auto size-1.5 rounded-full bg-highlight" />}
+                    {changed.has(id) && <span aria-hidden data-testid="unsaved-mark" className="ms-auto size-1.5 rounded-full bg-(--settings-dialog-unsaved-indicator)" />}
                   </TabsTab>
                 ))}
               </TabsList>
             </div>
             <TabsPanel value={section} className="relative flex min-h-0 min-w-0 flex-1 flex-col" data-testid="settings-section">
               <DialogPanel data-testid="settings-form" inert={paneSheet}>
-                <h2 className="m-0 mt-3 text-base font-semibold text-foreground" data-testid="settings-section-title">
+                <h2 className="m-0 mt-3 text-base font-semibold text-(--settings-dialog-foreground)" data-testid="settings-section-title">
                   {current.label}
                 </h2>
                 {section === "generation" && generation}

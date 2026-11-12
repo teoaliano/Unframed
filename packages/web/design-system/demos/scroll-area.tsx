@@ -27,7 +27,7 @@ const List = () => (
   </ul>
 );
 
-const Box = ({ children }: { readonly children: ReactNode }) => <div className="h-40 w-72 rounded-lg border">{children}</div>;
+const Box = ({ children }: { readonly children: ReactNode }) => <div className="h-40 w-72 rounded-lg border border-(--catalogue-demo-border)">{children}</div>;
 
 export default function ScrollAreaDemo() {
   return (
@@ -71,11 +71,11 @@ export default function ScrollAreaDemo() {
       </Section>
       <Section title="Overflow">
         <Row label="horizontal">
-          <div className="h-24 w-72 rounded-lg border">
+          <div className="h-24 w-72 rounded-lg border border-(--catalogue-demo-border)">
             <ScrollArea>
               <div className="flex w-max gap-2 p-2">
                 {PROMPTS.map((prompt) => (
-                  <span key={prompt} className="flex size-20 shrink-0 items-end rounded-md bg-muted p-1.5 text-muted-foreground text-xs">
+                  <span key={prompt} className="flex size-20 shrink-0 items-end rounded-md bg-(--catalogue-demo-fill) p-1.5 text-(--catalogue-demo-description) text-xs">
                     {prompt.split(",")[0]}
                   </span>
                 ))}

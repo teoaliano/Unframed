@@ -30,10 +30,10 @@ export const Avatar = ({ author, size = 20, muted = false, framed = true }: { re
     aria-label={authorLabel(author)}
     role="img"
     style={{ width: size, height: size }}
-    className={cn("inline-flex shrink-0 items-center justify-center rounded-full bg-background text-foreground", framed && "ring-1 ring-border ring-inset", muted && "text-muted-foreground opacity-64")}
+    className={cn("inline-flex shrink-0 items-center justify-center rounded-full bg-(--comment-avatar-surface) text-(--comment-avatar-foreground)", framed && "ring-1 ring-(--comment-avatar-ring) ring-inset", muted && "text-(--comment-avatar-foreground-disabled) opacity-64")}
   >
     {author.kind === "person" ? (
-      <User aria-hidden className="text-muted-foreground" style={{ width: size * 0.6, height: size * 0.6 }} />
+      <User aria-hidden className="text-(--comment-avatar-icon)" style={{ width: size * 0.6, height: size * 0.6 }} />
     ) : author.provider === "outside" ? (
       <span aria-hidden className="text-xs font-medium leading-none">
         {author.name.charAt(0).toUpperCase()}
@@ -55,7 +55,7 @@ export const MentionText = ({ text }: { readonly text: string }) => {
     const start = match.index! + match[1]!.length;
     if (start > last) parts.push(text.slice(last, start));
     parts.push(
-      <span key={start} data-comment-mention="" className="font-medium text-highlight">
+      <span key={start} data-comment-mention="" className="font-medium text-(--comment-mention)">
         {match[2]}
       </span>,
     );
@@ -68,8 +68,8 @@ export const MentionText = ({ text }: { readonly text: string }) => {
 const Byline = ({ author, at, now, muted = false }: { readonly author: CommentAuthor; readonly at: number; readonly now: number; readonly muted?: boolean }) => (
   <div className="flex min-w-0 items-center gap-2">
     <Avatar author={author} muted={muted} />
-    <span className="truncate text-xs font-medium text-foreground">{authorLabel(author)}</span>
-    <span className="shrink-0 text-xs text-muted-foreground">{relativeTime(at, now)}</span>
+    <span className="truncate text-xs font-medium text-(--comment-author)">{authorLabel(author)}</span>
+    <span className="shrink-0 text-xs text-(--comment-meta)">{relativeTime(at, now)}</span>
   </div>
 );
 
@@ -90,12 +90,12 @@ export const PinBody = ({
     data-comment-pin-body=""
     className={cn(
       "relative box-border flex size-8 items-center justify-center rounded-full rounded-bl-none border shadow-md/5",
-      pending ? "border-primary bg-primary" : "bg-popover",
-      selected && "outline-2 outline-offset-1 outline-highlight",
+      pending ? "border-(--comment-pin-border-active) bg-(--comment-pin-surface-active)" : "border-(--comment-pin-border) bg-(--comment-pin-surface)",
+      selected && "outline-2 outline-offset-1 outline-(--comment-pin-ring-selected)",
     )}
   >
     {!pending && author !== undefined && <Avatar author={author} size={24} muted={resolved} framed={false} />}
-    {unread && !pending && <span data-comment-unread="" className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-highlight ring-2 ring-background" />}
+    {unread && !pending && <span data-comment-unread="" className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-(--comment-pin-indicator) ring-2 ring-(--comment-pin-indicator-border)" />}
   </span>
 );
 
@@ -108,12 +108,12 @@ export const PreviewCard = ({ thread, now, resolved = false }: { readonly thread
       <p className="m-0 line-clamp-2 ps-7 text-sm leading-relaxed break-words">
         <MentionText text={first.text} />
       </p>
-      {replies !== null && <span className="ps-7 text-xs text-muted-foreground">{replies}</span>}
+      {replies !== null && <span className="ps-7 text-xs text-(--comment-meta)">{replies}</span>}
     </div>
   );
 };
 
-const COMPOSER_CLASS = `${composerGlassClass} relative isolate flex w-full flex-col text-sm leading-relaxed text-foreground gap-1.5 rounded-2xl px-3 pt-2.5 pb-2 after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-border`;
+const COMPOSER_CLASS = `${composerGlassClass} relative isolate flex w-full flex-col text-sm leading-relaxed text-(--composer-foreground) gap-1.5 rounded-2xl px-3 pt-2.5 pb-2 after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-(--composer-border)`;
 
 export const Composer = ({
   placeholder,
@@ -175,7 +175,7 @@ export const Composer = ({
   };
 
   return (
-    <div data-comment-composer={variant} className={cn(COMPOSER_CLASS, variant === "card" && "shadow-composer dark:shadow-none")}>
+    <div data-comment-composer={variant} className={cn(COMPOSER_CLASS, variant === "card" && "shadow-(--shadow-app-floating)")}>
       <Textarea
         unstyled
         ref={area}
@@ -249,9 +249,9 @@ const MessageView = ({
           />
         </div>
       ) : (
-        <p className={cn("m-0 ps-7 text-sm leading-relaxed break-words whitespace-pre-wrap", muted && "text-muted-foreground")}>
+        <p className={cn("m-0 ps-7 text-sm leading-relaxed break-words whitespace-pre-wrap", muted && "text-(--comment-foreground-disabled)")}>
           <MentionText text={message.text} />
-          {message.editedAt !== null && <span className="text-xs text-muted-foreground"> (edited)</span>}
+          {message.editedAt !== null && <span className="text-xs text-(--comment-meta)"> (edited)</span>}
         </p>
       )}
       {own && !editing && (
@@ -285,7 +285,7 @@ export interface ThreadActions {
   readonly onDeleteComment: (commentId: string) => void;
 }
 
-export const FLOATING_CARD_CLASS = "dropdown-glass rounded-xl border font-sans text-popover-foreground shadow-[0_12px_32px_-18px_rgb(0_0_0/8%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]";
+export const FLOATING_CARD_CLASS = "dropdown-glass rounded-xl border border-(--comment-card-border) bg-(--comment-card-surface) font-sans text-(--comment-card-foreground) shadow-(--shadow-app-dropdown)";
 
 export const ThreadPopover = ({ thread, now, actions, autoFocus = false }: { readonly thread: CommentThread; readonly now: number; readonly actions: ThreadActions; readonly autoFocus?: boolean }) => {
   const [confirming, setConfirming] = useState(false);
@@ -297,12 +297,12 @@ export const ThreadPopover = ({ thread, now, actions, autoFocus = false }: { rea
     if (element !== null) element.scrollTop = element.scrollHeight;
   }, [count]);
   return (
-    <div data-comment-thread={thread.id} role="dialog" aria-label={`Comment #${thread.number}`} className={cn(FLOATING_CARD_CLASS, "box-border flex max-h-[min(560px,calc(100vh-120px))] w-80 flex-col")}>
+    <div data-comment-thread={thread.id} role="dialog" aria-label={`Comment #${thread.number}`} className={cn(FLOATING_CARD_CLASS, "box-border flex max-h-[min(var(--comment-card-height),calc(100vh-var(--comment-card-offset)))] w-80 flex-col")}>
       <header className="flex h-11 shrink-0 items-center gap-1 border-b pr-1.5 pl-3">
-        <MessageCircle aria-hidden className="size-4 shrink-0 text-foreground" />
+        <MessageCircle aria-hidden className="size-4 shrink-0 text-(--comment-card-icon)" />
         <h2 className="m-0 ml-1 flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium">
           Comment
-          <span className="text-muted-foreground tabular-nums">#{thread.number}</span>
+          <span className="text-(--comment-card-meta) tabular-nums">#{thread.number}</span>
           {resolved && (
             <Badge variant="success" size="sm">
               Resolved
@@ -311,7 +311,7 @@ export const ThreadPopover = ({ thread, now, actions, autoFocus = false }: { rea
         </h2>
         <Tip label={resolved ? "Reopen" : "Resolve"}>
           <Button variant="ghost" size="icon-sm" aria-label={resolved ? "Reopen" : "Resolve"} aria-pressed={resolved} onClick={() => actions.onResolve(!resolved)}>
-            {resolved ? <Check aria-hidden className="text-success-foreground" /> : <CircleCheck aria-hidden />}
+            {resolved ? <Check aria-hidden className="text-(--comment-card-resolved-icon)" /> : <CircleCheck aria-hidden />}
           </Button>
         </Tip>
         <Menu>
@@ -402,12 +402,12 @@ export const SidebarRow = ({
           onOpen();
         }
       }}
-      className="group/row relative flex cursor-pointer flex-col gap-1.5 rounded-lg px-2.5 py-2 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring data-selected:bg-accent"
+      className="group/row relative flex cursor-pointer flex-col gap-1.5 rounded-lg px-2.5 py-2 text-left outline-none transition-colors hover:bg-(--comment-list-row-surface-hover) focus-visible:ring-2 focus-visible:ring-(--comment-list-row-ring-focus) data-selected:bg-(--comment-list-row-surface-selected)"
     >
       <div className="flex h-6 items-center gap-1.5">
         <div className="flex -space-x-1">
           {participants(thread).slice(0, 4).map((author) => (
-            <span key={author.kind === "person" ? "person" : author.chatId} className="rounded-full ring-2 ring-background">
+            <span key={author.kind === "person" ? "person" : author.chatId} className="rounded-full ring-2 ring-(--comment-list-row-avatar-ring)">
               <Avatar author={author} muted={resolved} />
             </span>
           ))}
@@ -443,16 +443,16 @@ export const SidebarRow = ({
             </Button>
           </Tip>
         </div>
-        {unread && <span data-comment-unread="" aria-label="Unread" role="img" className="size-2 shrink-0 rounded-full bg-highlight" />}
+        {unread && <span data-comment-unread="" aria-label="Unread" role="img" className="size-2 shrink-0 rounded-full bg-(--comment-list-row-indicator)" />}
       </div>
       <div className="flex min-w-0 items-baseline gap-1.5 text-xs">
-        <span className="truncate font-medium text-foreground">{authorLabel(first.author)}</span>
-        <span className="shrink-0 text-muted-foreground">{relativeTime(first.createdAt, now)}</span>
+        <span className="truncate font-medium text-(--comment-author)">{authorLabel(first.author)}</span>
+        <span className="shrink-0 text-(--comment-meta)">{relativeTime(first.createdAt, now)}</span>
       </div>
-      <p className={cn("m-0 line-clamp-3 text-sm leading-relaxed break-words", resolved ? "text-muted-foreground" : "text-foreground")}>
+      <p className={cn("m-0 line-clamp-3 text-sm leading-relaxed break-words", resolved ? "text-(--comment-foreground-disabled)" : "text-(--comment-foreground)")}>
         <MentionText text={first.text} />
       </p>
-      {replies !== null && <span className="text-xs text-muted-foreground">{replies}</span>}
+      {replies !== null && <span className="text-xs text-(--comment-meta)">{replies}</span>}
     </div>
   );
 };
@@ -473,14 +473,14 @@ export const ClusterBubble = ({ authors, count, hovered }: { readonly authors: R
   <span
     data-comment-cluster-body=""
     className={cn(
-      "box-border flex items-center justify-center rounded-full border bg-popover text-xs font-medium text-foreground tabular-nums shadow-md/5 transition-[width,height] duration-150 ease-out motion-reduce:transition-none",
+      "box-border flex items-center justify-center rounded-full border border-(--comment-cluster-border) bg-(--comment-cluster-surface) text-xs font-medium text-(--comment-cluster-foreground) tabular-nums shadow-md/5 transition-[width,height] duration-150 ease-out motion-reduce:transition-none",
       hovered ? "h-9 min-w-9 px-1.5" : "size-8",
     )}
   >
     {hovered ? (
       <span className="flex -space-x-1.5">
         {authors.slice(0, 3).map((author, index) => (
-          <span key={index} className="rounded-full ring-2 ring-popover">
+          <span key={index} className="rounded-full ring-2 ring-(--comment-cluster-avatar-ring)">
             <Avatar author={author} size={24} />
           </span>
         ))}

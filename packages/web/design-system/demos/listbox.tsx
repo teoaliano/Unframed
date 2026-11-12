@@ -27,11 +27,11 @@ export default function ListboxDemo() {
     <Demos>
       <Section title="Mention menu">
         <Row label="row 2 highlighted">
-          <div role="listbox" aria-label="Mentions" className={`${listboxPopupClass} max-h-[168px] w-[260px]`}>
+          <div role="listbox" aria-label="Mentions" className={`${listboxPopupClass} max-h-42 w-65`}>
             {MENTIONS.map((row, index) => (
               <div key={row.ref} role="option" aria-selected={index === 1} data-highlighted={index === 1 ? "" : undefined} className={`${listboxRowClass} whitespace-nowrap`}>
-                <span className="shrink-0 text-highlight">@{row.ref}</span>
-                <span className="min-w-0 truncate text-muted-foreground">{row.preview}</span>
+                <span className="shrink-0 text-(--catalogue-demo-highlight)">@{row.ref}</span>
+                <span className="min-w-0 truncate text-(--listbox-row-description)">{row.preview}</span>
               </div>
             ))}
           </div>
@@ -42,9 +42,9 @@ export default function ListboxDemo() {
           <div role="listbox" aria-label="Commands" className={`${listboxPopupClass} max-h-65 w-96`}>
             {COMMANDS.map((item, index) => (
               <div key={item.key} role="option" aria-selected={index === 0} data-highlighted={index === 0 ? "" : undefined} className={listboxRowClass}>
-                <span className="inline-flex shrink-0 text-muted-foreground">{item.icon}</span>
+                <span className="inline-flex shrink-0 text-(--listbox-row-icon)">{item.icon}</span>
                 <span className="min-w-0 max-w-[45%] shrink-0 truncate text-xs font-medium">{item.label}</span>
-                {item.description !== "" && <span className="min-w-0 flex-1 truncate text-left text-xs text-secondary-label">{item.description}</span>}
+                {item.description !== "" && <span className="min-w-0 flex-1 truncate text-left text-xs text-(--listbox-row-description)">{item.description}</span>}
                 {item.badge !== undefined && (
                   <span className="ms-auto">
                     <Badge variant="secondary">{item.badge}</Badge>
@@ -56,7 +56,7 @@ export default function ListboxDemo() {
         </Row>
         <Row label="empty">
           <div role="listbox" aria-label="Commands" className={`${listboxPopupClass} w-96`}>
-            <p className="m-0 px-2 py-1.5 text-xs text-secondary-label">No commands match “/xyz”.</p>
+            <p className="m-0 px-2 py-1.5 text-xs text-(--listbox-row-description)">No commands match “/xyz”.</p>
           </div>
         </Row>
       </Section>
@@ -66,7 +66,7 @@ export default function ListboxDemo() {
             {THREADS.map((thread, index) => (
               <div key={thread.title} role="option" aria-selected={index === 0} data-highlighted={index === 0 ? "" : undefined} className={`${listboxRowClass} flex-col items-start gap-0.5`}>
                 <span className="truncate font-medium">{thread.title}</span>
-                <span className="truncate text-xs text-muted-foreground">{thread.line}</span>
+                <span className="truncate text-xs text-(--listbox-row-description)">{thread.line}</span>
               </div>
             ))}
           </div>

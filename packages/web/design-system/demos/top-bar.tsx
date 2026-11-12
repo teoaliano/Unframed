@@ -11,7 +11,7 @@ const Logo = () => (
   <span
     role="img"
     aria-label="Unframed"
-    className="block size-6 shrink-0 bg-foreground"
+    className="block size-6 shrink-0 bg-(--top-bar-logo)"
     style={{ mask: `url("${logoUrl}") center / contain no-repeat`, WebkitMask: `url("${logoUrl}") center / contain no-repeat` }}
   />
 );
@@ -28,7 +28,7 @@ const Bar = ({ platform, initial, initialActive }: { readonly platform: Platform
     if (active === name) setActive(rest[Math.min(index, rest.length - 1)]?.name);
   };
   return (
-    <div className="overflow-hidden rounded-xl border bg-background">
+    <div className="overflow-hidden rounded-xl border border-(--top-bar-border) bg-(--top-bar-surface)">
       <TopBar
         platform={platform}
         tabs={tabs}
@@ -109,8 +109,8 @@ export default function TopBarDemo() {
           platform={platform}
           initial={[
             { name: "default" },
-            { name: "default/landing", label: "Landing", context: "default", variant: "secondary", attachedTo: "default", icon: <AppWindow aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />, title: "Landing · Page in default" },
-            { name: "default/teaser", label: "Teaser", context: "default", variant: "secondary", attachedTo: "default", icon: <Clapperboard aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />, title: "Teaser · Motion in default" },
+            { name: "default/landing", label: "Landing", context: "default", variant: "secondary", attachedTo: "default", icon: <AppWindow aria-hidden className="size-3.5 shrink-0 text-(--project-tab-icon)" />, title: "Landing · Page in default" },
+            { name: "default/teaser", label: "Teaser", context: "default", variant: "secondary", attachedTo: "default", icon: <Clapperboard aria-hidden className="size-3.5 shrink-0 text-(--project-tab-icon)" />, title: "Teaser · Motion in default" },
             { name: "beta" },
           ]}
           initialActive="default/landing"

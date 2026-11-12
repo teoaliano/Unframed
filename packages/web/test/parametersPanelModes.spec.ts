@@ -70,6 +70,7 @@ test("the floating panel starts beside its page, stays put while the canvas pans
   expect(edge.x + edge.width).toBeLessThanOrEqual(viewport.width - 8 + 0.5);
   expect(edge.y).toBeGreaterThanOrEqual(36 + 8 - 0.5);
   await expect(header).toBeVisible();
+  await expect.poll(() => savedPanel(agent)).toMatchObject({ mode: "float", x: Math.round(edge.x), y: Math.round(edge.y) });
 
   await page.reload();
   await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible({ timeout: 20_000 });

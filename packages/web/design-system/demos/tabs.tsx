@@ -30,7 +30,7 @@ export default function TabsDemo() {
 
       <Section title="Fill">
         <Row label="underline, fill">
-          <div className="flex h-12 w-80 items-stretch border-b">
+          <div className="flex h-12 w-80 items-stretch border-b border-(--catalogue-demo-border)">
             <Tabs defaultValue="image" className="h-full">
               <TabsList variant="underline" fill aria-label="Filled tabs">
                 {OPTIONS.map((option) => (
@@ -73,7 +73,7 @@ export default function TabsDemo() {
           </Tabs>
         </Row>
         <Row label="hover, focus">
-          <p className="m-0 text-muted-foreground text-xs">
+          <p className="m-0 text-(--catalogue-demo-description) text-xs">
             Hover any tab for its hover colour. Press Tab to reach the list: the focused tab shows the focus ring, and the arrow keys move between tabs.
           </p>
         </Row>

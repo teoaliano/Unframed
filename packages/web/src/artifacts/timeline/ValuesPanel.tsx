@@ -74,7 +74,7 @@ const TokenChip = ({ token }: { readonly token: PanelToken }) => {
                 }}
               >
                 <span className="truncate">{option.path}</span>
-                <span className="font-mono text-xs text-muted-foreground">{option.value}</span>
+                <span className="font-mono text-xs text-(--values-panel-meta)">{option.value}</span>
               </Button>
             ))}
             <Button
@@ -96,7 +96,7 @@ const TokenChip = ({ token }: { readonly token: PanelToken }) => {
 };
 
 const Control = ({ label, control }: { readonly label: string; readonly control: PanelControl }): ReactNode => {
-  if (control.kind === "text") return <code className="max-w-40 truncate font-mono text-xs text-muted-foreground">{control.value}</code>;
+  if (control.kind === "text") return <code className="max-w-40 truncate font-mono text-xs text-(--values-panel-meta)">{control.value}</code>;
   if (control.kind === "colour") return <ColourField label={label} value={control.value} editable={control.editable} onCommit={control.onCommit} />;
   return <NumberControl label={label} value={control.value} unit={control.unit} editable={control.editable} onCommit={control.onCommit} />;
 };
@@ -118,7 +118,7 @@ const NumberControl = ({ label, value, unit, editable, onCommit }: { readonly la
           />
         </NumberFieldGroup>
       </NumberField>
-      {unit !== "" && <span className="text-xs text-muted-foreground">{unit}</span>}
+      {unit !== "" && <span className="text-xs text-(--values-panel-meta)">{unit}</span>}
     </span>
   );
 };
@@ -152,7 +152,7 @@ const ColourField = ({ label, value, editable, onCommit }: { readonly label: str
 const FieldRow = ({ field }: { readonly field: PanelField }) => (
   <div className="flex flex-col gap-1">
     <div className="flex items-center justify-between gap-2 text-xs">
-      <span className="flex min-w-0 items-center gap-1 text-muted-foreground">
+      <span className="flex min-w-0 items-center gap-1 text-(--values-panel-label)">
         {field.label}
         {field.parameter !== undefined && (
           <Tip label={`Parameter ${field.parameter}`}>
@@ -164,7 +164,7 @@ const FieldRow = ({ field }: { readonly field: PanelField }) => (
       </span>
       {field.token !== undefined ? <TokenChip token={field.token} /> : <Control label={field.label} control={field.control} />}
     </div>
-    {field.note !== undefined && <p className="m-0 text-xs text-muted-foreground">{field.note}</p>}
+    {field.note !== undefined && <p className="m-0 text-xs text-(--values-panel-note)">{field.note}</p>}
     {field.ask !== undefined && (
       <Button variant="ghost" size="xs" className="justify-self-start" onClick={field.ask}>
         Ask the agent to make this editable
@@ -175,12 +175,12 @@ const FieldRow = ({ field }: { readonly field: PanelField }) => (
 
 export const ValuesPanel = ({ title, group, method, fields, ease, onEase, repeat, sentence, readOnly, ask, onClose, anchor }: ValuesPanelProps) => (
   <Popover open onOpenChange={(open) => !open && onClose()}>
-    <PopoverPopup anchor={anchor} side="bottom" align="start" padding="none" initialFocus={false} finalFocus={false} className="w-[280px]">
+    <PopoverPopup anchor={anchor} side="bottom" align="start" padding="none" initialFocus={false} finalFocus={false} className="w-(--values-panel-width)">
       <section aria-label={`Values for ${title}`} data-testid="values-panel" className="p-3">
         <header className="mb-2 flex items-center gap-2">
           <span className="min-w-0 flex-1 truncate text-sm font-medium">
             {group === null ? title : `${title} · ${group}`}
-            <span className="ml-1 text-muted-foreground">{method}</span>
+            <span className="ml-1 text-(--values-panel-meta)">{method}</span>
           </span>
           <Button variant="ghost" size="icon-sm" aria-label="Close values" onClick={onClose}>
             <X aria-hidden />
@@ -189,8 +189,8 @@ export const ValuesPanel = ({ title, group, method, fields, ease, onEase, repeat
         <div className="flex flex-col gap-2">
           {readOnly !== null && (
             <div className="flex flex-col gap-1">
-              <p className="m-0 text-xs text-muted-foreground">Set by the agent&apos;s code.</p>
-              <p className="m-0 text-xs text-muted-foreground">{readOnly}</p>
+              <p className="m-0 text-xs text-(--values-panel-note)">Set by the agent&apos;s code.</p>
+              <p className="m-0 text-xs text-(--values-panel-note)">{readOnly}</p>
               {ask !== null && (
                 <Button variant="ghost" size="xs" className="justify-self-start" onClick={ask}>
                   Ask the agent to make this editable
@@ -203,12 +203,12 @@ export const ValuesPanel = ({ title, group, method, fields, ease, onEase, repeat
           ))}
           {ease !== null && (
             <div className="flex items-center justify-between gap-2 text-xs">
-              <span className="text-muted-foreground">Ease</span>
+              <span className="text-(--values-panel-label)">Ease</span>
               <EasePicker label={ease.label} choices={ease.choices} disabled={ease.disabled} onChoose={onEase} />
             </div>
           )}
-          {repeat !== null && <p className="m-0 text-xs text-muted-foreground">{repeat}</p>}
-          {sentence !== null && <p className="m-0 text-xs text-muted-foreground">{sentence}</p>}
+          {repeat !== null && <p className="m-0 text-xs text-(--values-panel-note)">{repeat}</p>}
+          {sentence !== null && <p className="m-0 text-xs text-(--values-panel-note)">{sentence}</p>}
         </div>
       </section>
     </PopoverPopup>

@@ -44,7 +44,7 @@ test("Delete asks first, then the chat is gone and what it changed on the canvas
   await expect(dialog).toHaveAttribute("data-slot", "alert-dialog-popup");
   await inBothSchemes(page, async () => {
     expect(await styleOf(dialog.locator("[data-slot='alert-dialog-title']"), "font-size")).toBe("20px");
-    await expectToken(dialog.getByRole("button", { name: "Delete chat" }), "background-color", "--destructive");
+    await expectToken(dialog.getByRole("button", { name: "Delete chat" }), "background-color", "--button-destructive-surface");
     await expect(dialog.getByRole("button", { name: "Cancel" })).toHaveAttribute("data-slot", "alert-dialog-close");
   });
   await dialog.getByRole("button", { name: "Cancel" }).click();

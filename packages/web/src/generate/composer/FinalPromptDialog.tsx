@@ -13,8 +13,8 @@ import type { TrayOverlayProps } from "../mediumRegistry.ts";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
-const labelClass = "m-0 text-xs font-medium text-muted-foreground";
-const readOnlyClass = "m-0 max-h-24 overflow-y-auto whitespace-pre-wrap rounded-lg border bg-card px-3 py-2 text-sm text-card-foreground";
+const labelClass = "m-0 text-xs font-medium text-(--final-prompt-dialog-label)";
+const readOnlyClass = "m-0 max-h-24 overflow-y-auto whitespace-pre-wrap rounded-lg border border-(--final-prompt-dialog-field-border) bg-(--final-prompt-dialog-field-surface) px-3 py-2 text-sm text-(--final-prompt-dialog-field-foreground)";
 
 /** A run's row: which images it receives. */
 const imagesOf = (used: ReadonlyArray<number> | null): string =>
@@ -67,7 +67,7 @@ const FinalPromptDialog = ({ staged, onClose, onSent }: { staged: StagedFree; on
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogPopup data-testid="final-prompt" className="max-h-[min(760px,calc(100vh-48px))] max-w-[640px]">
+      <DialogPopup data-testid="final-prompt" className="max-h-[min(var(--final-prompt-dialog-height),calc(100vh-(--spacing(12))))] max-w-(--final-prompt-dialog-width)">
         <DialogHeader>
           <DialogTitle>Final prompt</DialogTitle>
           <DialogDescription>{subtitle}</DialogDescription>
@@ -97,9 +97,9 @@ const FinalPromptDialog = ({ staged, onClose, onSent }: { staged: StagedFree; on
           {runs > 0 && (
             <ol className="m-0 flex list-none flex-col p-0 text-sm" aria-label="Runs">
               {batch.runs.map((run, index) => (
-                <li key={index} className="flex h-7 items-center justify-between border-b last:border-b-0">
+                <li key={index} className="flex h-7 items-center justify-between border-b border-(--final-prompt-dialog-divider) last:border-b-0">
                   <span>Run {index + 1}</span>
-                  <span className="text-muted-foreground">{imagesOf(run.used)}</span>
+                  <span className="text-(--final-prompt-dialog-meta)">{imagesOf(run.used)}</span>
                 </li>
               ))}
             </ol>
@@ -110,7 +110,7 @@ const FinalPromptDialog = ({ staged, onClose, onSent }: { staged: StagedFree; on
             </Alert>
           ))}
           {staged.repairNotes.length > 0 && (
-            <p role="status" data-kind="info" className="m-0 text-xs text-muted-foreground">
+            <p role="status" data-kind="info" className="m-0 text-xs text-(--final-prompt-dialog-description)">
               {staged.repairNotes.join(" · ")}
             </p>
           )}

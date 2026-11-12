@@ -465,7 +465,6 @@ test("ArrowUp recalls a repeated message once, moves through a wrapped line befo
   }
 });
 
-const MENU_GLASS = "color-mix(in srgb, var(--popover) 18%, color-mix(in srgb, var(--popover) var(--glass-opacity), transparent))";
 
 test("the Agent tray is t3code's composer on the kit: the rounded shell, kit chips and controls, the round Send, the kit menu look", async ({ page, agent }) => {
   await enablePlanMode(agent);
@@ -500,7 +499,7 @@ test("the Agent tray is t3code's composer on the kit: the rounded shell, kit chi
     await promptBox(tray).pressSequentially("@");
     const mentions = page.getByRole("listbox", { name: "Mentions" });
     await expect(mentions).toBeVisible();
-    expect(await styleOf(mentions, "background-color")).toBe(await resolvedColor(page, MENU_GLASS));
+    expect(await styleOf(mentions, "background-color")).toBe(await resolvedColor(page, "var(--listbox-surface)"));
     await page.keyboard.press("Backspace");
     await expect(mentions).toHaveCount(0);
   });

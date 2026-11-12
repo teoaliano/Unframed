@@ -19,8 +19,8 @@ const Columns = () => (
   <colgroup>
     <col className="w-[34%]" />
     <col />
-    <col className="w-[120px]" />
-    <col className="w-[52px]" />
+    <col className="w-(--voice-dialog-category-column-width)" />
+    <col className="w-13" />
   </colgroup>
 );
 
@@ -116,7 +116,7 @@ export const VoiceDialog = ({ open, onOpenChange, current, onPick, finalFocus }:
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPopup
-        className="max-h-[min(720px,calc(100vh-48px))] max-w-[680px]"
+        className="max-h-[min(var(--voice-dialog-height),calc(100vh-(--spacing(12))))] max-w-(--voice-dialog-width)"
         initialFocus={search}
         data-testid="voice-dialog"
         {...(finalFocus === undefined ? {} : { finalFocus: () => finalFocus() ?? true })}
@@ -151,7 +151,7 @@ export const VoiceDialog = ({ open, onOpenChange, current, onPick, finalFocus }:
             </Alert>
           )}
           {voices !== undefined && rows.length === 0 && failure === undefined ? (
-            <p className="m-0 py-6 text-center text-sm text-muted-foreground">No voice matches. Clear the search.</p>
+            <p className="m-0 py-6 text-center text-sm text-(--voice-dialog-description)">No voice matches. Clear the search.</p>
           ) : (
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="shrink-0 overflow-y-hidden [scrollbar-gutter:stable]">
@@ -193,7 +193,7 @@ export const VoiceDialog = ({ open, onOpenChange, current, onPick, finalFocus }:
                           <TableCell>
                             {labels !== "" && (
                               <Tip label={labels} side="top">
-                                <span className="block truncate text-muted-foreground">{labels}</span>
+                                <span className="block truncate text-(--voice-dialog-meta)">{labels}</span>
                               </Tip>
                             )}
                           </TableCell>

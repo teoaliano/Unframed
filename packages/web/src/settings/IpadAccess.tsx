@@ -39,7 +39,7 @@ const Address = ({ address }: { readonly address: string }) => {
   useEffect(() => () => clearTimeout(timer.current), []);
   return (
     <div className="flex items-center gap-2">
-      <code className="min-w-0 flex-1 truncate rounded-md border bg-muted/40 px-2.5 py-1.5 font-mono text-xs" data-testid="ipad-address">
+      <code className="min-w-0 flex-1 truncate rounded-md border border-(--settings-dialog-address-border) bg-(--settings-dialog-address-surface)/(--settings-dialog-address-surface-opacity) px-2.5 py-1.5 font-mono text-xs" data-testid="ipad-address">
         {address}
       </code>
       <Button
@@ -113,7 +113,7 @@ const PairDialog = ({ open, onClose, onPaired }: { readonly open: boolean; reado
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogPopup className="max-w-[420px]" data-testid="ipad-pair-dialog">
+      <DialogPopup className="max-w-(--ipad-pair-dialog-width)" data-testid="ipad-pair-dialog">
         <DialogHeader>
           <DialogTitle>Pair an iPad</DialogTitle>
         </DialogHeader>
@@ -128,12 +128,12 @@ const PairDialog = ({ open, onClose, onPaired }: { readonly open: boolean; reado
             {started === undefined && error === undefined && <Spinner />}
             {started !== undefined && (
               <>
-                <p className="m-0 text-center text-sm text-muted-foreground">Scan this on the iPad, or open the address and type the code.</p>
-                {image !== undefined && <img src={image} alt="Pairing code" width={220} height={220} className="rounded-lg border" data-testid="ipad-qr" />}
-                <p className="m-0 font-mono text-3xl tracking-[0.3em] text-foreground" data-testid="ipad-code">
+                <p className="m-0 text-center text-sm text-(--ipad-pair-dialog-description)">Scan this on the iPad, or open the address and type the code.</p>
+                {image !== undefined && <img src={image} alt="Pairing code" width={220} height={220} className="rounded-lg border border-(--ipad-pair-dialog-qr-border)" data-testid="ipad-qr" />}
+                <p className="m-0 font-mono text-3xl tracking-[0.3em] text-(--ipad-pair-dialog-code-foreground)" data-testid="ipad-code">
                   {started.code}
                 </p>
-                <p className="m-0 text-xs text-muted-foreground" data-testid="ipad-countdown">
+                <p className="m-0 text-xs text-(--ipad-pair-dialog-description)" data-testid="ipad-countdown">
                   {countdownText(started.expiresAt, now)}
                 </p>
               </>
@@ -182,8 +182,8 @@ const DeviceRow = ({
   };
   return (
     <div className="flex items-center gap-3 text-sm" data-testid="ipad-device">
-      <span className="font-medium text-foreground">{device.name}</span>
-      <span className="min-w-0 flex-1 text-muted-foreground" data-testid="ipad-device-seen">
+      <span className="font-medium text-(--settings-dialog-foreground)">{device.name}</span>
+      <span className="min-w-0 flex-1 text-(--settings-dialog-description)" data-testid="ipad-device-seen">
         {lastUsedText(device.lastSeenAt, now)}
       </span>
       <Button variant={confirming ? "destructive" : "ghost"} size="sm" disabled={busy} onClick={revoke}>
@@ -266,7 +266,7 @@ export const IpadAccess = ({
 
   return (
     <section className="flex flex-col gap-3" data-testid="ipad-section">
-      <p className="m-0 text-sm text-muted-foreground">Draw on this canvas from your iPad over your home Wi-Fi. Only devices you pair can connect.</p>
+      <p className="m-0 text-sm text-(--settings-dialog-description)">Draw on this canvas from your iPad over your home Wi-Fi. Only devices you pair can connect.</p>
       <div className="flex items-center gap-2">
         <Switch id="ipad-access" checked={access} disabled={switching} onCheckedChange={setAccess} />
         <Label htmlFor="ipad-access">iPad access</Label>
@@ -295,7 +295,7 @@ export const IpadAccess = ({
               Pair an iPad
             </Button>
           </div>
-          <ol className="m-0 flex list-decimal flex-col gap-1 pl-5 text-xs text-muted-foreground" data-testid="ipad-steps">
+          <ol className="m-0 flex list-decimal flex-col gap-1 pl-5 text-xs text-(--settings-dialog-description)" data-testid="ipad-steps">
             {SETUP_STEPS.map((step) => (
               <li key={step}>{step}</li>
             ))}

@@ -11,7 +11,7 @@ const Example = ({ defaultOpen, disabled }: { readonly defaultOpen?: boolean; re
         Advanced settings
       </CollapsibleTrigger>
       <CollapsiblePanel>
-        <p className="m-0 px-2 pt-2 text-muted-foreground text-sm">Seed, guidance scale and negative prompt. Leave them empty to use the model's defaults.</p>
+        <p className="m-0 px-2 pt-2 text-(--catalogue-demo-description) text-sm">Seed, guidance scale and negative prompt. Leave them empty to use the model's defaults.</p>
       </CollapsiblePanel>
     </Collapsible>
   </div>

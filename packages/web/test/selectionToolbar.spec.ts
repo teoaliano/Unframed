@@ -1,6 +1,6 @@
 import { centre, emptyCanvasPoint, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { clickShape, expect, selectGroup, test, toolbar } from "./generation.ts";
-import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
+import { expectSlot, expectToken, inBothSchemes, styleOf, tokenColor } from "./kit.ts";
 import { artifactRecord, emptyMedia, groupRecord, inGroup, promptRecord, putRecords } from "./media.ts";
 
 test("a usable selection gets Generate and its count; a named group reads by its name", async ({ page, generation }) => {
@@ -29,8 +29,6 @@ test("a usable selection gets Generate and its count; a named group reads by its
   await expect(toolbar(page).getByTestId("selection-hint")).toHaveText("@character");
 });
 
-const GLASS = "color-mix(in srgb, var(--background) var(--glass-opacity), transparent)";
-
 test("the bar is glass with the kit border and radius; Generate is the kit's primary Button and the hint is muted", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
   await clickShape(page, "shape:starter-subject");
@@ -39,11 +37,11 @@ test("the bar is glass with the kit border and radius; Generate is the kit's pri
   await expectSlot(generate, "button");
   await inBothSchemes(page, async () => {
     await page.mouse.move(5, 500);
-    expect(await styleOf(bar, "background-color")).toBe(await resolvedColor(page, GLASS));
+    expect(await styleOf(bar, "background-color")).toBe(await tokenColor(page, "--selection-toolbar-surface"));
     expect(await styleOf(bar, "border-top-left-radius")).toBe("14px");
-    await expectToken(bar, "border-top-color", "--color-border");
-    await expectToken(generate, "background-color", "--primary");
-    await expectToken(bar.getByTestId("selection-hint"), "color", "--color-muted-foreground");
+    await expectToken(bar, "border-top-color", "--selection-toolbar-border");
+    await expectToken(generate, "background-color", "--button-default-surface");
+    await expectToken(bar.getByTestId("selection-hint"), "color", "--selection-toolbar-hint");
   });
 });
 

@@ -11,7 +11,7 @@ export const CommentToolbarGroup = () => {
       <TldrawUiMenuContextProvider type="toolbar" sourceId="toolbar">
         <span className="relative flex" data-comment-tool-button="" data-unread={unread ? "" : undefined}>
           <ToolbarItem tool={COMMENT_TOOL} />
-          {unread && <span data-comment-tool-unread="" className="pointer-events-none absolute top-1.5 right-1.5 size-2 rounded-full bg-highlight ring-2 ring-popover" />}
+          {unread && <span data-comment-tool-unread="" className="pointer-events-none absolute top-1.5 right-1.5 size-2 rounded-full bg-(--comment-toolbar-indicator) ring-2 ring-(--comment-toolbar-indicator-border)" />}
         </span>
       </TldrawUiMenuContextProvider>
     </TldrawUiToolbar>

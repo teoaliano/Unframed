@@ -60,7 +60,7 @@ const VoiceChip = ({ props, onChange, onMenuOpen }: LeadChipProps) => {
   return (
     <>
       <TrayChip data-testid="voice-chip" onClick={() => setOpenReported(true)}>
-        {voice === undefined ? <span className="text-muted-foreground">Pick a voice</span> : voice.name}
+        {voice === undefined ? <span className="text-(--generate-tray-placeholder)">Pick a voice</span> : voice.name}
       </TrayChip>
       <VoiceDialog open={open} onOpenChange={setOpenReported} current={voice?.id} onPick={(picked) => onChange({ ...props, [VOICE_ID]: picked.id, [VOICE_NAME]: picked.name })} />
     </>
@@ -72,7 +72,7 @@ const RangeControl = ({ prop, value, onChange, labelled = true }: { readonly pro
   return (
     <div className="flex flex-col gap-1.5">
       {labelled && (
-        <label htmlFor={id} className="text-xs font-medium text-foreground">
+        <label htmlFor={id} className="text-xs font-medium text-(--generate-tray-label)">
           {prop.label}
         </label>
       )}
@@ -82,14 +82,14 @@ const RangeControl = ({ prop, value, onChange, labelled = true }: { readonly pro
           id={id}
           type="range"
           aria-label={labelled ? undefined : prop.label}
-          className="min-w-0 flex-1 accent-highlight"
+          className="min-w-0 flex-1 accent-(--generate-tray-range-fill)"
           min={prop.min}
           max={prop.max}
           step={prop.step}
           value={value}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
-        <span className="w-10 shrink-0 text-right text-xs text-muted-foreground tabular-nums" data-testid={`${prop.key}-value`}>
+        <span className="w-10 shrink-0 text-right text-xs text-(--generate-tray-meta) tabular-nums" data-testid={`${prop.key}-value`}>
           {fixed(value)}
         </span>
       </div>
@@ -144,7 +144,7 @@ const deliveryProp = (prop: RangeProp): TrayPropDefinition => {
 const AdvancedRow = ({ label, set, onReset, children }: { readonly label: string; readonly set: boolean; readonly onReset: () => void; readonly children: ReactNode }) => (
   <div className="flex flex-col gap-1.5" data-advanced={label}>
     <div className="flex min-h-6 items-center justify-between gap-2">
-      <span className="text-xs font-medium text-foreground">{label}</span>
+      <span className="text-xs font-medium text-(--generate-tray-label)">{label}</span>
       <Button variant="ghost" size="xs" data-set={set ? "true" : undefined} onClick={onReset} aria-label={`Reset ${label}`}>
         Reset
       </Button>
@@ -166,7 +166,7 @@ const LanguagePicker = ({ languages, value, onChange }: { readonly languages: Au
   return (
     <Combobox items={languages.map((language) => language.id)} value={value ?? null} onValueChange={(next) => typeof next === "string" && onChange(next)} itemToStringLabel={label}>
       <ComboboxTrigger aria-label="Language" render={<SelectButton size="sm" />}>
-        {value === undefined ? <span className="text-placeholder">Model default</span> : label(value)}
+        {value === undefined ? <span className="text-(--generate-tray-placeholder)">Model default</span> : label(value)}
       </ComboboxTrigger>
       <ComboboxPopup aria-label="Languages">
         <ComboboxSearchInput aria-label="Search languages" placeholder="Search languages" />

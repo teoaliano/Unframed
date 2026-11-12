@@ -91,6 +91,7 @@ export const useFloatingPlacement = ({
     paint();
     const observer = new ResizeObserver(() => {
       if (!box.current) return;
+      editor.updateViewportScreenBounds(editor.getContainer());
       box.current = settle(box.current);
       paint();
     });

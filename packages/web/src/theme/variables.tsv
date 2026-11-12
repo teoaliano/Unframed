@@ -1,0 +1,2328 @@
+collection	name	type	light	dark	code
+Primitives	color-alpha/amber-100/80	COLOR	#fef3c6cc		color-mix(in srgb, var(--color-amber-100) 80%, transparent)
+Primitives	color-alpha/amber-300/70	COLOR	#ffd230b2		color-mix(in srgb, var(--color-amber-300) 70%, transparent)
+Primitives	color-alpha/amber-500/12	COLOR	#fe9a001f		color-mix(in srgb, var(--color-amber-500) 12%, transparent)
+Primitives	color-alpha/amber-500/16	COLOR	#fe9a0029		color-mix(in srgb, var(--color-amber-500) 16%, transparent)
+Primitives	color-alpha/amber-500/32	COLOR	#fe9a0052		color-mix(in srgb, var(--color-amber-500) 32%, transparent)
+Primitives	color-alpha/black/10	COLOR	#0000001a		color-mix(in srgb, var(--color-black) 10%, transparent)
+Primitives	color-alpha/black/15	COLOR	#00000026		color-mix(in srgb, var(--color-black) 15%, transparent)
+Primitives	color-alpha/black/25	COLOR	#00000040		color-mix(in srgb, var(--color-black) 25%, transparent)
+Primitives	color-alpha/black/30	COLOR	#0000004d		color-mix(in srgb, var(--color-black) 30%, transparent)
+Primitives	color-alpha/black/4	COLOR	#0000000a		color-mix(in srgb, var(--color-black) 4%, transparent)
+Primitives	color-alpha/black/40	COLOR	#00000066		color-mix(in srgb, var(--color-black) 40%, transparent)
+Primitives	color-alpha/black/5	COLOR	#0000000d		color-mix(in srgb, var(--color-black) 5%, transparent)
+Primitives	color-alpha/black/50	COLOR	#00000080		color-mix(in srgb, var(--color-black) 50%, transparent)
+Primitives	color-alpha/black/6	COLOR	#0000000f		color-mix(in srgb, var(--color-black) 6%, transparent)
+Primitives	color-alpha/black/65	COLOR	#000000a6		color-mix(in srgb, var(--color-black) 65%, transparent)
+Primitives	color-alpha/black/70	COLOR	#000000b2		color-mix(in srgb, var(--color-black) 70%, transparent)
+Primitives	color-alpha/black/8	COLOR	#00000014		color-mix(in srgb, var(--color-black) 8%, transparent)
+Primitives	color-alpha/blue-500/16	COLOR	#2b7fff29		color-mix(in srgb, var(--color-blue-500) 16%, transparent)
+Primitives	color-alpha/blue-500/8	COLOR	#2b7fff14		color-mix(in srgb, var(--color-blue-500) 8%, transparent)
+Primitives	color-alpha/emerald-500/16	COLOR	#00bc7d29		color-mix(in srgb, var(--color-emerald-500) 16%, transparent)
+Primitives	color-alpha/emerald-500/8	COLOR	#00bc7d14		color-mix(in srgb, var(--color-emerald-500) 8%, transparent)
+Primitives	color-alpha/neutral-100/72	COLOR	#f5f5f5b8		color-mix(in srgb, var(--color-neutral-100) 72%, transparent)
+Primitives	color-alpha/neutral-100/80	COLOR	#f5f5f5cc		color-mix(in srgb, var(--color-neutral-100) 80%, transparent)
+Primitives	color-alpha/neutral-50/24	COLOR	#fafafa3d		color-mix(in srgb, var(--color-neutral-50) 24%, transparent)
+Primitives	color-alpha/neutral-900/24	COLOR	#1717173d		color-mix(in srgb, var(--color-neutral-900) 24%, transparent)
+Primitives	color-alpha/neutral-950/12	COLOR	#0a0a0a1f		color-mix(in srgb, var(--color-neutral-950) 12%, transparent)
+Primitives	color-alpha/neutral-950/16	COLOR	#0a0a0a29		color-mix(in srgb, var(--color-neutral-950) 16%, transparent)
+Primitives	color-alpha/neutral-950/60	COLOR	#0a0a0a99		color-mix(in srgb, var(--color-neutral-950) 60%, transparent)
+Primitives	color-alpha/red-400/25	COLOR	#ff646740		color-mix(in srgb, var(--color-red-400) 25%, transparent)
+Primitives	color-alpha/red-400/70	COLOR	#ff6467b2		color-mix(in srgb, var(--color-red-400) 70%, transparent)
+Primitives	color-alpha/red-500/16	COLOR	#fb2c3629		color-mix(in srgb, var(--color-red-500) 16%, transparent)
+Primitives	color-alpha/red-500/24	COLOR	#fb2c363d		color-mix(in srgb, var(--color-red-500) 24%, transparent)
+Primitives	color-alpha/red-500/30	COLOR	#fb2c364d		color-mix(in srgb, var(--color-red-500) 30%, transparent)
+Primitives	color-alpha/red-500/35	COLOR	#fb2c3659		color-mix(in srgb, var(--color-red-500) 35%, transparent)
+Primitives	color-alpha/red-600/35	COLOR	#e7000b59		color-mix(in srgb, var(--color-red-600) 35%, transparent)
+Primitives	color-alpha/sky-300/24	COLOR	#74d4ff3d		color-mix(in srgb, var(--color-sky-300) 24%, transparent)
+Primitives	color-alpha/sky-300/70	COLOR	#74d4ffb2		color-mix(in srgb, var(--color-sky-300) 70%, transparent)
+Primitives	color-alpha/sky-400/30	COLOR	#00bcff4d		color-mix(in srgb, var(--color-sky-400) 30%, transparent)
+Primitives	color-alpha/sky-400/70	COLOR	#00bcffb2		color-mix(in srgb, var(--color-sky-400) 70%, transparent)
+Primitives	color-alpha/sky-500/35	COLOR	#00a6f459		color-mix(in srgb, var(--color-sky-500) 35%, transparent)
+Primitives	color-alpha/sky-600/24	COLOR	#0084d13d		color-mix(in srgb, var(--color-sky-600) 24%, transparent)
+Primitives	color-alpha/sky-600/35	COLOR	#0084d159		color-mix(in srgb, var(--color-sky-600) 35%, transparent)
+Primitives	color-alpha/white/0	COLOR	#ffffff00		color-mix(in srgb, var(--color-white) 0%, transparent)
+Primitives	color-alpha/white/10	COLOR	#ffffff1a		color-mix(in srgb, var(--color-white) 10%, transparent)
+Primitives	color-alpha/white/12	COLOR	#ffffff1f		color-mix(in srgb, var(--color-white) 12%, transparent)
+Primitives	color-alpha/white/15	COLOR	#ffffff26		color-mix(in srgb, var(--color-white) 15%, transparent)
+Primitives	color-alpha/white/16	COLOR	#ffffff29		color-mix(in srgb, var(--color-white) 16%, transparent)
+Primitives	color-alpha/white/20	COLOR	#ffffff33		color-mix(in srgb, var(--color-white) 20%, transparent)
+Primitives	color-alpha/white/25	COLOR	#ffffff40		color-mix(in srgb, var(--color-white) 25%, transparent)
+Primitives	color-alpha/white/30	COLOR	#ffffff4d		color-mix(in srgb, var(--color-white) 30%, transparent)
+Primitives	color-alpha/white/4	COLOR	#ffffff0a		color-mix(in srgb, var(--color-white) 4%, transparent)
+Primitives	color-alpha/white/55	COLOR	#ffffff8c		color-mix(in srgb, var(--color-white) 55%, transparent)
+Primitives	color-alpha/white/6	COLOR	#ffffff0f		color-mix(in srgb, var(--color-white) 6%, transparent)
+Primitives	color-alpha/white/60	COLOR	#ffffff99		color-mix(in srgb, var(--color-white) 60%, transparent)
+Primitives	color-alpha/white/65	COLOR	#ffffffa6		color-mix(in srgb, var(--color-white) 65%, transparent)
+Primitives	color-alpha/white/70	COLOR	#ffffffb2		color-mix(in srgb, var(--color-white) 70%, transparent)
+Primitives	color-alpha/white/75	COLOR	#ffffffbf		color-mix(in srgb, var(--color-white) 75%, transparent)
+Primitives	color-alpha/white/8	COLOR	#ffffff14		color-mix(in srgb, var(--color-white) 8%, transparent)
+Primitives	color-alpha/white/80	COLOR	#ffffffcc		color-mix(in srgb, var(--color-white) 80%, transparent)
+Primitives	color-alpha/white/90	COLOR	#ffffffe5		color-mix(in srgb, var(--color-white) 90%, transparent)
+Primitives	color-alpha/zinc-800/72	COLOR	#27272ab8		color-mix(in srgb, var(--color-zinc-800) 72%, transparent)
+Primitives	color-alpha/zinc-800/80	COLOR	#27272acc		color-mix(in srgb, var(--color-zinc-800) 80%, transparent)
+Primitives	color/amber/100	COLOR	#fef3c6		
+Primitives	color/amber/200	COLOR	#fee685		
+Primitives	color/amber/300	COLOR	#ffd230		
+Primitives	color/amber/400	COLOR	#ffb900		
+Primitives	color/amber/50	COLOR	#fffbeb		
+Primitives	color/amber/500	COLOR	#fe9a00		
+Primitives	color/amber/600	COLOR	#e17100		
+Primitives	color/amber/700	COLOR	#bb4d00		
+Primitives	color/amber/800	COLOR	#973c00		
+Primitives	color/amber/900	COLOR	#7b3306		
+Primitives	color/amber/950	COLOR	#461901		
+Primitives	color/black	COLOR	#000000		
+Primitives	color/blue/100	COLOR	#dbeafe		
+Primitives	color/blue/200	COLOR	#bedbff		
+Primitives	color/blue/300	COLOR	#8ec5ff		
+Primitives	color/blue/400	COLOR	#51a2ff		
+Primitives	color/blue/50	COLOR	#eff6ff		
+Primitives	color/blue/500	COLOR	#2b7fff		
+Primitives	color/blue/600	COLOR	#155dfc		
+Primitives	color/blue/700	COLOR	#1447e6		
+Primitives	color/blue/800	COLOR	#193cb8		
+Primitives	color/blue/900	COLOR	#1c398e		
+Primitives	color/blue/950	COLOR	#162456		
+Primitives	color/cyan/100	COLOR	#cefafe		
+Primitives	color/cyan/200	COLOR	#a2f4fd		
+Primitives	color/cyan/300	COLOR	#53eafd		
+Primitives	color/cyan/400	COLOR	#00d3f2		
+Primitives	color/cyan/50	COLOR	#ecfeff		
+Primitives	color/cyan/500	COLOR	#00b8db		
+Primitives	color/cyan/600	COLOR	#0092b8		
+Primitives	color/cyan/700	COLOR	#007595		
+Primitives	color/cyan/800	COLOR	#005f78		
+Primitives	color/cyan/900	COLOR	#104e64		
+Primitives	color/cyan/950	COLOR	#053345		
+Primitives	color/emerald/100	COLOR	#d0fae5		
+Primitives	color/emerald/200	COLOR	#a4f4cf		
+Primitives	color/emerald/300	COLOR	#5ee9b5		
+Primitives	color/emerald/400	COLOR	#00d492		
+Primitives	color/emerald/50	COLOR	#ecfdf5		
+Primitives	color/emerald/500	COLOR	#00bc7d		
+Primitives	color/emerald/600	COLOR	#009966		
+Primitives	color/emerald/700	COLOR	#007a55		
+Primitives	color/emerald/800	COLOR	#006045		
+Primitives	color/emerald/900	COLOR	#004f3b		
+Primitives	color/emerald/950	COLOR	#002c22		
+Primitives	color/fuchsia/100	COLOR	#fae8ff		
+Primitives	color/fuchsia/200	COLOR	#f6cfff		
+Primitives	color/fuchsia/300	COLOR	#f4a8ff		
+Primitives	color/fuchsia/400	COLOR	#ed6aff		
+Primitives	color/fuchsia/50	COLOR	#fdf4ff		
+Primitives	color/fuchsia/500	COLOR	#e12afb		
+Primitives	color/fuchsia/600	COLOR	#c800de		
+Primitives	color/fuchsia/700	COLOR	#a800b7		
+Primitives	color/fuchsia/800	COLOR	#8a0194		
+Primitives	color/fuchsia/900	COLOR	#721378		
+Primitives	color/fuchsia/950	COLOR	#4b004f		
+Primitives	color/gray/100	COLOR	#f3f4f6		
+Primitives	color/gray/200	COLOR	#e5e7eb		
+Primitives	color/gray/300	COLOR	#d1d5dc		
+Primitives	color/gray/400	COLOR	#99a1af		
+Primitives	color/gray/50	COLOR	#f9fafb		
+Primitives	color/gray/500	COLOR	#6a7282		
+Primitives	color/gray/600	COLOR	#4a5565		
+Primitives	color/gray/700	COLOR	#364153		
+Primitives	color/gray/800	COLOR	#1e2939		
+Primitives	color/gray/900	COLOR	#101828		
+Primitives	color/gray/950	COLOR	#030712		
+Primitives	color/green/100	COLOR	#dcfce7		
+Primitives	color/green/200	COLOR	#b9f8cf		
+Primitives	color/green/300	COLOR	#7bf1a8		
+Primitives	color/green/400	COLOR	#05df72		
+Primitives	color/green/50	COLOR	#f0fdf4		
+Primitives	color/green/500	COLOR	#00c950		
+Primitives	color/green/600	COLOR	#00a63e		
+Primitives	color/green/700	COLOR	#008236		
+Primitives	color/green/800	COLOR	#016630		
+Primitives	color/green/900	COLOR	#0d542b		
+Primitives	color/green/950	COLOR	#032e15		
+Primitives	color/indigo/100	COLOR	#e0e7ff		
+Primitives	color/indigo/200	COLOR	#c6d2ff		
+Primitives	color/indigo/300	COLOR	#a3b3ff		
+Primitives	color/indigo/400	COLOR	#7c86ff		
+Primitives	color/indigo/50	COLOR	#eef2ff		
+Primitives	color/indigo/500	COLOR	#615fff		
+Primitives	color/indigo/600	COLOR	#4f39f6		
+Primitives	color/indigo/700	COLOR	#432dd7		
+Primitives	color/indigo/800	COLOR	#372aac		
+Primitives	color/indigo/900	COLOR	#312c85		
+Primitives	color/indigo/950	COLOR	#1e1a4d		
+Primitives	color/lime/100	COLOR	#ecfcca		
+Primitives	color/lime/200	COLOR	#d8f999		
+Primitives	color/lime/300	COLOR	#bbf451		
+Primitives	color/lime/400	COLOR	#9ae600		
+Primitives	color/lime/50	COLOR	#f7fee7		
+Primitives	color/lime/500	COLOR	#7ccf00		
+Primitives	color/lime/600	COLOR	#5ea500		
+Primitives	color/lime/700	COLOR	#497d00		
+Primitives	color/lime/800	COLOR	#3c6300		
+Primitives	color/lime/900	COLOR	#35530e		
+Primitives	color/lime/950	COLOR	#192e03		
+Primitives	color/mauve/100	COLOR	#f3f1f3		
+Primitives	color/mauve/200	COLOR	#e7e4e7		
+Primitives	color/mauve/300	COLOR	#d7d0d7		
+Primitives	color/mauve/400	COLOR	#a89ea9		
+Primitives	color/mauve/50	COLOR	#fafafa		
+Primitives	color/mauve/500	COLOR	#79697b		
+Primitives	color/mauve/600	COLOR	#594c5b		
+Primitives	color/mauve/700	COLOR	#463947		
+Primitives	color/mauve/800	COLOR	#2a212c		
+Primitives	color/mauve/900	COLOR	#1d161e		
+Primitives	color/mauve/950	COLOR	#0c090c		
+Primitives	color/mist/100	COLOR	#f1f3f3		
+Primitives	color/mist/200	COLOR	#e3e7e8		
+Primitives	color/mist/300	COLOR	#d0d6d8		
+Primitives	color/mist/400	COLOR	#9ca8ab		
+Primitives	color/mist/50	COLOR	#f9fbfb		
+Primitives	color/mist/500	COLOR	#67787c		
+Primitives	color/mist/600	COLOR	#4b585b		
+Primitives	color/mist/700	COLOR	#394447		
+Primitives	color/mist/800	COLOR	#22292b		
+Primitives	color/mist/900	COLOR	#161b1d		
+Primitives	color/mist/950	COLOR	#090b0c		
+Primitives	color/neutral/100	COLOR	#f5f5f5		
+Primitives	color/neutral/200	COLOR	#e5e5e5		
+Primitives	color/neutral/300	COLOR	#d4d4d4		
+Primitives	color/neutral/400	COLOR	#a1a1a1		
+Primitives	color/neutral/50	COLOR	#fafafa		
+Primitives	color/neutral/500	COLOR	#737373		
+Primitives	color/neutral/600	COLOR	#525252		
+Primitives	color/neutral/700	COLOR	#404040		
+Primitives	color/neutral/800	COLOR	#262626		
+Primitives	color/neutral/900	COLOR	#171717		
+Primitives	color/neutral/950	COLOR	#0a0a0a		
+Primitives	color/olive/100	COLOR	#f4f4f0		
+Primitives	color/olive/200	COLOR	#e8e8e3		
+Primitives	color/olive/300	COLOR	#d8d8d0		
+Primitives	color/olive/400	COLOR	#abab9c		
+Primitives	color/olive/50	COLOR	#fbfbf9		
+Primitives	color/olive/500	COLOR	#7c7c67		
+Primitives	color/olive/600	COLOR	#5b5b4b		
+Primitives	color/olive/700	COLOR	#474739		
+Primitives	color/olive/800	COLOR	#2b2b22		
+Primitives	color/olive/900	COLOR	#1d1d16		
+Primitives	color/olive/950	COLOR	#0c0c09		
+Primitives	color/orange/100	COLOR	#ffedd4		
+Primitives	color/orange/200	COLOR	#ffd6a7		
+Primitives	color/orange/300	COLOR	#ffb86a		
+Primitives	color/orange/400	COLOR	#ff8904		
+Primitives	color/orange/50	COLOR	#fff7ed		
+Primitives	color/orange/500	COLOR	#ff6900		
+Primitives	color/orange/600	COLOR	#f54900		
+Primitives	color/orange/700	COLOR	#ca3500		
+Primitives	color/orange/800	COLOR	#9f2d00		
+Primitives	color/orange/900	COLOR	#7e2a0c		
+Primitives	color/orange/950	COLOR	#441306		
+Primitives	color/os/macos-close	COLOR	#ff5f57		
+Primitives	color/os/macos-minimize	COLOR	#febc2e		
+Primitives	color/os/macos-zoom	COLOR	#28c840		
+Primitives	color/os/windows-close-hover	COLOR	#c42b1c		
+Primitives	color/pink/100	COLOR	#fce7f3		
+Primitives	color/pink/200	COLOR	#fccee8		
+Primitives	color/pink/300	COLOR	#fda5d5		
+Primitives	color/pink/400	COLOR	#fb64b6		
+Primitives	color/pink/50	COLOR	#fdf2f8		
+Primitives	color/pink/500	COLOR	#f6339a		
+Primitives	color/pink/600	COLOR	#e60076		
+Primitives	color/pink/700	COLOR	#c6005c		
+Primitives	color/pink/800	COLOR	#a3004c		
+Primitives	color/pink/900	COLOR	#861043		
+Primitives	color/pink/950	COLOR	#510424		
+Primitives	color/purple/100	COLOR	#f3e8ff		
+Primitives	color/purple/200	COLOR	#e9d4ff		
+Primitives	color/purple/300	COLOR	#dab2ff		
+Primitives	color/purple/400	COLOR	#c27aff		
+Primitives	color/purple/50	COLOR	#faf5ff		
+Primitives	color/purple/500	COLOR	#ad46ff		
+Primitives	color/purple/600	COLOR	#9810fa		
+Primitives	color/purple/700	COLOR	#8200db		
+Primitives	color/purple/800	COLOR	#6e11b0		
+Primitives	color/purple/900	COLOR	#59168b		
+Primitives	color/purple/950	COLOR	#3c0366		
+Primitives	color/red/100	COLOR	#ffe2e2		
+Primitives	color/red/200	COLOR	#ffc9c9		
+Primitives	color/red/300	COLOR	#ffa2a2		
+Primitives	color/red/400	COLOR	#ff6467		
+Primitives	color/red/50	COLOR	#fef2f2		
+Primitives	color/red/500	COLOR	#fb2c36		
+Primitives	color/red/600	COLOR	#e7000b		
+Primitives	color/red/700	COLOR	#c10007		
+Primitives	color/red/800	COLOR	#9f0712		
+Primitives	color/red/900	COLOR	#82181a		
+Primitives	color/red/950	COLOR	#460809		
+Primitives	color/rose/100	COLOR	#ffe4e6		
+Primitives	color/rose/200	COLOR	#ffccd3		
+Primitives	color/rose/300	COLOR	#ffa1ad		
+Primitives	color/rose/400	COLOR	#ff637e		
+Primitives	color/rose/50	COLOR	#fff1f2		
+Primitives	color/rose/500	COLOR	#ff2056		
+Primitives	color/rose/600	COLOR	#ec003f		
+Primitives	color/rose/700	COLOR	#c70036		
+Primitives	color/rose/800	COLOR	#a50036		
+Primitives	color/rose/900	COLOR	#8b0836		
+Primitives	color/rose/950	COLOR	#4d0218		
+Primitives	color/sky/100	COLOR	#dff2fe		
+Primitives	color/sky/200	COLOR	#b8e6fe		
+Primitives	color/sky/300	COLOR	#74d4ff		
+Primitives	color/sky/400	COLOR	#00bcff		
+Primitives	color/sky/50	COLOR	#f0f9ff		
+Primitives	color/sky/500	COLOR	#00a6f4		
+Primitives	color/sky/600	COLOR	#0084d1		
+Primitives	color/sky/700	COLOR	#0069a8		
+Primitives	color/sky/800	COLOR	#00598a		
+Primitives	color/sky/900	COLOR	#024a70		
+Primitives	color/sky/950	COLOR	#052f4a		
+Primitives	color/slate/100	COLOR	#f1f5f9		
+Primitives	color/slate/200	COLOR	#e2e8f0		
+Primitives	color/slate/300	COLOR	#cad5e2		
+Primitives	color/slate/400	COLOR	#90a1b9		
+Primitives	color/slate/50	COLOR	#f8fafc		
+Primitives	color/slate/500	COLOR	#62748e		
+Primitives	color/slate/600	COLOR	#45556c		
+Primitives	color/slate/700	COLOR	#314158		
+Primitives	color/slate/800	COLOR	#1d293d		
+Primitives	color/slate/900	COLOR	#0f172b		
+Primitives	color/slate/950	COLOR	#020618		
+Primitives	color/stone/100	COLOR	#f5f5f4		
+Primitives	color/stone/200	COLOR	#e7e5e4		
+Primitives	color/stone/300	COLOR	#d6d3d1		
+Primitives	color/stone/400	COLOR	#a6a09b		
+Primitives	color/stone/50	COLOR	#fafaf9		
+Primitives	color/stone/500	COLOR	#79716b		
+Primitives	color/stone/600	COLOR	#57534d		
+Primitives	color/stone/700	COLOR	#44403b		
+Primitives	color/stone/800	COLOR	#292524		
+Primitives	color/stone/900	COLOR	#1c1917		
+Primitives	color/stone/950	COLOR	#0c0a09		
+Primitives	color/taupe/100	COLOR	#f3f1f1		
+Primitives	color/taupe/200	COLOR	#e8e4e3		
+Primitives	color/taupe/300	COLOR	#d8d2d0		
+Primitives	color/taupe/400	COLOR	#aba09c		
+Primitives	color/taupe/50	COLOR	#fbfaf9		
+Primitives	color/taupe/500	COLOR	#7c6d67		
+Primitives	color/taupe/600	COLOR	#5b4f4b		
+Primitives	color/taupe/700	COLOR	#473c39		
+Primitives	color/taupe/800	COLOR	#2b2422		
+Primitives	color/taupe/900	COLOR	#1d1816		
+Primitives	color/taupe/950	COLOR	#0c0a09		
+Primitives	color/teal/100	COLOR	#cbfbf1		
+Primitives	color/teal/200	COLOR	#96f7e4		
+Primitives	color/teal/300	COLOR	#46ecd5		
+Primitives	color/teal/400	COLOR	#00d5be		
+Primitives	color/teal/50	COLOR	#f0fdfa		
+Primitives	color/teal/500	COLOR	#00bba7		
+Primitives	color/teal/600	COLOR	#009689		
+Primitives	color/teal/700	COLOR	#00786f		
+Primitives	color/teal/800	COLOR	#005f5a		
+Primitives	color/teal/900	COLOR	#0b4f4a		
+Primitives	color/teal/950	COLOR	#022f2e		
+Primitives	color/violet/100	COLOR	#ede9fe		
+Primitives	color/violet/200	COLOR	#ddd6ff		
+Primitives	color/violet/300	COLOR	#c4b4ff		
+Primitives	color/violet/400	COLOR	#a684ff		
+Primitives	color/violet/50	COLOR	#f5f3ff		
+Primitives	color/violet/500	COLOR	#8e51ff		
+Primitives	color/violet/600	COLOR	#7f22fe		
+Primitives	color/violet/700	COLOR	#7008e7		
+Primitives	color/violet/800	COLOR	#5d0ec0		
+Primitives	color/violet/900	COLOR	#4d179a		
+Primitives	color/violet/950	COLOR	#2f0d68		
+Primitives	color/white	COLOR	#ffffff		
+Primitives	color/yellow/100	COLOR	#fef9c2		
+Primitives	color/yellow/200	COLOR	#fff085		
+Primitives	color/yellow/300	COLOR	#ffdf20		
+Primitives	color/yellow/400	COLOR	#fdc700		
+Primitives	color/yellow/50	COLOR	#fefce8		
+Primitives	color/yellow/500	COLOR	#f0b100		
+Primitives	color/yellow/600	COLOR	#d08700		
+Primitives	color/yellow/700	COLOR	#a65f00		
+Primitives	color/yellow/800	COLOR	#894b00		
+Primitives	color/yellow/900	COLOR	#733e0a		
+Primitives	color/yellow/950	COLOR	#432004		
+Primitives	color/zinc/100	COLOR	#f4f4f5		
+Primitives	color/zinc/200	COLOR	#e4e4e7		
+Primitives	color/zinc/25	COLOR	#fcfcfc		
+Primitives	color/zinc/300	COLOR	#d4d4d8		
+Primitives	color/zinc/400	COLOR	#9f9fa9		
+Primitives	color/zinc/50	COLOR	#fafafa		
+Primitives	color/zinc/500	COLOR	#71717b		
+Primitives	color/zinc/600	COLOR	#52525c		
+Primitives	color/zinc/700	COLOR	#3f3f46		
+Primitives	color/zinc/800	COLOR	#27272a		
+Primitives	color/zinc/900	COLOR	#18181b		
+Primitives	color/zinc/950	COLOR	#09090b		
+Tokens	blur/none	FLOAT	0		0
+Tokens	blur/xs	FLOAT	4		
+Tokens	border-width/1	FLOAT	1		1px
+Tokens	border-width/2	FLOAT	2		2px
+Tokens	border-width/3	FLOAT	3		3px
+Tokens	duration/default	FLOAT	150		
+Tokens	duration/live-tool-shine	FLOAT	2200		
+Tokens	duration/skeleton	FLOAT	2400		
+Tokens	duration/spin	FLOAT	1000		
+Tokens	duration/stash-pulse	FLOAT	1400		
+Tokens	duration/status-pulse	FLOAT	2000		
+Tokens	ease/drawer	STRING	cubic-bezier(0.32, 0.72, 0, 1)		
+Tokens	ease/in	STRING	cubic-bezier(0.4, 0, 1, 1)		
+Tokens	ease/in-out	STRING	cubic-bezier(0.4, 0, 0.2, 1)		
+Tokens	ease/out	STRING	cubic-bezier(0, 0, 0.2, 1)		
+Tokens	font-family/mono	STRING	SF Mono		var(--font-mono)
+Tokens	font-family/sans	STRING	SF Pro		var(--font-sans)
+Tokens	font-family/serif	STRING	Georgia		var(--font-serif)
+Tokens	font-size/2xl	FLOAT	24		var(--text-2xl)
+Tokens	font-size/2xs	FLOAT	11		var(--text-2xs)
+Tokens	font-size/3xl	FLOAT	30		var(--text-3xl)
+Tokens	font-size/3xs	FLOAT	10		var(--text-3xs)
+Tokens	font-size/4xs	FLOAT	8		var(--text-4xs)
+Tokens	font-size/5xs	FLOAT	7		var(--text-5xs)
+Tokens	font-size/base	FLOAT	16		var(--text-base)
+Tokens	font-size/lg	FLOAT	18		var(--text-lg)
+Tokens	font-size/sm	FLOAT	14		var(--text-sm)
+Tokens	font-size/xl	FLOAT	20		var(--text-xl)
+Tokens	font-size/xs	FLOAT	12		var(--text-xs)
+Tokens	font-weight/bold	FLOAT	700		
+Tokens	font-weight/medium	FLOAT	500		
+Tokens	font-weight/normal	FLOAT	400		
+Tokens	font-weight/semibold	FLOAT	600		
+Tokens	line-height/3_5	FLOAT	14		calc(var(--spacing) * 3.5)
+Tokens	line-height/4	FLOAT	16		calc(var(--spacing) * 4)
+Tokens	line-height/4_5	FLOAT	18		calc(var(--spacing) * 4.5)
+Tokens	line-height/5	FLOAT	20		calc(var(--spacing) * 5)
+Tokens	line-height/6	FLOAT	24		calc(var(--spacing) * 6)
+Tokens	line-height/6_5	FLOAT	26		calc(var(--spacing) * 6.5)
+Tokens	line-height/7	FLOAT	28		calc(var(--spacing) * 7)
+Tokens	line-height/7_5	FLOAT	30		calc(var(--spacing) * 7.5)
+Tokens	line-height/8	FLOAT	32		calc(var(--spacing) * 8)
+Tokens	line-height/8_5	FLOAT	34		calc(var(--spacing) * 8.5)
+Tokens	line-height/9_5	FLOAT	38		calc(var(--spacing) * 9.5)
+Tokens	line-height/none	FLOAT	100		1
+Tokens	opacity/0	FLOAT	0		0%
+Tokens	opacity/10	FLOAT	10		10%
+Tokens	opacity/100	FLOAT	100		100%
+Tokens	opacity/12	FLOAT	12		12%
+Tokens	opacity/16	FLOAT	16		16%
+Tokens	opacity/20	FLOAT	20		20%
+Tokens	opacity/24	FLOAT	24		24%
+Tokens	opacity/28	FLOAT	28		28%
+Tokens	opacity/3	FLOAT	3		3%
+Tokens	opacity/30	FLOAT	30		30%
+Tokens	opacity/32	FLOAT	32		32%
+Tokens	opacity/35	FLOAT	35		35%
+Tokens	opacity/36	FLOAT	36		36%
+Tokens	opacity/4	FLOAT	4		4%
+Tokens	opacity/40	FLOAT	40		40%
+Tokens	opacity/45	FLOAT	45		45%
+Tokens	opacity/5	FLOAT	5		5%
+Tokens	opacity/50	FLOAT	50		50%
+Tokens	opacity/55	FLOAT	55		55%
+Tokens	opacity/6	FLOAT	6		6%
+Tokens	opacity/60	FLOAT	60		60%
+Tokens	opacity/64	FLOAT	64		64%
+Tokens	opacity/65	FLOAT	65		65%
+Tokens	opacity/70	FLOAT	70		70%
+Tokens	opacity/72	FLOAT	72		72%
+Tokens	opacity/75	FLOAT	75		75%
+Tokens	opacity/8	FLOAT	8		8%
+Tokens	opacity/80	FLOAT	80		80%
+Tokens	opacity/85	FLOAT	85		85%
+Tokens	opacity/90	FLOAT	90		90%
+Tokens	opacity/disabled	FLOAT	{opacity/64}		64%
+Tokens	radius/2xl	FLOAT	18		
+Tokens	radius/3xl	FLOAT	22		
+Tokens	radius/default	FLOAT	4		0.25rem
+Tokens	radius/full	FLOAT	9999		calc(infinity * 1px)
+Tokens	radius/lg	FLOAT	10		
+Tokens	radius/md	FLOAT	8		
+Tokens	radius/none	FLOAT	0		0
+Tokens	radius/sm	FLOAT	6		
+Tokens	radius/xl	FLOAT	14		
+Tokens	radius/xs	FLOAT	2		
+Tokens	shadow/lg/1/blur	FLOAT	15		
+Tokens	shadow/lg/1/color	COLOR	#0000001a		
+Tokens	shadow/lg/1/spread	FLOAT	-3		
+Tokens	shadow/lg/1/x	FLOAT	0		
+Tokens	shadow/lg/1/y	FLOAT	10		
+Tokens	shadow/lg/2/blur	FLOAT	6		
+Tokens	shadow/lg/2/color	COLOR	#0000001a		
+Tokens	shadow/lg/2/spread	FLOAT	-4		
+Tokens	shadow/lg/2/x	FLOAT	0		
+Tokens	shadow/lg/2/y	FLOAT	4		
+Tokens	shadow/md/1/blur	FLOAT	6		
+Tokens	shadow/md/1/color	COLOR	#0000001a		
+Tokens	shadow/md/1/spread	FLOAT	-1		
+Tokens	shadow/md/1/x	FLOAT	0		
+Tokens	shadow/md/1/y	FLOAT	4		
+Tokens	shadow/md/2/blur	FLOAT	4		
+Tokens	shadow/md/2/color	COLOR	#0000001a		
+Tokens	shadow/md/2/spread	FLOAT	-2		
+Tokens	shadow/md/2/x	FLOAT	0		
+Tokens	shadow/md/2/y	FLOAT	2		
+Tokens	shadow/sm/1/blur	FLOAT	3		
+Tokens	shadow/sm/1/color	COLOR	#0000001a		
+Tokens	shadow/sm/1/spread	FLOAT	0		
+Tokens	shadow/sm/1/x	FLOAT	0		
+Tokens	shadow/sm/1/y	FLOAT	1		
+Tokens	shadow/sm/2/blur	FLOAT	2		
+Tokens	shadow/sm/2/color	COLOR	#0000001a		
+Tokens	shadow/sm/2/spread	FLOAT	-1		
+Tokens	shadow/sm/2/x	FLOAT	0		
+Tokens	shadow/sm/2/y	FLOAT	1		
+Tokens	shadow/xl/1/blur	FLOAT	25		
+Tokens	shadow/xl/1/color	COLOR	#0000001a		
+Tokens	shadow/xl/1/spread	FLOAT	-5		
+Tokens	shadow/xl/1/x	FLOAT	0		
+Tokens	shadow/xl/1/y	FLOAT	20		
+Tokens	shadow/xl/2/blur	FLOAT	10		
+Tokens	shadow/xl/2/color	COLOR	#0000001a		
+Tokens	shadow/xl/2/spread	FLOAT	-6		
+Tokens	shadow/xl/2/x	FLOAT	0		
+Tokens	shadow/xl/2/y	FLOAT	8		
+Tokens	shadow/xs/blur	FLOAT	2		
+Tokens	shadow/xs/color	COLOR	#0000000d		
+Tokens	shadow/xs/spread	FLOAT	0		
+Tokens	shadow/xs/x	FLOAT	0		
+Tokens	shadow/xs/y	FLOAT	1		
+Tokens	size/0	FLOAT	0		calc(var(--spacing) * 0)
+Tokens	size/0_5	FLOAT	2		calc(var(--spacing) * 0.5)
+Tokens	size/1	FLOAT	4		calc(var(--spacing) * 1)
+Tokens	size/1_5	FLOAT	6		calc(var(--spacing) * 1.5)
+Tokens	size/10	FLOAT	40		calc(var(--spacing) * 10)
+Tokens	size/104	FLOAT	416		calc(var(--spacing) * 104)
+Tokens	size/105	FLOAT	420		calc(var(--spacing) * 105)
+Tokens	size/11	FLOAT	44		calc(var(--spacing) * 11)
+Tokens	size/12	FLOAT	48		calc(var(--spacing) * 12)
+Tokens	size/120	FLOAT	480		calc(var(--spacing) * 120)
+Tokens	size/13	FLOAT	52		calc(var(--spacing) * 13)
+Tokens	size/136	FLOAT	544		calc(var(--spacing) * 136)
+Tokens	size/14	FLOAT	56		calc(var(--spacing) * 14)
+Tokens	size/15	FLOAT	60		calc(var(--spacing) * 15)
+Tokens	size/16	FLOAT	64		calc(var(--spacing) * 16)
+Tokens	size/16_5	FLOAT	66		calc(var(--spacing) * 16.5)
+Tokens	size/17_5	FLOAT	70		calc(var(--spacing) * 17.5)
+Tokens	size/18	FLOAT	72		calc(var(--spacing) * 18)
+Tokens	size/18_5	FLOAT	74		calc(var(--spacing) * 18.5)
+Tokens	size/19_5	FLOAT	78		calc(var(--spacing) * 19.5)
+Tokens	size/2	FLOAT	8		calc(var(--spacing) * 2)
+Tokens	size/2_5	FLOAT	10		calc(var(--spacing) * 2.5)
+Tokens	size/20	FLOAT	80		calc(var(--spacing) * 20)
+Tokens	size/20_5	FLOAT	82		calc(var(--spacing) * 20.5)
+Tokens	size/21_5	FLOAT	86		calc(var(--spacing) * 21.5)
+Tokens	size/24	FLOAT	96		calc(var(--spacing) * 24)
+Tokens	size/27	FLOAT	108		calc(var(--spacing) * 27)
+Tokens	size/28	FLOAT	112		calc(var(--spacing) * 28)
+Tokens	size/3	FLOAT	12		calc(var(--spacing) * 3)
+Tokens	size/3_5	FLOAT	14		calc(var(--spacing) * 3.5)
+Tokens	size/30	FLOAT	120		calc(var(--spacing) * 30)
+Tokens	size/32	FLOAT	128		calc(var(--spacing) * 32)
+Tokens	size/36	FLOAT	144		calc(var(--spacing) * 36)
+Tokens	size/38	FLOAT	152		calc(var(--spacing) * 38)
+Tokens	size/4	FLOAT	16		calc(var(--spacing) * 4)
+Tokens	size/4_5	FLOAT	18		calc(var(--spacing) * 4.5)
+Tokens	size/40	FLOAT	160		calc(var(--spacing) * 40)
+Tokens	size/42	FLOAT	168		calc(var(--spacing) * 42)
+Tokens	size/44	FLOAT	176		calc(var(--spacing) * 44)
+Tokens	size/45	FLOAT	180		calc(var(--spacing) * 45)
+Tokens	size/48	FLOAT	192		calc(var(--spacing) * 48)
+Tokens	size/5	FLOAT	20		calc(var(--spacing) * 5)
+Tokens	size/5_5	FLOAT	22		calc(var(--spacing) * 5.5)
+Tokens	size/50	FLOAT	200		calc(var(--spacing) * 50)
+Tokens	size/56	FLOAT	224		calc(var(--spacing) * 56)
+Tokens	size/6	FLOAT	24		calc(var(--spacing) * 6)
+Tokens	size/6_5	FLOAT	26		calc(var(--spacing) * 6.5)
+Tokens	size/60	FLOAT	240		calc(var(--spacing) * 60)
+Tokens	size/63	FLOAT	252		calc(var(--spacing) * 63)
+Tokens	size/64	FLOAT	256		calc(var(--spacing) * 64)
+Tokens	size/65	FLOAT	260		calc(var(--spacing) * 65)
+Tokens	size/7	FLOAT	28		calc(var(--spacing) * 7)
+Tokens	size/7_5	FLOAT	30		calc(var(--spacing) * 7.5)
+Tokens	size/70	FLOAT	280		calc(var(--spacing) * 70)
+Tokens	size/72	FLOAT	288		calc(var(--spacing) * 72)
+Tokens	size/8	FLOAT	32		calc(var(--spacing) * 8)
+Tokens	size/8_5	FLOAT	34		calc(var(--spacing) * 8.5)
+Tokens	size/80	FLOAT	320		calc(var(--spacing) * 80)
+Tokens	size/9	FLOAT	36		calc(var(--spacing) * 9)
+Tokens	size/9_5	FLOAT	38		calc(var(--spacing) * 9.5)
+Tokens	size/90	FLOAT	360		calc(var(--spacing) * 90)
+Tokens	size/96	FLOAT	384		calc(var(--spacing) * 96)
+Tokens	size/px	FLOAT	1		1px
+Tokens	spacing/0	FLOAT	0		calc(var(--spacing) * 0)
+Tokens	spacing/0_5	FLOAT	2		calc(var(--spacing) * 0.5)
+Tokens	spacing/1	FLOAT	4		calc(var(--spacing) * 1)
+Tokens	spacing/1_5	FLOAT	6		calc(var(--spacing) * 1.5)
+Tokens	spacing/10	FLOAT	40		calc(var(--spacing) * 10)
+Tokens	spacing/12	FLOAT	48		calc(var(--spacing) * 12)
+Tokens	spacing/14	FLOAT	56		calc(var(--spacing) * 14)
+Tokens	spacing/16	FLOAT	64		calc(var(--spacing) * 16)
+Tokens	spacing/2	FLOAT	8		calc(var(--spacing) * 2)
+Tokens	spacing/2_5	FLOAT	10		calc(var(--spacing) * 2.5)
+Tokens	spacing/20	FLOAT	80		calc(var(--spacing) * 20)
+Tokens	spacing/3	FLOAT	12		calc(var(--spacing) * 3)
+Tokens	spacing/3_5	FLOAT	14		calc(var(--spacing) * 3.5)
+Tokens	spacing/4	FLOAT	16		calc(var(--spacing) * 4)
+Tokens	spacing/4_5	FLOAT	18		calc(var(--spacing) * 4.5)
+Tokens	spacing/5	FLOAT	20		calc(var(--spacing) * 5)
+Tokens	spacing/6	FLOAT	24		calc(var(--spacing) * 6)
+Tokens	spacing/7	FLOAT	28		calc(var(--spacing) * 7)
+Tokens	spacing/8	FLOAT	32		calc(var(--spacing) * 8)
+Tokens	spacing/9	FLOAT	36		calc(var(--spacing) * 9)
+Tokens	spacing/px	FLOAT	1		1px
+Theme	action/highlight	COLOR	{color/sky/600}	{color/sky/300}	
+Theme	action/on-highlight	COLOR	{color/white}	{color/neutral/950}	
+Theme	action/on-primary	COLOR	{color/white}	{color/neutral/950}	
+Theme	action/primary	COLOR	{color/neutral/900}	{color/neutral/50}	
+Theme	border/default	COLOR	{color/zinc/200}	#ffffff0f	
+Theme	border/focus	COLOR	{action/highlight}		
+Theme	border/glass	COLOR	#27272a1a	#f5f5f51a	
+Theme	border/strong	COLOR	{color/zinc/300}	#ffffff14	
+Theme	effect/glass-blur	FLOAT	12	16	
+Theme	effect/glass-opacity	FLOAT	80		
+Theme	effect/glass-saturation	FLOAT	1.14	1.08	
+Theme	icon/default	COLOR	{text/default}		
+Theme	icon/muted	COLOR	{text/muted}		
+Theme	shadow/app/dialog-glass/1/blur	FLOAT	0		
+Theme	shadow/app/dialog-glass/1/color	COLOR	#00000000	#ffffff0a	
+Theme	shadow/app/dialog-glass/1/spread	FLOAT	0		
+Theme	shadow/app/dialog-glass/1/x	FLOAT	0		
+Theme	shadow/app/dialog-glass/1/y	FLOAT	1		
+Theme	shadow/app/dialog-glass/2/blur	FLOAT	64	72	
+Theme	shadow/app/dialog-glass/2/color	COLOR	#000000a6	#000000e5	
+Theme	shadow/app/dialog-glass/2/spread	FLOAT	-24	-20	
+Theme	shadow/app/dialog-glass/2/x	FLOAT	0		
+Theme	shadow/app/dialog-glass/2/y	FLOAT	24		
+Theme	shadow/app/dropdown/blur	FLOAT	32	44	
+Theme	shadow/app/dropdown/color	COLOR	#00000014	#000000cc	
+Theme	shadow/app/dropdown/spread	FLOAT	-18		
+Theme	shadow/app/dropdown/x	FLOAT	0		
+Theme	shadow/app/dropdown/y	FLOAT	12	18	
+Theme	shadow/app/edge/color	COLOR	#0000000a	#ffffff0f	
+Theme	shadow/app/edge/y	FLOAT	1	-1	
+Theme	shadow/app/floating/blur	FLOAT	28	32	
+Theme	shadow/app/floating/color	COLOR	#00000066	#000000bf	
+Theme	shadow/app/floating/spread	FLOAT	-18		
+Theme	shadow/app/floating/x	FLOAT	0		
+Theme	shadow/app/floating/y	FLOAT	12	14	
+Theme	status/error	COLOR	{color/red/500}	#fb414a	
+Theme	status/error-surface	COLOR	#fb2c3614	#fb414a29	
+Theme	status/error-text	COLOR	{color/red/700}	{color/red/400}	
+Theme	status/info	COLOR	{color/blue/500}		
+Theme	status/info-surface	COLOR	{color-alpha/blue-500/8}	{color-alpha/blue-500/16}	
+Theme	status/info-text	COLOR	{color/blue/700}	{color/blue/400}	
+Theme	status/success	COLOR	{color/emerald/500}		
+Theme	status/success-surface	COLOR	{color-alpha/emerald-500/8}	{color-alpha/emerald-500/16}	
+Theme	status/success-text	COLOR	{color/emerald/700}	{color/emerald/400}	
+Theme	status/warning	COLOR	{color/amber/500}		
+Theme	status/warning-surface	COLOR	#fe9a0014	#fe9a0029	
+Theme	status/warning-text	COLOR	{color/amber/700}	{color/amber/400}	
+Theme	surface/accent	COLOR	{color/zinc/100}	#ffffff0a	
+Theme	surface/backdrop	COLOR	#fcfcfc99	#0a0a0aa3	
+Theme	surface/background	COLOR	{color/zinc/25}	{color/neutral/950}	
+Theme	surface/card	COLOR	{color/white}	#111111	
+Theme	surface/code	COLOR	#ffffff	#111111	
+Theme	surface/glass	COLOR	#fcfcfccc	#0a0a0acc	
+Theme	surface/glass-popover	COLOR	#ffffffd5	#111111d5	
+Theme	surface/muted	COLOR	{color/zinc/50}	#ffffff08	
+Theme	surface/popover	COLOR	{color/white}	#111111	
+Theme	surface/raised	COLOR	#ffffff33	#111111	
+Theme	text/default	COLOR	{color/zinc/800}	{color/neutral/100}	
+Theme	text/muted	COLOR	{color/zinc/500}	#818181	
+Components	add-to-library-dialog/error/foreground	COLOR	{status/error-text}		
+Components	add-to-library-dialog/label	COLOR	{text/default}		
+Components	add-to-library-dialog/width	FLOAT	420		
+Components	agent-rail/docked/border	COLOR	{border/default}		
+Components	agent-rail/docked/surface	COLOR	{surface/background}		
+Components	agent-rail/empty-chat	COLOR	{text/muted}		
+Components	agent-rail/foreground	COLOR	{text/default}		
+Components	agent-rail/outside-line-border	COLOR	{border/default}		
+Components	agent-rail/outside-line-foreground	COLOR	{text/muted}		
+Components	agent-rail/outside-line-surface	COLOR	{surface/card}		
+Components	agent-rail/title-icon	COLOR	{text/default}		
+Components	agent-rail/width	FLOAT	380		
+Components	alert/default/border	COLOR	{border/default}		
+Components	alert/default/icon	COLOR	{text/muted}		
+Components	alert/default/surface	COLOR	{color-alpha/white/0}	{border/strong}	
+Components	alert/default/surface-opacity	FLOAT	{opacity/100}	{opacity/32}	
+Components	alert/description	COLOR	{text/muted}		
+Components	alert/error/border	COLOR	{status/error}		
+Components	alert/error/border-opacity	FLOAT	{opacity/32}		
+Components	alert/error/description	COLOR	{status/error-text}		
+Components	alert/error/description-opacity	FLOAT	{opacity/80}		
+Components	alert/error/foreground	COLOR	{status/error-text}		
+Components	alert/error/icon	COLOR	{status/error}		
+Components	alert/error/surface	COLOR	{status/error-surface}		
+Components	alert/error/tint	COLOR	{status/error}		
+Components	alert/foreground	COLOR	{text/default}		
+Components	alert/glass-surface	COLOR	{surface/glass}		
+Components	alert/info/border	COLOR	{status/info}		
+Components	alert/info/border-opacity	FLOAT	{opacity/32}		
+Components	alert/info/icon	COLOR	{status/info}		
+Components	alert/info/surface	COLOR	{status/info}		
+Components	alert/info/surface-opacity	FLOAT	{opacity/4}		
+Components	alert/info/tint	COLOR	{status/info}		
+Components	alert/sidebar/border	COLOR	{border/default}		
+Components	alert/sidebar/description	COLOR	{text/muted}		
+Components	alert/sidebar/surface	COLOR	{surface/muted}		
+Components	alert/success/border	COLOR	{status/success}		
+Components	alert/success/border-opacity	FLOAT	{opacity/32}		
+Components	alert/success/icon	COLOR	{status/success}		
+Components	alert/success/surface	COLOR	{status/success}		
+Components	alert/success/surface-opacity	FLOAT	{opacity/4}		
+Components	alert/success/tint	COLOR	{status/success}		
+Components	alert/tint-opacity	FLOAT	{opacity/4}		
+Components	alert/warning/border	COLOR	{status/warning}		
+Components	alert/warning/border-opacity	FLOAT	{opacity/32}		
+Components	alert/warning/description	COLOR	{status/warning-text}		
+Components	alert/warning/description-opacity	FLOAT	{opacity/80}		
+Components	alert/warning/foreground	COLOR	{status/warning-text}		
+Components	alert/warning/icon	COLOR	{status/warning}		
+Components	alert/warning/surface	COLOR	{status/warning-surface}		
+Components	alert/warning/tint	COLOR	{status/warning}		
+Components	app/foreground	COLOR	{text/default}		
+Components	app/surface	COLOR	{surface/background}		
+Components	artifact-card/border	COLOR	{border/default}		
+Components	artifact-card/foreground	COLOR	{text/muted}		
+Components	artifact-card/surface	COLOR	{surface/card}		
+Components	artifact-card/title	COLOR	{text/default}		
+Components	artifact-editor/column/border	COLOR	{border/default}		
+Components	artifact-editor/column/surface	COLOR	{surface/card}		
+Components	artifact-editor/error/foreground	COLOR	{status/error-text}		
+Components	artifact-editor/foreground	COLOR	{text/default}		
+Components	artifact-editor/icon	COLOR	{icon/muted}		
+Components	artifact-editor/label	COLOR	{text/muted}		
+Components	artifact-editor/label-width	FLOAT	120		
+Components	artifact-editor/layer/surface-selected	COLOR	{surface/accent}		
+Components	artifact-editor/meta	COLOR	{text/muted}		
+Components	artifact-editor/note	COLOR	{text/muted}		
+Components	artifact-editor/parameters/width	FLOAT	320		
+Components	artifact-editor/preview-size/width	FLOAT	248		
+Components	artifact-editor/rail/width	FLOAT	360		
+Components	artifact-editor/sheet/width	FLOAT	384		
+Components	artifact-editor/surface	COLOR	{surface/background}		
+Components	artifact-editor/warning/foreground	COLOR	{status/warning-text}		
+Components	artifact-problem/foreground	COLOR	{status/error-text}		
+Components	assistant-message/author	COLOR	{text/muted}		
+Components	assistant-message/empty	COLOR	{text/muted}		
+Components	attachment/size-opacity	FLOAT	{opacity/80}		
+Components	attachment/thumb-border	COLOR	{border/default}		
+Components	attachment/thumb-border-opacity	FLOAT	{opacity/80}		
+Components	attachment/thumb-foreground	COLOR	{text/default}		
+Components	attachment/thumb-overlay	COLOR	{surface/background}		
+Components	attachment/thumb-overlay-opacity	FLOAT	{opacity/60}		
+Components	attachment/thumb-surface	COLOR	{surface/background}		
+Components	attachment/thumb-surface-opacity	FLOAT	{opacity/70}		
+Components	badge/default/border	COLOR	{color-alpha/white/0}		
+Components	badge/default/foreground	COLOR	{action/on-primary}		
+Components	badge/default/icon	COLOR	{badge/default/foreground}		
+Components	badge/default/surface	COLOR	{action/primary}		
+Components	badge/default/surface-hover	COLOR	{action/primary}		
+Components	badge/default/surface-hover-opacity	FLOAT	{opacity/90}		
+Components	badge/destructive/border	COLOR	{color-alpha/white/0}		
+Components	badge/destructive/foreground	COLOR	{color/white}		
+Components	badge/destructive/icon	COLOR	{badge/destructive/foreground}		
+Components	badge/destructive/surface	COLOR	{status/error}		
+Components	badge/destructive/surface-hover	COLOR	{status/error}		
+Components	badge/destructive/surface-hover-opacity	FLOAT	{opacity/90}		
+Components	badge/error/border	COLOR	{color-alpha/white/0}		
+Components	badge/error/foreground	COLOR	{status/error-text}		
+Components	badge/error/icon	COLOR	{badge/error/foreground}		
+Components	badge/error/surface	COLOR	{status/error}		
+Components	badge/error/surface-opacity	FLOAT	{opacity/8}	{opacity/16}	
+Components	badge/icon-opacity	FLOAT	{opacity/80}		
+Components	badge/info/border	COLOR	{color-alpha/white/0}		
+Components	badge/info/foreground	COLOR	{status/info-text}		
+Components	badge/info/icon	COLOR	{badge/info/foreground}		
+Components	badge/info/surface	COLOR	{status/info}		
+Components	badge/info/surface-opacity	FLOAT	{opacity/8}	{opacity/16}	
+Components	badge/label/foreground	COLOR	{text/default}		
+Components	badge/label/foreground-tint	FLOAT	{opacity/30}	{opacity/45}	
+Components	badge/label/surface-opacity	FLOAT	{opacity/8}	{opacity/12}	
+Components	badge/outline/border	COLOR	{border/strong}		
+Components	badge/outline/foreground	COLOR	{text/default}		
+Components	badge/outline/icon	COLOR	{badge/outline/foreground}		
+Components	badge/outline/surface	COLOR	{surface/background}	{border/strong}	
+Components	badge/outline/surface-hover	COLOR	{surface/accent}	{border/strong}	
+Components	badge/outline/surface-hover-opacity	FLOAT	{opacity/50}		
+Components	badge/outline/surface-opacity	FLOAT	{opacity/100}	{opacity/32}	
+Components	badge/ring-focus	COLOR	{border/focus}		
+Components	badge/ring-offset	COLOR	{surface/background}		
+Components	badge/secondary/border	COLOR	{color-alpha/white/0}		
+Components	badge/secondary/foreground	COLOR	{text/default}		
+Components	badge/secondary/icon	COLOR	{badge/secondary/foreground}		
+Components	badge/secondary/surface	COLOR	{surface/muted}		
+Components	badge/secondary/surface-hover	COLOR	{surface/muted}		
+Components	badge/secondary/surface-hover-opacity	FLOAT	{opacity/90}		
+Components	badge/success/border	COLOR	{color-alpha/white/0}		
+Components	badge/success/foreground	COLOR	{status/success-text}		
+Components	badge/success/icon	COLOR	{badge/success/foreground}		
+Components	badge/success/surface	COLOR	{status/success}		
+Components	badge/success/surface-opacity	FLOAT	{opacity/8}	{opacity/16}	
+Components	badge/warning/border	COLOR	{color-alpha/white/0}		
+Components	badge/warning/foreground	COLOR	{status/warning-text}		
+Components	badge/warning/icon	COLOR	{badge/warning/foreground}		
+Components	badge/warning/surface	COLOR	{status/warning}		
+Components	badge/warning/surface-opacity	FLOAT	{opacity/8}	{opacity/16}	
+Components	banner/body-opacity	FLOAT	{opacity/85}		
+Components	banner/border	COLOR	{border/default}		
+Components	banner/description	COLOR	{text/muted}		
+Components	banner/error/border	COLOR	{status/error}		
+Components	banner/error/border-opacity	FLOAT	{opacity/32}		
+Components	banner/error/icon	COLOR	{status/error}		
+Components	banner/error/tint	COLOR	{status/error}		
+Components	banner/error/tint-opacity	FLOAT	{opacity/8}		
+Components	banner/foreground	COLOR	{text/default}		
+Components	banner/icon	COLOR	{text/muted}		
+Components	banner/option-icon-selected	COLOR	{action/highlight}		
+Components	banner/ring-focus	COLOR	{border/focus}		
+Components	banner/ring-focus-opacity	FLOAT	{opacity/70}		
+Components	banner/secondary	COLOR	{text/muted}		
+Components	banner/surface	COLOR	{surface/card}	{surface/raised}	
+Components	banner/surface-opacity	FLOAT	{effect/glass-opacity}		
+Components	banner/title	COLOR	{text/muted}		
+Components	banner/warning-text	COLOR	{status/warning-text}		
+Components	banner/warning/border	COLOR	{status/warning}		
+Components	banner/warning/border-opacity	FLOAT	{opacity/28}		
+Components	banner/warning/icon	COLOR	{status/warning}		
+Components	banner/warning/tint	COLOR	{status/warning}		
+Components	banner/warning/tint-opacity	FLOAT	{opacity/8}		
+Components	banner/warning/title	COLOR	{status/warning}		
+Components	bottom-toolbar/surface	COLOR	{tldraw/panel}		
+Components	button-group/divider	COLOR	{border/strong}		
+Components	button-group/divider-focus	COLOR	{border/focus}		
+Components	button-group/divider-hover	COLOR	{color-alpha/white/0}	{border/strong}	
+Components	button-group/divider-hover-opacity	FLOAT	{opacity/64}		
+Components	button-group/divider-overlay	COLOR	{color-alpha/white/0}	{border/strong}	
+Components	button-group/divider-overlay-opacity	FLOAT	{opacity/32}		
+Components	button/default/border	COLOR	{color/sky/300}	{color-alpha/sky-300/70}	
+Components	button/default/border-hover	COLOR	{button/default/border}		
+Components	button/default/border-pressed	COLOR	{button/default/border}		
+Components	button/default/foreground	COLOR	{color/white}		
+Components	button/default/foreground-hover	COLOR	{button/default/foreground}		
+Components	button/default/foreground-pressed	COLOR	{button/default/foreground}		
+Components	button/default/glass-inner-glow	COLOR	{color-alpha/white/55}	{color-alpha/white/30}	
+Components	button/default/glass-inner-glow-hover	COLOR	{button/default/glass-inner-glow}		
+Components	button/default/glass-inner-glow-pressed	COLOR	{button/default/glass-inner-glow}		
+Components	button/default/glass-sheen-hover-opacity	FLOAT	{button/default/glass-sheen-opacity}		
+Components	button/default/glass-sheen-opacity	FLOAT	{opacity/72}	{opacity/35}	
+Components	button/default/glass-sheen-pressed-opacity	FLOAT	{button/default/glass-sheen-opacity}		
+Components	button/default/glass-specular-hover-opacity	FLOAT	{button/default/glass-specular-opacity}		
+Components	button/default/glass-specular-opacity	FLOAT	{opacity/100}	{opacity/70}	
+Components	button/default/glass-specular-pressed-opacity	FLOAT	{button/default/glass-specular-opacity}		
+Components	button/default/icon	COLOR	{button/default/foreground}		
+Components	button/default/icon-hover	COLOR	{button/default/foreground-hover}		
+Components	button/default/icon-pressed	COLOR	{button/default/foreground-pressed}		
+Components	button/default/shadow	COLOR	{color-alpha/sky-400/30}	{color-alpha/sky-500/35}	
+Components	button/default/shadow-hover	COLOR	{button/default/shadow}		
+Components	button/default/surface	COLOR	{color/sky/400}	{color/sky/500}	
+Components	button/default/surface-hover	COLOR	{button/default/surface}		
+Components	button/default/surface-pressed	COLOR	{button/default/surface}		
+Components	button/destructive-outline/border	COLOR	{color/red/200}	{color-alpha/red-400/25}	
+Components	button/destructive-outline/border-hover	COLOR	{button/destructive-outline/border}		
+Components	button/destructive-outline/border-pressed	COLOR	{button/destructive-outline/border}		
+Components	button/destructive-outline/foreground	COLOR	{color/red/700}	{color/red/400}	
+Components	button/destructive-outline/foreground-hover	COLOR	{button/destructive-outline/foreground}		
+Components	button/destructive-outline/foreground-pressed	COLOR	{button/destructive-outline/foreground}		
+Components	button/destructive-outline/glass-inner-glow	COLOR	{color-alpha/white/90}	{color-alpha/white/8}	
+Components	button/destructive-outline/glass-inner-glow-hover	COLOR	{button/destructive-outline/glass-inner-glow}		
+Components	button/destructive-outline/glass-inner-glow-pressed	COLOR	{button/destructive-outline/glass-inner-glow}		
+Components	button/destructive-outline/glass-sheen-hover-opacity	FLOAT	{button/destructive-outline/glass-sheen-opacity}		
+Components	button/destructive-outline/glass-sheen-opacity	FLOAT	{opacity/60}	{opacity/5}	
+Components	button/destructive-outline/glass-sheen-pressed-opacity	FLOAT	{button/destructive-outline/glass-sheen-opacity}		
+Components	button/destructive-outline/glass-specular-hover-opacity	FLOAT	{button/destructive-outline/glass-specular-opacity}		
+Components	button/destructive-outline/glass-specular-opacity	FLOAT	{opacity/100}	{opacity/45}	
+Components	button/destructive-outline/glass-specular-pressed-opacity	FLOAT	{button/destructive-outline/glass-specular-opacity}		
+Components	button/destructive-outline/icon	COLOR	{button/destructive-outline/foreground}		
+Components	button/destructive-outline/icon-hover	COLOR	{button/destructive-outline/foreground-hover}		
+Components	button/destructive-outline/icon-pressed	COLOR	{button/destructive-outline/foreground-pressed}		
+Components	button/destructive-outline/shadow	COLOR	{color-alpha/black/8}	{color-alpha/black/50}	
+Components	button/destructive-outline/shadow-hover	COLOR	{button/destructive-outline/shadow}		
+Components	button/destructive-outline/surface	COLOR	{color-alpha/white/70}	{color-alpha/white/4}	
+Components	button/destructive-outline/surface-hover	COLOR	{button/destructive-outline/surface}		
+Components	button/destructive-outline/surface-pressed	COLOR	{button/destructive-outline/surface}		
+Components	button/destructive/border	COLOR	{color/red/300}	{color-alpha/red-400/70}	
+Components	button/destructive/border-hover	COLOR	{button/destructive/border}		
+Components	button/destructive/border-pressed	COLOR	{button/destructive/border}		
+Components	button/destructive/foreground	COLOR	{color/white}		
+Components	button/destructive/foreground-hover	COLOR	{button/destructive/foreground}		
+Components	button/destructive/foreground-pressed	COLOR	{button/destructive/foreground}		
+Components	button/destructive/glass-inner-glow	COLOR	{color-alpha/white/55}	{color-alpha/white/30}	
+Components	button/destructive/glass-inner-glow-hover	COLOR	{button/destructive/glass-inner-glow}		
+Components	button/destructive/glass-inner-glow-pressed	COLOR	{button/destructive/glass-inner-glow}		
+Components	button/destructive/glass-sheen-hover-opacity	FLOAT	{button/destructive/glass-sheen-opacity}		
+Components	button/destructive/glass-sheen-opacity	FLOAT	{opacity/60}	{opacity/30}	
+Components	button/destructive/glass-sheen-pressed-opacity	FLOAT	{button/destructive/glass-sheen-opacity}		
+Components	button/destructive/glass-specular-hover-opacity	FLOAT	{button/destructive/glass-specular-opacity}		
+Components	button/destructive/glass-specular-opacity	FLOAT	{opacity/100}	{opacity/70}	
+Components	button/destructive/glass-specular-pressed-opacity	FLOAT	{button/destructive/glass-specular-opacity}		
+Components	button/destructive/icon	COLOR	{button/destructive/foreground}		
+Components	button/destructive/icon-hover	COLOR	{button/destructive/foreground-hover}		
+Components	button/destructive/icon-pressed	COLOR	{button/destructive/foreground-pressed}		
+Components	button/destructive/shadow	COLOR	{color-alpha/red-500/30}	{color-alpha/red-500/35}	
+Components	button/destructive/shadow-hover	COLOR	{button/destructive/shadow}		
+Components	button/destructive/surface	COLOR	{color/red/400}	{color/red/500}	
+Components	button/destructive/surface-hover	COLOR	{button/destructive/surface}		
+Components	button/destructive/surface-pressed	COLOR	{button/destructive/surface}		
+Components	button/focus-ring	COLOR	{border/focus}		
+Components	button/focus-ring-offset	COLOR	{surface/background}		
+Components	button/ghost-destructive/border	COLOR	{color-alpha/white/0}		
+Components	button/ghost-destructive/border-hover	COLOR	{button/secondary/border}		
+Components	button/ghost-destructive/border-pressed	COLOR	{button/secondary/border}		
+Components	button/ghost-destructive/foreground	COLOR	{color/zinc/500}	{color/neutral/400}	
+Components	button/ghost-destructive/foreground-hover	COLOR	{button/destructive-outline/foreground}		
+Components	button/ghost-destructive/foreground-pressed	COLOR	{button/destructive-outline/foreground}		
+Components	button/ghost-destructive/glass-inner-glow	COLOR	{color-alpha/white/0}		
+Components	button/ghost-destructive/glass-inner-glow-hover	COLOR	{button/secondary/glass-inner-glow}		
+Components	button/ghost-destructive/glass-inner-glow-pressed	COLOR	{button/secondary/glass-inner-glow}		
+Components	button/ghost-destructive/glass-sheen-hover-opacity	FLOAT	{button/secondary/glass-sheen-opacity}		
+Components	button/ghost-destructive/glass-sheen-opacity	FLOAT	{opacity/0}		
+Components	button/ghost-destructive/glass-sheen-pressed-opacity	FLOAT	{button/secondary/glass-sheen-opacity}		
+Components	button/ghost-destructive/glass-specular-hover-opacity	FLOAT	{button/secondary/glass-specular-opacity}		
+Components	button/ghost-destructive/glass-specular-opacity	FLOAT	{opacity/0}		
+Components	button/ghost-destructive/glass-specular-pressed-opacity	FLOAT	{button/secondary/glass-specular-opacity}		
+Components	button/ghost-destructive/icon	COLOR	{button/ghost-destructive/foreground}		
+Components	button/ghost-destructive/icon-hover	COLOR	{button/ghost-destructive/foreground-hover}		
+Components	button/ghost-destructive/icon-pressed	COLOR	{button/ghost-destructive/foreground-pressed}		
+Components	button/ghost-destructive/shadow	COLOR	{color-alpha/white/0}		
+Components	button/ghost-destructive/shadow-hover	COLOR	{button/secondary/shadow}		
+Components	button/ghost-destructive/surface	COLOR	{color-alpha/white/0}		
+Components	button/ghost-destructive/surface-hover	COLOR	{button/secondary/surface}		
+Components	button/ghost-destructive/surface-pressed	COLOR	{button/secondary/surface}		
+Components	button/ghost-muted/border	COLOR	{color-alpha/white/0}		
+Components	button/ghost-muted/border-hover	COLOR	{button/secondary/border}		
+Components	button/ghost-muted/border-pressed	COLOR	{button/secondary/border}		
+Components	button/ghost-muted/foreground	COLOR	{color/zinc/500}	{color/neutral/400}	
+Components	button/ghost-muted/foreground-hover	COLOR	{button/ghost/foreground}		
+Components	button/ghost-muted/foreground-pressed	COLOR	{button/ghost/foreground}		
+Components	button/ghost-muted/glass-inner-glow	COLOR	{color-alpha/white/0}		
+Components	button/ghost-muted/glass-inner-glow-hover	COLOR	{button/secondary/glass-inner-glow}		
+Components	button/ghost-muted/glass-inner-glow-pressed	COLOR	{button/secondary/glass-inner-glow}		
+Components	button/ghost-muted/glass-sheen-hover-opacity	FLOAT	{button/secondary/glass-sheen-opacity}		
+Components	button/ghost-muted/glass-sheen-opacity	FLOAT	{opacity/0}		
+Components	button/ghost-muted/glass-sheen-pressed-opacity	FLOAT	{button/secondary/glass-sheen-opacity}		
+Components	button/ghost-muted/glass-specular-hover-opacity	FLOAT	{button/secondary/glass-specular-opacity}		
+Components	button/ghost-muted/glass-specular-opacity	FLOAT	{opacity/0}		
+Components	button/ghost-muted/glass-specular-pressed-opacity	FLOAT	{button/secondary/glass-specular-opacity}		
+Components	button/ghost-muted/icon	COLOR	{button/ghost-muted/foreground}		
+Components	button/ghost-muted/icon-hover	COLOR	{button/ghost-muted/foreground-hover}		
+Components	button/ghost-muted/icon-pressed	COLOR	{button/ghost-muted/foreground-pressed}		
+Components	button/ghost-muted/shadow	COLOR	{color-alpha/white/0}		
+Components	button/ghost-muted/shadow-hover	COLOR	{button/secondary/shadow}		
+Components	button/ghost-muted/surface	COLOR	{color-alpha/white/0}		
+Components	button/ghost-muted/surface-hover	COLOR	{button/secondary/surface}		
+Components	button/ghost-muted/surface-pressed	COLOR	{button/secondary/surface}		
+Components	button/ghost/border	COLOR	{color-alpha/white/0}		
+Components	button/ghost/border-hover	COLOR	{button/secondary/border}		
+Components	button/ghost/border-pressed	COLOR	{button/secondary/border}		
+Components	button/ghost/foreground	COLOR	{color/zinc/800}	{color/neutral/100}	
+Components	button/ghost/foreground-hover	COLOR	{button/ghost/foreground}		
+Components	button/ghost/foreground-pressed	COLOR	{button/ghost/foreground}		
+Components	button/ghost/glass-inner-glow	COLOR	{color-alpha/white/0}		
+Components	button/ghost/glass-inner-glow-hover	COLOR	{button/secondary/glass-inner-glow}		
+Components	button/ghost/glass-inner-glow-pressed	COLOR	{button/secondary/glass-inner-glow}		
+Components	button/ghost/glass-sheen-hover-opacity	FLOAT	{button/secondary/glass-sheen-opacity}		
+Components	button/ghost/glass-sheen-opacity	FLOAT	{opacity/0}		
+Components	button/ghost/glass-sheen-pressed-opacity	FLOAT	{button/secondary/glass-sheen-opacity}		
+Components	button/ghost/glass-specular-hover-opacity	FLOAT	{button/secondary/glass-specular-opacity}		
+Components	button/ghost/glass-specular-opacity	FLOAT	{opacity/0}		
+Components	button/ghost/glass-specular-pressed-opacity	FLOAT	{button/secondary/glass-specular-opacity}		
+Components	button/ghost/icon	COLOR	{button/ghost/foreground}		
+Components	button/ghost/icon-hover	COLOR	{button/ghost/foreground-hover}		
+Components	button/ghost/icon-pressed	COLOR	{button/ghost/foreground-pressed}		
+Components	button/ghost/shadow	COLOR	{color-alpha/white/0}		
+Components	button/ghost/shadow-hover	COLOR	{button/secondary/shadow}		
+Components	button/ghost/surface	COLOR	{color-alpha/white/0}		
+Components	button/ghost/surface-hover	COLOR	{button/secondary/surface}		
+Components	button/ghost/surface-pressed	COLOR	{button/secondary/surface}		
+Components	button/glass/backdrop-blur	FLOAT	{effect/glass-blur}		
+Components	button/glass/border	COLOR	{color/white}	{color-alpha/white/12}	
+Components	button/glass/border-hover	COLOR	{button/glass/border}		
+Components	button/glass/border-pressed	COLOR	{button/glass/border}		
+Components	button/glass/foreground	COLOR	{color/zinc/800}	{color/neutral/100}	
+Components	button/glass/foreground-hover	COLOR	{button/glass/foreground}		
+Components	button/glass/foreground-pressed	COLOR	{button/glass/foreground}		
+Components	button/glass/glass-inner-glow	COLOR	{color/white}	{color-alpha/white/8}	
+Components	button/glass/glass-inner-glow-hover	COLOR	{button/glass/glass-inner-glow}		
+Components	button/glass/glass-inner-glow-pressed	COLOR	{button/glass/glass-inner-glow}		
+Components	button/glass/glass-sheen-hover-opacity	FLOAT	{button/glass/glass-sheen-opacity}		
+Components	button/glass/glass-sheen-opacity	FLOAT	{opacity/40}	{opacity/6}	
+Components	button/glass/glass-sheen-pressed-opacity	FLOAT	{button/glass/glass-sheen-opacity}		
+Components	button/glass/glass-specular-hover-opacity	FLOAT	{button/glass/glass-specular-opacity}		
+Components	button/glass/glass-specular-opacity	FLOAT	{opacity/100}	{opacity/50}	
+Components	button/glass/glass-specular-pressed-opacity	FLOAT	{button/glass/glass-specular-opacity}		
+Components	button/glass/icon	COLOR	{button/glass/foreground}		
+Components	button/glass/icon-hover	COLOR	{button/glass/foreground-hover}		
+Components	button/glass/icon-pressed	COLOR	{button/glass/foreground-pressed}		
+Components	button/glass/shadow	COLOR	{color-alpha/black/10}	{color-alpha/black/50}	
+Components	button/glass/shadow-hover	COLOR	{button/glass/shadow}		
+Components	button/glass/surface	COLOR	{color-alpha/white/60}	{color-alpha/neutral-950/60}	
+Components	button/glass/surface-hover	COLOR	{button/glass/surface}		
+Components	button/glass/surface-pressed	COLOR	{button/glass/surface}		
+Components	button/hover-overlay	COLOR	{color-alpha/white/16}		
+Components	button/link/border	COLOR	{color-alpha/white/0}		
+Components	button/link/border-hover	COLOR	{button/link/border}		
+Components	button/link/border-pressed	COLOR	{button/link/border}		
+Components	button/link/foreground	COLOR	{color/sky/600}	{color/sky/300}	
+Components	button/link/foreground-hover	COLOR	{button/link/foreground}		
+Components	button/link/foreground-pressed	COLOR	{button/link/foreground}		
+Components	button/link/glass-inner-glow	COLOR	{color-alpha/white/0}		
+Components	button/link/glass-inner-glow-hover	COLOR	{button/link/glass-inner-glow}		
+Components	button/link/glass-inner-glow-pressed	COLOR	{button/link/glass-inner-glow}		
+Components	button/link/glass-sheen-hover-opacity	FLOAT	{button/link/glass-sheen-opacity}		
+Components	button/link/glass-sheen-opacity	FLOAT	{opacity/0}		
+Components	button/link/glass-sheen-pressed-opacity	FLOAT	{button/link/glass-sheen-opacity}		
+Components	button/link/glass-specular-hover-opacity	FLOAT	{button/link/glass-specular-opacity}		
+Components	button/link/glass-specular-opacity	FLOAT	{opacity/0}		
+Components	button/link/glass-specular-pressed-opacity	FLOAT	{button/link/glass-specular-opacity}		
+Components	button/link/icon	COLOR	{button/link/foreground}		
+Components	button/link/icon-hover	COLOR	{button/link/foreground-hover}		
+Components	button/link/icon-pressed	COLOR	{button/link/foreground-pressed}		
+Components	button/link/shadow	COLOR	{color-alpha/white/0}		
+Components	button/link/shadow-hover	COLOR	{button/link/shadow}		
+Components	button/link/surface	COLOR	{color-alpha/white/0}		
+Components	button/link/surface-hover	COLOR	{button/link/surface}		
+Components	button/link/surface-pressed	COLOR	{button/link/surface}		
+Components	button/media-close/border	COLOR	{color-alpha/white/20}		
+Components	button/media-close/border-hover	COLOR	{button/media-close/border}		
+Components	button/media-close/border-pressed	COLOR	{button/media-close/border}		
+Components	button/media-close/foreground	COLOR	{color/white}		
+Components	button/media-close/foreground-hover	COLOR	{button/media-close/foreground}		
+Components	button/media-close/foreground-pressed	COLOR	{button/media-close/foreground}		
+Components	button/media-close/glass-inner-glow	COLOR	{color-alpha/white/15}		
+Components	button/media-close/glass-inner-glow-hover	COLOR	{button/media-close/glass-inner-glow}		
+Components	button/media-close/glass-inner-glow-pressed	COLOR	{button/media-close/glass-inner-glow}		
+Components	button/media-close/glass-sheen-hover-opacity	FLOAT	{button/media-close/glass-sheen-opacity}		
+Components	button/media-close/glass-sheen-opacity	FLOAT	{opacity/10}		
+Components	button/media-close/glass-sheen-pressed-opacity	FLOAT	{button/media-close/glass-sheen-opacity}		
+Components	button/media-close/glass-specular-hover-opacity	FLOAT	{button/media-close/glass-specular-opacity}		
+Components	button/media-close/glass-specular-opacity	FLOAT	{opacity/45}		
+Components	button/media-close/glass-specular-pressed-opacity	FLOAT	{button/media-close/glass-specular-opacity}		
+Components	button/media-close/icon	COLOR	{button/media-close/foreground}		
+Components	button/media-close/icon-hover	COLOR	{button/media-close/foreground-hover}		
+Components	button/media-close/icon-pressed	COLOR	{button/media-close/foreground-pressed}		
+Components	button/media-close/shadow	COLOR	{color-alpha/black/30}		
+Components	button/media-close/shadow-hover	COLOR	{button/media-close/shadow}		
+Components	button/media-close/surface	COLOR	{color-alpha/black/65}		
+Components	button/media-close/surface-hover	COLOR	{button/media-close/surface}		
+Components	button/media-close/surface-pressed	COLOR	{button/media-close/surface}		
+Components	button/media-navigation/border	COLOR	{color-alpha/white/0}		
+Components	button/media-navigation/border-hover	COLOR	{color-alpha/white/16}		
+Components	button/media-navigation/border-pressed	COLOR	{color-alpha/white/16}		
+Components	button/media-navigation/foreground	COLOR	{color-alpha/white/90}		
+Components	button/media-navigation/foreground-hover	COLOR	{button/media-close/foreground}		
+Components	button/media-navigation/foreground-pressed	COLOR	{button/media-close/foreground}		
+Components	button/media-navigation/glass-inner-glow	COLOR	{color-alpha/white/0}		
+Components	button/media-navigation/glass-inner-glow-hover	COLOR	{color-alpha/white/12}		
+Components	button/media-navigation/glass-inner-glow-pressed	COLOR	{color-alpha/white/12}		
+Components	button/media-navigation/glass-sheen-hover-opacity	FLOAT	{opacity/10}		
+Components	button/media-navigation/glass-sheen-opacity	FLOAT	{opacity/0}		
+Components	button/media-navigation/glass-sheen-pressed-opacity	FLOAT	{opacity/10}		
+Components	button/media-navigation/glass-specular-hover-opacity	FLOAT	{opacity/40}		
+Components	button/media-navigation/glass-specular-opacity	FLOAT	{opacity/0}		
+Components	button/media-navigation/glass-specular-pressed-opacity	FLOAT	{opacity/40}		
+Components	button/media-navigation/icon	COLOR	{button/media-navigation/foreground}		
+Components	button/media-navigation/icon-hover	COLOR	{button/media-navigation/foreground-hover}		
+Components	button/media-navigation/icon-pressed	COLOR	{button/media-navigation/foreground-pressed}		
+Components	button/media-navigation/shadow	COLOR	{color-alpha/white/0}		
+Components	button/media-navigation/shadow-hover	COLOR	{color-alpha/black/15}		
+Components	button/media-navigation/surface	COLOR	{color-alpha/white/0}		
+Components	button/media-navigation/surface-hover	COLOR	{color-alpha/white/10}		
+Components	button/media-navigation/surface-pressed	COLOR	{color-alpha/white/10}		
+Components	button/outline/border	COLOR	{color/zinc/300}	{color-alpha/white/15}	
+Components	button/outline/border-hover	COLOR	{button/outline/border}		
+Components	button/outline/border-pressed	COLOR	{button/outline/border}		
+Components	button/outline/foreground	COLOR	{color/zinc/800}	{color/neutral/100}	
+Components	button/outline/foreground-hover	COLOR	{button/outline/foreground}		
+Components	button/outline/foreground-pressed	COLOR	{button/outline/foreground}		
+Components	button/outline/glass-inner-glow	COLOR	{color-alpha/white/90}	{color-alpha/white/8}	
+Components	button/outline/glass-inner-glow-hover	COLOR	{button/outline/glass-inner-glow}		
+Components	button/outline/glass-inner-glow-pressed	COLOR	{button/outline/glass-inner-glow}		
+Components	button/outline/glass-sheen-hover-opacity	FLOAT	{button/outline/glass-sheen-opacity}		
+Components	button/outline/glass-sheen-opacity	FLOAT	{opacity/60}	{opacity/5}	
+Components	button/outline/glass-sheen-pressed-opacity	FLOAT	{button/outline/glass-sheen-opacity}		
+Components	button/outline/glass-specular-hover-opacity	FLOAT	{button/outline/glass-specular-opacity}		
+Components	button/outline/glass-specular-opacity	FLOAT	{opacity/100}	{opacity/45}	
+Components	button/outline/glass-specular-pressed-opacity	FLOAT	{button/outline/glass-specular-opacity}		
+Components	button/outline/icon	COLOR	{button/outline/foreground}		
+Components	button/outline/icon-hover	COLOR	{button/outline/foreground-hover}		
+Components	button/outline/icon-pressed	COLOR	{button/outline/foreground-pressed}		
+Components	button/outline/shadow	COLOR	{color-alpha/black/8}	{color-alpha/black/50}	
+Components	button/outline/shadow-hover	COLOR	{button/outline/shadow}		
+Components	button/outline/surface	COLOR	{color-alpha/white/70}	{color-alpha/white/4}	
+Components	button/outline/surface-hover	COLOR	{button/outline/surface}		
+Components	button/outline/surface-pressed	COLOR	{button/outline/surface}		
+Components	button/overlay/border	COLOR	{color-alpha/white/12}		
+Components	button/overlay/border-hover	COLOR	{button/overlay/border}		
+Components	button/overlay/border-pressed	COLOR	{button/overlay/border}		
+Components	button/overlay/foreground	COLOR	{color-alpha/white/65}		
+Components	button/overlay/foreground-hover	COLOR	{button/media-close/foreground}		
+Components	button/overlay/foreground-pressed	COLOR	{button/media-close/foreground}		
+Components	button/overlay/glass-inner-glow	COLOR	{color-alpha/white/12}		
+Components	button/overlay/glass-inner-glow-hover	COLOR	{button/overlay/glass-inner-glow}		
+Components	button/overlay/glass-inner-glow-pressed	COLOR	{button/overlay/glass-inner-glow}		
+Components	button/overlay/glass-sheen-hover-opacity	FLOAT	{button/overlay/glass-sheen-opacity}		
+Components	button/overlay/glass-sheen-opacity	FLOAT	{opacity/8}		
+Components	button/overlay/glass-sheen-pressed-opacity	FLOAT	{button/overlay/glass-sheen-opacity}		
+Components	button/overlay/glass-specular-hover-opacity	FLOAT	{button/overlay/glass-specular-opacity}		
+Components	button/overlay/glass-specular-opacity	FLOAT	{opacity/35}		
+Components	button/overlay/glass-specular-pressed-opacity	FLOAT	{button/overlay/glass-specular-opacity}		
+Components	button/overlay/icon	COLOR	{button/overlay/foreground}		
+Components	button/overlay/icon-hover	COLOR	{button/overlay/foreground-hover}		
+Components	button/overlay/icon-pressed	COLOR	{button/overlay/foreground-pressed}		
+Components	button/overlay/shadow	COLOR	{color-alpha/black/25}		
+Components	button/overlay/shadow-hover	COLOR	{button/overlay/shadow}		
+Components	button/overlay/surface	COLOR	{color-alpha/black/70}		
+Components	button/overlay/surface-hover	COLOR	{button/overlay/surface}		
+Components	button/overlay/surface-pressed	COLOR	{button/overlay/surface}		
+Components	button/pressed-inset	COLOR	{color-alpha/black/15}		
+Components	button/pressed-inset-blur	FLOAT	3		
+Components	button/pressed-overlay	COLOR	{color-alpha/black/25}		
+Components	button/secondary/border	COLOR	{color/zinc/200}	{color-alpha/white/8}	
+Components	button/secondary/border-hover	COLOR	{button/secondary/border}		
+Components	button/secondary/border-pressed	COLOR	{button/secondary/border}		
+Components	button/secondary/foreground	COLOR	{color/zinc/800}	{color/neutral/100}	
+Components	button/secondary/foreground-hover	COLOR	{button/secondary/foreground}		
+Components	button/secondary/foreground-pressed	COLOR	{button/secondary/foreground}		
+Components	button/secondary/glass-inner-glow	COLOR	{color-alpha/white/90}	{color-alpha/white/6}	
+Components	button/secondary/glass-inner-glow-hover	COLOR	{button/secondary/glass-inner-glow}		
+Components	button/secondary/glass-inner-glow-pressed	COLOR	{button/secondary/glass-inner-glow}		
+Components	button/secondary/glass-sheen-hover-opacity	FLOAT	{button/secondary/glass-sheen-opacity}		
+Components	button/secondary/glass-sheen-opacity	FLOAT	{opacity/50}	{opacity/4}	
+Components	button/secondary/glass-sheen-pressed-opacity	FLOAT	{button/secondary/glass-sheen-opacity}		
+Components	button/secondary/glass-specular-hover-opacity	FLOAT	{button/secondary/glass-specular-opacity}		
+Components	button/secondary/glass-specular-opacity	FLOAT	{opacity/90}	{opacity/35}	
+Components	button/secondary/glass-specular-pressed-opacity	FLOAT	{button/secondary/glass-specular-opacity}		
+Components	button/secondary/icon	COLOR	{button/secondary/foreground}		
+Components	button/secondary/icon-hover	COLOR	{button/secondary/foreground-hover}		
+Components	button/secondary/icon-pressed	COLOR	{button/secondary/foreground-pressed}		
+Components	button/secondary/shadow	COLOR	{color-alpha/black/6}	{color-alpha/black/40}	
+Components	button/secondary/shadow-hover	COLOR	{button/secondary/shadow}		
+Components	button/secondary/surface	COLOR	{color/zinc/100}	{color-alpha/white/6}	
+Components	button/secondary/surface-hover	COLOR	{button/secondary/surface}		
+Components	button/secondary/surface-pressed	COLOR	{button/secondary/surface}		
+Components	button/size-16/inner-glow-blur	FLOAT	4		
+Components	button/size-16/rim-width	FLOAT	1		
+Components	button/size-16/shadow-blur	FLOAT	3		
+Components	button/size-20/inner-glow-blur	FLOAT	4		
+Components	button/size-20/rim-width	FLOAT	1.125		
+Components	button/size-20/shadow-blur	FLOAT	3		
+Components	button/size-24/inner-glow-blur	FLOAT	5		
+Components	button/size-24/rim-width	FLOAT	1.25		
+Components	button/size-24/shadow-blur	FLOAT	4		
+Components	button/size-28/inner-glow-blur	FLOAT	6		
+Components	button/size-28/rim-width	FLOAT	1.375		
+Components	button/size-28/shadow-blur	FLOAT	4		
+Components	button/size-32/inner-glow-blur	FLOAT	7		
+Components	button/size-32/rim-width	FLOAT	1.5		
+Components	button/size-32/shadow-blur	FLOAT	4		
+Components	button/size-36/inner-glow-blur	FLOAT	8		
+Components	button/size-36/rim-width	FLOAT	1.625		
+Components	button/size-36/shadow-blur	FLOAT	5		
+Components	button/size-40/inner-glow-blur	FLOAT	9		
+Components	button/size-40/rim-width	FLOAT	1.75		
+Components	button/size-40/shadow-blur	FLOAT	5		
+Components	button/warning-outline/border	COLOR	{color-alpha/amber-300/70}	{color-alpha/amber-500/32}	
+Components	button/warning-outline/border-hover	COLOR	{button/warning-outline/border}		
+Components	button/warning-outline/border-pressed	COLOR	{button/warning-outline/border}		
+Components	button/warning-outline/foreground	COLOR	{color/amber/700}	{color/amber/400}	
+Components	button/warning-outline/foreground-hover	COLOR	{button/warning-outline/foreground}		
+Components	button/warning-outline/foreground-pressed	COLOR	{button/warning-outline/foreground}		
+Components	button/warning-outline/glass-inner-glow	COLOR	{color-alpha/white/80}	{color-alpha/white/6}	
+Components	button/warning-outline/glass-inner-glow-hover	COLOR	{button/warning-outline/glass-inner-glow}		
+Components	button/warning-outline/glass-inner-glow-pressed	COLOR	{button/warning-outline/glass-inner-glow}		
+Components	button/warning-outline/glass-sheen-hover-opacity	FLOAT	{button/warning-outline/glass-sheen-opacity}		
+Components	button/warning-outline/glass-sheen-opacity	FLOAT	{opacity/50}	{opacity/5}	
+Components	button/warning-outline/glass-sheen-pressed-opacity	FLOAT	{button/warning-outline/glass-sheen-opacity}		
+Components	button/warning-outline/glass-specular-hover-opacity	FLOAT	{button/warning-outline/glass-specular-opacity}		
+Components	button/warning-outline/glass-specular-opacity	FLOAT	{opacity/90}	{opacity/40}	
+Components	button/warning-outline/glass-specular-pressed-opacity	FLOAT	{button/warning-outline/glass-specular-opacity}		
+Components	button/warning-outline/icon	COLOR	{button/warning-outline/foreground}		
+Components	button/warning-outline/icon-hover	COLOR	{button/warning-outline/foreground-hover}		
+Components	button/warning-outline/icon-pressed	COLOR	{button/warning-outline/foreground-pressed}		
+Components	button/warning-outline/shadow	COLOR	{color-alpha/amber-500/12}	{color-alpha/black/40}	
+Components	button/warning-outline/shadow-hover	COLOR	{button/warning-outline/shadow}		
+Components	button/warning-outline/surface	COLOR	{color-alpha/amber-100/80}	{color-alpha/amber-500/16}	
+Components	button/warning-outline/surface-hover	COLOR	{button/warning-outline/surface}		
+Components	button/warning-outline/surface-pressed	COLOR	{button/warning-outline/surface}		
+Components	canvas/artifact-page	COLOR	{color/white}		
+Components	catalogue/backdrop/dot	COLOR	{text/default}		
+Components	catalogue/backdrop/error	COLOR	{status/error}		
+Components	catalogue/backdrop/info	COLOR	{status/info}		
+Components	catalogue/backdrop/primary	COLOR	{action/primary}		
+Components	catalogue/backdrop/stripe	COLOR	{action/primary}		
+Components	catalogue/backdrop/success	COLOR	{status/success}		
+Components	catalogue/backdrop/warning	COLOR	{status/warning}		
+Components	catalogue/demo/border	COLOR	{border/default}		
+Components	catalogue/demo/card-surface	COLOR	{surface/card}		
+Components	catalogue/demo/description	COLOR	{text/muted}		
+Components	catalogue/demo/emphasis	COLOR	{action/primary}		
+Components	catalogue/demo/fill	COLOR	{surface/muted}		
+Components	catalogue/demo/glass-backdrop	COLOR	{text/muted}		
+Components	catalogue/demo/highlight	COLOR	{action/highlight}		
+Components	catalogue/demo/placeholder	COLOR	{text/muted}		
+Components	catalogue/demo/surface	COLOR	{surface/background}		
+Components	catalogue/description	COLOR	{text/muted}		
+Components	catalogue/divider	COLOR	{border/default}		
+Components	catalogue/foreground	COLOR	{text/default}		
+Components	catalogue/nav-item/surface-active	COLOR	{surface/accent}		
+Components	catalogue/nav-item/surface-hover	COLOR	{surface/accent}		
+Components	catalogue/nav/border	COLOR	{border/default}		
+Components	catalogue/nav/width	FLOAT	240		
+Components	catalogue/row/label	COLOR	{text/muted}		
+Components	catalogue/row/label-width	FLOAT	144		
+Components	catalogue/sample/border	COLOR	{text/default}		
+Components	catalogue/sample/border-opacity	FLOAT	{opacity/40}		
+Components	catalogue/sample/surface	COLOR	{surface/muted}		
+Components	catalogue/section/border	COLOR	{border/default}		
+Components	catalogue/section/surface	COLOR	{surface/card}		
+Components	catalogue/section/title	COLOR	{text/muted}		
+Components	catalogue/shadow-sample/surface	COLOR	{surface/card}		
+Components	catalogue/surface	COLOR	{surface/background}		
+Components	catalogue/swatch/border	COLOR	{border/default}		
+Components	catalogue/token-width	FLOAT	240		
+Components	catalogue/usage-row/surface-hover	COLOR	{surface/accent}		
+Components	catalogue/usage/border	COLOR	{border/default}		
+Components	catalogue/usage/header-surface	COLOR	{surface/muted}		
+Components	catalogue/usage/header-surface-opacity	FLOAT	{opacity/40}		
+Components	chain-dialog/meta	COLOR	{text/muted}		
+Components	chain-dialog/width	FLOAT	440		
+Components	chat-markdown/blockquote-border	COLOR	{border/default}		
+Components	chat-markdown/blockquote-foreground	COLOR	{text/muted}		
+Components	chat-markdown/checked/task-checkbox-check	COLOR	{surface/background}		
+Components	chat-markdown/checked/task-checkbox-surface	COLOR	{text/muted}		
+Components	chat-markdown/code-block-border	COLOR	{border/default}		
+Components	chat-markdown/code-block-border-opacity	FLOAT	{opacity/70}	{opacity/0}	
+Components	chat-markdown/code-block-foreground	COLOR	{color-alpha/zinc-800/80}	{color-alpha/neutral-100/80}	
+Components	chat-markdown/code-block-header	COLOR	{color-alpha/zinc-800/72}	{color-alpha/neutral-100/72}	
+Components	chat-markdown/code-block-surface	COLOR	{surface/muted}	{border/strong}	
+Components	chat-markdown/code-block-surface-opacity	FLOAT	{opacity/100}	{opacity/32}	
+Components	chat-markdown/foreground	COLOR	{color-alpha/zinc-800/80}	{color-alpha/neutral-100/80}	
+Components	chat-markdown/h6/heading	COLOR	{text/muted}		
+Components	chat-markdown/heading	COLOR	{text/default}		
+Components	chat-markdown/image-placeholder	COLOR	{surface/muted}		
+Components	chat-markdown/inline-code-border	COLOR	{border/default}		
+Components	chat-markdown/inline-code-foreground	COLOR	{text/default}		
+Components	chat-markdown/inline-code-surface	COLOR	{surface/muted}		
+Components	chat-markdown/link	COLOR	{action/highlight}		
+Components	chat-markdown/link-hover	COLOR	{action/highlight}		
+Components	chat-markdown/marker	COLOR	{color-alpha/zinc-800/80}	{color-alpha/neutral-100/80}	
+Components	chat-markdown/table-border	COLOR	{border/default}		
+Components	chat-markdown/table-border-opacity	FLOAT	{opacity/60}		
+Components	chat-markdown/table-foreground	COLOR	{color-alpha/zinc-800/80}	{color-alpha/neutral-100/80}	
+Components	chat-markdown/task-checkbox-border	COLOR	{border/strong}		
+Components	chat-markdown/task-checkbox-surface	COLOR	{surface/background}		
+Components	chat-tabs/border	COLOR	{border/default}		
+Components	chat-tabs/detach-menu-width	FLOAT	260		
+Components	chat-tabs/empty-foreground	COLOR	{text/muted}		
+Components	chat-tabs/more-menu-width	FLOAT	300		
+Components	chat-tabs/status-failed	COLOR	{status/error}		
+Components	chat-tabs/status-finished	COLOR	{status/success}		
+Components	chat-tabs/tab-menu-width	FLOAT	260		
+Components	checkbox/border	COLOR	{border/strong}		
+Components	checkbox/border-invalid	COLOR	{status/error}		
+Components	checkbox/border-invalid-focus	COLOR	{status/error}		
+Components	checkbox/border-invalid-focus-opacity	FLOAT	{opacity/64}		
+Components	checkbox/border-invalid-opacity	FLOAT	{opacity/36}		
+Components	checkbox/indicator/foreground	COLOR	{action/on-primary}		
+Components	checkbox/indicator/foreground-indeterminate	COLOR	{text/default}		
+Components	checkbox/indicator/surface-checked	COLOR	{action/primary}		
+Components	checkbox/ring	COLOR	{border/focus}		
+Components	checkbox/ring-invalid	COLOR	{status/error}		
+Components	checkbox/ring-invalid-opacity	FLOAT	{opacity/50}	{opacity/24}	
+Components	checkbox/ring-offset	COLOR	{surface/background}		
+Components	checkbox/shadow	COLOR	{color-alpha/black/5}		
+Components	checkbox/shadow-inset/color	COLOR	{color-alpha/black/4}	{color-alpha/white/6}	
+Components	checkbox/shadow-inset/y	FLOAT	1	-1	
+Components	checkbox/surface	COLOR	{surface/background}	{border/strong}	
+Components	checkbox/surface-opacity	FLOAT	{opacity/100}	{opacity/32}	
+Components	combobox/search/divider	COLOR	{border/default}		
+Components	combobox/search/divider-focus	COLOR	{border/focus}		
+Components	combobox/search/divider-opacity	FLOAT	{opacity/70}		
+Components	combobox/search/icon	COLOR	{text/muted}		
+Components	combobox/search/icon-opacity	FLOAT	{opacity/55}		
+Components	command/backdrop	COLOR	{surface/backdrop}		
+Components	command/border	COLOR	{border/glass}		
+Components	command/content-inset	FLOAT	16		
+Components	command/footer/foreground	COLOR	{text/muted}		
+Components	command/footer/surface	COLOR	{text/default}		
+Components	command/footer/surface-opacity	FLOAT	{opacity/3}		
+Components	command/foreground	COLOR	{text/default}		
+Components	command/input/icon	COLOR	{icon/muted}		
+Components	command/input/placeholder	COLOR	{text/muted}		
+Components	command/item/foreground-active	COLOR	{text/default}		
+Components	command/item/foreground-highlighted	COLOR	{text/default}		
+Components	command/item/surface-active	COLOR	{surface/accent}		
+Components	command/item/surface-highlighted	COLOR	{text/default}		
+Components	command/item/surface-highlighted-opacity	FLOAT	{opacity/8}		
+Components	command/item/surface-selected	COLOR	{text/default}		
+Components	command/item/surface-selected-opacity	FLOAT	{opacity/6}		
+Components	command/kbd/foreground	COLOR	{text/default}		
+Components	command/kbd/surface	COLOR	{text/default}		
+Components	command/kbd/surface-opacity	FLOAT	{opacity/8}		
+Components	command/shell-inset	FLOAT	8		
+Components	command/shortcut/foreground	COLOR	{text/muted}		
+Components	command/surface	COLOR	{surface/glass}		
+Components	comment-avatar/foreground	COLOR	{text/default}		
+Components	comment-avatar/foreground-disabled	COLOR	{text/muted}		
+Components	comment-avatar/icon	COLOR	{icon/muted}		
+Components	comment-avatar/ring	COLOR	{border/default}		
+Components	comment-avatar/surface	COLOR	{surface/background}		
+Components	comment-card/border	COLOR	{border/glass}		
+Components	comment-card/foreground	COLOR	{text/default}		
+Components	comment-card/height	FLOAT	560		
+Components	comment-card/icon	COLOR	{icon/default}		
+Components	comment-card/meta	COLOR	{text/muted}		
+Components	comment-card/offset	FLOAT	120		
+Components	comment-card/resolved-icon	COLOR	{status/success-text}		
+Components	comment-card/surface	COLOR	{surface/glass-popover}		
+Components	comment-cluster/avatar-ring	COLOR	{surface/popover}		
+Components	comment-cluster/border	COLOR	{border/default}		
+Components	comment-cluster/foreground	COLOR	{text/default}		
+Components	comment-cluster/surface	COLOR	{surface/popover}		
+Components	comment-list/row/avatar-ring	COLOR	{surface/background}		
+Components	comment-list/row/indicator	COLOR	{action/highlight}		
+Components	comment-list/row/ring-focus	COLOR	{border/focus}		
+Components	comment-list/row/surface-hover	COLOR	{surface/accent}		
+Components	comment-list/row/surface-selected	COLOR	{surface/accent}		
+Components	comment-pin/border	COLOR	{border/default}		
+Components	comment-pin/border-active	COLOR	{action/primary}		
+Components	comment-pin/indicator	COLOR	{action/highlight}		
+Components	comment-pin/indicator-border	COLOR	{surface/background}		
+Components	comment-pin/ring-selected	COLOR	{action/highlight}		
+Components	comment-pin/surface	COLOR	{surface/popover}		
+Components	comment-pin/surface-active	COLOR	{action/primary}		
+Components	comment-region/fill	COLOR	{action/highlight}		
+Components	comment-region/fill-opacity	FLOAT	{opacity/6}		
+Components	comment-region/indicator	COLOR	{action/highlight}		
+Components	comment-region/indicator-border	COLOR	{surface/background}		
+Components	comment-region/stroke	COLOR	{action/highlight}		
+Components	comment-sidebar/border	COLOR	{border/default}		
+Components	comment-sidebar/foreground	COLOR	{text/default}		
+Components	comment-sidebar/icon	COLOR	{icon/default}		
+Components	comment-sidebar/surface	COLOR	{surface/background}		
+Components	comment-toolbar/indicator	COLOR	{action/highlight}		
+Components	comment-toolbar/indicator-border	COLOR	{surface/popover}		
+Components	comment/author	COLOR	{text/default}		
+Components	comment/foreground	COLOR	{text/default}		
+Components	comment/foreground-disabled	COLOR	{text/muted}		
+Components	comment/mention	COLOR	{action/highlight}		
+Components	comment/meta	COLOR	{text/muted}		
+Components	composer-menu/description	COLOR	{text/muted}		
+Components	composer-menu/empty	COLOR	{text/muted}		
+Components	composer-menu/icon	COLOR	{text/muted}		
+Components	composer-menu/row-foreground	COLOR	{text/default}		
+Components	composer-menu/row-foreground-highlighted	COLOR	{text/default}		
+Components	composer-menu/row-surface-highlighted	COLOR	{surface/accent}		
+Components	composer/border	COLOR	{border/default}		
+Components	composer/border-dragging	COLOR	{border/focus}		
+Components	composer/controls-menu-description	COLOR	{text/muted}		
+Components	composer/controls-menu-width	FLOAT	300		
+Components	composer/drop-border	COLOR	{action/primary}		
+Components	composer/drop-foreground	COLOR	{text/default}		
+Components	composer/drop-surface	COLOR	{surface/background}		
+Components	composer/drop-surface-opacity	FLOAT	{opacity/80}		
+Components	composer/foreground	COLOR	{text/default}		
+Components	composer/note	COLOR	{text/muted}		
+Components	composer/placeholder	COLOR	{text/muted}		
+Components	composer/placeholder-opacity	FLOAT	{opacity/75}		
+Components	composer/resting-controls-foreground	COLOR	{text/muted}		
+Components	composer/resting-image-border	COLOR	{border/default}		
+Components	composer/resting-image-border-opacity	FLOAT	{opacity/80}		
+Components	composer/selected-node-ring	COLOR	{border/focus}		
+Components	composer/surface	COLOR	{surface/card}	{surface/raised}	
+Components	composer/surface-opacity	FLOAT	{effect/glass-opacity}		
+Components	composer/target-chat-foreground	COLOR	{text/default}		
+Components	composer/target-foreground	COLOR	{text/muted}		
+Components	confirm-dialog/backdrop	COLOR	{surface/backdrop}		
+Components	confirm-dialog/border	COLOR	{border/glass}		
+Components	confirm-dialog/description	COLOR	{text/muted}		
+Components	confirm-dialog/footer-border	COLOR	{border/default}		
+Components	confirm-dialog/footer-surface	COLOR	{surface/muted}		
+Components	confirm-dialog/footer-surface-opacity	FLOAT	72		
+Components	confirm-dialog/foreground	COLOR	{text/default}		
+Components	confirm-dialog/surface	COLOR	{surface/glass}		
+Components	confirm-dialog/title	COLOR	{text/default}		
+Components	confirm-dialog/width	FLOAT	380		
+Components	context-meter/bar-track	COLOR	{surface/muted}		
+Components	context-meter/bar-track-opacity	FLOAT	{opacity/60}		
+Components	context-meter/fill	COLOR	{action/highlight}		
+Components	context-meter/label	COLOR	{text/muted}		
+Components	context-meter/overloaded/fill	COLOR	{status/error}		
+Components	context-meter/secondary	COLOR	{text/muted}		
+Components	context-meter/track	COLOR	{text/muted}		
+Components	context-meter/track-opacity	FLOAT	{opacity/24}		
+Components	corner-card/border	COLOR	{border/default}		
+Components	corner-card/surface	COLOR	{surface/glass}		
+Components	design-panel/border	COLOR	{border/default}		
+Components	design-panel/chevron	COLOR	{text/muted}		
+Components	design-panel/foreground	COLOR	{text/default}		
+Components	design-panel/icon	COLOR	{icon/muted}		
+Components	design-panel/label	COLOR	{text/muted}		
+Components	design-panel/label-width	FLOAT	120		
+Components	design-panel/note	COLOR	{text/muted}		
+Components	design-panel/sample/swatch	COLOR	{surface/accent}		
+Components	design-panel/surface	COLOR	{surface/background}		
+Components	design-panel/swatch-border	COLOR	{border/default}		
+Components	design-panel/title	COLOR	{text/default}		
+Components	dial/border	COLOR	{border/strong}		
+Components	dial/border-hover	COLOR	{text/muted}		
+Components	dial/control-shadow	COLOR	{color-alpha/black/4}		
+Components	dial/dropdown-bg	COLOR	{surface/popover}		
+Components	dial/focus-ring	COLOR	{border/focus}		
+Components	dial/glass-bg	COLOR	{surface/card}		
+Components	dial/glass-bg-docked	COLOR	{surface/background}		
+Components	dial/shadow-dropdown/blur	FLOAT	16		
+Components	dial/shadow-dropdown/color	COLOR	#00000014		
+Components	dial/shadow-dropdown/spread	FLOAT	0		
+Components	dial/shadow-dropdown/x	FLOAT	0		
+Components	dial/shadow-dropdown/y	FLOAT	4		
+Components	dial/slider-fill-active	COLOR	{border/default}		
+Components	dial/surface	COLOR	{surface/background}		
+Components	dial/surface-active	COLOR	{surface/accent}		
+Components	dial/surface-hover	COLOR	{surface/accent}		
+Components	dial/surface-subtle	COLOR	{border/default}		
+Components	dial/text-focus	COLOR	{text/default}		
+Components	dial/text-label	COLOR	{text/muted}		
+Components	dial/text-primary	COLOR	{text/default}		
+Components	dial/text-root	COLOR	{text/default}		
+Components	dial/text-secondary	COLOR	{text/muted}		
+Components	dial/text-section	COLOR	{text/muted}		
+Components	dial/text-tertiary	COLOR	{text/muted}		
+Components	dialog/backdrop	COLOR	{surface/backdrop}		
+Components	dialog/border	COLOR	{border/glass}		
+Components	dialog/description	COLOR	{text/muted}		
+Components	dialog/footer-border	COLOR	{border/default}		
+Components	dialog/footer-surface	COLOR	{surface/muted}		
+Components	dialog/footer-surface-opacity	FLOAT	{opacity/72}		
+Components	dialog/foreground	COLOR	{text/default}		
+Components	dialog/media/backdrop	COLOR	{color/black}		
+Components	dialog/media/backdrop-opacity	FLOAT	{opacity/75}		
+Components	dialog/surface	COLOR	{surface/glass}		
+Components	dialog/title	COLOR	{text/default}		
+Components	diff-panel/addition	COLOR	{diff/addition}		
+Components	diff-panel/addition/emphasis-opacity	FLOAT	{opacity/20}		
+Components	diff-panel/addition/line-tint	COLOR	{diff/addition}		
+Components	diff-panel/addition/line-tint-hover-opacity	FLOAT	{opacity/16}		
+Components	diff-panel/addition/line-tint-opacity	FLOAT	{opacity/50}	{opacity/30}	
+Components	diff-panel/addition/number-tint-opacity	FLOAT	{opacity/65}	{opacity/40}	
+Components	diff-panel/border	COLOR	{border/default}		
+Components	diff-panel/buffer/line-tint	COLOR	{text/default}		
+Components	diff-panel/buffer/line-tint-opacity	FLOAT	{opacity/10}		
+Components	diff-panel/code-foreground	COLOR	{text/default}		
+Components	diff-panel/code-surface	COLOR	{surface/code}		
+Components	diff-panel/context/line-tint	COLOR	{text/default}		
+Components	diff-panel/context/line-tint-opacity	FLOAT	{opacity/3}		
+Components	diff-panel/deletion	COLOR	{diff/deletion}		
+Components	diff-panel/deletion/emphasis-opacity	FLOAT	{opacity/20}		
+Components	diff-panel/deletion/line-tint	COLOR	{diff/deletion}		
+Components	diff-panel/deletion/line-tint-hover-opacity	FLOAT	{opacity/16}		
+Components	diff-panel/deletion/line-tint-opacity	FLOAT	{opacity/50}	{opacity/30}	
+Components	diff-panel/deletion/number-tint-opacity	FLOAT	{opacity/65}	{opacity/40}	
+Components	diff-panel/divider	COLOR	{border/default}		
+Components	diff-panel/divider-opacity	FLOAT	{opacity/60}		
+Components	diff-panel/empty	COLOR	{text/muted}		
+Components	diff-panel/file-names	COLOR	{text/muted}		
+Components	diff-panel/file-title	COLOR	{text/default}		
+Components	diff-panel/hover/line-tint	COLOR	{text/default}		
+Components	diff-panel/hover/line-tint-opacity	FLOAT	{opacity/6}		
+Components	diff-panel/line-number	COLOR	{text/muted}		
+Components	diff-panel/offset	FLOAT	52		
+Components	diff-panel/separator/line-tint	COLOR	{text/default}		
+Components	diff-panel/separator/line-tint-opacity	FLOAT	{opacity/5}		
+Components	diff-panel/shadow	COLOR	{color-alpha/black/5}		
+Components	diff-panel/surface	COLOR	{surface/background}		
+Components	diff-panel/viewport-inset	FLOAT	160		
+Components	diff-panel/width	FLOAT	760		
+Components	diff/addition	COLOR	{status/success}		
+Components	diff/addition-foreground	COLOR	{color/emerald/600}	{color/emerald/400}	
+Components	diff/deletion	COLOR	{status/error}		
+Components	diff/deletion-foreground	COLOR	{color/red/600}	{color/red/400}	
+Components	dot-grid/dot	COLOR	#dadadb	#3e3e3e	
+Components	dot-grid/surface	COLOR	{surface/background}		
+Components	drawer-grip/indicator-dragging	COLOR	{border/focus}		
+Components	drawer-grip/indicator-focus	COLOR	{border/focus}		
+Components	drawer-grip/indicator-hover	COLOR	{border/focus}		
+Components	ease-picker/icon	COLOR	{text/muted}		
+Components	edit-overlay/border-copy	COLOR	{action/primary}		
+Components	edit-overlay/border-hover	COLOR	{border/focus}		
+Components	edit-overlay/border-selected	COLOR	{action/primary}		
+Components	edit-overlay/halo-inner	COLOR	{color/white}		
+Components	edit-overlay/halo-outer	COLOR	{color/black}		
+Components	edit-overlay/tag/foreground	COLOR	{action/on-primary}		
+Components	edit-overlay/tag/surface	COLOR	{action/primary}		
+Components	empty/description	COLOR	{text/muted}		
+Components	empty/link-hover	COLOR	{action/primary}		
+Components	empty/media/border	COLOR	{border/default}		
+Components	empty/media/icon	COLOR	{icon/default}		
+Components	empty/media/shadow	COLOR	{color-alpha/black/5}		
+Components	empty/media/surface	COLOR	{surface/card}		
+Components	final-prompt-dialog/description	COLOR	{text/muted}		
+Components	final-prompt-dialog/divider	COLOR	{border/default}		
+Components	final-prompt-dialog/field/border	COLOR	{border/default}		
+Components	final-prompt-dialog/field/foreground	COLOR	{text/default}		
+Components	final-prompt-dialog/field/surface	COLOR	{surface/card}		
+Components	final-prompt-dialog/height	FLOAT	760		
+Components	final-prompt-dialog/label	COLOR	{text/muted}		
+Components	final-prompt-dialog/meta	COLOR	{text/muted}		
+Components	final-prompt-dialog/width	FLOAT	640		
+Components	fps-meter/border	COLOR	{border/default}		
+Components	fps-meter/foreground	COLOR	{text/muted}		
+Components	fps-meter/surface	COLOR	{surface/popover}		
+Components	generate-composer/agent/width	FLOAT	416		
+Components	generate-composer/width	FLOAT	418		
+Components	generate-tray/foreground	COLOR	{text/default}		
+Components	generate-tray/label	COLOR	{text/default}		
+Components	generate-tray/meta	COLOR	{text/muted}		
+Components	generate-tray/note	COLOR	{text/muted}		
+Components	generate-tray/placeholder	COLOR	{text/muted}		
+Components	generate-tray/prop-menu/meta	COLOR	{text/muted}		
+Components	generate-tray/prop-menu/width	FLOAT	186		
+Components	generate-tray/range/fill	COLOR	{action/highlight}		
+Components	group/border	COLOR	{border/default}		
+Components	group/border-selected	COLOR	{action/highlight}		
+Components	group/border-width	FLOAT	1.5		
+Components	group/surface	COLOR	#f2f8fb	#0e1214	
+Components	image-drop/indicator	COLOR	{action/primary}		
+Components	inline-button/default/foreground	COLOR	{text/default}		
+Components	inline-button/default/foreground-hover	COLOR	{inline-button/default/foreground}		
+Components	inline-button/destructive/foreground	COLOR	{status/error}		
+Components	inline-button/destructive/foreground-hover	COLOR	{inline-button/destructive/foreground}		
+Components	inline-button/destructive/foreground-opacity	FLOAT	{opacity/80}		
+Components	inline-button/focus-ring	COLOR	{border/focus}		
+Components	inline-button/muted/foreground	COLOR	{text/muted}		
+Components	inline-button/muted/foreground-hover	COLOR	{text/default}		
+Components	inline-button/picker/foreground	COLOR	{text/default}		
+Components	inline-button/picker/foreground-hover	COLOR	{inline-button/picker/foreground}		
+Components	inline-button/picker/underline	COLOR	{text/default}		
+Components	inline-button/picker/underline-opacity	FLOAT	{opacity/30}		
+Components	input-group/border-focus	COLOR	{input/border-focus}		
+Components	input-group/border-invalid	COLOR	{input/border-invalid}		
+Components	input-group/border-invalid-focus	COLOR	{input/border-invalid-focus}		
+Components	input-group/border-invalid-focus-opacity	FLOAT	{input/border-invalid-focus-opacity}		
+Components	input-group/border-invalid-opacity	FLOAT	{input/border-invalid-opacity}		
+Components	input-group/default/border	COLOR	{input/border}		
+Components	input-group/default/shadow	COLOR	{input/shadow}		
+Components	input-group/default/shadow-inset/color	COLOR	{color-alpha/black/4}	{color-alpha/white/6}	
+Components	input-group/default/shadow-inset/y	FLOAT	1	-1	
+Components	input-group/default/surface	COLOR	{input/surface}		
+Components	input-group/default/surface-opacity	FLOAT	{input/surface-opacity}		
+Components	input-group/foreground	COLOR	{input/foreground}		
+Components	input-group/ghost/surface-focus	COLOR	{surface/background}		
+Components	input-group/ghost/surface-hover	COLOR	{surface/muted}		
+Components	input-group/ghost/surface-hover-opacity	FLOAT	{opacity/40}		
+Components	input-group/ring	COLOR	{input/ring}		
+Components	input-group/ring-invalid	COLOR	{input/ring-invalid}		
+Components	input-group/surface-autofill	COLOR	{input/surface-autofill}		
+Components	input-group/surface-autofill-opacity	FLOAT	{input/surface-autofill-opacity}		
+Components	input/border	COLOR	{border/strong}		
+Components	input/border-focus	COLOR	{border/focus}		
+Components	input/border-invalid	COLOR	{status/error}		
+Components	input/border-invalid-focus	COLOR	{input/border-invalid}		
+Components	input/border-invalid-focus-opacity	FLOAT	{opacity/64}		
+Components	input/border-invalid-opacity	FLOAT	{opacity/36}		
+Components	input/file/foreground	COLOR	{text/muted}		
+Components	input/file/label	COLOR	{text/default}		
+Components	input/foreground	COLOR	{text/default}		
+Components	input/placeholder	COLOR	{text/muted}		
+Components	input/ring	COLOR	{color-alpha/sky-600/24}	{color-alpha/sky-300/24}	
+Components	input/ring-invalid	COLOR	{color-alpha/red-500/16}	{color-alpha/red-500/24}	
+Components	input/shadow	COLOR	{color-alpha/black/5}		
+Components	input/shadow-inset/color	COLOR	{color-alpha/black/4}	{color-alpha/white/6}	
+Components	input/shadow-inset/y	FLOAT	1	-1	
+Components	input/surface	COLOR	{surface/background}	{border/strong}	
+Components	input/surface-autofill	COLOR	{text/default}		
+Components	input/surface-autofill-opacity	FLOAT	{opacity/4}	{opacity/8}	
+Components	input/surface-opacity	FLOAT	{opacity/100}	{opacity/32}	
+Components	ipad-pair-dialog/code/foreground	COLOR	{text/default}		
+Components	ipad-pair-dialog/description	COLOR	{text/muted}		
+Components	ipad-pair-dialog/qr/border	COLOR	{border/default}		
+Components	ipad-pair-dialog/width	FLOAT	420		
+Components	kbd/foreground	COLOR	{text/muted}		
+Components	kbd/surface	COLOR	{surface/muted}		
+Components	kit-dialog/confirm/width	FLOAT	400		
+Components	kit-dialog/description	COLOR	{text/muted}		
+Components	kit-dialog/width	FLOAT	960		
+Components	kit-guidance/border	COLOR	{border/default}		
+Components	kit-guidance/description	COLOR	{text/muted}		
+Components	kit-guidance/error/foreground	COLOR	{status/error-text}		
+Components	kit-import-dialog/drop/border	COLOR	{border/default}		
+Components	kit-import-dialog/drop/foreground	COLOR	{text/muted}		
+Components	kit-import-dialog/drop/surface-dragging	COLOR	{surface/accent}		
+Components	kit-import-dialog/label	COLOR	{text/default}		
+Components	kit-import-dialog/width	FLOAT	520		
+Components	kit-replace-dialog/width	FLOAT	400		
+Components	kit-table/alias/surface	COLOR	{surface/muted}		
+Components	kit-table/error/foreground	COLOR	{status/error}		
+Components	kit-table/header/surface	COLOR	{surface/popover}		
+Components	kit-table/height	FLOAT	480		
+Components	kit-table/label	COLOR	{text/muted}		
+Components	kit-table/meta	COLOR	{text/muted}		
+Components	kit-table/nav/width	FLOAT	140		
+Components	kit-table/swatch/border	COLOR	{border/default}		
+Components	kit-table/width	FLOAT	560		
+Components	kit-update-dialog/description	COLOR	{text/muted}		
+Components	kit-update-dialog/divider	COLOR	{border/default}		
+Components	kit-update-dialog/swatch/border	COLOR	{border/default}		
+Components	kit-update-dialog/width	FLOAT	640		
+Components	label-hue/amber	COLOR	{color/amber/500}		
+Components	label-hue/blue	COLOR	{color/blue/500}		
+Components	label-hue/cyan	COLOR	{color/cyan/500}		
+Components	label-hue/gray	COLOR	{color/gray/500}		
+Components	label-hue/green	COLOR	{color/green/500}		
+Components	label-hue/neutral	COLOR	{color/neutral/500}		
+Components	label-hue/orange	COLOR	{color/orange/500}		
+Components	label-hue/pink	COLOR	{color/pink/500}		
+Components	label-hue/purple	COLOR	{color/purple/500}		
+Components	label-hue/red	COLOR	{color/red/500}		
+Components	label-hue/teal	COLOR	{color/teal/500}		
+Components	label-hue/yellow	COLOR	{color/yellow/500}		
+Components	label/foreground	COLOR	{text/default}		
+Components	legacy-import/alert/width	FLOAT	520		
+Components	legacy-import/report/foreground	COLOR	{text/default}		
+Components	legacy-import/report/width	FLOAT	520		
+Components	library-dialog/card/border	COLOR	{border/default}		
+Components	library-dialog/card/divider	COLOR	{border/default}		
+Components	library-dialog/card/foreground	COLOR	{text/default}		
+Components	library-dialog/card/surface	COLOR	{surface/card}		
+Components	library-dialog/confirm/width	FLOAT	400		
+Components	library-dialog/height	FLOAT	760		
+Components	library-dialog/meta	COLOR	{text/muted}		
+Components	library-dialog/row/divider	COLOR	{border/default}		
+Components	library-dialog/width	FLOAT	680		
+Components	listbox/border	COLOR	{border/glass}		
+Components	listbox/empty/foreground	COLOR	{text/muted}		
+Components	listbox/group-label/foreground	COLOR	{text/muted}		
+Components	listbox/max-height	FLOAT	368		
+Components	listbox/row/description	COLOR	{text/muted}		
+Components	listbox/row/foreground	COLOR	{text/default}		
+Components	listbox/row/foreground-highlighted	COLOR	{text/default}		
+Components	listbox/row/icon	COLOR	{text/muted}		
+Components	listbox/row/surface	COLOR	{color-alpha/white/0}		
+Components	listbox/row/surface-highlighted	COLOR	{surface/accent}		
+Components	listbox/row/surface-selected	COLOR	{text/default}		
+Components	listbox/row/surface-selected-opacity	FLOAT	{opacity/8}		
+Components	listbox/scroll-arrow/surface	COLOR	{surface/popover}		
+Components	listbox/shadow	COLOR	{color-alpha/black/5}		
+Components	listbox/shadow-inset/color	COLOR	{color-alpha/black/4}	{color-alpha/white/6}	
+Components	listbox/shadow-inset/y	FLOAT	1	-1	
+Components	listbox/status/foreground	COLOR	{text/muted}		
+Components	listbox/surface	COLOR	{surface/glass-popover}		
+Components	media-card/border	COLOR	{border/default}		
+Components	media-card/error/foreground	COLOR	{status/error-text}		
+Components	media-card/foreground	COLOR	{text/default}		
+Components	media-card/meta	COLOR	{text/muted}		
+Components	media-card/surface	COLOR	{surface/card}		
+Components	media-card/track	COLOR	{action/highlight}		
+Components	mention-list/height	FLOAT	168		
+Components	mention-list/ref	COLOR	{action/highlight}		
+Components	mention-list/width	FLOAT	260		
+Components	menu/border	COLOR	{border/glass}		
+Components	menu/group/label	COLOR	{text/muted}		
+Components	menu/item-destructive/foreground	COLOR	{status/error-text}		
+Components	menu/item-destructive/foreground-highlighted	COLOR	{menu/item-destructive/foreground}		
+Components	menu/item-destructive/icon	COLOR	{menu/item-destructive/foreground}		
+Components	menu/item-destructive/icon-highlighted	COLOR	{menu/item-destructive/icon}		
+Components	menu/item-destructive/icon-opacity	FLOAT	{opacity/80}		
+Components	menu/item-destructive/surface	COLOR	{color-alpha/white/0}		
+Components	menu/item-destructive/surface-highlighted	COLOR	{surface/accent}		
+Components	menu/item-ghost/foreground	COLOR	{text/default}		
+Components	menu/item-ghost/foreground-highlighted	COLOR	{text/default}		
+Components	menu/item-ghost/icon	COLOR	{text/muted}		
+Components	menu/item-ghost/icon-highlighted	COLOR	{menu/item-ghost/icon}		
+Components	menu/item-ghost/icon-opacity	FLOAT	{opacity/80}		
+Components	menu/item-ghost/surface	COLOR	{color-alpha/white/0}		
+Components	menu/item-ghost/surface-highlighted	COLOR	{surface/accent}		
+Components	menu/item/foreground	COLOR	{text/default}		
+Components	menu/item/foreground-highlighted	COLOR	{text/default}		
+Components	menu/item/foreground-open	COLOR	{menu/item/foreground-highlighted}		
+Components	menu/item/icon	COLOR	{text/muted}		
+Components	menu/item/icon-highlighted	COLOR	{menu/item/icon}		
+Components	menu/item/icon-opacity	FLOAT	{opacity/80}		
+Components	menu/item/icon-open	COLOR	{menu/item/icon}		
+Components	menu/item/surface	COLOR	{color-alpha/white/0}		
+Components	menu/item/surface-checked	COLOR	{text/default}		
+Components	menu/item/surface-checked-opacity	FLOAT	{opacity/8}		
+Components	menu/item/surface-highlighted	COLOR	{surface/accent}		
+Components	menu/item/surface-open	COLOR	{menu/item/surface-highlighted}		
+Components	menu/separator	COLOR	{border/default}		
+Components	menu/shortcut	COLOR	{text/muted}		
+Components	menu/surface	COLOR	{surface/glass-popover}		
+Components	menu/switch/inset	COLOR	{color-alpha/black/4}		
+Components	menu/switch/ring-focus	COLOR	{border/focus}		
+Components	menu/switch/ring-offset	COLOR	{surface/background}		
+Components	menu/switch/surface	COLOR	{border/strong}		
+Components	menu/switch/surface-checked	COLOR	{action/primary}		
+Components	menu/switch/thumb	COLOR	{surface/background}		
+Components	menu/switch/thumb-shadow	COLOR	{color-alpha/black/5}		
+Components	message-action/pill-end/divider	COLOR	{message/action-foreground}		
+Components	message-action/pill-end/divider-opacity	FLOAT	{opacity/12}		
+Components	message-action/pill/divider	COLOR	{color-alpha/white/12}	{color-alpha/neutral-950/12}	
+Components	message-action/pill/foreground	COLOR	{message/action-foreground}		
+Components	message-action/pill/shadow	COLOR	{color-alpha/neutral-900/24}	{color-alpha/neutral-50/24}	
+Components	message-action/pill/surface	COLOR	{message/action}		
+Components	message-action/pill/surface-hover	COLOR	{message/action-hover}		
+Components	message-action/ring-focus	COLOR	{border/focus}		
+Components	message-action/ring-offset	COLOR	{surface/background}		
+Components	message-action/send/foreground	COLOR	{message/action-foreground}		
+Components	message-action/send/inset	COLOR	{color-alpha/white/16}	{color-alpha/neutral-950/16}	
+Components	message-action/send/shadow	COLOR	{color-alpha/neutral-900/24}	{color-alpha/neutral-50/24}	
+Components	message-action/send/surface	COLOR	{message/action}		
+Components	message-action/send/surface-hover	COLOR	{message/action-hover}		
+Components	message-action/stop/foreground	COLOR	{action/on-primary}		
+Components	message-action/stop/inset	COLOR	{color-alpha/white/16}	{color-alpha/neutral-950/16}	
+Components	message-action/stop/shadow	COLOR	{color-alpha/red-500/24}		
+Components	message-action/stop/surface	COLOR	{status/error}		
+Components	message-action/stop/surface-hover-opacity	FLOAT	{opacity/100}		
+Components	message-action/stop/surface-opacity	FLOAT	{opacity/90}		
+Components	message/action	COLOR	{action/primary}		
+Components	message/action-foreground	COLOR	{action/on-primary}		
+Components	message/action-hover	COLOR	#2e2e2e	#e2e2e2	
+Components	model-dialog/description	COLOR	{text/muted}		
+Components	model-dialog/height	FLOAT	720		
+Components	model-dialog/languages-column/width	FLOAT	110		
+Components	model-dialog/released-column/width	FLOAT	130		
+Components	model-dialog/width	FLOAT	680		
+Components	motion-timeline/bar/ring-focus	COLOR	{border/focus}		
+Components	motion-timeline/bar/ring-selected	COLOR	{text/default}		
+Components	motion-timeline/bar/surface	COLOR	{action/primary}		
+Components	motion-timeline/bar/surface-copy	COLOR	{action/primary}		
+Components	motion-timeline/bar/surface-copy-opacity	FLOAT	{opacity/24}		
+Components	motion-timeline/bar/surface-disabled	COLOR	{text/muted}		
+Components	motion-timeline/bar/surface-disabled-opacity	FLOAT	{opacity/50}		
+Components	motion-timeline/bar/surface-opacity	FLOAT	{opacity/70}		
+Components	motion-timeline/border	COLOR	{border/default}		
+Components	motion-timeline/clip/surface	COLOR	{text/muted}		
+Components	motion-timeline/clip/surface-opacity	FLOAT	{opacity/40}		
+Components	motion-timeline/handle	COLOR	{action/primary}		
+Components	motion-timeline/icon	COLOR	{icon/muted}		
+Components	motion-timeline/keyframe/fill	COLOR	{text/default}		
+Components	motion-timeline/keyframe/ring-focus	COLOR	{border/focus}		
+Components	motion-timeline/label/surface	COLOR	{surface/card}		
+Components	motion-timeline/meta	COLOR	{text/muted}		
+Components	motion-timeline/note	COLOR	{text/muted}		
+Components	motion-timeline/past-end/surface	COLOR	{surface/background}		
+Components	motion-timeline/past-end/surface-opacity	FLOAT	{opacity/60}		
+Components	motion-timeline/playhead	COLOR	{action/primary}		
+Components	motion-timeline/row/foreground-disabled	COLOR	{text/muted}		
+Components	motion-timeline/row/surface-selected	COLOR	{surface/accent}		
+Components	motion-timeline/row/surface-selected-opacity	FLOAT	{opacity/40}		
+Components	motion-timeline/ruler/end-border	COLOR	{text/default}		
+Components	motion-timeline/ruler/range	COLOR	{action/primary}		
+Components	motion-timeline/ruler/range-opacity	FLOAT	{opacity/16}		
+Components	motion-timeline/ruler/surface	COLOR	{surface/card}		
+Components	motion-timeline/ruler/tick	COLOR	{text/muted}		
+Components	motion-timeline/snap-guide/border	COLOR	{text/default}		
+Components	motion-timeline/snap-guide/border-opacity	FLOAT	{opacity/80}		
+Components	motion-timeline/surface	COLOR	{surface/card}		
+Components	no-project/border	COLOR	{border/default}		
+Components	no-project/description	COLOR	{text/muted}		
+Components	no-project/foreground	COLOR	{text/default}		
+Components	no-project/surface	COLOR	{surface/card}		
+Components	no-provider/alert-border	COLOR	{border/default}		
+Components	no-provider/alert-description	COLOR	{text/muted}		
+Components	no-provider/alert-foreground	COLOR	{text/default}		
+Components	no-provider/alert-surface	COLOR	{border/strong}		
+Components	no-provider/alert-surface-opacity	FLOAT	0	32	
+Components	no-provider/description	COLOR	{text/muted}		
+Components	no-provider/link	COLOR	{status/info-text}		
+Components	no-provider/media-border	COLOR	{border/default}		
+Components	no-provider/media-icon	COLOR	{text/default}		
+Components	no-provider/media-surface	COLOR	{surface/card}		
+Components	no-provider/provider-name	COLOR	{text/default}		
+Components	no-provider/title	COLOR	{text/default}		
+Components	node-editor/icon	COLOR	{icon/muted}		
+Components	node-editor/input/border	COLOR	{border/default}		
+Components	node-editor/input/border-dragging	COLOR	{border/focus}		
+Components	node-editor/input/surface	COLOR	{surface/background}		
+Components	node-editor/meta	COLOR	{text/muted}		
+Components	node-editor/note	COLOR	{text/muted}		
+Components	node/border	COLOR	{border/default}		
+Components	node/foreground	COLOR	{text/default}		
+Components	node/icon	COLOR	{icon/muted}		
+Components	node/meta	COLOR	{text/muted}		
+Components	node/note	COLOR	{text/muted}		
+Components	node/result/foreground	COLOR	{text/muted}		
+Components	node/result/surface	COLOR	{surface/muted}		
+Components	node/result/surface-opacity	FLOAT	{opacity/40}		
+Components	node/status/foreground	COLOR	{text/default}		
+Components	node/status/foreground-failed	COLOR	{status/error-text}		
+Components	node/status/indicator	COLOR	{text/muted}		
+Components	node/status/indicator-failed	COLOR	{status/error}		
+Components	node/status/indicator-opacity	FLOAT	{opacity/50}		
+Components	node/status/indicator-out-of-date	COLOR	{status/warning}		
+Components	node/status/indicator-ready	COLOR	{status/success}		
+Components	node/status/indicator-running	COLOR	{status/info}		
+Components	node/status/indicator-waiting	COLOR	{status/warning}		
+Components	node/surface	COLOR	{surface/card}		
+Components	node/version/border	COLOR	{border/default}		
+Components	node/version/border-selected	COLOR	{border/focus}		
+Components	node/version/foreground-failed	COLOR	{status/error-text}		
+Components	node/version/ghost-surface	COLOR	{surface/card}		
+Components	node/version/ring-focus	COLOR	{border/focus}		
+Components	node/version/ring-selected	COLOR	{border/focus}		
+Components	node/version/ring-selected-opacity	FLOAT	{opacity/40}		
+Components	node/version/surface	COLOR	{surface/muted}		
+Components	node/version/surface-opacity	FLOAT	{opacity/40}		
+Components	number-field/border	COLOR	{input/border}		
+Components	number-field/border-focus	COLOR	{input/border-focus}		
+Components	number-field/border-invalid	COLOR	{input/border-invalid}		
+Components	number-field/border-invalid-focus	COLOR	{input/border-invalid-focus}		
+Components	number-field/border-invalid-focus-opacity	FLOAT	{input/border-invalid-focus-opacity}		
+Components	number-field/border-invalid-opacity	FLOAT	{input/border-invalid-opacity}		
+Components	number-field/foreground	COLOR	{input/foreground}		
+Components	number-field/ring	COLOR	{input/ring}		
+Components	number-field/ring-invalid	COLOR	{input/ring-invalid}		
+Components	number-field/shadow	COLOR	{input/shadow}		
+Components	number-field/shadow-inset/color	COLOR	{color-alpha/black/4}	{color-alpha/white/6}	
+Components	number-field/shadow-inset/y	FLOAT	1	-1	
+Components	number-field/stepper/surface-hover	COLOR	{surface/accent}		
+Components	number-field/surface	COLOR	{input/surface}		
+Components	number-field/surface-autofill	COLOR	{input/surface-autofill}		
+Components	number-field/surface-autofill-opacity	FLOAT	{input/surface-autofill-opacity}		
+Components	number-field/surface-opacity	FLOAT	{input/surface-opacity}		
+Components	parameters-dock/border	COLOR	{border/default}		
+Components	parameters-dock/foreground	COLOR	{text/default}		
+Components	parameters-dock/surface	COLOR	{surface/background}		
+Components	parameters-dock/width	FLOAT	380		
+Components	parameters-panel/border	COLOR	{border/default}		
+Components	parameters-panel/foreground	COLOR	{text/default}		
+Components	parameters-panel/icon	COLOR	{icon/muted}		
+Components	parameters-panel/ring	COLOR	{border/focus}		
+Components	parameters-panel/surface	COLOR	{surface/card}		
+Components	parameters-sheet/foreground	COLOR	{text/default}		
+Components	parameters-sheet/surface	COLOR	{surface/background}		
+Components	parameters-sheet/width	FLOAT	384		
+Components	picker/chevron-opacity	FLOAT	{opacity/60}		
+Components	picker/empty	COLOR	{text/muted}		
+Components	picker/group-label	COLOR	{text/muted}		
+Components	picker/model-width	FLOAT	300		
+Components	picker/row-description	COLOR	{text/muted}		
+Components	picker/row-foreground	COLOR	{text/default}		
+Components	picker/row-foreground-highlighted	COLOR	{text/default}		
+Components	picker/row-meta	COLOR	{text/muted}		
+Components	picker/row-surface-chosen	COLOR	{text/default}		
+Components	picker/row-surface-chosen-opacity	FLOAT	{opacity/8}		
+Components	picker/row-surface-highlighted	COLOR	{surface/accent}		
+Components	picker/status	COLOR	{text/muted}		
+Components	picker/traits-width	FLOAT	280		
+Components	plan-card/border	COLOR	{border/default}		
+Components	plan-card/border-opacity	FLOAT	{opacity/80}		
+Components	plan-card/fade	COLOR	{surface/card}		
+Components	plan-card/fade-from-opacity	FLOAT	{opacity/90}		
+Components	plan-card/fade-via-opacity	FLOAT	{opacity/80}		
+Components	plan-card/surface	COLOR	{surface/card}		
+Components	plan-card/surface-opacity	FLOAT	{opacity/70}		
+Components	plan-card/title	COLOR	{text/default}		
+Components	popover/default/border	COLOR	{border/glass}		
+Components	popover/default/foreground	COLOR	{text/default}		
+Components	popover/default/surface	COLOR	{surface/glass-popover}		
+Components	popover/tooltip/shadow	COLOR	{color-alpha/black/5}		
+Components	preview-card/border	COLOR	{border/default}		
+Components	preview-card/foreground	COLOR	{text/default}		
+Components	preview-card/surface	COLOR	{surface/popover}		
+Components	project-confirm-dialog/width	FLOAT	400		
+Components	project-dialog/label	COLOR	{text/default}		
+Components	project-dialog/problem-foreground	COLOR	{status/error-text}		
+Components	project-dialog/width	FLOAT	360		
+Components	project-menu/width	FLOAT	220		
+Components	project-tab/active/surface	COLOR	{surface/accent}		
+Components	project-tab/border	COLOR	{border/default}		
+Components	project-tab/context	COLOR	{text/muted}		
+Components	project-tab/divider	COLOR	{border/default}		
+Components	project-tab/foreground	COLOR	{text/muted}		
+Components	project-tab/foreground-active	COLOR	{text/default}		
+Components	project-tab/foreground-hover	COLOR	{text/default}		
+Components	project-tab/icon	COLOR	{text/muted}		
+Components	project-tab/indicator	COLOR	{action/primary}		
+Components	project-tab/mark-border	COLOR	{border/default}		
+Components	project-tab/mark-foreground	COLOR	{text/default}		
+Components	project-tab/mark-surface	COLOR	{surface/muted}		
+Components	project-tab/ring-dragging	COLOR	{border/default}		
+Components	project-tab/ring-focus	COLOR	{border/focus}		
+Components	project-tab/shadow-dragging	COLOR	{color-alpha/black/10}		
+Components	project-tab/status-dot	COLOR	{action/highlight}		
+Components	project-tab/status-finished	COLOR	{status/success}		
+Components	project-tab/status-running	COLOR	{text/default}		
+Components	project-tab/surface	COLOR	{surface/background}		
+Components	project-tab/surface-dragging	COLOR	{surface/popover}		
+Components	prompt-chip/border	COLOR	{border/default}		
+Components	prompt-chip/border-opacity	FLOAT	{opacity/70}		
+Components	prompt-chip/foreground	COLOR	{text/default}		
+Components	prompt-chip/surface	COLOR	{surface/accent}		
+Components	prompt-chip/surface-opacity	FLOAT	{opacity/40}		
+Components	prompt-shape/hint	COLOR	{text/muted}		
+Components	queue/border	COLOR	{text/muted}		
+Components	queue/border-opacity	FLOAT	{opacity/40}		
+Components	queue/drop-indicator	COLOR	{action/primary}		
+Components	queue/drop-indicator-opacity	FLOAT	{opacity/70}		
+Components	queue/editing/border	COLOR	{action/primary}		
+Components	queue/editing/border-opacity	FLOAT	{opacity/60}		
+Components	queue/editing/foreground	COLOR	{text/default}		
+Components	queue/foreground	COLOR	{text/muted}		
+Components	queue/meta	COLOR	{text/muted}		
+Components	queue/title	COLOR	{text/muted}		
+Components	radio/border	COLOR	{border/strong}		
+Components	radio/border-invalid	COLOR	{status/error}		
+Components	radio/border-invalid-focus	COLOR	{status/error}		
+Components	radio/border-invalid-focus-opacity	FLOAT	{opacity/64}		
+Components	radio/border-invalid-opacity	FLOAT	{opacity/36}		
+Components	radio/indicator/fill	COLOR	{action/on-primary}		
+Components	radio/indicator/surface-checked	COLOR	{action/primary}		
+Components	radio/ring	COLOR	{border/focus}		
+Components	radio/ring-invalid	COLOR	{status/error}		
+Components	radio/ring-invalid-opacity	FLOAT	{opacity/50}	{opacity/24}	
+Components	radio/ring-offset	COLOR	{surface/background}		
+Components	radio/shadow	COLOR	{color-alpha/black/5}		
+Components	radio/shadow-inset/color	COLOR	{color-alpha/black/4}	{color-alpha/white/6}	
+Components	radio/shadow-inset/y	FLOAT	1	-1	
+Components	radio/surface	COLOR	{surface/background}	{border/strong}	
+Components	radio/surface-opacity	FLOAT	{opacity/100}	{opacity/32}	
+Components	recap-card/border	COLOR	{border/default}		
+Components	recap-card/foreground	COLOR	{text/default}		
+Components	recap-card/muted	COLOR	{text/muted}		
+Components	recap-card/ring-focus	COLOR	{border/focus}		
+Components	recap-card/ring-focus-opacity	FLOAT	{opacity/70}		
+Components	recap-card/shadow	COLOR	{color-alpha/black/5}		
+Components	recap-card/surface	COLOR	{surface/card}		
+Components	recap-card/toggle-surface-hover	COLOR	{surface/accent}		
+Components	recap-card/toggle-surface-hover-opacity	FLOAT	{opacity/20}		
+Components	rename-field/border	COLOR	{action/highlight}		
+Components	rename-field/error/foreground	COLOR	{status/error-text}		
+Components	rename-field/foreground	COLOR	{text/default}		
+Components	rename-field/surface	COLOR	{surface/background}		
+Components	render-progress/fill	COLOR	{action/highlight}		
+Components	render-progress/foreground	COLOR	{text/muted}		
+Components	render-progress/track	COLOR	{border/strong}		
+Components	scroll-area/fade-size	FLOAT	24		
+Components	scroll-area/ring	COLOR	{border/focus}		
+Components	scroll-area/ring-offset	COLOR	{surface/background}		
+Components	scrollbar/thumb	COLOR	#d9d9d9	#ffffff14	
+Components	scrollbar/thumb-hover	COLOR	#bfbfbf	#ffffff1f	
+Components	scrollbar/width	FLOAT	6		
+Components	select/ghost/foreground	COLOR	{text/muted}		
+Components	select/ghost/foreground-hover	COLOR	{text/default}		
+Components	select/ghost/ring-focus	COLOR	{border/focus}		
+Components	select/ghost/surface-hover	COLOR	{surface/accent}		
+Components	select/trigger/icon	COLOR	{icon/muted}		
+Components	selection-toolbar/border	COLOR	{border/default}		
+Components	selection-toolbar/foreground	COLOR	{text/default}		
+Components	selection-toolbar/hint	COLOR	{text/muted}		
+Components	selection-toolbar/meta	COLOR	{text/muted}		
+Components	selection-toolbar/shadow	COLOR	{color-alpha/black/5}		
+Components	selection-toolbar/surface	COLOR	{surface/glass}		
+Components	selection/grip	COLOR	{surface/card}		
+Components	selection/stroke	COLOR	{action/highlight}		
+Components	separator/surface	COLOR	{border/default}		
+Components	settings-dialog/address/border	COLOR	{border/default}		
+Components	settings-dialog/address/surface	COLOR	{surface/muted}		
+Components	settings-dialog/address/surface-opacity	FLOAT	{opacity/40}		
+Components	settings-dialog/description	COLOR	{text/muted}		
+Components	settings-dialog/divider	COLOR	{border/default}		
+Components	settings-dialog/error/foreground	COLOR	{status/error-text}		
+Components	settings-dialog/foreground	COLOR	{text/default}		
+Components	settings-dialog/height	FLOAT	640		
+Components	settings-dialog/label	COLOR	{text/muted}		
+Components	settings-dialog/link	COLOR	{text/default}		
+Components	settings-dialog/nav/border	COLOR	{border/default}		
+Components	settings-dialog/nav/surface	COLOR	{surface/muted}		
+Components	settings-dialog/nav/surface-opacity	FLOAT	{opacity/40}		
+Components	settings-dialog/panel/border	COLOR	{border/default}		
+Components	settings-dialog/panel/surface	COLOR	{surface/muted}		
+Components	settings-dialog/panel/surface-opacity	FLOAT	{opacity/30}		
+Components	settings-dialog/placeholder	COLOR	{text/muted}		
+Components	settings-dialog/provider-dot/indicator	COLOR	{border/strong}		
+Components	settings-dialog/provider-dot/indicator-active	COLOR	{action/highlight}		
+Components	settings-dialog/provider-dot/indicator-invalid	COLOR	{status/error}		
+Components	settings-dialog/setup-code/border	COLOR	{border/default}		
+Components	settings-dialog/setup-code/surface	COLOR	{surface/muted}		
+Components	settings-dialog/setup-code/surface-opacity	FLOAT	{opacity/40}		
+Components	settings-dialog/sheet/divider	COLOR	{border/default}		
+Components	settings-dialog/sheet/surface	COLOR	{surface/popover}		
+Components	settings-dialog/unsaved/indicator	COLOR	{action/highlight}		
+Components	settings-dialog/width	FLOAT	760		
+Components	shape-label/foreground	COLOR	{text/muted}		
+Components	sheet/backdrop	COLOR	{surface/background}		
+Components	sheet/backdrop-opacity	FLOAT	{opacity/60}		
+Components	sheet/border	COLOR	{border/default}		
+Components	sheet/description	COLOR	{text/muted}		
+Components	sheet/foreground	COLOR	{text/default}		
+Components	sheet/shadow	COLOR	{color-alpha/black/5}		
+Components	sheet/shadow-inset/color	COLOR	{color-alpha/black/4}	{color-alpha/white/6}	
+Components	sheet/shadow-inset/y	FLOAT	1	-1	
+Components	sheet/surface	COLOR	{surface/popover}		
+Components	skeleton/surface	COLOR	{text/muted}		
+Components	skeleton/surface-opacity	FLOAT	{opacity/16}		
+Components	spinner/current/foreground	COLOR	{text/default}		
+Components	spinner/muted/foreground	COLOR	{text/muted}		
+Components	start-card/border	COLOR	{border/default}		
+Components	start-card/foreground	COLOR	{text/muted}		
+Components	start-card/surface	COLOR	{surface/card}		
+Components	stash/empty	COLOR	{text/muted}		
+Components	stash/icon	COLOR	{text/muted}		
+Components	stash/meta	COLOR	{text/muted}		
+Components	stash/pulse-count	COLOR	{action/primary}		
+Components	stash/pulse-row	COLOR	{text/default}		
+Components	stash/row-foreground-highlighted	COLOR	{text/default}		
+Components	stash/row-surface-highlighted	COLOR	{surface/accent}		
+Components	stash/snippet	COLOR	{text/default}		
+Components	stash/snippet-opacity	FLOAT	{opacity/80}		
+Components	switch/ring	COLOR	{border/focus}		
+Components	switch/ring-offset	COLOR	{surface/background}		
+Components	switch/surface	COLOR	{border/strong}		
+Components	switch/surface-checked	COLOR	{action/primary}		
+Components	switch/thumb	COLOR	{surface/background}		
+Components	switch/thumb-shadow	COLOR	{color-alpha/black/5}		
+Components	tab-strip/border	COLOR	{border/default}		
+Components	table/head/foreground	COLOR	{text/default}		
+Components	table/row/divider	COLOR	{border/default}		
+Components	table/row/surface-hover	COLOR	{surface/muted}		
+Components	table/row/surface-hover-opacity	FLOAT	{opacity/50}		
+Components	table/row/surface-open	COLOR	{surface/muted}		
+Components	table/row/surface-open-opacity	FLOAT	{opacity/50}		
+Components	table/row/surface-selected	COLOR	{surface/muted}		
+Components	tabs/divider	COLOR	{border/default}		
+Components	tabs/list-pill/surface	COLOR	{border/strong}		
+Components	tabs/list-pill/surface-opacity	FLOAT	{opacity/40}		
+Components	tabs/list/border	COLOR	{border/default}		
+Components	tabs/panel/ring-focus	COLOR	{border/focus}		
+Components	tabs/panel/ring-offset	COLOR	{surface/background}		
+Components	tabs/status-dot	COLOR	{action/highlight}		
+Components	tabs/status-failed	COLOR	{status/error}		
+Components	tabs/status-finished	COLOR	{status/success}		
+Components	tabs/tab-panel/surface	COLOR	{color-alpha/white/0}		
+Components	tabs/tab-panel/surface-active	COLOR	{surface/accent}		
+Components	tabs/tab-panel/surface-hover	COLOR	{surface/accent}		
+Components	tabs/tab-pill/shadow-active	COLOR	{color-alpha/black/10}		
+Components	tabs/tab-pill/surface	COLOR	{color-alpha/white/0}		
+Components	tabs/tab-pill/surface-active	COLOR	{surface/background}	{border/strong}	
+Components	tabs/tab-pill/surface-active-opacity	FLOAT	{opacity/100}	{opacity/72}	
+Components	tabs/tab-pill/surface-hover	COLOR	{surface/background}		
+Components	tabs/tab-pill/surface-hover-opacity	FLOAT	{opacity/55}		
+Components	tabs/tab-sidebar/surface-active	COLOR	{surface/accent}		
+Components	tabs/tab-sidebar/surface-hover	COLOR	{surface/accent}		
+Components	tabs/tab-underline/indicator	COLOR	{action/primary}		
+Components	tabs/tab-underline/surface	COLOR	{color-alpha/white/0}		
+Components	tabs/tab-underline/surface-active	COLOR	{color-alpha/white/0}		
+Components	tabs/tab-underline/surface-hover	COLOR	{color-alpha/white/0}		
+Components	tabs/tab/foreground	COLOR	{text/muted}		
+Components	tabs/tab/foreground-active	COLOR	{text/default}		
+Components	tabs/tab/foreground-hover	COLOR	{text/default}		
+Components	tabs/tab/ring-focus	COLOR	{border/focus}		
+Components	tether/stroke	COLOR	{border/default}		
+Components	textarea/border	COLOR	{input/border}		
+Components	textarea/border-focus	COLOR	{input/border-focus}		
+Components	textarea/border-invalid	COLOR	{input/border-invalid}		
+Components	textarea/border-invalid-focus	COLOR	{input/border-invalid-focus}		
+Components	textarea/border-invalid-focus-opacity	FLOAT	{input/border-invalid-focus-opacity}		
+Components	textarea/border-invalid-opacity	FLOAT	{input/border-invalid-opacity}		
+Components	textarea/foreground	COLOR	{input/foreground}		
+Components	textarea/ring	COLOR	{input/ring}		
+Components	textarea/ring-invalid	COLOR	{input/ring-invalid}		
+Components	textarea/shadow	COLOR	{input/shadow}		
+Components	textarea/shadow-inset/color	COLOR	{color-alpha/black/4}	{color-alpha/white/6}	
+Components	textarea/shadow-inset/y	FLOAT	1	-1	
+Components	textarea/surface	COLOR	{input/surface}		
+Components	textarea/surface-opacity	FLOAT	{input/surface-opacity}		
+Components	thread-search/border	COLOR	{border/default}		
+Components	thread-search/empty	COLOR	{text/muted}		
+Components	thread-search/match	COLOR	{text/default}		
+Components	thread-search/result-foreground	COLOR	{text/default}		
+Components	thread-search/result-foreground-highlighted	COLOR	{text/default}		
+Components	thread-search/result-surface-highlighted	COLOR	{surface/accent}		
+Components	thread-search/snippet	COLOR	{text/muted}		
+Components	thread-search/source-agent	COLOR	{status/success-text}		
+Components	thread-search/source-user	COLOR	{status/info-text}		
+Components	thread-search/surface	COLOR	{surface/background}		
+Components	tldraw-menu/context-width	FLOAT	188		
+Components	tldraw-menu/divider	COLOR	{tldraw/divider}		
+Components	tldraw-menu/heading	COLOR	{text/muted}		
+Components	tldraw-menu/item-disabled-opacity	FLOAT	{opacity/disabled}		
+Components	tldraw-menu/item-foreground	COLOR	{text/default}		
+Components	tldraw-menu/item-surface-highlighted	COLOR	{surface/accent}		
+Components	tldraw-menu/surface	COLOR	{tldraw/panel}		
+Components	tldraw/background	COLOR	{surface/background}		
+Components	tldraw/danger	COLOR	{status/error}		
+Components	tldraw/divider	COLOR	{border/default}		
+Components	tldraw/focus	COLOR	{border/focus}		
+Components	tldraw/hint	COLOR	{surface/accent}		
+Components	tldraw/info	COLOR	{status/info}		
+Components	tldraw/low	COLOR	{surface/muted}		
+Components	tldraw/low-border	COLOR	{border/default}		
+Components	tldraw/muted-0	COLOR	#f4f4f580	#ffffff05	
+Components	tldraw/muted-1	COLOR	#27272a1a	#f5f5f51a	
+Components	tldraw/muted-2	COLOR	{surface/accent}		
+Components	tldraw/muted-none	COLOR	{color-alpha/white/0}		
+Components	tldraw/overlay	COLOR	#fcfcfc99	#0a0a0a99	
+Components	tldraw/panel	COLOR	{surface/popover}		
+Components	tldraw/panel-contrast	COLOR	{surface/popover}		
+Components	tldraw/panel-overlay	COLOR	#ffffffd1	#111111d1	
+Components	tldraw/panel-transparent	COLOR	{color-alpha/white/0}		
+Components	tldraw/primary	COLOR	{action/primary}		
+Components	tldraw/selected	COLOR	{action/primary}		
+Components	tldraw/selected-contrast	COLOR	{action/on-primary}		
+Components	tldraw/selection-fill	COLOR	#0084d129	#74d4ff29	
+Components	tldraw/selection-stroke	COLOR	{action/highlight}		
+Components	tldraw/shadow-1/blur	FLOAT	2		
+Components	tldraw/shadow-1/color	COLOR	#0000000d		
+Components	tldraw/shadow-1/spread	FLOAT	0		
+Components	tldraw/shadow-1/x	FLOAT	0		
+Components	tldraw/shadow-1/y	FLOAT	1		
+Components	tldraw/shadow-2/1/blur	FLOAT	0		
+Components	tldraw/shadow-2/1/color	COLOR	{border/default}		
+Components	tldraw/shadow-2/1/spread	FLOAT	1		
+Components	tldraw/shadow-2/1/x	FLOAT	0		
+Components	tldraw/shadow-2/1/y	FLOAT	0		
+Components	tldraw/shadow-2/2/blur	FLOAT	15		
+Components	tldraw/shadow-2/2/color	COLOR	#0000000d		
+Components	tldraw/shadow-2/2/spread	FLOAT	-3		
+Components	tldraw/shadow-2/2/x	FLOAT	0		
+Components	tldraw/shadow-2/2/y	FLOAT	10		
+Components	tldraw/shadow-2/3/blur	FLOAT	6		
+Components	tldraw/shadow-2/3/color	COLOR	#0000000d		
+Components	tldraw/shadow-2/3/spread	FLOAT	-4		
+Components	tldraw/shadow-2/3/x	FLOAT	0		
+Components	tldraw/shadow-2/3/y	FLOAT	4		
+Components	tldraw/shadow-3/1/blur	FLOAT	0		
+Components	tldraw/shadow-3/1/color	COLOR	{border/glass}		
+Components	tldraw/shadow-3/1/spread	FLOAT	1		
+Components	tldraw/shadow-3/1/x	FLOAT	0		
+Components	tldraw/shadow-3/1/y	FLOAT	0		
+Components	tldraw/shadow-3/2/blur	FLOAT	40	44	
+Components	tldraw/shadow-3/2/color	COLOR	#0000008c	#000000cc	
+Components	tldraw/shadow-3/2/spread	FLOAT	-18		
+Components	tldraw/shadow-3/2/x	FLOAT	0		
+Components	tldraw/shadow-3/2/y	FLOAT	16	18	
+Components	tldraw/shadow-4/1/blur	FLOAT	0		
+Components	tldraw/shadow-4/1/color	COLOR	{border/glass}		
+Components	tldraw/shadow-4/1/spread	FLOAT	1		
+Components	tldraw/shadow-4/1/x	FLOAT	0		
+Components	tldraw/shadow-4/1/y	FLOAT	0		
+Components	tldraw/shadow-4/2/blur	FLOAT	64	72	
+Components	tldraw/shadow-4/2/color	COLOR	#000000a6	#000000e5	
+Components	tldraw/shadow-4/2/spread	FLOAT	-24	-20	
+Components	tldraw/shadow-4/2/x	FLOAT	0		
+Components	tldraw/shadow-4/2/y	FLOAT	24		
+Components	tldraw/success	COLOR	{status/success}		
+Components	tldraw/text	COLOR	{text/default}		
+Components	tldraw/text-0	COLOR	{text/default}		
+Components	tldraw/text-1	COLOR	{text/default}		
+Components	tldraw/text-3	COLOR	{text/muted}		
+Components	tldraw/text-disabled	COLOR	{text/default}		
+Components	tldraw/text-shadow	COLOR	{surface/background}		
+Components	tldraw/top-zone-offset	FLOAT	64		
+Components	tldraw/warning	COLOR	{status/warning}		
+Components	toast/border	COLOR	{border/glass}		
+Components	toast/copied/icon	COLOR	{status/success}		
+Components	toast/copy/icon	COLOR	{text/muted}		
+Components	toast/copy/icon-hover	COLOR	{text/muted}		
+Components	toast/copy/icon-opacity	FLOAT	{opacity/80}		
+Components	toast/description-trigger/icon	COLOR	{text/muted}		
+Components	toast/description-trigger/surface-hover	COLOR	{surface/muted}		
+Components	toast/description-trigger/surface-hover-opacity	FLOAT	{opacity/40}		
+Components	toast/description/foreground	COLOR	{text/muted}		
+Components	toast/description/underline	COLOR	{text/muted}		
+Components	toast/description/underline-opacity	FLOAT	{opacity/60}		
+Components	toast/dismiss/border	COLOR	{border/default}		
+Components	toast/dismiss/border-opacity	FLOAT	{opacity/60}		
+Components	toast/dismiss/icon	COLOR	{text/muted}		
+Components	toast/dismiss/icon-hover	COLOR	{text/default}		
+Components	toast/dismiss/surface	COLOR	{surface/popover}		
+Components	toast/dismiss/surface-hover	COLOR	{surface/popover}		
+Components	toast/dismiss/surface-opacity	FLOAT	{opacity/90}		
+Components	toast/error/icon	COLOR	{status/error}		
+Components	toast/expand/foreground	COLOR	{text/muted}		
+Components	toast/expand/foreground-hover	COLOR	{text/default}		
+Components	toast/footer-offset	FLOAT	32		
+Components	toast/foreground	COLOR	{text/default}		
+Components	toast/header-offset	FLOAT	{top-bar/height}		
+Components	toast/info/icon	COLOR	{status/info}		
+Components	toast/loading/icon-opacity	FLOAT	{opacity/80}		
+Components	toast/ring-focus	COLOR	{border/focus}		
+Components	toast/ring-offset	COLOR	{surface/background}		
+Components	toast/shadow	COLOR	{color-alpha/black/25}		
+Components	toast/success/icon	COLOR	{status/success}		
+Components	toast/surface	COLOR	{surface/glass-popover}		
+Components	toast/warning/icon	COLOR	{status/warning}		
+Components	toggle-group/divider-hover	COLOR	{color-alpha/white/0}	{border/strong}	
+Components	toggle-group/divider-hover-opacity	FLOAT	{opacity/64}		
+Components	toggle-group/divider-pressed	COLOR	{color-alpha/white/0}	{border/strong}	
+Components	toggle-group/segmented/surface	COLOR	{border/strong}		
+Components	toggle-group/segmented/surface-opacity	FLOAT	{opacity/40}		
+Components	toggle/default/border	COLOR	{color-alpha/white/0}		
+Components	toggle/default/foreground	COLOR	{text/default}		
+Components	toggle/default/foreground-disabled	COLOR	{toggle/default/foreground}		
+Components	toggle/default/foreground-hover	COLOR	{text/default}		
+Components	toggle/default/foreground-pressed	COLOR	{text/default}		
+Components	toggle/default/icon-disabled-opacity	FLOAT	{toggle/default/icon-opacity}		
+Components	toggle/default/icon-opacity	FLOAT	{opacity/80}		
+Components	toggle/default/surface	COLOR	{color-alpha/white/0}		
+Components	toggle/default/surface-hover	COLOR	{surface/accent}		
+Components	toggle/default/surface-pressed	COLOR	{border/strong}		
+Components	toggle/default/surface-pressed-opacity	FLOAT	{opacity/64}		
+Components	toggle/ghost/border	COLOR	{color-alpha/white/0}		
+Components	toggle/ghost/foreground	COLOR	{text/default}		
+Components	toggle/ghost/foreground-disabled	COLOR	{text/muted}		
+Components	toggle/ghost/foreground-hover	COLOR	{text/default}		
+Components	toggle/ghost/foreground-pressed	COLOR	{text/default}		
+Components	toggle/ghost/icon-disabled-opacity	FLOAT	{opacity/100}		
+Components	toggle/ghost/icon-opacity	FLOAT	{opacity/80}		
+Components	toggle/ghost/surface	COLOR	{color-alpha/white/0}		
+Components	toggle/ghost/surface-hover	COLOR	{surface/accent}		
+Components	toggle/ghost/surface-pressed	COLOR	{surface/accent}		
+Components	toggle/outline/border	COLOR	{border/strong}		
+Components	toggle/outline/foreground	COLOR	{text/default}		
+Components	toggle/outline/foreground-disabled	COLOR	{toggle/outline/foreground}		
+Components	toggle/outline/foreground-hover	COLOR	{text/default}		
+Components	toggle/outline/foreground-pressed	COLOR	{text/default}		
+Components	toggle/outline/icon-disabled-opacity	FLOAT	{toggle/outline/icon-opacity}		
+Components	toggle/outline/icon-opacity	FLOAT	{opacity/80}		
+Components	toggle/outline/inset-active	COLOR	{color-alpha/white/0}	{color-alpha/white/4}	
+Components	toggle/outline/shadow	COLOR	{color-alpha/black/5}		
+Components	toggle/outline/surface	COLOR	{surface/background}	{border/strong}	
+Components	toggle/outline/surface-hover	COLOR	{surface/accent}	{border/strong}	
+Components	toggle/outline/surface-hover-opacity	FLOAT	{opacity/100}	{opacity/64}	
+Components	toggle/outline/surface-opacity	FLOAT	{opacity/100}	{opacity/32}	
+Components	toggle/outline/surface-pressed	COLOR	{border/strong}		
+Components	toggle/outline/surface-pressed-opacity	FLOAT	{opacity/64}	{opacity/100}	
+Components	toggle/pill/border	COLOR	{color-alpha/white/0}		
+Components	toggle/pill/foreground	COLOR	{text/muted}		
+Components	toggle/pill/foreground-disabled	COLOR	{toggle/pill/foreground}		
+Components	toggle/pill/foreground-hover	COLOR	{text/muted}		
+Components	toggle/pill/foreground-pressed	COLOR	{text/default}		
+Components	toggle/pill/icon-disabled-opacity	FLOAT	{toggle/pill/icon-opacity}		
+Components	toggle/pill/icon-opacity	FLOAT	{opacity/80}		
+Components	toggle/pill/surface	COLOR	{color-alpha/white/0}		
+Components	toggle/pill/surface-hover	COLOR	{surface/accent}		
+Components	toggle/pill/surface-pressed	COLOR	{border/strong}		
+Components	toggle/pill/surface-pressed-opacity	FLOAT	{opacity/64}		
+Components	toggle/ring-focus	COLOR	{border/focus}		
+Components	toggle/ring-offset	COLOR	{surface/background}		
+Components	toggle/segmented/border	COLOR	{color-alpha/white/0}		
+Components	toggle/segmented/foreground	COLOR	{text/muted}		
+Components	toggle/segmented/foreground-disabled	COLOR	{toggle/segmented/foreground}		
+Components	toggle/segmented/foreground-hover	COLOR	{text/default}		
+Components	toggle/segmented/foreground-pressed	COLOR	{text/default}		
+Components	toggle/segmented/icon-disabled-opacity	FLOAT	{toggle/segmented/icon-opacity}		
+Components	toggle/segmented/icon-opacity	FLOAT	{opacity/80}		
+Components	toggle/segmented/shadow-pressed	COLOR	{color-alpha/black/10}		
+Components	toggle/segmented/surface	COLOR	{color-alpha/white/0}		
+Components	toggle/segmented/surface-hover	COLOR	{surface/background}	{border/strong}	
+Components	toggle/segmented/surface-hover-opacity	FLOAT	{opacity/55}	{opacity/32}	
+Components	toggle/segmented/surface-pressed	COLOR	{surface/background}	{border/strong}	
+Components	toggle/segmented/surface-pressed-opacity	FLOAT	{opacity/100}	{opacity/72}	
+Components	toolbar-button/icon/foreground	COLOR	{text/default}		
+Components	toolbar-button/icon/foreground-active	COLOR	{toolbar-button/icon/foreground}		
+Components	toolbar-button/icon/foreground-disabled	COLOR	{text/default}		
+Components	toolbar-button/icon/foreground-hover	COLOR	{toolbar-button/icon/foreground}		
+Components	toolbar-button/icon/foreground-open	COLOR	{toolbar-button/icon/foreground}		
+Components	toolbar-button/icon/foreground-pressed	COLOR	{toolbar-button/icon/foreground-hover}		
+Components	toolbar-button/icon/surface	COLOR	{color-alpha/white/0}		
+Components	toolbar-button/icon/surface-active	COLOR	{surface/accent}		
+Components	toolbar-button/icon/surface-disabled	COLOR	{color-alpha/white/0}		
+Components	toolbar-button/icon/surface-hover	COLOR	{surface/accent}		
+Components	toolbar-button/icon/surface-open	COLOR	{surface/accent}		
+Components	toolbar-button/icon/surface-pressed	COLOR	{toolbar-button/icon/surface-hover}		
+Components	toolbar-button/overflow/foreground	COLOR	{text/default}		
+Components	toolbar-button/overflow/foreground-hover	COLOR	{toolbar-button/overflow/foreground}		
+Components	toolbar-button/overflow/foreground-open	COLOR	{toolbar-button/overflow/foreground}		
+Components	toolbar-button/overflow/foreground-pressed	COLOR	{toolbar-button/overflow/foreground-hover}		
+Components	toolbar-button/overflow/surface	COLOR	{color-alpha/white/0}		
+Components	toolbar-button/overflow/surface-hover	COLOR	{surface/accent}		
+Components	toolbar-button/overflow/surface-open	COLOR	{surface/accent}		
+Components	toolbar-button/overflow/surface-pressed	COLOR	{toolbar-button/overflow/surface-hover}		
+Components	toolbar-button/tool/foreground	COLOR	{text/default}		
+Components	toolbar-button/tool/foreground-active	COLOR	{toolbar-button/tool/foreground}		
+Components	toolbar-button/tool/foreground-hover	COLOR	{toolbar-button/tool/foreground}		
+Components	toolbar-button/tool/foreground-pressed	COLOR	{toolbar-button/tool/foreground-hover}		
+Components	toolbar-button/tool/foreground-selected	COLOR	{tldraw/selected-contrast}		
+Components	toolbar-button/tool/surface	COLOR	{color-alpha/white/0}		
+Components	toolbar-button/tool/surface-active	COLOR	{surface/accent}		
+Components	toolbar-button/tool/surface-hover	COLOR	{surface/accent}		
+Components	toolbar-button/tool/surface-pressed	COLOR	{toolbar-button/tool/surface-hover}		
+Components	toolbar-button/tool/surface-selected	COLOR	{tldraw/selected}		
+Components	toolbar-popover/surface	COLOR	{tldraw/panel}		
+Components	tooltip/code/border	COLOR	{tooltip/default/border}		
+Components	tooltip/code/foreground	COLOR	{tooltip/default/foreground}		
+Components	tooltip/code/shadow	COLOR	{tooltip/default/shadow}		
+Components	tooltip/code/surface	COLOR	{tooltip/default/surface}		
+Components	tooltip/default/border	COLOR	{border/default}		
+Components	tooltip/default/foreground	COLOR	{text/default}		
+Components	tooltip/default/shadow	COLOR	{color-alpha/black/5}		
+Components	tooltip/default/surface	COLOR	{surface/popover}		
+Components	tooltip/glass/border	COLOR	{border/glass}		
+Components	tooltip/glass/foreground	COLOR	{text/default}		
+Components	tooltip/glass/shadow	COLOR	{color-alpha/black/25}		
+Components	tooltip/glass/surface	COLOR	{surface/glass-popover}		
+Components	top-bar/border	COLOR	{border/default}		
+Components	top-bar/height	FLOAT	{size/9}		
+Components	top-bar/lights-zone	FLOAT	81		
+Components	top-bar/logo	COLOR	{text/default}		
+Components	top-bar/logo-inset	FLOAT	94		
+Components	top-bar/surface	COLOR	{surface/background}		
+Components	top-bar/window-controls-width	FLOAT	156		
+Components	transcript-notice/foreground	COLOR	{text/muted}		
+Components	transcript-notice/limit/foreground	COLOR	{status/error-text}		
+Components	user-message/author	COLOR	{text/muted}		
+Components	user-message/foreground	COLOR	{text/default}		
+Components	user-message/surface	COLOR	{surface/accent}		
+Components	values-panel/label	COLOR	{text/muted}		
+Components	values-panel/meta	COLOR	{text/muted}		
+Components	values-panel/note	COLOR	{text/muted}		
+Components	values-panel/width	FLOAT	280		
+Components	video-transport/foreground	COLOR	{text/muted}		
+Components	video-transport/track	COLOR	{action/highlight}		
+Components	voice-dialog/category-column/width	FLOAT	120		
+Components	voice-dialog/description	COLOR	{text/muted}		
+Components	voice-dialog/height	FLOAT	720		
+Components	voice-dialog/meta	COLOR	{text/muted}		
+Components	voice-dialog/width	FLOAT	680		
+Components	window-caption/close/foreground-hover	COLOR	{color/white}		
+Components	window-caption/close/surface-hover	COLOR	{color/os/windows-close-hover}		
+Components	window-caption/foreground	COLOR	{text/default}		
+Components	window-caption/surface	COLOR	{surface/background}		
+Components	window-caption/surface-hover	COLOR	{surface/accent}		
+Components	window-controls/stand-in	COLOR	{text/muted}		
+Components	window-controls/stand-in-opacity	FLOAT	{opacity/40}		
+Components	window-controls/traffic-close	COLOR	{color/os/macos-close}		
+Components	window-controls/traffic-minimize	COLOR	{color/os/macos-minimize}		
+Components	window-controls/traffic-zoom	COLOR	{color/os/macos-zoom}		
+Components	wire-handle/border	COLOR	{surface/background}		
+Components	wire-handle/preview-stroke	COLOR	{border/focus}		
+Components	wire-handle/ring-focus	COLOR	{border/focus}		
+Components	wire-handle/surface	COLOR	{border/focus}		
+Components	wire/end/fill	COLOR	{text/muted}		
+Components	wire/end/fill-opacity	FLOAT	{opacity/64}		
+Components	wire/end/fill-selected	COLOR	{border/focus}		
+Components	wire/stroke	COLOR	{text/muted}		
+Components	wire/stroke-opacity	FLOAT	{opacity/50}		
+Components	wire/stroke-selected	COLOR	{border/focus}		
+Components	work-log/body-command	COLOR	{text/muted}		
+Components	work-log/body-detail	COLOR	{text/muted}		
+Components	work-log/body-surface	COLOR	{surface/muted}		
+Components	work-log/body-surface-opacity	FLOAT	{opacity/40}		
+Components	work-log/chevron	COLOR	{icon/muted}		
+Components	work-log/chevron-opacity	FLOAT	{opacity/70}		
+Components	work-log/failed/icon	COLOR	{status/error}		
+Components	work-log/failed/label	COLOR	{status/error-text}		
+Components	work-log/icon	COLOR	{icon/muted}		
+Components	work-log/inProgress/label-shine	COLOR	{text/default}		
+Components	work-log/label	COLOR	{text/muted}		
+Components	work-log/reasoning-body	COLOR	{text/muted}		
+Components	work-log/reasoning/icon-opacity	FLOAT	{opacity/70}		
+Components	work-log/ring-focus	COLOR	{border/focus}		
+Components	work-log/ring-focus-opacity	FLOAT	{opacity/70}		
+Components	work-log/row-surface-hover	COLOR	{surface/accent}		
+Components	work-log/row-surface-hover-opacity	FLOAT	{opacity/20}		
+Components	work-log/status	COLOR	{text/muted}		
+Components	work-log/tool-error-icon	COLOR	{status/error}	#fca5a5	
+Components	worked-for/border	COLOR	{border/default}		
+Components	worked-for/border-opacity	FLOAT	{opacity/60}		
+Components	worked-for/foreground	COLOR	{text/muted}		
+Components	worked-for/foreground-hover	COLOR	{text/default}		
+Components	worked-for/ring-focus	COLOR	{border/focus}		
+Components	worked-for/ring-focus-opacity	FLOAT	{opacity/70}		
+Components	zoom-card/border	COLOR	{surface/background}		
+Components	zoom-card/button-surface-hover	COLOR	{surface/accent}		
+Components	zoom-card/button-surface-open	COLOR	{surface/accent}		
+Components	zoom-card/foreground	COLOR	{text/default}		
+Components	zoom-card/surface	COLOR	{tldraw/low}		

@@ -17,7 +17,7 @@ export const ChainConfirm = () => {
   const total = chainTotal(pending.steps);
   return (
     <AlertDialog open onOpenChange={(open) => !open && pending.answer(false)}>
-      <AlertDialogPopup className="max-w-[440px]" data-testid="chain-confirm">
+      <AlertDialogPopup className="max-w-(--chain-dialog-width)" data-testid="chain-confirm">
         <AlertDialogHeader>
           <AlertDialogTitle>{`Run ${pending.steps.length} nodes?`}</AlertDialogTitle>
           <AlertDialogDescription>Each step runs after the ones it takes input from. A failed step stops the steps after it.</AlertDialogDescription>
@@ -25,13 +25,13 @@ export const ChainConfirm = () => {
         <ol className="mx-6 my-0 flex list-none flex-col gap-1 p-0 text-sm" data-testid="chain-steps">
           {pending.steps.map((step, index) => (
             <li key={step.id} className="flex items-baseline gap-2" data-testid="chain-step">
-              <span className="w-5 shrink-0 text-xs text-muted-foreground tabular-nums">{index + 1}</span>
+              <span className="w-5 shrink-0 text-xs text-(--chain-dialog-meta) tabular-nums">{index + 1}</span>
               <span className="min-w-0 flex-1 truncate">{`${step.name} · ${step.model}`}</span>
-              <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{stepLabel(step)}</span>
+              <span className="shrink-0 text-xs text-(--chain-dialog-meta) tabular-nums">{stepLabel(step)}</span>
             </li>
           ))}
         </ol>
-        {total.label !== undefined && <p className="mx-6 mt-1 mb-4 border-t pt-2 text-right text-xs text-muted-foreground tabular-nums" data-testid="chain-total">{`In all ${total.label}`}</p>}
+        {total.label !== undefined && <p className="mx-6 mt-1 mb-4 border-t pt-2 text-right text-xs text-(--chain-dialog-meta) tabular-nums" data-testid="chain-total">{`In all ${total.label}`}</p>}
         <AlertDialogFooter>
           <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
           <Button onClick={() => pending.answer(true)}>Run</Button>

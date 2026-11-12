@@ -169,8 +169,8 @@ const Wire = ({ wire }: { readonly wire: WireShape }) => {
   return (
     <>
       <SVGContainer data-testid="wire" data-wire-id={wire.id}>
-        <path d={pathOf(ends)} fill="none" className={selected ? "stroke-ring" : "stroke-muted-foreground/48"} strokeWidth={selected ? 2.5 : 2} strokeLinecap="round" />
-        <circle cx={ends.end.x} cy={ends.end.y} r={3.5} className={selected ? "fill-ring" : "fill-muted-foreground/64"} />
+        <path d={pathOf(ends)} fill="none" className={selected ? "stroke-(--wire-stroke-selected)" : "stroke-(--wire-stroke)/(--wire-stroke-opacity)"} strokeWidth={selected ? 2.5 : 2} strokeLinecap="round" />
+        <circle cx={ends.end.x} cy={ends.end.y} r={3.5} className={selected ? "fill-(--wire-end-fill-selected)" : "fill-(--wire-end-fill)/(--wire-end-fill-opacity)"} />
       </SVGContainer>
       <RoleChip wire={wire} at={pointAt(ends, 0.5)} />
     </>

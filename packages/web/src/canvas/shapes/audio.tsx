@@ -130,7 +130,7 @@ const Generating = ({ shape }: { readonly shape: AudioShape }) => {
   return (
     <HTMLContainer id={shape.id} className={mediaCardClass} data-testid="audio-placeholder" data-placeholder="" style={{ width: shape.props.w, height: shape.props.h }}>
       <AudioLabel shape={shape} />
-      <div className="box-border flex h-full items-center justify-center gap-2 p-2.5 text-sm text-muted-foreground" role="status">
+      <div className="box-border flex h-full items-center justify-center gap-2 p-2.5 text-sm text-(--media-card-meta)" role="status">
         <Spinner size="md" aria-hidden />
         <span>Generating…</span>
       </div>
@@ -234,7 +234,7 @@ const Player = ({ shape }: { readonly shape: AudioShape }) => {
           {isPlaying ? <Pause aria-hidden /> : <Play aria-hidden />}
         </Button>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="truncate text-xs text-foreground" data-testid="audio-title">
+          <span className="truncate text-xs text-(--media-card-foreground)" data-testid="audio-title">
             {title}
           </span>
           <div className="flex items-center gap-2">
@@ -242,7 +242,7 @@ const Player = ({ shape }: { readonly shape: AudioShape }) => {
             <input
               type="range"
               aria-label="Position"
-              className="pointer-events-auto h-3 min-w-0 flex-1 accent-highlight"
+              className="pointer-events-auto h-3 min-w-0 flex-1 accent-(--media-card-track)"
               min={0}
               max={Number.isFinite(duration) && duration > 0 ? duration : 0}
               step={0.01}
@@ -254,7 +254,7 @@ const Player = ({ shape }: { readonly shape: AudioShape }) => {
               }}
               {...events}
             />
-            <span className="shrink-0 text-2xs text-muted-foreground tabular-nums" data-testid="audio-time">
+            <span className="shrink-0 text-2xs text-(--media-card-meta) tabular-nums" data-testid="audio-time">
               {audioClock(time)} / {audioClock(duration)}
             </span>
           </div>

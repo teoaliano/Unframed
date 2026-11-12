@@ -3,7 +3,7 @@ import { gate } from "../../engine/test/openRouterStub.ts";
 import { openCanvas, roomRecords, roomShapes, shapeOnScreen, toast, type AnyRecord } from "./canvas.ts";
 import { clickShape, composer, expect, instructionBox, openComposer, pressSend, sendRun, settled, test, toolbar, type GenerationEngine } from "./generation.ts";
 import { pngBytes } from "./images.ts";
-import { expectSlot, expectToken } from "./kit.ts";
+import { expectSlot, expectToken, tokenColor } from "./kit.ts";
 
 const results = async (generation: GenerationEngine) => (await roomShapes(generation.engine, "default", "image")).filter((shape) => shape.meta?.unframed?.result);
 
@@ -54,9 +54,10 @@ test("results land to the right of the selection, placeholder first, and a selec
   // Generate is the kit's primary Button, Regenerate its outline Button.
   await page.mouse.move(5, 500);
   for (const name of ["Generate", "Regenerate"]) await expectSlot(toolbar(page).getByRole("button", { name, exact: true }), "button");
-  await expectToken(toolbar(page).getByRole("button", { name: "Generate", exact: true }), "background-color", "--primary");
-  await expectToken(toolbar(page).getByRole("button", { name: "Regenerate" }), "border-top-color", "--color-input");
-  await expectToken(toolbar(page).getByTestId("result-line"), "color", "--color-muted-foreground");
+  await expectToken(toolbar(page).getByRole("button", { name: "Generate", exact: true }), "background-color", "--button-default-surface");
+  const regenerateRing = await toolbar(page).getByRole("button", { name: "Regenerate" }).evaluate((element) => getComputedStyle(element, "::after").backgroundColor);
+  expect(regenerateRing).toBe(await tokenColor(page, "--button-outline-border"));
+  await expectToken(toolbar(page).getByTestId("result-line"), "color", "--selection-toolbar-meta");
 
   // Generate opens the composer on the result as on any selection, and sends the result itself.
   await toolbar(page).getByRole("button", { name: "Generate", exact: true }).click();

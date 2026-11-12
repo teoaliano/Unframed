@@ -78,14 +78,14 @@ const Chips = ({ preset }: { readonly preset: LibraryEntry }) => (
 
 const LegacyLine = ({ preset }: { readonly preset: LibraryEntry }) =>
   preset.legacy ? (
-    <span className="text-xs text-muted-foreground" data-testid="preset-legacy">
+    <span className="text-xs text-(--library-dialog-meta)" data-testid="preset-legacy">
       {legacyPresetLine(preset.notes ?? [])}
     </span>
   ) : null;
 
 const KitLine = ({ preset }: { readonly preset: LibraryEntry }) =>
   preset.kind === "kit" ? (
-    <span className="text-xs text-muted-foreground" data-testid="kit-counts">
+    <span className="text-xs text-(--library-dialog-meta)" data-testid="kit-counts">
       {`${preset.kit.tokens.length} ${preset.kit.tokens.length === 1 ? "token" : "tokens"} · ${preset.kit.modes.length} ${preset.kit.modes.length === 1 ? "mode" : "modes"}`}
     </span>
   ) : null;
@@ -107,7 +107,7 @@ interface ItemProps {
 }
 
 const Card = ({ preset, onAdd, onDelete }: ItemProps) => (
-  <li className="relative flex flex-col rounded-xl border bg-card text-card-foreground shadow-xs/5" data-testid="preset" data-preset={preset.id}>
+  <li className="relative flex flex-col rounded-xl border border-(--library-dialog-card-border) bg-(--library-dialog-card-surface) text-(--library-dialog-card-foreground) shadow-xs/5" data-testid="preset" data-preset={preset.id}>
     <div className="flex flex-1 flex-col gap-1.5 p-3 pr-9">
       <span className="text-sm font-medium" data-testid="preset-name">
         {preset.name}
@@ -116,7 +116,7 @@ const Card = ({ preset, onAdd, onDelete }: ItemProps) => (
       <KitLine preset={preset} />
       <LegacyLine preset={preset} />
       {preset.needs !== undefined && (
-        <span className="text-xs text-muted-foreground" data-testid="preset-needs">
+        <span className="text-xs text-(--library-dialog-meta)" data-testid="preset-needs">
           {preset.needs}
         </span>
       )}
@@ -127,7 +127,7 @@ const Card = ({ preset, onAdd, onDelete }: ItemProps) => (
         <DeleteButton preset={preset} onDelete={onDelete} />
       </span>
     )}
-    <div className="flex justify-end border-t px-3 py-2">
+    <div className="flex justify-end border-t border-(--library-dialog-card-divider) px-3 py-2">
       <Button variant="outline" size="xs" onClick={() => onAdd(preset)}>
         {actionOf(preset)}
       </Button>
@@ -136,7 +136,7 @@ const Card = ({ preset, onAdd, onDelete }: ItemProps) => (
 );
 
 const Row = ({ preset, onAdd, onDelete }: ItemProps) => (
-  <li className="flex items-start gap-3 border-b py-2.5 last:border-b-0" data-testid="preset" data-preset={preset.id}>
+  <li className="flex items-start gap-3 border-b border-(--library-dialog-row-divider) py-2.5 last:border-b-0" data-testid="preset" data-preset={preset.id}>
     <div className="flex min-w-0 flex-1 flex-col gap-1">
       <span className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium" data-testid="preset-name">
@@ -146,7 +146,7 @@ const Row = ({ preset, onAdd, onDelete }: ItemProps) => (
       </span>
       {preset.summary !== "" && (
         <Tip label={preset.summary}>
-          <span className="line-clamp-3 text-xs text-muted-foreground">{preset.summary}</span>
+          <span className="line-clamp-3 text-xs text-(--library-dialog-meta)">{preset.summary}</span>
         </Tip>
       )}
       <KitLine preset={preset} />
@@ -248,7 +248,7 @@ export const LibraryDialog = ({ onClose, onAdd, initialType = "all" }: { readonl
   return (
     <>
       <Dialog open onOpenChange={(open) => !open && onClose()}>
-        <DialogPopup data-testid="library" data-view={view} className="max-h-[min(760px,calc(100vh-48px))] max-w-[680px]" initialFocus={search}>
+        <DialogPopup data-testid="library" data-view={view} className="max-h-[min(var(--library-dialog-height),calc(100vh-(--spacing(12))))] max-w-(--library-dialog-width)" initialFocus={search}>
           <DialogHeader>
             <DialogTitle>Library</DialogTitle>
           </DialogHeader>
@@ -322,7 +322,7 @@ export const LibraryDialog = ({ onClose, onAdd, initialType = "all" }: { readonl
               )}
             </div>
             {loaded && shown.pages > 1 && (
-              <nav className="flex items-center justify-end gap-1 text-xs text-muted-foreground" aria-label="Pages">
+              <nav className="flex items-center justify-end gap-1 text-xs text-(--library-dialog-meta)" aria-label="Pages">
                 <span data-testid="library-range">{libraryRange(shown)}</span>
                 <Button variant="ghost" size="icon-xs" aria-label="Previous page" disabled={shown.page <= 1} onClick={() => change({ page: shown.page - 1 })}>
                   <ChevronLeft aria-hidden />
@@ -336,7 +336,7 @@ export const LibraryDialog = ({ onClose, onAdd, initialType = "all" }: { readonl
         </DialogPopup>
       </Dialog>
       <AlertDialog open={confirming} onOpenChange={setConfirming}>
-        <AlertDialogPopup className="max-w-[400px]">
+        <AlertDialogPopup className="max-w-(--library-dialog-confirm-width)">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete preset?</AlertDialogTitle>
             <AlertDialogDescription>

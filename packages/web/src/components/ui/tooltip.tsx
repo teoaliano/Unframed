@@ -39,13 +39,15 @@ function TooltipPopup({
       >
         <TooltipPrimitive.Popup
           className={cn(
-            "relative flex h-(--popup-height,auto) w-(--popup-width,auto) origin-(--transform-origin) text-balance rounded-md text-popover-foreground text-xs transition-[width,height,scale,opacity] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-md)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] data-ending-style:scale-98 data-starting-style:scale-98 data-ending-style:opacity-0 data-starting-style:opacity-0 data-instant:duration-0 dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
+            "relative flex h-(--popup-height,auto) w-(--popup-width,auto) origin-(--transform-origin) text-balance rounded-md text-xs transition-[width,height,scale,opacity] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-md)-1px)] before:shadow-(--shadow-app-edge) data-ending-style:scale-98 data-starting-style:scale-98 data-ending-style:opacity-0 data-starting-style:opacity-0 data-instant:duration-0",
             variant === "glass"
-              ? "dropdown-glass shadow-xl shadow-black/25 before:hidden"
-              : "border bg-popover not-dark:bg-clip-padding shadow-md/5",
+              ? "dropdown-glass border-(--tooltip-glass-border) bg-(--tooltip-glass-surface) text-(--tooltip-glass-foreground) shadow-xl shadow-(color:--tooltip-glass-shadow) before:hidden"
+              : variant === "code"
+                ? "border border-(--tooltip-code-border) bg-(--tooltip-code-surface) text-(--tooltip-code-foreground) not-dark:bg-clip-padding shadow-md shadow-(color:--tooltip-code-shadow)"
+                : "border border-(--tooltip-default-border) bg-(--tooltip-default-surface) text-(--tooltip-default-foreground) not-dark:bg-clip-padding shadow-md shadow-(color:--tooltip-default-shadow)",
             // One wrap width for prose; code dumps get more room and break anywhere.
             variant === "code"
-              ? "max-w-120 wrap-anywhere text-left font-mono text-[11px] leading-relaxed"
+              ? "max-w-120 wrap-anywhere text-left font-mono text-2xs leading-relaxed"
               : "max-w-80 wrap-anywhere whitespace-normal leading-snug",
             className,
           )}

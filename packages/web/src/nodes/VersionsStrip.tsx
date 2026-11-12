@@ -63,7 +63,7 @@ const Thumb = ({ shape, version, index }: { readonly shape: NodeShape; readonly 
       {/* oxlint-disable-next-line react/forbid-elements -- a version thumbnail, pressed to use it and dragged to put it on the board */}
       <button
         type="button"
-        className={`relative block size-14 cursor-grab touch-none overflow-hidden rounded-md border bg-muted/40 p-0 outline-none focus-visible:ring-2 focus-visible:ring-ring ${current ? "border-ring ring-2 ring-ring/40" : ""}`}
+        className={`relative block size-14 cursor-grab touch-none overflow-hidden rounded-md border border-(--node-version-border) bg-(--node-version-surface)/(--node-version-surface-opacity) p-0 outline-none focus-visible:ring-2 focus-visible:ring-(--node-version-ring-focus) ${current ? "border-(--node-version-border-selected) ring-2 ring-(--node-version-ring-selected)/(--node-version-ring-selected-opacity)" : ""}`}
         aria-label={`Version ${index + 1}${current ? ", current" : ""}`}
         aria-pressed={current}
         onPointerDown={onPointerDown}
@@ -81,7 +81,7 @@ const Thumb = ({ shape, version, index }: { readonly shape: NodeShape; readonly 
             <Spinner aria-hidden />
           </span>
         ) : version.error !== undefined ? (
-          <span className="flex size-full items-center justify-center p-1 text-center text-2xs text-destructive-foreground" title={version.error}>
+          <span className="flex size-full items-center justify-center p-1 text-center text-2xs text-(--node-version-foreground-failed)" title={version.error}>
             Failed
           </span>
         ) : (
@@ -103,7 +103,7 @@ const Thumb = ({ shape, version, index }: { readonly shape: NodeShape; readonly 
       </Menu>
       {ghost &&
         createPortal(
-          <div className="pointer-events-none fixed z-[1000] size-16 -translate-1/2 overflow-hidden rounded-md border bg-card opacity-80 shadow-lg" style={{ left: ghost.x, top: ghost.y }} data-testid="node-version-ghost">
+          <div className="pointer-events-none fixed z-[1000] size-16 -translate-1/2 overflow-hidden rounded-md border border-(--node-version-border) bg-(--node-version-ghost-surface) opacity-80 shadow-lg" style={{ left: ghost.x, top: ghost.y }} data-testid="node-version-ghost">
             <VersionView version={version} medium={props.medium} fit="cover" />
           </div>,
           document.body,
@@ -119,7 +119,7 @@ export const VersionsStrip = ({ shape }: { readonly shape: NodeShape }) => {
   return (
     <div className="flex flex-col gap-1.5">
       {current && (
-        <div className="relative h-36 overflow-hidden rounded-lg border bg-muted/40" data-testid="node-result">
+        <div className="relative h-36 overflow-hidden rounded-lg border border-(--node-border) bg-(--node-result-surface)/(--node-result-surface-opacity)" data-testid="node-result">
           <VersionView version={current} medium={medium} />
         </div>
       )}

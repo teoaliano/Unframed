@@ -34,7 +34,7 @@ const Frame = () => {
   const { active: project, loaded } = useTabState(activation);
   // isolate: the canvas and its chrome stack below every kit popup, which portals to <body> at t3code's z-50 to 140.
   return (
-    <main className="relative isolate h-full w-full overflow-hidden bg-background text-foreground">
+    <main className="relative isolate h-full w-full overflow-hidden bg-(--app-surface) text-(--app-foreground)">
       {project !== undefined && (
         <ImportGate key={project} project={project}>
           <CanvasHost project={project} activation={activation} />
@@ -42,8 +42,8 @@ const Frame = () => {
       )}
       {project === undefined && loaded && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="grid justify-items-center gap-3 rounded-2xl border bg-card p-8 text-center text-card-foreground shadow-lg/5">
-            <p className="m-0 text-sm text-muted-foreground">No project is open.</p>
+          <div className="grid justify-items-center gap-3 rounded-2xl border border-(--no-project-border) bg-(--no-project-surface) p-8 text-center text-(--no-project-foreground) shadow-lg/5">
+            <p className="m-0 text-sm text-(--no-project-description)">No project is open.</p>
             <Button onClick={() => window.dispatchEvent(new Event(OPEN_PROJECT_LIST))}>Open project</Button>
           </div>
         </div>

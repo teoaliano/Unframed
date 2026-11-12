@@ -100,8 +100,8 @@ const Floating = ({ target, hidden, expanded, framed, children }: { target: Scre
     <div
       ref={root}
       className={cn(
-        "pointer-events-auto absolute z-[500] box-border overflow-hidden font-sans text-foreground data-[morphing=true]:transition-[left,top,width,height,border-radius,background-color,box-shadow] data-[morphing=true]:duration-200 data-[morphing=true]:ease-out motion-reduce:data-[morphing=true]:transition-none",
-        !expanded ? "rounded-xl border shadow-lg/5 surface-glass" : framed ? `${composerGlassClass} rounded-3xl border shadow-composer dark:shadow-none` : "rounded-3xl",
+        "pointer-events-auto absolute z-[500] box-border overflow-hidden font-sans text-(--selection-toolbar-foreground) data-[morphing=true]:transition-[left,top,width,height,border-radius,background-color,box-shadow] data-[morphing=true]:duration-200 data-[morphing=true]:ease-out motion-reduce:data-[morphing=true]:transition-none",
+        !expanded ? "rounded-xl border border-(--selection-toolbar-border) bg-(--selection-toolbar-surface) shadow-lg shadow-(color:--selection-toolbar-shadow) surface-glass" : framed ? `${composerGlassClass} rounded-3xl border border-(--composer-border) shadow-(--shadow-app-floating)` : "rounded-3xl",
       )}
       data-testid="selection-toolbar"
       data-side={place?.side}
@@ -131,7 +131,7 @@ const Floating = ({ target, hidden, expanded, framed, children }: { target: Scre
 
 const rowClass = "flex items-center gap-1.5";
 const barClass = `${rowClass} whitespace-nowrap p-1`;
-const hintClass = "px-1 text-xs text-muted-foreground";
+const hintClass = "px-1 text-xs text-(--selection-toolbar-hint)";
 
 const DragHandle = () => {
   const editor = useEditor();
@@ -239,7 +239,7 @@ const ResultBar = ({ state, onGenerate, agent, style }: { state: Extract<Toolbar
         )}
       </div>
       {line !== undefined && (
-        <div className="px-1.5 text-xs text-muted-foreground tabular-nums" data-testid="result-line">
+        <div className="px-1.5 text-xs text-(--selection-toolbar-meta) tabular-nums" data-testid="result-line">
           {line}
         </div>
       )}

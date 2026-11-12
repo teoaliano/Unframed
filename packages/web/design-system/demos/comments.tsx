@@ -61,7 +61,7 @@ export default function CommentsDemo() {
       </Section>
       <Section title="Comments panel">
         <Row label="unread, selected, resolved">
-          <div className="flex w-80 flex-col gap-0.5 border bg-background p-2">
+          <div className="flex w-80 flex-col gap-0.5 border border-(--catalogue-demo-border) bg-(--catalogue-demo-surface) p-2">
             <SidebarRow thread={open!} now={NOW} unread selected={false} onOpen={noop} onResolve={noop} onToggleRead={noop} onDelete={noop} />
             <SidebarRow thread={open!} now={NOW} unread={false} selected onOpen={noop} onResolve={noop} onToggleRead={noop} onDelete={noop} />
             <SidebarRow thread={resolved!} now={NOW} unread={false} selected={false} onOpen={noop} onResolve={noop} onToggleRead={noop} onDelete={noop} />

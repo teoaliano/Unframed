@@ -10,7 +10,7 @@ import type { Captured } from "./state.ts";
 export const SAVE_FAILED_MESSAGE = "Could not save. Is the local server running?";
 
 const fieldLabelClass = "grid gap-1.5";
-const fieldNameClass = "text-xs font-medium text-foreground";
+const fieldNameClass = "text-xs font-medium text-(--add-to-library-dialog-label)";
 
 /** `N shape(s), saved as you have them now.`, naming the recipe when the group has one. */
 export const saveSubtitle = (captured: Pick<Captured, "members" | "recipe" | "flow">): string =>
@@ -61,7 +61,7 @@ export const AddToLibraryDialog = ({ captured, onClose }: { readonly captured: C
       {/* The popup is the form, so its header, panel and footer stay the popup's own column. */}
       <DialogPopup
         data-testid="add-to-library"
-        className="max-w-[420px]"
+        className="max-w-(--add-to-library-dialog-width)"
         initialFocus={nameField}
         render={
           <form
@@ -91,7 +91,7 @@ export const AddToLibraryDialog = ({ captured, onClose }: { readonly captured: C
             />
           </label>
           {problem !== undefined && (
-            <p role="alert" className="m-0 text-sm text-destructive-foreground">
+            <p role="alert" className="m-0 text-sm text-(--add-to-library-dialog-error-foreground)">
               {problem}
             </p>
           )}

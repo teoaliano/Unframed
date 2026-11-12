@@ -92,12 +92,12 @@ export default function CommandDemo() {
       </Section>
       <Section title="Inline">
         <Row label="primitive highlight">
-          <div className="w-full max-w-xl rounded-2xl border">
+          <div className="w-full max-w-xl rounded-2xl border border-(--catalogue-demo-border)">
             <Palette />
           </div>
         </Row>
         <Row label="active item">
-          <div className="w-full max-w-xl rounded-2xl border">
+          <div className="w-full max-w-xl rounded-2xl border border-(--catalogue-demo-border)">
             <Palette activeItem="Ask Claude about the selection" />
           </div>
         </Row>

@@ -49,8 +49,8 @@ const TabStatusIcon = ({ status, measure = false }: { readonly status: TabStatus
   return (
     <span role="img" aria-label={label} data-testid={measure ? undefined : "chat-status"} data-status={measure ? undefined : status} className="inline-flex shrink-0">
       {status === "running" && <Spinner size="xs" aria-hidden />}
-      {status === "finished" && <Check aria-hidden className="text-success" />}
-      {status === "failed" && <CircleAlert aria-hidden className="text-destructive" />}
+      {status === "finished" && <Check aria-hidden className="text-(--chat-tabs-status-finished)" />}
+      {status === "failed" && <CircleAlert aria-hidden className="text-(--chat-tabs-status-failed)" />}
     </span>
   );
 };
@@ -122,7 +122,7 @@ const DetachItems = ({ client, chat }: { readonly client: ChatClient; readonly c
         <Unlink aria-hidden />
         Detach from
       </MenuSubTrigger>
-      <MenuSubPopup className="max-w-[260px]" aria-label="Detach from">
+      <MenuSubPopup className="max-w-(--chat-tabs-detach-menu-width)" aria-label="Detach from">
         {linked.map((artifact) => {
           const Icon = KIND_ICONS[artifact.kind as keyof typeof KIND_ICONS];
           return (
@@ -221,7 +221,7 @@ export const TabStrip = ({ client, chats, observed, active, selectedCount, onDel
     const empty = selectedCount === 0 ? "No chats yet" : selectedCount >= 2 ? "Nothing said about these yet. Your first message starts a chat." : undefined;
     return (
       <div ref={setStrip} className={STRIP_CLASS} data-testid="chat-tabs">
-        {empty !== undefined && <p className="m-0 truncate px-1 text-xs text-muted-foreground">{empty}</p>}
+        {empty !== undefined && <p className="m-0 truncate px-1 text-xs text-(--chat-tabs-empty-foreground)">{empty}</p>}
       </div>
     );
   }
@@ -315,7 +315,7 @@ export const TabStrip = ({ client, chats, observed, active, selectedCount, onDel
             side="bottom"
             align="start"
             sideOffset={4}
-            className="max-w-[260px]"
+            className="max-w-(--chat-tabs-tab-menu-width)"
             finalFocus={() => false}
             aria-label={`${tabLabel(menuChat)} actions`}
           >
@@ -342,7 +342,7 @@ export const TabStrip = ({ client, chats, observed, active, selectedCount, onDel
             <span className="min-w-0 truncate">More ({more.length})</span>
             <ChevronDown aria-hidden />
           </MenuTrigger>
-          <MenuPopup side="bottom" align="end" sideOffset={4} className="max-w-[300px]">
+          <MenuPopup side="bottom" align="end" sideOffset={4} className="max-w-(--chat-tabs-more-menu-width)">
             {more.map((chat) => (
               <MenuItem
                 key={chat.id}

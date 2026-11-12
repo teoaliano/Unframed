@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "typecheck": "tsc --noEmit -p . && oxlint --deny-warnings"
+    "typecheck": "tsc --noEmit -p . && oxlint --deny-warnings && node scripts/tokens.ts --check",
+    "tokens": "node scripts/tokens.ts"
   },
   "dependencies": {
     "@base-ui/react": "1.8.0",
