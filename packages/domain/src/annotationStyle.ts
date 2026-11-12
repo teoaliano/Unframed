@@ -5,7 +5,7 @@ export type StyleControl = (typeof STYLE_CONTROLS)[number];
 
 const CONTROLS: Readonly<Record<DesignableType, readonly StyleControl[]>> = {
   text: ["font", "size", "bold", "align", "textColor"],
-  note: ["fill", "font", "size", "bold", "align", "textColor"],
+  note: ["fill", "font", "size", "bold", "align"],
   geo: ["fill", "stroke", "strokeWidth", "font", "size"],
   arrow: ["stroke", "strokeWidth", "dash"],
   draw: ["stroke", "strokeWidth", "dash"],

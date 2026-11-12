@@ -156,6 +156,7 @@ test("a rectangle's label, fill, border and corners, and a sticky note's backgro
 
   await select(page, "shape:sticky");
   await expect(panel(page).getByText("Sticky note", { exact: true })).toBeVisible();
+  await expect(panel(page).getByRole("textbox", { name: "Colour color value", exact: true })).toHaveCount(0);
   await pickColour(page, "Background", "#22aa66");
   await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:sticky")?.meta?.unframed?.design?.fillColor === "#22aa66");
 });

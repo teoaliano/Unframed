@@ -87,6 +87,23 @@ const openStyle = async (page: Page, scope: ReturnType<Page["getByTestId"]>, con
   return popup;
 };
 
+const field = (scope: ReturnType<Page["getByTestId"]>, label: string) => scope.getByLabel(label, { exact: true });
+
+const typeInto = async (scope: ReturnType<Page["getByTestId"]>, label: string, value: string) => {
+  const input = field(scope, label);
+  await input.fill(value);
+  await input.press("Enter");
+};
+
+const pickFromMenu = async (page: Page, scope: ReturnType<Page["getByTestId"]>, control: string, item: string) => {
+  await scope.getByRole("button", { name: control, exact: true }).click();
+  const menu = page.getByRole("menu", { name: control });
+  await expect(menu).toBeVisible();
+  const choice = menu.getByRole("menuitemradio", { name: item, exact: true });
+  await choice.click();
+  return choice;
+};
+
 const setSlider = async (scope: ReturnType<Page["getByTestId"]>, label: string, value: string) => {
   const slider = scope.getByRole("slider", { name: label, exact: true });
   await slider.focus();
@@ -112,7 +129,7 @@ test("a sticky note's style row comes first in the bar, and the Design panel sta
   await put(page, engine, STICKIES);
   await select(page, "shape:sticky");
   await expect(row(page)).toBeVisible();
-  await expectControls(row(page), ["fill", "font", "size", "bold", "align", "textColor"]);
+  await expectControls(row(page), ["fill", "font", "size", "bold", "align"]);
   await expect(row(page).getByRole("button", { name: "Design panel" })).toBeVisible();
   const rowBox = (await row(page).boundingBox())!;
   const hint = (await toolbar(page).getByTestId("selection-hint").boundingBox())!;
@@ -145,7 +162,7 @@ test("each kind shows its own controls, a mixed selection what it shares, and a 
   await page.keyboard.down("Shift");
   await page.mouse.click(sticky.x, sticky.y);
   await page.keyboard.up("Shift");
-  await expectControls(row(page), ["fill", "font", "size", "bold", "align", "textColor"]);
+  await expectControls(row(page), ["fill", "font", "size", "bold", "align"]);
 
   await page.keyboard.press("Escape");
   const start = await emptyCanvasPoint(page);
@@ -173,6 +190,12 @@ test("a colour swatch sets a sticky note's colour as one undo step, and Default 
   await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:sticky")?.meta?.unframed?.design?.fillColor === "#e5484d");
   await expect(page.getByRole("dialog", { name: "Colour" })).toHaveCount(0);
   await expect(shapeOnScreen(page, "shape:sticky").locator(".tl-note__container")).toHaveCSS("background-color", "rgb(229, 72, 77)");
+  await expect(shapeOnScreen(page, "shape:sticky").locator(".tl-text-content__wrapper").first()).toHaveCSS("color", "rgb(255, 255, 255)");
+  await pickSwatch(page, "Colour", "Yellow");
+  await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:sticky")?.meta?.unframed?.design?.fillColor === "#ffe066");
+  await expect(shapeOnScreen(page, "shape:sticky").locator(".tl-text-content__wrapper").first()).toHaveCSS("color", "rgb(0, 0, 0)");
+  await page.keyboard.press("ControlOrMeta+z");
+  await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:sticky")?.meta?.unframed?.design?.fillColor === "#e5484d");
 
   await pickSwatch(page, "Colour", "Green");
   await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:sticky")?.meta?.unframed?.design?.fillColor === "#30a46c");
@@ -213,7 +236,7 @@ test("fill None and solid on a rectangle, a stroke swatch, and a typed text colo
   await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:starter-subject")?.meta?.unframed?.design?.textColor === "#ff0044");
 });
 
-test("stroke width and dash on a drawing come from DialKit fields, and the bar shows the width", async ({ page, engine }) => {
+test("stroke width is a number field with a stepper on hover, and the stroke style menu previews each line", async ({ page, engine }) => {
   await openCanvas(page, engine);
   const start = await emptyCanvasPoint(page);
   await page.getByTestId("tools.draw").click();
@@ -222,18 +245,34 @@ test("stroke width and dash on a drawing come from DialKit fields, and the bar s
   const drawing = { id: await drawnShape(engine) };
   await page.mouse.click(start.x - 200, start.y);
 
-  await setSlider(await openStyle(page, row(page), "Stroke width"), "Stroke width", "8");
+  const increase = row(page).getByRole("button", { name: "Increase", exact: true });
+  const stepper = row(page).locator("[data-slot=number-field-stepper]");
+  await expect(stepper).toHaveCSS("opacity", "0");
+  await typeInto(row(page), "Stroke width", "8");
   await waitForRoom(engine, "default", (records) => shapeNamed(records, drawing.id)?.meta?.unframed?.design?.strokeWidth === 8);
-  await expect(row(page).getByRole("button", { name: "Stroke width", exact: true })).toHaveText("8");
-  await page.keyboard.press("Escape");
-  await (await openStyle(page, row(page), "Dash")).getByRole("radio", { name: "Dot" }).click();
+  await expect(field(row(page), "Stroke width")).toHaveValue("8");
+  await expect(toolbar(page)).toBeVisible();
+  await field(row(page), "Stroke width").hover();
+  await expect(stepper).toHaveCSS("opacity", "1");
+  await increase.click();
+  await waitForRoom(engine, "default", (records) => shapeNamed(records, drawing.id)?.meta?.unframed?.design?.strokeWidth === 8.5);
+
+  const dotted = await pickFromMenu(page, row(page), "Stroke style", "Dotted");
   await waitForRoom(engine, "default", (records) => shapeNamed(records, drawing.id)?.props?.dash === "dotted");
+  await expect(dotted).toHaveCount(0);
+  await row(page).getByRole("button", { name: "Stroke style", exact: true }).click();
+  const menu = page.getByRole("menu", { name: "Stroke style" });
+  await expect(menu.getByRole("menuitemradio")).toHaveText(["Draw", "Solid", "Dashed", "Dotted"]);
+  await expect(menu.getByRole("menuitemradio", { name: "Dotted" })).toHaveAttribute("aria-checked", "true");
+  await expect(menu.locator("svg[width=\"32\"]")).toHaveCount(4);
   await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
+  await expect(row(page)).toBeVisible();
 
   await row(page).getByRole("button", { name: "Design panel" }).click();
   await setSlider(panel(page), "Stroke width", "3");
   await waitForRoom(engine, "default", (records) => shapeNamed(records, drawing.id)?.meta?.unframed?.design?.strokeWidth === 3);
-  await expect(row(page).getByRole("button", { name: "Stroke width", exact: true })).toHaveText("3");
+  await expect(field(row(page), "Stroke width")).toHaveValue("3");
 });
 
 test("font, size, bold and align on a prompt write as the panel writes them", async ({ page, engine }) => {
@@ -241,20 +280,24 @@ test("font, size, bold and align on a prompt write as the panel writes them", as
   await select(page, "shape:starter-subject");
   const id = "shape:starter-subject";
 
-  await (await openStyle(page, row(page), "Font")).getByRole("radio", { name: "Serif" }).click();
+  await row(page).getByRole("button", { name: "Font", exact: true }).click();
+  const fonts = page.getByRole("menu", { name: "Font" });
+  await expect(fonts.getByRole("menuitemradio")).toHaveText(["Draw", "Sans", "Serif", "Mono"]);
+  await expect(fonts.getByRole("menuitemradio", { name: "Serif" })).toHaveCSS("font-family", /tldraw_serif/);
+  await expect(fonts.getByRole("menuitemradio", { name: "Mono" })).toHaveCSS("font-family", /tldraw_mono/);
+  await fonts.getByRole("menuitemradio", { name: "Serif" }).click();
   await waitForRoom(engine, "default", (records) => shapeNamed(records, id)?.props?.font === "serif");
   await expect(row(page).getByRole("button", { name: "Font", exact: true })).toHaveText("Serif");
-  await page.keyboard.press("Escape");
 
-  const sizePopup = await openStyle(page, row(page), "Size");
-  await setSlider(sizePopup, "Size", "40");
+  await typeInto(row(page), "Size", "40");
   await waitForRoom(engine, "default", (records) => shapeNamed(records, id)?.meta?.unframed?.design?.fontSize === 40);
-  await sizePopup.getByRole("slider", { name: "Size", exact: true }).press("ArrowRight");
+  await field(row(page), "Size").focus();
+  await field(row(page), "Size").press("ArrowUp");
   await waitForRoom(engine, "default", (records) => shapeNamed(records, id)?.meta?.unframed?.design?.fontSize === 41);
-  await setSlider(sizePopup, "Size", "1");
+  await typeInto(row(page), "Size", "1");
   await waitForRoom(engine, "default", (records) => shapeNamed(records, id)?.meta?.unframed?.design?.fontSize === 4);
-  await expect(row(page).getByRole("button", { name: "Size", exact: true })).toHaveText("4");
-  await page.keyboard.press("Escape");
+  await expect(field(row(page), "Size")).toHaveValue("4");
+  await expect(row(page)).toBeVisible();
 
   await row(page).getByRole("button", { name: "Bold", exact: true }).click();
   await waitForRoom(engine, "default", (records) => shapeNamed(records, id)?.meta?.unframed?.design?.fontWeight === "700");
@@ -268,7 +311,8 @@ test("two notes that differ read as Mixed and one choice evens them out", async 
   await openCanvas(page, engine);
   await put(page, engine, STICKIES);
   await select(page, "shape:sticky", "shape:other");
-  await expect(row(page).getByRole("button", { name: "Size", exact: true })).toHaveText("Mixed");
+  await expect(field(row(page), "Size")).toHaveValue("");
+  await expect(field(row(page), "Size")).toHaveAttribute("placeholder", "Mixed");
   await row(page).getByRole("button", { name: "Colour", exact: true }).click();
   await expect(page.getByRole("group", { name: "Colour swatches" }).getByRole("button", { pressed: true })).toHaveCount(0);
   await page.keyboard.press("Escape");
@@ -381,7 +425,7 @@ test("the tool tray follows the picked tool, closes on Select, and gives way to 
   await expectControls(tray(page), ["stroke", "strokeWidth", "dash"]);
   await page.getByTestId("tools.note").click();
   await expect(tray(page)).toBeVisible();
-  await expectControls(tray(page), ["fill", "font", "size", "bold", "align", "textColor"]);
+  await expectControls(tray(page), ["fill", "font", "size", "bold", "align"]);
   const trayBox = (await tray(page).boundingBox())!;
   const button = (await page.getByTestId("tools.note").boundingBox())!;
   expect(Math.abs(trayBox.x + trayBox.width / 2 - (button.x + button.width / 2))).toBeLessThan(2);
@@ -397,16 +441,15 @@ test("the tool tray follows the picked tool, closes on Select, and gives way to 
   await expect(tray(page)).toHaveCount(0);
 });
 
-test("a burst of slider changes is one undo step", async ({ page, engine }) => {
+test("a burst of stepper clicks is one undo step", async ({ page, engine }) => {
   await openCanvas(page, engine);
   await select(page, "shape:starter-subject");
   const id = "shape:starter-subject";
-  const popup = await openStyle(page, row(page), "Size");
-  const slider = popup.getByRole("slider", { name: "Size", exact: true });
-  await slider.focus();
-  for (let step = 0; step < 4; step += 1) await slider.press("ArrowRight");
+  await field(row(page), "Size").hover();
+  for (let step = 0; step < 4; step += 1) await row(page).getByRole("button", { name: "Increase", exact: true }).click();
   await waitForRoom(engine, "default", (records) => shapeNamed(records, id)?.meta?.unframed?.design?.fontSize === 22);
-  await page.keyboard.press("Escape");
+  await field(row(page), "Size").press("Escape");
+  await expect(row(page)).toBeVisible();
   await page.keyboard.press("ControlOrMeta+z");
   await waitForRoom(engine, "default", (records) => {
     const found = shapeNamed(records, id);

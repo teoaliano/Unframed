@@ -1,16 +1,18 @@
-import { ANNOTATION_SWATCHES, shapeDesignOf, styleControlsFor, type DesignKey, type StyleControl } from "@unframed/domain";
+import { ANNOTATION_SWATCHES, cssFamily, shapeDesignOf, styleControlsFor, type DesignKey, type StyleControl } from "@unframed/domain";
 import { AlignCenter, AlignLeft, AlignRight, Bold, SlidersHorizontal, Spline } from "lucide-react";
-import { Suspense, useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { Suspense, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { useEditor, type Editor } from "tldraw";
 import { Button } from "~/components/ui/button";
+import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuRadioItemIndicator, MenuTrigger } from "~/components/ui/menu";
+import { NumberField, NumberFieldGroup, NumberFieldInput, NumberFieldStepper } from "~/components/ui/number-field";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Toggle } from "~/components/ui/toggle";
 import { cn } from "~/lib/utils";
 import { Tip } from "../chrome/ui.tsx";
 import { MIXED, numberOf } from "../design/controls.tsx";
-import { DialColour, DialScope, DialSegmented, DialSlider } from "./dialLazy.tsx";
+import { DialColour, DialScope, DialSegmented } from "./dialLazy.tsx";
 import { useDesignPanelOpen } from "./designPanelPref.ts";
-import { ALIGN_OPTIONS, alignChange, alignOf, DASH_OPTIONS, designValue, fillChange, fillOf, FONT_NAMES, fontChange, fontOf, props, shared, toHex, SIZE_RANGE, STROKE_WIDTH_RANGE, weightOf, writeDesign, type DesignChange, type DesignTarget, type Subject } from "./designTarget.ts";
+import { ALIGN_OPTIONS, alignChange, alignOf, designValue, fillChange, fillOf, FONT_NAMES, fontChange, fontOf, props, shared, toHex, SIZE_RANGE, STROKE_WIDTH_RANGE, weightOf, writeDesign, type DesignChange, type DesignTarget, type Subject } from "./designTarget.ts";
 
 const ALIGN_ICONS = { left: AlignLeft, center: AlignCenter, right: AlignRight } as const;
 
@@ -41,7 +43,7 @@ const SwatchFace = ({ kind, view }: { readonly kind: "fill" | "stroke" | "text";
   return (
     <span
       aria-hidden
-      className={cn("flex size-4 items-center justify-center rounded-full border", kind === "stroke" && "border-[3px]")}
+      className={cn("flex size-4 items-center justify-center rounded-[4px] border", kind === "stroke" && "border-[3px]")}
       style={kind === "stroke" ? { borderColor: colour } : { background: colour }}
     >
       {view.mixed ? <MixedMark /> : view.none ? <span className="block h-px w-3 rotate-45 bg-destructive" /> : null}
@@ -61,7 +63,7 @@ const StylePopover = ({
   readonly control: StyleControl;
   readonly icon: boolean;
   readonly trigger: ReactNode;
-  readonly width?: "narrow" | "normal" | "wide";
+  readonly width?: "fit" | "normal";
   readonly children: (close: () => void) => ReactNode;
 }) => {
   const editor = useEditor();
@@ -71,7 +73,7 @@ const StylePopover = ({
       <Tip label={label} side="top">
         <PopoverTrigger render={<Button variant="ghost" size={icon ? "icon-sm" : "sm"} aria-label={label} data-style-control={control} />}>{trigger}</PopoverTrigger>
       </Tip>
-      <PopoverPopup side="top" align="center" padding="compact" className={width === "wide" ? "w-72" : width === "narrow" ? "w-60" : "w-64"} aria-label={label} initialFocus={false} finalFocus={canvasFocus(editor)} onKeyDown={keepEscape(editor)}>
+      <PopoverPopup side="top" align="center" padding="compact" className={width === "fit" ? "w-fit" : "w-64"} aria-label={label} initialFocus={false} finalFocus={canvasFocus(editor)} onKeyDown={keepEscape(editor)}>
         {open && (
           <Suspense fallback={null}>
             <DialScope>{children(() => setOpen(false))}</DialScope>
@@ -85,7 +87,7 @@ const StylePopover = ({
 const SwatchButton = ({ name, selected, onClick, children }: { readonly name: string; readonly selected: boolean; readonly onClick: () => void; readonly children: ReactNode }) => (
   <Tip label={name} side="top">
     <Button variant="ghost" size="icon-xs" aria-label={name} aria-pressed={selected} onClick={onClick}>
-      <span className={cn("block size-5 rounded-full", selected && "ring-2 ring-primary ring-offset-1 ring-offset-background")}>{children}</span>
+      <span className={cn("block size-5 rounded-[5px]", selected && "ring-2 ring-primary ring-offset-1 ring-offset-background")}>{children}</span>
     </Button>
   </Tip>
 );
@@ -105,21 +107,21 @@ const ColourButton = ({
 }) => {
   const current = view.mixed ? undefined : view.value;
   return (
-    <StylePopover label={label} control={kind === "text" ? "textColor" : kind} icon trigger={<SwatchFace kind={kind} view={view} />} width="narrow">
+    <StylePopover label={label} control={kind === "text" ? "textColor" : kind} icon trigger={<SwatchFace kind={kind} view={view} />} width="fit">
       {(close) => (
         <>
-          <div className="grid grid-cols-7 gap-1 pb-1.5" role="group" aria-label={`${label} swatches`}>
+          <div className="grid grid-cols-[repeat(7,--spacing(6))] gap-1 pb-1.5" role="group" aria-label={`${label} swatches`}>
             <SwatchButton name="Default" selected={!view.mixed && !view.none && current === ""} onClick={() => (onPick(null), close())}>
-              <span aria-hidden className="block size-full rounded-full bg-[linear-gradient(135deg,var(--foreground)_50%,var(--background)_50%)]" />
+              <span aria-hidden className="block size-full rounded-[5px] border bg-[linear-gradient(135deg,var(--foreground)_50%,var(--background)_50%)]" />
             </SwatchButton>
             {ANNOTATION_SWATCHES.map((swatch) => (
               <SwatchButton key={swatch.hex} name={swatch.name} selected={current === swatch.hex} onClick={() => (onPick(swatch.hex), close())}>
-                <span aria-hidden className="block size-full rounded-full" style={{ background: swatch.hex }} />
+                <span aria-hidden className="block size-full rounded-[5px]" style={{ background: swatch.hex }} />
               </SwatchButton>
             ))}
             {allowNone && (
               <SwatchButton name="None" selected={view.none === true} onClick={() => (onPick("none"), close())}>
-                <span aria-hidden className="relative block size-full rounded-full border">
+                <span aria-hidden className="relative block size-full rounded-[5px] border">
                   <span className="absolute top-1/2 left-0.5 right-0.5 h-px -rotate-45 bg-destructive" />
                 </span>
               </SwatchButton>
@@ -137,6 +139,128 @@ const StrokeLine = ({ width }: { readonly width: number }) => (
     <span className="block w-full rounded-full bg-foreground" style={{ height: Math.max(1, Math.min(width, 8)) / 1.5 + 0.5 }} />
   </span>
 );
+
+const toCanvas = (editor: Editor) => {
+  editor.getContainer().focus();
+};
+
+const StyleNumber = ({
+  label,
+  control,
+  value,
+  mixed,
+  range,
+  leading,
+  onCommit,
+}: {
+  readonly label: string;
+  readonly control: StyleControl;
+  readonly value: number;
+  readonly mixed: boolean;
+  readonly range: { readonly min: number; readonly max: number; readonly step: number };
+  readonly leading?: ReactNode;
+  readonly onCommit: (next: number) => void;
+}) => {
+  const editor = useEditor();
+  const shown = mixed || !Number.isFinite(value) ? null : value;
+  const [draft, setDraft] = useState<number | null>(shown);
+  useEffect(() => setDraft(shown), [shown]);
+  return (
+    <NumberField
+      size="sm"
+      className="w-auto shrink-0"
+      value={draft}
+      min={range.min}
+      max={range.max}
+      step={range.step}
+      format={{ useGrouping: false, maximumFractionDigits: 1 }}
+      onValueChange={setDraft}
+      onValueCommitted={(next) => {
+        if (next !== null && next !== shown) onCommit(next);
+      }}
+    >
+      <NumberFieldGroup className={mixed ? (leading === undefined ? "w-18" : "w-24") : leading === undefined ? "w-13" : "w-20"} data-style-control={control}>
+        {leading}
+        <NumberFieldInput
+          aria-label={label}
+          placeholder={mixed ? MIXED : undefined}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== "Escape") return;
+            editor.markEventAsHandled(event.nativeEvent);
+            if (event.key === "Escape") setDraft(shown);
+            event.currentTarget.blur();
+            toCanvas(editor);
+          }}
+        />
+        <NumberFieldStepper />
+      </NumberFieldGroup>
+    </NumberField>
+  );
+};
+
+const StyleMenu = ({
+  label,
+  control,
+  icon,
+  trigger,
+  value,
+  options,
+  onPick,
+}: {
+  readonly label: string;
+  readonly control: StyleControl;
+  readonly icon: boolean;
+  readonly trigger: ReactNode;
+  readonly value: string;
+  readonly options: readonly { readonly value: string; readonly label: ReactNode; readonly style?: CSSProperties }[];
+  readonly onPick: (picked: string) => void;
+}) => {
+  const editor = useEditor();
+  return (
+    <Menu>
+      <Tip label={label} side="top">
+        <MenuTrigger render={<Button variant="ghost" size={icon ? "icon-sm" : "sm"} aria-label={label} data-style-control={control} />}>{trigger}</MenuTrigger>
+      </Tip>
+      <MenuPopup side="top" align="center" sideOffset={8} aria-label={label} finalFocus={canvasFocus(editor)} onKeyDown={keepEscape(editor)}>
+        <MenuRadioGroup value={value} onValueChange={(picked) => typeof picked === "string" && picked !== value && onPick(picked)}>
+          {options.map((option) => (
+            <MenuRadioItem key={option.value} value={option.value} closeOnClick style={option.style}>
+              <span className="flex w-full items-center justify-between gap-4">
+                {option.label}
+                <MenuRadioItemIndicator />
+              </span>
+            </MenuRadioItem>
+          ))}
+        </MenuRadioGroup>
+      </MenuPopup>
+    </Menu>
+  );
+};
+
+const FONT_FACES: Readonly<Record<string, string>> = { Draw: "tldraw_draw, sans-serif", Sans: "tldraw_sans, sans-serif", Serif: "tldraw_serif, serif", Mono: "tldraw_mono, monospace" };
+
+const DASH_PATHS: Readonly<Record<string, { readonly d: string; readonly dash?: string }>> = {
+  draw: { d: "M1 7C5 3 8 10 12 6S19 3 23 7 29 9 31 5" },
+  solid: { d: "M1 6H31" },
+  dashed: { d: "M1 6H31", dash: "5 4" },
+  dotted: { d: "M2 6H31", dash: "0 4.5" },
+};
+
+const DASH_STYLES = [
+  { value: "draw", name: "Draw" },
+  { value: "solid", name: "Solid" },
+  { value: "dashed", name: "Dashed" },
+  { value: "dotted", name: "Dotted" },
+] as const;
+
+const DashPreview = ({ dash }: { readonly dash: string }) => {
+  const path = DASH_PATHS[dash] ?? DASH_PATHS.solid!;
+  return (
+    <svg aria-hidden width="32" height="12" viewBox="0 0 32 12" fill="none" className="shrink-0">
+      <path d={path.d} stroke="currentColor" strokeWidth="2" strokeLinecap={path.dash === "5 4" ? "butt" : "round"} strokeDasharray={path.dash} />
+    </svg>
+  );
+};
 
 const controlFor = (editor: Editor, target: DesignTarget, control: StyleControl): ReactNode => {
   const { subjects } = target;
@@ -174,36 +298,64 @@ const controlFor = (editor: Editor, target: DesignTarget, control: StyleControl)
       const view = number("strokeWidth");
       const width = Number(view.value);
       return (
-        <StylePopover key={control} label="Stroke width" control={control} icon={false} trigger={view.mixed ? <StrokeLine width={2} /> : <span className="flex items-center gap-1.5"><StrokeLine width={width} /><span className="text-xs tabular-nums">{view.value}</span></span>}>
-          {() => <DialSlider label="Stroke width" value={Number.isFinite(width) ? width : 2} {...STROKE_WIDTH_RANGE} unit="px" onChange={(next) => write({ design: { strokeWidth: next } }, "strokeWidth")} />}
-        </StylePopover>
+        <StyleNumber
+          key={control}
+          label="Stroke width"
+          control={control}
+          value={width}
+          mixed={view.mixed}
+          range={STROKE_WIDTH_RANGE}
+          leading={
+            <span aria-hidden className="flex items-center ps-2.5">
+              <StrokeLine width={view.mixed || !Number.isFinite(width) ? 2 : width} />
+            </span>
+          }
+          onCommit={(next) => write({ design: { strokeWidth: next } }, "strokeWidth")}
+        />
       );
     }
     case "dash": {
       const view = values((subject) => String(props(subject.shape).dash ?? "draw"));
       return (
-        <StylePopover key={control} label="Dash" control={control} icon trigger={<Spline aria-hidden />}>
-          {() => <DialSegmented label="Dash" value={view.mixed ? "" : view.value} options={DASH_OPTIONS} onChange={(picked) => write({ props: () => ({ dash: picked }) })} />}
-        </StylePopover>
+        <StyleMenu
+          key={control}
+          label="Stroke style"
+          control={control}
+          icon
+          trigger={<Spline aria-hidden />}
+          value={view.mixed ? "" : view.value}
+          options={DASH_STYLES.map((style) => ({
+            value: style.value,
+            label: (
+              <span className="flex items-center gap-2">
+                <DashPreview dash={style.value} />
+                {style.name}
+              </span>
+            ),
+          }))}
+          onPick={(picked) => write({ props: () => ({ dash: picked }) })}
+        />
       );
     }
     case "font": {
       const view = values(fontOf);
       const custom = !view.mixed && view.value !== "" && !FONT_NAMES.includes(view.value) ? [view.value] : [];
       return (
-        <StylePopover key={control} label="Font" control={control} icon={false} width="wide" trigger={<span className="max-w-20 truncate text-xs">{view.mixed ? MIXED : view.value}</span>}>
-          {() => <DialSegmented label="Font" value={view.mixed ? "" : view.value} options={[...custom, ...FONT_NAMES].map((name) => ({ value: name, label: name }))} onChange={(picked) => picked !== view.value && write(fontChange(picked))} />}
-        </StylePopover>
+        <StyleMenu
+          key={control}
+          label="Font"
+          control={control}
+          icon={false}
+          trigger={<span className="max-w-20 truncate text-xs">{view.mixed ? MIXED : view.value}</span>}
+          value={view.mixed ? "" : view.value}
+          options={[...custom, ...FONT_NAMES].map((name) => ({ value: name, label: name, style: { fontFamily: FONT_FACES[name] ?? cssFamily(name) } }))}
+          onPick={(picked) => write(fontChange(picked))}
+        />
       );
     }
     case "size": {
       const view = number("fontSize");
-      const size = Number(view.value);
-      return (
-        <StylePopover key={control} label="Size" control={control} icon={false} trigger={<span className="min-w-6 text-xs tabular-nums">{view.mixed ? MIXED : view.value}</span>}>
-          {() => <DialSlider label="Size" value={Number.isFinite(size) ? size : 22} {...SIZE_RANGE} unit="px" onChange={(next) => write({ design: { fontSize: Math.round(next) } }, "fontSize")} />}
-        </StylePopover>
-      );
+      return <StyleNumber key={control} label="Size" control={control} value={Number(view.value)} mixed={view.mixed} range={SIZE_RANGE} onCommit={(next) => write({ design: { fontSize: Math.round(next) } }, "fontSize")} />;
     }
     case "bold": {
       const view = values((subject) => (Number(weightOf(designValue(editor, subject, "fontWeight"))) >= 600 ? "bold" : "regular"));
@@ -244,7 +396,7 @@ export const useOpenPopupEscape = (ref: RefObject<HTMLElement | null>) => {
     const element = ref.current;
     if (element === null) return;
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape" && event.target instanceof Element && event.target.closest("[aria-expanded='true']") !== null) editor.markEventAsHandled(event);
+      if (event.key === "Escape" && event.target instanceof Element && event.target.closest("[aria-expanded='true'], [data-slot='number-field-input']") !== null) editor.markEventAsHandled(event);
     };
     element.addEventListener("keydown", onKeyDown);
     return () => element.removeEventListener("keydown", onKeyDown);

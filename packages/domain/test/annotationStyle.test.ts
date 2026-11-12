@@ -4,7 +4,7 @@ import { ANNOTATION_SWATCHES, designPanelPreference, designValueRefusal, styleCo
 describe("styleControlsFor", () => {
   it.each<[DesignableType, string[]]>([
     ["text", ["font", "size", "bold", "align", "textColor"]],
-    ["note", ["fill", "font", "size", "bold", "align", "textColor"]],
+    ["note", ["fill", "font", "size", "bold", "align"]],
     ["geo", ["fill", "stroke", "strokeWidth", "font", "size"]],
     ["arrow", ["stroke", "strokeWidth", "dash"]],
     ["draw", ["stroke", "strokeWidth", "dash"]],
@@ -15,7 +15,7 @@ describe("styleControlsFor", () => {
   });
 
   it.each<[DesignableType[], string[]]>([
-    [["text", "note"], ["font", "size", "bold", "align", "textColor"]],
+    [["text", "note"], ["font", "size", "bold", "align"]],
     [["note", "line"], []],
     [["geo", "draw"], ["stroke", "strokeWidth"]],
     [["draw", "draw", "arrow"], ["stroke", "strokeWidth", "dash"]],

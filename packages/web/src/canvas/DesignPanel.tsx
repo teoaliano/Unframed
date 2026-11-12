@@ -131,7 +131,7 @@ const OpenDesignPanel = () => {
                 />
               )}
               {all(VERTICAL) && <DialSegmented label="Vertical" value={vertical.mixed ? "" : vertical.value} options={VERTICALS} onChange={(picked) => write({ props: () => ({ verticalAlign: picked }) })} />}
-              {colourField("Colour", "textColor")}
+              {has("textColor") && colourField("Colour", "textColor")}
             </DialSection>
           )}
 
