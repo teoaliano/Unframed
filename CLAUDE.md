@@ -17,6 +17,7 @@ This codebase replaced an older Unframed (a React Flow canvas with output nodes)
 
 1. **Four test seams, no others**: the engine seam (`packages/engine/test`, Vitest against a real engine), the domain seam (`packages/domain/test`, Vitest on pure logic), the browser seam (`packages/web/test`, Playwright against the running app), and the shell seam for the desktop app in `apps/desktop` (`npm test` there: `node --test` against fakes of Electron and electron-updater, plus `e2e/update.mjs`, a real signed update on a Mac). Every behaviour is tested through one of them.
 2. **Changes land by pull request, never a direct push to `main`**, not even one-liners. The desktop shell ships builds from tags on `main`.
+3. **Unreleased work lives on `dev` or behind a feature.** Work that should not reach users yet goes by pull request into the `dev` branch, which merges into `main` by pull request once it is ready, and takes `main` back in regularly. Nothing is tagged from `dev`. A feature already on `main` that should not ship is turned off by the engine's `UNFRAMED_FEATURES` variable: production builds turn on none. `pnpm dev:app` builds "Unframed Dev" from the current checkout and installs it beside the production app, with its own data folder, no updates and every feature on.
 
 ## Commands
 

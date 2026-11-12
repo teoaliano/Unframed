@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import { inAppClaudeDisallowedTools } from "@unframed/domain";
 import type { CanUseTool, Options, PermissionResult, PermissionUpdate, Query, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import {
-  AGENT_SYSTEM_PROMPT,
   CHAT_TITLE_SYSTEM_PROMPT,
   chatTitlePrompt,
   claudePermissionMode,
@@ -225,7 +224,7 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
         ...(input.modelSelection.model === "" ? {} : { model: input.modelSelection.model }),
         ...(traits.effort === undefined ? {} : { effort: traits.effort }),
         ...(Object.keys(settings).length > 0 ? { settings } : {}),
-        systemPrompt: { type: "preset", preset: "claude_code", append: AGENT_SYSTEM_PROMPT },
+        systemPrompt: { type: "preset", preset: "claude_code", append: context.systemPrompt },
         tools: { type: "preset", preset: "claude_code" },
         allowedTools: context.registeredTools().map((name) => `${UNFRAMED_TOOL_PREFIX}${name}`),
         // The outside connection's server never serves an in-app session (spec 14).

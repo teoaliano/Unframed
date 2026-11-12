@@ -135,6 +135,7 @@ export const agentsLayer = Layer.effect(
         book: connections.book,
       },
       testAgentScript: config.testAgentScript,
+      features: config.features,
       idleMs: config.testAgentIdleMs,
       outsideTurnIdleMs: config.outsideTurnIdleMs,
       uploadUrlTtlMs: config.testUploadUrlTtlMs,
@@ -158,7 +159,9 @@ export const agentsLayer = Layer.effect(
       realAdapter,
       extraTools: (tools) => [...new ArtifactTools(tools, () => previewPort).tools(), ...new ComponentTools(tools, () => previewPort).tools(), ...preview.tools()],
       onSessionClosed: (_project, chatId) => void preview.closeChat(chatId),
+      providerReady: async (provider) => (await run(detection.statuses({})))[provider].status === "ready",
     });
+    yield* rooms.afterCommit((project, change) => runtime.commentCommitted(project, change));
 
     const opened = (projectId: string) =>
       Effect.tryPromise({ try: () => runtime.project(projectId), catch: toUnframed });

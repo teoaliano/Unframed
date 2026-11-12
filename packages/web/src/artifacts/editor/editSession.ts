@@ -92,6 +92,7 @@ interface EditSessionInput {
   readonly file: string;
   readonly locked: readonly string[];
   readonly kit: Kit | null;
+  readonly editing: boolean;
 }
 
 export interface EditSession {
@@ -141,8 +142,8 @@ const sameIds = (a: readonly string[], b: readonly string[]): boolean => a.lengt
 const conflictSentence = (kind: ArtifactKind, reason: unknown): string =>
   reason === "agent" ? "The agent rewrote this. Your last change wasn't saved." : `This ${kind} changed somewhere else. Your last change wasn't saved.`;
 
-export const useEditSession = ({ editor, engine, project, shapeId, kind, file, locked, kit }: EditSessionInput): EditSession => {
-  const [mode, setModeState] = useState<EditMode>("edit");
+export const useEditSession = ({ editor, engine, project, shapeId, kind, file, locked, kit, editing }: EditSessionInput): EditSession => {
+  const [mode, setModeState] = useState<EditMode>(editing ? "edit" : "interact");
   const [selection, setSelectionState] = useState<readonly string[]>([]);
   const [tween, setTweenState] = useState<number | null>(null);
   const tweenRef = useRef<number | null>(null);
@@ -165,7 +166,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   const inFlight = useRef<Readonly<Record<string, unknown>>>({});
   const lastEdit = useRef<Record<string, SourceEdit>>({});
 
-  const modeRef = useRef<EditMode>("edit");
+  const modeRef = useRef<EditMode>(editing ? "edit" : "interact");
   const selectionRef = useRef<readonly string[]>([]);
   const lockedRef = useRef<readonly string[]>(locked);
   lockedRef.current = locked;
@@ -434,7 +435,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
 
   const setMode = useCallback(
     (next: EditMode) => {
-      if (modeRef.current === next) return;
+      if (modeRef.current === next || (next === "edit" && !editing)) return;
       void commit();
       textPending.current = null;
       modeRef.current = next;
@@ -442,7 +443,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       if (next === "interact") setHovered(null);
       post({ type: "unframed:edit:mode", mode: next, locked: lockedRef.current });
     },
-    [commit, post],
+    [commit, post, editing],
   );
 
   const selectMatching = useCallback((selector: string) => post({ type: "unframed:edit:selectMatching", selector }), [post]);
@@ -499,7 +500,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       else undo();
       return true;
     }
-    if (modified) return false;
+    if (modified || !editing) return false;
     if (key.toLowerCase() === "v") {
       setMode("edit");
       return true;
@@ -673,7 +674,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   }, [file]);
 
   useEffect(() => {
-    if (file === "") return;
+    if (file === "" || !editing) return;
     if (preparingFile.current !== undefined && file !== preparingFile.current) {
       preparingFile.current = undefined;
       setPreparing(false);
@@ -711,7 +712,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     return () => {
       live = false;
     };
-  }, [file]);
+  }, [file, editing]);
 
   return {
     mode,

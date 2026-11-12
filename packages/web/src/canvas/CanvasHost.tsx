@@ -45,11 +45,15 @@ import { PromptShapeUtil } from "./shapes/prompt.tsx";
 import { DESIGNED_SHAPE_UTILS } from "./shapes/designed.tsx";
 import { installNextShapeDesign } from "./nextShapeDesign.ts";
 import { SyncSocket } from "./syncSocket.ts";
+import { CommentTool } from "../comments/CommentTool.ts";
 import { recalledCamera, rememberCamera } from "../project/tabMemory.ts";
 import { TLDRAW_ASSET_URLS, TLDRAW_CHROME, TLDRAW_OPTIONS } from "./tldrawChrome.tsx";
+import { useFeature } from "../features.ts";
 
 
 const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, AudioShapeUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil, ComponentShapeUtil, NodeShapeUtil, WireShapeUtil, ...DESIGNED_SHAPE_UTILS];
+
+const TOOLS = [CommentTool];
 
 const COMPONENTS: TLComponents = {
   ...TLDRAW_CHROME,
@@ -101,7 +105,8 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
   const store = useSync({ connect, assets, schema: canvasSchema() });
 
   useEffect(() => watchRunReports(engine, project), [engine, project]);
-  useEffect(() => watchChainReports(engine, project), [engine, project]);
+  const nodesOn = useFeature("nodes");
+  useEffect(() => (nodesOn ? watchChainReports(engine, project) : undefined), [engine, project, nodesOn]);
 
   useEffect(() => {
     activation.setBeforeSwitch(() => socket.current?.settled(SETTLE_BEFORE_SWITCH_MS) ?? Promise.resolve());
@@ -169,6 +174,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
         maxImageDimension={Number.POSITIVE_INFINITY}
         onMount={onMount}
         shapeUtils={SHAPE_UTILS}
+        tools={TOOLS}
         overlayUtils={OVERLAY_UTILS}
         overrides={overrides}
         components={COMPONENTS}

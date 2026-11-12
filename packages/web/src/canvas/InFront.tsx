@@ -10,13 +10,17 @@ import { MentionMenu } from "./MentionMenu.tsx";
 import { ToolTray } from "./ToolTray.tsx";
 import { ArtifactsHost } from "../artifacts/ArtifactsHost.tsx";
 import { NodeChrome } from "../nodes/NodeChrome.tsx";
+import { CommentsHost } from "../comments/CommentsHost.tsx";
+import { useFeature } from "../features.ts";
 
 export const InFront = () => {
   useEffect(() => registerSlot("toolbarEnd", ToolbarEnd), []);
+  const nodes = useFeature("nodes");
   return (
   <>
     <Tether />
-    <NodeChrome />
+    <CommentsHost />
+    {nodes && <NodeChrome />}
     <MentionMenu />
     <SelectionToolbar />
     <ToolTray />

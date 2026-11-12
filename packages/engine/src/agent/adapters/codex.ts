@@ -1,5 +1,4 @@
 import {
-  AGENT_SYSTEM_PROMPT,
   CHAT_TITLE_SYSTEM_PROMPT,
   chatTitlePrompt,
   checkCanvasTools,
@@ -116,7 +115,7 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
       sandbox: policy.sandbox,
       approvalsReviewer: policy.approvalsReviewer,
       ...(input.model === "" ? {} : { model: input.model }),
-      developerInstructions: AGENT_SYSTEM_PROMPT,
+      developerInstructions: context.systemPrompt,
     };
   };
 

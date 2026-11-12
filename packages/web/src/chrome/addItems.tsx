@@ -1,11 +1,12 @@
-import { ARTIFACT_ITEMS, INPUT_ITEMS, type AddAction } from "@unframed/domain";
+import { ARTIFACT_ITEMS, inputItems, type AddAction, type Features } from "@unframed/domain";
 import { AlignLeft, AppWindow, AudioLines, Clapperboard, Group, Image, SquarePlay, Workflow, type LucideIcon } from "lucide-react";
 
 /** The add menu's sections, shared by the add button and the canvas context menu. */
-export const ADD_SECTIONS = [
-  { heading: "Inputs", items: INPUT_ITEMS },
-  { heading: "Artifacts", items: ARTIFACT_ITEMS },
-] as const;
+export const addSections = (features: Features) =>
+  [
+    { heading: "Inputs", items: inputItems(features) },
+    { heading: "Artifacts", items: ARTIFACT_ITEMS },
+  ] as const;
 
 export const ADD_ICONS: Record<AddAction, LucideIcon> = {
   "add-prompt": AlignLeft,

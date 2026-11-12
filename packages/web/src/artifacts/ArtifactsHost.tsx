@@ -18,6 +18,7 @@ import { watchComponentPins } from "./componentPins.ts";
 import { applyLateSaves } from "./editor/lateSaves.ts";
 import { watchFileChanges, watchSnapshots } from "./snapshots.ts";
 import { ScaleMenu } from "./ScaleMenu.tsx";
+import { useFeature } from "../features.ts";
 
 const ArtifactEditor = lazy(() => import("./editor/ArtifactEditor.tsx").then((module) => ({ default: module.ArtifactEditor })));
 const ParametersPanel = lazy(() => import("./ParametersPanel.tsx").then((module) => ({ default: module.ParametersPanel })));
@@ -101,6 +102,7 @@ export const ArtifactsHost = () => {
   const settings = useSettings();
   const activation = useActivation();
   const device = useIsDevice();
+  const elementEditing = useFeature("element-editing");
 
   useEffect(() => {
     if (settings) previewPort.set(settings.previewPort);
@@ -111,7 +113,7 @@ export const ArtifactsHost = () => {
     applyLateSaves(editor, project);
     const stops = [
       installFrameHold(editor),
-      installImageDrop(editor, engine, project),
+      ...(elementEditing ? [installImageDrop(editor, engine, project)] : []),
       watchSnapshots(engine, project),
       watchFileChanges(engine, project),
       watchComponentPins(engine, project),
@@ -127,7 +129,7 @@ export const ArtifactsHost = () => {
       for (const stop of stops) stop();
       closeArtifactEditor(editor);
     };
-  }, [editor, engine, project, activation, device]);
+  }, [editor, engine, project, activation, device, elementEditing]);
 
   const editing = useValue("editing artifact", () => artifactsOf(editor).editing.get(), [editor]);
   const tuning = useValue("tuning artifact", () => artifactsOf(editor).tuning.get(), [editor]);

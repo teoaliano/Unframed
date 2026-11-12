@@ -205,8 +205,13 @@
   padding-right: 320px;
 }
 
-:root .tl-container[data-parameters-panel] {
+:root .tl-container[data-parameters-panel],
+:root .tl-container:has([data-comments-sidebar]) {
   --tl-layer-watermark: 251;
+}
+
+:root .tl-container:has([data-comments-sidebar]) .tlui-layout__bottom {
+  padding-right: 320px;
 }
 
 :root .tl-container[data-parameters-panel="dock"]:not(:has(~ [data-slot="docked-rail"][data-state="open"])) .tlui-layout__bottom {
