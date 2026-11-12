@@ -96,7 +96,8 @@ test("clicking a shape while the composer is open adds it; clicking empty canvas
   await openComposer(page);
   await expect(composer(page).getByTestId("source-count")).toHaveText("1 selected");
 
-  await clickShape(page, "shape:starter-scene");
+  const scene = (await shapeOnScreen(page, "shape:starter-scene").boundingBox())!;
+  await page.mouse.click(scene.x + scene.width / 2, scene.y + 8);
   await expect(composer(page).getByTestId("source-count")).toHaveText("2 selected");
   await expect(composer(page)).toBeVisible();
 
