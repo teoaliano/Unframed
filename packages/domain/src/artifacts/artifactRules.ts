@@ -1,4 +1,5 @@
 import { isArtifactScale } from "@unframed/contracts";
+import { bareOrigin } from "../devShare.ts";
 import { projectSlug } from "../slug.ts";
 import { ADD_PARAMETER_TEMPLATE, APPLY_PARAMETERS_TEMPLATE } from "./prompts.ts";
 
@@ -101,6 +102,12 @@ export const previewHostFor = (appHostname: string): string => {
   return host === "localhost" ? "127.0.0.1" : "localhost";
 };
 
+const artifactBase = (input: { readonly appHostname: string; readonly previewPort: number; readonly project: string; readonly previewOrigin?: string | undefined }): string => {
+  const origin = bareOrigin(input.previewOrigin);
+  const root = origin ?? `http://${previewHostFor(input.appHostname)}:${input.previewPort}`;
+  return `${root}/p/${encodeURIComponent(input.project)}`;
+};
+
 export const artifactUrl = (input: {
   readonly appHostname: string;
   readonly previewPort: number;
@@ -108,8 +115,9 @@ export const artifactUrl = (input: {
   readonly file: string;
   readonly kind: ArtifactKind;
   readonly editor?: boolean;
+  readonly previewOrigin?: string | undefined;
 }): string => {
-  const base = `http://${previewHostFor(input.appHostname)}:${input.previewPort}/p/${encodeURIComponent(input.project)}`;
+  const base = artifactBase(input);
   if (input.kind !== "motion") return `${base}/${encodeURIComponent(input.file)}`;
   const editor = input.editor === true ? "&ui=editor" : "";
   return `${base}/hyperframes-viewer.html?c=${encodeURIComponent(input.file)}${editor}`;

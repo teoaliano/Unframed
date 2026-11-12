@@ -118,7 +118,7 @@ class FakeDocument {
 
 const ORIGIN = "http://localhost:18787";
 
-const stubEditWindow = (options: { peer?: string; timelines?: unknown; loading?: boolean } = {}) => {
+const stubEditWindow = (options: { peer?: string; timelines?: unknown; loading?: boolean; peers?: readonly string[] } = {}) => {
   const posted: Array<{ message: any; targetOrigin: string }> = [];
   const errors: unknown[][] = [];
   const listeners: Listener[] = [];
@@ -158,7 +158,7 @@ const stubEditWindow = (options: { peer?: string; timelines?: unknown; loading?:
     ...(options.peer === undefined ? {} : { unframedEditPeer: options.peer }),
     ...(options.timelines === undefined ? {} : { __timelines: options.timelines }),
   };
-  new Function("window", editBridgeSource())(win);
+  new Function("window", editBridgeSource(options.peers ?? []))(win);
   const send = (data: unknown, from: { source?: unknown; origin?: string } = {}) => {
     for (const listener of listeners) listener({ source: from.source ?? parent, origin: from.origin ?? "http://127.0.0.1:5001", data });
   };
@@ -193,6 +193,17 @@ describe("the built edit bridge", () => {
     send({ type: "unframed:edit:hello" }, { origin: "http://127.0.0.1:5001" });
     expect(posted.at(-1)).toEqual({ message: { type: "unframed:edit:ready" }, targetOrigin: "http://127.0.0.1:5001" });
     expect(messages("unframed:edit:ready")).toHaveLength(2);
+  });
+
+  it("accepts one configured https peer, and refuses a different https origin", () => {
+    const peer = "https://homebox.tail1234.ts.net:5173";
+    const { document, send } = stubEditWindow({ peers: [peer] });
+    send({ type: "unframed:edit:mode", mode: "edit", locked: [] }, { origin: "https://other.example" });
+    expect(document.listening("click")).toBe(0);
+    send({ type: "unframed:edit:mode", mode: "edit", locked: [] }, { origin: peer });
+    expect(document.listening("click")).toBe(1);
+    send({ type: "unframed:edit:mode", mode: "interact", locked: [] }, { origin: "http://127.0.0.1:5001" });
+    expect(document.listening("click")).toBe(0);
   });
 
   it("accepts a message only from its parent with its own origin or a loopback one", () => {

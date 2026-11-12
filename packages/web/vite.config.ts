@@ -14,6 +14,11 @@ const shareOrigin = devShareOrigin(shareValue);
 if (shareValue !== undefined && shareValue.trim() !== "" && shareOrigin === undefined) {
   throw new Error(`UNFRAMED_DEV_SHARE_ORIGIN must be a bare https origin, got ${JSON.stringify(shareValue)}`);
 }
+const previewValue = process.env.UNFRAMED_DEV_SHARE_PREVIEW_ORIGIN;
+const previewOrigin = devShareOrigin(previewValue);
+if (previewValue !== undefined && previewValue.trim() !== "" && previewOrigin === undefined) {
+  throw new Error(`UNFRAMED_DEV_SHARE_PREVIEW_ORIGIN must be a bare https origin, got ${JSON.stringify(previewValue)}`);
+}
 
 // The dev share relay (spec 01). Without a share origin the proxy forwards headers untouched.
 const relay: ProxyOptions["configure"] = (proxy) => {
@@ -90,6 +95,7 @@ export default defineConfig({
   envDir: false,
   define: {
     __TLDRAW_LICENSE_KEY__: JSON.stringify(process.env.TLDRAW_LICENSE_KEY ?? ""),
+    __UNFRAMED_PREVIEW_ORIGIN__: JSON.stringify(previewOrigin ?? ""),
   },
   // tldraw's asset imports use ?url, which the dev dependency bundler cannot follow.
   optimizeDeps: { exclude: ["@tldraw/assets"] },

@@ -1,5 +1,6 @@
 import { artifactUrl, defaultDialValues, liveViewerUrl, normaliseDials, type ArtifactKind, type DialsAnnouncement, type Kit } from "@unframed/domain";
 import { useEffect, useRef, useState } from "react";
+import { previewOriginForWindow } from "./previewOrigin.ts";
 
 export interface ArtifactFrameProps {
   readonly project: string;
@@ -31,10 +32,10 @@ export interface EditMessage {
 const nonEmpty = (dials: Readonly<Record<string, unknown>> | undefined) => dials !== undefined && Object.keys(dials).length > 0;
 
 export const urlOf = (project: string, kind: ArtifactKind, file: string, port: number, editor = false): string =>
-  artifactUrl({ appHostname: window.location.hostname, previewPort: port, project, file, kind, editor });
+  artifactUrl({ appHostname: window.location.hostname, previewPort: port, project, file, kind, editor, previewOrigin: previewOriginForWindow() });
 
 export const outsideUrlOf = (project: string, shapeId: string, kind: ArtifactKind, file: string, port: number): string =>
-  liveViewerUrl({ appHostname: window.location.hostname, previewPort: port, project, shapeId }) ?? urlOf(project, kind, file, port);
+  liveViewerUrl({ appHostname: window.location.hostname, previewPort: port, project, shapeId, previewOrigin: previewOriginForWindow() }) ?? urlOf(project, kind, file, port);
 
 interface FrameWheel {
   readonly type: "unframed:wheel";
