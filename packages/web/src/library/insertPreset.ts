@@ -5,6 +5,7 @@
  * Nothing that reaches the room holds a `preset-file:` pointer, which the room refuses.
  */
 import {
+  FEATURE_OFF_MESSAGES,
   flowInsert,
   instantiate,
   placeAt,
@@ -20,6 +21,7 @@ import {
 } from "@unframed/domain";
 import { AssetRecordType, createShapeId, type Editor, type TLContent, type TLRecord } from "tldraw";
 import { RefMinter } from "../canvas/refs.ts";
+import { featureOn } from "../features.ts";
 import type { EngineConnection } from "../rpc/engine.ts";
 import { showError } from "../toasts.tsx";
 
@@ -53,6 +55,7 @@ export const insertPreset = async (input: {
   readonly textModel: string | undefined;
 }): Promise<void> => {
   const { editor, engine, project } = input;
+  if (input.preset.kind === "flow" && !featureOn("nodes")) throw new Error(FEATURE_OFF_MESSAGES.nodes);
   const preset = input.preset.source === "system" && input.textModel ? presetWithTextModel(input.preset, input.textModel) : input.preset;
   const files = presetFiles(preset.content);
   const copied = files.length === 0 ? [] : await engine.call("library.copyFiles", { project, files });

@@ -19,6 +19,7 @@ import {
   audioReset,
   audioStatus,
   composeSelection,
+  ALL_FEATURES,
   contextMenu,
   creditsFrom,
   dropKind,
@@ -324,7 +325,7 @@ describe("audio on the canvas", () => {
 
   it("offers Reveal and Copy path on a filled audio shape, and nothing on an empty one", () => {
     const filled = { id: "a1", type: "audio", ref: "line", file: "1-line.mp3" };
-    const menu = contextMenu({ target: { kind: "shape", shape: filled }, selection: [filled], clipboard: false, libraryRegistered: false, platform: "darwin" });
+    const menu = contextMenu({ target: { kind: "shape", shape: filled }, selection: [filled], clipboard: false, libraryRegistered: false, platform: "darwin", features: ALL_FEATURES });
     expect(menu[0]).toEqual({
       section: "image",
       heading: "Audio",
@@ -334,11 +335,11 @@ describe("audio on the canvas", () => {
       ],
     });
     const empty = { id: "a2", type: "audio", ref: "102" };
-    expect(contextMenu({ target: { kind: "shape", shape: empty }, selection: [empty], clipboard: false, libraryRegistered: false, platform: "darwin" }).map((section) => section.section)).not.toContain("image");
+    expect(contextMenu({ target: { kind: "shape", shape: empty }, selection: [empty], clipboard: false, libraryRegistered: false, platform: "darwin", features: ALL_FEATURES }).map((section) => section.section)).not.toContain("image");
   });
 
   it("adds Audio to the add menu's inputs, after Video", () => {
-    const inputs = contextMenu({ target: { kind: "canvas" }, selection: [], clipboard: false, libraryRegistered: false, platform: "darwin" }).find((section) => section.section === "inputs");
+    const inputs = contextMenu({ target: { kind: "canvas" }, selection: [], clipboard: false, libraryRegistered: false, platform: "darwin", features: ALL_FEATURES }).find((section) => section.section === "inputs");
     expect(inputs?.items.map((item) => item.label)).toEqual(["Prompt", "Image", "Video", "Audio", "Group", "Node"]);
   });
 

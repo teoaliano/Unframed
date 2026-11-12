@@ -1,6 +1,6 @@
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { acceptTestOrigin, OUTSIDE_TURN_IDLE_MS, PROVIDER_KEYS, type ProviderId } from "@unframed/domain";
+import { acceptTestOrigin, OUTSIDE_TURN_IDLE_MS, PROVIDER_KEYS, readFeatures, type Features, type ProviderId } from "@unframed/domain";
 import { agentConnectionsFilePath, discoveryFilePath, envFilePath, ipadDevicesFilePath, ipadDirPath, preferencesFilePath, resolveDataDir } from "./paths.ts";
 
 const positiveInt = (value: string | undefined): number | undefined => {
@@ -71,6 +71,7 @@ export interface EngineConfig {
   /** `UNFRAMED_TEST_RENDERER`: `ok`, `fail` or `no-chrome` stand in for the motion renderer and the Chrome search. */
   readonly testRenderer: TestRenderer | undefined;
   readonly testIpadName: string | undefined;
+  readonly features: Features;
   readonly platform: NodeJS.Platform;
 }
 
@@ -133,6 +134,7 @@ export const loadConfig = (
       testUploadUrlTtlMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_UPLOAD_URL_TTL_MS)),
       testRenderer: renderer === "ok" || renderer === "fail" || renderer === "no-chrome" ? renderer : undefined,
       testIpadName: nonEmpty(env.UNFRAMED_TEST_IPAD)?.toLowerCase(),
+      features: readFeatures(env.UNFRAMED_FEATURES),
       platform,
     },
     warnings,

@@ -3,6 +3,7 @@ import {
   artifactTitle,
   dialsWith,
   editorPreviewViewport,
+  FEATURE_OFF_MESSAGES,
   isArtifactKind,
   mergeDialValues,
   normaliseDials,
@@ -40,6 +41,7 @@ import { AgentRail } from "../../agent/rail/AgentRail.tsx";
 import { useChatClient, useProviders } from "../../agent/store.ts";
 import { Tip } from "../../chrome/ui.tsx";
 import { useCanvasProject, useEngine } from "../../context.ts";
+import { useFeature } from "../../features.ts";
 import {
   ArtifactFrame,
   outsideUrlOf,
@@ -176,6 +178,7 @@ export const ArtifactEditor = ({
   );
   const port = useValue("preview port", () => previewPort.get(), []);
   const gone = facts === undefined;
+  const editing = useFeature("element-editing");
 
   const session = useEditSession({
     editor,
@@ -186,6 +189,7 @@ export const ArtifactEditor = ({
     file: facts?.file ?? "",
     locked: facts?.locked ?? [],
     kit,
+    editing,
   });
   const sessionRef = useRef(session);
   sessionRef.current = session;
@@ -448,7 +452,7 @@ export const ArtifactEditor = ({
   sheetOpenRef.current = sheet !== undefined;
 
   const [panel, setPanelState] = useState<Panel>(
-    () => (panelRemembered.get(shapeId) ?? "design") as Panel,
+    () => (panelRemembered.get(shapeId) ?? (editing ? "design" : "parameters")) as Panel,
   );
   const setPanel = (next: Panel) => {
     panelRemembered.set(shapeId, next);
@@ -503,8 +507,13 @@ export const ArtifactEditor = ({
     displayTitle === "" ? shapeId.replace(/^shape:/, "") : displayTitle;
   const component = facts.kind === "component";
   const Icon = KIND_LOOK[facts.kind].Icon;
-  const shownPanel: Panel =
-    component && panel === "parameters" ? "design" : panel;
+  const shownPanel: Panel | undefined = !editing
+    ? component
+      ? undefined
+      : "parameters"
+    : component && panel === "parameters"
+      ? "design"
+      : panel;
   const askAboutComponent = () => {
     const chip: ChipElement = {
       elementId: null,
@@ -550,7 +559,7 @@ export const ArtifactEditor = ({
   for (const element of session.tree?.elements ?? [])
     names[element.id] = element.name;
 
-  const timeline = facts.kind === "motion" && hasFile;
+  const timeline = facts.kind === "motion" && hasFile && editing;
   const columns = railFolded
     ? parametersFolded
       ? "grid-cols-[minmax(0,1fr)]"
@@ -561,8 +570,8 @@ export const ArtifactEditor = ({
       <ColumnHeader className="px-0">
         <Tabs value={shownPanel} onValueChange={(next) => setPanel(String(next) as Panel)} className="h-full min-w-0">
           <TabsList variant="underline" fill aria-label="Editor panels">
-            <TabsTab value="design">Design</TabsTab>
-            <TabsTab value="layers">Layers</TabsTab>
+            {editing && <TabsTab value="design">Design</TabsTab>}
+            {editing && <TabsTab value="layers">Layers</TabsTab>}
             {!component && (
               <TabsTab value="parameters">
                 <SlidersHorizontal aria-hidden />
@@ -614,6 +623,11 @@ export const ArtifactEditor = ({
           onLock={setLocked}
           onTell={tell}
         />
+      )}
+      {shownPanel === undefined && (
+        <p className="m-0 p-3 text-sm text-muted-foreground" data-testid="editor-no-panels">
+          {FEATURE_OFF_MESSAGES["element-editing"]}
+        </p>
       )}
       {shownPanel === "parameters" && (
         <div className="min-h-0 flex-1 overflow-auto">
@@ -726,7 +740,7 @@ export const ArtifactEditor = ({
               </span>
             )}
           </span>
-          {hasFile && (
+          {hasFile && editing && (
             <ToggleGroup
               aria-label="Mode"
               variant="default"
@@ -959,7 +973,7 @@ export const ArtifactEditor = ({
                   lazy={false}
                   onAnnounce={setAnnouncement}
                   onReady={onReady}
-                  editable
+                  editable={editing}
                   onEdit={onEdit}
                   onEditReady={onEditReady}
                   onSwapped={clearAnnouncement}

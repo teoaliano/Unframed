@@ -9,6 +9,7 @@ describe("RPC socket", () => {
     const health = await rpc.call("server.health");
     expect(health).toEqual({
       ok: true,
+      features: ["nodes", "element-editing"],
       hasKey: false,
       keyHint: "",
       imageModel: "openai/gpt-image-2",
@@ -30,7 +31,7 @@ describe("RPC socket", () => {
       ipadPort: 18790,
       client: "mac",
     });
-    expect(await rpc.call("settings.get")).toEqual({ ...health, ok: undefined, client: undefined });
+    expect(await rpc.call("settings.get")).toEqual({ ...health, ok: undefined, client: undefined, features: undefined });
   });
 
   it("serves several sockets at once", async () => {

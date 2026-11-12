@@ -51,7 +51,7 @@ import {
 } from "@unframed/domain";
 import type { ArtifactDiffFile, ElementChip } from "@unframed/contracts";
 import type { TLRecord } from "@tldraw/tlschema";
-import type { Kit } from "@unframed/domain";
+import { agentSystemPrompt, type Features, type Kit } from "@unframed/domain";
 import type { Applied, CanvasChange, ChangeLogRow, ChangeOrigin } from "../canvas/rooms.ts";
 import { errorText, logError, logInfo } from "../log.ts";
 import type { AdapterContext, ProviderAdapter, TurnAttachment } from "./adapter.ts";
@@ -126,6 +126,7 @@ interface AgentRuntimeDeps {
   readonly extraTools?: (context: AgentToolContext) => ReadonlyArray<McpTool>;
   readonly onSessionClosed?: (project: string, chatId: string) => void;
   readonly providerReady?: (provider: AgentProvider) => Promise<boolean>;
+  readonly features: Features;
 }
 
 const runKey = (chatId: string, turn: number): string => `${chatId}:${turn}`;
@@ -217,7 +218,7 @@ export class AgentRuntime {
           () => undefined,
         ),
     };
-    for (const tool of new CanvasTools(context).tools()) this.registry.register(tool);
+    for (const tool of new CanvasTools(context, deps.features).tools()) this.registry.register(tool);
     for (const tool of new CommentTools({ ...context, author: (project, chatId) => this.commentAuthor(project, chatId) }).tools()) this.registry.register(tool);
     for (const tool of new KitTools(context).tools()) this.registry.register(tool);
     this.generation = new AgentGeneration({
@@ -310,7 +311,7 @@ export class AgentRuntime {
       },
       book: deps.generationRuns.book,
     });
-    this.registry.register(nodeRunTool((binding, args) => this.nodeRunFor(binding, args)));
+    if (deps.features.has("nodes")) this.registry.register(nodeRunTool((binding, args) => this.nodeRunFor(binding, args)));
     this.providers = new ProviderService({
       adapterFor: (provider) => this.adapterFor(provider),
       tokens: this.tokens,
@@ -395,6 +396,7 @@ export class AgentRuntime {
         if (this.deps.agentDebug) logInfo(`[agent ${chatId}] ${line}`);
       },
       dataDir: this.deps.dataDir,
+      systemPrompt: agentSystemPrompt(this.deps.features),
     };
   }
 

@@ -1,10 +1,24 @@
 import { createBindingId, createShapeId, type Editor, type TLContent, type TLShape, type TLShapeId } from "tldraw";
+import { featureOn } from "../features.ts";
 import { isWireShape, type WireShape } from "./facts.ts";
 
 const wiresBetween = (editor: Editor, ids: ReadonlySet<string>): WireShape[] =>
   editor.getCurrentPageShapes().filter((shape): shape is WireShape => isWireShape(shape) && !ids.has(shape.id) && ids.has(shape.props.from) && ids.has(shape.props.to));
 
 const sameCopy = (a: TLShape, b: TLShape) => a.type === b.type && JSON.stringify(a.props) === JSON.stringify(b.props);
+
+const NODE_KINDS = new Set(["node", "wire"]);
+
+const withoutNodes = (content: TLContent): TLContent => {
+  const gone = new Set(content.shapes.filter((shape) => NODE_KINDS.has(shape.type)).map((shape) => shape.id as string));
+  if (gone.size === 0) return content;
+  return {
+    ...content,
+    shapes: content.shapes.filter((shape) => !gone.has(shape.id)),
+    rootShapeIds: content.rootShapeIds.filter((id) => !gone.has(id)),
+    bindings: (content.bindings ?? []).filter((binding) => !gone.has(binding.fromId) && !gone.has(binding.toId)),
+  };
+};
 
 export const installWireCopies = (editor: Editor): (() => void) => {
   const getContent = editor.getContentFromCurrentPage.bind(editor);
@@ -19,7 +33,8 @@ export const installWireCopies = (editor: Editor): (() => void) => {
     return { ...content, shapes: [...content.shapes, ...wires], rootShapeIds: [...content.rootShapeIds, ...wires.map((wire) => wire.id)] };
   }) as Editor["getContentFromCurrentPage"];
 
-  editor.putContentOntoCurrentPage = ((content: TLContent, options: Parameters<Editor["putContentOntoCurrentPage"]>[1] = {}) => {
+  editor.putContentOntoCurrentPage = ((given: TLContent, options: Parameters<Editor["putContentOntoCurrentPage"]>[1] = {}) => {
+    const content = featureOn("nodes") ? given : withoutNodes(given);
     if (options.preserveIds === true || !content.shapes.some((shape) => shape.type === "wire")) return putContent(content, options);
     const ids = new Map<string, TLShapeId>(content.shapes.map((shape) => [shape.id, createShapeId()]));
     const kept = content.shapes.filter((shape) => !isWireShape(shape) || (ids.has(shape.props.from) && ids.has(shape.props.to) && !content.shapes.some((other) => other.id === shape.props.from && isWireShape(other))));
@@ -35,8 +50,11 @@ export const installWireCopies = (editor: Editor): (() => void) => {
     return putContent({ ...content, shapes, bindings, rootShapeIds }, { ...options, preserveIds: true });
   }) as Editor["putContentOntoCurrentPage"];
 
-  editor.duplicateShapes = ((shapes: Parameters<Editor["duplicateShapes"]>[0], offset?: Parameters<Editor["duplicateShapes"]>[1]) => {
-    const originals = (shapes as ReadonlyArray<TLShapeId | TLShape>).map((each) => (typeof each === "string" ? editor.getShape(each) : each)).filter((each): each is TLShape => each !== undefined);
+  editor.duplicateShapes = ((given: Parameters<Editor["duplicateShapes"]>[0], offset?: Parameters<Editor["duplicateShapes"]>[1]) => {
+    const all = (given as ReadonlyArray<TLShapeId | TLShape>).map((each) => (typeof each === "string" ? editor.getShape(each) : each)).filter((each): each is TLShape => each !== undefined);
+    const originals = featureOn("nodes") ? all : all.filter((shape) => !NODE_KINDS.has(shape.type));
+    const shapes = (featureOn("nodes") ? given : originals) as Parameters<Editor["duplicateShapes"]>[0];
+    if (originals.length === 0) return editor;
     const before = new Set(editor.getCurrentPageShapeIds());
     const result = duplicate(shapes, offset);
     const made = editor.getCurrentPageShapes().filter((shape) => !before.has(shape.id));

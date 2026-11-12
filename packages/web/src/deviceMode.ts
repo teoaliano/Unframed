@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { setFeatures } from "./features.ts";
 import { isConnectionFailure, type EngineConnection } from "./rpc/engine.ts";
 
 let device = false;
@@ -24,6 +25,7 @@ export const readClientMode = async (engine: EngineConnection): Promise<boolean>
     try {
       const health = await engine.call("server.health");
       setDeviceClient(health.client === "device");
+      setFeatures(health.features);
       return isDeviceClient();
     } catch (error) {
       if (!isConnectionFailure(error)) throw error;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contextMenu, revealLabel, shortcutHint, type MenuInput, type MenuShape } from "../src/index.ts";
+import { ALL_FEATURES, contextMenu, NO_FEATURES, revealLabel, shortcutHint, type MenuInput, type MenuShape } from "../src/index.ts";
 
 const prompt: MenuShape = { id: "p", type: "text", ref: "100" };
 const image: MenuShape = { id: "i", type: "image", ref: "101", file: "1-fox.png" };
@@ -10,7 +10,7 @@ const group: MenuShape = { id: "g", type: "frame", ref: "105" };
 const page: MenuShape = { id: "pg", type: "page", ref: "106" };
 const mark: MenuShape = { id: "m", type: "geo" };
 
-const base = { clipboard: false, libraryRegistered: false, platform: "darwin" };
+const base = { clipboard: false, libraryRegistered: false, platform: "darwin", features: ALL_FEATURES };
 
 const shape = (target: MenuShape, selection: MenuShape[] = [target], extra: Partial<Omit<MenuInput, "target" | "selection">> = {}) =>
   contextMenu({ ...base, ...extra, target: { kind: "shape", shape: target }, selection });
@@ -172,6 +172,23 @@ describe("contextMenu", () => {
       ["inputs", ["Prompt", "Image", "Video", "Audio", "Group", "Node"]],
       ["artifacts", ["Page", "Motion"]],
     ]);
+  });
+
+  it("leaves Node out of the add items when nodes are off", () => {
+    expect(outline(contextMenu({ ...base, features: NO_FEATURES, target: { kind: "canvas" }, selection: [] }))).toEqual([
+      ["inputs", ["Prompt", "Image", "Video", "Audio", "Group"]],
+      ["artifacts", ["Page", "Motion"]],
+    ]);
+  });
+
+  it("with nodes off, judges Add to library on the selection without its nodes and wires", () => {
+    const node: MenuShape = { id: "n", type: "node", ref: "110" };
+    const wire: MenuShape = { id: "w", type: "wire" };
+    const item = (selection: MenuShape[], features = NO_FEATURES) =>
+      shape(selection[0]!, selection, { libraryRegistered: true, features }).find((section) => section.section === "library")?.items[0];
+    expect(item([node, wire])).toEqual({ action: "add-to-library", label: "Add to library", disabled: true });
+    expect(item([node, prompt, wire])).toEqual({ action: "add-to-library", label: "Add to library" });
+    expect(item([node, wire], ALL_FEATURES)).toEqual({ action: "add-to-library", label: "Add to library" });
   });
 
   it("offers Keep playing on a filled page or motion, checked when pinned, and disabled with the reason at three", () => {

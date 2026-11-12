@@ -17,7 +17,8 @@ import { clearStoredModels } from "../lastUsed.ts";
 import { Native } from "../native.ts";
 import { Catalogue } from "../openRouter/catalogue.ts";
 import { ElevenLabsError, listAudioModels, listVoices, subscriptionStatus } from "../elevenLabs/client.ts";
-import { ELEVENLABS_NO_KEY, GENERATION_PROVIDERS, providerServesMessage } from "@unframed/domain";
+import { ELEVENLABS_NO_KEY, FEATURE_OFF_MESSAGES, featureList, GENERATION_PROVIDERS, providerServesMessage } from "@unframed/domain";
+import type { Feature } from "@unframed/contracts";
 import { vercelCredits } from "../vercel/client.ts";
 import { providerCatalogues } from "../runs/providers.ts";
 import { VideoCatalogue } from "../openRouter/videoCatalogue.ts";
@@ -81,8 +82,11 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const testOnly = <A, E>(run: () => Effect.Effect<A, E>) =>
       config.testCanvasRpc ? run() : Effect.fail(unframedError("unavailable", "That method is only for tests."));
 
+    const featureOn = <A, E>(feature: Feature, run: () => Effect.Effect<A, E>) =>
+      config.features.has(feature) ? run() : Effect.fail(unframedError("unavailable", FEATURE_OFF_MESSAGES[feature]));
+
     return guardHandlers({
-      "server.health": (_payload, { headers }) => Effect.map(settings.view, (view) => ({ ...view, ok: true as const, client: clientOf(headers) })),
+      "server.health": (_payload, { headers }) => Effect.map(settings.view, (view) => ({ ...view, ok: true as const, client: clientOf(headers), features: featureList(config.features) })),
       "ipad.status": () => ipad.status,
       "ipad.setAvailability": ({ available }) => Effect.as(ipad.setAvailability(available), {}),
       "ipad.pairStart": () => ipad.pairStart,
@@ -206,18 +210,18 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
               : catalogue.listImageModels,
       "models.imagePricing": ({ id }) => catalogue.imagePricing(id),
       "run.image": (request) => runs.image(request),
-      "node.run": ({ project, shapeId, downstream, scope, rendered, steps }) => nodeRuns.run({ project, ids: [shapeId], downstream, scope, rendered, expect: steps }),
-      "chain.run": ({ project, shapeIds, rendered, steps }) => nodeRuns.run({ project, ids: shapeIds, rendered, expect: steps }),
-      "node.useVersion": ({ project, shapeId, versionId }) => nodeRuns.useVersion(project, shapeId, versionId),
-      "node.removeVersion": ({ project, shapeId, versionId }) => nodeRuns.removeVersion(project, shapeId, versionId),
+      "node.run": ({ project, shapeId, downstream, scope, rendered, steps }) => featureOn("nodes", () => nodeRuns.run({ project, ids: [shapeId], downstream, scope, rendered, expect: steps })),
+      "chain.run": ({ project, shapeIds, rendered, steps }) => featureOn("nodes", () => nodeRuns.run({ project, ids: shapeIds, rendered, expect: steps })),
+      "node.useVersion": ({ project, shapeId, versionId }) => featureOn("nodes", () => nodeRuns.useVersion(project, shapeId, versionId)),
+      "node.removeVersion": ({ project, shapeId, versionId }) => featureOn("nodes", () => nodeRuns.removeVersion(project, shapeId, versionId)),
       "node.renders": ({ project, files }) => nodeRuns.renders(project, files),
       "flow.save": ({ project, shapeIds, name, summary }) =>
-        Effect.gen(function* () {
+        featureOn("nodes", () => Effect.gen(function* () {
           const made = flowContent(project, yield* rooms.read(project), shapeIds, name);
           if ("error" in made) return yield* unframedError("bad_request", made.error);
           const saved = yield* presets.save({ name, summary: summary ?? "", content: made.content });
           return { preset: saved.preset, droppedWires: made.droppedWires };
-        }),
+        })),
       "run.text": (request) => runs.text(request),
       "text.complete": (request) => runs.complete(request),
       "run.subscribe": ({ project }) => runs.subscribe(project),
@@ -298,8 +302,8 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
           });
         }),
       "artifact.sourceTree": ({ project, file }) => artifacts.sourceTree(project, file),
-      "artifact.prepareEdit": ({ project, shapeId }) => artifacts.prepareEdit(project, shapeId),
-      "artifact.edit": ({ project, shapeId, baseFile, edits }) => artifacts.edit(project, shapeId, baseFile, [...edits]),
+      "artifact.prepareEdit": ({ project, shapeId }) => featureOn("element-editing", () => artifacts.prepareEdit(project, shapeId)),
+      "artifact.edit": ({ project, shapeId, baseFile, edits }) => featureOn("element-editing", () => artifacts.edit(project, shapeId, baseFile, [...edits])),
       "artifact.images": ({ project }) => artifacts.images(project),
       "legacyImport.status": ({ project }) => legacy.status(project),
       "legacyImport.report": ({ project }) => legacy.report(project),

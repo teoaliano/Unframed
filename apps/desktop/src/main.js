@@ -6,6 +6,7 @@ const { createEngine } = require('./engine');
 const { createLifecycle } = require('./lifecycle');
 const { createWindow } = require('./window');
 const { createKeepAwake } = require('./keep-awake');
+const { channelOf } = require('./channel');
 const { createUpdater } = require('./updates/updater');
 const { createMacInstaller, relaunchedAfter, waitForExit } = require('./updates/mac-install');
 const { paintScript, DOWNLOAD_URL, INSTALL_URL } = require('./updates/pill');
@@ -13,17 +14,20 @@ const { paintScript, DOWNLOAD_URL, INSTALL_URL } = require('./updates/pill');
 const mac = process.platform === 'darwin';
 const ENGINE_FAILURE_CHECK_MS = 15000;
 
+const channel = channelOf(require('../package.json'), process.env);
+if (channel.dataFolder) app.setPath('userData', path.join(app.getPath('appData'), channel.dataFolder));
+
 function boot() {
   const userData = app.getPath('userData');
   const log = createLog({ dir: path.join(userData, 'logs') });
-  log.info(`Unframed ${app.getVersion()} starting from ${process.execPath}`);
+  log.info(`${app.getName()} ${app.getVersion()} starting from ${process.execPath}`);
 
   const engineDir =
     process.env.UNFRAMED_ENGINE_DIR ||
     (app.isPackaged
       ? path.join(process.resourcesPath, 'app.asar', 'node_modules', 'unframed')
       : path.join(__dirname, '..', 'node_modules', 'unframed'));
-  const outputDir = path.join(app.getPath('pictures'), 'Unframed');
+  const outputDir = path.join(app.getPath('pictures'), channel.outputFolder);
   const esbuildDir = path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', '@esbuild');
   const esbuildBinary = app.isPackaged
     ? {
@@ -42,6 +46,7 @@ function boot() {
     env: {
       ...process.env,
       ...esbuildBinary,
+      ...channel.engineEnv,
       ELECTRON_RUN_AS_NODE: '1',
       UNFRAMED_DATA_DIR: userData,
       UNFRAMED_CLIENT_DIST: path.join(engineDir, 'client', 'dist'),
@@ -142,7 +147,7 @@ function boot() {
 
   async function engineFailed(message) {
     log.error(message);
-    if (!app.isPackaged) return fatal(message);
+    if (!app.isPackaged || !channel.updates) return fatal(message);
     updates.check();
     await Promise.race([updates.firstCheck(), new Promise((r) => setTimeout(r, ENGINE_FAILURE_CHECK_MS))]);
     const state = updates.state();
@@ -172,7 +177,7 @@ function boot() {
   });
 
   app.whenReady().then(async () => {
-    if (app.isPackaged) updates.enable();
+    if (app.isPackaged && channel.updates) updates.enable();
     if (macInstaller) macInstaller.cleanup();
     fs.mkdirSync(outputDir, { recursive: true });
 
