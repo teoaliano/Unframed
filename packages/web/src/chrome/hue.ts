@@ -1,18 +1,18 @@
 import type { CSSProperties } from "react";
 
 const HUES = {
-  amber: "var(--color-amber-500)",
-  blue: "var(--color-blue-500)",
-  orange: "var(--color-orange-500)",
-  purple: "var(--color-purple-500)",
-  green: "var(--color-green-500)",
-  pink: "var(--color-pink-500)",
-  teal: "var(--color-teal-500)",
-  red: "var(--color-red-500)",
-  cyan: "var(--color-cyan-500)",
-  yellow: "var(--color-yellow-500)",
-  gray: "var(--color-gray-500)",
-  neutral: "var(--color-neutral-500)",
+  amber: "var(--label-hue-amber)",
+  blue: "var(--label-hue-blue)",
+  orange: "var(--label-hue-orange)",
+  purple: "var(--label-hue-purple)",
+  green: "var(--label-hue-green)",
+  pink: "var(--label-hue-pink)",
+  teal: "var(--label-hue-teal)",
+  red: "var(--label-hue-red)",
+  cyan: "var(--label-hue-cyan)",
+  yellow: "var(--label-hue-yellow)",
+  gray: "var(--label-hue-gray)",
+  neutral: "var(--label-hue-neutral)",
 } as const;
 
 export type Hue = keyof typeof HUES;

@@ -131,7 +131,7 @@ export const KitTable = (props: KitTableProps) => {
   };
 
   return (
-    <div className="grid gap-3 md:grid-cols-[140px_minmax(0,1fr)]">
+    <div className="grid gap-3 md:grid-cols-[var(--kit-table-nav-width)_minmax(0,1fr)]">
       <nav aria-label="Token groups" className="grid content-start gap-1">
         <GroupButton name="All" active={group === "All"} onClick={() => setGroup("All")} />
         {groups.map((item) => (
@@ -140,8 +140,8 @@ export const KitTable = (props: KitTableProps) => {
       </nav>
       <div className="grid min-w-0 gap-3">
         <Input type="search" placeholder="Search tokens…" aria-label="Search tokens" value={query} onChange={(event) => setQuery(event.currentTarget.value)} />
-        <div className="[&_[data-slot=table-container]]:max-h-[480px] [&_[data-slot=table-container]]:overflow-auto [&_[data-slot=table-header]]:bg-popover" onScrollCapture={(event) => setScrollTop((event.target as HTMLElement).scrollTop)}>
-          <Table className="min-w-[560px]">
+        <div className="[&_[data-slot=table-container]]:max-h-(--kit-table-height) [&_[data-slot=table-container]]:overflow-auto [&_[data-slot=table-header]]:bg-(--kit-table-header-surface)" onScrollCapture={(event) => setScrollTop((event.target as HTMLElement).scrollTop)}>
+          <Table className="min-w-(--kit-table-width)">
             <TableHeader className="sticky top-0 z-[1]">
               <TableRow>
                 <TableHead scope="col">Token</TableHead>
@@ -153,7 +153,7 @@ export const KitTable = (props: KitTableProps) => {
                     ) : (
                       <span className="inline-flex items-center gap-1">
                         {mode}
-                        {index === 0 && mode !== "default" && <span className="text-muted-foreground">default</span>}
+                        {index === 0 && mode !== "default" && <span className="text-(--kit-table-meta)">default</span>}
                         <OptionsMenu
                           label={`Mode options ${mode}`}
                           align="start"
@@ -195,7 +195,7 @@ export const KitTable = (props: KitTableProps) => {
                 const users = usage.tokens[token.path] ?? [];
                 return (
                   <TableRow key={token.path} data-token={token.path}>
-                    <TableCell className="min-w-[15rem]">
+                    <TableCell className="min-w-60">
                       <div className="flex items-start gap-1">
                         <span className="grid min-w-0">
                           {renaming === token.path ? (
@@ -206,10 +206,10 @@ export const KitTable = (props: KitTableProps) => {
                             </Tip>
                           )}
                           <Tip label={cssName(token.path)}>
-                            <span className="truncate font-mono text-xs text-muted-foreground">{cssName(token.path)}</span>
+                            <span className="truncate font-mono text-xs text-(--kit-table-meta)">{cssName(token.path)}</span>
                           </Tip>
                           {former.length > 0 && (
-                            <span className="text-xs text-muted-foreground">
+                            <span className="text-xs text-(--kit-table-meta)">
                               Also answers to {former.join(", ")}{" "}
                               {former.map((name) => (
                                 <Button key={name} variant="link" size="xs" onClick={() => commit([{ op: "forgetFormerName", path: token.path, cssName: name }])}>
@@ -283,7 +283,7 @@ export const KitTable = (props: KitTableProps) => {
 const GroupButton = ({ name, count, active, onClick }: { readonly name: string; readonly count?: number; readonly active: boolean; readonly onClick: () => void }) => (
   <Button variant={active ? "secondary" : "ghost"} size="sm" className="justify-start" aria-label={count === undefined ? name : `${name} ${count}`} aria-pressed={active} onClick={onClick}>
     {name}
-    {count !== undefined && <span className="ml-1 tabular-nums text-muted-foreground">{count}</span>}
+    {count !== undefined && <span className="ml-1 tabular-nums text-(--kit-table-meta)">{count}</span>}
   </Button>
 );
 
@@ -309,7 +309,7 @@ const NameField = ({ label, initial, onCommit, onCancel }: { readonly label: str
         onBlur={onCancel}
       />
       {problem !== undefined && (
-        <span role="alert" className="text-xs text-destructive">
+        <span role="alert" className="text-xs text-(--kit-table-error-foreground)">
           {problem}
         </span>
       )}

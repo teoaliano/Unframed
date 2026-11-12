@@ -11,7 +11,7 @@ const PADDINGS = ["default", "compact", "none"] as const;
 const Body = () => (
   <div className="flex flex-col gap-2">
     <PopoverTitle>Cost estimate</PopoverTitle>
-    <p className="m-0 text-muted-foreground text-sm">Four variations on this model cost about $0.16, billed by OpenRouter.</p>
+    <p className="m-0 text-(--catalogue-demo-description) text-sm">Four variations on this model cost about $0.16, billed by OpenRouter.</p>
   </div>
 );
 

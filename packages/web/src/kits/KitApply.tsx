@@ -46,7 +46,7 @@ export const ReplaceKitDialog = ({ editor, preset, onClose }: { readonly editor:
   };
   return (
     <AlertDialog open onOpenChange={(open) => !open && onClose()}>
-      <AlertDialogPopup className="max-w-[400px]">
+      <AlertDialogPopup className="max-w-(--kit-replace-dialog-width)">
         <AlertDialogHeader>
           <AlertDialogTitle>Replace this project's kit?</AlertDialogTitle>
           <AlertDialogDescription>{`“${preset.name}” takes the place of “${current?.name ?? ""}”. Tokens with the same name take the new values. Tokens only this project has stay, so no page loses a value.`}</AlertDialogDescription>
@@ -89,7 +89,7 @@ const opening = (text: string) => (text === "" ? "(none)" : text.length > 160 ? 
 
 const ValueText = ({ colour, text }: { readonly colour: boolean; readonly text: string }) => (
   <span className="inline-flex items-center gap-1.5 font-mono text-xs">
-    {colour && <span aria-hidden className="size-3 shrink-0 rounded-sm border" style={{ background: text }} />}
+    {colour && <span aria-hidden className="size-3 shrink-0 rounded-sm border border-(--kit-update-dialog-swatch-border)" style={{ background: text }} />}
     {text}
   </span>
 );
@@ -106,18 +106,18 @@ export const UpdateFromKitDialog = ({ editor, preset, onClose }: { readonly edit
   };
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogPopup data-testid="update-from-kit" className="max-w-[640px]">
+      <DialogPopup data-testid="update-from-kit" className="max-w-(--kit-update-dialog-width)">
         <DialogHeader>
           <DialogTitle>{`Update from “${preset.name}”`}</DialogTitle>
         </DialogHeader>
         <DialogPanel>
-          <p className="text-sm text-muted-foreground">{countsLine(result.counts)}</p>
-          {result.guidance !== undefined && GUIDANCE_LINE[result.guidance] !== undefined && <p className="text-sm text-muted-foreground">{GUIDANCE_LINE[result.guidance]}</p>}
+          <p className="text-sm text-(--kit-update-dialog-description)">{countsLine(result.counts)}</p>
+          {result.guidance !== undefined && GUIDANCE_LINE[result.guidance] !== undefined && <p className="text-sm text-(--kit-update-dialog-description)">{GUIDANCE_LINE[result.guidance]}</p>}
           {result.guidanceConflict !== undefined && (
-            <div data-conflict={GUIDANCE_CHOICE} className="grid gap-2 border-t pt-3">
+            <div data-conflict={GUIDANCE_CHOICE} className="grid gap-2 border-t border-(--kit-update-dialog-divider) pt-3">
               <span className="text-sm">Guidance</span>
-              <span className="text-xs whitespace-pre-line text-muted-foreground">Here: {opening(result.guidanceConflict.here)}</span>
-              <span className="text-xs whitespace-pre-line text-muted-foreground">Kit: {opening(result.guidanceConflict.kit)}</span>
+              <span className="text-xs whitespace-pre-line text-(--kit-update-dialog-description)">Here: {opening(result.guidanceConflict.here)}</span>
+              <span className="text-xs whitespace-pre-line text-(--kit-update-dialog-description)">Kit: {opening(result.guidanceConflict.kit)}</span>
               <ToggleGroup
                 aria-label="Resolve guidance"
                 value={[choices[GUIDANCE_CHOICE] ?? "mine"]}
@@ -139,15 +139,15 @@ export const UpdateFromKitDialog = ({ editor, preset, onClose }: { readonly edit
             const key = `${conflict.path}|${conflict.mode}`;
             const colour = types.get(conflict.path) === "color";
             return (
-              <div key={key} data-conflict={key} className="grid gap-2 border-t pt-3">
+              <div key={key} data-conflict={key} className="grid gap-2 border-t border-(--kit-update-dialog-divider) pt-3">
                 <span className="text-sm">
                   {conflict.path}
-                  {project.modes.length > 1 && <span className="text-muted-foreground"> · {conflict.mode}</span>}
+                  {project.modes.length > 1 && <span className="text-(--kit-update-dialog-description)"> · {conflict.mode}</span>}
                 </span>
-                <span className="text-xs text-muted-foreground">
+                <span className="text-xs text-(--kit-update-dialog-description)">
                   Here: <ValueText colour={colour} text={conflict.here} />
                 </span>
-                <span className="text-xs text-muted-foreground">
+                <span className="text-xs text-(--kit-update-dialog-description)">
                   Kit: <ValueText colour={colour} text={conflict.kit} />
                 </span>
                 <ToggleGroup

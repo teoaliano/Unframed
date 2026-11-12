@@ -92,7 +92,7 @@ import { composerGlassClass } from "../../chrome/composerSurface.ts";
 const PROMPT_LABEL = "Message the agent";
 
 const COMPOSER_SHELL =
-  `${composerGlassClass} relative isolate flex flex-col gap-1.5 rounded-3xl px-3 pt-2.5 pb-2 shadow-composer dark:shadow-none after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-border data-dragging:after:border-ring`;
+  `${composerGlassClass} relative isolate flex flex-col gap-1.5 rounded-3xl px-3 pt-2.5 pb-2 shadow-(--shadow-app-floating) dark:shadow-none after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-(--composer-border) data-dragging:after:border-(--composer-border-dragging)`;
 
 const PLACEHOLDERS = {
   approval: "Resolve this approval request to continue",
@@ -956,7 +956,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         dropElement &&
         createPortal(
           <div
-            className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[inherit] border-2 border-dashed border-primary bg-background/80 text-sm font-medium text-foreground"
+            className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[inherit] border-2 border-dashed border-(--composer-drop-border) bg-(--composer-drop-surface)/(--composer-drop-surface-opacity) text-sm font-medium text-(--composer-drop-foreground)"
             data-testid="drop-overlay"
           >
             Drop files to attach
@@ -1035,7 +1035,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           {restingImages.length > 0 && (
             <div className="flex shrink-0 items-center gap-1" data-testid="resting-images">
               {restingImages.slice(0, restingCounts.visibleCount).map((item) => (
-                <img key={item.key} src={item.preview} alt={item.name} className="size-7 rounded-md border border-border/80 object-cover" />
+                <img key={item.key} src={item.preview} alt={item.name} className="size-7 rounded-md border border-(--composer-resting-image-border)/(--composer-resting-image-border-opacity) object-cover" />
               ))}
               {restingCounts.overflowCount > 0 && (
                 <Button variant="ghost-muted" size="xs" aria-label={`Show ${restingCounts.overflowCount} more images`} onClick={() => box.current?.focus()}>
@@ -1057,7 +1057,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           <div
             className={
               resting.resting
-                ? "col-span-2 row-start-3 -mx-1 flex min-w-0 items-center gap-0.5 text-muted-foreground [&_button]:text-xs!"
+                ? "col-span-2 row-start-3 -mx-1 flex min-w-0 items-center gap-0.5 text-(--composer-resting-controls-foreground) [&_button]:text-xs!"
                 : "flex min-w-0 flex-1 items-center gap-0.5"
             }
             data-composer-controls
@@ -1270,11 +1270,11 @@ export const ToolbarAgentTray = ({ project, close, onMenuOpen }: SlotProps) => {
       onSent={close}
       {...(onMenuOpen ? { onMenuOpen } : {})}
       underChips={
-        <div className="flex min-h-7 items-center gap-1.5 px-0.5 text-xs text-muted-foreground" data-testid="agent-target">
+        <div className="flex min-h-7 items-center gap-1.5 px-0.5 text-xs text-(--composer-target-foreground)" data-testid="agent-target">
           <span className="min-w-0 truncate" data-testid="agent-target-line">
             {target !== null && continuable ? (
               <>
-                continues <em className="text-foreground">{tabLabel(continuable)}</em>
+                continues <em className="text-(--composer-target-chat-foreground)">{tabLabel(continuable)}</em>
               </>
             ) : (
               "new chat"
@@ -1297,7 +1297,7 @@ export const ToolbarAgentTray = ({ project, close, onMenuOpen }: SlotProps) => {
           </Tip>
         </div>
       }
-      note={(provider) => <span className="text-xs whitespace-nowrap text-muted-foreground">{`${provider} · not metered`}</span>}
+      note={(provider) => <span className="text-xs whitespace-nowrap text-(--composer-note)">{`${provider} · not metered`}</span>}
     />
   );
 };

@@ -22,10 +22,10 @@ const stop = (event: { stopPropagation(): void }) => event.stopPropagation();
 type Shown = "float" | "dock" | "sheet";
 
 const FLOAT_CLASS =
-  "pointer-events-auto invisible absolute top-0 left-0 z-[500] box-border flex w-80 flex-col overflow-hidden rounded-xl border bg-card font-sans text-foreground shadow-lg/5 opacity-100 [scale:1] [transition:opacity_150ms_ease-out,scale_150ms_ease-out] starting:opacity-0 starting:[scale:0.97] motion-reduce:[transition:opacity_150ms_ease-out] motion-reduce:starting:[scale:1]";
+  "pointer-events-auto invisible absolute top-0 left-0 z-[500] box-border flex w-80 flex-col overflow-hidden rounded-xl border border-(--parameters-panel-border) bg-(--parameters-panel-surface) font-sans text-(--parameters-panel-foreground) shadow-lg/5 opacity-100 [scale:1] [transition:opacity_150ms_ease-out,scale_150ms_ease-out] starting:opacity-0 starting:[scale:0.97] motion-reduce:[transition:opacity_150ms_ease-out] motion-reduce:starting:[scale:1]";
 
 const DOCK_CLASS =
-  "pointer-events-auto absolute right-0 bottom-0 z-[500] box-border flex w-(--parameters-dock-width) flex-col border-l bg-background font-sans text-foreground [transform:none] opacity-100 [transition:transform_260ms_var(--ease-drawer),opacity_200ms_ease-out] starting:[transform:translateX(100%)] starting:opacity-0 motion-reduce:[transition:opacity_160ms_ease-out] motion-reduce:starting:[transform:none]";
+  "pointer-events-auto absolute right-0 bottom-0 z-[500] box-border flex w-(--parameters-dock-width) flex-col border-l border-(--parameters-dock-border) bg-(--parameters-dock-surface) font-sans text-(--parameters-dock-foreground) [transform:none] opacity-100 [transition:transform_260ms_var(--ease-drawer),opacity_200ms_ease-out] starting:[transform:translateX(100%)] starting:opacity-0 motion-reduce:[transition:opacity_160ms_ease-out] motion-reduce:starting:[transform:none]";
 
 const DOCK_WIDTH_VAR = "--parameters-dock-width";
 
@@ -40,7 +40,7 @@ const EDGES: ReadonlyArray<readonly [PanelEdge, string]> = [
   ["sw", "bottom-0 start-0 size-3 cursor-nesw-resize"],
 ];
 
-const SHEET_CLASS = "relative box-border flex size-full min-h-0 flex-col bg-background font-sans text-foreground";
+const SHEET_CLASS = "relative box-border flex size-full min-h-0 flex-col bg-(--parameters-sheet-surface) font-sans text-(--parameters-sheet-foreground)";
 
 export const ParametersPanel = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   const editor = useEditor();
@@ -137,13 +137,13 @@ export const ParametersPanel = ({ shapeId }: { readonly shapeId: TLShapeId }) =>
               aria-label="Move parameters"
               aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight"
               data-panel-handle="move"
-              className="-ms-1 flex h-6 w-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="-ms-1 flex h-6 w-4 shrink-0 items-center justify-center rounded-sm text-(--parameters-panel-icon) outline-none focus-visible:ring-2 focus-visible:ring-(--parameters-panel-ring)"
             >
               <GripVertical aria-hidden className="size-3.5" />
             </span>
           </Tip>
         )}
-        <SlidersHorizontal aria-hidden className="me-1 size-4 shrink-0 text-muted-foreground" />
+        <SlidersHorizontal aria-hidden className="me-1 size-4 shrink-0 text-(--parameters-panel-icon)" />
         <span className="min-w-0 flex-1 truncate text-sm font-semibold">Parameters</span>
         <Tip label={floating ? "Dock to the right" : "Float"}>
           <Button variant="ghost" size="icon-sm" aria-label={floating ? "Dock parameters to the right" : "Float parameters"} onClick={switchMode}>
@@ -179,7 +179,7 @@ export const ParametersPanel = ({ shapeId }: { readonly shapeId: TLShapeId }) =>
   if (shown !== "sheet") return panel;
   return (
     <Sheet open onOpenChange={(open) => !open && close()}>
-      <SheetPopup side="right" showCloseButton={false} className="mb-12 w-[min(88vw,24rem)]">
+      <SheetPopup side="right" showCloseButton={false} className="mb-12 w-[min(88vw,var(--parameters-sheet-width))]">
         {panel}
       </SheetPopup>
     </Sheet>

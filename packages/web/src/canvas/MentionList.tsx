@@ -45,7 +45,7 @@ const MentionThumb = ({ editor, row }: { readonly editor: Editor; readonly row: 
   }
   const Icon = ICONS[row.kind];
   return (
-    <span data-testid="mention-thumb" data-thumb="icon" className="flex size-5 shrink-0 items-center justify-center text-muted-foreground">
+    <span data-testid="mention-thumb" data-thumb="icon" className="flex size-5 shrink-0 items-center justify-center text-(--listbox-row-icon)">
       <Icon aria-hidden className="size-3.5" />
     </span>
   );
@@ -79,7 +79,7 @@ export const MentionList = ({
       ref={list}
       role="listbox"
       aria-label="Mentions"
-      className={`${listboxPopupClass} pointer-events-auto absolute z-[600] max-h-[168px] w-[260px]`}
+      className={`${listboxPopupClass} pointer-events-auto absolute z-[600] max-h-(--mention-list-height) w-(--mention-list-width)`}
       style={style}
       onPointerDown={(event) => event.stopPropagation()}
     >
@@ -99,8 +99,8 @@ export const MentionList = ({
           onPointerEnter={() => onHighlight(index)}
         >
           <MentionThumb editor={editor} row={row} />
-          <span className="max-w-[60%] shrink-0 truncate text-highlight">@{row.ref}</span>
-          {row.preview !== undefined && <span className="min-w-0 truncate text-muted-foreground">{row.preview}</span>}
+          <span className="max-w-[60%] shrink-0 truncate text-(--mention-list-ref)">@{row.ref}</span>
+          {row.preview !== undefined && <span className="min-w-0 truncate text-(--listbox-row-description)">{row.preview}</span>}
         </div>
       ))}
     </div>

@@ -173,17 +173,18 @@ test("DialKit follows the app's scheme in the kit's tokens, as one card with its
   await filledArtifact(agent, { id: "shape:tuned", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Tuned", html: dialsPage({ size: [12, 8, 40] }) });
   await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible();
 
-  const themed = async (dials: ReturnType<Page["locator"]>, card: ReturnType<Page["locator"]>) => {
+  const themed = async (dials: ReturnType<Page["locator"]>, card: ReturnType<Page["locator"]>, cardSurface: string) => {
     const panel = dials.locator(".dialkit-panel-inner");
     await expect(dials.locator(".dialkit-folder-title-root")).toHaveText("Look");
     await inBothSchemes(page, async (scheme) => {
       await expect(dials.locator(".dialkit-root")).toHaveAttribute("data-theme", scheme);
-      await expectToken(panel, "background-color", "--card");
-      await expectToken(card, "background-color", "--card");
-      await expectToken(dials.locator(".dialkit-slider"), "background-color", "--background");
-      await expectToken(dials.locator(".dialkit-slider"), "border-top-color", "--input");
-      await expectToken(dials.locator(".dialkit-folder-title-root"), "color", "--foreground");
-      await expectToken(dials.locator(".dialkit-slider-label"), "color", "--muted-foreground");
+      await expectToken(panel, "background-color", "--dial-glass-bg");
+      await expectToken(card, "background-color", cardSurface);
+      await expectToken(panel, "background-color", cardSurface);
+      await expectToken(dials.locator(".dialkit-slider"), "background-color", "--dial-surface");
+      await expectToken(dials.locator(".dialkit-slider"), "border-top-color", "--dial-border");
+      await expectToken(dials.locator(".dialkit-folder-title-root"), "color", "--dial-text-root");
+      await expectToken(dials.locator(".dialkit-slider-label"), "color", "--dial-text-label");
       expect(await styleOf(panel, "font-family")).toBe(await styleOf(page.locator("body"), "font-family"));
       expect(await styleOf(dials.locator(".dialkit-slider-label"), "font-size")).toBe("14px");
       expect(await styleOf(dials.locator(".dialkit-slider-label"), "font-family")).toBe(await styleOf(page.locator("body"), "font-family"));
@@ -194,12 +195,12 @@ test("DialKit follows the app's scheme in the kit's tokens, as one card with its
   await clickShape(page, "shape:tuned");
   await parametersToggle(page).click();
   const canvas = canvasPanel(page, "Tuned");
-  await themed(canvas.getByTestId("artifact-dials"), canvas);
+  await themed(canvas.getByTestId("artifact-dials"), canvas, "--parameters-panel-surface");
   await page.keyboard.press("Escape");
 
   await page.mouse.click(640, 600);
   await openEditor(page, "shape:tuned", "Tuned");
-  await themed(editor(page).getByTestId("artifact-dials"), editor(page).locator('[data-editor-column="parameters"]'));
+  await themed(editor(page).getByTestId("artifact-dials"), editor(page).locator('[data-editor-column="parameters"]'), "--artifact-editor-column-surface");
 });
 
 const dialKitLoaded = (page: Page) =>

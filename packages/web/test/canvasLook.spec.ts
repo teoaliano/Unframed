@@ -33,17 +33,17 @@ test("labels, the dot grid, empty media, the remove control, the transport and a
   await inBothSchemes(page, async () => {
     expect(await styleOf(label, "font-size")).toBe("11px");
     expect(await styleOf(label, "text-transform")).toBe("none");
-    expect(await styleOf(label, "color")).toBe(await tokenColor(page, "--color-muted-foreground"));
+    expect(await styleOf(label, "color")).toBe(await tokenColor(page, "--shape-label-foreground"));
 
     const grid = page.getByTestId("dot-grid");
-    await expectToken(grid, "background-color", "--background");
-    expect(await styleOf(grid, "background-image")).toContain(await resolvedColor(page, "var(--canvas-dot)"));
+    await expectToken(grid, "background-color", "--dot-grid-surface");
+    expect(await styleOf(grid, "background-image")).toContain(await resolvedColor(page, "var(--dot-grid-dot)"));
 
-    await expectToken(card, "background-color", "--card");
-    expect(await styleOf(card, "border-top-color")).toBe(await tokenColor(page, "--color-border"));
+    await expectToken(card, "background-color", "--media-card-surface");
+    expect(await styleOf(card, "border-top-color")).toBe(await tokenColor(page, "--media-card-border"));
     expect(await styleOf(card, "border-top-left-radius")).toBe("10px");
 
-    await expectToken(pageCard, "background-color", "--card");
+    await expectToken(pageCard, "background-color", "--artifact-card-surface");
     expect(await styleOf(pageCard, "border-top-left-radius")).toBe("14px");
     // A live filled page's frame stays white in both schemes (spec 09).
     const landing = shapeOnScreen(page, "shape:landing");
@@ -52,7 +52,7 @@ test("labels, the dot grid, empty media, the remove control, the transport and a
     expect(await styleOf(landing.locator("iframe[data-artifact-frame]"), "background-color")).toBe("rgb(255, 255, 255)");
     await page.mouse.click(5, 400);
 
-    expect(await styleOf(transport.getByTestId("video-time"), "color")).toBe(await tokenColor(page, "--color-muted-foreground"));
+    expect(await styleOf(transport.getByTestId("video-time"), "color")).toBe(await tokenColor(page, "--video-transport-foreground"));
 
     await page.mouse.click(...(Object.values(await centre(photo.locator(".tl-html-container").first())) as [number, number]));
     await expectSlot(remove, "button");
@@ -69,13 +69,12 @@ test("the mention menu is the kit's popup with its row look", async ({ page, eng
   await page.keyboard.type("A photo of @");
   const menu = page.getByRole("listbox", { name: "Mentions" });
   await expect(menu).toBeVisible();
-  const glass = "color-mix(in srgb, var(--popover) 18%, color-mix(in srgb, var(--popover) var(--glass-opacity), transparent))";
   await inBothSchemes(page, async () => {
-    expect(await styleOf(menu, "background-color")).toBe(await resolvedColor(page, glass));
+    expect(await styleOf(menu, "background-color")).toBe(await tokenColor(page, "--listbox-surface"));
     const row = menu.getByRole("option").first();
     expect((await row.boundingBox())!.height).toBe(28);
     await expect(row).toHaveAttribute("aria-selected", "true");
-    await expectToken(row, "background-color", "--accent");
+    await expectToken(row, "background-color", "--listbox-row-surface-highlighted");
   });
 });
 
@@ -92,15 +91,15 @@ test("a group is a dashed frame in the border colour on the group fill, solid hi
   await inBothSchemes(page, async () => {
     await page.mouse.click(5, 400);
     expect(await styleOf(frame, "border-top-style")).toBe("dashed");
-    expect(await styleOf(frame, "border-top-color")).toBe(await tokenColor(page, "--color-border"));
+    expect(await styleOf(frame, "border-top-color")).toBe(await tokenColor(page, "--group-border"));
     expect(await styleOf(frame, "border-top-left-radius")).toBe("14px");
-    await expectToken(frame, "background-color", "--group-fill");
+    await expectToken(frame, "background-color", "--group-surface");
 
     const box = (await frame.boundingBox())!;
     await page.mouse.click(box.x + 2, box.y + box.height / 2);
     await expect(frame).toHaveAttribute("data-selected", "true");
     expect(await styleOf(frame, "border-top-style")).toBe("solid");
-    expect(await styleOf(frame, "border-top-color")).toBe(await tokenColor(page, "--highlight"));
+    expect(await styleOf(frame, "border-top-color")).toBe(await tokenColor(page, "--group-border-selected"));
     expect(await styleOf(frame, "border-top-left-radius")).toBe("0px");
 
     await page.keyboard.press("F2");

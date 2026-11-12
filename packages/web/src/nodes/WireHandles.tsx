@@ -38,7 +38,7 @@ export const WireHandles = () => {
             aria-label="Wire handle"
             data-testid="wire-handle"
             data-wire-from={drag?.from ?? handle?.id}
-            className="pointer-events-auto absolute top-0 left-0 z-[400] size-3.5 -translate-1/2 cursor-crosshair rounded-full border-2 border-background bg-ring shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="pointer-events-auto absolute top-0 left-0 z-[400] size-3.5 -translate-1/2 cursor-crosshair rounded-full border-2 border-(--wire-handle-border) bg-(--wire-handle-surface) shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-(--wire-handle-ring-focus)"
             style={{ transform: `translate(${drag?.start.x ?? handle!.x}px, ${drag?.start.y ?? handle!.y}px) translate(-50%, -50%)` }}
             onPointerEnter={() => handle && setHeld(handle.id)}
             onPointerLeave={() => !drag && setHeld(undefined)}
@@ -70,7 +70,7 @@ export const WireHandles = () => {
             <path
               d={`M ${drag.start.x} ${drag.start.y} C ${drag.start.x + 80} ${drag.start.y}, ${drag.at.x - 80} ${drag.at.y}, ${drag.at.x} ${drag.at.y}`}
               fill="none"
-              className="stroke-ring"
+              className="stroke-(--wire-handle-preview-stroke)"
               strokeWidth={2}
               strokeDasharray="6 4"
             />

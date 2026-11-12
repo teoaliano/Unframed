@@ -17,13 +17,13 @@ const Columns = ({ languages }: { readonly languages: boolean }) =>
   languages ? (
     <colgroup>
       <col />
-      <col className="w-[110px]" />
+      <col className="w-(--model-dialog-languages-column-width)" />
     </colgroup>
   ) : (
     <colgroup>
       <col />
       <col className="w-44" />
-      <col className="w-[130px]" />
+      <col className="w-(--model-dialog-released-column-width)" />
     </colgroup>
   );
 
@@ -141,7 +141,7 @@ export const ModelDialog = ({ open, onOpenChange, title, browseUrl, browseLabel 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPopup
-        className="max-h-[min(720px,calc(100vh-48px))] max-w-[680px]"
+        className="max-h-[min(var(--model-dialog-height),calc(100vh-(--spacing(12))))] max-w-(--model-dialog-width)"
         initialFocus={search}
         {...(finalFocus === undefined ? {} : { finalFocus: () => finalFocus() ?? true })}
       >
@@ -165,7 +165,7 @@ export const ModelDialog = ({ open, onOpenChange, title, browseUrl, browseLabel 
             <InputGroupInput ref={search} aria-label="Search models" placeholder="Search models…" value={query} onChange={(event) => setQuery(event.target.value)} />
           </InputGroup>
           {rows.length === 0 ? (
-            <p className="m-0 py-6 text-center text-sm text-muted-foreground">No model matches. Clear the search.</p>
+            <p className="m-0 py-6 text-center text-sm text-(--model-dialog-description)">No model matches. Clear the search.</p>
           ) : (
             // The header is its own table above the scrolling rows, so it stays put while they scroll.
             <div className="flex min-h-0 flex-1 flex-col">

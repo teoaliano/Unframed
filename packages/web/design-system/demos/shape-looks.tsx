@@ -11,7 +11,7 @@ export default function ShapeLooksDemo() {
       <Section title="shapeLabelClass">
         <Row label="over a shape">
           <div className="pt-6">
-            <div className="relative h-16 w-48 rounded-lg border bg-card">
+            <div className="relative h-16 w-48 rounded-lg border border-(--catalogue-demo-border) bg-(--catalogue-demo-card-surface)">
               <div className={shapeLabelClass}>Prompt p1</div>
             </div>
           </div>
@@ -51,7 +51,7 @@ export default function ShapeLooksDemo() {
           <div className="pt-6">
             <div className={`${mediaCardClass} relative h-40 w-60`}>
               <div className={shapeLabelClass}>Image</div>
-              <div className="box-border flex h-full items-center justify-center gap-2 p-2.5 text-sm text-muted-foreground" role="status">
+              <div className="box-border flex h-full items-center justify-center gap-2 p-2.5 text-sm text-(--media-card-meta)" role="status">
                 <Spinner size="md" aria-hidden />
                 <span>Generating…</span>
               </div>
@@ -63,7 +63,7 @@ export default function ShapeLooksDemo() {
             <div className={`${mediaCardClass} relative h-40 w-60`}>
               <div className={shapeLabelClass}>Video</div>
               <div className="box-border flex h-full flex-col items-center justify-center gap-2 p-3 text-center">
-                <p role="alert" className="m-0 text-sm leading-snug wrap-anywhere text-destructive-foreground">
+                <p role="alert" className="m-0 text-sm leading-snug wrap-anywhere text-(--media-card-error-foreground)">
                   The render stopped: Chrome closed before the last frame.
                 </p>
               </div>
@@ -76,7 +76,7 @@ export default function ShapeLooksDemo() {
           <div className="pt-6">
             <div className={`${artifactCardClass} relative h-40 w-60`}>
               <div className={shapeLabelClass}>page</div>
-              <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+              <div className="flex h-full flex-col items-center justify-center gap-3 text-(--artifact-card-foreground)">
                 <AppWindow className="size-7" strokeWidth={1.5} aria-label="Page" />
               </div>
             </div>
@@ -86,7 +86,7 @@ export default function ShapeLooksDemo() {
           <div className="pt-6">
             <div className={`${artifactCardClass} relative h-40 w-60`}>
               <div className={shapeLabelClass}>motion</div>
-              <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+              <div className="flex h-full flex-col items-center justify-center gap-3 text-(--artifact-card-foreground)">
                 <Clapperboard className="size-7" strokeWidth={1.5} aria-label="Motion" />
               </div>
             </div>
@@ -96,8 +96,8 @@ export default function ShapeLooksDemo() {
           <div className="pt-6">
             <div className="relative h-40 w-60">
               <div className={shapeLabelClass}>Harbour landing page</div>
-              <div className={`${artifactCardClass} flex size-full flex-col items-center justify-center gap-1 p-3 text-center font-sans text-xs text-muted-foreground`}>
-                <span className="text-sm font-medium text-foreground">Harbour landing page</span>
+              <div className={`${artifactCardClass} flex size-full flex-col items-center justify-center gap-1 p-3 text-center font-sans text-xs text-(--artifact-card-foreground)`}>
+                <span className="text-sm font-medium text-(--artifact-card-title)">Harbour landing page</span>
                 <span>Select to preview</span>
               </div>
             </div>

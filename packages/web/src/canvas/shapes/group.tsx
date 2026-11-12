@@ -60,7 +60,7 @@ const GroupBox = ({ shape }: { readonly shape: TLFrameShape }) => {
   return (
     <HTMLContainer
       id={shape.id}
-      className="box-border rounded-xl border-[1.5px] border-dashed border-border bg-group-fill data-[selected]:rounded-none data-[selected]:border-solid data-[selected]:border-highlight"
+      className="box-border rounded-xl border-(length:--group-border-width) border-dashed border-(--group-border) bg-(--group-surface) data-[selected]:rounded-none data-[selected]:border-solid data-[selected]:border-(--group-border-selected)"
       data-testid="group-frame"
       data-selected={selected ? "true" : undefined}
       style={{ width: shape.props.w, height: shape.props.h }}

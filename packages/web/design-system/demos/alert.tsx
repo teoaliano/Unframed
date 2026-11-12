@@ -31,7 +31,7 @@ export default function AlertDemo() {
       <Section title="Surface">
         {(["default", "error", "warning", "success"] as const).map((variant) => (
           <Row key={variant} label={`glass, ${variant}`}>
-            <div className="w-full max-w-md rounded-lg bg-muted p-3">
+            <div className="w-full max-w-md rounded-lg bg-(--catalogue-demo-fill) p-3">
               <Alert surface="glass" variant={variant}>
                 <Info />
                 <AlertTitle>Floating over the canvas</AlertTitle>

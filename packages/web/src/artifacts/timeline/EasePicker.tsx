@@ -7,7 +7,7 @@ import type { EaseChoice, EaseValue } from "./ease.ts";
 const Curve = ({ samples }: { readonly samples: readonly number[] }) => {
   const points = samples.map((value, index) => `${(index / (samples.length - 1)) * 24},${16 - value * 12 - 2}`).join(" ");
   return (
-    <svg aria-hidden viewBox="0 0 24 16" className="h-4 w-6 shrink-0 overflow-visible text-muted-foreground">
+    <svg aria-hidden viewBox="0 0 24 16" className="h-4 w-6 shrink-0 overflow-visible text-(--ease-picker-icon)">
       <polyline points={points} fill="none" stroke="currentColor" strokeWidth={1.25} strokeLinejoin="round" />
     </svg>
   );

@@ -78,13 +78,13 @@ const ProjectNameDialog = ({
   return (
     <Dialog open={open} onOpenChange={close}>
       {/* The popup is the form, so its header, panel and footer stay the popup's own column. */}
-      <DialogPopup className="max-w-[360px]" render={<form onSubmit={onSubmit} />}>
+      <DialogPopup className="max-w-(--project-dialog-width)" render={<form onSubmit={onSubmit} />}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <DialogPanel>
           <label className="grid gap-1.5">
-            <span className="text-xs font-medium text-foreground">Project name</span>
+            <span className="text-xs font-medium text-(--project-dialog-label)">Project name</span>
             <Input
               autoFocus
               placeholder="e.g. product-shots"
@@ -97,7 +97,7 @@ const ProjectNameDialog = ({
             />
           </label>
           {problem !== undefined && (
-            <p role="alert" className="m-0 text-sm text-destructive-foreground">
+            <p role="alert" className="m-0 text-sm text-(--project-dialog-problem-foreground)">
               {problem}
             </p>
           )}
@@ -132,7 +132,7 @@ const Confirm = ({
   readonly onConfirm: () => void;
 }) => (
   <AlertDialog open={open} onOpenChange={(next) => !next && onCancel()}>
-    <AlertDialogPopup className="max-w-[400px]">
+    <AlertDialogPopup className="max-w-(--project-confirm-dialog-width)">
       <AlertDialogHeader>
         <AlertDialogTitle>{title}</AlertDialogTitle>
         <AlertDialogDescription>{description}</AlertDialogDescription>
@@ -285,7 +285,7 @@ export const ProjectMenu = () => {
         <MenuTrigger aria-label="All projects" render={<Button variant="ghost" size="icon-xs" />}>
           <Plus aria-hidden />
         </MenuTrigger>
-        <MenuPopup sideOffset={8} align="end" className="min-w-[220px]">
+        <MenuPopup sideOffset={8} align="end" className="min-w-(--project-menu-width)">
           {/* The current project is the kit's checked radio item: its check and its tint. */}
           <MenuRadioGroup value={active ?? ""}>
             {projects.map((project) => (

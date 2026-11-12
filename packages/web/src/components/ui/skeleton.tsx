@@ -4,7 +4,7 @@ import { cn } from "~/lib/utils";
 
 // A skeleton's width and height are its content, so consumers size it through
 // className (the lint contract allows layout there). Its shape is not.
-const skeletonVariants = cva("bg-muted-foreground/15 motion-safe:animate-skeleton", {
+const skeletonVariants = cva("bg-(--skeleton-surface)/(--skeleton-surface-opacity) motion-safe:animate-skeleton", {
   variants: {
     shape: {
       block: "rounded-sm",

@@ -16,7 +16,7 @@ export default function CornerCardDemo() {
         <Section title="Corner card">
           <Row label="top left">
             <div className={cornerCardClass}>
-              <span role="img" aria-label="Unframed" className="ml-1 block size-7 shrink-0 bg-foreground" style={{ mask: logoMask, WebkitMask: logoMask }} />
+              <span role="img" aria-label="Unframed" className="ml-1 block size-7 shrink-0 bg-(--top-bar-logo)" style={{ mask: logoMask, WebkitMask: logoMask }} />
               <Button variant="ghost" size="sm">
                 Harbour moodboard
                 <ChevronDown />

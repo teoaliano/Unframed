@@ -190,7 +190,7 @@ export const StashDrawer = ({
       </Button>
       <ul role="list" aria-label="Stashed prompts" className="m-0 grid max-h-[min(24rem,40dvh)] list-none grid-cols-1 gap-px overflow-y-auto p-0">
         {entries.length === 0 ? (
-          <li className="px-2 py-1 text-xs text-muted-foreground">{`Nothing stashed yet. Press ${mac ? "⌘S" : "Ctrl+S"} with a prompt in the composer to stash it.`}</li>
+          <li className="px-2 py-1 text-xs text-(--stash-empty)">{`Nothing stashed yet. Press ${mac ? "⌘S" : "Ctrl+S"} with a prompt in the composer to stash it.`}</li>
         ) : (
           entries.map((entry) => {
             const pointed = entry.elements?.length ?? 0;
@@ -201,7 +201,7 @@ export const StashDrawer = ({
             return (
               <li
                 key={entry.id}
-                className={cn("flex min-h-6 items-center gap-1.5 rounded-sm ps-2 text-xs", lit && "bg-accent text-accent-foreground")}
+                className={cn("flex min-h-6 items-center gap-1.5 rounded-sm ps-2 text-xs", lit && "bg-(--stash-row-surface-highlighted) text-(--stash-row-foreground-highlighted)")}
                 data-stash-entry={entry.id}
                 data-highlighted={lit ? "" : undefined}
                 onMouseMove={() => {
@@ -209,7 +209,7 @@ export const StashDrawer = ({
                 }}
                 onFocus={() => setHighlighted(entry.id)}
               >
-                <FileText aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+                <FileText aria-hidden className="size-3 shrink-0 text-(--stash-icon)" />
                 <Button
                   variant="ghost"
                   size="xs"
@@ -219,21 +219,21 @@ export const StashDrawer = ({
                   onPointerDown={(event) => event.preventDefault()}
                   onClick={() => onRestore(entry)}
                 >
-                  <span className="min-w-0 flex-1 truncate text-start font-normal text-foreground/80">{snippet}</span>
+                  <span className="min-w-0 flex-1 truncate text-start font-normal text-(--stash-snippet)/(--stash-snippet-opacity)">{snippet}</span>
                 </Button>
                 {images > 0 && (
-                  <span className="flex shrink-0 items-center gap-0.5 text-muted-foreground" aria-label={`${images} image${images === 1 ? "" : "s"}`}>
+                  <span className="flex shrink-0 items-center gap-0.5 text-(--stash-meta)" aria-label={`${images} image${images === 1 ? "" : "s"}`}>
                     <Image aria-hidden className="size-3" />
                     {images}
                   </span>
                 )}
                 {files > 0 && (
-                  <span className="flex shrink-0 items-center gap-0.5 text-muted-foreground" aria-label={`${files} file${files === 1 ? "" : "s"}`}>
+                  <span className="flex shrink-0 items-center gap-0.5 text-(--stash-meta)" aria-label={`${files} file${files === 1 ? "" : "s"}`}>
                     <File aria-hidden className="size-3" />
                     {files}
                   </span>
                 )}
-                <time dateTime={entry.at} className="shrink-0 text-muted-foreground tabular-nums">
+                <time dateTime={entry.at} className="shrink-0 text-(--stash-meta) tabular-nums">
                   {relativeTime(entry.at)}
                 </time>
                 <Button

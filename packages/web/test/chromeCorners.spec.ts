@@ -85,7 +85,7 @@ test("the bar is one solid background with a bottom border; Settings is a circle
   const settings = page.getByRole("button", { name: "Settings", exact: true });
   await expectSlot(settings, "tooltip-trigger");
   await inBothSchemes(page, async () => {
-    expect(await styleOf(bar, "background-color")).toBe(await resolvedColor(page, "var(--background)"));
+    expect(await styleOf(bar, "background-color")).toBe(await resolvedColor(page, "var(--top-bar-surface)"));
     expect(await styleOf(bar, "border-bottom-width")).toBe("1px");
     expect(await styleOf(bar, "border-top-width")).toBe("0px");
     // A circle: the radius reaches half the 32 px diameter (the browser reports a fully rounded corner as a huge value).

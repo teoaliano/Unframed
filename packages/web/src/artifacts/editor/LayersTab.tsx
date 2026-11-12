@@ -117,7 +117,7 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
     document.querySelector<HTMLElement>(`[data-layer="${CSS.escape(selection[0]!)}"]`)?.scrollIntoView({ block: "nearest" });
   }, [selection]);
 
-  if (preparing) return <p className="m-0 p-2.5 text-sm text-muted-foreground">{`Getting this ${kind} ready for editing…`}</p>;
+  if (preparing) return <p className="m-0 p-2.5 text-sm text-(--artifact-editor-note)">{`Getting this ${kind} ready for editing…`}</p>;
   if (tree === undefined) return null;
 
   const rows = layerRows(tree.elements, live, collapsed, locked);
@@ -179,7 +179,7 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
         if (row.element === null) {
           return (
             <li key={`runtime-${row.key}`} data-layer-runtime="" style={{ paddingInlineStart: `${row.depth * INDENT_PX}px` }}>
-              <div className="flex min-w-0 items-center gap-1.5 px-1 py-0.5 text-sm text-muted-foreground">
+              <div className="flex min-w-0 items-center gap-1.5 px-1 py-0.5 text-sm text-(--artifact-editor-meta)">
                 <span className="size-3.5 shrink-0" aria-hidden />
                 <span className="truncate">{row.tag}</span>
                 <span className="shrink-0 text-xs">Set by the agent's code</span>
@@ -199,7 +199,7 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
         return (
           <li key={id} data-layer-row={id} data-selected={selected ? "true" : undefined} style={{ paddingInlineStart: `${row.depth * INDENT_PX}px` }} className="group">
             <div
-              className={cn("flex min-w-0 items-center gap-1 rounded-sm", selected && "bg-accent")}
+              className={cn("flex min-w-0 items-center gap-1 rounded-sm", selected && "bg-(--artifact-editor-layer-surface-selected)")}
               onMouseEnter={() => session.hoverLayer(id)}
               onContextMenu={(event) => {
                 event.preventDefault();
@@ -249,10 +249,10 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
                     startRename(element);
                   }}
                 >
-                  <span className={cn("flex min-w-0 flex-1 items-center gap-1.5", hidden && "opacity-50", row.inLocked && "text-muted-foreground")}>
-                    <Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+                  <span className={cn("flex min-w-0 flex-1 items-center gap-1.5", hidden && "opacity-50", row.inLocked && "text-(--artifact-editor-meta)")}>
+                    <Icon aria-hidden className="size-3.5 shrink-0 text-(--artifact-editor-icon)" />
                     <span className="truncate">{label}</span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{element.tag}</span>
+                    <span className="shrink-0 text-xs text-(--artifact-editor-meta)">{element.tag}</span>
                   </span>
                 </Button>
               )}

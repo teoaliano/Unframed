@@ -29,10 +29,10 @@ export const numberOf = (value: string | undefined): string => {
   const parsed = Number.parseFloat(value ?? "");
   return Number.isFinite(parsed) ? String(Math.round(parsed * 100) / 100) : "";
 };
-export const noteText = (text: string) => <p className="m-0 text-xs text-muted-foreground">{text}</p>;
+export const noteText = (text: string) => <p className="m-0 text-xs text-(--design-panel-note)">{text}</p>;
 export const ParameterMark = ({ path }: { readonly path: string }) => (
   <Tip label={`Parameter ${path}`}>
-    <span role="img" aria-label={`Parameter ${path}`} className="inline-flex shrink-0 text-muted-foreground">
+    <span role="img" aria-label={`Parameter ${path}`} className="inline-flex shrink-0 text-(--design-panel-icon)">
       <SlidersHorizontal aria-hidden className="size-3.5" />
     </span>
   </Tip>
@@ -159,7 +159,7 @@ export const KeywordControl = ({
   </Select>
 );
 
-export const Swatch = ({ colour }: { readonly colour: string | undefined }) => <span aria-hidden className="size-3.5 shrink-0 rounded-sm border" style={{ background: colour }} />;
+export const Swatch = ({ colour }: { readonly colour: string | undefined }) => <span aria-hidden className="size-3.5 shrink-0 rounded-sm border border-(--design-panel-swatch-border)" style={{ background: colour }} />;
 
 export const ColourControl = ({
   label,
@@ -217,16 +217,16 @@ export const ColourControl = ({
   );
 };
 
-export const Caption = ({ children }: { readonly children: ReactNode }) => <span className="mb-0.5 block text-xs text-muted-foreground">{children}</span>;
+export const Caption = ({ children }: { readonly children: ReactNode }) => <span className="mb-0.5 block text-xs text-(--design-panel-label)">{children}</span>;
 
 export const Row = ({ label, mark, token, children }: { readonly label: string; readonly mark?: string | undefined; readonly token?: ReactNode; readonly children: ReactNode }) => (
-  <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-2">
-    <span className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+  <div className="grid grid-cols-[var(--design-panel-label-width)_minmax(0,1fr)] items-center gap-2">
+    <span className="flex min-w-0 items-center gap-1.5 text-sm text-(--design-panel-label)">
       <span className="truncate">{label}</span>
       {mark !== undefined && <ParameterMark path={mark} />}
     </span>
     <div className="flex min-w-0 flex-wrap items-center gap-1">
-      <div className="min-w-[7rem] flex-1">{children}</div>
+      <div className="min-w-28 flex-1">{children}</div>
       {token}
     </div>
   </div>
@@ -234,7 +234,7 @@ export const Row = ({ label, mark, token, children }: { readonly label: string; 
 
 export const Section = ({ name, note, action, children }: { readonly name: string; readonly note: ReactNode; readonly action?: ReactNode; readonly children: ReactNode }) => (
   <fieldset aria-label={name} className="m-0 flex flex-col gap-2 border-0 p-0">
-    <legend className="mb-1 flex min-w-0 items-center gap-1 text-xs font-medium text-muted-foreground">
+    <legend className="mb-1 flex min-w-0 items-center gap-1 text-xs font-medium text-(--design-panel-label)">
       {name}
       {action}
     </legend>

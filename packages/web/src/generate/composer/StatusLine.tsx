@@ -42,7 +42,7 @@ export const StatusLine = ({ kind, children }: { readonly kind: StatusKind; read
       </Alert>
     );
   return (
-    <p role="status" data-kind={kind} className="m-0 text-xs text-muted-foreground">
+    <p role="status" data-kind={kind} className="m-0 text-xs text-(--generate-tray-note)">
       {children}
     </p>
   );

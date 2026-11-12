@@ -91,7 +91,7 @@ export const ImportKitDialog = ({ kit, onClose }: { readonly kit: Kit | null; re
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogPopup data-testid="kit-import" className="max-w-[520px]">
+      <DialogPopup data-testid="kit-import" className="max-w-(--kit-import-dialog-width)">
         <DialogHeader>
           <DialogTitle>Import</DialogTitle>
           <DialogDescription>Drop DTCG JSON, CSS or a DESIGN.md here, or paste one below.</DialogDescription>
@@ -99,7 +99,7 @@ export const ImportKitDialog = ({ kit, onClose }: { readonly kit: Kit | null; re
         <DialogPanel>
           <div
             data-testid="import-drop"
-            className={`grid place-items-center rounded-lg border border-dashed p-6 text-sm text-muted-foreground ${over ? "bg-accent" : ""}`}
+            className={`grid place-items-center rounded-lg border border-dashed border-(--kit-import-dialog-drop-border) p-6 text-sm text-(--kit-import-dialog-drop-foreground) ${over ? "bg-(--kit-import-dialog-drop-surface-dragging)" : ""}`}
             onDragOver={(event) => {
               event.preventDefault();
               setOver(true);
@@ -108,7 +108,7 @@ export const ImportKitDialog = ({ kit, onClose }: { readonly kit: Kit | null; re
             onDrop={onDrop}
           >
             <Label>
-              <span className="grid w-full justify-items-center gap-1 text-sm font-normal text-muted-foreground">
+              <span className="grid w-full justify-items-center gap-1 text-sm font-normal text-(--kit-import-dialog-drop-foreground)">
               <span>Drop .json, .css or .md files, or</span>
               <Input type="file" multiple accept=".json,.css,.md,.markdown" aria-label="Choose files" onChange={(event) => void take([...(event.currentTarget.files ?? [])])} />
               </span>
@@ -116,7 +116,7 @@ export const ImportKitDialog = ({ kit, onClose }: { readonly kit: Kit | null; re
           </div>
           <Label className="w-full">
             <span className="grid w-full gap-1.5">
-            <span className="text-xs font-medium text-foreground">Paste</span>
+            <span className="text-xs font-medium text-(--kit-import-dialog-label)">Paste</span>
             <Textarea aria-label="Paste" value={paste} onChange={(event) => setPaste(event.currentTarget.value)} />
             </span>
           </Label>

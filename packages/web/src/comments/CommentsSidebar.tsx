@@ -40,7 +40,7 @@ export const CommentsSidebar = ({ ui }: { readonly ui: CommentsUi }) => {
       data-comments-sidebar=""
       role="region"
       aria-label="Comments"
-      className="pointer-events-auto absolute top-9 right-0 bottom-0 z-[calc(var(--tl-layer-watermark)_-_1)] box-border flex w-80 flex-col border-l bg-background font-sans text-foreground"
+      className="pointer-events-auto absolute top-9 right-0 bottom-0 z-[calc(var(--tl-layer-watermark)_-_1)] box-border flex w-80 flex-col border-l border-(--comment-sidebar-border) bg-(--comment-sidebar-surface) font-sans text-(--comment-sidebar-foreground)"
       onPointerDown={(event) => editor.markEventAsHandled(event)}
       onPointerMove={(event) => editor.markEventAsHandled(event)}
       onKeyDown={(event) => {
@@ -50,7 +50,7 @@ export const CommentsSidebar = ({ ui }: { readonly ui: CommentsUi }) => {
       }}
     >
       <header className="flex h-12 shrink-0 items-center gap-1 pr-2 pl-3.5">
-        <MessageCircle aria-hidden className="size-4 shrink-0 text-foreground" />
+        <MessageCircle aria-hidden className="size-4 shrink-0 text-(--comment-sidebar-icon)" />
         <h2 className="m-0 ml-1 flex-1 text-sm font-medium">Comments</h2>
         <Menu>
           <Tip label="Sort and filter">

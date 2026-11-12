@@ -3,9 +3,9 @@ import { Demos, Row, Section } from "../frame.tsx";
 
 const Card = ({ title, meta }: { readonly title: string; readonly meta: string }) => (
   <div className="flex w-64 flex-col gap-2 p-3">
-    <div className="aspect-video rounded-md bg-muted" />
+    <div className="aspect-video rounded-md bg-(--catalogue-demo-fill)" />
     <span className="font-medium text-sm">{title}</span>
-    <span className="text-muted-foreground text-xs">{meta}</span>
+    <span className="text-(--catalogue-demo-description) text-xs">{meta}</span>
   </div>
 );
 

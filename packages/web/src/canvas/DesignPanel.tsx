@@ -214,7 +214,7 @@ export const DesignPanel = () => {
       data-testid="design-panel"
       aria-label="Design"
       role="region"
-      className="pointer-events-auto absolute top-9 right-0 bottom-0 z-[calc(var(--tl-layer-watermark)_-_1)] box-border flex w-80 flex-col gap-3 *:shrink-0 overflow-y-auto overflow-x-hidden overscroll-none border-l bg-background p-2.5 pb-14 font-sans text-foreground"
+      className="pointer-events-auto absolute top-9 right-0 bottom-0 z-[calc(var(--tl-layer-watermark)_-_1)] box-border flex w-80 flex-col gap-3 *:shrink-0 overflow-y-auto overflow-x-hidden overscroll-none border-l border-(--design-panel-border) bg-(--design-panel-surface) p-2.5 pb-14 font-sans text-(--design-panel-foreground)"
     >
       <span className="min-w-0 truncate text-sm font-semibold">{titleOf(subjects, next)}</span>
 

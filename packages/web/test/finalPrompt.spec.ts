@@ -66,7 +66,7 @@ test("the final prompt dialog opens after the repair with nothing else paid for,
   await expectSlot(dialog(page).locator('[data-kind="warning"]'), "alert");
   await expectSlot(dialog(page).getByRole("button", { name: "Cancel" }), "dialog-close");
   expect((await sections(page).boundingBox())!.height).toBe(250);
-  await expectToken(dialog(page).getByRole("button", { name: "Generate 3×" }), "background-color", "--primary");
+  await expectToken(dialog(page).getByRole("button", { name: "Generate 3×" }), "background-color", "--button-default-surface");
 });
 
 test("editing the list updates the rows live, and confirm sends the edited batch with the staged batch id, no second text call and nothing written back", async ({ page, generation }) => {
@@ -75,7 +75,8 @@ test("editing the list updates the rows live, and confirm sends the edited batch
   await stage(page);
 
   await sections(page).click();
-  await page.keyboard.press("ControlOrMeta+End");
+  // Chrome on macOS has no Cmd+End in a textarea: the caret goes to the end of the text directly.
+  await sections(page).evaluate((element: HTMLTextAreaElement) => element.setSelectionRange(element.value.length, element.value.length));
   await page.keyboard.type("\n---\na black fox\n---\nimages: 1\n");
   await expect(dialog(page)).toContainText("4 generations. Nothing has been sent yet.");
   await expect(rows(page)).toHaveCount(4);
@@ -117,7 +118,8 @@ test("Cancel and Esc send nothing, and a cycle typed into the list disables Gene
   await expect(dialog(page).getByRole("region", { name: "Added after every section" })).toHaveCount(0);
 
   await sections(page).click();
-  await page.keyboard.press("ControlOrMeta+End");
+  // Chrome on macOS has no Cmd+End in a textarea: the caret goes to the end of the text directly.
+  await sections(page).evaluate((element: HTMLTextAreaElement) => element.setSelectionRange(element.value.length, element.value.length));
   await page.keyboard.type("\n---\nagain @301");
   await expect(dialog(page)).toContainText("This list cannot be assembled yet.");
   await expect(dialog(page).getByRole("alert")).toHaveText("Circular reference: 301 -> 301");

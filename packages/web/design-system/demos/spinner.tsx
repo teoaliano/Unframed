@@ -17,7 +17,7 @@ export default function SpinnerDemo() {
       </Section>
       <Section title="Tones">
         <Row label="current">
-          <span className="flex items-center gap-2 text-sm text-primary">
+          <span className="flex items-center gap-2 text-sm text-(--catalogue-demo-emphasis)">
             <Spinner size="md" />
             Takes the text colour
           </span>
