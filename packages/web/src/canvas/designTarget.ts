@@ -8,6 +8,20 @@ const TLDRAW_FONTS: Readonly<Record<string, string>> = { draw: "Draw", sans: "Sa
 export const FONT_NAMES = Object.values(TLDRAW_FONTS);
 export const DASHES = ["draw", "solid", "dashed", "dotted"];
 export const FILLED: readonly DesignableType[] = ["geo", "draw"];
+export const ALIGN_OPTIONS = [
+  { value: "left", label: "Left" },
+  { value: "center", label: "Centre" },
+  { value: "right", label: "Right" },
+];
+export const DASH_OPTIONS = [
+  { value: "draw", label: "Draw" },
+  { value: "solid", label: "Solid" },
+  { value: "dashed", label: "Dash" },
+  { value: "dotted", label: "Dot" },
+];
+export const STROKE_WIDTH_RANGE = { min: 0, max: 20, step: 0.5 } as const;
+export const SIZE_RANGE = { min: 4, max: 200, step: 1 } as const;
+
 const ALIGN_PROP: Readonly<Record<string, string>> = { left: "start", center: "middle", right: "end" };
 const ALIGN_NAME: Readonly<Record<string, string>> = { start: "left", middle: "center", end: "right", "start-legacy": "left", "middle-legacy": "center", "end-legacy": "right" };
 
@@ -103,7 +117,10 @@ export const shared = (values: readonly string[]): { readonly value: string; rea
 
 const mergeableMeta = (before: TLShape["meta"], after: TLShape["meta"]): TLShape["meta"] => ("unframed" in before && !("unframed" in after) ? { ...after, unframed: {} } : after);
 
-export const writeDesign = (editor: Editor, { subjects, next }: DesignTarget, change: DesignChange): boolean => {
+const BURST_MS = 800;
+let lastBurst: { readonly key: string; readonly at: number } | undefined;
+
+export const writeDesign = (editor: Editor, { subjects, next }: DesignTarget, change: DesignChange, burst?: string): boolean => {
   const refusal = Object.entries(change.design ?? {})
     .map(([key, value]) => (value === null ? null : designValueRefusal(key as DesignKey, value)))
     .find((text) => text !== null);
@@ -121,7 +138,10 @@ export const writeDesign = (editor: Editor, { subjects, next }: DesignTarget, ch
     }
     return true;
   }
-  editor.markHistoryStoppingPoint("design");
+  const now = Date.now();
+  const key = `${burst ?? ""}:${subjects.map(({ shape }) => shape.id).join(",")}`;
+  if (burst === undefined || lastBurst?.key !== key || now - lastBurst.at > BURST_MS) editor.markHistoryStoppingPoint("design");
+  lastBurst = burst === undefined ? undefined : { key, at: now };
   editor.updateShapes(
     subjects.map(({ shape, ...subject }) => {
       const extra = change.props?.({ shape, ...subject });

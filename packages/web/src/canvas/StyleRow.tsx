@@ -1,21 +1,18 @@
-import { ANNOTATION_SWATCHES, shapeDesignOf, STROKE_WIDTH_PRESETS, strokeWidthPreset, styleControlsFor, type DesignKey, type StyleControl } from "@unframed/domain";
+import { ANNOTATION_SWATCHES, shapeDesignOf, styleControlsFor, type DesignKey, type StyleControl } from "@unframed/domain";
 import { AlignCenter, AlignLeft, AlignRight, Bold, SlidersHorizontal, Spline } from "lucide-react";
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { Suspense, useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { useEditor, type Editor } from "tldraw";
 import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuRadioItemIndicator, MenuTrigger } from "~/components/ui/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Toggle } from "~/components/ui/toggle";
 import { cn } from "~/lib/utils";
 import { Tip } from "../chrome/ui.tsx";
-import { MIXED, NumberControl, numberOf } from "../design/controls.tsx";
+import { MIXED, numberOf } from "../design/controls.tsx";
+import { DialColour, DialScope, DialSegmented, DialSlider } from "./dialLazy.tsx";
 import { useDesignPanelOpen } from "./designPanelPref.ts";
-import { alignChange, alignOf, DASHES, designValue, fillChange, fillOf, FONT_NAMES, fontChange, fontOf, props, shared, toHex, weightOf, writeDesign, type DesignChange, type DesignTarget, type Subject } from "./designTarget.ts";
+import { ALIGN_OPTIONS, alignChange, alignOf, DASH_OPTIONS, designValue, fillChange, fillOf, FONT_NAMES, fontChange, fontOf, props, shared, toHex, SIZE_RANGE, STROKE_WIDTH_RANGE, weightOf, writeDesign, type DesignChange, type DesignTarget, type Subject } from "./designTarget.ts";
 
 const ALIGN_ICONS = { left: AlignLeft, center: AlignCenter, right: AlignRight } as const;
-const ALIGN_LABELS = { left: "Left", center: "Centre", right: "Right" } as const;
-const DASH_LABELS: Readonly<Record<string, string>> = { draw: "Draw", solid: "Solid", dashed: "Dashed", dotted: "Dotted" };
 
 interface ColourView {
   readonly value: string;
@@ -52,87 +49,34 @@ const SwatchFace = ({ kind, view }: { readonly kind: "fill" | "stroke" | "text";
   );
 };
 
-const ColourButton = ({
+const StylePopover = ({
   label,
-  kind,
-  view,
-  allowNone,
-  onPick,
+  control,
+  icon,
+  trigger,
+  width = "normal",
+  children,
 }: {
   readonly label: string;
-  readonly kind: "fill" | "stroke" | "text";
-  readonly view: ColourView;
-  readonly allowNone: boolean;
-  readonly onPick: (hex: string | null | "none") => void;
+  readonly control: StyleControl;
+  readonly icon: boolean;
+  readonly trigger: ReactNode;
+  readonly width?: "narrow" | "normal" | "wide";
+  readonly children: (close: () => void) => ReactNode;
 }) => {
   const editor = useEditor();
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState("");
-  const picker = useRef<HTMLInputElement>(null);
-  const pickLatest = useRef(onPick);
-  pickLatest.current = onPick;
-  useEffect(() => {
-    const input = picker.current;
-    if (!open || input === null) return;
-    const onChange = () => pickLatest.current(input.value);
-    input.addEventListener("change", onChange);
-    return () => input.removeEventListener("change", onChange);
-  }, [open]);
-  const pick = (value: string | null | "none") => {
-    onPick(value);
-    setOpen(false);
-  };
-  const commitHex = () => {
-    const trimmed = draft.trim();
-    if (trimmed === "") return;
-    const hex = (trimmed.startsWith("#") ? trimmed : `#${trimmed}`).toLowerCase();
-    if (hex !== view.value) onPick(hex);
-  };
-  const current = view.mixed ? undefined : view.value;
   return (
-    <Popover open={open} onOpenChange={(next) => (setOpen(next), next && setDraft(view.mixed ? "" : view.value))}>
+    <Popover open={open} onOpenChange={setOpen}>
       <Tip label={label} side="top">
-        <PopoverTrigger render={<Button variant="ghost" size="icon-sm" aria-label={label} data-style-control={kind === "text" ? "textColor" : kind} />}>
-          <SwatchFace kind={kind} view={view} />
-        </PopoverTrigger>
+        <PopoverTrigger render={<Button variant="ghost" size={icon ? "icon-sm" : "sm"} aria-label={label} data-style-control={control} />}>{trigger}</PopoverTrigger>
       </Tip>
-      <PopoverPopup side="top" align="center" padding="compact" className="w-56" aria-label={`${label} swatches`} initialFocus={false} finalFocus={canvasFocus(editor)} onKeyDown={keepEscape(editor)}>
-        <div className="grid grid-cols-7 gap-1" role="group" aria-label={`${label} swatches`}>
-          <SwatchButton name="Default" selected={!view.mixed && !view.none && current === ""} onClick={() => pick(null)}>
-            <span aria-hidden className="block size-full rounded-full bg-[linear-gradient(135deg,var(--foreground)_50%,var(--background)_50%)]" />
-          </SwatchButton>
-          {ANNOTATION_SWATCHES.map((swatch) => (
-            <SwatchButton key={swatch.hex} name={swatch.name} selected={current === swatch.hex} onClick={() => pick(swatch.hex)}>
-              <span aria-hidden className="block size-full rounded-full" style={{ background: swatch.hex }} />
-            </SwatchButton>
-          ))}
-          {allowNone && (
-            <SwatchButton name="None" selected={view.none === true} onClick={() => pick("none")}>
-              <span aria-hidden className="relative block size-full rounded-full border">
-                <span className="absolute top-1/2 left-0.5 right-0.5 h-px -rotate-45 bg-destructive" />
-              </span>
-            </SwatchButton>
-          )}
-        </div>
-        <div className="mt-2 flex items-center gap-2">
-          <Input
-            type="color"
-            aria-label={`${label} picker`}
-            className="w-10 shrink-0"
-            ref={picker}
-            defaultValue={(current || view.shown || "#000000").slice(0, 7)}
-          />
-          <Input
-            aria-label="Hex"
-            value={draft}
-            placeholder={view.mixed ? MIXED : view.shown || "#rrggbb"}
-            onChange={(event) => setDraft(event.currentTarget.value)}
-            onBlur={commitHex}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") commitHex();
-            }}
-          />
-        </div>
+      <PopoverPopup side="top" align="center" padding="compact" className={width === "wide" ? "w-72" : width === "narrow" ? "w-60" : "w-64"} aria-label={label} initialFocus={false} finalFocus={canvasFocus(editor)} onKeyDown={keepEscape(editor)}>
+        {open && (
+          <Suspense fallback={null}>
+            <DialScope>{children(() => setOpen(false))}</DialScope>
+          </Suspense>
+        )}
       </PopoverPopup>
     </Popover>
   );
@@ -146,40 +90,45 @@ const SwatchButton = ({ name, selected, onClick, children }: { readonly name: st
   </Tip>
 );
 
-const RadioMenu = ({
+const ColourButton = ({
   label,
-  control,
-  trigger,
-  value,
-  options,
+  kind,
+  view,
+  allowNone,
   onPick,
 }: {
   readonly label: string;
-  readonly control: StyleControl;
-  readonly trigger: ReactNode;
-  readonly value: string | undefined;
-  readonly options: ReadonlyArray<{ readonly value: string; readonly label: ReactNode }>;
-  readonly onPick: (value: string) => void;
+  readonly kind: "fill" | "stroke" | "text";
+  readonly view: ColourView;
+  readonly allowNone: boolean;
+  readonly onPick: (hex: string | null | "none", burst?: boolean) => void;
 }) => {
-  const editor = useEditor();
+  const current = view.mixed ? undefined : view.value;
   return (
-    <Menu>
-      <Tip label={label} side="top">
-        <MenuTrigger render={<Button variant="ghost" size="sm" aria-label={label} data-style-control={control} />}>{trigger}</MenuTrigger>
-      </Tip>
-      <MenuPopup side="top" align="center" className="min-w-32" finalFocus={canvasFocus(editor)} onKeyDown={keepEscape(editor)}>
-        <MenuRadioGroup value={value ?? ""} onValueChange={(picked) => onPick(String(picked))}>
-          {options.map((option) => (
-            <MenuRadioItem key={option.value} value={option.value} closeOnClick>
-              <span className="flex items-center justify-between gap-3">
-                {option.label}
-                <MenuRadioItemIndicator />
-              </span>
-            </MenuRadioItem>
-          ))}
-        </MenuRadioGroup>
-      </MenuPopup>
-    </Menu>
+    <StylePopover label={label} control={kind === "text" ? "textColor" : kind} icon trigger={<SwatchFace kind={kind} view={view} />} width="narrow">
+      {(close) => (
+        <>
+          <div className="grid grid-cols-7 gap-1 pb-1.5" role="group" aria-label={`${label} swatches`}>
+            <SwatchButton name="Default" selected={!view.mixed && !view.none && current === ""} onClick={() => (onPick(null), close())}>
+              <span aria-hidden className="block size-full rounded-full bg-[linear-gradient(135deg,var(--foreground)_50%,var(--background)_50%)]" />
+            </SwatchButton>
+            {ANNOTATION_SWATCHES.map((swatch) => (
+              <SwatchButton key={swatch.hex} name={swatch.name} selected={current === swatch.hex} onClick={() => (onPick(swatch.hex), close())}>
+                <span aria-hidden className="block size-full rounded-full" style={{ background: swatch.hex }} />
+              </SwatchButton>
+            ))}
+            {allowNone && (
+              <SwatchButton name="None" selected={view.none === true} onClick={() => (onPick("none"), close())}>
+                <span aria-hidden className="relative block size-full rounded-full border">
+                  <span className="absolute top-1/2 left-0.5 right-0.5 h-px -rotate-45 bg-destructive" />
+                </span>
+              </SwatchButton>
+            )}
+          </div>
+          <DialColour label="Custom" value={(current || view.shown || "#000000").slice(0, 7)} onChange={(hex) => /^#[0-9a-f]{6}$/i.test(hex) && hex.toLowerCase() !== current && onPick(hex.toLowerCase(), true)} />
+        </>
+      )}
+    </StylePopover>
   );
 };
 
@@ -189,20 +138,9 @@ const StrokeLine = ({ width }: { readonly width: number }) => (
   </span>
 );
 
-const SizeField = ({ value, mixed, onCommit }: { readonly value: string; readonly mixed: boolean; readonly onCommit: (typed: number) => boolean }) => {
-  const [refusals, setRefusals] = useState(0);
-  return (
-    <Tip label="Size" side="top">
-      <div className="w-13 *:h-7 [&_input]:h-7 [&_input]:px-1.5 [&_input]:text-xs" data-style-control="size">
-        <NumberControl key={refusals} label="Size" value={value} placeholder={mixed ? MIXED : undefined} disabled={false} onCommit={(typed) => !onCommit(typed) && setRefusals((count) => count + 1)} />
-      </div>
-    </Tip>
-  );
-};
-
 const controlFor = (editor: Editor, target: DesignTarget, control: StyleControl): ReactNode => {
   const { subjects } = target;
-  const write = (change: DesignChange) => writeDesign(editor, target, change);
+  const write = (change: DesignChange, burst?: string) => writeDesign(editor, target, change, burst);
   const values = (pick: (subject: Subject) => string) => shared(subjects.map(pick));
   const colourView = (key: DesignKey): ColourView => {
     const set = values((subject) => String(shapeDesignOf(subject.shape.meta)[key] ?? ""));
@@ -210,6 +148,8 @@ const controlFor = (editor: Editor, target: DesignTarget, control: StyleControl)
     const mixed = set.mixed || shown.mixed;
     return { value: mixed ? "" : set.value, shown: mixed ? "" : shown.value, mixed };
   };
+  const number = (key: DesignKey) => values((subject) => numberOf(String(designValue(editor, subject, key) ?? "")));
+  const pickColour = (key: DesignKey) => (hex: string | null | "none", burst?: boolean) => hex !== "none" && write({ design: { [key]: hex } }, burst ? key : undefined);
   switch (control) {
     case "fill": {
       const note = subjects.every((subject) => subject.type === "note");
@@ -222,70 +162,48 @@ const controlFor = (editor: Editor, target: DesignTarget, control: StyleControl)
           kind="fill"
           view={view}
           allowNone={!subjects.some((subject) => subject.type === "note")}
-          onPick={(hex) => write(hex === "none" ? fillChange(null) : hex === null ? { design: { fillColor: null } } : fillChange(hex))}
+          onPick={(hex, burst) => write(hex === "none" ? fillChange(null) : hex === null ? { design: { fillColor: null } } : fillChange(hex), burst ? "fillColor" : undefined)}
         />
       );
     }
     case "stroke":
-      return <ColourButton key={control} label="Stroke" kind="stroke" view={colourView("strokeColor")} allowNone={false} onPick={(hex) => hex !== "none" && write({ design: { strokeColor: hex } })} />;
+      return <ColourButton key={control} label="Stroke" kind="stroke" view={colourView("strokeColor")} allowNone={false} onPick={pickColour("strokeColor")} />;
     case "textColor":
-      return <ColourButton key={control} label="Text colour" kind="text" view={colourView("textColor")} allowNone={false} onPick={(hex) => hex !== "none" && write({ design: { textColor: hex } })} />;
+      return <ColourButton key={control} label="Text colour" kind="text" view={colourView("textColor")} allowNone={false} onPick={pickColour("textColor")} />;
     case "strokeWidth": {
-      const view = values((subject) => numberOf(String(designValue(editor, subject, "strokeWidth") ?? "")));
+      const view = number("strokeWidth");
       const width = Number(view.value);
-      const preset = view.mixed ? undefined : strokeWidthPreset(width);
       return (
-        <RadioMenu
-          key={control}
-          label="Stroke width"
-          control={control}
-          trigger={view.mixed ? <StrokeLine width={2} /> : preset === undefined ? <span className="text-xs tabular-nums">{view.value}</span> : <StrokeLine width={width} />}
-          value={preset === undefined ? undefined : String(preset.width)}
-          options={STROKE_WIDTH_PRESETS.map((choice) => ({
-            value: String(choice.width),
-            label: (
-              <span className="flex items-center gap-2">
-                <StrokeLine width={choice.width} />
-                {choice.label}
-              </span>
-            ),
-          }))}
-          onPick={(picked) => write({ design: { strokeWidth: Number(picked) } })}
-        />
+        <StylePopover key={control} label="Stroke width" control={control} icon={false} trigger={view.mixed ? <StrokeLine width={2} /> : <span className="flex items-center gap-1.5"><StrokeLine width={width} /><span className="text-xs tabular-nums">{view.value}</span></span>}>
+          {() => <DialSlider label="Stroke width" value={Number.isFinite(width) ? width : 2} {...STROKE_WIDTH_RANGE} unit="px" onChange={(next) => write({ design: { strokeWidth: next } }, "strokeWidth")} />}
+        </StylePopover>
       );
     }
     case "dash": {
       const view = values((subject) => String(props(subject.shape).dash ?? "draw"));
       return (
-        <RadioMenu
-          key={control}
-          label="Dash"
-          control={control}
-          trigger={<Spline aria-hidden />}
-          value={view.mixed ? undefined : view.value}
-          options={DASHES.map((dash) => ({ value: dash, label: DASH_LABELS[dash] }))}
-          onPick={(picked) => write({ props: () => ({ dash: picked }) })}
-        />
+        <StylePopover key={control} label="Dash" control={control} icon trigger={<Spline aria-hidden />}>
+          {() => <DialSegmented label="Dash" value={view.mixed ? "" : view.value} options={DASH_OPTIONS} onChange={(picked) => write({ props: () => ({ dash: picked }) })} />}
+        </StylePopover>
       );
     }
     case "font": {
       const view = values(fontOf);
       const custom = !view.mixed && view.value !== "" && !FONT_NAMES.includes(view.value) ? [view.value] : [];
       return (
-        <RadioMenu
-          key={control}
-          label="Font"
-          control={control}
-          trigger={<span className="max-w-20 truncate text-xs">{view.mixed ? MIXED : view.value}</span>}
-          value={view.mixed ? undefined : view.value}
-          options={[...custom, ...FONT_NAMES].map((name) => ({ value: name, label: name }))}
-          onPick={(picked) => picked !== view.value && write(fontChange(picked))}
-        />
+        <StylePopover key={control} label="Font" control={control} icon={false} width="wide" trigger={<span className="max-w-20 truncate text-xs">{view.mixed ? MIXED : view.value}</span>}>
+          {() => <DialSegmented label="Font" value={view.mixed ? "" : view.value} options={[...custom, ...FONT_NAMES].map((name) => ({ value: name, label: name }))} onChange={(picked) => picked !== view.value && write(fontChange(picked))} />}
+        </StylePopover>
       );
     }
     case "size": {
-      const view = values((subject) => numberOf(String(designValue(editor, subject, "fontSize") ?? "")));
-      return <SizeField key={control} value={view.mixed ? "" : view.value} mixed={view.mixed} onCommit={(typed) => write({ design: { fontSize: typed } })} />;
+      const view = number("fontSize");
+      const size = Number(view.value);
+      return (
+        <StylePopover key={control} label="Size" control={control} icon={false} trigger={<span className="min-w-6 text-xs tabular-nums">{view.mixed ? MIXED : view.value}</span>}>
+          {() => <DialSlider label="Size" value={Number.isFinite(size) ? size : 22} {...SIZE_RANGE} unit="px" onChange={(next) => write({ design: { fontSize: Math.round(next) } }, "fontSize")} />}
+        </StylePopover>
+      );
     }
     case "bold": {
       const view = values((subject) => (Number(weightOf(designValue(editor, subject, "fontWeight"))) >= 600 ? "bold" : "regular"));
@@ -302,18 +220,19 @@ const controlFor = (editor: Editor, target: DesignTarget, control: StyleControl)
       const view = values(alignOf);
       const Icon = ALIGN_ICONS[(view.mixed ? "left" : view.value) as keyof typeof ALIGN_ICONS] ?? AlignLeft;
       return (
-        <RadioMenu
-          key={control}
-          label="Align"
-          control={control}
-          trigger={<Icon aria-hidden />}
-          value={view.mixed ? undefined : view.value}
-          options={(Object.keys(ALIGN_LABELS) as (keyof typeof ALIGN_LABELS)[]).map((align) => ({ value: align, label: ALIGN_LABELS[align] }))}
-          onPick={(picked) => {
-            const change = alignChange(picked);
-            if (change !== undefined) write(change);
-          }}
-        />
+        <StylePopover key={control} label="Align" control={control} icon trigger={<Icon aria-hidden />}>
+          {() => (
+            <DialSegmented
+              label="Align"
+              value={view.mixed ? "" : view.value}
+              options={ALIGN_OPTIONS}
+              onChange={(picked) => {
+                const change = alignChange(picked);
+                if (change !== undefined) write(change);
+              }}
+            />
+          )}
+        </StylePopover>
       );
     }
   }

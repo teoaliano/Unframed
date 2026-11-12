@@ -1,24 +1,24 @@
 import { designKeysOf, type DesignableType, type DesignKey } from "@unframed/domain";
-import { AlignVerticalJustifyCenter, AlignVerticalJustifyEnd, AlignVerticalJustifyStart, X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { X } from "lucide-react";
+import { Suspense, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useEditor, usePassThroughWheelEvents } from "tldraw";
 import { Button } from "~/components/ui/button";
-import { Toggle, ToggleGroup } from "~/components/ui/toggle-group";
 import { Tip } from "../chrome/ui.tsx";
-import { ALIGNS, Caption, ColourControl, FontControl, KeywordControl, MIXED, NumberControl, numberOf, Row, Section, WEIGHTS } from "../design/controls.tsx";
+import { numberOf, WEIGHTS } from "../design/controls.tsx";
 import { useDesignPanelOpen } from "./designPanelPref.ts";
-import { alignChange, alignOf, DASHES, designValue, FILLED, fillChange, fillOf, FONT_NAMES, fontChange, fontOf, panelTarget, props, shared, toHex, useDesignTarget, weightOf, writeDesign, type DesignChange, type Subject } from "./designTarget.ts";
+import { DialButtons, DialColour, DialScope, DialSection, DialSegmented, DialSelect, DialSlider } from "./dialLazy.tsx";
+import { ALIGN_OPTIONS, alignChange, alignOf, DASH_OPTIONS, designValue, FILLED, SIZE_RANGE, STROKE_WIDTH_RANGE, fillChange, fillOf, FONT_NAMES, fontChange, fontOf, panelTarget, props, shared, toHex, useDesignTarget, weightOf, writeDesign, type DesignChange, type Subject } from "./designTarget.ts";
 
 const DASHED: readonly DesignableType[] = ["geo", "draw", "line", "arrow"];
 const ALIGNED: readonly DesignableType[] = ["text", "geo", "note"];
 const VERTICAL: readonly DesignableType[] = ["geo", "note"];
-const PANEL_ALIGNS = ALIGNS.filter((align) => align.value !== "justify");
 const VERTICALS = [
-  { value: "start", label: "Top", Icon: AlignVerticalJustifyStart },
-  { value: "middle", label: "Middle", Icon: AlignVerticalJustifyCenter },
-  { value: "end", label: "Bottom", Icon: AlignVerticalJustifyEnd },
-] as const;
+  { value: "start", label: "Top" },
+  { value: "middle", label: "Middle" },
+  { value: "end", label: "Bottom" },
+];
+const GENERIC_FONTS = ["system-ui", "Georgia", "Helvetica"];
 const KIND_LABEL: Readonly<Record<DesignableType, string>> = { text: "Text", geo: "Shape", note: "Sticky note", arrow: "Arrow", draw: "Drawing", line: "Line", highlight: "Highlight" };
 
 const titleOf = (subjects: readonly Subject[], next: boolean): string => {
@@ -65,31 +65,27 @@ const OpenDesignPanel = () => {
   const all = (types: readonly DesignableType[]) => subjects.every((subject) => types.includes(subject.type));
   const has = (key: DesignKey) => subjects.every((subject) => designKeysOf(subject.type).includes(key));
 
-  const write = (change: DesignChange) => writeDesign(editor, target, change);
+  const write = (change: DesignChange, burst?: string) => writeDesign(editor, target, change, burst);
 
   const values = (pick: (subject: Subject) => string) => shared(subjects.map(pick));
   const numeric = (key: DesignKey) => values((subject) => numberOf(String(designValue(editor, subject, key) ?? "")));
   const colour = (key: DesignKey) => values((subject) => toHex(designValue(editor, subject, key)));
-
-  const numberRow = (label: string, key: DesignKey, options: { readonly placeholder?: string } = {}) => {
-    const view = numeric(key);
-    return (
-      <Row label={label}>
-        <NumberControl label={label} value={view.mixed ? "" : view.value} placeholder={view.mixed ? MIXED : options.placeholder} disabled={false} onCommit={(typed) => write({ design: { [key]: typed } })} />
-      </Row>
-    );
+  const numberAt = (key: DesignKey, fallback: number) => {
+    const value = Number(numeric(key).value);
+    return Number.isFinite(value) ? value : fallback;
   };
 
-  const colourRow = (label: string, key: DesignKey, empty?: string) => {
+  const slider = (label: string, key: DesignKey, range: { readonly min: number; readonly max: number; readonly step: number }, fallback: number, unit?: string) => (
+    <DialSlider label={label} value={numberAt(key, fallback)} {...range} {...(unit === undefined ? {} : { unit })} onChange={(next) => write({ design: { [key]: next } }, key)} />
+  );
+
+  const colourField = (label: string, key: DesignKey, onPick: (hex: string) => void = (hex) => write({ design: { [key]: hex } }, key)) => {
     const view = colour(key);
-    return (
-      <Row label={label}>
-        <ColourControl label={label} hex={view.value} mixed={view.mixed} disabled={false} empty={empty} onCommit={(hex) => write({ design: { [key]: hex } })} />
-      </Row>
-    );
+    return <DialColour label={label} value={(view.mixed || view.value === "" ? "#000000" : view.value).slice(0, 7)} onChange={(hex) => /^#[0-9a-f]{6}$/i.test(hex) && hex.toLowerCase() !== view.value && onPick(hex.toLowerCase())} />;
   };
 
   const font = values(fontOf);
+  const fonts = [...new Set([...(font.mixed || font.value === "" ? [] : [font.value]), ...FONT_NAMES, ...GENERIC_FONTS])];
   const weight = values((subject) => weightOf(designValue(editor, subject, "fontWeight")));
   const align = values(alignOf);
   const vertical = values((subject) => String(props(subject.shape).verticalAlign ?? "middle"));
@@ -97,8 +93,6 @@ const OpenDesignPanel = () => {
   const fill = fillOf(editor, subjects);
   const opacity = values((subject) => String(Math.round(subject.shape.opacity * 100)));
   const strokeName = all(["geo", "note"]) ? "Border" : "Stroke";
-
-  const commitFont = (typed: string): boolean => write(fontChange(typed));
 
   return createPortal(
     <div
@@ -117,120 +111,50 @@ const OpenDesignPanel = () => {
           </Button>
         </Tip>
       </div>
-
-      {has("fontSize") && (
-        <Section name="Text" note={null}>
-          <Row label="Font">
-            <FontControl value={font.mixed ? "" : font.value} placeholder={font.mixed ? MIXED : undefined} disabled={false} families={FONT_NAMES} generics={["system-ui", "Georgia", "Helvetica"]} onCommit={commitFont} />
-          </Row>
-          {numberRow("Size", "fontSize")}
-          {has("fontWeight") && (
-            <Row label="Weight">
-              <KeywordControl label="Weight" value={weight.value} mixed={weight.mixed} options={WEIGHTS} disabled={false} onPick={(picked) => write({ design: { fontWeight: picked } })} />
-            </Row>
-          )}
-          {numberRow("Line height", "lineHeight")}
-          {all(ALIGNED) && (
-            <Row label="Align">
-              <ToggleGroup
-                aria-label="Align"
-                value={align.mixed ? [] : [align.value]}
-                onValueChange={(picked) => {
-                  const [value] = picked as string[];
-                  const change = value === undefined ? undefined : alignChange(value);
-                  if (change !== undefined) write(change);
-                }}
-              >
-                {PANEL_ALIGNS.map(({ value, label, Icon }) => (
-                  <Toggle key={value} value={value} aria-label={label}>
-                    <Icon aria-hidden />
-                  </Toggle>
-                ))}
-              </ToggleGroup>
-            </Row>
-          )}
-          {all(VERTICAL) && (
-            <Row label="Vertical">
-              <ToggleGroup
-                aria-label="Vertical align"
-                value={vertical.mixed ? [] : [vertical.value]}
-                onValueChange={(picked) => {
-                  const [value] = picked as string[];
-                  if (value !== undefined) write({ props: () => ({ verticalAlign: value }) });
-                }}
-              >
-                {VERTICALS.map(({ value, label, Icon }) => (
-                  <Toggle key={value} value={value} aria-label={label}>
-                    <Icon aria-hidden />
-                  </Toggle>
-                ))}
-              </ToggleGroup>
-            </Row>
-          )}
-          {colourRow("Colour", "textColor")}
-        </Section>
-      )}
-
-      {has("fillColor") && (
-        <Section name="Fill" note={null}>
-          <Row label="Background">
-            <div className="flex min-w-0 items-center gap-1">
-              <ColourControl
-                label="Background"
-                hex={fill.value}
-                mixed={fill.mixed}
-                disabled={false}
-                empty="None"
-                onCommit={(hex) => write(fillChange(hex))}
-              />
-              {all(FILLED) && !fill.none && (
-                <Button variant="ghost" size="xs" onClick={() => write(fillChange(null))}>
-                  None
-                </Button>
+      <Suspense fallback={null}>
+        <DialScope>
+          {has("fontSize") && (
+            <DialSection title="Text">
+              <DialSelect label="Font" value={font.mixed ? "" : font.value} options={fonts} onChange={(picked) => picked !== font.value && write(fontChange(picked))} />
+              {slider("Size", "fontSize", SIZE_RANGE, 22, "px")}
+              {has("fontWeight") && <DialSelect label="Weight" value={weight.mixed ? "" : weight.value} options={WEIGHTS} onChange={(picked) => write({ design: { fontWeight: picked } })} />}
+              {slider("Line height", "lineHeight", { min: 0.5, max: 3, step: 0.05 }, 1.35)}
+              {all(ALIGNED) && (
+                <DialSegmented
+                  label="Align"
+                  value={align.mixed ? "" : align.value}
+                  options={ALIGN_OPTIONS}
+                  onChange={(picked) => {
+                    const change = alignChange(picked);
+                    if (change !== undefined) write(change);
+                  }}
+                />
               )}
-            </div>
-          </Row>
-        </Section>
-      )}
+              {all(VERTICAL) && <DialSegmented label="Vertical" value={vertical.mixed ? "" : vertical.value} options={VERTICALS} onChange={(picked) => write({ props: () => ({ verticalAlign: picked }) })} />}
+              {colourField("Colour", "textColor")}
+            </DialSection>
+          )}
 
-      <Section name="Shape" note={null}>
-        {has("strokeColor") && (
-          <Row label={strokeName}>
-            <div role="group" aria-label={strokeName} className="flex min-w-0 flex-wrap items-center gap-1.5">
-              <div className="w-20">
-                <Caption>Width</Caption>
-                {(() => {
-                  const view = numeric("strokeWidth");
-                  return <NumberControl label={`${strokeName} width`} value={view.mixed ? "" : view.value} placeholder={view.mixed ? MIXED : undefined} disabled={false} onCommit={(typed) => write({ design: { strokeWidth: typed } })} />;
-                })()}
-              </div>
-              {all(DASHED) && (
-                <div className="min-w-24 flex-1">
-                  <Caption>Style</Caption>
-                  <KeywordControl label={`${strokeName} style`} value={dash.value} mixed={dash.mixed} options={DASHES} disabled={false} onPick={(picked) => write({ props: () => ({ dash: picked }) })} />
-                </div>
-              )}
-              <div>
-                <Caption>Colour</Caption>
-                {(() => {
-                  const view = colour("strokeColor");
-                  return <ColourControl label={`${strokeName} colour`} hex={view.value} mixed={view.mixed} disabled={false} onCommit={(hex) => write({ design: { strokeColor: hex } })} />;
-                })()}
-              </div>
-            </div>
-          </Row>
-        )}
-        {has("cornerRadius") && numberRow("Corner radius", "cornerRadius")}
-        <Row label="Opacity">
-          <NumberControl
-            label="Opacity"
-            value={opacity.mixed ? "" : opacity.value}
-            placeholder={opacity.mixed ? MIXED : undefined}
-            disabled={false}
-            onCommit={(typed) => write({ opacity: Math.min(100, Math.max(0, typed)) / 100 })}
-          />
-        </Row>
-      </Section>
+          {has("fillColor") && (
+            <DialSection title="Fill">
+              {colourField("Background", "fillColor", (hex) => write(fillChange(hex), "fillColor"))}
+              {all(FILLED) && <DialButtons buttons={[{ label: fill.none && !fill.mixed ? "No fill" : "None", onClick: () => write(fillChange(null)) }]} />}
+            </DialSection>
+          )}
+
+          <DialSection title="Shape">
+            {has("strokeColor") && (
+              <>
+                {slider(`${strokeName} width`, "strokeWidth", STROKE_WIDTH_RANGE, 2, "px")}
+                {all(DASHED) && <DialSegmented label={`${strokeName} style`} value={dash.mixed ? "" : dash.value} options={DASH_OPTIONS} onChange={(picked) => write({ props: () => ({ dash: picked }) })} />}
+                {colourField(`${strokeName} colour`, "strokeColor")}
+              </>
+            )}
+            {has("cornerRadius") && slider("Corner radius", "cornerRadius", { min: 0, max: 100, step: 1 }, 0, "px")}
+            <DialSlider label="Opacity" value={Number(opacity.value) || 0} min={0} max={100} step={1} unit="%" onChange={(next) => write({ opacity: Math.min(100, Math.max(0, next)) / 100 }, "opacity")} />
+          </DialSection>
+        </DialScope>
+      </Suspense>
     </div>,
     editor.getContainer(),
   );

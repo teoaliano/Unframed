@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ANNOTATION_SWATCHES, designPanelPreference, designValueRefusal, strokeWidthPreset, styleControlsFor, type DesignableType } from "../src/index.ts";
+import { ANNOTATION_SWATCHES, designPanelPreference, designValueRefusal, styleControlsFor, type DesignableType } from "../src/index.ts";
 
 describe("styleControlsFor", () => {
   it.each<[DesignableType, string[]]>([
@@ -26,19 +26,6 @@ describe("styleControlsFor", () => {
 
   it("gives no controls for no shapes", () => {
     expect(styleControlsFor([])).toEqual([]);
-  });
-});
-
-describe("strokeWidthPreset", () => {
-  it.each([
-    [1, "thin"],
-    [2, "medium"],
-    [4, "thick"],
-    [8, "heavy"],
-    [3, undefined],
-    [0, undefined],
-  ])("maps a width of %d to %s", (width, preset) => {
-    expect(strokeWidthPreset(width)?.name).toBe(preset);
   });
 });
 

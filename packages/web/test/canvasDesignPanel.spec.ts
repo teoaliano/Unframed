@@ -63,17 +63,23 @@ const note = (id: string, at: { x: number; y: number }) => ({
 const panel = (page: Page) => page.getByTestId("design-panel");
 
 const typeNumber = async (page: Page, label: string, value: string) => {
-  const field = panel(page).getByRole("spinbutton", { name: label, exact: true });
-  await field.fill(value);
-  await field.press("Enter");
+  const slider = panel(page).getByRole("slider", { name: label, exact: true });
+  await slider.focus();
+  await slider.press("Enter");
+  const input = panel(page).getByRole("textbox", { name: `${label} value` });
+  await input.fill(value);
+  await input.press("Enter");
 };
 
 const pickColour = async (page: Page, label: string, hex: string) => {
-  await panel(page).getByRole("button", { name: label, exact: true }).click();
-  const field = page.getByRole("textbox", { name: "Hex" });
+  const field = panel(page).getByRole("textbox", { name: `${label} color value` });
   await field.fill(hex);
   await field.press("Enter");
-  await page.keyboard.press("Escape");
+};
+
+const pickSelect = async (page: Page, label: string, option: string) => {
+  await panel(page).getByRole("button", { name: new RegExp(`^${label} `) }).click();
+  await page.locator(".dialkit-select-option", { hasText: new RegExp(`^${option}$`) }).click();
 };
 
 const shapeNamed = (records: AnyRecord[], id: string) => records.find((record) => record.id === id) as (AnyRecord & { opacity?: number }) | undefined;
@@ -102,17 +108,14 @@ test("the Design panel replaces tldraw's style panel and sets a prompt's font, s
   await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:starter-subject")?.meta?.unframed?.design?.fontSize === 40);
   await expect(shapeOnScreen(page, "shape:starter-subject").locator(".tl-rich-text").first()).toHaveCSS("font-size", "40px");
 
-  const font = panel(page).getByRole("combobox", { name: "Font" });
-  await font.fill("Georgia");
-  await font.press("Enter");
+  await pickSelect(page, "Font", "Georgia");
   await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:starter-subject")?.meta?.unframed?.design?.fontFamily === "Georgia");
 
-  await panel(page).getByRole("combobox", { name: "Weight" }).click();
-  await page.getByRole("option", { name: "700" }).click();
+  await pickSelect(page, "Weight", "700");
   await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:starter-subject")?.meta?.unframed?.design?.fontWeight === "700");
   await expect(shapeOnScreen(page, "shape:starter-subject").locator(".tl-rich-text-wrapper").first()).toHaveCSS("font-weight", "700");
 
-  await panel(page).getByRole("button", { name: "Center", exact: true }).click();
+  await panel(page).getByRole("radio", { name: "Centre" }).click();
   await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:starter-subject")?.props?.textAlign === "middle");
 
   await pickColour(page, "Colour", "#ff0044");
@@ -130,7 +133,6 @@ test("a rectangle's label, fill, border and corners, and a sticky note's backgro
   await select(page, "shape:box");
   await openPanel(page);
   await expect(panel(page).getByText("Rectangle", { exact: true })).toBeVisible();
-  await expect(panel(page).getByRole("button", { name: "Background", exact: true })).toHaveText("None");
 
   await typeNumber(page, "Size", "32");
   await typeNumber(page, "Corner radius", "24");
@@ -149,7 +151,7 @@ test("a rectangle's label, fill, border and corners, and a sticky note's backgro
     return found?.props?.fill === "none" && found.meta?.unframed?.design?.fillColor === undefined;
   });
 
-  await panel(page).getByRole("button", { name: "Top", exact: true }).click();
+  await panel(page).getByRole("radio", { name: "Top" }).click();
   await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:box")?.props?.verticalAlign === "start");
 
   await select(page, "shape:sticky");

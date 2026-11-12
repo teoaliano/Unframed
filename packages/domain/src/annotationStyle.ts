@@ -16,21 +16,6 @@ const CONTROLS: Readonly<Record<DesignableType, readonly StyleControl[]>> = {
 export const styleControlsFor = (types: readonly DesignableType[]): readonly StyleControl[] =>
   types.length === 0 ? [] : STYLE_CONTROLS.filter((control) => types.every((type) => CONTROLS[type].includes(control)));
 
-export interface StrokeWidthPreset {
-  readonly name: "thin" | "medium" | "thick" | "heavy";
-  readonly label: string;
-  readonly width: number;
-}
-
-export const STROKE_WIDTH_PRESETS: readonly StrokeWidthPreset[] = [
-  { name: "thin", label: "Thin", width: 1 },
-  { name: "medium", label: "Medium", width: 2 },
-  { name: "thick", label: "Thick", width: 4 },
-  { name: "heavy", label: "Heavy", width: 8 },
-];
-
-export const strokeWidthPreset = (width: number): StrokeWidthPreset | undefined => STROKE_WIDTH_PRESETS.find((preset) => preset.width === width);
-
 export interface AnnotationSwatch {
   readonly name: string;
   readonly hex: string;
