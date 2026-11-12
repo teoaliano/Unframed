@@ -8,12 +8,12 @@ import { SelectButton } from "~/components/ui/select";
 
 export const SectionHeading = ({ children, end }: { readonly children: ReactNode; readonly end?: ReactNode }) => (
   <div className="flex min-h-7 items-center justify-between gap-2">
-    <h3 className="m-0 text-sm font-medium text-foreground">{children}</h3>
+    <h3 className="m-0 text-sm font-medium text-(--settings-dialog-foreground)">{children}</h3>
     {end}
   </div>
 );
 
-export const linkClass = "text-foreground underline underline-offset-2 hover:opacity-80";
+export const linkClass = "text-(--settings-dialog-link) underline underline-offset-2 hover:opacity-80";
 
 /** A line of copy whose link parts open in a new tab. */
 export const Copy = ({ parts }: { readonly parts: ReadonlyArray<CopyPart> }) => (
@@ -71,7 +71,7 @@ export const ModelSelect = ({
             }
           }}
         >
-          {value === "" ? <span className="text-placeholder">{placeholder}</span> : value}
+          {value === "" ? <span className="text-(--settings-dialog-placeholder)">{placeholder}</span> : value}
         </ComboboxTrigger>
         <ComboboxPopup aria-label={`${label} models`}>
           <ComboboxSearchInput aria-label={`Search ${label.toLowerCase()} models`} placeholder="Search models" />

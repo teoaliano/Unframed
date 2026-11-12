@@ -48,7 +48,7 @@ export default function KbdDemo() {
           </KbdGroup>
         </Row>
         <Row label="in text">
-          <span className="text-muted-foreground text-sm">
+          <span className="text-(--catalogue-demo-description) text-sm">
             Press{" "}
             <KbdGroup>
               <Kbd>⌘</Kbd>

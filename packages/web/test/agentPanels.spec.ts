@@ -151,12 +151,12 @@ test("the approval panel is t3code's pending approval: the warning-tinted banner
   await expect(approval.getByTestId("approval-target")).toHaveText("rm -rf build");
   await inBothSchemes(page, async () => {
     await page.mouse.move(10, 400);
-    await expectToken(approval.getByTestId("panel-title"), "color", "--warning");
-    expect(await styleOf(approval, "border-top-color")).toBe(await resolvedColor(page, "color-mix(in oklab, var(--warning) 28%, transparent)"));
+    await expectToken(approval.getByTestId("panel-title"), "color", "--banner-warning-title");
+    expect(await styleOf(approval, "border-top-color")).toBe(await resolvedColor(page, "color-mix(in oklab, var(--banner-warning-border) var(--banner-warning-border-opacity), transparent)"));
     expect(await styleOf(approval.getByTestId("approval-target"), "font-family")).toContain("monospace");
     const approve = approval.getByRole("button", { name: "Approve" });
     await expectSlot(approve, "button");
-    await expectToken(approve, "background-color", "--primary");
+    await expectToken(approve, "background-color", "--button-default-surface");
     await expectSlot(approval.getByRole("button", { name: "Decline" }), "button");
     await expectSlot(approval.getByRole("button", { name: "More approval options" }), "menu-trigger");
   });
@@ -181,7 +181,7 @@ test("the question panel is t3code's: kit Buttons in its header and for its opti
   await page.mouse.move(10, 400);
   // An option is a kit ghost Button in the checkbox or radio role; the chosen one shows the pressed fill.
   await expectSlot(hero, "button");
-  await expectToken(hero, "background-color", "--accent");
+  await expectToken(hero, "background-color", "--button-ghost-surface-pressed");
   await expectSlot(panel.getByRole("button", { name: "Submit answers" }), "message-action");
 });
 

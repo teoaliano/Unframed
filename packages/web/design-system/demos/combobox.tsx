@@ -72,7 +72,7 @@ const SelectLike = () => {
     <div className="w-80">
       <Combobox items={MODELS} value={value} onValueChange={setValue}>
         <ComboboxTrigger aria-label="Image model" render={<SelectButton />}>
-          {value ?? <span className="text-placeholder">Pick a model</span>}
+          {value ?? <span className="text-(--catalogue-demo-placeholder)">Pick a model</span>}
         </ComboboxTrigger>
         <ComboboxPopup aria-label="Image models">
           <ComboboxSearchInput aria-label="Search image models" placeholder="Search models" />

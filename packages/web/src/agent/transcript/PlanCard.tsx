@@ -35,11 +35,11 @@ export const PlanCard = ({ plan }: { readonly plan: string }) => {
     });
   };
   return (
-    <section className="rounded-3xl border border-border/80 bg-card/70 p-4" data-testid="plan-card">
+    <section className="rounded-3xl border border-(--plan-card-border)/(--plan-card-border-opacity) bg-(--plan-card-surface)/(--plan-card-surface-opacity) p-4" data-testid="plan-card">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Badge variant="secondary">Plan</Badge>
-          <h3 className="m-0 truncate text-sm font-medium text-foreground">{planTitle(plan) ?? "Proposed plan"}</h3>
+          <h3 className="m-0 truncate text-sm font-medium text-(--plan-card-title)">{planTitle(plan) ?? "Proposed plan"}</h3>
         </div>
         <Menu>
           <MenuTrigger render={<Button aria-label="Plan actions" size="icon-xs" variant="outline" />}>
@@ -56,7 +56,7 @@ export const PlanCard = ({ plan }: { readonly plan: string }) => {
       <div className="mt-4">
         <div className="relative data-collapsed:max-h-104 data-collapsed:overflow-hidden" data-collapsed={collapses && !expanded ? "" : undefined}>
           <ChatMarkdown text={collapses && !expanded ? collapsedPlanPreview(plan) : shownPlan(plan)} />
-          {collapses && !expanded && <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-linear-to-t from-card/95 via-card/80 to-transparent" />}
+          {collapses && !expanded && <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-linear-to-t from-(--plan-card-fade)/(--plan-card-fade-from-opacity) via-(--plan-card-fade)/(--plan-card-fade-via-opacity) to-transparent" />}
         </div>
         {collapses && (
           <div className="mt-4 flex justify-center">

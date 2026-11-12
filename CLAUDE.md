@@ -31,6 +31,16 @@ This codebase replaced an older Unframed (a React Flow canvas with output nodes)
 3. **The tldraw watermark stays visible.** The license is a hobby license approved on that condition. The key comes from a build-time environment variable and is never committed.
 4. **The hosting contract with the desktop shell** is a public interface: environment variable names, IPC messages, the stdout banner, the DOM hooks, the bundle layout. Changing any of them breaks installed apps.
 
+## Design tokens: Figma and code are 1:1
+
+The Figma file "🦾 Unframed" is the source of the design. Its variables live in `packages/web/src/theme/variables.tsv`, and `pnpm --filter @unframed/web tokens` writes `src/theme/tokens.css` from it. `pnpm typecheck` fails when code and Figma drift.
+
+1. **Four collections.** Primitives (the Tailwind palette), Tokens (scales named as Tailwind names them: `spacing/2` is `p-2`, `size/4_5` is `size-4.5`, `radius/md` is `rounded-md`), Theme (cross-component meaning: `surface/background`, `text/muted`) and Components (one group per component: `menu/item/surface-highlighted` is `--menu-item-surface-highlighted`).
+2. **A component paints only with its own tokens.** It never reads a Theme token or a palette colour directly; its tokens alias them. A new component or part gets new tokens in Figma first.
+3. **Change a token in Figma, then export.** Run `packages/web/scripts/figma-export.js` in the file through the Figma plugin API, save the result over `variables.tsv`, run `tokens`, and commit both files with the code that uses them. Never edit `tokens.css` by hand.
+4. **Sizes stay on the scales.** Spacing, sizes, radii, font sizes, line heights and opacities use Tailwind steps that exist in Tokens. A layout dimension that is not a step is a component token (`max-w-(--settings-dialog-width)`), not an arbitrary value.
+5. **Named exceptions**, and only these, are listed in `scripts/tokens.ts` with their reasons: the font family (Figma names SF Pro, code asks for the system stack), primitive colours (Tailwind's oklch against Figma's hex), runtime variables set by Base UI and tldraw, em lengths that track text, literal colours that are data (masks, colour-picker fallbacks, a user kit's defaults), and z-index and motion, which Figma does not hold.
+
 ## Writing
 
 Code has no comments, except licence and attribution notices, tool directives (such as `@ts-expect-error` or `eslint-disable`), and at most one short line guarding the desktop-shell hosting contract. The git log holds history. Docs: plain words, active voice, no em dashes.

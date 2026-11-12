@@ -101,7 +101,7 @@ const RecipeLine = ({
   return (
     <div className={recipeLineClass} data-testid="recipe-line">
       {current && recipeEquals(current, standing) ? (
-        <span className="text-muted-foreground">Recipe of @{name}</span>
+        <span className="text-(--generate-tray-note)">Recipe of @{name}</span>
       ) : (
         <InlineButton disabled={!current} onClick={save}>
           Update recipe
@@ -384,22 +384,22 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
             {sources}
           </Badge>
         ) : (
-          <span className="whitespace-nowrap text-xs text-muted-foreground" data-testid="source-count">
+          <span className="whitespace-nowrap text-xs text-(--generate-tray-note)" data-testid="source-count">
             {sources}
           </span>
         )}
       </div>
       {live && recipe?.recipe.sentPrompt !== undefined && (
-        <div className="flex flex-col gap-0.5 px-0.5 text-xs text-muted-foreground" data-testid="recipe-sent">
+        <div className="flex flex-col gap-0.5 px-0.5 text-xs text-(--generate-tray-note)" data-testid="recipe-sent">
           <p className="m-0">{IMPORTED_RECIPE_NOTE}</p>
-          <p className="m-0 max-h-24 overflow-y-auto whitespace-pre-wrap text-foreground">{recipe.recipe.sentPrompt}</p>
+          <p className="m-0 max-h-24 overflow-y-auto whitespace-pre-wrap text-(--generate-tray-foreground)">{recipe.recipe.sentPrompt}</p>
         </div>
       )}
       {(recordedPrompt !== "" || references !== undefined) && (
-        <div className="flex flex-col gap-0.5 px-0.5 text-xs text-muted-foreground" data-testid="recipe-sent">
+        <div className="flex flex-col gap-0.5 px-0.5 text-xs text-(--generate-tray-note)" data-testid="recipe-sent">
           <p className="m-0">Sent ahead of your instruction:</p>
           {recordedPrompt !== "" && (
-            <p className="m-0 line-clamp-3 whitespace-pre-wrap text-foreground" title={recordedPrompt} data-testid="recipe-prompt">
+            <p className="m-0 line-clamp-3 whitespace-pre-wrap text-(--generate-tray-foreground)" title={recordedPrompt} data-testid="recipe-prompt">
               {recordedPrompt}
             </p>
           )}
@@ -411,7 +411,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
         </div>
       )}
       {/* The box: the kit's field frame and focus ring around the editor, with send at its bottom right. */}
-      <div className="relative flex min-h-27 flex-col rounded-lg border border-input bg-background px-3 pt-2.5 pb-12 not-dark:bg-clip-padding shadow-xs/5 ring-ring/24 transition-shadow has-focus-visible:border-ring has-focus-visible:ring-[3px] dark:bg-input/32">
+      <div className="relative flex min-h-27 flex-col rounded-lg border border-(--input-border) bg-(--input-surface)/(--input-surface-opacity) px-3 pt-2.5 pb-12 not-dark:bg-clip-padding shadow-xs shadow-(color:--input-shadow) ring-(--input-ring) transition-shadow has-focus-visible:border-(--input-border-focus) has-focus-visible:ring-3">
         <InstructionEditor
           initial={instruction}
           placeholder={INSTRUCTION_PLACEHOLDER}
@@ -421,7 +421,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
         />
         <div className="absolute right-2.5 bottom-2.5 flex items-center gap-2.5">
           {estimate !== undefined && (
-            <span className="text-xs text-muted-foreground tabular-nums" data-testid="estimate">
+            <span className="text-xs text-(--generate-tray-note) tabular-nums" data-testid="estimate">
               {estimate}
             </span>
           )}
@@ -432,7 +432,7 @@ export const GenerateTray = ({ project, recipe, onSent, onMenuOpen, handle }: Ge
         </div>
       </div>
       {definition.hint !== undefined && (
-        <p className="m-0 px-0.5 text-xs text-muted-foreground" data-testid="medium-hint">
+        <p className="m-0 px-0.5 text-xs text-(--generate-tray-note)" data-testid="medium-hint">
           {definition.hint}
         </p>
       )}

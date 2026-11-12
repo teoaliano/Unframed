@@ -18,13 +18,13 @@ const looks = (page: Page) =>
   });
 
 /**
- * What spec 12 says each surface is: the body and grid on --background (the body in sRGB,
- * the format the shell reads), the top bar opaque on the same background.
+ * What spec 12 says each surface is: the body on --surface-background (in sRGB, the format
+ * the shell reads), the grid and the top bar opaque on their own surface tokens.
  */
 const expected = async (page: Page, theme: "light" | "dark") => ({
-  body: await tokenRgb(page, "--background"),
-  grid: await tokenColor(page, "--background"),
-  card: await resolvedColor(page, "var(--background)"),
+  body: await tokenRgb(page, "--surface-background"),
+  grid: await tokenColor(page, "--dot-grid-surface"),
+  card: await resolvedColor(page, "var(--top-bar-surface)"),
   group: expect.any(String),
   tldraw: theme,
   theme,

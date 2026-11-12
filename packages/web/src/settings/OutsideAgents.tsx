@@ -36,9 +36,9 @@ const CodeBlock = ({ step }: { readonly step: SetupStep }) => {
   };
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="text-sm text-foreground">{step.text}</p>
+      <p className="text-sm text-(--settings-dialog-foreground)">{step.text}</p>
       {step.code !== undefined && (
-        <div className="relative rounded-lg border bg-muted/40">
+        <div className="relative rounded-lg border border-(--settings-dialog-setup-code-border) bg-(--settings-dialog-setup-code-surface)/(--settings-dialog-setup-code-surface-opacity)">
           <pre className="overflow-x-auto p-3 pr-20 font-mono text-xs whitespace-pre-wrap break-all" data-testid="setup-code">
             {step.code}
           </pre>
@@ -80,19 +80,19 @@ const PaneSheet = ({ label, onClose, footer, children }: { readonly label: strin
       ref={ref}
       aria-label={label}
       onKeyDown={escapeWithin(ref, onClose)}
-      className="absolute inset-y-0 -start-3 end-0 z-10 flex flex-col bg-popover transition-[translate,opacity] duration-200 ease-out starting:translate-x-6 starting:opacity-0 motion-reduce:transition-none"
+      className="absolute inset-y-0 -start-3 end-0 z-10 flex flex-col bg-(--settings-dialog-sheet-surface) transition-[translate,opacity] duration-200 ease-out starting:translate-x-6 starting:opacity-0 motion-reduce:transition-none"
       data-testid="outside-sheet"
     >
-      <header className="flex items-center gap-2 border-b px-4 py-3">
+      <header className="flex items-center gap-2 border-b border-(--settings-dialog-sheet-divider) px-4 py-3">
         <Button variant="ghost" size="icon-sm" aria-label="Back to connections" onClick={onClose}>
           <ArrowLeft />
         </Button>
-        <h3 className="m-0 text-base font-semibold text-foreground">{label}</h3>
+        <h3 className="m-0 text-base font-semibold text-(--settings-dialog-foreground)">{label}</h3>
       </header>
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-6" data-sheet-body>
         {children}
       </div>
-      <div className="flex justify-end gap-2 border-t px-6 py-3">{footer}</div>
+      <div className="flex justify-end gap-2 border-t border-(--settings-dialog-sheet-divider) px-6 py-3">{footer}</div>
     </section>
   );
 };
@@ -111,8 +111,8 @@ const InlinePanel = ({ label, onEscape, footer, children }: { readonly label: st
   }, []);
   const onKeyDown = escapeWithin(ref, onEscape);
   return (
-    <section ref={ref} aria-label={label} onKeyDown={onKeyDown} className="flex flex-col gap-4 rounded-xl border bg-muted/30 p-4" data-testid="outside-panel">
-      <h4 className="m-0 text-sm font-medium text-foreground">{label}</h4>
+    <section ref={ref} aria-label={label} onKeyDown={onKeyDown} className="flex flex-col gap-4 rounded-xl border border-(--settings-dialog-panel-border) bg-(--settings-dialog-panel-surface)/(--settings-dialog-panel-surface-opacity) p-4" data-testid="outside-panel">
+      <h4 className="m-0 text-sm font-medium text-(--settings-dialog-foreground)">{label}</h4>
       {children}
       <div className="flex justify-end gap-2">{footer}</div>
     </section>
@@ -191,13 +191,13 @@ const ConnectPanel = ({ hasKey, onClose, onMade }: { readonly hasKey: boolean; r
         ))}
       </ToggleGroup>
       <label className="flex flex-col gap-1.5 text-sm">
-        <span className="text-muted-foreground">Name</span>
+        <span className="text-(--settings-dialog-label)">Name</span>
         <Input aria-label="Name" value={name} onChange={(event) => setTyped(event.target.value)} />
       </label>
       {hasKey ? (
         <SpendFields amount={amount} period={period} onAmount={setAmount} onPeriod={setPeriod} />
       ) : (
-        <p className="text-sm text-muted-foreground" data-testid="agents-generate-need-key">
+        <p className="text-sm text-(--settings-dialog-description)" data-testid="agents-generate-need-key">
           {NEEDS_KEY}
         </p>
       )}
@@ -254,7 +254,7 @@ const LimitPanel = ({ connection, onClose, onSaved }: { readonly connection: Age
       }
     >
       <SpendFields amount={amount} period={period} onAmount={setAmount} onPeriod={setPeriod} />
-      <p className="m-0 text-sm text-muted-foreground">Leave the amount empty for no limit. A change applies to the next paid run.</p>
+      <p className="m-0 text-sm text-(--settings-dialog-description)">Leave the amount empty for no limit. A change applies to the next paid run.</p>
       <Problem message={limit.ok ? undefined : limit.message} />
       <Problem message={error} />
     </InlinePanel>
@@ -292,7 +292,7 @@ const RevokePanel = ({ connection, onClose, onRevoked }: { readonly connection: 
         </>
       }
     >
-      <p className="m-0 text-sm text-muted-foreground">The agent loses access at once. Its chats and the changes it made stay.</p>
+      <p className="m-0 text-sm text-(--settings-dialog-description)">The agent loses access at once. Its chats and the changes it made stay.</p>
     </InlinePanel>
   );
 };
@@ -348,9 +348,9 @@ export const OutsideAgents = ({
   return (
     <section className="flex flex-col gap-3">
       <SectionHeading>Agents outside Unframed</SectionHeading>
-      <p className="text-sm text-muted-foreground">Let Claude Code, Codex or another MCP client on this computer read and change your canvas while Unframed is open.</p>
+      <p className="text-sm text-(--settings-dialog-description)">Let Claude Code, Codex or another MCP client on this computer read and change your canvas while Unframed is open.</p>
       {!hasKey && (
-        <p className="text-sm text-muted-foreground" data-testid="agents-generate-need-key">
+        <p className="text-sm text-(--settings-dialog-description)" data-testid="agents-generate-need-key">
           A connection works without OpenRouter. Generating images, video and text from an agent, and its spend limit, need it.{" "}
           <InlineButton onClick={onConnectOpenRouter}>{NEEDS_KEY.replace(/\.$/, "")}</InlineButton>.
         </p>
@@ -360,12 +360,12 @@ export const OutsideAgents = ({
           <div className="flex items-center gap-3 text-sm" data-testid="outside-connection">
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <div className="flex min-w-0 items-baseline gap-2">
-                <span className="truncate font-medium text-foreground">{connection.name}</span>
+                <span className="truncate font-medium text-(--settings-dialog-foreground)">{connection.name}</span>
                 {connectionClientLabel(connection.client) !== connection.name && (
-                  <span className="shrink-0 text-muted-foreground">{connectionClientLabel(connection.client)}</span>
+                  <span className="shrink-0 text-(--settings-dialog-description)">{connectionClientLabel(connection.client)}</span>
                 )}
               </div>
-              <div className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
+              <div className="flex flex-wrap gap-x-2 text-xs text-(--settings-dialog-description)">
                 <span>{lastUsedText(connection.lastUsedAt, now)}</span>
                 <span aria-hidden>·</span>
                 <span data-testid="outside-spend">{spendText(connection)}</span>

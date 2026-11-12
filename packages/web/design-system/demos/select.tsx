@@ -145,13 +145,13 @@ export default function SelectDemo() {
                 <SelectItem value="queue">
                   <span className="flex flex-col">
                     <span>Queue the message</span>
-                    <span className="text-muted-foreground text-xs">Sends after the agent finishes</span>
+                    <span className="text-(--catalogue-demo-description) text-xs">Sends after the agent finishes</span>
                   </span>
                 </SelectItem>
                 <SelectItem value="steer">
                   <span className="flex flex-col">
                     <span>Steer the current turn</span>
-                    <span className="text-muted-foreground text-xs">Interrupts and redirects</span>
+                    <span className="text-(--catalogue-demo-description) text-xs">Interrupts and redirects</span>
                   </span>
                 </SelectItem>
               </SelectPopup>

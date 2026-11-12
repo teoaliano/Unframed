@@ -54,8 +54,8 @@ withRenderer("Render puts a placeholder beside the motion at once, shows the pro
   const progress = shape.getByTestId("render-progress");
   await expect(progress).toHaveText(/^\d+% · (Capturing frames|Encoding|Finishing)$/, { timeout: 5000 });
   await expect(progress.locator("svg[aria-label='Loading']")).toHaveCount(1);
-  await expectToken(progress.getByTestId("render-fill"), "background-color", "--highlight");
-  await expectToken(progress, "color", "--color-muted-foreground");
+  await expectToken(progress.getByTestId("render-fill"), "background-color", "--render-progress-fill");
+  await expectToken(progress, "color", "--render-progress-foreground");
   const filled = await waitForRoom(engine, "default", (records) => {
     const video = records.find((record) => record.id === placeholder.id);
     return video?.props.assetId ? video : undefined;
@@ -76,7 +76,7 @@ withRenderer.describe("a render that fails", () => {
     await renderButton(page).click();
     await waitForRoom(engine, "default", (records) => placeholderOf(records));
     await expect(shape.getByRole("alert")).toHaveText("Stub render failed.", { timeout: 10_000 });
-    await expectToken(shape.getByRole("alert"), "color", "--color-destructive-foreground");
+    await expectToken(shape.getByRole("alert"), "color", "--artifact-problem-foreground");
     await expect.poll(async () => placeholderOf(await roomRecords(engine, "default"))).toBeUndefined();
     await expect(renderButton(page)).toBeEnabled();
     await renderButton(page).click();

@@ -103,9 +103,9 @@ function errorDescriptionClampClass(type: unknown, description: unknown): string
 /** Dismiss-only: circular control overlapping the card corner (iOS notification–style). */
 const toastCornerDismissClass = "absolute z-20 -top-1.5 -right-1.5";
 const toastCornerOrbClass = cn(
-  "inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border/60 bg-popover/92 text-muted-foreground shadow-sm outline-none backdrop-blur-sm",
-  "transition-[color,background-color,box-shadow] hover:bg-popover hover:text-foreground",
-  "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+  "inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full border border-(--toast-dismiss-border)/(--toast-dismiss-border-opacity) bg-(--toast-dismiss-surface)/(--toast-dismiss-surface-opacity) text-(--toast-dismiss-icon) shadow-sm outline-none backdrop-blur-sm",
+  "transition-[color,background-color,box-shadow] hover:bg-(--toast-dismiss-surface-hover) hover:text-(--toast-dismiss-icon-hover)",
+  "focus-visible:ring-2 focus-visible:ring-(--toast-ring-focus) focus-visible:ring-offset-1 focus-visible:ring-offset-(--toast-ring-offset)",
 );
 
 function handleToastDismissClick(
@@ -129,12 +129,12 @@ function CopyErrorButton({ text }: { text: string }) {
             size="icon-micro"
             variant="ghost-muted"
             aria-label={label}
-            className="[--control-icon-color:currentColor] rounded-md text-muted-foreground/80 hover:bg-transparent hover:text-muted-foreground"
+            className="[--control-icon-color:currentColor] rounded-md text-(--toast-copy-icon)/(--toast-copy-icon-opacity) hover:bg-transparent hover:text-(--toast-copy-icon-hover)"
             onClick={() => copyToClipboard(text)}
           />
         }
       >
-        {isCopied ? <CheckIcon className="size-3 text-success" /> : <CopyIcon className="size-3" />}
+        {isCopied ? <CheckIcon className="size-3 text-(--toast-copied-icon)" /> : <CopyIcon className="size-3" />}
       </TooltipTrigger>
       <TooltipPopup side="top">{label}</TooltipPopup>
     </Tooltip>
@@ -160,7 +160,7 @@ function ToastExpandableSection({
     <div className="min-w-0">
       <button
         aria-expanded={open}
-        className="inline-flex cursor-pointer items-center gap-1 rounded-md py-0.5 text-left text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+        className="inline-flex cursor-pointer items-center gap-1 rounded-md py-0.5 text-left text-xs font-medium text-(--toast-expand-foreground) transition-colors hover:text-(--toast-expand-foreground-hover)"
         onClick={() => setOpen((prev) => !prev)}
         type="button"
       >
@@ -189,7 +189,7 @@ function ToastDescriptionAndExpandable({
   const labels = toastData?.expandableLabels ?? {};
   const descriptionTrigger = toastData?.expandableDescriptionTrigger ?? false;
   const descriptionClassName = cn(
-    "min-w-0 select-text wrap-break-word text-muted-foreground",
+    "min-w-0 select-text wrap-break-word text-(--toast-description-foreground)",
     errorDescriptionClampClass(toastType, toastDescription),
   );
   const [open, setOpen] = useState(false);
@@ -227,9 +227,9 @@ function ToastDescriptionAndExpandable({
               aria-label={open ? collapseLabel : expandLabel}
               aria-expanded={open}
               className={cn(
-                "group flex min-w-0 w-full cursor-pointer select-none items-start gap-1.5 rounded-sm text-left outline-none ring-offset-background",
-                "transition-colors hover:bg-muted/40",
-                "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                "group flex min-w-0 w-full cursor-pointer select-none items-start gap-1.5 rounded-sm text-left outline-none ring-offset-(--toast-ring-offset)",
+                "transition-colors hover:bg-(--toast-description-trigger-surface-hover)/(--toast-description-trigger-surface-hover-opacity)",
+                "focus-visible:ring-2 focus-visible:ring-(--toast-ring-focus) focus-visible:ring-offset-1 focus-visible:ring-offset-(--toast-ring-offset)",
               )}
               onClick={toggle}
               onKeyDown={onKeyDown}
@@ -241,9 +241,9 @@ function ToastDescriptionAndExpandable({
           <div className="min-w-0 flex-1">
             <Toast.Description
               className={cn(
-                "min-w-0 select-none wrap-break-word text-muted-foreground",
+                "min-w-0 select-none wrap-break-word text-(--toast-description-foreground)",
                 errorDescriptionClampClass(toastType, toastDescription),
-                "underline-offset-2 decoration-muted-foreground/60 group-hover:underline",
+                "underline-offset-2 decoration-(--toast-description-underline)/(--toast-description-underline-opacity) group-hover:underline",
               )}
               data-slot="toast-description"
             />
@@ -251,13 +251,13 @@ function ToastDescriptionAndExpandable({
           {open ? (
             <ChevronUpIcon
               aria-hidden
-              className="mt-0.5 size-3.5 shrink-0 text-muted-foreground opacity-80"
+              className="mt-0.5 size-3.5 shrink-0 text-(--toast-description-trigger-icon) opacity-80"
               strokeWidth={2.25}
             />
           ) : (
             <ChevronDownIcon
               aria-hidden
-              className="mt-0.5 size-3.5 shrink-0 text-muted-foreground opacity-80"
+              className="mt-0.5 size-3.5 shrink-0 text-(--toast-description-trigger-icon) opacity-80"
               strokeWidth={2.25}
             />
           )}
@@ -363,7 +363,7 @@ function ToastBodyContent({
               className="[&>svg]:h-lh [&>svg]:w-4 [&_svg]:pointer-events-none [&_svg]:shrink-0"
               data-slot="toast-icon"
             >
-              <Icon className="in-data-[type=error]:text-destructive in-data-[type=info]:text-info in-data-[type=success]:text-success in-data-[type=warning]:text-warning in-data-[type=loading]:opacity-80" />
+              <Icon className="in-data-[type=error]:text-(--toast-error-icon) in-data-[type=info]:text-(--toast-info-icon) in-data-[type=success]:text-(--toast-success-icon) in-data-[type=warning]:text-(--toast-warning-icon) in-data-[type=loading]:opacity-(--toast-loading-icon-opacity)" />
             </div>
           ) : null}
           <Toast.Title className="min-w-0 wrap-break-word font-medium" data-slot="toast-title" />
@@ -541,11 +541,11 @@ function Toasts({ position }: { position: ToastPosition }) {
     <Toast.Portal data-slot="toast-portal">
       <Toast.Viewport
         className={cn(
-          "fixed z-100 mx-auto flex w-[calc(100%-var(--toast-inset)*2)] max-w-90 [--toast-header-offset:var(--workspace-topbar-height)] [--toast-inset:--spacing(4)] sm:[--toast-inset:--spacing(8)]",
+          "fixed z-100 mx-auto flex w-[calc(100%-var(--toast-inset)*2)] max-w-90 [--toast-inset:--spacing(4)] sm:[--toast-inset:--spacing(8)]",
           // Vertical positioning
           "data-[position*=top]:top-[calc(var(--toast-inset)+var(--toast-header-offset))]",
           // Unframed: spec 02's toasts clear tldraw's zoom controls, through a footer offset the theme sets.
-          "data-[position*=bottom]:bottom-[calc(var(--toast-inset)+var(--toast-footer-offset,0px))]",
+          "data-[position*=bottom]:bottom-[calc(var(--toast-inset)+var(--toast-footer-offset))]",
           // Horizontal positioning
           // Unframed: bottom-left toasts move right of the docked agent rail, through a start offset the theme sets.
           "data-[position*=left]:left-[calc(var(--toast-inset)+var(--toast-start-offset,0px))]",
@@ -571,7 +571,7 @@ function Toasts({ position }: { position: ToastPosition }) {
           return (
             <Toast.Root
               className={cn(
-                "dropdown-glass absolute z-[calc(9999-var(--toast-index))] w-full overflow-visible select-none rounded-lg text-popover-foreground shadow-xl shadow-black/25 [transition:transform_.5s_cubic-bezier(.22,1,.36,1),opacity_.5s,height_.15s]",
+                "dropdown-glass absolute z-[calc(9999-var(--toast-index))] w-full overflow-visible select-none rounded-lg border-(--toast-border) bg-(--toast-surface) text-(--toast-foreground) shadow-xl shadow-(color:--toast-shadow) [transition:transform_.5s_cubic-bezier(.22,1,.36,1),opacity_.5s,height_.15s]",
                 // Base positioning using data-position
                 "data-[position*=right]:right-0 data-[position*=right]:left-auto",
                 "data-[position*=left]:right-auto data-[position*=left]:left-0",
@@ -723,7 +723,7 @@ function AnchoredToasts() {
               >
                 <Toast.Root
                   className={cn(
-                    "dropdown-glass relative overflow-visible text-balance text-popover-foreground text-xs shadow-xl shadow-black/25 transition-[scale,opacity] data-ending-style:scale-98 data-starting-style:scale-98 data-ending-style:opacity-0 data-starting-style:opacity-0",
+                    "dropdown-glass relative overflow-visible text-balance border-(--toast-border) bg-(--toast-surface) text-(--toast-foreground) text-xs shadow-xl shadow-(color:--toast-shadow) transition-[scale,opacity] data-ending-style:scale-98 data-starting-style:scale-98 data-ending-style:opacity-0 data-starting-style:opacity-0",
                     tooltipStyle ? "rounded-md" : "rounded-lg",
                   )}
                   data-slot="toast-popup"

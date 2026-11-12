@@ -34,7 +34,7 @@ const CodeBlock = ({ children, ...rest }: ComponentPropsWithoutRef<"pre">) => {
   const copyLabel = copied ? "Copied" : "Copy code";
   return (
     <div
-      className="chat-markdown-codeblock my-[0.65rem] overflow-hidden rounded-lg border border-border/70 bg-secondary leading-snug dark:border-transparent dark:bg-input/32"
+      className="chat-markdown-codeblock my-2.5 overflow-hidden rounded-lg border border-(--chat-markdown-code-block-border)/(--chat-markdown-code-block-border-opacity) bg-(--chat-markdown-code-block-surface)/(--chat-markdown-code-block-surface-opacity) leading-snug"
       data-language={language}
       data-wrap={wrap ? "true" : "false"}
       data-testid="code-block"
@@ -149,7 +149,7 @@ const urlTransform = (url: string): string => defaultUrlTransform(url);
  * reply shows as the text it is. That is the one deliberate difference from t3code.
  */
 export const ChatMarkdown = memo(({ text }: { readonly text: string }) => (
-  <div className="chat-markdown w-full min-w-0 text-sm leading-relaxed text-foreground/[calc(80%+var(--appearance-contrast-boost)/5)] [overflow-wrap:anywhere] [word-break:break-word]">
+  <div className="chat-markdown w-full min-w-0 text-sm leading-6 text-(--chat-markdown-foreground) [overflow-wrap:anywhere] [word-break:break-word]">
     <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks, htmlAsText]} components={COMPONENTS} urlTransform={urlTransform}>
       {text}
     </ReactMarkdown>

@@ -16,14 +16,14 @@ import { record } from "../record.ts";
 
 export const EMPTY_CHAT = "Ask about what is on the canvas, or say what should change or be made. Whatever is selected comes with the message as context.";
 
-const SCROLLER_CLASS = "flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-3.5 pt-3.5 pb-2.5 text-sm leading-relaxed";
+const SCROLLER_CLASS = "flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-3.5 pt-3.5 pb-2.5 text-sm leading-6";
 
-const REASONING_BODY_CLASS = `${BODY_CLASS} max-h-96 overflow-auto text-sm whitespace-pre-wrap text-muted-foreground select-text`;
+const REASONING_BODY_CLASS = `${BODY_CLASS} max-h-96 overflow-auto text-sm whitespace-pre-wrap text-(--work-log-reasoning-body) select-text`;
 
 const COLLAPSE_CHARACTERS = 600;
 const COLLAPSE_LINES = 8;
 
-const AUTHOR_CLASS = "mb-1 text-xs font-medium text-muted-foreground";
+const AUTHOR_CLASS = "mb-1 text-xs font-medium";
 
 const UserMessage = ({ message, running, onEdit }: { readonly message: ChatMessage; readonly running: boolean; readonly onEdit: (restoreCanvas: boolean) => void }) => {
   const [confirming, setConfirming] = useState(false);
@@ -32,8 +32,8 @@ const UserMessage = ({ message, running, onEdit }: { readonly message: ChatMessa
   const selected = (message.context?.selection.length ?? 0) + (message.context?.elements?.length ?? 0);
   return (
     <article className="group flex flex-col items-end gap-1" data-role="user" data-message-id={message.id}>
-      <div className="relative max-w-[80%] min-w-0 rounded-2xl bg-message p-3 text-message-foreground" data-testid="message-bubble">
-        <header className={AUTHOR_CLASS}>
+      <div className="relative max-w-[80%] min-w-0 rounded-2xl bg-(--user-message-surface) p-3 text-(--user-message-foreground)" data-testid="message-bubble">
+        <header className={`${AUTHOR_CLASS} text-(--user-message-author)`}>
           You{selected > 0 && <span>{` · ${selected} selected`}</span>}
         </header>
         {(message.attachments?.length ?? 0) > 0 && (
@@ -45,7 +45,7 @@ const UserMessage = ({ message, running, onEdit }: { readonly message: ChatMessa
             ))}
           </div>
         )}
-        <div className="text-sm leading-relaxed whitespace-pre-wrap break-words data-collapsed:line-clamp-8" data-testid="message-text" data-collapsed={long && !open ? "" : undefined}>
+        <div className="text-sm leading-6 whitespace-pre-wrap break-words data-collapsed:line-clamp-8" data-testid="message-text" data-collapsed={long && !open ? "" : undefined}>
           {message.text}
         </div>
         {long && (
@@ -89,7 +89,7 @@ const OutsideNote = ({ activities, latestTurn }: { readonly activities: Chat["ac
   if (!last) return null;
   if (last.kind === "outside.session-ended" && latestTurn !== null && latestTurn.requestedAt > last.createdAt) return null;
   const text = last.kind === "outside.disconnected" ? "Disconnected. This connection was revoked in Settings." : "This session ended.";
-  return <p className="m-0 text-xs text-muted-foreground" data-testid="outside-note">{text}</p>;
+  return <p className="m-0 text-xs text-(--transcript-notice-foreground)" data-testid="outside-note">{text}</p>;
 };
 
 export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }: TranscriptProps) => {
@@ -157,8 +157,8 @@ export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }:
   const streaming = chat.messages.some((message) => message.streaming && message.role === "assistant" && message.turnId === latest?.turnId);
   const assistant = (message: ChatMessage) => (
     <article key={message.id} className="relative min-w-0 px-1 py-0.5" data-role="assistant" data-message-id={message.id} data-streaming={message.streaming ? "" : undefined}>
-      <header className={AUTHOR_CLASS}>{author}</header>
-      {message.text === "" && !message.streaming ? <p className="m-0 text-sm text-muted-foreground">(empty response)</p> : <ChatMarkdown text={message.text} />}
+      <header className={`${AUTHOR_CLASS} text-(--assistant-message-author)`}>{author}</header>
+      {message.text === "" && !message.streaming ? <p className="m-0 text-sm text-(--assistant-message-empty)">(empty response)</p> : <ChatMarkdown text={message.text} />}
     </article>
   );
   const labelOf = (id: string) => (editor && describeShape(editor, id)?.label) ?? agentShapeId(id);
@@ -219,7 +219,7 @@ export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }:
           <ActivityLine label={chat.outside === undefined ? activityLabel(chat.activities, latest.turnId) : "Working from outside Unframed…"} since={latest.startedAt ?? latest.requestedAt} />
         )}
         {chat.outside !== undefined && <OutsideNote activities={chat.activities} latestTurn={chat.latestTurn} />}
-        {chat.messages.length === 0 && <p className="m-0 mt-auto text-xs text-muted-foreground">{EMPTY_CHAT}</p>}
+        {chat.messages.length === 0 && <p className="m-0 mt-auto text-xs text-(--agent-rail-empty-chat)">{EMPTY_CHAT}</p>}
       </div>
       {pill && (
         <Button
@@ -249,7 +249,7 @@ const Reasoning = ({ message }: { readonly message: ChatMessage }) => {
         <IconSlot>
           <Brain aria-hidden className="size-4 shrink-0 opacity-70" />
         </IconSlot>
-        <span className="min-w-0 flex-1 truncate text-secondary-label">{message.streaming ? "Thinking" : "Thought"}</span>
+        <span className="min-w-0 flex-1 truncate text-(--work-log-label)">{message.streaming ? "Thinking" : "Thought"}</span>
         <Chevron open={open} />
       </Disclosure>
       {open && <p className={REASONING_BODY_CLASS}>{message.text}</p>}
@@ -264,11 +264,11 @@ const WorkedFor = ({ turn, children }: { readonly turn: ChatTurn; readonly child
   const took = formatWorkDuration(Math.max(0, ended - started));
   return (
     <div className="flex flex-col" data-testid="worked-for">
-      <div className="flex items-center gap-1 border-b border-border/60 pt-1 pb-2">
+      <div className="flex items-center gap-1 border-b border-(--worked-for-border)/(--worked-for-border-opacity) pt-1 pb-2">
         <Disclosure
           open={open}
           onToggle={() => setOpen(!open)}
-          className="flex cursor-pointer select-none items-center gap-1 rounded-md px-1 text-sm leading-relaxed text-muted-foreground tabular-nums transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+          className="flex cursor-pointer select-none items-center gap-1 rounded-md px-1 text-sm leading-6 text-(--worked-for-foreground) tabular-nums transition-colors hover:text-(--worked-for-foreground-hover) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-(--worked-for-ring-focus)/(--worked-for-ring-focus-opacity)"
         >
           <span>{turn.state === "interrupted" ? `You stopped after ${took}` : `Worked for ${took}`}</span>
           {open ? <ChevronDown aria-hidden className="size-3.5" /> : <ChevronRight aria-hidden className="size-3.5" />}
@@ -279,7 +279,7 @@ const WorkedFor = ({ turn, children }: { readonly turn: ChatTurn; readonly child
   );
 };
 
-const NOTICE_CLASS = "m-0 px-1 text-sm leading-relaxed text-muted-foreground";
+const NOTICE_CLASS = "m-0 px-1 text-sm leading-6 text-(--transcript-notice-foreground)";
 
 const retrySentence = (payload: unknown): string => {
   const p = record(payload);
@@ -308,7 +308,7 @@ const LimitLine = ({ chat }: { readonly chat: Chat }) => {
   const time = resetTime(p.resetsAt);
   if (p.status === "rejected") {
     return (
-      <p className="m-0 px-1 text-sm leading-relaxed text-destructive-foreground" data-kind="limit" data-testid="limit-line">
+      <p className="m-0 px-1 text-sm leading-6 text-(--transcript-notice-limit-foreground)" data-kind="limit" data-testid="limit-line">
         {time === undefined ? "You have hit a usage limit." : `You have hit a usage limit. It resets ${time}.`}
       </p>
     );
@@ -317,7 +317,7 @@ const LimitLine = ({ chat }: { readonly chat: Chat }) => {
 };
 
 const ActivityLine = ({ label, since }: { readonly label: string; readonly since: string }) => (
-  <p className="m-0 px-1 text-sm leading-relaxed text-muted-foreground tabular-nums" data-testid="activity-line">
+  <p className="m-0 px-1 text-sm leading-6 text-(--transcript-notice-foreground) tabular-nums" data-testid="activity-line">
     {label}
     <Elapsed since={since} />
   </p>

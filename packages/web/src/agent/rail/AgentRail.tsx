@@ -56,10 +56,10 @@ const keyIsTaken = (target: EventTarget | null): boolean => {
 };
 
 const RAIL_CLASS =
-  "pointer-events-auto absolute top-9 left-0 bottom-0 z-[600] box-border flex w-(--agent-rail-width) flex-col border-r bg-background font-sans text-foreground [transform:none] opacity-100 [transition:transform_260ms_var(--ease-drawer),opacity_200ms_ease-out] starting:data-[state=open]:[transform:translateX(-100%)] starting:data-[state=open]:opacity-0 data-[state=closed]:pointer-events-none data-[state=closed]:[transform:translateX(-100%)] data-[state=closed]:opacity-0 data-[state=closed]:[transition:transform_200ms_var(--ease-drawer),opacity_160ms_ease-out] motion-reduce:[transition:opacity_160ms_ease-out] motion-reduce:data-[state=closed]:[transform:none] motion-reduce:data-[state=closed]:[transition:opacity_160ms_ease-out]";
+  "pointer-events-auto absolute top-9 left-0 bottom-0 z-[600] box-border flex w-(--agent-rail-width) flex-col border-r border-(--agent-rail-docked-border) bg-(--agent-rail-docked-surface) font-sans text-(--agent-rail-foreground) [transform:none] opacity-100 [transition:transform_260ms_var(--ease-drawer),opacity_200ms_ease-out] starting:data-[state=open]:[transform:translateX(-100%)] starting:data-[state=open]:opacity-0 data-[state=closed]:pointer-events-none data-[state=closed]:[transform:translateX(-100%)] data-[state=closed]:opacity-0 data-[state=closed]:[transition:transform_200ms_var(--ease-drawer),opacity_160ms_ease-out] motion-reduce:[transition:opacity_160ms_ease-out] motion-reduce:data-[state=closed]:[transform:none] motion-reduce:data-[state=closed]:[transition:opacity_160ms_ease-out]";
 
 /** The editor's left column, or the Sheet: the same rail in place, with no surface or motion of its own. */
-const EMBEDDED_CLASS = "relative box-border flex size-full min-h-0 flex-col font-sans text-foreground";
+const EMBEDDED_CLASS = "relative box-border flex size-full min-h-0 flex-col font-sans text-(--agent-rail-foreground)";
 
 /**
  * The chat rail (spec 08): the project's chats as folder tabs filtered by the selected
@@ -213,7 +213,7 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
       }}
     >
       <header className="flex h-12 shrink-0 items-center gap-1 pr-2 pl-3.5">
-        <Sparkles aria-hidden className="size-4 shrink-0 text-foreground" />
+        <Sparkles aria-hidden className="size-4 shrink-0 text-(--agent-rail-title-icon)" />
         <h2 className="m-0 ml-1 flex-1 text-sm font-medium">Agent</h2>
         <Tip label="Search chats">
           <Button variant="ghost" size="icon-sm" aria-label="Search chats" onClick={() => client.setUi({ searchOpen: true })}>
@@ -269,7 +269,7 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
           <Transcript client={client} chatId={active} embedded={embedded === true} {...(onLocate ? { onLocate } : {})} {...(onOpenEditor ? { onOpenEditor } : {})} />
         ) : (
           <div className="flex min-h-0 flex-1 flex-col p-3.5" data-testid="transcript">
-            <p className="m-0 mt-auto text-xs text-muted-foreground">{EMPTY_CHAT}</p>
+            <p className="m-0 mt-auto text-xs text-(--agent-rail-empty-chat)">{EMPTY_CHAT}</p>
           </div>
         )}
       </div>
@@ -327,8 +327,8 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
         ) : (
           <div className="flex flex-col gap-1.5">
             <NoticeStack items={notices} />
-            <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-sm" data-testid="outside-line">
-              <span className="min-w-0 flex-1 text-muted-foreground">{`${activeChat.title} works from outside Unframed. Talk to it where it runs.`}</span>
+            <div className="flex items-center gap-2 rounded-lg border border-(--agent-rail-outside-line-border) bg-(--agent-rail-outside-line-surface) px-3 py-2 text-sm" data-testid="outside-line">
+              <span className="min-w-0 flex-1 text-(--agent-rail-outside-line-foreground)">{`${activeChat.title} works from outside Unframed. Talk to it where it runs.`}</span>
               <Button variant="outline" size="sm" onClick={newChat}>
                 New chat
               </Button>

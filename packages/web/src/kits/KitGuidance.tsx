@@ -24,7 +24,7 @@ export const KitGuidance = ({ guidance, apply }: { readonly guidance: string | u
   };
 
   return (
-    <section aria-labelledby="kit-guidance-title" data-testid="kit-guidance" className="grid gap-2 rounded-lg border p-3">
+    <section aria-labelledby="kit-guidance-title" data-testid="kit-guidance" className="grid gap-2 rounded-lg border border-(--kit-guidance-border) p-3">
       <div className="flex items-center justify-between gap-2">
         <h3 id="kit-guidance-title" className="m-0 text-sm font-medium">
           Guidance
@@ -50,7 +50,7 @@ export const KitGuidance = ({ guidance, apply }: { readonly guidance: string | u
             }}
           />
           {problem !== undefined && (
-            <p role="alert" className="m-0 text-sm text-destructive-foreground">
+            <p role="alert" className="m-0 text-sm text-(--kit-guidance-error-foreground)">
               {problem}
             </p>
           )}
@@ -64,7 +64,7 @@ export const KitGuidance = ({ guidance, apply }: { readonly guidance: string | u
           </div>
         </div>
       ) : guidance === undefined ? (
-        <p className="m-0 text-sm text-muted-foreground">{NO_GUIDANCE_MESSAGE}</p>
+        <p className="m-0 text-sm text-(--kit-guidance-description)">{NO_GUIDANCE_MESSAGE}</p>
       ) : (
         <div className="max-h-56 overflow-y-auto pr-1" data-scrolls="true" data-testid="kit-guidance-text">
           <ChatMarkdown text={guidance} />

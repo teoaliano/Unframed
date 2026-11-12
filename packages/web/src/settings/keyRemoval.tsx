@@ -61,7 +61,7 @@ export const RemoveKeyButton = ({ removal }: { readonly removal: KeyRemoval }) =
 
 export const KeyWarning = ({ removal, testId }: { readonly removal: KeyRemoval; readonly testId: string }) =>
   removal.warning === undefined ? null : (
-    <p className="m-0 text-xs text-destructive-foreground" data-testid={testId}>
+    <p className="m-0 text-xs text-(--settings-dialog-error-foreground)" data-testid={testId}>
       {removal.warning}
     </p>
   );

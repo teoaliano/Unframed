@@ -89,7 +89,7 @@ test("a failed render keeps its recipe: Regenerate, sent from the composer, star
   await clickShape(page, failed.id);
   // A failed render has no clip to send, so its bar has no Generate, and Regenerate is the primary action.
   await expect(toolbar(page).getByRole("button")).toHaveText(["Regenerate", "Agent"]);
-  await expectToken(toolbar(page).getByRole("button", { name: "Regenerate" }), "background-color", "--primary");
+  await expectToken(toolbar(page).getByRole("button", { name: "Regenerate" }), "background-color", "--button-default-surface");
   await toolbar(page).getByRole("button", { name: "Regenerate" }).click();
   await expect(composer(page).getByTestId("source-count")).toHaveText(/^recipe · /);
   await sendRun(page);

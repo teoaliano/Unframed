@@ -5,11 +5,11 @@ import { Collapsible, CollapsibleTrigger } from "~/components/ui/collapsible";
 
 /** t3code's timeline row: a quiet row that highlights on hover, its icon in a 24 px slot. */
 const ROW_CLASS =
-  "group/timeline-row relative flex min-h-6 w-full min-w-0 select-none items-center gap-1.5 rounded-md px-0.5 py-0.5 text-left text-sm leading-relaxed transition-colors duration-150";
-const TOGGLE_CLASS = "cursor-pointer hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70";
+  "group/timeline-row relative flex min-h-6 w-full min-w-0 select-none items-center gap-1.5 rounded-md px-0.5 py-0.5 text-left text-sm leading-6 transition-colors duration-150";
+const TOGGLE_CLASS = "cursor-pointer hover:bg-(--work-log-row-surface-hover)/(--work-log-row-surface-hover-opacity) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-(--work-log-ring-focus)/(--work-log-ring-focus-opacity)";
 /** A row that toggles: the timeline row with its hover and focus ring, in one static string for the lint. */
 const TOGGLE_ROW_CLASS =
-  "group/timeline-row relative flex min-h-6 w-full min-w-0 select-none items-center gap-1.5 rounded-md px-0.5 py-0.5 text-left text-sm leading-relaxed transition-colors duration-150 cursor-pointer hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70";
+  "group/timeline-row relative flex min-h-6 w-full min-w-0 select-none items-center gap-1.5 rounded-md px-0.5 py-0.5 text-left text-sm leading-6 transition-colors duration-150 cursor-pointer hover:bg-(--work-log-row-surface-hover)/(--work-log-row-surface-hover-opacity) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-(--work-log-ring-focus)/(--work-log-ring-focus-opacity)";
 
 /**
  * A row that opens and closes what is under it: the kit's CollapsibleTrigger, whose class
@@ -39,17 +39,17 @@ export const Disclosure = ({
 /** The chevron at the end of a timeline row, turning a quarter when it opens. */
 export const Chevron = ({ open, hidden = false }: { readonly open: boolean; readonly hidden?: boolean }) => (
   <span className={hidden ? "invisible flex size-4 shrink-0 items-center justify-center" : "flex size-4 shrink-0 items-center justify-center"} aria-hidden>
-    <ChevronRight className={open ? "size-3 shrink-0 rotate-90 text-icon-muted opacity-70 transition-transform duration-200 motion-reduce:transition-none" : "size-3 shrink-0 text-icon-muted opacity-70 transition-transform duration-200 motion-reduce:transition-none"} />
+    <ChevronRight className={open ? "size-3 shrink-0 rotate-90 text-(--work-log-chevron) opacity-70 transition-transform duration-200 motion-reduce:transition-none" : "size-3 shrink-0 text-(--work-log-chevron) opacity-70 transition-transform duration-200 motion-reduce:transition-none"} />
   </span>
 );
 
 /** A row's icon slot. */
 export const IconSlot = ({ children, tone = "muted" }: { readonly children: ReactNode; readonly tone?: "muted" | "error" }) => (
-  <span className={tone === "error" ? "flex size-6 shrink-0 items-center justify-center text-destructive" : "flex size-6 shrink-0 items-center justify-center text-icon-muted"}>{children}</span>
+  <span className={tone === "error" ? "flex size-6 shrink-0 items-center justify-center text-(--work-log-failed-icon)" : "flex size-6 shrink-0 items-center justify-center text-(--work-log-icon)"}>{children}</span>
 );
 
 /** Where an opened row's detail sits: under the label, on the muted fill. */
-const BODY_CLASS = "ms-7 mt-1 mb-1 cursor-default rounded-md bg-muted/40 px-3 py-2";
+const BODY_CLASS = "ms-7 mt-1 mb-1 cursor-default rounded-md bg-(--work-log-body-surface)/(--work-log-body-surface-opacity) px-3 py-2";
 
 const StateIcon = ({ state, tone }: { readonly state: WorkRow["state"]; readonly tone: WorkRow["tone"] }) => {
   if (tone === "error" || state === "failed") return <CircleAlert aria-label="Failed" className="size-4 shrink-0" />;
@@ -69,7 +69,7 @@ export const WorkRowView = ({ row }: { readonly row: WorkRow }) => {
       <IconSlot tone={failed ? "error" : "muted"}>
         <StateIcon state={row.state} tone={row.tone} />
       </IconSlot>
-      <span className={failed ? "min-w-0 flex-1 truncate font-medium text-destructive-foreground" : "min-w-0 flex-1 truncate text-secondary-label"} data-testid="work-row-label">
+      <span className={failed ? "min-w-0 flex-1 truncate font-medium text-(--work-log-failed-label)" : "min-w-0 flex-1 truncate text-(--work-log-label)"} data-testid="work-row-label">
         {row.label}
       </span>
       <Chevron open={open} hidden={!expandable} />
@@ -87,19 +87,19 @@ export const WorkRowView = ({ row }: { readonly row: WorkRow }) => {
       {open && (
         <div className={BODY_CLASS} data-testid="work-row-body">
           {row.command !== undefined && (
-            <pre className="m-0 max-h-64 overflow-auto font-mono text-2xs leading-relaxed whitespace-pre-wrap break-words text-secondary-label select-text" data-testid="work-row-command">
+            <pre className="m-0 max-h-64 overflow-auto font-mono text-2xs leading-4.5 whitespace-pre-wrap break-words text-(--work-log-body-command) select-text" data-testid="work-row-command">
               {row.command}
             </pre>
           )}
-          {row.detail !== undefined && <p className="m-0 text-xs whitespace-pre-wrap text-muted-foreground">{row.detail}</p>}
+          {row.detail !== undefined && <p className="m-0 text-xs whitespace-pre-wrap text-(--work-log-body-detail)">{row.detail}</p>}
           {(row.changedFiles?.length ?? 0) > 1 && (
-            <ul className="m-0 list-none p-0 font-mono text-2xs leading-relaxed text-secondary-label">
+            <ul className="m-0 list-none p-0 font-mono text-2xs leading-4.5 text-(--work-log-body-command)">
               {row.changedFiles!.map((file) => (
                 <li key={file}>{file}</li>
               ))}
             </ul>
           )}
-          {row.image !== undefined && <p className="m-0 text-xs whitespace-pre-wrap text-muted-foreground">{row.image}</p>}
+          {row.image !== undefined && <p className="m-0 text-xs whitespace-pre-wrap text-(--work-log-body-detail)">{row.image}</p>}
         </div>
       )}
     </div>
@@ -115,7 +115,7 @@ const WorkGroupView = ({ group }: { readonly group: WorkGroup }) => {
         <IconSlot>
           <Layers className="size-4 shrink-0" aria-hidden />
         </IconSlot>
-        <span className="min-w-0 flex-1 truncate text-secondary-label">{group.summary}</span>
+        <span className="min-w-0 flex-1 truncate text-(--work-log-label)">{group.summary}</span>
         <Chevron open={open} />
       </Disclosure>
       {open && (
@@ -138,18 +138,18 @@ const SubagentsView = ({ entry }: { readonly entry: SubagentRow }) => {
         <IconSlot>
           <Users className="size-4 shrink-0" aria-hidden />
         </IconSlot>
-        <span className="min-w-0 flex-1 truncate text-secondary-label">{entry.label}</span>
-        <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{entry.status}</span>
+        <span className="min-w-0 flex-1 truncate text-(--work-log-label)">{entry.label}</span>
+        <span className="shrink-0 text-xs text-(--work-log-status) tabular-nums">{entry.status}</span>
         <Chevron open={open} />
       </Disclosure>
       {open && (
-        <ul className={`${BODY_CLASS} m-0 flex list-none flex-col gap-1 text-xs text-muted-foreground`}>
+        <ul className={`${BODY_CLASS} m-0 flex list-none flex-col gap-1 text-xs text-(--work-log-status)`}>
           {entry.tasks.map((task) => (
             <li key={task.taskId} className="flex min-h-5 items-center gap-1.5" data-state={task.state}>
-              <span className="flex size-4 shrink-0 items-center justify-center text-icon-muted">
+              <span className="flex size-4 shrink-0 items-center justify-center text-(--work-log-icon)">
                 <StateIcon state={task.state === "working" ? "inProgress" : task.state} tone="tool" />
               </span>
-              <span className="min-w-0 flex-1 truncate text-secondary-label">{task.title}</span>
+              <span className="min-w-0 flex-1 truncate text-(--work-log-label)">{task.title}</span>
               <span className="shrink-0 tabular-nums">
                 {task.state === "working" ? "working" : task.state}
                 {task.durationMs !== undefined ? ` · ${formatWorkDuration(task.durationMs)}` : ""}

@@ -51,7 +51,7 @@ const EmptyArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readonl
     <>
       <HTMLContainer id={shape.id} className={artifactCardClass} data-testid="artifact-card" data-artifact-kind={kind} style={{ width: props.w, height: props.h }}>
         <ShapeLabel shapeId={shape.id} kind={kind} name={readRef(shape)} width={props.w} text={waitingLabel(shape, word)} />
-        <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+        <div className="flex h-full flex-col items-center justify-center gap-3 text-(--artifact-card-foreground)">
           <Icon className="size-7" strokeWidth={1.5} aria-label={word} />
         </div>
       </HTMLContainer>
@@ -70,8 +70,8 @@ const Still = ({ shape, title }: { readonly shape: ArtifactShape; readonly title
   const src = stillOf(project, shape.id, current);
   if (src !== undefined) return <img className="pointer-events-none block size-full object-cover select-none" data-testid="artifact-snapshot" src={src} alt="" draggable={false} />;
   return (
-    <div className={`${artifactCardClass} flex size-full flex-col items-center justify-center gap-1 p-3 text-center font-sans text-xs text-muted-foreground`}>
-      {title !== "" && <span className="text-sm font-medium text-foreground">{title}</span>}
+    <div className={`${artifactCardClass} flex size-full flex-col items-center justify-center gap-1 p-3 text-center font-sans text-xs text-(--artifact-card-foreground)`}>
+      {title !== "" && <span className="text-sm font-medium text-(--artifact-card-title)">{title}</span>}
       <span>Select to preview</span>
     </div>
   );

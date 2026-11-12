@@ -50,7 +50,7 @@ const RunsChip = ({ props, onChange, open, onOpenChange, offersFree = true }: Tr
         align="start"
         sideOffset={6}
         padding="compact"
-        className="w-[200px]"
+        className="w-50"
         aria-label="Runs"
         initialFocus={() => (runs === "free" ? free.current : field.current)}
         onKeyDown={(event) => {
@@ -70,7 +70,7 @@ const RunsChip = ({ props, onChange, open, onOpenChange, offersFree = true }: Tr
             onValueChange={(value) => set({ [RUNS_KEY]: clampRuns(value ?? "") })}
             className="flex-row items-center justify-between"
           >
-            <span className="text-sm text-foreground">Runs</span>
+            <span className="text-sm text-(--generate-tray-label)">Runs</span>
             <NumberFieldGroup className="w-14">
               <NumberFieldInput
                 ref={field}

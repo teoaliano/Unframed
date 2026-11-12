@@ -31,8 +31,8 @@ export const followSystemTheme = (): (() => void) => {
     const theme: Theme = query.matches ? "dark" : "light";
     const root = document.documentElement;
     root.setAttribute("data-unframed-theme", theme);
-    root.style.setProperty("--unframed-text-secondary", hexOf("--muted-foreground"));
-    document.body.style.backgroundColor = hexOf("--background");
+    root.style.setProperty("--unframed-text-secondary", hexOf("--text-muted"));
+    document.body.style.backgroundColor = hexOf("--surface-background");
   };
   apply();
   query.addEventListener("change", apply);

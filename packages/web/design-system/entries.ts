@@ -33,7 +33,7 @@ const title = (file: string) =>
     .join(" ");
 
 export const ENTRIES: readonly Entry[] = [
-  { id: "tokens", title: "Tokens", group: "Foundations", summary: "Every custom property the theme defines, resolved in the current scheme." },
+  { id: "tokens", title: "Tokens", group: "Foundations", summary: "Every Figma variable in the Tokens, Theme and Components collections, by its CSS name, resolved in the current scheme." },
   ...modulesUnder("/src/components/ui/").map((module): Entry => {
     const file = module.slice("/src/components/ui/".length, -".tsx".length);
     return { id: file, title: title(file), group: "Kit components", module };

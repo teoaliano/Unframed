@@ -63,7 +63,7 @@ export const UpNext = ({ client, chatId, running, editingId, editBlockedReason, 
 
   return (
     <section aria-label={`Up next: ${queue.length} queued message${queue.length === 1 ? "" : "s"}`} className={cn("flex w-full shrink flex-col gap-2 pb-2", collapsible ? "min-h-15" : "min-h-9")}>
-      <h3 className="m-0 flex min-h-5 shrink-0 items-center gap-1.5 px-1 text-xs font-normal text-muted-foreground [&_svg]:size-3.5">
+      <h3 className="m-0 flex min-h-5 shrink-0 items-center gap-1.5 px-1 text-xs font-normal text-(--queue-title) [&_svg]:size-3.5">
         <ListOrdered aria-hidden />
         Up next
         <span className="tabular-nums" aria-live="polite">
@@ -110,22 +110,22 @@ export const UpNext = ({ client, chatId, running, editingId, editBlockedReason, 
                 complete();
               }}
             >
-              {drag?.insertIndex === index && <span aria-hidden className="pointer-events-none absolute inset-x-0 -top-1.5 h-0.5 rounded bg-primary/70" />}
+              {drag?.insertIndex === index && <span aria-hidden className="pointer-events-none absolute inset-x-0 -top-1.5 h-0.5 rounded bg-(--queue-drop-indicator)/(--queue-drop-indicator-opacity)" />}
               {index === queue.length - 1 && drag?.insertIndex === queue.length && (
-                <span aria-hidden className="pointer-events-none absolute inset-x-0 -bottom-1.5 h-0.5 rounded bg-primary/70" />
+                <span aria-hidden className="pointer-events-none absolute inset-x-0 -bottom-1.5 h-0.5 rounded bg-(--queue-drop-indicator)/(--queue-drop-indicator-opacity)" />
               )}
               {/* Dashed and unfilled: a message that has not been sent yet. */}
               <div
                 className={cn(
                   "flex max-w-[80%] min-w-0 flex-col gap-2 rounded-2xl border border-dashed px-3 py-2 text-sm",
-                  editing ? "border-primary/60 text-foreground" : "border-muted-foreground/40 text-muted-foreground",
+                  editing ? "border-(--queue-editing-border)/(--queue-editing-border-opacity) text-(--queue-editing-foreground)" : "border-(--queue-border)/(--queue-border-opacity) text-(--queue-foreground)",
                 )}
               >
                 <p className="m-0 line-clamp-3 whitespace-pre-wrap break-words" data-testid="queued-text" title={item.message.text}>
                   {item.message.text}
                 </p>
               </div>
-              <div className="flex items-center gap-0.5 pe-1 text-xs text-muted-foreground">
+              <div className="flex items-center gap-0.5 pe-1 text-xs text-(--queue-meta)">
                 {queue.length > 1 ? (
                   <Button
                     size="icon-xs"
@@ -157,7 +157,7 @@ export const UpNext = ({ client, chatId, running, editingId, editBlockedReason, 
                 ) : null}
                 {editing ? (
                   <>
-                    <span className="px-1 text-foreground">Editing in the composer</span>
+                    <span className="px-1 text-(--queue-editing-foreground)">Editing in the composer</span>
                     <Button size="xs" variant="ghost" aria-label="Cancel editing queued message" onClick={onCancelEdit}>
                       Cancel
                     </Button>

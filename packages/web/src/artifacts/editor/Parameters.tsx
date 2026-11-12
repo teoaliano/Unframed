@@ -14,7 +14,7 @@ import { Tip } from "../../chrome/ui.tsx";
 import { useCanvasProject, useEngine } from "../../context.ts";
 import { DialControls, type DialChrome } from "../DialControls.tsx";
 
-export const COLUMN = "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border bg-card";
+export const COLUMN = "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-(--artifact-editor-column-border) bg-(--artifact-editor-column-surface)";
 
 export const ColumnHeader = ({ children, className }: { readonly children: ReactNode; readonly className?: string }) => (
   <header className={cn("flex h-12 min-w-0 flex-none items-center gap-2 border-b px-2.5", className)}>{children}</header>
@@ -101,7 +101,7 @@ const useArtifactChat = (shapeId: TLShapeId, place: Place, railVisible: boolean)
 
 const Failure = ({ error }: { readonly error: string | undefined }) =>
   error === undefined ? null : (
-    <p role="alert" className="m-0 text-xs text-destructive-foreground">
+    <p role="alert" className="m-0 text-xs text-(--artifact-editor-error-foreground)">
       {error}
     </p>
   );
@@ -157,6 +157,8 @@ const AddParameterComposer = ({
   sending,
   busy,
   error,
+  text,
+  onText,
   onSend,
   onCancel,
 }: {
@@ -165,10 +167,11 @@ const AddParameterComposer = ({
   readonly sending: boolean;
   readonly busy: boolean;
   readonly error: string | undefined;
+  readonly text: string;
+  readonly onText: (text: string) => void;
   readonly onSend: (wanted: string) => Promise<boolean>;
   readonly onCancel: () => void;
 }) => {
-  const [text, setText] = useState("");
   const field = useRef<HTMLTextAreaElement>(null);
   const cancel = useRef(onCancel);
   cancel.current = onCancel;
@@ -190,7 +193,7 @@ const AddParameterComposer = ({
   const send = async () => {
     const wanted = text.trim();
     if (wanted === "" || busy) return;
-    if (await onSend(wanted)) setText("");
+    if (await onSend(wanted)) onText("");
   };
 
   return (
@@ -202,7 +205,7 @@ const AddParameterComposer = ({
         size="sm"
         placeholder={hasParameters ? "Add a parameter… (e.g. the background colour, the title size)" : "Describe a parameter… (e.g. the accent colour and the intro speed)"}
         value={text}
-        onChange={(event) => setText(event.currentTarget.value)}
+        onChange={(event) => onText(event.currentTarget.value)}
         onKeyDown={(event) => {
           if (event.key !== "Enter" || event.shiftKey || event.altKey || event.nativeEvent.isComposing) return;
           event.preventDefault();
@@ -210,7 +213,7 @@ const AddParameterComposer = ({
         }}
       />
       <div className="flex items-center gap-2">
-        <span className="flex-1 text-xs text-muted-foreground">The agent writes it</span>
+        <span className="flex-1 text-xs text-(--artifact-editor-meta)">The agent writes it</span>
         <Button variant="outline" size="xs" disabled={text.trim() === "" || busy} onClick={() => void send()}>
           <Sparkles aria-hidden />
           {sending ? "Asking…" : "Add"}
@@ -247,6 +250,7 @@ const ApplyButton = ({ onApply, sending, busy }: { readonly onApply: () => Promi
 export const ParametersContent = ({ shapeId, kind, title, announcement, saved, post, onWrite, place, railVisible = true }: ParametersProps) => {
   const chat = useArtifactChat(shapeId, place, railVisible);
   const [composing, setComposing] = useState(false);
+  const [draft, setDraft] = useState("");
   const [chrome, setChrome] = useState<DialChrome>();
   const composerId = useId();
   const toggleButton = useRef<HTMLButtonElement>(null);
@@ -259,13 +263,15 @@ export const ParametersContent = ({ shapeId, kind, title, announcement, saved, p
   const fold = (returnFocus: boolean) => {
     refocus.current = returnFocus;
     setComposing(false);
+    setDraft("");
   };
   const hasParameters = announcement !== undefined && Object.keys(announcement.schema ?? {}).length > 0;
   const busy = chat.sending !== undefined;
 
   const toggle = () => {
     chat.clearError();
-    setComposing((open) => !open);
+    if (composing) setDraft("");
+    setComposing(!composing);
   };
   const addParameter = async (wanted: string) => {
     const result = await chat.send("add", addParameterInstruction({ wanted, kind, title }), false);
@@ -285,6 +291,8 @@ export const ParametersContent = ({ shapeId, kind, title, announcement, saved, p
       sending={chat.sending === "add"}
       busy={busy}
       error={chat.error?.by === "add" ? chat.error.text : undefined}
+      text={draft}
+      onText={setDraft}
       onSend={addParameter}
       onCancel={() => fold(true)}
     />
@@ -295,7 +303,7 @@ export const ParametersContent = ({ shapeId, kind, title, announcement, saved, p
     return (
       <div className="flex flex-col gap-2 px-2.5 pt-2.5">
         <div className="flex items-center gap-2">
-          <p className="m-0 flex-1 text-sm text-muted-foreground">No parameters yet.</p>
+          <p className="m-0 flex-1 text-sm text-(--artifact-editor-note)">No parameters yet.</p>
           {toggler}
         </div>
         {composer}

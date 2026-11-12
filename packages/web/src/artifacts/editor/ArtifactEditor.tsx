@@ -563,8 +563,8 @@ export const ArtifactEditor = ({
   const columns = railFolded
     ? parametersFolded
       ? "grid-cols-[minmax(0,1fr)]"
-      : "grid-cols-[minmax(0,1fr)_320px]"
-    : "grid-cols-[360px_minmax(0,1fr)_320px]";
+      : "grid-cols-[minmax(0,1fr)_var(--artifact-editor-parameters-width)]"
+    : "grid-cols-[var(--artifact-editor-rail-width)_minmax(0,1fr)_var(--artifact-editor-parameters-width)]";
   const parametersBody = (
     <>
       <ColumnHeader className="px-0">
@@ -625,7 +625,7 @@ export const ArtifactEditor = ({
         />
       )}
       {shownPanel === undefined && (
-        <p className="m-0 p-3 text-sm text-muted-foreground" data-testid="editor-no-panels">
+        <p className="m-0 p-3 text-sm text-(--artifact-editor-note)" data-testid="editor-no-panels">
           {FEATURE_OFF_MESSAGES["element-editing"]}
         </p>
       )}
@@ -653,7 +653,7 @@ export const ArtifactEditor = ({
       ref={grid}
       data-testid="artifact-editor"
       className={cn(
-        "pointer-events-auto absolute inset-x-0 bottom-0 z-[700] box-border grid gap-3 bg-background p-3 font-sans text-foreground",
+        "pointer-events-auto absolute inset-x-0 bottom-0 z-[700] box-border grid gap-3 bg-(--artifact-editor-surface) p-3 font-sans text-(--artifact-editor-foreground)",
         timeline
           ? "grid-rows-[minmax(0,1fr)_auto]"
           : "grid-rows-[minmax(0,1fr)]",
@@ -713,7 +713,7 @@ export const ArtifactEditor = ({
               </Button>
             </Tip>
           )}
-          <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+          <Icon aria-hidden className="size-4 shrink-0 text-(--artifact-editor-icon) @max-[520px]/editor-header:hidden" />
           <span className="flex min-w-0 flex-1 items-baseline gap-2">
             <Tip label={title}>
               <span
@@ -725,14 +725,14 @@ export const ArtifactEditor = ({
             </Tip>
             <span
               data-testid="artifact-editor-kind"
-              className="min-w-0 shrink truncate text-sm text-muted-foreground @max-[760px]/editor-header:hidden"
+              className="min-w-0 shrink truncate text-sm text-(--artifact-editor-meta) @max-[760px]/editor-header:hidden"
             >
               {facts.kind}
             </span>
             {component && uses > 0 && (
               <span
                 data-testid="artifact-editor-uses"
-                className="shrink-0 text-sm text-muted-foreground @max-[520px]/editor-header:hidden"
+                className="shrink-0 text-sm text-(--artifact-editor-meta) @max-[520px]/editor-header:hidden"
               >
                 {uses === 1
                   ? "Used in 1 artifact"
@@ -825,7 +825,7 @@ export const ArtifactEditor = ({
                           <span className="min-w-0 truncate text-sm font-medium">
                             {row.title}
                           </span>
-                          <span className="shrink-0 text-xs text-muted-foreground">
+                          <span className="shrink-0 text-xs text-(--artifact-editor-meta)">
                             {uses === 1 ? "1 instance" : `${uses} instances`}
                           </span>
                           <Button
@@ -842,7 +842,7 @@ export const ArtifactEditor = ({
                         {row.warnings.map((warning) => (
                           <p
                             key={warning}
-                            className="m-0 text-xs text-warning-foreground"
+                            className="m-0 text-xs text-(--artifact-editor-warning-foreground)"
                           >
                             {warning}
                           </p>
@@ -927,7 +927,7 @@ export const ArtifactEditor = ({
           )}
         >
           {facts.file === "" ? (
-            <p className="m-auto p-6 text-center text-sm text-muted-foreground">{`This ${facts.kind} has no file yet. Ask the agent to write one.`}</p>
+            <p className="m-auto p-6 text-center text-sm text-(--artifact-editor-note)">{`This ${facts.kind} has no file yet. Ask the agent to write one.`}</p>
           ) : port === undefined ? null : (
             <div
               data-testid="artifact-preview"
@@ -1043,7 +1043,7 @@ export const ArtifactEditor = ({
           side="left"
           aria-label="Agent"
           showCloseButton={false}
-          className="w-[min(88vw,24rem)]"
+          className="w-[min(88vw,var(--artifact-editor-sheet-width))]"
         >
           <AgentRail
             project={project}
@@ -1062,7 +1062,7 @@ export const ArtifactEditor = ({
           side="right"
           aria-label="Parameters"
           showCloseButton={false}
-          className="w-[min(88vw,24rem)]"
+          className="w-[min(88vw,var(--artifact-editor-sheet-width))]"
         >
           <div className="flex min-h-0 flex-1 flex-col">{parametersBody}</div>
         </SheetPopup>

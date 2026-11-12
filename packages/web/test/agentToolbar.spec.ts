@@ -67,7 +67,7 @@ test("Agent on the toolbar is an outline button, and opens the Agent tray saying
   const button = toolbar(page).getByRole("button", { name: "Agent" });
   await expectSlot(button, "button");
   await page.mouse.move(10, 10);
-  await expectToken(button, "background-color", "--popover");
+  await expectToken(button, "background-color", "--button-outline-surface");
   await expect(button.locator("svg")).toHaveCount(1);
   await button.click();
 

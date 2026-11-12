@@ -171,11 +171,11 @@ const Region = ({ anchor, pending }: { readonly anchor: Extract<CommentAnchor, {
         style={{ ...placeAt({ x: anchor.x, y: anchor.y }), width: `calc(${anchor.w} * var(--z) * 1px)`, height: `calc(${anchor.h} * var(--z) * 1px)` }}
       >
         <svg className="absolute inset-0 size-full overflow-visible">
-          <rect x="0" y="0" width="100%" height="100%" fill={pending ? "color-mix(in srgb, var(--highlight) 6%, transparent)" : "none"} stroke="var(--highlight)" strokeWidth="1.5" strokeDasharray="5 3" />
+          <rect x="0" y="0" width="100%" height="100%" fill={pending ? "color-mix(in srgb, var(--comment-region-fill) var(--comment-region-fill-opacity), transparent)" : "none"} stroke="var(--comment-region-stroke)" strokeWidth="1.5" strokeDasharray="5 3" />
         </svg>
       </div>
       <div className={cn(AT_POINT, "pointer-events-none")} style={placeAt({ x: startX, y: startY })}>
-        <span className="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background bg-highlight shadow-sm" />
+        <span className="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-(--comment-region-indicator-border) bg-(--comment-region-indicator) shadow-sm" />
       </div>
     </>
   );
@@ -368,7 +368,7 @@ const DraggingRegion = ({ ui }: { readonly ui: CommentsUi }) => {
       }}
     >
       <svg className="absolute inset-0 size-full overflow-visible">
-        <rect x="0" y="0" width="100%" height="100%" fill="none" stroke="var(--highlight)" strokeWidth="1.5" strokeDasharray="5 3" />
+        <rect x="0" y="0" width="100%" height="100%" fill="none" stroke="var(--comment-region-stroke)" strokeWidth="1.5" strokeDasharray="5 3" />
       </svg>
     </div>
   );

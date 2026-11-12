@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { openCanvas } from "./canvas.ts";
 import { clickShape, composer, openAndEscape, openComposer } from "./generation.ts";
-import { expectSlot, expectToken } from "./kit.ts";
+import { expectSlot, tokenColor } from "./kit.ts";
 import { addRuns, expect, runsChip, runsField, runsPopup, setRuns, test, tray } from "./texting.ts";
 
 const openOnSubject = async (page: Page) => {
@@ -63,7 +63,8 @@ test("the Runs chip is the tray's chip; its popup is the kit's Popover with a Nu
   await expect(runsPopup(page)).toHaveCount(0);
   await expectSlot(runsChip(page), "popover-trigger");
   expect((await runsChip(page).boundingBox())!.height).toBe(28);
-  await expectToken(runsChip(page), "border-top-color", "--color-input");
+  const ring = await runsChip(page).evaluate((element) => getComputedStyle(element, "::after").backgroundColor);
+  expect(ring).toBe(await tokenColor(page, "--button-outline-border"));
 });
 
 test("an Escape the moment the Runs popup opens closes only the popup", async ({ page, generation }) => {

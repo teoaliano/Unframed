@@ -214,10 +214,10 @@ test("the menu has the kit's label and disabled looks, at 188 px, and its rows h
     const heading = menu(page).getByTestId("context-menu-heading").first();
     expect(await styleOf(heading, "font-size")).toBe("12px");
     expect(await styleOf(heading, "font-weight")).toBe("500");
-    expect(await styleOf(heading, "color")).toBe(await tokenColor(page, "--color-muted-foreground"));
+    expect(await styleOf(heading, "color")).toBe(await tokenColor(page, "--tldraw-menu-heading"));
     const row = menu(page).getByRole("menuitem", { name: "Prompt" });
     await row.hover();
-    expect(await row.evaluate((element) => getComputedStyle(element, "::after").backgroundColor)).toBe(await tokenColor(page, "--accent"));
+    expect(await row.evaluate((element) => getComputedStyle(element, "::after").backgroundColor)).toBe(await tokenColor(page, "--tldraw-muted-2"));
     await closeMenu(page);
   });
 });

@@ -96,10 +96,10 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
   const sourceLine = () => {
     if (kit === null || kit.from === undefined || linkedPreset === undefined) return null;
     if (linkedPreset === null)
-      return <p className="m-0 text-sm text-muted-foreground">{presetName === undefined ? "The library kit is gone. This project keeps its copy." : `The library kit “${presetName}” is gone. This project keeps its copy.`}</p>;
+      return <p className="m-0 text-sm text-(--kit-dialog-description)">{presetName === undefined ? "The library kit is gone. This project keeps its copy." : `The library kit “${presetName}” is gone. This project keeps its copy.`}</p>;
     const offer = linkedPreset.revision > kit.from.revision && hasDifferences(mergeWith(kit, linkedPreset), kit);
     return (
-      <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-(--kit-dialog-description)">
         <span>{`From “${linkedPreset.name}” in your library.`}</span>
         {offer && (
           <Button variant="ghost" size="sm" onClick={() => void updateFromKit()}>
@@ -134,7 +134,7 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
   return (
     <>
       <Dialog open onOpenChange={(open) => !open && onClose()}>
-        <DialogPopup data-testid="kit" className="max-w-[960px]">
+        <DialogPopup data-testid="kit" className="max-w-(--kit-dialog-width)">
           <DialogHeader>
             <DialogTitle>Kit</DialogTitle>
           </DialogHeader>
@@ -202,7 +202,7 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
       )}
 
       <AlertDialog open={ask !== undefined} onOpenChange={(open) => !open && setAsk(undefined)}>
-        <AlertDialogPopup className="max-w-[400px]" finalFocus={() => document.querySelector<HTMLElement>('[data-testid="kit"] input[type="search"]') ?? true}>
+        <AlertDialogPopup className="max-w-(--kit-dialog-confirm-width)" finalFocus={() => document.querySelector<HTMLElement>('[data-testid="kit"] input[type="search"]') ?? true}>
           <AlertDialogHeader>
             {ask?.kind === "token" && (
               <>

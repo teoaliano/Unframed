@@ -86,7 +86,7 @@ export const RenameField = ({ shapeId, current, kind }: { readonly shapeId: TLSh
     // The name is typed as it is, not in the label's case; the kit Input sits unstyled inside this frame.
     <span className="pointer-events-auto flex origin-bottom-left items-center gap-px" style={zoom < 1 ? { transform: `scale(${1 / zoom})` } : undefined}>
       <span data-testid="rename-prefix">@</span>
-      <span className="inline-flex h-5 items-center overflow-hidden rounded-md border border-highlight bg-background text-foreground">
+      <span className="inline-flex h-5 items-center overflow-hidden rounded-md border border-(--rename-field-border) bg-(--rename-field-surface) text-(--rename-field-foreground)">
         <Input
           ref={input}
           unstyled
@@ -100,7 +100,7 @@ export const RenameField = ({ shapeId, current, kind }: { readonly shapeId: TLSh
         />
       </span>
       {problem !== undefined && (
-        <span role="alert" className="ml-1.5 whitespace-nowrap text-destructive-foreground">
+        <span role="alert" className="ml-1.5 whitespace-nowrap text-(--rename-field-error-foreground)">
           {problem}
         </span>
       )}

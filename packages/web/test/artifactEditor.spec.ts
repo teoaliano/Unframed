@@ -5,7 +5,7 @@ import { putRecords } from "./media.ts";
 import { artifactShape, filledArtifact } from "./artifacts.ts";
 import { connectTab } from "../../engine/test/syncClient.ts";
 import { column, editor, preparedFile } from "./editorHarness.ts";
-import { expectSlot, expectToken, inBothSchemes, styleOf } from "./kit.ts";
+import { expectSlot, expectToken, inBothSchemes, styleOf, tokenColor } from "./kit.ts";
 
 const openParameters = (page: Page) => editor(page).locator('[data-editor-column="parameters"]').getByRole("tab", { name: "Parameters" }).click();
 
@@ -353,14 +353,14 @@ test("the editor's columns, header actions and parameter box are the kit's, in b
   await page.mouse.move(640, 700);
   await inBothSchemes(page, async () => {
     for (const name of ["rail", "centre", "parameters"] as const) {
-      await expectToken(column(page, name), "background-color", "--card");
-      await expectToken(column(page, name), "border-top-color", "--color-border");
+      await expectToken(column(page, name), "background-color", "--artifact-editor-column-surface");
+      await expectToken(column(page, name), "border-top-color", "--artifact-editor-column-border");
     }
-    expect(await styleOf(back, "background-color")).toBe("rgba(0, 0, 0, 0)");
-    await expectToken(region.getByTestId("artifact-editor-title"), "color", "--color-foreground");
-    await expectToken(region.getByTestId("artifact-editor-kind"), "color", "--color-muted-foreground");
-    await expectToken(editor(page).getByText("The agent writes it"), "color", "--color-muted-foreground");
-    await expectToken(editor(page), "background-color", "--background");
+    expect(await styleOf(back, "background-color")).toBe(await tokenColor(page, "--button-ghost-surface"));
+    await expectToken(region.getByTestId("artifact-editor-title"), "color", "--artifact-editor-foreground");
+    await expectToken(region.getByTestId("artifact-editor-kind"), "color", "--artifact-editor-meta");
+    await expectToken(editor(page).getByText("The agent writes it"), "color", "--artifact-editor-meta");
+    await expectToken(editor(page), "background-color", "--artifact-editor-surface");
   });
 });
 
