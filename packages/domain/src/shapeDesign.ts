@@ -24,7 +24,7 @@ const LABEL = { fontFamily: "labelFontFamily", fontSize: "labelFontSize", lineHe
 const DISPLAY_KEYS: Record<DesignableType, Partial<Record<DesignKey, string>>> = {
   text: { fontFamily: "fontFamily", fontSize: "fontSize", fontWeight: "fontWeight", lineHeight: "lineHeight", textColor: "color" },
   geo: { ...LABEL, fontWeight: "labelFontWeight", fillColor: "fillColor", strokeColor: "strokeColor", strokeWidth: "strokeWidth", cornerRadius: "strokeRoundness" },
-  note: { ...LABEL, fontWeight: "labelFontWeight", fillColor: "noteBackgroundColor", strokeColor: "borderColor", strokeWidth: "borderWidth" },
+  note: { fontFamily: "labelFontFamily", fontSize: "labelFontSize", lineHeight: "labelLineHeight", fontWeight: "labelFontWeight", fillColor: "noteBackgroundColor", strokeColor: "borderColor", strokeWidth: "borderWidth" },
   arrow: { ...LABEL, strokeColor: "strokeColor", strokeWidth: "strokeWidth" },
   draw: { fillColor: "fillColor", strokeColor: "strokeColor", strokeWidth: "strokeWidth" },
   line: { strokeColor: "strokeColor", strokeWidth: "strokeWidth" },
@@ -89,6 +89,16 @@ export const cssFamily = (family: string): string => {
   return `"${trimmed}"`;
 };
 
+const luminance = (hex: string): number => {
+  const channel = (offset: number) => {
+    const value = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+};
+
+export const readableTextOn = (hex: string): "#000000" | "#ffffff" => (luminance(hex) > 0.35 ? "#000000" : "#ffffff");
+
 export const designDisplayValues = (type: DesignableType, design: ShapeDesign): Record<string, string | number> => {
   const values: Record<string, string | number> = {};
   for (const key of designKeysOf(type)) {
@@ -97,5 +107,6 @@ export const designDisplayValues = (type: DesignableType, design: ShapeDesign): 
     if (value === undefined || target === undefined) continue;
     values[target] = key === "fontFamily" ? cssFamily(String(value)) : value;
   }
+  if (type === "note" && design.fillColor !== undefined) values.labelColor = readableTextOn(design.fillColor);
   return values;
 };

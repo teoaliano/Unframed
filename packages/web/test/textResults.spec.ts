@@ -90,7 +90,7 @@ test("a text result's bar offers Regenerate, Agent and Generate, and Regenerate 
 
   await page.mouse.click(10, 400);
   await clickShape(page, first.id);
-  await expect(toolbar(page).getByRole("button")).toHaveText(["Regenerate", "Agent", "Generate"]);
+  await expect(toolbar(page).locator("button:not([data-testid='style-row'] *)")).toHaveText(["Regenerate", "Agent", "Generate"]);
 
   // Generate opens the composer on the answer as on any selection.
   await toolbar(page).getByRole("button", { name: "Generate", exact: true }).click();

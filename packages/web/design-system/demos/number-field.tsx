@@ -1,5 +1,5 @@
 import { Label } from "~/components/ui/label";
-import { NumberField, NumberFieldDecrement, NumberFieldGroup, NumberFieldIncrement, NumberFieldInput } from "~/components/ui/number-field";
+import { NumberField, NumberFieldDecrement, NumberFieldGroup, NumberFieldIncrement, NumberFieldInput, NumberFieldStepper } from "~/components/ui/number-field";
 import { Demos, Row, Section } from "../frame.tsx";
 
 const SIZES = ["sm", "default", "lg"] as const;
@@ -40,6 +40,16 @@ export default function NumberFieldDemo() {
             <NumberField defaultValue={421337} aria-label="Seed">
               <NumberFieldGroup>
                 <NumberFieldInput />
+              </NumberFieldGroup>
+            </NumberField>
+          </div>
+        </Row>
+        <Row label="stepper on hover">
+          <div className="w-14">
+            <NumberField size="sm" defaultValue={22} min={4} max={200} aria-label="Size">
+              <NumberFieldGroup>
+                <NumberFieldInput />
+                <NumberFieldStepper />
               </NumberFieldGroup>
             </NumberField>
           </div>

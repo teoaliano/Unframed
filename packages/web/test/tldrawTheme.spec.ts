@@ -14,6 +14,7 @@ test("tldraw's toolbar, the Design panel, zoom controls, menus and shortcuts dia
   const toolbar = page.getByTestId("bottom-toolbar");
   const selectTool = page.getByTestId("tools.select");
   const stylePanel = page.getByTestId("design-panel");
+  await page.getByTestId("selection-toolbar").getByRole("button", { name: "Design panel", exact: true }).click();
   await expect(stylePanel).toBeVisible();
 
   await inBothSchemes(page, async () => {

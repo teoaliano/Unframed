@@ -37,7 +37,7 @@ test("a selected component offers Editor and Agent in its toolbar, and neither R
   await writeSheet(engine, PRICE_CARD);
   await putRecords(engine, [componentShape({ id: "shape:card", ref: "150", at: { x: 420, y: 60 }, tag: "uf-price-card", title: "Price card" })]);
   await clickShape(page, "shape:card");
-  await expect(toolbar(page).getByRole("button")).toHaveText(["", "Editor", "Agent"]);
+  await expect(toolbar(page).locator("button:not([data-testid='style-row'] *)")).toHaveText(["", "Editor", "Agent"]);
 });
 
 test("a double-click on the label opens its name field under the kind word Component", async ({ page, engine }) => {

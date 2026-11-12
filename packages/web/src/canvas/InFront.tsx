@@ -7,6 +7,7 @@ import { SelectionToolbar } from "../generate/SelectionToolbar.tsx";
 import { KitHost } from "../kits/KitHost.tsx";
 import { LibraryHost } from "../library/LibraryHost.tsx";
 import { MentionMenu } from "./MentionMenu.tsx";
+import { ToolTray } from "./ToolTray.tsx";
 import { ArtifactsHost } from "../artifacts/ArtifactsHost.tsx";
 import { NodeChrome } from "../nodes/NodeChrome.tsx";
 import { CommentsHost } from "../comments/CommentsHost.tsx";
@@ -22,6 +23,7 @@ export const InFront = () => {
     {nodes && <NodeChrome />}
     <MentionMenu />
     <SelectionToolbar />
+    <ToolTray />
     <LibraryHost />
     <KitHost />
     <AgentHost />

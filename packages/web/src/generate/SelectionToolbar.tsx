@@ -24,6 +24,8 @@ import { closeComposer, composerState, leaveRecipeMode, openComposer } from "./s
 import { composerGlassClass } from "../chrome/composerSurface.ts";
 import { useWheelToCanvas } from "../canvas/wheelToCanvas.ts";
 import { NodeRunButtons, selectionNodeCount } from "../nodes/NodeChrome.tsx";
+import { selectionTarget, useDesignTarget } from "../canvas/designTarget.ts";
+import { StyleRow } from "../canvas/StyleRow.tsx";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
@@ -192,7 +194,7 @@ const AgentButton = ({ onOpen }: { onOpen: () => void }) => {
   );
 };
 
-const ResultBar = ({ state, onGenerate, agent }: { state: Extract<ToolbarState, { kind: "result" }>; onGenerate: () => void; agent: ReactNode }) => {
+const ResultBar = ({ state, onGenerate, agent, style }: { state: Extract<ToolbarState, { kind: "result" }>; onGenerate: () => void; agent: ReactNode; style: ReactNode }) => {
   const editor = useEditor();
   const engine = useEngine();
   const project = useCanvasProject();
@@ -223,8 +225,9 @@ const ResultBar = ({ state, onGenerate, agent }: { state: Extract<ToolbarState, 
   };
 
   return (
-    <div className="flex flex-col gap-0.5 whitespace-nowrap p-1">
+    <div className="flex flex-col gap-1 whitespace-nowrap p-1">
       <div className={rowClass}>
+        {style}
         <Button variant={state.generate ? "outline" : "default"} size="sm" onClick={() => void regenerate()}>
           Regenerate
         </Button>
@@ -236,7 +239,7 @@ const ResultBar = ({ state, onGenerate, agent }: { state: Extract<ToolbarState, 
         )}
       </div>
       {line !== undefined && (
-        <div className="px-1.5 py-0.5 text-xs text-(--selection-toolbar-meta) tabular-nums" data-testid="result-line">
+        <div className="px-1.5 text-xs text-(--selection-toolbar-meta) tabular-nums" data-testid="result-line">
           {line}
         </div>
       )}
@@ -244,7 +247,7 @@ const ResultBar = ({ state, onGenerate, agent }: { state: Extract<ToolbarState, 
   );
 };
 
-const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "recipe" }>; agent: ReactNode }) => {
+const RecipeBar = ({ state, agent, style }: { state: Extract<ToolbarState, { kind: "recipe" }>; agent: ReactNode; style: ReactNode }) => {
   const editor = useEditor();
   const engine = useEngine();
   const project = useCanvasProject();
@@ -287,11 +290,12 @@ const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "rec
   const Overlay = definition?.Overlay;
   return (
     <div className={barClass}>
+      {style}
       {state.drag && <DragHandle />}
       <Button size="sm" disabled={busy || progress !== undefined} onClick={() => void generate()}>
         {label}
       </Button>
-      <span className={hintClass} data-testid="selection-hint">
+      <span className={cn(hintClass, "ps-2.5 pe-0")} data-testid="selection-hint">
         {`@${state.name}${estimate === undefined ? "" : ` · ${estimate.replace(/^est\. /, "")}`}`}
       </span>
       <Button variant="ghost" size="sm" onClick={() => recipe && openOnRecipe(editor, groupId, recipe)}>
@@ -303,14 +307,14 @@ const RecipeBar = ({ state, agent }: { state: Extract<ToolbarState, { kind: "rec
   );
 };
 
-const Bar = ({ state, onGenerate, agent, nodes }: { state: Exclude<ToolbarState, { kind: "none" }>; onGenerate: () => void; agent: ReactNode; nodes: number }) => {
+const Bar = ({ state, onGenerate, agent, nodes, style }: { state: Exclude<ToolbarState, { kind: "none" }>; onGenerate: () => void; agent: ReactNode; nodes: number; style: ReactNode }) => {
   const editor = useEditor();
   const { openArtifact, renderButton: Render, parametersButton: ParametersToggle, kitModeButton: KitModeToggle, scaleButton: Scale } = useSlots();
   switch (state.kind) {
     case "recipe":
-      return <RecipeBar state={state} agent={agent} />;
+      return <RecipeBar state={state} agent={agent} style={style} />;
     case "result":
-      return <ResultBar state={state} onGenerate={onGenerate} agent={agent} />;
+      return <ResultBar state={state} onGenerate={onGenerate} agent={agent} style={style} />;
     case "generating":
       return (
         <div className={barClass}>
@@ -335,6 +339,7 @@ const Bar = ({ state, onGenerate, agent, nodes }: { state: Exclude<ToolbarState,
     case "generate":
       return (
         <div className={barClass}>
+          {style}
           {state.drag && <DragHandle />}
           <span className={hintClass} data-testid="selection-hint">
             {state.hint}
@@ -347,8 +352,9 @@ const Bar = ({ state, onGenerate, agent, nodes }: { state: Exclude<ToolbarState,
         </div>
       );
     case "agent":
-      return agent === null && !state.drag && nodes === 0 ? null : (
+      return agent === null && !state.drag && nodes === 0 && style === null ? null : (
         <div className={barClass}>
+          {style}
           {state.drag && <DragHandle />}
           {nodes > 1 && (
             <span className={hintClass} data-testid="selection-hint">
@@ -396,16 +402,22 @@ export const SelectionToolbar = () => {
   const nodesOn = useFeature("nodes");
   const nodes = useValue("selected nodes", () => (nodesOn ? selectionNodeCount(editor) : 0), [editor, nodesOn]);
   const agent = agentTray ? <AgentButton onOpen={() => openComposer(editor, "agent")} /> : null;
+  const designTarget = useDesignTarget(editor, selectionTarget);
+  const style = designTarget.subjects.length === 0 ? null : (
+    <span className="mr-1.5 flex items-center">
+      <StyleRow target={designTarget} />
+    </span>
+  );
 
   if (selectionKey === "") return null;
-  if (!expanded && (state === undefined || state.kind === "none" || (state.kind === "agent" && agent === null && !state.drag && nodes === 0))) return null;
+  if (!expanded && (state === undefined || state.kind === "none" || (state.kind === "agent" && agent === null && !state.drag && nodes === 0 && style === null))) return null;
 
   return (
     <Floating target={target ?? lastTarget.current} hidden={hidden} expanded={expanded} framed={composer.mode !== "agent"}>
       {expanded ? (
         <Composer mode={composer.mode === "agent" ? "agent" : "generate"} project={project} recipe={composer.recipe} onCollapse={collapse} />
       ) : state && state.kind !== "none" ? (
-        <Bar state={state} onGenerate={() => openComposer(editor, "generate")} agent={agent} nodes={nodes} />
+        <Bar state={state} onGenerate={() => openComposer(editor, "generate")} agent={agent} nodes={nodes} style={style} />
       ) : null}
     </Floating>
   );

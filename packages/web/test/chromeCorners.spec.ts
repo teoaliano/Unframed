@@ -120,6 +120,7 @@ test("the Design panel docks to the window's right edge from the bar's bottom bo
   const subject = await centre(shapeOnScreen(page, "shape:starter-subject"));
   await page.mouse.click(subject.x, subject.y);
   const panel = page.getByTestId("design-panel");
+  await page.getByTestId("selection-toolbar").getByRole("button", { name: "Design panel", exact: true }).click();
   await expect(panel).toBeVisible();
   const box = (await panel.boundingBox())!;
   const viewport = page.viewportSize()!;
@@ -137,7 +138,7 @@ test("the Design panel docks to the window's right edge from the bar's bottom bo
   expect(watermarkOnTop).toBe(true);
 });
 
-test("the Design panel shows only while a drawing tool is on or the selection holds text, notes or drawings", async ({ page, engine }) => {
+test("the Design panel, once opened, shows only while a drawing tool is on or the selection holds text, notes or drawings", async ({ page, engine }) => {
   await openCanvas(page, engine);
   await putRecords(engine, [emptyMedia("shape:still", "image", "180", { x: -400, y: 300 })]);
   const panel = page.getByTestId("design-panel");
@@ -145,6 +146,8 @@ test("the Design panel shows only while a drawing tool is on or the selection ho
   await expect(page.locator(".tlui-style-panel")).toHaveCount(0);
   const subject = await centre(shapeOnScreen(page, "shape:starter-subject"));
   await page.mouse.click(subject.x, subject.y);
+  await expect(panel).toHaveCount(0);
+  await page.getByTestId("selection-toolbar").getByRole("button", { name: "Design panel", exact: true }).click();
   await expect(panel).toBeVisible();
   const still = (await shapeOnScreen(page, "shape:still").boundingBox())!;
   await page.mouse.click(still.x + 12, still.y + 12);
