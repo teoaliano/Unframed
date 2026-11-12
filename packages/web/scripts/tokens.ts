@@ -28,7 +28,9 @@ const LITERAL_COLOURS: Record<string, string[]> = {
   "src/artifacts/editor/DesignTab.tsx": ["#000000"],
   "src/kits/KitTable.tsx": ["#000000", "rgba(0, 0, 0, 0.2)"],
   "src/generate/render.ts": ["#ffffff"],
-  "src/canvas/DesignPanel.tsx": ["rgb(${p3.slice(1, 4)"],
+  "src/canvas/DesignPanel.tsx": ["#000000"],
+  "src/canvas/StyleRow.tsx": ["#000000"],
+  "src/canvas/designTarget.ts": ["rgb(${p3.slice(1, 4)"],
 };
 
 const RUNTIME = new Set([

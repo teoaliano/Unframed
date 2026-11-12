@@ -1775,6 +1775,8 @@ Components	number-field/ring-invalid	COLOR	{input/ring-invalid}
 Components	number-field/shadow	COLOR	{input/shadow}		
 Components	number-field/shadow-inset/color	COLOR	{color-alpha/black/4}	{color-alpha/white/6}	
 Components	number-field/shadow-inset/y	FLOAT	1	-1	
+Components	number-field/stepper/foreground	COLOR	{text/muted}		
+Components	number-field/stepper/foreground-hover	COLOR	{text/default}		
 Components	number-field/stepper/surface-hover	COLOR	{surface/accent}		
 Components	number-field/surface	COLOR	{input/surface}		
 Components	number-field/surface-autofill	COLOR	{input/surface-autofill}		
@@ -1966,6 +1968,15 @@ Components	stash/row-foreground-highlighted	COLOR	{text/default}
 Components	stash/row-surface-highlighted	COLOR	{surface/accent}		
 Components	stash/snippet	COLOR	{text/default}		
 Components	stash/snippet-opacity	FLOAT	{opacity/80}		
+Components	style-row/line	COLOR	{text/default}		
+Components	style-row/mixed-mark	COLOR	{text/muted}		
+Components	style-row/swatch/border	COLOR	{border/default}		
+Components	style-row/swatch/default-dark	COLOR	{text/default}		
+Components	style-row/swatch/default-light	COLOR	{surface/background}		
+Components	style-row/swatch/none	COLOR	{status/error}		
+Components	style-row/swatch/radius	FLOAT	5		
+Components	style-row/swatch/ring	COLOR	{action/primary}		
+Components	style-row/swatch/ring-offset	COLOR	{surface/popover}		
 Components	switch/ring	COLOR	{border/focus}		
 Components	switch/ring-offset	COLOR	{surface/background}		
 Components	switch/surface	COLOR	{border/strong}		
@@ -2210,6 +2221,10 @@ Components	toggle/segmented/surface-hover	COLOR	{surface/background}	{border/str
 Components	toggle/segmented/surface-hover-opacity	FLOAT	{opacity/55}	{opacity/32}	
 Components	toggle/segmented/surface-pressed	COLOR	{surface/background}	{border/strong}	
 Components	toggle/segmented/surface-pressed-opacity	FLOAT	{opacity/100}	{opacity/72}	
+Components	tool-tray/border	COLOR	{border/default}		
+Components	tool-tray/foreground	COLOR	{text/default}		
+Components	tool-tray/shadow	COLOR	{color-alpha/black/5}		
+Components	tool-tray/surface	COLOR	{surface/glass}		
 Components	toolbar-button/icon/foreground	COLOR	{text/default}		
 Components	toolbar-button/icon/foreground-active	COLOR	{toolbar-button/icon/foreground}		
 Components	toolbar-button/icon/foreground-disabled	COLOR	{text/default}		

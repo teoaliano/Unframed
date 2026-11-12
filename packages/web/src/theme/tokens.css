@@ -1211,6 +1211,8 @@
   --number-field-ring: var(--input-ring);
   --number-field-ring-invalid: var(--input-ring-invalid);
   --number-field-shadow: var(--input-shadow);
+  --number-field-stepper-foreground: var(--text-muted);
+  --number-field-stepper-foreground-hover: var(--text-default);
   --number-field-stepper-surface-hover: var(--surface-accent);
   --number-field-surface: var(--input-surface);
   --number-field-surface-autofill: var(--input-surface-autofill);
@@ -1398,6 +1400,15 @@
   --stash-row-surface-highlighted: var(--surface-accent);
   --stash-snippet: var(--text-default);
   --stash-snippet-opacity: 80%;
+  --style-row-line: var(--text-default);
+  --style-row-mixed-mark: var(--text-muted);
+  --style-row-swatch-border: var(--border-default);
+  --style-row-swatch-default-dark: var(--text-default);
+  --style-row-swatch-default-light: var(--surface-background);
+  --style-row-swatch-none: var(--status-error);
+  --style-row-swatch-radius: 5px;
+  --style-row-swatch-ring: var(--action-primary);
+  --style-row-swatch-ring-offset: var(--surface-popover);
   --switch-ring: var(--border-focus);
   --switch-ring-offset: var(--surface-background);
   --switch-surface: var(--border-strong);
@@ -1600,6 +1611,10 @@
   --toggle-segmented-surface-hover-opacity: 55%;
   --toggle-segmented-surface-pressed: var(--surface-background);
   --toggle-segmented-surface-pressed-opacity: 100%;
+  --tool-tray-border: var(--border-default);
+  --tool-tray-foreground: var(--text-default);
+  --tool-tray-shadow: color-mix(in srgb, var(--color-black) 5%, transparent);
+  --tool-tray-surface: var(--surface-glass);
   --toolbar-button-icon-foreground: var(--text-default);
   --toolbar-button-icon-foreground-active: var(--toolbar-button-icon-foreground);
   --toolbar-button-icon-foreground-disabled: var(--text-default);

@@ -29,17 +29,17 @@ const keepEscape = (editor: Editor) => (event: KeyboardEvent<HTMLElement>) => {
   if (event.key === "Escape") editor.markEventAsHandled(event.nativeEvent);
 };
 
-const MixedMark = () => <span aria-hidden className="block h-0.5 w-2 rounded-full bg-muted-foreground" />;
+const MixedMark = () => <span aria-hidden className="block h-0.5 w-2 rounded-full bg-(--style-row-mixed-mark)" />;
 
 const SwatchFace = ({ kind, view }: { readonly kind: "fill" | "stroke" | "text"; readonly view: ColourView }) => {
   const colour = view.mixed || view.none || view.shown === "" ? undefined : view.shown;
   return (
     <span
       aria-hidden
-      className={cn("flex size-4 items-center justify-center rounded-[4px] border", kind === "stroke" && "border-[3px]")}
+      className={cn("flex size-4 items-center justify-center rounded border border-(--style-row-swatch-border)", kind === "stroke" && "border-3")}
       style={kind === "stroke" ? { borderColor: colour } : { background: colour }}
     >
-      {view.mixed ? <MixedMark /> : view.none ? <span className="block h-px w-3 rotate-45 bg-destructive" /> : null}
+      {view.mixed ? <MixedMark /> : view.none ? <span className="block h-px w-3 rotate-45 bg-(--style-row-swatch-none)" /> : null}
     </span>
   );
 };
@@ -76,7 +76,7 @@ const StylePopover = ({
 const SwatchButton = ({ name, selected, onClick, children }: { readonly name: string; readonly selected: boolean; readonly onClick: () => void; readonly children: ReactNode }) => (
   <Tip label={name} side="top">
     <Button variant="ghost" size="icon-xs" aria-label={name} aria-pressed={selected} onClick={onClick}>
-      <span className={cn("block size-5 rounded-[5px]", selected && "ring-2 ring-primary ring-offset-1 ring-offset-background")}>{children}</span>
+      <span className={cn("block size-5 rounded-(--style-row-swatch-radius)", selected && "ring-2 ring-(--style-row-swatch-ring) ring-offset-1 ring-offset-(--style-row-swatch-ring-offset)")}>{children}</span>
     </Button>
   </Tip>
 );
@@ -101,17 +101,17 @@ const ColourButton = ({
         <>
           <div className="grid grid-cols-[repeat(7,--spacing(6))] gap-1 pb-1.5" role="group" aria-label={`${label} swatches`}>
             <SwatchButton name="Default" selected={!view.mixed && !view.none && current === ""} onClick={() => (onPick(null), close())}>
-              <span aria-hidden className="block size-full rounded-[5px] border bg-[linear-gradient(135deg,var(--foreground)_50%,var(--background)_50%)]" />
+              <span aria-hidden className="block size-full rounded-(--style-row-swatch-radius) border border-(--style-row-swatch-border) bg-[linear-gradient(135deg,var(--style-row-swatch-default-dark)_50%,var(--style-row-swatch-default-light)_50%)]" />
             </SwatchButton>
             {ANNOTATION_SWATCHES.map((swatch) => (
               <SwatchButton key={swatch.hex} name={swatch.name} selected={current === swatch.hex} onClick={() => (onPick(swatch.hex), close())}>
-                <span aria-hidden className="block size-full rounded-[5px]" style={{ background: swatch.hex }} />
+                <span aria-hidden className="block size-full rounded-(--style-row-swatch-radius)" style={{ background: swatch.hex }} />
               </SwatchButton>
             ))}
             {allowNone && (
               <SwatchButton name="None" selected={view.none === true} onClick={() => (onPick("none"), close())}>
-                <span aria-hidden className="relative block size-full rounded-[5px] border">
-                  <span className="absolute top-1/2 left-0.5 right-0.5 h-px -rotate-45 bg-destructive" />
+                <span aria-hidden className="relative block size-full rounded-(--style-row-swatch-radius) border border-(--style-row-swatch-border)">
+                  <span className="absolute top-1/2 left-0.5 right-0.5 h-px -rotate-45 bg-(--style-row-swatch-none)" />
                 </span>
               </SwatchButton>
             )}
@@ -125,7 +125,7 @@ const ColourButton = ({
 
 const StrokeLine = ({ width }: { readonly width: number }) => (
   <span aria-hidden className="flex h-4 w-4 items-center">
-    <span className="block w-full rounded-full bg-foreground" style={{ height: Math.max(1, Math.min(width, 8)) / 1.5 + 0.5 }} />
+    <span className="block w-full rounded-full bg-(--style-row-line)" style={{ height: Math.max(1, Math.min(width, 8)) / 1.5 + 0.5 }} />
   </span>
 );
 

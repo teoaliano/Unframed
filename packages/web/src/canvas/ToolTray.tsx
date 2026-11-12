@@ -59,7 +59,7 @@ const Tray = () => {
       aria-label="Next shape style"
       data-unframed-tool-tray=""
       data-testid="tool-tray"
-      className="pointer-events-auto absolute z-[500] flex items-center gap-0.5 rounded-xl border p-1 font-sans text-foreground shadow-lg/5 surface-glass"
+      className="pointer-events-auto absolute z-[500] flex items-center gap-0.5 rounded-xl border border-(--tool-tray-border) bg-(--tool-tray-surface) p-1 font-sans text-(--tool-tray-foreground) shadow-lg shadow-(color:--tool-tray-shadow) surface-glass"
       style={{ left: place?.left ?? 0, top: place?.top ?? 0, visibility: place === undefined ? "hidden" : "visible" }}
       onPointerDown={(event) => event.stopPropagation()}
       onPointerUp={(event) => event.stopPropagation()}

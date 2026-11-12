@@ -93,14 +93,14 @@ export function NumberFieldStepper({
     >
       <NumberFieldPrimitive.Increment
         aria-label="Increase"
-        className="flex h-3 w-3.5 cursor-pointer items-center justify-center rounded-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        className="flex h-3 w-3.5 cursor-pointer items-center justify-center rounded-xs text-(--number-field-stepper-foreground) transition-colors hover:bg-(--number-field-stepper-surface-hover) hover:text-(--number-field-stepper-foreground-hover)"
         data-slot="number-field-stepper-increment"
       >
         <ChevronUpIcon />
       </NumberFieldPrimitive.Increment>
       <NumberFieldPrimitive.Decrement
         aria-label="Decrease"
-        className="flex h-3 w-3.5 cursor-pointer items-center justify-center rounded-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        className="flex h-3 w-3.5 cursor-pointer items-center justify-center rounded-xs text-(--number-field-stepper-foreground) transition-colors hover:bg-(--number-field-stepper-surface-hover) hover:text-(--number-field-stepper-foreground-hover)"
         data-slot="number-field-stepper-decrement"
       >
         <ChevronDownIcon />
