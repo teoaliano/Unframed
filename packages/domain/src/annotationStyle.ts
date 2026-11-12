@@ -1,10 +1,10 @@
 import type { DesignableType } from "./shapeDesign.ts";
 
-const STYLE_CONTROLS = ["fill", "stroke", "strokeWidth", "dash", "font", "size", "bold", "align", "textColor"] as const;
+const STYLE_CONTROLS = ["fill", "textColor", "stroke", "strokeWidth", "dash", "font", "size", "bold", "align"] as const;
 export type StyleControl = (typeof STYLE_CONTROLS)[number];
 
 const CONTROLS: Readonly<Record<DesignableType, readonly StyleControl[]>> = {
-  text: ["font", "size", "bold", "align", "textColor"],
+  text: ["textColor", "font", "size", "bold", "align"],
   note: ["fill", "font", "size", "bold", "align"],
   geo: ["fill", "stroke", "strokeWidth", "font", "size"],
   arrow: ["stroke", "strokeWidth", "dash"],

@@ -3,7 +3,7 @@ import { ANNOTATION_SWATCHES, designPanelPreference, designValueRefusal, styleCo
 
 describe("styleControlsFor", () => {
   it.each<[DesignableType, string[]]>([
-    ["text", ["font", "size", "bold", "align", "textColor"]],
+    ["text", ["textColor", "font", "size", "bold", "align"]],
     ["note", ["fill", "font", "size", "bold", "align"]],
     ["geo", ["fill", "stroke", "strokeWidth", "font", "size"]],
     ["arrow", ["stroke", "strokeWidth", "dash"]],

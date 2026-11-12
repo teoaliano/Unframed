@@ -138,7 +138,7 @@ test("each kind shows its own controls, a mixed selection what it shares, and a 
   await fit(page);
 
   await select(page, "shape:starter-subject");
-  await expectControls(row(page), ["font", "size", "bold", "align", "textColor"]);
+  await expectControls(row(page), ["textColor", "font", "size", "bold", "align"]);
 
   await select(page, "shape:box");
   await expectControls(row(page), ["fill", "stroke", "strokeWidth", "font", "size"]);

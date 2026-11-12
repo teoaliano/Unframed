@@ -33,13 +33,6 @@ const MixedMark = () => <span aria-hidden className="block h-0.5 w-2 rounded-ful
 
 const SwatchFace = ({ kind, view }: { readonly kind: "fill" | "stroke" | "text"; readonly view: ColourView }) => {
   const colour = view.mixed || view.none || view.shown === "" ? undefined : view.shown;
-  if (kind === "text")
-    return (
-      <span aria-hidden className="flex flex-col items-center leading-none">
-        <span className="text-sm font-semibold">A</span>
-        <span className="mt-0.5 h-1 w-3.5 rounded-sm border" style={{ background: colour }} />
-      </span>
-    );
   return (
     <span
       aria-hidden
