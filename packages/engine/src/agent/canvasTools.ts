@@ -4,6 +4,8 @@ import { basename, join } from "node:path";
 import { isBareFileName, resultMetaOf } from "@unframed/contracts";
 import {
   canvasView,
+  commentThreads,
+  type CommentRecordLike,
   canvasReadDescription,
   canvasWriteDescription,
   CANVAS_WRITE_OPS_ARGUMENT,
@@ -159,7 +161,12 @@ export class CanvasTools {
       pins,
     });
     const kit = kitOf(records);
-    const withKit = { ...view, kit: kit === null ? null : { name: kit.name, tokens: kit.tokens.length, modes: kit.modes } };
+    const open = commentThreads(records as unknown as CommentRecordLike[]).filter((thread) => thread.resolved === null).length;
+    const withKit = {
+      ...view,
+      kit: kit === null ? null : { name: kit.name, tokens: kit.tokens.length, modes: kit.modes },
+      ...(open === 0 ? {} : { comments: { open } }),
+    };
     return { value: live?.note === undefined ? withKit : { ...withKit, selectionNote: live.note } };
   }
 

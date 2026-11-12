@@ -1,6 +1,7 @@
 import type { TLUiActionItem, TLUiOverrides, TLUiToolItem } from "tldraw";
 import { addShape, type AddKind } from "./addShapes.ts";
 import { ungroup, wrapSelection } from "./groups.ts";
+import { COMMENT_TOOL, commentsUi } from "../comments/state.ts";
 
 /** Unframed's add-at-pointer keys, as tldraw spells them. */
 const ADD_KEYS: ReadonlyArray<readonly [AddKind, string]> = [
@@ -37,7 +38,7 @@ let actionKeys = new Set<string>();
  */
 export const overrides: TLUiOverrides = {
   // tldraw's text is Unframed's prompt and its frame is Unframed's group, everywhere they are named.
-  translations: { en: { "tool.text": "Prompt", "tool.frame": "Group" } },
+  translations: { en: { "tool.text": "Prompt", "tool.frame": "Group", "tool.comments": "Comment", "action.toggle-comments": "Show or hide comments" } },
   actions(editor, actions) {
     const redo = actions.redo;
     if (redo) redo.kbd = "cmd+shift+z,ctrl+shift+z,cmd+y,ctrl+y";
@@ -57,6 +58,18 @@ export const overrides: TLUiOverrides = {
     replace("frame-selection", group);
     replace("ungroup", ungroupSelection);
     replace("remove-frame", ungroupSelection);
+    const used = new Set(Object.values(actions).flatMap((action) => bindings(action.kbd)));
+    if (!used.has("shift+c")) {
+      actions["toggle-comments"] = {
+        id: "toggle-comments",
+        label: "action.toggle-comments" as NonNullable<TLUiActionItem["label"]>,
+        kbd: "shift+c",
+        onSelect: () => {
+          const ui = commentsUi(editor);
+          ui.hidden.set(!ui.hidden.get());
+        },
+      };
+    }
     actionKeys = new Set(Object.values(actions).flatMap((action) => bindings(action.kbd)));
     return actions;
   },
@@ -65,6 +78,18 @@ export const overrides: TLUiOverrides = {
     // No Media tool (and no Cmd+U): Image and Video from Add, drop and paste bring files in.
     delete tools.asset;
     const taken = new Set([...actionKeys, ...Object.values(tools).flatMap((tool) => bindings(tool.kbd))]);
+    const commentKbd = unframedBinding("c", taken);
+    tools[COMMENT_TOOL] = {
+      id: COMMENT_TOOL,
+      label: "tool.comments" as TLUiToolItem["label"],
+      icon: "comment",
+      ...(commentKbd === undefined ? {} : { kbd: commentKbd }),
+      onSelect: () => {
+        if (editor.getEditingShapeId()) editor.complete();
+        editor.setCurrentTool(COMMENT_TOOL);
+      },
+    };
+    if (commentKbd !== undefined) taken.add(commentKbd);
     for (const [kind, key] of ADD_KEYS) {
       const id = `unframed-add-${kind}`;
       const kbd = unframedBinding(key, taken);

@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { createCanvasChangesTable, createSyncStorageTables } from "./canvas/tables.ts";
 import { createChatTables } from "./agent/chatTables.ts";
+import { createCommentChatsTable } from "./agent/commentChats.ts";
 import { ImportFailed, makeLegacyImporter, type ImportState } from "./legacy/importer.ts";
 import { createLegacyImportReportTable } from "./legacy/reportTable.ts";
 import { errorText } from "./log.ts";
@@ -33,6 +34,7 @@ export const MIGRATIONS: ReadonlyArray<Migration> = [
   { id: 2, name: "canvas_changes", up: createCanvasChangesTable },
   { id: 3, name: "chat store and turn_changes", up: createChatTables },
   { id: 4, name: "legacy_import_report", up: createLegacyImportReportTable },
+  { id: 5, name: "comment_chats", up: createCommentChatsTable },
 ];
 
 /** `UNFRAMED_TEST_MIGRATION`'s extra migration, numbered far past any real one. */

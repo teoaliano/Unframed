@@ -9,6 +9,7 @@ import { LibraryHost } from "../library/LibraryHost.tsx";
 import { MentionMenu } from "./MentionMenu.tsx";
 import { ArtifactsHost } from "../artifacts/ArtifactsHost.tsx";
 import { NodeChrome } from "../nodes/NodeChrome.tsx";
+import { CommentsHost } from "../comments/CommentsHost.tsx";
 import { useFeature } from "../features.ts";
 
 export const InFront = () => {
@@ -17,6 +18,7 @@ export const InFront = () => {
   return (
   <>
     <Tether />
+    <CommentsHost />
     {nodes && <NodeChrome />}
     <MentionMenu />
     <SelectionToolbar />
