@@ -155,7 +155,7 @@ test("deleting a thread removes it with its replies", async ({ page, engine }) =
   await pin(page, "t1").click();
   await popover(page).getByRole("button", { name: "More" }).click();
   await page.getByRole("menuitem", { name: "Delete thread…" }).click();
-  await popover(page).getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Delete", exact: true }).click();
   await expect(pin(page, "t1")).toHaveCount(0);
   await waitForRoom(engine, project, (records) => threads(records).length === 0 && comments(records).length === 0);
 });

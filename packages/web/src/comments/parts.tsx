@@ -1,15 +1,19 @@
 import { authorLabel, participants, relativeTime, replyCountLabel, type CommentAuthor, type CommentMessage, type CommentThread } from "@unframed/domain";
-import { ArrowUp, AtSign, Check, CircleCheck, Ellipsis, User, X } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { AtSign, Check, CircleCheck, Ellipsis, MessageCircle, User, X } from "lucide-react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "~/lib/utils";
+import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "~/components/ui/empty";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
-import claudeLogo from "../../../../assets/brand/provider-logos/claude.svg?url";
-import codexLogo from "../../../../assets/brand/provider-logos/codex.svg?url";
-
-const LOGOS: Record<string, string> = { claude: claudeLogo, codex: codexLogo };
-
-const AGENT_FILL: Record<string, string> = { claude: "bg-agent-claude text-comment-foreground", codex: "bg-agent-codex text-agent-codex-foreground" };
+import { Separator } from "~/components/ui/separator";
+import { Textarea } from "~/components/ui/textarea";
+import { ConfirmDialog } from "../agent/ConfirmDialog.tsx";
+import { ProviderLogo } from "../agent/composer/pickers.tsx";
+import { composerGlassClass } from "../chrome/composerSurface.ts";
+import { listboxPopupClass } from "../chrome/listbox.ts";
+import { MessageAction, SendArrow } from "../chrome/MessageAction.tsx";
+import { Tip } from "../chrome/ui.tsx";
 
 export const useNow = (every = 30_000): number => {
   const [now, setNow] = useState(() => Date.now());
@@ -20,34 +24,27 @@ export const useNow = (every = 30_000): number => {
   return now;
 };
 
-export const Avatar = ({ author, size = 24, muted = false }: { readonly author: CommentAuthor; readonly size?: number; readonly muted?: boolean }) => {
-  const style = { width: size, height: size };
-  if (author.kind === "person") {
-    return (
-      <span data-comment-avatar="person" aria-label="You" role="img" style={style} className={cn("inline-flex shrink-0 items-center justify-center rounded-full bg-comment-avatar text-comment-avatar-foreground", muted && "opacity-50")}>
-        <User aria-hidden style={{ width: size * 0.58, height: size * 0.58 }} strokeWidth={2.25} />
+export const Avatar = ({ author, size = 20, muted = false, framed = true }: { readonly author: CommentAuthor; readonly size?: number; readonly muted?: boolean; readonly framed?: boolean }) => (
+  <span
+    data-comment-avatar={author.kind === "person" ? "person" : author.provider}
+    aria-label={authorLabel(author)}
+    role="img"
+    style={{ width: size, height: size }}
+    className={cn("inline-flex shrink-0 items-center justify-center rounded-full bg-background text-foreground", framed && "ring-1 ring-border ring-inset", muted && "text-muted-foreground opacity-64")}
+  >
+    {author.kind === "person" ? (
+      <User aria-hidden className="text-muted-foreground" style={{ width: size * 0.6, height: size * 0.6 }} />
+    ) : author.provider === "outside" ? (
+      <span aria-hidden className="text-xs font-medium leading-none">
+        {author.name.charAt(0).toUpperCase()}
       </span>
-    );
-  }
-  const logo = LOGOS[author.provider];
-  return (
-    <span
-      data-comment-avatar={author.provider}
-      aria-label={author.name}
-      role="img"
-      style={style}
-      className={cn("inline-flex shrink-0 items-center justify-center rounded-full", logo === undefined ? "bg-comment text-comment-foreground" : AGENT_FILL[author.provider], muted && "bg-comment-avatar text-comment-avatar-foreground")}
-    >
-      {logo === undefined ? (
-        <span className="font-semibold leading-none" style={{ fontSize: size * 0.46 }}>
-          {author.name.charAt(0).toUpperCase()}
-        </span>
-      ) : (
-        <span className="block bg-current" style={{ width: size * 0.58, height: size * 0.58, mask: `url("${logo}") center / contain no-repeat`, WebkitMask: `url("${logo}") center / contain no-repeat` }} />
-      )}
-    </span>
-  );
-};
+    ) : (
+      <span aria-hidden className="inline-flex">
+        <ProviderLogo provider={author.provider} />
+      </span>
+    )}
+  </span>
+);
 
 const MENTION = /(^|[^\w@])(@(?:claude|codex))\b/gi;
 
@@ -58,7 +55,7 @@ export const MentionText = ({ text }: { readonly text: string }) => {
     const start = match.index! + match[1]!.length;
     if (start > last) parts.push(text.slice(last, start));
     parts.push(
-      <span key={start} data-comment-mention="" className="font-medium text-comment">
+      <span key={start} data-comment-mention="" className="font-medium text-highlight">
         {match[2]}
       </span>,
     );
@@ -68,7 +65,13 @@ export const MentionText = ({ text }: { readonly text: string }) => {
   return <>{parts}</>;
 };
 
-export const PIN_SHADOW = "shadow-[0_1px_3px_rgb(0_0_0/0.15),0_0_0.5px_rgb(0_0_0/0.18)]";
+const Byline = ({ author, at, now, muted = false }: { readonly author: CommentAuthor; readonly at: number; readonly now: number; readonly muted?: boolean }) => (
+  <div className="flex min-w-0 items-center gap-2">
+    <Avatar author={author} muted={muted} />
+    <span className="truncate text-xs font-medium text-foreground">{authorLabel(author)}</span>
+    <span className="shrink-0 text-xs text-muted-foreground">{relativeTime(at, now)}</span>
+  </div>
+);
 
 export const PinBody = ({
   author,
@@ -86,14 +89,13 @@ export const PinBody = ({
   <span
     data-comment-pin-body=""
     className={cn(
-      "relative box-border flex size-8 items-center justify-center rounded-[16px] rounded-bl-none",
-      PIN_SHADOW,
-      pending ? "bg-comment" : "bg-comment-pin",
-      selected && "ring-2 ring-comment",
+      "relative box-border flex size-8 items-center justify-center rounded-full rounded-bl-none border shadow-md/5",
+      pending ? "border-primary bg-primary" : "bg-popover",
+      selected && "outline-2 outline-offset-1 outline-highlight",
     )}
   >
-    {!pending && author !== undefined && <Avatar author={author} muted={resolved} />}
-    {unread && !pending && <span data-comment-unread="" className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full border-2 border-comment-pin bg-comment box-content" />}
+    {!pending && author !== undefined && <Avatar author={author} size={24} muted={resolved} framed={false} />}
+    {unread && !pending && <span data-comment-unread="" className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-highlight ring-2 ring-background" />}
   </span>
 );
 
@@ -101,25 +103,17 @@ export const PreviewCard = ({ thread, now, resolved = false }: { readonly thread
   const first = thread.messages[0]!;
   const replies = replyCountLabel(thread);
   return (
-    <div data-comment-preview="" className={cn("box-border flex w-60 flex-col gap-1 rounded-[16px] rounded-bl-none bg-popover p-1 pe-3 text-popover-foreground", PIN_SHADOW)}>
-      <div className="flex min-w-0 items-center gap-2">
-        <Avatar author={first.author} muted={resolved} />
-        <span className="truncate text-[13px] font-semibold leading-5">{authorLabel(first.author)}</span>
-        <span className="shrink-0 text-[11px] leading-5 text-muted-foreground">{relativeTime(first.createdAt, now)}</span>
-      </div>
-      <p className="m-0 line-clamp-2 ps-8 pb-1 text-[13px] leading-5 break-words">
+    <div data-comment-preview="" className={cn(listboxPopupClass, "flex w-64 flex-col gap-1 rounded-lg rounded-bl-none border p-2.5")}>
+      <Byline author={first.author} at={first.createdAt} now={now} muted={resolved} />
+      <p className="m-0 line-clamp-2 ps-7 text-sm leading-relaxed break-words">
         <MentionText text={first.text} />
       </p>
-      {replies !== null && <span className="ps-8 pb-1 text-[11px] leading-4 text-muted-foreground">{replies}</span>}
+      {replies !== null && <span className="ps-7 text-xs text-muted-foreground">{replies}</span>}
     </div>
   );
 };
 
-const SendButton = ({ disabled, onClick }: { readonly disabled: boolean; readonly onClick: () => void }) => (
-  <Button variant="comment" size="icon-xs" aria-label="Post" data-comment-send="" disabled={disabled} onClick={onClick}>
-    <ArrowUp aria-hidden strokeWidth={2.25} />
-  </Button>
-);
+const COMPOSER_CLASS = `${composerGlassClass} relative isolate flex w-full flex-col text-sm leading-relaxed text-foreground gap-1.5 rounded-2xl px-3 pt-2.5 pb-2 after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-border`;
 
 export const Composer = ({
   placeholder,
@@ -141,14 +135,6 @@ export const Composer = ({
   const [text, setText] = useState(initial);
   const area = useRef<HTMLTextAreaElement>(null);
   const empty = text.trim() === "";
-  const expanded = !empty || variant === "edit";
-
-  useLayoutEffect(() => {
-    const element = area.current;
-    if (element === null) return;
-    element.style.height = "0px";
-    element.style.height = `${Math.min(element.scrollHeight, 240)}px`;
-  }, [text, expanded]);
 
   useEffect(() => {
     if (!autoFocus) return;
@@ -181,69 +167,52 @@ export const Composer = ({
     const start = element.selectionStart;
     const before = text.slice(0, start);
     const insert = before === "" || /\s$/.test(before) ? "@" : " @";
-    const next = before + insert + text.slice(element.selectionEnd);
-    setText(next);
+    setText(before + insert + text.slice(element.selectionEnd));
     requestAnimationFrame(() => {
       element.focus();
       element.setSelectionRange(start + insert.length, start + insert.length);
     });
   };
 
-  const field = (
-    <textarea
-      ref={area}
-      data-comment-input=""
-      aria-label={placeholder}
-      value={text}
-      rows={1}
-      placeholder={placeholder}
-      onChange={(event) => setText(event.target.value)}
-      onKeyDown={onKeyDown}
-      className={cn(
-        "block w-full resize-none border-0 bg-transparent p-0 text-[13px] leading-5 text-popover-foreground outline-none placeholder:text-muted-foreground",
-        expanded ? "min-h-10" : "min-h-5",
-      )}
-    />
-  );
-
   return (
-    <div data-comment-composer={variant} data-expanded={expanded ? "" : undefined} className={cn("box-border flex w-full flex-col rounded-xl", variant === "card" ? "bg-popover" : "bg-comment-field")}>
-      <div className={cn("flex min-h-10 items-center gap-2", expanded ? "px-3 pt-2.5 pb-2" : "ps-3 pe-2")}>
-        <div className={cn("min-w-0 flex-1", !expanded && "py-2.5")}>{field}</div>
-        {!expanded && <SendButton disabled onClick={submit} />}
-      </div>
-      {expanded && (
-        <>
-          <div className="h-px bg-border" />
-          <div className="flex h-10 items-center gap-1 ps-2 pe-2">
-            <Button variant="ghost-muted" size="icon-xs" aria-label="Mention an agent" title="Mention an agent" onClick={mention}>
-              <AtSign aria-hidden />
+    <div data-comment-composer={variant} className={cn(COMPOSER_CLASS, variant === "card" && "shadow-composer dark:shadow-none")}>
+      <Textarea
+        unstyled
+        ref={area}
+        data-comment-input=""
+        aria-label={placeholder}
+        value={text}
+        rows={1}
+        placeholder={placeholder}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={onKeyDown}
+        style={{ minHeight: variant === "reply" ? 24 : 44, padding: 0, resize: "none" }}
+      />
+      <div className="flex items-center gap-1">
+        <Tip label="Mention Claude or Codex" side="top">
+          <Button variant="ghost-muted" size="icon-xs" aria-label="Mention an agent" onClick={mention}>
+            <AtSign aria-hidden />
+          </Button>
+        </Tip>
+        <span className="flex-1" />
+        {variant === "edit" ? (
+          <>
+            <Button variant="ghost" size="xs" onClick={onCancel}>
+              Cancel
             </Button>
-            <span className="flex-1" />
-            {variant === "edit" ? (
-              <>
-                <Button variant="ghost" size="xs" onClick={onCancel}>
-                  Cancel
-                </Button>
-                <Button variant="comment" size="xs" onClick={submit} disabled={empty}>
-                  {submitLabel ?? "Save"}
-                </Button>
-              </>
-            ) : (
-              <SendButton disabled={empty} onClick={submit} />
-            )}
-          </div>
-        </>
-      )}
+            <Button size="xs" onClick={submit} disabled={empty}>
+              {submitLabel ?? "Save"}
+            </Button>
+          </>
+        ) : (
+          <MessageAction tone="send" aria-label="Post" data-comment-send="" disabled={empty} onClick={submit} className="size-7">
+            <SendArrow />
+          </MessageAction>
+        )}
+      </div>
     </div>
   );
 };
-
-const IconButton = ({ label, children, onClick, active = false }: { readonly label: string; readonly children: ReactNode; readonly onClick?: () => void; readonly active?: boolean }) => (
-  <Button variant="ghost" size="icon-xs" aria-label={label} title={label} onClick={onClick} aria-pressed={active}>
-    {children}
-  </Button>
-);
 
 const MessageView = ({
   message,
@@ -261,14 +230,12 @@ const MessageView = ({
   const [editing, setEditing] = useState(false);
   const own = message.author.kind === "person" && (onEdit !== undefined || onDelete !== undefined);
   return (
-    <div data-comment-message={message.id} className="group/message relative flex flex-col gap-1">
-      <div className="flex min-w-0 items-center gap-2 pe-7">
-        <Avatar author={message.author} muted={muted} />
-        <span className="truncate text-[13px] font-semibold leading-5">{authorLabel(message.author)}</span>
-        <span className="shrink-0 text-[13px] leading-5 text-muted-foreground">{relativeTime(message.createdAt, now)}</span>
+    <article data-comment-message={message.id} className="group/message relative flex flex-col gap-1">
+      <div className="pe-7">
+        <Byline author={message.author} at={message.createdAt} now={now} muted={muted} />
       </div>
       {editing ? (
-        <div className="ps-8">
+        <div className="ps-7">
           <Composer
             variant="edit"
             placeholder="Edit comment"
@@ -282,19 +249,19 @@ const MessageView = ({
           />
         </div>
       ) : (
-        <p className="m-0 ps-8 text-[13px] leading-5 break-words whitespace-pre-wrap">
+        <p className={cn("m-0 ps-7 text-sm leading-relaxed break-words whitespace-pre-wrap", muted && "text-muted-foreground")}>
           <MentionText text={message.text} />
-          {message.editedAt !== null && <span className="text-muted-foreground"> (edited)</span>}
+          {message.editedAt !== null && <span className="text-xs text-muted-foreground"> (edited)</span>}
         </p>
       )}
       {own && !editing && (
         <Menu>
-          <span className="absolute top-0 right-0 opacity-0 group-hover/message:opacity-100 focus-within:opacity-100 has-data-popup-open:opacity-100">
+          <span className="absolute -top-1 right-0 opacity-0 transition-opacity group-hover/message:opacity-100 focus-within:opacity-100 has-data-popup-open:opacity-100 pointer-coarse:opacity-100">
             <MenuTrigger aria-label="Comment actions" data-comment-message-menu="" render={<Button variant="ghost-muted" size="icon-xs" />}>
               <Ellipsis aria-hidden />
             </MenuTrigger>
           </span>
-          <MenuPopup align="end" className="w-36 min-w-0">
+          <MenuPopup align="end">
             {onEdit && <MenuItem onClick={() => setEditing(true)}>Edit…</MenuItem>}
             {onDelete && (
               <MenuItem variant="destructive" onClick={onDelete}>
@@ -304,7 +271,7 @@ const MessageView = ({
           </MenuPopup>
         </Menu>
       )}
-    </div>
+    </article>
   );
 };
 
@@ -318,26 +285,42 @@ export interface ThreadActions {
   readonly onDeleteComment: (commentId: string) => void;
 }
 
-export const POPOVER_SHADOW = "shadow-[0_0_0.5px_rgb(0_0_0/0.15),0_2px_5px_rgb(0_0_0/0.15),0_10px_16px_rgb(0_0_0/0.12)] dark:shadow-[0_0_0_1px_rgb(255_255_255/0.08),0_2px_5px_rgb(0_0_0/0.4),0_10px_16px_rgb(0_0_0/0.35)]";
+export const FLOATING_CARD_CLASS = "dropdown-glass rounded-xl border font-sans text-popover-foreground shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]";
 
 export const ThreadPopover = ({ thread, now, actions, autoFocus = false }: { readonly thread: CommentThread; readonly now: number; readonly actions: ThreadActions; readonly autoFocus?: boolean }) => {
   const [confirming, setConfirming] = useState(false);
   const resolved = thread.resolved !== null;
   const list = useRef<HTMLDivElement>(null);
   const count = thread.messages.length;
-  useLayoutEffect(() => {
+  useEffect(() => {
     const element = list.current;
     if (element !== null) element.scrollTop = element.scrollHeight;
   }, [count]);
   return (
-    <div data-comment-thread={thread.id} role="dialog" aria-label={`Comment #${thread.number}`} className={cn("box-border flex max-h-[min(560px,calc(100vh-120px))] w-[356px] flex-col rounded-[13px] bg-popover font-sans text-popover-foreground", POPOVER_SHADOW)}>
-      <div className="flex h-10 shrink-0 items-center gap-1 border-b ps-4 pe-2">
-        <span className="flex-1 text-[13px] font-semibold">Comment</span>
+    <div data-comment-thread={thread.id} role="dialog" aria-label={`Comment #${thread.number}`} className={cn(FLOATING_CARD_CLASS, "box-border flex max-h-[min(560px,calc(100vh-120px))] w-80 flex-col")}>
+      <header className="flex h-11 shrink-0 items-center gap-1 border-b pr-1.5 pl-3">
+        <MessageCircle aria-hidden className="size-4 shrink-0 text-foreground" />
+        <h2 className="m-0 ml-1 flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium">
+          Comment
+          <span className="text-muted-foreground tabular-nums">#{thread.number}</span>
+          {resolved && (
+            <Badge variant="success" size="sm">
+              Resolved
+            </Badge>
+          )}
+        </h2>
+        <Tip label={resolved ? "Reopen" : "Resolve"}>
+          <Button variant="ghost" size="icon-sm" aria-label={resolved ? "Reopen" : "Resolve"} aria-pressed={resolved} onClick={() => actions.onResolve(!resolved)}>
+            {resolved ? <Check aria-hidden className="text-success-foreground" /> : <CircleCheck aria-hidden />}
+          </Button>
+        </Tip>
         <Menu>
-          <MenuTrigger aria-label="More" title="More" data-comment-thread-menu="" render={<Button variant="ghost" size="icon-xs" />}>
-            <Ellipsis aria-hidden />
-          </MenuTrigger>
-          <MenuPopup align="end" className="w-44 min-w-0">
+          <Tip label="More">
+            <MenuTrigger aria-label="More" data-comment-thread-menu="" render={<Button variant="ghost" size="icon-sm" />}>
+              <Ellipsis aria-hidden />
+            </MenuTrigger>
+          </Tip>
+          <MenuPopup align="end">
             <MenuItem onClick={actions.onMarkUnread}>Mark as unread</MenuItem>
             <MenuSeparator />
             <MenuItem variant="destructive" onClick={() => setConfirming(true)}>
@@ -345,25 +328,21 @@ export const ThreadPopover = ({ thread, now, actions, autoFocus = false }: { rea
             </MenuItem>
           </MenuPopup>
         </Menu>
-        <IconButton label={resolved ? "Reopen" : "Resolve"} active={resolved} onClick={() => actions.onResolve(!resolved)}>
-          {resolved ? <CircleCheck aria-hidden className="size-4 fill-comment text-popover" /> : <CircleCheck aria-hidden className="size-4" />}
-        </IconButton>
-        <IconButton label="Close" onClick={actions.onClose}>
-          <X aria-hidden className="size-4" />
-        </IconButton>
-      </div>
-      {confirming && (
-        <div data-comment-confirm="" className="flex shrink-0 items-center gap-2 border-b bg-muted px-4 py-2.5 text-[12px]">
-          <span className="flex-1">Delete this thread and its replies?</span>
-          <Button variant="ghost" size="xs" onClick={() => setConfirming(false)}>
-            Cancel
+        <Separator orientation="vertical" className="mx-1 h-4" />
+        <Tip label="Close">
+          <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={actions.onClose}>
+            <X aria-hidden />
           </Button>
-          <Button variant="destructive" size="xs" onClick={actions.onDeleteThread}>
-            Delete
-          </Button>
-        </div>
-      )}
-      <div ref={list} className="flex min-h-0 flex-col gap-4 overflow-y-auto px-4 pt-3 pb-1">
+        </Tip>
+      </header>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={`Delete comment #${thread.number}?`}
+        description="The thread and all its replies are removed for good."
+        actions={[{ label: "Delete", destructive: true, onClick: actions.onDeleteThread }]}
+      />
+      <div ref={list} className="flex min-h-0 flex-col gap-3.5 overflow-y-auto px-3 pt-3 pb-1">
         {thread.messages.map((message) => (
           <MessageView
             key={message.id}
@@ -375,21 +354,16 @@ export const ThreadPopover = ({ thread, now, actions, autoFocus = false }: { rea
           />
         ))}
       </div>
-      <div className="flex shrink-0 items-start gap-2 px-4 pt-3 pb-4">
-        <span className="pt-2">
-          <Avatar author={{ kind: "person" }} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <Composer variant="reply" placeholder="Reply" autoFocus={autoFocus} onSubmit={actions.onReply} onCancel={actions.onClose} />
-        </div>
+      <div className="shrink-0 p-2.5">
+        <Composer variant="reply" placeholder="Reply" autoFocus={autoFocus} onSubmit={actions.onReply} onCancel={actions.onClose} />
       </div>
     </div>
   );
 };
 
 export const NewThreadComposer = ({ onSubmit, onCancel }: { readonly onSubmit: (text: string) => void; readonly onCancel: () => void }) => (
-  <div data-comment-new="" className={cn("box-border w-[292px] rounded-xl bg-popover font-sans", POPOVER_SHADOW)}>
-    <Composer variant="card" placeholder="Add a comment" autoFocus onSubmit={onSubmit} onCancel={onCancel} />
+  <div data-comment-new="" className="box-border w-80 font-sans">
+    <Composer variant="card" placeholder="Add a comment, @ to ask Claude or Codex" autoFocus onSubmit={onSubmit} onCancel={onCancel} />
   </div>
 );
 
@@ -428,23 +402,34 @@ export const SidebarRow = ({
           onOpen();
         }
       }}
-      className={cn(
-        "group/row relative flex cursor-pointer flex-col gap-1 rounded-lg p-3 text-left font-sans outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-comment",
-        selected && "bg-comment-surface hover:bg-comment-surface",
-      )}
+      className="group/row relative flex cursor-pointer flex-col gap-1.5 rounded-lg px-2.5 py-2 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring data-selected:bg-accent"
     >
-      <div className="flex h-6 items-center gap-1">
-        <div className="flex flex-1 items-center gap-1">
+      <div className="flex h-6 items-center gap-1.5">
+        <div className="flex -space-x-1">
           {participants(thread).slice(0, 4).map((author) => (
-            <Avatar key={author.kind === "person" ? "person" : author.chatId} author={author} muted={resolved} />
+            <span key={author.kind === "person" ? "person" : author.chatId} className="rounded-full ring-2 ring-background">
+              <Avatar author={author} muted={resolved} />
+            </span>
           ))}
         </div>
-        <div className={cn("flex items-center gap-0.5 opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 has-data-popup-open:opacity-100", selected && "opacity-100")} onClick={(event) => event.stopPropagation()}>
+        <Badge variant="outline" size="sm">
+          #{thread.number}
+        </Badge>
+        {resolved && (
+          <Badge variant="success" size="sm">
+            Resolved
+          </Badge>
+        )}
+        <span className="flex-1" />
+        <div
+          className={cn("flex items-center opacity-0 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100 has-data-popup-open:opacity-100 pointer-coarse:opacity-100", selected && "opacity-100")}
+          onClick={(event) => event.stopPropagation()}
+        >
           <Menu>
-            <MenuTrigger aria-label="Thread actions" render={<Button variant="ghost" size="icon-xs" />}>
+            <MenuTrigger aria-label="Thread actions" render={<Button variant="ghost-muted" size="icon-xs" />}>
               <Ellipsis aria-hidden />
             </MenuTrigger>
-            <MenuPopup align="end" className="w-40 min-w-0">
+            <MenuPopup align="end">
               <MenuItem onClick={onToggleRead}>{unread ? "Mark as read" : "Mark as unread"}</MenuItem>
               <MenuSeparator />
               <MenuItem variant="destructive" onClick={onDelete}>
@@ -452,39 +437,51 @@ export const SidebarRow = ({
               </MenuItem>
             </MenuPopup>
           </Menu>
-          <Button variant="ghost" size="icon-xs" aria-label={resolved ? "Reopen" : "Resolve"} title={resolved ? "Reopen" : "Resolve"} onClick={() => onResolve(!resolved)}>
-            {resolved ? <Check aria-hidden className="text-comment" /> : <CircleCheck aria-hidden />}
-          </Button>
+          <Tip label={resolved ? "Reopen" : "Resolve"}>
+            <Button variant="ghost-muted" size="icon-xs" aria-label={resolved ? "Reopen" : "Resolve"} onClick={() => onResolve(!resolved)}>
+              {resolved ? <Check aria-hidden /> : <CircleCheck aria-hidden />}
+            </Button>
+          </Tip>
         </div>
-        {unread && <span data-comment-unread="" className="ms-1 size-2 shrink-0 rounded-full bg-comment" />}
+        {unread && <span data-comment-unread="" aria-label="Unread" role="img" className="size-2 shrink-0 rounded-full bg-highlight" />}
       </div>
-      <span className="text-[11px] leading-4 text-muted-foreground">#{thread.number}{resolved ? " · Resolved" : ""}</span>
-      <div className="flex min-w-0 items-baseline gap-1.5">
-        <span className="truncate text-[13px] font-semibold leading-5 text-foreground">{authorLabel(first.author)}</span>
-        <span className="shrink-0 text-[11px] leading-5 text-muted-foreground">{relativeTime(first.createdAt, now)}</span>
+      <div className="flex min-w-0 items-baseline gap-1.5 text-xs">
+        <span className="truncate font-medium text-foreground">{authorLabel(first.author)}</span>
+        <span className="shrink-0 text-muted-foreground">{relativeTime(first.createdAt, now)}</span>
       </div>
-      <p className={cn("m-0 line-clamp-3 text-[13px] leading-5 break-words", resolved ? "text-muted-foreground" : "text-foreground")}>
+      <p className={cn("m-0 line-clamp-3 text-sm leading-relaxed break-words", resolved ? "text-muted-foreground" : "text-foreground")}>
         <MentionText text={first.text} />
       </p>
-      {replies !== null && <span className="text-[12px] font-medium leading-4 text-comment">{replies}</span>}
+      {replies !== null && <span className="text-xs text-muted-foreground">{replies}</span>}
     </div>
   );
 };
+
+export const CommentsEmpty = ({ filtered }: { readonly filtered: boolean }) => (
+  <Empty size="compact">
+    <EmptyHeader>
+      <EmptyMedia variant="icon">
+        <MessageCircle aria-hidden />
+      </EmptyMedia>
+      <EmptyTitle>{filtered ? "No comments match" : "No comments yet"}</EmptyTitle>
+      <EmptyDescription>{filtered ? "Try other words, or show resolved comments." : "Click the canvas to leave one. Mention @Claude or @Codex to ask an agent."}</EmptyDescription>
+    </EmptyHeader>
+  </Empty>
+);
 
 export const ClusterBubble = ({ authors, count, hovered }: { readonly authors: ReadonlyArray<CommentAuthor>; readonly count: number; readonly hovered: boolean }) => (
   <span
     data-comment-cluster-body=""
     className={cn(
-      "box-border flex items-center justify-center rounded-full bg-comment-pin text-[13px] font-semibold text-comment-pin-foreground transition-[width,height] duration-150 ease-out",
-      PIN_SHADOW,
-      hovered ? "h-10 min-w-10 px-1.5" : "size-8",
+      "box-border flex items-center justify-center rounded-full border bg-popover text-xs font-medium text-foreground tabular-nums shadow-md/5 transition-[width,height] duration-150 ease-out motion-reduce:transition-none",
+      hovered ? "h-9 min-w-9 px-1.5" : "size-8",
     )}
   >
     {hovered ? (
-      <span className="flex -space-x-2">
+      <span className="flex -space-x-1.5">
         {authors.slice(0, 3).map((author, index) => (
-          <span key={index} className="rounded-full ring-2 ring-comment-pin">
-            <Avatar author={author} />
+          <span key={index} className="rounded-full ring-2 ring-popover">
+            <Avatar author={author} size={24} />
           </span>
         ))}
       </span>

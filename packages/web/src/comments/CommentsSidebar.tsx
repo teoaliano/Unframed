@@ -1,11 +1,13 @@
 import { isUnread, visibleThreads, type CommentFilter } from "@unframed/domain";
 import { Ellipsis, ListFilter, MessageCircle, Search, X } from "lucide-react";
+import { Tip } from "../chrome/ui.tsx";
 import { useRef } from "react";
 import { usePassThroughWheelEvents, useValue } from "tldraw";
 import { Button } from "~/components/ui/button";
+import { Separator } from "~/components/ui/separator";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "~/components/ui/input-group";
 import { Menu, MenuCheckboxItem, MenuGroup, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "~/components/ui/menu";
-import { SidebarRow, useNow } from "./parts.tsx";
+import { CommentsEmpty, SidebarRow, useNow } from "./parts.tsx";
 import type { CommentsUi } from "./state.ts";
 
 export const CommentsSidebar = ({ ui }: { readonly ui: CommentsUi }) => {
@@ -47,28 +49,16 @@ export const CommentsSidebar = ({ ui }: { readonly ui: CommentsUi }) => {
         editor.getContainer().focus();
       }}
     >
-      <div className="flex h-11 shrink-0 items-center border-b ps-4 pe-2">
-        <span className="flex-1 text-sm font-semibold">Comments</span>
-      </div>
-      <div className="flex shrink-0 items-center gap-1 border-b px-2 py-2">
-        <InputGroup className="min-w-0 flex-1">
-          <InputGroupAddon>
-            <Search aria-hidden />
-          </InputGroupAddon>
-          <InputGroupInput size="sm" type="search" aria-label="Search comments" placeholder="Search" value={filter.query} onChange={(event) => setFilter({ query: event.target.value })} />
-          {filter.query !== "" && (
-            <InputGroupAddon align="inline-end">
-              <Button variant="ghost-muted" size="icon-micro" aria-label="Clear search" onClick={() => setFilter({ query: "" })}>
-                <X aria-hidden />
-              </Button>
-            </InputGroupAddon>
-          )}
-        </InputGroup>
+      <header className="flex h-12 shrink-0 items-center gap-1 pr-2 pl-3.5">
+        <MessageCircle aria-hidden className="size-4 shrink-0 text-foreground" />
+        <h2 className="m-0 ml-1 flex-1 text-sm font-medium">Comments</h2>
         <Menu>
-          <MenuTrigger aria-label="Sort and filter" title="Sort and filter" render={<Button variant="ghost" size="icon-sm" />}>
-            <ListFilter aria-hidden />
-          </MenuTrigger>
-          <MenuPopup align="end" className="w-56 min-w-0">
+          <Tip label="Sort and filter">
+            <MenuTrigger aria-label="Sort and filter" render={<Button variant="ghost" size="icon-sm" />}>
+              <ListFilter aria-hidden />
+            </MenuTrigger>
+          </Tip>
+          <MenuPopup align="end">
             <MenuRadioGroup value={filter.sort} onValueChange={(value) => setFilter({ sort: value as CommentFilter["sort"] })}>
               <MenuRadioItem value="date">Sort by date</MenuRadioItem>
               <MenuRadioItem value="unread">Sort by unread</MenuRadioItem>
@@ -85,20 +75,35 @@ export const CommentsSidebar = ({ ui }: { readonly ui: CommentsUi }) => {
           </MenuPopup>
         </Menu>
         <Menu>
-          <MenuTrigger aria-label="More comment actions" title="More" render={<Button variant="ghost" size="icon-sm" />}>
-            <Ellipsis aria-hidden />
-          </MenuTrigger>
-          <MenuPopup align="end" className="w-44 min-w-0">
+          <Tip label="More">
+            <MenuTrigger aria-label="More comment actions" render={<Button variant="ghost" size="icon-sm" />}>
+              <Ellipsis aria-hidden />
+            </MenuTrigger>
+          </Tip>
+          <MenuPopup align="end">
             <MenuItem onClick={() => ui.markAllSeen()}>Mark all as read</MenuItem>
           </MenuPopup>
         </Menu>
+      </header>
+      <div className="shrink-0 px-2.5 pb-2.5">
+        <InputGroup>
+          <InputGroupAddon>
+            <Search aria-hidden />
+          </InputGroupAddon>
+          <InputGroupInput size="sm" type="search" aria-label="Search comments" placeholder="Search comments" value={filter.query} onChange={(event) => setFilter({ query: event.target.value })} />
+          {filter.query !== "" && (
+            <InputGroupAddon align="inline-end">
+              <Button variant="ghost-muted" size="icon-micro" aria-label="Clear search" onClick={() => setFilter({ query: "" })}>
+                <X aria-hidden />
+              </Button>
+            </InputGroupAddon>
+          )}
+        </InputGroup>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain p-2 pb-14" data-comments-list="">
+      <Separator />
+      <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain p-1.5 pb-14" data-comments-list="">
         {shown.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 px-6 pt-16 text-center text-[13px] text-muted-foreground">
-            <MessageCircle aria-hidden className="size-6" />
-            {threads.length === 0 ? <span>Click anywhere on the canvas to leave a comment. Mention @Claude or @Codex to ask an agent.</span> : <span>No comments match.</span>}
-          </div>
+          <CommentsEmpty filtered={threads.length > 0} />
         ) : (
           shown.map((thread) => (
             <SidebarRow

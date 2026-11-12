@@ -13,8 +13,3 @@
 .tl-container[data-unframed-commenting] .tl-canvas * {
   cursor: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M2 22V12a10 10 0 1 1 10 10H2z' fill='white' stroke='black' stroke-width='1.5' stroke-linejoin='round'/%3E%3C/svg%3E") 2 22, crosshair !important;
 }
-
-[data-comment-tool-button] {
-  --tl-color-selected: var(--comment);
-  --tl-color-selected-contrast: var(--comment-foreground);
-}
