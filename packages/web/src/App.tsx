@@ -13,6 +13,7 @@ import { Button } from "~/components/ui/button";
 import type { EngineConnection } from "./rpc/engine.ts";
 import { reportIpadAvailability } from "./settings/ipadAvailability.ts";
 import { SettingsHost } from "./settings/SettingsHost.tsx";
+import { setThemeChoice, THEME_KEY, themeChoiceOf } from "./theme/theme.ts";
 import { Toasts } from "./toasts.tsx";
 
 /** Feeds the RPC socket's state to the connection monitor. */
@@ -21,6 +22,10 @@ const useRpcHealth = (engine: EngineConnection) => {
     connectionMonitor.setRpc(engine.state === "open" ? "up" : "down");
     return engine.onStateChange((state) => connectionMonitor.setRpc(state === "open" ? "up" : "down"));
   }, [engine]);
+};
+
+const useThemePreference = (engine: EngineConnection) => {
+  useEffect(() => engine.subscribe("preferences.subscribe", { keys: [THEME_KEY] }, ({ value }) => setThemeChoice(themeChoiceOf(value))), [engine]);
 };
 
 /**
@@ -57,6 +62,7 @@ const Frame = () => {
 export const App = ({ engine }: { readonly engine: EngineConnection }) => {
   const activation = useMemo(() => new ProjectActivation(engine), [engine]);
   useRpcHealth(engine);
+  useThemePreference(engine);
   const loaded = useRef(false);
   useEffect(() => {
     if (loaded.current) return;

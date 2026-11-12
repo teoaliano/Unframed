@@ -21,6 +21,7 @@ import { installRenderPolls } from "../generate/renderPolls.ts";
 import { watchRunReports } from "../generate/runReports.ts";
 import { LicenseKeyContext } from "../license.ts";
 import { SETTLE_BEFORE_SWITCH_MS, type ProjectActivation } from "../project/activation.ts";
+import { onThemeShown } from "../theme/theme.ts";
 import { showError } from "../toasts.tsx";
 import { createAssetStore, Previews } from "./assetStore.ts";
 import { clipboardOptions, installExternalContent, type ContentContext } from "./externalContent.ts";
@@ -119,6 +120,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
 
   const onMount = useCallback((editor: Editor) => {
     editor.user.updateUserPreferences({ locale: "en" });
+    const stopTheme = onThemeShown((colorScheme) => editor.user.updateUserPreferences({ colorScheme }));
     const minter = new RefMinter(editor);
     const stopMinting = installRefMinting(editor, minter);
     const stopLabelLevel = installLabelLevel(editor);
@@ -142,6 +144,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     else fitToShapes(editor);
     return () => {
       rememberCamera(project, editor.getCamera());
+      stopTheme();
       stopMinting();
       stopLabelLevel();
       stopLabelActivity();

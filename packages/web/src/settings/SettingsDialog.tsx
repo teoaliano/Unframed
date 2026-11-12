@@ -1,15 +1,18 @@
 import { UnframedError, type ProviderStatuses, type Settings, type SettingsPatch } from "@unframed/contracts";
 import { ELEVENLABS_KEY, elevenLabsStatusCopy, GENERATION_PROVIDERS, VERCEL_KEY_SAVED_MESSAGE, vercelCreditsCopy, keyStatusCopy, OPENROUTER_KEY, sendShortcutOf, VERCEL_KEY, type SendShortcut } from "@unframed/domain";
 import { Bot, CircleAlert, CircleCheck, FolderOpen, Plug, SlidersHorizontal, Sparkles, Tablet, type LucideIcon } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Spinner } from "~/components/ui/spinner";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "~/components/ui/tabs";
 import { useActivation, useEngine } from "../context.ts";
 import { loadCatalogue } from "../generate/catalogue.ts";
+import { setThemeChoice, THEME_CHOICES, THEME_KEY, themeChoice, themeChoiceOf, type ThemeChoice } from "../theme/theme.ts";
 import { showNotice } from "../toasts.tsx";
 import { Copy, linkClass, ModelSelect, SectionHeading } from "./fields.tsx";
 import { FOLLOW_UP_KEY, LocalAgents, PLAN_MODE_KEY, SEND_SHORTCUT_KEY, type FollowUp } from "./LocalAgents.tsx";
@@ -146,6 +149,8 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const [followUp, setFollowUp] = useState<FollowUp>("queue");
   const [sendShortcut, setSendShortcut] = useState<SendShortcut>("enter");
   const [planMode, setPlanMode] = useState(false);
+  const [theme, setTheme] = useState<ThemeChoice>(themeChoice);
+  const themeId = useId();
   const keyField = useRef<HTMLInputElement>(null);
   const checks = useRef(0);
   const resetRemovals = useRef(() => {});
@@ -239,10 +244,11 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   useEffect(() => {
     if (!open) return;
     checkProviders(false);
-    return engine.subscribe("preferences.subscribe", { keys: [FOLLOW_UP_KEY, PLAN_MODE_KEY, SEND_SHORTCUT_KEY] }, ({ key, value }) => {
+    return engine.subscribe("preferences.subscribe", { keys: [FOLLOW_UP_KEY, PLAN_MODE_KEY, SEND_SHORTCUT_KEY, THEME_KEY] }, ({ key, value }) => {
       if (key === FOLLOW_UP_KEY) setFollowUp(value === "steer" ? "steer" : "queue");
       if (key === SEND_SHORTCUT_KEY) setSendShortcut(sendShortcutOf(value));
       if (key === PLAN_MODE_KEY) setPlanMode(value === true);
+      if (key === THEME_KEY) setTheme(themeChoiceOf(value));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, engine]);
@@ -366,6 +372,11 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const setSendShortcutPreference = (value: SendShortcut) => {
     setSendShortcut(value);
     engine.call("preferences.set", { key: SEND_SHORTCUT_KEY, value }).catch((error: unknown) => setBanner({ kind: "error", message: messageOf(error) }));
+  };
+  const setThemePreference = (value: ThemeChoice) => {
+    setTheme(value);
+    setThemeChoice(value);
+    engine.call("preferences.set", { key: THEME_KEY, value }).catch((error: unknown) => setBanner({ kind: "error", message: messageOf(error) }));
   };
   const setFollowUpPreference = (value: FollowUp) => {
     setFollowUp(value);
@@ -579,19 +590,41 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   );
 
   const general = (
-    <section className="flex flex-col gap-2">
-      <SectionHeading>Output folder</SectionHeading>
-      <p className="m-0 text-xs text-(--settings-dialog-description)">Every project is a folder in here, with its files, sidecars and chats.</p>
-      <div className="flex items-center gap-2">
-        <Input aria-label="Output folder" placeholder="./output" font="mono" spellCheck={false} autoComplete="off" value={draft.outputDir} onChange={(event) => edit({ outputDir: event.target.value })} />
-        {!device && (
-          <Button variant="outline" onClick={() => void browse()}>
-            <FolderOpen aria-hidden />
-            Browse…
-          </Button>
-        )}
-      </div>
-    </section>
+    <>
+      <section className="flex flex-col gap-3" aria-label="Appearance">
+        <SectionHeading>Appearance</SectionHeading>
+        <div className="flex flex-col gap-1.5">
+          <Label id={themeId} render={<span />}>
+            Theme
+          </Label>
+          <Select value={theme} onValueChange={(value) => value && setThemePreference(themeChoiceOf(value))}>
+            <SelectTrigger aria-labelledby={themeId}>
+              <SelectValue>{THEME_CHOICES.find((option) => option.value === theme)?.label}</SelectValue>
+            </SelectTrigger>
+            <SelectPopup alignItemWithTrigger={false}>
+              {THEME_CHOICES.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectPopup>
+          </Select>
+        </div>
+      </section>
+      <section className="flex flex-col gap-2 border-t border-(--settings-dialog-divider) pt-4">
+        <SectionHeading>Output folder</SectionHeading>
+        <p className="m-0 text-xs text-(--settings-dialog-description)">Every project is a folder in here, with its files, sidecars and chats.</p>
+        <div className="flex items-center gap-2">
+          <Input aria-label="Output folder" placeholder="./output" font="mono" spellCheck={false} autoComplete="off" value={draft.outputDir} onChange={(event) => edit({ outputDir: event.target.value })} />
+          {!device && (
+            <Button variant="outline" onClick={() => void browse()}>
+              <FolderOpen aria-hidden />
+              Browse…
+            </Button>
+          )}
+        </div>
+      </section>
+    </>
   );
 
   const current = SECTIONS.find((each) => each.id === section) ?? SECTIONS[0]!;
