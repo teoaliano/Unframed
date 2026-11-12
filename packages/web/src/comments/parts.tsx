@@ -285,7 +285,7 @@ export interface ThreadActions {
   readonly onDeleteComment: (commentId: string) => void;
 }
 
-export const FLOATING_CARD_CLASS = "dropdown-glass rounded-xl border font-sans text-popover-foreground shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]";
+export const FLOATING_CARD_CLASS = "dropdown-glass rounded-xl border font-sans text-popover-foreground shadow-[0_12px_32px_-18px_rgb(0_0_0/8%)] dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]";
 
 export const ThreadPopover = ({ thread, now, actions, autoFocus = false }: { readonly thread: CommentThread; readonly now: number; readonly actions: ThreadActions; readonly autoFocus?: boolean }) => {
   const [confirming, setConfirming] = useState(false);
