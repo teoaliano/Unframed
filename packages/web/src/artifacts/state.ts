@@ -1,6 +1,6 @@
 import { farOffscreen, isArtifactKind, liveArtifacts, LIVE_SELECTED_LIMIT, PIN_LIMIT, type DialsAnnouncement } from "@unframed/domain";
 import type { RenderStatus } from "@unframed/contracts";
-import { atom, computed, react, type Atom, type Computed, type Editor, type TLShapeId } from "tldraw";
+import { atom, computed, react, type Atom, type Computed, type Editor, type TLShapeId, type TLStore } from "tldraw";
 import { isDeviceClient } from "../deviceMode.ts";
 
 export const previewPort: Atom<number | undefined> = atom("preview port", undefined);
@@ -30,6 +30,8 @@ export const togglePin = (project: string, id: string): boolean => {
 
 interface CanvasArtifacts {
   readonly project: Atom<string>;
+  /** The mounted canvas, if any: the state outlives it, keyed by the project's store. */
+  readonly canvas: Atom<Editor | undefined>;
   readonly editing: Atom<TLShapeId | undefined>;
   readonly tuning: Atom<TLShapeId | undefined>;
   readonly updatesOpen: Atom<TLShapeId | undefined>;
@@ -51,23 +53,25 @@ export interface DropHit {
   readonly box: { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
 }
 
-const canvases = new WeakMap<Editor, CanvasArtifacts>();
+const canvases = new WeakMap<TLStore, CanvasArtifacts>();
 
 const hasFile = (editor: Editor, id: TLShapeId): boolean => {
   const shape = editor.getShape(id);
   return !!shape && isArtifactKind(shape.type) && (shape.props as { file?: string }).file !== "";
 };
 
-export const artifactsOf = (editor: Editor): CanvasArtifacts => {
-  let found = canvases.get(editor);
+export const artifactsOf = (owner: { readonly store: TLStore }): CanvasArtifacts => {
+  let found = canvases.get(owner.store);
   if (!found) {
+    const canvas = atom<Editor | undefined>("mounted canvas", undefined);
     const editing = atom<TLShapeId | undefined>("editing artifact", undefined);
     const tuning = atom<TLShapeId | undefined>("tuning artifact", undefined);
     const updatesOpen = atom<TLShapeId | undefined>("component updates open", undefined);
     const project = atom("artifact project", "");
     const dropHolds = atom<ReadonlySet<string>>("image drop holds", new Set());
     const live = computed<ReadonlySet<string>>("live artifacts", () => {
-      if (editing.get() !== undefined) return new Set();
+      const editor = canvas.get();
+      if (editor === undefined || editing.get() !== undefined) return new Set();
       const selected = editor.getSelectedShapeIds().filter((id) => hasFile(editor, id));
       const centreOf = (id: TLShapeId) => editor.getShapePageBounds(id)?.center ?? { x: 0, y: 0 };
       const found = liveArtifacts({
@@ -81,6 +85,7 @@ export const artifactsOf = (editor: Editor): CanvasArtifacts => {
     });
     found = {
       project,
+      canvas,
       editing,
       tuning,
       updatesOpen,
@@ -94,7 +99,7 @@ export const artifactsOf = (editor: Editor): CanvasArtifacts => {
       dropHit: atom<DropHit | undefined>("image drop hit", undefined),
       dropHolds,
     };
-    canvases.set(editor, found);
+    canvases.set(owner.store, found);
   }
   return found;
 };

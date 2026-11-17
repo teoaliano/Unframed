@@ -14,7 +14,12 @@ import { DotGrid } from "../chrome/DotGrid.tsx";
 import { installLabelActivity, installLabelLevel } from "../chrome/labelLevel.ts";
 import { OVERLAY_UTILS } from "../chrome/selectionLook.ts";
 import { connectionMonitor } from "../connection/monitor.ts";
-import { CanvasProjectContext, useEngine } from "../context.ts";
+import { CanvasProjectContext, useEngine, useSettings } from "../context.ts";
+import { artifactsOf, previewPort } from "../artifacts/state.ts";
+import { watchComponentPins } from "../artifacts/componentPins.ts";
+import { applyLateSaves } from "../artifacts/editor/lateSaves.ts";
+import { watchEditorTabs } from "../artifacts/editorTabs.ts";
+import { watchFileChanges, watchSnapshots } from "../artifacts/snapshots.ts";
 import { installCopyStripping } from "../generate/copies.ts";
 import { RoleBadges } from "../generate/overlays.tsx";
 import { installRenderPolls } from "../generate/renderPolls.ts";
@@ -109,6 +114,25 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
   const doc = useMemo(() => (synced ? new CanvasDoc(synced) : undefined), [synced]);
   useEffect(() => () => doc?.dispose(), [doc]);
 
+  const settings = useSettings();
+  useEffect(() => {
+    if (settings) previewPort.set(settings.previewPort);
+  }, [settings]);
+
+  useEffect(() => {
+    const stops = [watchSnapshots(engine, project), watchFileChanges(engine, project), watchComponentPins(engine, project)];
+    return () => {
+      for (const stop of stops) stop();
+    };
+  }, [engine, project]);
+
+  useEffect(() => {
+    if (!doc) return;
+    artifactsOf(doc).project.set(project);
+    applyLateSaves(doc, project);
+    return watchEditorTabs(doc, activation, project);
+  }, [doc, activation, project]);
+
   useEffect(() => watchRunReports(engine, project), [engine, project]);
   const nodesOn = useFeature("nodes");
   useEffect(() => (nodesOn ? watchChainReports(engine, project) : undefined), [engine, project, nodesOn]);
@@ -142,6 +166,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     const stopCatalogues = watchNodeCatalogues(editor, engine);
     const stopLongPress = installLongPressMenu(editor);
     const detach = doc?.attach(editor);
+    artifactsOf(editor).canvas.set(editor);
     content.current = { project, engine, minter };
     installExternalContent(editor, content.current);
     const camera = recalledCamera(project);
@@ -165,6 +190,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
       stopCatalogues();
       stopLongPress();
       detach?.();
+      if (artifactsOf(editor).canvas.get() === editor) artifactsOf(editor).canvas.set(undefined);
       content.current = undefined;
     };
   }, [project, engine, doc]);
