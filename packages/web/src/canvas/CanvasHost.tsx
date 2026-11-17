@@ -50,6 +50,7 @@ import { CommentTool } from "../comments/CommentTool.ts";
 import { recalledCamera, rememberCamera } from "../project/tabMemory.ts";
 import { TLDRAW_ASSET_URLS, TLDRAW_CHROME, TLDRAW_OPTIONS } from "./tldrawChrome.tsx";
 import { useFeature } from "../features.ts";
+import { CanvasDoc, CanvasDocContext } from "./doc.ts";
 
 
 const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, AudioShapeUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil, ComponentShapeUtil, NodeShapeUtil, WireShapeUtil, ...DESIGNED_SHAPE_UTILS];
@@ -104,6 +105,9 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
   );
 
   const store = useSync({ connect, assets, schema: canvasSchema() });
+  const synced = store.status === "synced-remote" ? store.store : undefined;
+  const doc = useMemo(() => (synced ? new CanvasDoc(synced) : undefined), [synced]);
+  useEffect(() => () => doc?.dispose(), [doc]);
 
   useEffect(() => watchRunReports(engine, project), [engine, project]);
   const nodesOn = useFeature("nodes");
@@ -137,6 +141,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     bindNodeCatalogues(editor);
     const stopCatalogues = watchNodeCatalogues(editor, engine);
     const stopLongPress = installLongPressMenu(editor);
+    const detach = doc?.attach(editor);
     content.current = { project, engine, minter };
     installExternalContent(editor, content.current);
     const camera = recalledCamera(project);
@@ -159,15 +164,17 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
       stopRenders();
       stopCatalogues();
       stopLongPress();
+      detach?.();
       content.current = undefined;
     };
-  }, [project, engine]);
+  }, [project, engine, doc]);
 
   if (store.status === "error") return <div className="absolute inset-0" data-canvas-refused={project} />;
 
   return (
     <div className="absolute inset-0" data-canvas-project={project}>
       <CanvasProjectContext.Provider value={project}>
+      <CanvasDocContext.Provider value={doc}>
       <Tldraw
         store={store}
         options={options}
@@ -183,6 +190,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
         components={COMPONENTS}
         {...(licenseKey ? { licenseKey } : {})}
       />
+      </CanvasDocContext.Provider>
       </CanvasProjectContext.Provider>
     </div>
   );
