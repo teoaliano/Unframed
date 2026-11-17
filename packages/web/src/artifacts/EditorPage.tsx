@@ -20,6 +20,8 @@ export const EditorPage = ({ shapeId }: { readonly shapeId: string }) => {
   const leave = useCallback((commit: () => Promise<void>) => activation.setBeforeLeave(commit), [activation]);
 
   useEffect(() => registerSlot("artifactEditorOpen", true), []);
+  // The rail's composer takes the selection as context, as it did with the canvas mounted under the editor.
+  useEffect(() => doc.select([shapeId]), [doc, shapeId]);
 
   return (
     <Suspense fallback={null}>

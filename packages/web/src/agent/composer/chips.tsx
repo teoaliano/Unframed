@@ -2,7 +2,8 @@ import type { ElementChip } from "@unframed/contracts";
 import { shapeKind, shapeLabel, type ShapeKind } from "@unframed/domain";
 import { AlignLeft, AppWindow, AudioLines, Cable, Clapperboard, Component, Group, Image, PenLine, SquareMousePointer, SquarePlay, Workflow, X, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useValue, type Editor, type TLShapeId } from "tldraw";
+import { useValue, type TLShapeId } from "tldraw";
+import type { CanvasReader } from "../../canvas/doc.ts";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 
@@ -40,7 +41,7 @@ interface ChipShape {
   readonly label: string;
 }
 
-export const describeShape = (editor: Editor, id: string): ChipShape | undefined => {
+export const describeShape = (editor: CanvasReader, id: string): ChipShape | undefined => {
   const shape = editor.getShape(id as TLShapeId);
   if (!shape) return undefined;
   const kind = shapeKind(shape.type);
@@ -63,7 +64,7 @@ export const chipsOf = (shapes: ReadonlyArray<ChipShape>): Chip[] => {
   return chips;
 };
 
-export const useSelectionChips = (editor: Editor | null, draftEmpty: boolean) => {
+export const useSelectionChips = (editor: CanvasReader | null, draftEmpty: boolean) => {
   const selectionKey = useValue("selection", () => (editor ? editor.getSelectedShapeIds().join(" ") : ""), [editor]);
   const [ids, setIds] = useState<ReadonlyArray<string>>(() => (selectionKey === "" ? [] : selectionKey.split(" ")));
   const empty = useRef(draftEmpty);
@@ -87,7 +88,7 @@ export const useSelectionChips = (editor: Editor | null, draftEmpty: boolean) =>
   };
 };
 
-export const contextSelection = (editor: Editor | null, shapes: ReadonlyArray<ChipShape>): string[] => {
+export const contextSelection = (editor: CanvasReader | null, shapes: ReadonlyArray<ChipShape>): string[] => {
   const ids: string[] = [];
   const add = (id: string) => {
     if (!ids.includes(id)) ids.push(id);

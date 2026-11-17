@@ -1,7 +1,8 @@
 import { recapRows, revertSkipLine, roomShapeId, shapeKind, type ChatActivity, type ChatTurn, type RecapRow, type RecapShape, generationRecapLine, generationSpendOf } from "@unframed/domain";
 import { Crosshair, ExternalLink, FileDiff, Undo2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import { useValue, type Editor, type TLShapeId } from "tldraw";
+import { useValue, type TLShapeId } from "tldraw";
+import type { CanvasReader } from "../../canvas/doc.ts";
 import { Button } from "~/components/ui/button";
 import { Tip } from "../../chrome/ui.tsx";
 import { KIND_ICONS } from "../composer/chips.tsx";
@@ -10,7 +11,7 @@ import { Chevron, Disclosure } from "./WorkLog.tsx";
 const text = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
 
 /** The turn's rows, re-read as the canvas changes, so a deleted shape strikes through at once. */
-const useRecapRows = (editor: Editor | null, activities: ReadonlyArray<ChatActivity>, files: ChatTurn["files"]): RecapRow[] => {
+const useRecapRows = (editor: CanvasReader | null, activities: ReadonlyArray<ChatActivity>, files: ChatTurn["files"]): RecapRow[] => {
   const ids = useMemo(() => recapRows(activities, files ?? [], []).map((row) => row.shapeId), [activities, files]);
   const key = useValue(
     "recap shapes",
@@ -42,7 +43,7 @@ const useRecapRows = (editor: Editor | null, activities: ReadonlyArray<ChatActiv
 };
 
 export interface RecapCardProps {
-  readonly editor: Editor | null;
+  readonly editor: CanvasReader | null;
   readonly turn: ChatTurn;
   readonly activities: ReadonlyArray<ChatActivity>;
   /** The chat is running a turn: nothing can be reverted until it ends. */

@@ -1,6 +1,6 @@
 import type { Kit } from "@unframed/domain";
 import { createContext, useContext } from "react";
-import { isPageId, TLDOCUMENT_ID, TLINSTANCE_ID, type Editor, type TLRecord, type TLShape, type TLShapeId, type TLStore } from "tldraw";
+import { isPageId, TLDOCUMENT_ID, TLINSTANCE_ID, useMaybeEditor, type Editor, type TLAsset, type TLAssetId, type TLParentId, type TLRecord, type TLShape, type TLShapeId, type TLStore } from "tldraw";
 
 /** A shape as the app reads it: no tldraw types past this file. */
 export interface DocShape {
@@ -8,6 +8,12 @@ export interface DocShape {
   readonly type: string;
   readonly props: object;
 }
+
+/**
+ * The editor reads the agent's composer and transcript make, which a mounted canvas answers itself and the
+ * doc answers on an editor tab.
+ */
+export type CanvasReader = Pick<Editor, "getShape" | "getAsset" | "getSelectedShapeIds" | "getSelectedShapes" | "getSortedChildIdsForParent" | "getCurrentPageShapesSorted">;
 
 interface Change {
   readonly before: TLShape;
@@ -86,6 +92,34 @@ export class CanvasDoc {
     return this.store.query.records("shape").get().filter((shape) => this.pageOf(shape) === page);
   }
 
+  /** Selects `ids` on the current page, as `editor.select` would, without an editor. */
+  select(ids: ReadonlyArray<string>): void {
+    const state = this.pageState();
+    if (state === undefined || this.editor) return;
+    const same = state.selectedShapeIds.length === ids.length && state.selectedShapeIds.every((id, index) => id === ids[index]);
+    if (!same) this.store.put([{ ...state, selectedShapeIds: [...ids] as TLShapeId[] }]);
+  }
+
+  readonly reader: CanvasReader = {
+    getShape: ((id: TLShapeId | TLShape) => this.store.get((typeof id === "string" ? id : id.id) as TLShapeId)) as CanvasReader["getShape"],
+    getAsset: ((id: TLAssetId | TLAsset) => this.store.get((typeof id === "string" ? id : id.id) as TLAssetId)) as CanvasReader["getAsset"],
+    getSelectedShapeIds: () => this.pageState()?.selectedShapeIds ?? [],
+    getSelectedShapes: () => (this.pageState()?.selectedShapeIds ?? []).flatMap((id) => this.store.get(id) ?? []),
+    getSortedChildIdsForParent: ((parent: TLParentId | TLShape) => this.childrenOf(typeof parent === "string" ? parent : parent.id).map((shape) => shape.id)) as CanvasReader["getSortedChildIdsForParent"],
+    getCurrentPageShapesSorted: () => {
+      const page = this.currentPage();
+      const sorted: TLShape[] = [];
+      const walk = (parent: string) => {
+        for (const child of this.childrenOf(parent)) {
+          sorted.push(child);
+          walk(child.id);
+        }
+      };
+      if (page !== undefined) walk(page);
+      return sorted;
+    },
+  };
+
   kit(): Kit | null {
     const meta = (this.store.get(TLDOCUMENT_ID)?.meta ?? {}) as { unframed?: { kit?: Kit } };
     return meta.unframed?.kit ?? null;
@@ -154,6 +188,19 @@ export class CanvasDoc {
     }
   }
 
+  private childrenOf(parent: string): TLShape[] {
+    return this.store.query
+      .records("shape")
+      .get()
+      .filter((shape) => shape.parentId === parent)
+      .sort((a, b) => (a.index < b.index ? -1 : a.index > b.index ? 1 : 0));
+  }
+
+  private pageState() {
+    const page = this.currentPage();
+    return this.store.query.records("instance_page_state").get().find((state) => state.pageId === page);
+  }
+
   private currentPage(): string | undefined {
     const instance = this.store.get(TLINSTANCE_ID);
     if (instance && this.store.has(instance.currentPageId)) return instance.currentPageId;
@@ -175,6 +222,13 @@ export class CanvasDoc {
 export const CanvasDocContext = createContext<CanvasDoc | undefined>(undefined);
 
 export const useMaybeCanvasDoc = (): CanvasDoc | undefined => useContext(CanvasDocContext);
+
+/** The mounted canvas when there is one, else the doc's reader: what the agent's composer and transcript read. */
+export const useCanvasReader = (): CanvasReader | null => {
+  const editor = useMaybeEditor();
+  const doc = useContext(CanvasDocContext);
+  return editor ?? doc?.reader ?? null;
+};
 
 export const useCanvasDoc = (): CanvasDoc => {
   const doc = useContext(CanvasDocContext);

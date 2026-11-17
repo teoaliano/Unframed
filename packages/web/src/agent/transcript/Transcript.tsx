@@ -1,7 +1,8 @@
 import { activityLabel, agentShapeId, resetMoment, roomShapeId, shapeLabel, buildTimeline, type TimelineBlock, formatWorkDuration, revertSkipLine, type Chat, type ChatMessage, type ChatTurn } from "@unframed/domain";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Brain, ChevronDown, ChevronRight, Undo2 } from "lucide-react";
-import { useMaybeEditor, type TLShapeId } from "tldraw";
+import type { TLShapeId } from "tldraw";
+import { useCanvasReader } from "../../canvas/doc.ts";
 import { Badge } from "~/components/ui/badge";
 import { Button, InlineButton } from "~/components/ui/button";
 import { describeShape } from "../composer/chips.tsx";
@@ -94,7 +95,7 @@ const OutsideNote = ({ activities, latestTurn }: { readonly activities: Chat["ac
 
 export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }: TranscriptProps) => {
   const chat = useWatchedThread(client, chatId);
-  const editor = useMaybeEditor();
+  const editor = useCanvasReader();
   const running = chat?.latestTurn?.state === "running";
 
   const seenRewinds = useRef<Set<string> | undefined>(undefined);

@@ -1,6 +1,7 @@
 import { agentShapeId, isMintedRef, plainText, readRef, shapeKind, shapeLabel } from "@unframed/domain";
 import { File } from "lucide-react";
-import type { Editor, TLAssetId, TLShape } from "tldraw";
+import type { TLAssetId, TLShape } from "tldraw";
+import type { CanvasReader } from "../../canvas/doc.ts";
 import { KIND_ICONS } from "./chips.tsx";
 import type { MenuItem } from "./ComposerMenu.tsx";
 import type { DraftChip } from "./PromptEditor.tsx";
@@ -15,7 +16,7 @@ export interface Mentionable extends MenuItem {
 
 const text = (value: unknown): string => (typeof value === "string" ? value : "");
 
-const projectFileOf = (editor: Editor, shape: TLShape): string => {
+const projectFileOf = (editor: CanvasReader, shape: TLShape): string => {
   const props = shape.props as Record<string, unknown>;
   if (text(props.file) !== "") return text(props.file);
   const assetId = props.assetId;
@@ -24,7 +25,7 @@ const projectFileOf = (editor: Editor, shape: TLShape): string => {
   return src.startsWith("project-file:") ? src.slice("project-file:".length) : "";
 };
 
-const labelOf = (editor: Editor, shape: TLShape, kind: string): string => {
+const labelOf = (editor: CanvasReader, shape: TLShape, kind: string): string => {
   const props = shape.props as Record<string, unknown>;
   const ref = readRef(shape);
   // A shape a person named goes by its name, which is its @id.
@@ -40,7 +41,7 @@ const labelOf = (editor: Editor, shape: TLShape, kind: string): string => {
  * What `@` offers: the project's shapes (prompts and groups by `@id`, artifacts and media
  * by label) and the project files they name, matched case-insensitively.
  */
-export const mentionItems = (editor: Editor, query: string): Mentionable[] => {
+export const mentionItems = (editor: CanvasReader, query: string): Mentionable[] => {
   const wanted = query.toLowerCase();
   const shapes: Mentionable[] = [];
   const files = new Map<string, Mentionable>();
