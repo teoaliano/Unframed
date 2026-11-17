@@ -2,6 +2,7 @@ import { editorTabKey } from "@unframed/domain";
 import { lazy, Suspense, useCallback, useEffect } from "react";
 import { useCanvasDoc } from "../canvas/doc.ts";
 import { registerSlot } from "../chrome/slots.ts";
+import { EditorKitHost } from "../kits/KitHost.tsx";
 import { useActivation, useCanvasProject } from "../context.ts";
 import { openArtifactTab } from "./editorTabs.ts";
 
@@ -24,8 +25,11 @@ export const EditorPage = ({ shapeId }: { readonly shapeId: string }) => {
   useEffect(() => doc.select([shapeId]), [doc, shapeId]);
 
   return (
-    <Suspense fallback={null}>
-      <ArtifactEditor shapeId={shapeId} onClose={close} onOpen={open} onLeave={leave} />
-    </Suspense>
+    <>
+      <Suspense fallback={null}>
+        <ArtifactEditor shapeId={shapeId} onClose={close} onOpen={open} onLeave={leave} />
+      </Suspense>
+      <EditorKitHost />
+    </>
   );
 };

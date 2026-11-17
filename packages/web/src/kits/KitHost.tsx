@@ -1,10 +1,12 @@
-import { useEffect } from "react";
+import type { KitPreset, LibraryEntry } from "@unframed/domain";
+import { useEffect, useState } from "react";
 import { TldrawUiButtonIcon, TldrawUiToolbarButton, useEditor, useValue } from "tldraw";
 import { useCanvasDoc } from "../canvas/doc.ts";
 import { registerSlot } from "../chrome/slots.ts";
+import { LibraryDialog } from "../library/LibraryDialog.tsx";
 import { libraryUi } from "../library/state.ts";
 import { KitDialog } from "./KitDialog.tsx";
-import { UpdateFromKitDialog } from "./KitApply.tsx";
+import { applyLibraryKit, ReplaceKitDialog, UpdateFromKitDialog } from "./KitApply.tsx";
 import { kitUi } from "./state.ts";
 
 const KitButton = () => {
@@ -40,3 +42,28 @@ export const KitHost = () => {
   useEffect(() => registerSlot("kitButton", KitButton), []);
   return <KitDialogs />;
 };
+
+/** The library as an editor tab offers it, from the Kit dialog's From library: kits only. */
+const KitsFromLibrary = () => {
+  const doc = useCanvasDoc();
+  const open = useValue("library open", () => libraryUi(doc).get().open, [doc]);
+  const [replacing, setReplacing] = useState<KitPreset>();
+  const close = () => libraryUi(doc).update((state) => ({ ...state, open: false }));
+  const add = (entry: LibraryEntry) => {
+    close();
+    if (entry.kind === "kit") applyLibraryKit(doc, entry, () => setReplacing(entry));
+  };
+  return (
+    <>
+      {open && <LibraryDialog onClose={close} onAdd={add} kitsOnly />}
+      {replacing !== undefined && <ReplaceKitDialog doc={doc} preset={replacing} onClose={() => setReplacing(undefined)} />}
+    </>
+  );
+};
+
+export const EditorKitHost = () => (
+  <>
+    <KitDialogs />
+    <KitsFromLibrary />
+  </>
+);

@@ -561,10 +561,7 @@ export const ArtifactEditor = ({
           locked={facts.locked}
           kit={kit}
           mode={facts.mode}
-          onOpenKit={() => {
-            kitUi(doc).update((state) => ({ ...state, open: true }));
-            close();
-          }}
+          onOpenKit={() => kitUi(doc).update((state) => ({ ...state, open: true }))}
           onTell={tell}
           onAsk={ask}
           onShowOnTimeline={(element, property) =>
