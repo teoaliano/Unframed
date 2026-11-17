@@ -28,7 +28,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { useEditor, useValue, type TLShapeId } from "tldraw";
+import { useValue } from "tldraw";
 import { Button } from "~/components/ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Sheet, SheetPopup } from "~/components/ui/sheet";
@@ -39,6 +39,7 @@ import { cn } from "~/lib/utils";
 import { AgentRail } from "../../agent/rail/AgentRail.tsx";
 import { useChatClient, useProviders } from "../../agent/store.ts";
 import { Tip } from "../../chrome/ui.tsx";
+import { useCanvasDoc } from "../../canvas/doc.ts";
 import { useCanvasProject, useEngine } from "../../context.ts";
 import { useFeature } from "../../features.ts";
 import {
@@ -46,7 +47,6 @@ import {
   outsideUrlOf,
   type EditMessage,
 } from "../ArtifactFrame.tsx";
-import { kitOf } from "../kit.ts";
 import { kitUi } from "../../kits/state.ts";
 import { KitModePicker } from "../KitMode.tsx";
 import { countUsing } from "../componentPins.ts";
@@ -80,7 +80,7 @@ const useWindowQuery = (query: string): boolean =>
   );
 
 interface ArtifactEditorProps {
-  readonly shapeId: TLShapeId;
+  readonly shapeId: string;
   readonly onClose: () => void;
   readonly onOpen: (shapeId: string) => void;
   readonly onLeave?: (commit: () => Promise<void>) => () => void;
@@ -103,7 +103,6 @@ const transportZone = (): TransportZone | undefined => {
     return "body";
   if (active instanceof HTMLIFrameElement) return "frame";
   if (!(active instanceof HTMLElement)) return undefined;
-  if (active.classList.contains("tl-container")) return "frame";
   if (active.hasAttribute("data-timeline-focus")) return "strip";
   if (
     active.closest("[data-testid='timeline-transport']") !== null &&
@@ -111,19 +110,6 @@ const transportZone = (): TransportZone | undefined => {
   )
     return "strip";
   return undefined;
-};
-
-const stop = (event: { stopPropagation(): void }) => event.stopPropagation();
-
-const KEEP_FROM_CANVAS = {
-  onPointerDown: stop,
-  onPointerMove: stop,
-  onPointerUp: stop,
-  onWheel: stop,
-  onTouchStart: stop,
-  onTouchEnd: stop,
-  onDragOver: stop,
-  onDrop: stop,
 };
 
 const isUndo = (event: KeyboardEvent): boolean =>
@@ -138,16 +124,16 @@ export const ArtifactEditor = ({
   onOpen,
   onLeave,
 }: ArtifactEditorProps) => {
-  const editor = useEditor();
+  const doc = useCanvasDoc();
   const project = useCanvasProject();
   const engine = useEngine();
-  const kit = useValue("project kit", () => kitOf(editor), [editor]);
+  const kit = useValue("project kit", () => doc.kit(), [doc]);
   const chatClient = useChatClient(engine, project);
   const { statuses } = useProviders(chatClient);
   const facts = useValue(
     "edited artifact",
     () => {
-      const shape = editor.getShape(shapeId);
+      const shape = doc.shape(shapeId);
       if (!shape || !isArtifactKind(shape.type)) return undefined;
       const props = shape.props as ArtifactShapeProps;
       return {
@@ -161,26 +147,26 @@ export const ArtifactEditor = ({
         tag: (props as { tag?: string }).tag ?? "",
       };
     },
-    [editor, shapeId],
+    [doc, shapeId],
   );
   const uses = useValue(
     "component uses",
     () => {
       if (facts?.kind !== "component") return 0;
-      const files = editor
-        .getCurrentPageShapes()
+      const files = doc
+        .pageShapes()
         .filter((shape) => shape.type === "page" || shape.type === "motion")
         .map((shape) => (shape.props as { file?: string }).file ?? "");
       return countUsing(project, facts.tag, files);
     },
-    [editor, project, facts?.kind, facts?.tag],
+    [doc, project, facts?.kind, facts?.tag],
   );
   const port = useValue("preview port", () => previewPort.get(), []);
   const gone = facts === undefined;
   const editing = useFeature("element-editing");
 
   const session = useEditSession({
-    editor,
+    doc,
     engine,
     project,
     shapeId,
@@ -205,8 +191,8 @@ export const ArtifactEditor = ({
 
   const updateKey = useValue(
     "component update tags",
-    () => updateTagsOf(editor.getCurrentPageShapes(), project, facts?.file ?? "").join(","),
-    [editor, project, facts?.file],
+    () => updateTagsOf(doc.pageShapes(), project, facts?.file ?? "").join(","),
+    [doc, project, facts?.file],
   );
   const [updateRows, setUpdateRows] = useState<ReadonlyArray<ComponentUpdate>>(
     [],
@@ -228,14 +214,14 @@ export const ArtifactEditor = ({
   }, [updateRows]);
   const badgeRequested = useValue(
     "component updates requested",
-    () => artifactsOf(editor).updatesOpen.get() === shapeId,
-    [editor, shapeId],
+    () => artifactsOf(doc).updatesOpen.get() === shapeId,
+    [doc, shapeId],
   );
   useEffect(() => {
     if (!badgeRequested) return;
     setUpdatesShown(true);
-    artifactsOf(editor).updatesOpen.set(undefined);
-  }, [badgeRequested, editor]);
+    artifactsOf(doc).updatesOpen.set(undefined);
+  }, [badgeRequested, doc]);
   const retries = useRef(0);
   useEffect(() => {
     if (updateKey === "") {
@@ -287,29 +273,16 @@ export const ArtifactEditor = ({
     (id: string, on: boolean) => {
       const current =
         (
-          editor.getShape(shapeId)?.props as
+          doc.shape(shapeId)?.props as
             { lockedElements?: string[] } | undefined
         )?.lockedElements ?? [];
       const next = on
         ? [...current.filter((other) => other !== id), id]
         : current.filter((other) => other !== id);
-      editor.markHistoryStoppingPoint("lock");
-      const shape = editor.getShape(shapeId);
-      if (shape && next.length === 0) {
-        const { lockedElements: _gone, ...rest } = shape.props as {
-          lockedElements?: string[];
-        };
-        editor.store.put([{ ...shape, props: rest } as never]);
-      } else {
-        editor.updateShape({
-          id: shapeId,
-          type: facts?.kind ?? "page",
-          props: { lockedElements: next },
-        } as never);
-      }
+      doc.update(shapeId, { lockedElements: next.length === 0 ? undefined : next }, "lock");
       sessionRef.current.setLocked(next);
     },
-    [editor, shapeId, facts?.kind],
+    [doc, shapeId],
   );
 
   const close = useCallback(() => {
@@ -329,11 +302,11 @@ export const ArtifactEditor = ({
   useEffect(
     () =>
       leaveRef.current?.(() => {
-        if (editor.getShape(shapeId)) return sessionRef.current.commit();
+        if (doc.shape(shapeId)) return sessionRef.current.commit();
         sessionRef.current.discard(true);
         return Promise.resolve();
       }),
-    [editor, shapeId],
+    [doc, shapeId],
   );
 
   useEffect(() => {
@@ -369,7 +342,6 @@ export const ArtifactEditor = ({
       }
       if (
         event.defaultPrevented ||
-        editor.wasEventAlreadyHandled(event) ||
         typingIn(event.target) ||
         typingIn(document.activeElement)
       )
@@ -407,7 +379,7 @@ export const ArtifactEditor = ({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [editor]);
+  }, [transport]);
 
   const [announcement, setAnnouncement] = useState<DialsAnnouncement>();
   const clearAnnouncement = useCallback(() => setAnnouncement(undefined), []);
@@ -526,8 +498,8 @@ export const ArtifactEditor = ({
     tellAgent(chatClient, shapeId, [chip]);
   };
   const componentOf = (tag: string) => {
-    const shape = editor
-      .getCurrentPageShapes()
+    const shape = doc
+      .pageShapes()
       .find(
         (candidate) =>
           candidate.type === "component" &&
@@ -589,7 +561,10 @@ export const ArtifactEditor = ({
           locked={facts.locked}
           kit={kit}
           mode={facts.mode}
-          onOpenKit={() => kitUi(editor).update((state) => ({ ...state, open: true }))}
+          onOpenKit={() => {
+            kitUi(doc).update((state) => ({ ...state, open: true }));
+            close();
+          }}
           onTell={tell}
           onAsk={ask}
           onShowOnTimeline={(element, property) =>
@@ -659,7 +634,6 @@ export const ArtifactEditor = ({
         columns,
       )}
       style={{ top: TOP_BAR_HEIGHT }}
-      {...KEEP_FROM_CANVAS}
     >
       {!railFolded && (
         <section

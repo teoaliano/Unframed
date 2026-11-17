@@ -17,7 +17,7 @@ import {
   type Kit,
 } from "@unframed/domain";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Editor, TLShapeId } from "tldraw";
+import type { CanvasDoc } from "../../canvas/doc.ts";
 import type { EngineConnection } from "../../rpc/engine.ts";
 import { messageOf } from "../../agent/store.ts";
 import { expandShorthand } from "./expandShorthand.ts";
@@ -84,7 +84,7 @@ const LAG_RETRY_MS = 300;
 const LAG_RETRIES = 12;
 
 interface EditSessionInput {
-  readonly editor: Editor;
+  readonly doc: CanvasDoc;
   readonly engine: EngineConnection;
   readonly project: string;
   readonly shapeId: string;
@@ -142,7 +142,7 @@ const sameIds = (a: readonly string[], b: readonly string[]): boolean => a.lengt
 const conflictSentence = (kind: ArtifactKind, reason: unknown): string =>
   reason === "agent" ? "The agent rewrote this. Your last change wasn't saved." : `This ${kind} changed somewhere else. Your last change wasn't saved.`;
 
-export const useEditSession = ({ editor, engine, project, shapeId, kind, file, locked, kit, editing }: EditSessionInput): EditSession => {
+export const useEditSession = ({ doc, engine, project, shapeId, kind, file, locked, kit, editing }: EditSessionInput): EditSession => {
   const [mode, setModeState] = useState<EditMode>(editing ? "edit" : "interact");
   const [selection, setSelectionState] = useState<readonly string[]>([]);
   const [tween, setTweenState] = useState<number | null>(null);
@@ -198,7 +198,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
   const showDials = useCallback((values: Readonly<Record<string, unknown>>) => {
     shownDials.current = values;
   }, []);
-  const shapeDials = (): Readonly<Record<string, unknown>> | undefined => (editor.getShape(shapeId as TLShapeId)?.props as { dials?: Record<string, unknown> } | undefined)?.dials;
+  const shapeDials = (): Readonly<Record<string, unknown>> | undefined => (doc.shape(shapeId)?.props as { dials?: Record<string, unknown> } | undefined)?.dials;
   const settle = () => {
     if (burstRef.current.edits.size > 0 || burstRef.current.dials.size > 0) return;
     window.clearTimeout(timerRef.current);
@@ -249,8 +249,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
         showNotice(conflictSentence(kind, await conflictReason(base)), "warning");
         return;
       }
-      editor.markHistoryStoppingPoint("element edit");
-      editor.updateShape({ id: shapeId as TLShapeId, type: kind, props: { dials: dialsWith(shapeDials(), inFlight.current) } } as never);
+      doc.update(shapeId, { dials: dialsWith(shapeDials(), inFlight.current) }, "element edit");
       finish();
       undoable.current += 1;
       redoable.current = 0;
@@ -258,7 +257,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     }
     try {
       const answer = await send(base, edits);
-      if (editor.isDisposed) {
+      if (doc.isDisposed) {
         keepLateSave({ project, shapeId, kind, from: base, to: answer.file, held: dials.length > 0 ? { ...inFlight.current } : undefined });
         return;
       }
@@ -268,9 +267,8 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
         return;
       }
       if (baseRef.current === base) baseRef.current = answer.file;
-      editor.markHistoryStoppingPoint("element edit");
       const props = dials.length > 0 ? { file: answer.file, dials: dialsWith(shapeDials(), inFlight.current) } : { file: answer.file };
-      editor.updateShape({ id: shapeId as TLShapeId, type: kind, props } as never);
+      doc.update(shapeId, props, "element edit");
       lastSet.current = answer.file;
       setSettled((previous) => (previous?.base === base ? { ...previous, result: answer.file } : previous));
       finish();
@@ -284,7 +282,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
       if (code === "conflict") showNotice(conflictSentence(kind, details?.reason), "warning");
       else showError(messageOf(error));
     }
-  }, [editor, engine, kind, post, project, shapeId]);
+  }, [doc, engine, kind, post, project, shapeId]);
 
   const flights = useRef(new Set<Promise<void>>());
   const commit = useCallback((): Promise<void> => {
@@ -471,7 +469,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     [commit],
   );
 
-  const shownFile = (): string | undefined => (editor.getShape(shapeId as TLShapeId)?.props as { file?: string } | undefined)?.file;
+  const shownFile = (): string | undefined => (doc.shape(shapeId)?.props as { file?: string } | undefined)?.file;
 
   const undo = () => {
     if (baseRef.current !== undefined) {
@@ -481,7 +479,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     if (undoable.current === 0) return;
     undoable.current -= 1;
     redoable.current += 1;
-    editor.undo();
+    doc.undo();
     lastSet.current = shownFile();
   };
 
@@ -489,7 +487,7 @@ export const useEditSession = ({ editor, engine, project, shapeId, kind, file, l
     if (redoable.current === 0) return;
     redoable.current -= 1;
     undoable.current += 1;
-    editor.redo();
+    doc.redo();
     lastSet.current = shownFile();
   };
 
