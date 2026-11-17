@@ -208,6 +208,11 @@
   color: var(--dial-text-focus);
 }
 
+/* DialKit paints a keyboard-focused fill in the muted tone, which hides the label: focus shows only the ring. */
+:root .dialkit-root[data-theme] .dialkit-slider-fill {
+  background: var(--dial-surface-active);
+}
+
 :root .dialkit-root[data-theme] .dialkit-slider-active .dialkit-slider-fill {
   background: var(--dial-slider-fill-active);
 }
