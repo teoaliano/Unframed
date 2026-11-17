@@ -109,8 +109,8 @@ export default function TopBarDemo() {
           platform={platform}
           initial={[
             { name: "default" },
-            { name: "default/landing", label: "Landing", context: "default", variant: "secondary", attachedTo: "default", icon: <AppWindow aria-hidden className="size-3.5 shrink-0 text-(--project-tab-icon)" />, title: "Landing · Page in default" },
-            { name: "default/teaser", label: "Teaser", context: "default", variant: "secondary", attachedTo: "default", icon: <Clapperboard aria-hidden className="size-3.5 shrink-0 text-(--project-tab-icon)" />, title: "Teaser · Motion in default" },
+            { name: "default/landing", label: "Landing", variant: "secondary", attachedTo: "default", icon: <AppWindow aria-hidden className="size-3.5 shrink-0 text-(--project-tab-icon)" />, title: "Landing · Page in default" },
+            { name: "default/teaser", label: "Teaser", variant: "secondary", attachedTo: "default", icon: <Clapperboard aria-hidden className="size-3.5 shrink-0 text-(--project-tab-icon)" />, title: "Teaser · Motion in default" },
             { name: "beta" },
           ]}
           initialActive="default/landing"

@@ -35,8 +35,8 @@ test("an artifact opens in its own tab after its project's tab; Back returns to 
   await open(page, "shape:landing", "Landing");
   await expect(tabs(page)).toHaveCount(2);
   await expect(tabs(page).nth(0)).toHaveText("default");
-  await expect(tabs(page).nth(1)).toHaveAccessibleName("Landing, default");
-  await expect(selected(page)).toHaveAccessibleName("Landing, default");
+  await expect(tabs(page).nth(1)).toHaveAccessibleName("Landing");
+  await expect(selected(page)).toHaveAccessibleName("Landing");
   await expect(editorTab(page, "Landing")).toHaveAttribute("title", "Landing · Page in default");
 
   await editor(page).getByRole("button", { name: "Back to canvas" }).click();
@@ -348,7 +348,7 @@ test("clicking another project and then back on the open editor tab while it sav
   await page.waitForTimeout(2500);
   await expect(page.locator("[data-canvas-project]")).toHaveAttribute("data-canvas-project", "default");
   await expect(page.getByRole("region", { name: "Editing Landing" })).toBeVisible();
-  await expect(selected(page)).toHaveAccessibleName("Landing, default");
+  await expect(selected(page)).toHaveAccessibleName("Landing");
 });
 
 test("renaming a project on a slow machine still saves the editor's edits under the new name: the canvas waits for tldraw to send them", async ({ page, agent }) => {

@@ -126,7 +126,7 @@ test("the whole top bar stays on screen above the editor and works from it: its 
     expect(hit, `${region} is not covered`).toBe(true);
   }
   await expect(page.getByTestId("tab-strip").getByRole("tab", { name: "default", exact: true })).toBeVisible();
-  await expect(page.getByTestId("tab-strip").getByRole("tab", { name: "Landing, default" })).toBeVisible();
+  await expect(page.getByTestId("tab-strip").getByRole("tab", { name: "Landing" })).toBeVisible();
   const railHeader = column(page, "rail").locator("header").first();
   const back = column(page, "centre").getByRole("button", { name: "Back to canvas" });
   const middle = async (locator: typeof railHeader) => {
