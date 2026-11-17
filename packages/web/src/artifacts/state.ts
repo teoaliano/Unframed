@@ -119,8 +119,8 @@ export const isInteractive = (editor: Editor, id: TLShapeId): boolean =>
   !artifactsOf(editor).hold.get() &&
   !editor.isInAny("select.translating", "select.resizing", "select.rotating", "select.dragging_handle", "select.pointing_shape", "select.pointing_selection", "select.pointing_resize_handle");
 
-export const setProblem = (editor: Editor, id: string, message: string | undefined): void => {
-  artifactsOf(editor).problems.update((current) => {
+export const setProblem = (owner: { readonly store: TLStore }, id: string, message: string | undefined): void => {
+  artifactsOf(owner).problems.update((current) => {
     const next = new Map(current);
     if (message === undefined) next.delete(id);
     else next.set(id, message);

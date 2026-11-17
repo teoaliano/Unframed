@@ -205,7 +205,7 @@ export const ArtifactEditor = ({
 
   const updateKey = useValue(
     "component update tags",
-    () => updateTagsOf(editor, project, facts?.file ?? "").join(","),
+    () => updateTagsOf(editor.getCurrentPageShapes(), project, facts?.file ?? "").join(","),
     [editor, project, facts?.file],
   );
   const [updateRows, setUpdateRows] = useState<ReadonlyArray<ComponentUpdate>>(

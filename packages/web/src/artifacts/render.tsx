@@ -6,8 +6,9 @@
 import { UnframedError, type RenderStatus } from "@unframed/contracts";
 import { artifactTitle } from "@unframed/domain";
 import { Clapperboard } from "lucide-react";
-import { useEditor, useValue, type Editor, type TLShapeId } from "tldraw";
+import { useValue, type TLStore } from "tldraw";
 import { Button } from "~/components/ui/button";
+import { useCanvasDoc, type CanvasDoc } from "../canvas/doc.ts";
 import { useCanvasProject, useEngine } from "../context.ts";
 import type { EngineConnection } from "../rpc/engine.ts";
 import { artifactsOf, setProblem } from "./state.ts";
@@ -17,43 +18,45 @@ const POLL_MS = 700;
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
-const setRender = (editor: Editor, id: string, view: { starting: boolean; status?: RenderStatus } | undefined) =>
-  artifactsOf(editor).renders.update((current) => {
+type Owner = { readonly store: TLStore };
+
+const setRender = (owner: Owner, id: string, view: { starting: boolean; status?: RenderStatus } | undefined) =>
+  artifactsOf(owner).renders.update((current) => {
     const next = new Map(current);
     if (view === undefined) next.delete(id);
     else next.set(id, view);
     return next;
   });
 
-export const renderOf = (editor: Editor, id: string) => artifactsOf(editor).renders.get().get(id);
+export const renderOf = (owner: Owner, id: string) => artifactsOf(owner).renders.get().get(id);
 
-export const isRendering = (editor: Editor, id: string): boolean => {
-  const view = renderOf(editor, id);
+export const isRendering = (owner: Owner, id: string): boolean => {
+  const view = renderOf(owner, id);
   return !!view && (view.starting || view.status?.status === "queued" || view.status?.status === "rendering");
 };
 
-const follow = (editor: Editor, engine: EngineConnection, project: string, shapeId: string, renderId: string) => {
+const follow = (doc: CanvasDoc, engine: EngineConnection, project: string, shapeId: string, renderId: string) => {
   setTimeout(() => {
     engine.call("motion.renderStatus", { project, id: renderId }).then(
       (status) => {
-        setRender(editor, shapeId, { starting: false, status });
-        if (status.status === "failed") setProblem(editor, shapeId, status.error ?? "The render failed.");
-        if (status.status === "queued" || status.status === "rendering") follow(editor, engine, project, shapeId, renderId);
+        setRender(doc, shapeId, { starting: false, status });
+        if (status.status === "failed") setProblem(doc, shapeId, status.error ?? "The render failed.");
+        if (status.status === "queued" || status.status === "rendering") follow(doc, engine, project, shapeId, renderId);
       },
       (error: unknown) => {
-        setRender(editor, shapeId, undefined);
-        setProblem(editor, shapeId, messageOf(error));
+        setRender(doc, shapeId, undefined);
+        setProblem(doc, shapeId, messageOf(error));
       },
     );
   }, POLL_MS);
 };
 
-export const startRender = async (editor: Editor, engine: EngineConnection, project: string, shapeId: TLShapeId): Promise<void> => {
-  const shape = editor.getShape(shapeId);
-  if (!shape || isRendering(editor, shapeId)) return;
+export const startRender = async (doc: CanvasDoc, engine: EngineConnection, project: string, shapeId: string): Promise<void> => {
+  const shape = doc.shape(shapeId);
+  if (!shape || isRendering(doc, shapeId)) return;
   const props = shape.props as { file: string; title: string; fileName: string; dials?: Record<string, unknown> };
-  setProblem(editor, shapeId, undefined);
-  setRender(editor, shapeId, { starting: true });
+  setProblem(doc, shapeId, undefined);
+  setRender(doc, shapeId, { starting: true });
   try {
     const started = await engine.call("motion.renderStart", {
       project,
@@ -62,22 +65,22 @@ export const startRender = async (editor: Editor, engine: EngineConnection, proj
       shapeId,
       ...(props.dials === undefined ? {} : { dials: props.dials }),
     });
-    setRender(editor, shapeId, { starting: false, status: { id: started.id, file: props.file, status: started.status, progress: 0, message: "", output: null, error: null } });
-    follow(editor, engine, project, shapeId, started.id);
+    setRender(doc, shapeId, { starting: false, status: { id: started.id, file: props.file, status: started.status, progress: 0, message: "", output: null, error: null } });
+    follow(doc, engine, project, shapeId, started.id);
   } catch (error) {
-    setRender(editor, shapeId, undefined);
-    setProblem(editor, shapeId, messageOf(error));
+    setRender(doc, shapeId, undefined);
+    setProblem(doc, shapeId, messageOf(error));
   }
 };
 
 /** Render, as the kit's small outline Button: in the selection toolbar and the editor's header. */
-export const RenderButton = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
-  const editor = useEditor();
+export const RenderButton = ({ shapeId }: { readonly shapeId: string }) => {
+  const doc = useCanvasDoc();
   const engine = useEngine();
   const project = useCanvasProject();
-  const rendering = useValue("rendering", () => isRendering(editor, shapeId), [editor, shapeId]);
+  const rendering = useValue("rendering", () => isRendering(doc, shapeId), [doc, shapeId]);
   return (
-    <Button variant="outline" size="sm" disabled={rendering} onClick={() => void startRender(editor, engine, project, shapeId)}>
+    <Button variant="outline" size="sm" disabled={rendering} onClick={() => void startRender(doc, engine, project, shapeId)}>
       <Clapperboard aria-hidden />
       {/* In a narrow editor header the icon stays and the word leaves the screen, not the button's name. */}
       <span className="@max-[520px]/editor-header:sr-only">Render</span>

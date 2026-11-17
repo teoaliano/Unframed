@@ -162,7 +162,7 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
   const holder = useRef<HTMLDivElement>(null);
   const scale = kind === "component" ? 1 : artifactScale(props);
   const layout = { w: props.w / scale, h: props.h / scale };
-  const updates = useValue("component updates", () => updateTagsOf(editor, project, props.file).join(","), [editor, project, props.file]);
+  const updates = useValue("component updates", () => updateTagsOf(editor.getCurrentPageShapes(), project, props.file).join(","), [editor, project, props.file]);
   const editing = useFeature("element-editing");
   return (
     <>

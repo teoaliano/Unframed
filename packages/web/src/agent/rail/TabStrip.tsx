@@ -2,7 +2,8 @@ import type { ChatSummary } from "@unframed/contracts";
 import { inlineTabs, linkedArtifacts, shapeKind, tabLabel, tabTooltip, type RecapShape } from "@unframed/domain";
 import { Check, ChevronDown, CircleAlert, Pencil, Trash2, Unlink } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useMaybeEditor, useValue, type TLShapeId } from "tldraw";
+import { useValue } from "tldraw";
+import { useMaybeCanvasDoc } from "../../canvas/doc.ts";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Spinner } from "~/components/ui/spinner";
@@ -81,13 +82,13 @@ interface Linked {
  * A toast says what was detached and offers Undo, which links it again.
  */
 const DetachItems = ({ client, chat }: { readonly client: ChatClient; readonly chat: ChatSummary }) => {
-  const editor = useMaybeEditor();
+  const doc = useMaybeCanvasDoc();
   const key = useValue(
     "linked artifacts",
     () =>
       JSON.stringify(
         chat.tags.flatMap((id): RecapShape[] => {
-          const shape = editor?.getShape(id as TLShapeId);
+          const shape = doc?.shape(id);
           if (!shape) return [];
           const props = shape.props as Record<string, unknown>;
           const title = text(props.title);
@@ -95,7 +96,7 @@ const DetachItems = ({ client, chat }: { readonly client: ChatClient; readonly c
           return [{ id: shape.id, kind: shapeKind(shape.type), ...(title !== undefined ? { title } : {}), ...(fileName !== undefined ? { fileName } : {}) }];
         }),
       ),
-    [editor, chat.tags],
+    [doc, chat.tags],
   );
   const linked = useMemo(() => linkedArtifacts(chat.tags, JSON.parse(key) as RecapShape[]), [chat.tags, key]);
   const report = (error: unknown) => client.reportError(error);
