@@ -59,3 +59,8 @@ export const selectByText = async (page: Page, text: string) => {
     await expect(outline(page, "selected")).toHaveCount(1, { timeout: 1000 });
   }).toPass({ timeout: 20_000 });
 };
+
+/** Leaves the open editor the way a person does now: the close button on its tab in the top bar. */
+export const leaveEditor = async (page: Page) => {
+  await page.locator("[data-slot=top-bar] [data-slot=project-tab-group]:has([role=tab][data-active='true']) [data-close]").click();
+};

@@ -6,7 +6,7 @@ import { expect, test } from "./agent.ts";
 import { filledArtifact, projectPath, writeProjectFile } from "./artifacts.ts";
 import { componentShape, SHEET_FILE, sheetHtml } from "./components.ts";
 import { putRecords } from "./media.ts";
-import { parameters } from "./editorHarness.ts";
+import { leaveEditor, parameters } from "./editorHarness.ts";
 
 const PRICE_CARD = { tag: "uf-price-card", variants: { kind: ["primary", "secondary"] } };
 const NEW_SHEET = "1761400005000-price-card.html";
@@ -60,6 +60,6 @@ test("a component edit shows Updates on the page, the editor offers Update and t
   await expect.poll(() => pageFile(agent).then((file) => readFile(projectPath(agent, file), "utf8")), { timeout: 15_000 }).toContain(compiledFileName(SHEET_FILE));
   await expect(headerButton(page)).toBeVisible({ timeout: 20_000 });
 
-  await page.getByRole("button", { name: "Back to canvas", exact: true }).click();
+  await leaveEditor(page);
   await expect(canvasBadge(page)).toBeVisible({ timeout: 20_000 });
 });

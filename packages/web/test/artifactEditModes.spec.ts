@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import { centre, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 import { filledArtifact } from "./artifacts.ts";
-import { column, editor, frameOf, modeButton, outline, region } from "./editorHarness.ts";
+import { column, editor, frameOf, leaveEditor, modeButton, outline, region } from "./editorHarness.ts";
 
 const PAGE = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}</style></head><body><main><h1>Welcome</h1><p>Lead text</p><a href="https://example.invalid/">Go</a></main></body></html>`;
 
@@ -62,7 +62,7 @@ test("the chosen tab is remembered for the session, and the Design tab is shown 
   await column(page, "parameters").getByRole("tab", { name: "Layers" }).click();
   await expect(column(page, "parameters").getByRole("tab", { name: "Layers" })).toHaveAttribute("aria-selected", "true");
 
-  await region(page).getByRole("button", { name: "Back to canvas" }).click();
+  await leaveEditor(page);
   await expect(editor(page)).toHaveCount(0);
   await openEditor(page);
   await expect(column(page, "parameters").getByRole("tab", { name: "Layers" })).toHaveAttribute("aria-selected", "true");

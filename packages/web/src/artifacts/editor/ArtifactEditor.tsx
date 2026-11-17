@@ -13,7 +13,6 @@ import {
   type DialsAnnouncement,
 } from "@unframed/domain";
 import {
-  ArrowLeft,
   Component,
   ExternalLink,
   Hand,
@@ -686,17 +685,6 @@ export const ArtifactEditor = ({
         aria-label={`Editing ${title}`}
       >
         <ColumnHeader className="@container/editor-header gap-1">
-          <Tip label="Back to canvas (Esc)">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="shrink-0"
-              aria-label="Back to canvas"
-              onClick={close}
-            >
-              <ArrowLeft aria-hidden />
-            </Button>
-          </Tip>
           {railFolded && (
             <Tip label="Show agent">
               <Button
