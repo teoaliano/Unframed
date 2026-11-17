@@ -1,6 +1,6 @@
 import { useSync } from "@tldraw/sync";
 import { canvasSchema } from "@unframed/contracts";
-import { UPLOAD_BODY_LIMIT } from "@unframed/domain";
+import { shapeOfTab, UPLOAD_BODY_LIMIT } from "@unframed/domain";
 import { installLongPressMenu } from "./longPressMenu.ts";
 import { installSelectionReporter } from "./selectionReport.ts";
 import { useCallback, useContext, useEffect, useMemo, useRef } from "react";
@@ -15,6 +15,7 @@ import { installLabelActivity, installLabelLevel } from "../chrome/labelLevel.ts
 import { OVERLAY_UTILS } from "../chrome/selectionLook.ts";
 import { connectionMonitor } from "../connection/monitor.ts";
 import { CanvasProjectContext, useEngine, useSettings } from "../context.ts";
+import { EditorPage } from "../artifacts/EditorPage.tsx";
 import { artifactsOf, previewPort } from "../artifacts/state.ts";
 import { watchComponentPins } from "../artifacts/componentPins.ts";
 import { applyLateSaves } from "../artifacts/editor/lateSaves.ts";
@@ -25,7 +26,7 @@ import { RoleBadges } from "../generate/overlays.tsx";
 import { installRenderPolls } from "../generate/renderPolls.ts";
 import { watchRunReports } from "../generate/runReports.ts";
 import { LicenseKeyContext } from "../license.ts";
-import { SETTLE_BEFORE_SWITCH_MS, type ProjectActivation } from "../project/activation.ts";
+import { SETTLE_BEFORE_SWITCH_MS, useTabState, type ProjectActivation } from "../project/activation.ts";
 import { onThemeShown } from "../theme/theme.ts";
 import { showError } from "../toasts.tsx";
 import { createAssetStore, Previews } from "./assetStore.ts";
@@ -114,6 +115,9 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
   const doc = useMemo(() => (synced ? new CanvasDoc(synced) : undefined), [synced]);
   useEffect(() => () => doc?.dispose(), [doc]);
 
+  const tabs = useTabState(activation);
+  const editing = tabs.active === project && tabs.editing !== undefined ? shapeOfTab(tabs.editing) : undefined;
+
   const settings = useSettings();
   useEffect(() => {
     if (settings) previewPort.set(settings.previewPort);
@@ -201,6 +205,9 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     <div className="absolute inset-0" data-canvas-project={project}>
       <CanvasProjectContext.Provider value={project}>
       <CanvasDocContext.Provider value={doc}>
+      {editing !== undefined ? (
+        doc && <EditorPage shapeId={editing} />
+      ) : (
       <Tldraw
         store={store}
         options={options}
@@ -216,6 +223,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
         components={COMPONENTS}
         {...(licenseKey ? { licenseKey } : {})}
       />
+      )}
       </CanvasDocContext.Provider>
       </CanvasProjectContext.Provider>
     </div>

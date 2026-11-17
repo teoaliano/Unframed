@@ -44,12 +44,13 @@ test("double-click opens the editor: rail, live frame and parameters, with Back 
   await expect(frame).not.toHaveAttribute("loading", "lazy");
   await expect(region.frameLocator("iframe[data-artifact-frame]").getByRole("heading", { name: "Welcome" })).toBeVisible();
   await expect(column(page, "parameters")).toContainText("Parameters");
-  await expect(shapeOnScreen(page, "shape:landing").locator("iframe")).toHaveCount(0);
-  await expect(page.locator(".tl-watermark_SEE-LICENSE")).toBeVisible();
-  expect(await hitIsWatermark(page)).toBe(true);
+  await expect(page.locator(".tl-container")).toHaveCount(0);
+  await expect(page.locator(".tl-watermark_SEE-LICENSE")).toHaveCount(0);
 
   await leaveEditor(page);
   await expect(editor(page)).toHaveCount(0);
+  await expect(page.locator(".tl-watermark_SEE-LICENSE")).toBeVisible();
+  expect(await hitIsWatermark(page)).toBe(true);
   expect(await shapeOnScreen(page, "shape:landing").boundingBox()).toEqual(before);
   expect((await roomRecords(agent, "default")).filter((record) => record.type === "text")).toHaveLength(2);
 
@@ -66,7 +67,7 @@ test("double-click opens the editor: rail, live frame and parameters, with Back 
   expect(await shapeOnScreen(page, "shape:landing").boundingBox()).toEqual(moved);
 });
 
-test("the three columns start the margin below the top bar and run to the window's bottom edge at the same margin, and the watermark sits over the parameters corner without covering a control", async ({ page, agent }) => {
+test("the three columns start the margin below the top bar and run to the window's bottom edge at the same margin, with nothing of tldraw's on the page", async ({ page, agent }) => {
   await onBoard(page, agent);
   const at = await centre(shapeOnScreen(page, "shape:landing"));
   await page.mouse.dblclick(at.x, at.y);
@@ -86,29 +87,20 @@ test("the three columns start the margin below the top bar and run to the window
   expect(rail.x).toBeCloseTo(margin, 0);
   expect(parameters.x + parameters.width).toBeCloseTo(width - margin, 0);
 
-  const watermark = (await page.locator(".tl-watermark_SEE-LICENSE").boundingBox())!;
-  expect(watermark.y + watermark.height).toBeLessThanOrEqual(height);
-  expect(await hitIsWatermark(page)).toBe(true);
-  const strays = await page.evaluate(({ x, y, w, h, bar }) => {
+  await expect(page.locator(".tl-watermark_SEE-LICENSE")).toHaveCount(0);
+  const strays = await page.evaluate(({ bar }) => {
     const editor = document.querySelector("[data-testid='artifact-editor']")!;
     const hits: string[] = [];
     for (let px = 16; px < window.innerWidth; px += 32) {
       for (let py = 16; py < window.innerHeight; py += 32) {
-        if (px >= x && px <= x + w && py >= y && py <= y + h) continue;
         if (py < bar) continue;
         const hit = document.elementFromPoint(px, py);
         if (hit && !editor.contains(hit)) hits.push(`${px},${py} ${hit.tagName}.${hit.className.toString().slice(0, 30)}`);
       }
     }
     return hits;
-  }, { x: watermark.x, y: watermark.y, w: watermark.width, h: watermark.height, bar: bar.height });
+  }, { bar: bar.height });
   expect(strays).toEqual([]);
-  await openParameters(page);
-  await column(page, "parameters").getByRole("button", { name: "Add a parameter" }).click();
-  for (const control of [column(page, "parameters").getByRole("button", { name: "Add", exact: true }), column(page, "parameters").getByPlaceholder(/Describe a parameter/)]) {
-    const box = (await control.boundingBox())!;
-    expect(box.y + box.height).toBeLessThanOrEqual(watermark.y);
-  }
 });
 
 test("the whole top bar stays on screen above the editor and works from it: its tabs, its All projects button and Settings", async ({ page, agent }) => {

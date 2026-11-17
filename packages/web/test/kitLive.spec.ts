@@ -23,10 +23,13 @@ const swatchPage = () =>
 const frameState = async (page: Page, file: string) => {
   const frame = page.frames().find((candidate: Frame) => candidate.url().endsWith(`/${file}`));
   if (!frame) return undefined;
-  return frame.evaluate(() => {
-    const swatch = document.getElementById("swatch");
-    return swatch === null ? undefined : { colour: getComputedStyle(swatch).backgroundColor, marker: (window as unknown as { __kitMarker?: number }).__kitMarker ?? null };
-  });
+  // Opening the editor unmounts the canvas, so the canvas's frame for the same file can detach mid-read.
+  return frame
+    .evaluate(() => {
+      const swatch = document.getElementById("swatch");
+      return swatch === null ? undefined : { colour: getComputedStyle(swatch).backgroundColor, marker: (window as unknown as { __kitMarker?: number }).__kitMarker ?? null };
+    })
+    .catch(() => undefined);
 };
 
 test("a token change reaches a live page and the editor's frame without a reload", async ({ page, agent }) => {
