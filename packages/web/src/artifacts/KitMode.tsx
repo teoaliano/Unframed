@@ -7,7 +7,7 @@ import { Tip } from "../chrome/ui.tsx";
 const setShapeMode = (doc: CanvasDoc, shapeId: string, mode: string): void => {
   const kit = doc.kit();
   if (!doc.shape(shapeId) || !kit || !kit.modes.includes(mode)) return;
-  doc.update(shapeId, { mode: mode === kit.modes[0] ? undefined : mode }, "kit mode");
+  doc.update(shapeId, { mode: mode === kit.modes[0] ? undefined : mode });
 };
 
 export const KitModePicker = ({ shapeId, variant }: { readonly shapeId: string; readonly variant: "header" | "toolbar" }) => {
