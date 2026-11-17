@@ -16,9 +16,12 @@ export interface DocShape {
 export type CanvasReader = Pick<Editor, "getShape" | "getAsset" | "getSelectedShapeIds" | "getSelectedShapes" | "getSortedChildIdsForParent" | "getCurrentPageShapesSorted">;
 
 interface Change {
-  readonly before: TLShape;
-  readonly after: TLShape;
+  readonly before: TLRecord;
+  readonly after: TLRecord;
 }
+
+/** One undo step; a sealed one takes no unmarked change after it. */
+type Step = Change[] & { sealed?: boolean };
 
 const docs = new WeakMap<TLStore, CanvasDoc>();
 
@@ -40,8 +43,8 @@ const KEPT_STEPS = 100;
  */
 export class CanvasDoc {
   private editor: Editor | undefined;
-  private past: Change[][] = [];
-  private future: Change[][] = [];
+  private past: Step[] = [];
+  private future: Step[] = [];
   private restoring = false;
   private disposed = false;
 
@@ -120,9 +123,12 @@ export class CanvasDoc {
     },
   };
 
+  documentMeta(): Readonly<Record<string, unknown>> {
+    return (this.store.get(TLDOCUMENT_ID)?.meta ?? {}) as Readonly<Record<string, unknown>>;
+  }
+
   kit(): Kit | null {
-    const meta = (this.store.get(TLDOCUMENT_ID)?.meta ?? {}) as { unframed?: { kit?: Kit } };
-    return meta.unframed?.kit ?? null;
+    return (this.documentMeta() as { unframed?: { kit?: Kit } }).unframed?.kit ?? null;
   }
 
   /**
@@ -134,16 +140,32 @@ export class CanvasDoc {
     if (before?.typeName !== "shape") return;
     const merged: Record<string, unknown> = { ...(before.props as Record<string, unknown>), ...props };
     for (const [key, value] of Object.entries(props)) if (value === undefined) delete merged[key];
-    const after = { ...before, props: merged } as TLShape;
-    if (this.editor) {
-      if (label !== undefined) this.editor.markHistoryStoppingPoint(label);
-      this.store.put([after]);
+    this.write(before, { ...before, props: merged } as TLShape, label);
+  }
+
+  /** Replaces the document's meta (the project kit lives there) as one undo step of its own. */
+  setDocumentMeta(meta: Readonly<Record<string, unknown>>, label: string): void {
+    const before = this.store.get(TLDOCUMENT_ID);
+    if (!before) return;
+    this.write(before, { ...before, meta: { ...meta } } as TLRecord, label, true);
+  }
+
+  private write(before: TLRecord, after: TLRecord, label: string | undefined, sealed = false): void {
+    const editor = this.editor;
+    if (editor) {
+      if (label !== undefined) editor.markHistoryStoppingPoint(label);
+      editor.run(() => this.store.put([after]), { history: "record" });
+      if (sealed && label !== undefined) editor.markHistoryStoppingPoint(label);
       return;
     }
     this.store.put([after]);
     const last = this.past.at(-1);
-    if (label === undefined && last) last.push({ before, after });
-    else this.past.push([{ before, after }]);
+    if (label === undefined && last && !last.sealed) last.push({ before, after });
+    else {
+      const step: Step = [{ before, after }];
+      if (sealed) step.sealed = true;
+      this.past.push(step);
+    }
     if (this.past.length > KEPT_STEPS) this.past.shift();
     this.future = [];
   }
@@ -175,7 +197,7 @@ export class CanvasDoc {
     return true;
   }
 
-  private restore(records: TLShape[]): void {
+  private restore(records: TLRecord[]): void {
     const present = records.filter((record) => this.store.has(record.id));
     if (present.length === 0) return;
     const editor = this.editor;

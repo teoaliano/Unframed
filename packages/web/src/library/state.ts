@@ -1,5 +1,5 @@
 import { presetFromSelection, type Box, type PresetContent } from "@unframed/domain";
-import { atom, type Atom, type Editor, type TLShapeId } from "tldraw";
+import { atom, type Atom, type Editor, type TLShapeId, type TLStore } from "tldraw";
 import { featureOn } from "../features.ts";
 
 const withoutNodes = (content: PresetContent): PresetContent => {
@@ -23,13 +23,13 @@ interface LibraryUi {
   readonly type?: "kit" | undefined;
 }
 
-const states = new WeakMap<Editor, Atom<LibraryUi>>();
+const states = new WeakMap<TLStore, Atom<LibraryUi>>();
 
-export const libraryUi = (editor: Editor): Atom<LibraryUi> => {
-  let state = states.get(editor);
+export const libraryUi = (owner: { readonly store: TLStore }): Atom<LibraryUi> => {
+  let state = states.get(owner.store);
   if (!state) {
     state = atom<LibraryUi>("library", { open: false });
-    states.set(editor, state);
+    states.set(owner.store, state);
   }
   return state;
 };

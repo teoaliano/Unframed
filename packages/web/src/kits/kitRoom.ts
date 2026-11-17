@@ -1,32 +1,26 @@
 import { applyKitOps, type Kit, type KitLink, type KitOp } from "@unframed/domain";
-import { TLDOCUMENT_ID, type Editor } from "tldraw";
+import type { CanvasDoc } from "../canvas/doc.ts";
 
-export const kitOf = (editor: Editor): Kit | null => {
-  const document = editor.store.get(TLDOCUMENT_ID) as { meta?: { unframed?: { kit?: Kit } } } | undefined;
-  return document?.meta?.unframed?.kit ?? null;
-};
+export const kitOf = (doc: CanvasDoc): Kit | null => doc.kit();
 
 type KitCommit = { readonly ok: true } | { readonly ok: false; readonly refusal: string };
 
-export const writeKit = (editor: Editor, kit: Kit | null): void => {
-  const document = editor.store.get(TLDOCUMENT_ID)!;
-  const meta = (document.meta ?? {}) as { unframed?: Record<string, unknown> };
-  const unframed: Record<string, unknown> = { ...(meta.unframed ?? {}) };
+export const writeKit = (doc: CanvasDoc, kit: Kit | null): void => {
+  const meta = doc.documentMeta();
+  const unframed: Record<string, unknown> = { ...((meta.unframed as Record<string, unknown> | undefined) ?? {}) };
   if (kit === null) delete unframed.kit;
   else unframed.kit = kit;
-  editor.markHistoryStoppingPoint("kit");
-  editor.run(() => editor.store.put([{ ...document, meta: { ...meta, unframed } } as never]), { history: "record" });
-  editor.markHistoryStoppingPoint("kit");
+  doc.setDocumentMeta({ ...meta, unframed }, "kit");
 };
 
-export const commitKit = (editor: Editor, ops: ReadonlyArray<KitOp>): KitCommit => {
-  const result = applyKitOps(kitOf(editor), ops);
+export const commitKit = (doc: CanvasDoc, ops: ReadonlyArray<KitOp>): KitCommit => {
+  const result = applyKitOps(kitOf(doc), ops);
   if (!result.ok) return { ok: false, refusal: result.refusal };
-  writeKit(editor, result.kit);
+  writeKit(doc, result.kit);
   return { ok: true };
 };
 
-export const linkKit = (editor: Editor, from: KitLink): void => {
-  const kit = kitOf(editor);
-  if (kit !== null) writeKit(editor, { ...kit, from });
+export const linkKit = (doc: CanvasDoc, from: KitLink): void => {
+  const kit = kitOf(doc);
+  if (kit !== null) writeKit(doc, { ...kit, from });
 };

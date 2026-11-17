@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { TldrawUiButtonIcon, TldrawUiToolbarButton, useEditor, useValue } from "tldraw";
+import { useCanvasDoc } from "../canvas/doc.ts";
 import { registerSlot } from "../chrome/slots.ts";
 import { libraryUi } from "../library/state.ts";
 import { KitDialog } from "./KitDialog.tsx";
@@ -15,23 +16,27 @@ const KitButton = () => {
   );
 };
 
-export const KitHost = () => {
-  const editor = useEditor();
-  const open = useValue("kit ui", () => kitUi(editor).get().open, [editor]);
-  const merging = useValue("kit merge", () => kitUi(editor).get().merging, [editor]);
+/** The Kit dialog and its Update from kit dialog, wherever the project is shown: the canvas or an editor tab. */
+export const KitDialogs = () => {
+  const doc = useCanvasDoc();
+  const open = useValue("kit ui", () => kitUi(doc).get().open, [doc]);
+  const merging = useValue("kit merge", () => kitUi(doc).get().merging, [doc]);
 
-  useEffect(() => registerSlot("kitButton", KitButton), []);
-
-  const close = () => kitUi(editor).update((state) => ({ ...state, open: false }));
+  const close = () => kitUi(doc).update((state) => ({ ...state, open: false }));
   const fromLibrary = () => {
     close();
-    libraryUi(editor).update((state) => ({ ...state, open: true, type: "kit" }));
+    libraryUi(doc).update((state) => ({ ...state, open: true, type: "kit" }));
   };
-  const endMerge = () => kitUi(editor).update((state) => ({ ...state, merging: undefined }));
+  const endMerge = () => kitUi(doc).update((state) => ({ ...state, merging: undefined }));
   return (
     <>
       {open && <KitDialog onClose={close} onFromLibrary={fromLibrary} />}
-      {merging !== undefined && <UpdateFromKitDialog editor={editor} preset={merging} onClose={endMerge} />}
+      {merging !== undefined && <UpdateFromKitDialog doc={doc} preset={merging} onClose={endMerge} />}
     </>
   );
+};
+
+export const KitHost = () => {
+  useEffect(() => registerSlot("kitButton", KitButton), []);
+  return <KitDialogs />;
 };

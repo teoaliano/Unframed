@@ -2,6 +2,7 @@ import { UnframedError } from "@unframed/contracts";
 import type { KitPreset, LibraryEntry } from "@unframed/domain";
 import { useEffect, useState } from "react";
 import { TldrawUiButtonIcon, TldrawUiToolbarButton, useEditor, useValue } from "tldraw";
+import { useCanvasDoc } from "../canvas/doc.ts";
 import { registerSlot } from "../chrome/slots.ts";
 import { useCanvasProject, useEngine, useSettings } from "../context.ts";
 import { showError } from "../toasts.tsx";
@@ -26,6 +27,7 @@ const LibraryButton = () => {
 
 export const LibraryHost = () => {
   const editor = useEditor();
+  const doc = useCanvasDoc();
   const engine = useEngine();
   const project = useCanvasProject();
   const settings = useSettings();
@@ -47,7 +49,7 @@ export const LibraryHost = () => {
   const add = (entry: LibraryEntry) => {
     libraryUi(editor).update((state) => ({ ...state, open: false }));
     if (entry.kind === "kit") {
-      applyLibraryKit(editor, entry, () => setReplacing(entry));
+      applyLibraryKit(doc, entry, () => setReplacing(entry));
       return;
     }
     insertPreset({ editor, engine, project, preset: entry, textModel: settings?.textModel }).catch((error: unknown) => showError(messageOf(error)));
@@ -56,7 +58,7 @@ export const LibraryHost = () => {
   return (
     <>
       {ui.open && <LibraryDialog onClose={() => libraryUi(editor).update((state) => ({ ...state, open: false }))} onAdd={add} initialType={ui.type ?? "all"} />}
-      {replacing !== undefined && <ReplaceKitDialog editor={editor} preset={replacing} onClose={() => setReplacing(undefined)} />}
+      {replacing !== undefined && <ReplaceKitDialog doc={doc} preset={replacing} onClose={() => setReplacing(undefined)} />}
       {ui.saving && <AddToLibraryDialog captured={ui.saving} onClose={() => libraryUi(editor).update((state) => ({ ...state, saving: undefined }))} />}
     </>
   );

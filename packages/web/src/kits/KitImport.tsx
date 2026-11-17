@@ -1,5 +1,5 @@
 import { applyKitOps, fromCss, fromDesignMd, fromDtcg, isDesignMd, skippedList, type ImportFile, type ImportResult, type ImportFragment, type Kit, type KitOp, type TokenValue } from "@unframed/domain";
-import { useEditor } from "tldraw";
+import { useCanvasDoc } from "../canvas/doc.ts";
 import { useMemo, useState, type DragEvent } from "react";
 import { Alert } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
@@ -58,7 +58,7 @@ export const readImport = (sources: ReadonlyArray<ImportFile>): ImportResult | u
 };
 
 export const ImportKitDialog = ({ kit, onClose }: { readonly kit: Kit | null; readonly onClose: () => void }) => {
-  const editor = useEditor();
+  const doc = useCanvasDoc();
   const [sources, setSources] = useState<ImportFile[]>([]);
   const [paste, setPaste] = useState("");
   const [over, setOver] = useState(false);
@@ -84,7 +84,7 @@ export const ImportKitDialog = ({ kit, onClose }: { readonly kit: Kit | null; re
 
   const run = () => {
     if (ops === undefined || refusal !== undefined) return;
-    const result = commitKit(editor, ops);
+    const result = commitKit(doc, ops);
     if (result.ok) onClose();
     else setProblem(result.refusal);
   };
