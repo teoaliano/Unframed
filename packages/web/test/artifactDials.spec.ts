@@ -553,3 +553,29 @@ test("the header row shows the Add a parameter button's focus ring whole", async
   await expect(panel.getByRole("button", { name: "Add a parameter" })).toBeFocused();
   expect(await styleOf(panel.locator(".dialkit-panel-toolbar"), "overflow")).toBe("visible");
 });
+
+test("a slider's fill keeps its colour when the slider takes keyboard focus, at rest and hovered, while the focus ring shows", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await writeBridge(agent);
+  await filledArtifact(agent, { id: "shape:tuned", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Tuned", html: dialsPage({ size: [80, 0, 100, 1] }) });
+  await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible();
+  await clickShape(page, "shape:tuned");
+  await parametersToggle(page).click();
+  const panel = canvasPanel(page, "Tuned");
+  const slider = panel.getByRole("slider", { name: "Size" });
+  await expect(slider).toBeVisible();
+  const fill = panel.locator(".dialkit-slider-fill").first();
+  await inBothSchemes(page, async () => {
+    await page.mouse.move(0, 0);
+    await expectToken(fill, "background-color", "--dial-surface-active");
+    await page.keyboard.press("Shift");
+    await slider.focus();
+    await expect.poll(() => slider.evaluate((element) => element.matches(":focus-visible"))).toBe(true);
+    await expectToken(slider, "outline-color", "--dial-focus-ring");
+    await expectToken(fill, "background-color", "--dial-surface-active");
+    await slider.hover();
+    await expectToken(fill, "background-color", "--dial-slider-fill-active");
+    await page.mouse.move(0, 0);
+    await slider.blur();
+  });
+});
