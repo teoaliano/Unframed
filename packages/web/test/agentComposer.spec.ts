@@ -8,6 +8,7 @@ import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
 import { platformOf } from "./platform.ts";
 import { writeProjectFile } from "./artifacts.ts";
+import { leaveEditor } from "./editorHarness.ts";
 
 /** A toast's second line, by its text. */
 const toastDescription = (page: Page, text: string) => page.locator("[data-slot='toast-description']").filter({ hasText: text });
@@ -534,7 +535,7 @@ test("a chat's unsent draft follows it between the canvas rail and the editor's 
   await promptBox(editorRail).click();
   await page.keyboard.press("End");
   await page.keyboard.type(" and red");
-  await editor.getByRole("button", { name: "Back to canvas" }).click();
+  await leaveEditor(page);
   await expect(editor).toHaveCount(0);
   await expect(promptBox(panel)).toHaveText("Make the title bigger and red");
 

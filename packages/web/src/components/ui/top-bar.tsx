@@ -21,7 +21,6 @@ export interface TopBarTab {
   readonly pinned?: boolean | undefined;
   readonly label?: string | undefined;
   readonly icon?: ReactNode;
-  readonly context?: string | undefined;
   readonly variant?: "default" | "secondary" | undefined;
   readonly attachedTo?: string | undefined;
 }
@@ -224,7 +223,7 @@ export const TopBar = ({
                 data-status={tab.state ?? tab.status ?? "none"}
                 data-pinned={tab.pinned === true ? "true" : undefined}
                 data-variant={tab.variant ?? "default"}
-                aria-label={tab.pinned === true ? tab.name : tab.context === undefined ? undefined : `${tab.label ?? tab.name}, ${tab.context}`}
+                aria-label={tab.pinned === true ? tab.name : undefined}
                 title={tab.title ?? tab.name}
                 closable={manage && tab.pinned !== true}
                 closeLabel={`Close ${tab.label ?? tab.name}`}
@@ -245,11 +244,6 @@ export const TopBar = ({
                   <>
                     {tab.icon}
                     <span className="min-w-0 truncate">{tab.label ?? tab.name}</span>
-                    {tab.context !== undefined && (
-                      <span data-slot="top-bar-tab-context" className="min-w-0 max-w-20 shrink-[2] truncate text-(--project-tab-context) before:me-1 before:content-['·']">
-                        {tab.context}
-                      </span>
-                    )}
                   </>
                 )}
               </ProjectTab>

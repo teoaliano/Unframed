@@ -1,6 +1,6 @@
 import { useSync } from "@tldraw/sync";
 import { canvasSchema } from "@unframed/contracts";
-import { UPLOAD_BODY_LIMIT } from "@unframed/domain";
+import { shapeOfTab, UPLOAD_BODY_LIMIT } from "@unframed/domain";
 import { installLongPressMenu } from "./longPressMenu.ts";
 import { installSelectionReporter } from "./selectionReport.ts";
 import { useCallback, useContext, useEffect, useMemo, useRef } from "react";
@@ -14,13 +14,20 @@ import { DotGrid } from "../chrome/DotGrid.tsx";
 import { installLabelActivity, installLabelLevel } from "../chrome/labelLevel.ts";
 import { OVERLAY_UTILS } from "../chrome/selectionLook.ts";
 import { connectionMonitor } from "../connection/monitor.ts";
-import { CanvasProjectContext, useEngine } from "../context.ts";
+import { CanvasProjectContext, useEngine, useSettings } from "../context.ts";
+import { EditorPage } from "../artifacts/EditorPage.tsx";
+import { useChatClient } from "../agent/store.ts";
+import { artifactsOf, previewPort } from "../artifacts/state.ts";
+import { watchComponentPins } from "../artifacts/componentPins.ts";
+import { applyLateSaves } from "../artifacts/editor/lateSaves.ts";
+import { watchEditorTabs } from "../artifacts/editorTabs.ts";
+import { watchFileChanges, watchSnapshots } from "../artifacts/snapshots.ts";
 import { installCopyStripping } from "../generate/copies.ts";
 import { RoleBadges } from "../generate/overlays.tsx";
 import { installRenderPolls } from "../generate/renderPolls.ts";
 import { watchRunReports } from "../generate/runReports.ts";
 import { LicenseKeyContext } from "../license.ts";
-import { SETTLE_BEFORE_SWITCH_MS, type ProjectActivation } from "../project/activation.ts";
+import { SETTLE_BEFORE_SWITCH_MS, useTabState, type ProjectActivation } from "../project/activation.ts";
 import { onThemeShown } from "../theme/theme.ts";
 import { showError } from "../toasts.tsx";
 import { createAssetStore, Previews } from "./assetStore.ts";
@@ -50,6 +57,7 @@ import { CommentTool } from "../comments/CommentTool.ts";
 import { recalledCamera, rememberCamera } from "../project/tabMemory.ts";
 import { TLDRAW_ASSET_URLS, TLDRAW_CHROME, TLDRAW_OPTIONS } from "./tldrawChrome.tsx";
 import { useFeature } from "../features.ts";
+import { CanvasDoc, CanvasDocContext } from "./doc.ts";
 
 
 const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, AudioShapeUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil, ComponentShapeUtil, NodeShapeUtil, WireShapeUtil, ...DESIGNED_SHAPE_UTILS];
@@ -85,6 +93,7 @@ const REFUSALS: Record<string, string> = {
 export const CanvasHost = ({ project, activation }: { readonly project: string; readonly activation: ProjectActivation }) => {
   const licenseKey = useContext(LicenseKeyContext);
   const engine = useEngine();
+  useChatClient(engine, project);
   const content = useRef<ContentContext | undefined>(undefined);
   const options = useMemo(() => ({ ...TLDRAW_OPTIONS, ...clipboardOptions({ project, context: () => content.current }) }), [project]);
   const socket = useRef<SyncSocket | undefined>(undefined);
@@ -104,6 +113,31 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
   );
 
   const store = useSync({ connect, assets, schema: canvasSchema() });
+  const synced = store.status === "synced-remote" ? store.store : undefined;
+  const doc = useMemo(() => (synced ? new CanvasDoc(synced) : undefined), [synced]);
+  useEffect(() => () => doc?.dispose(), [doc]);
+
+  const tabs = useTabState(activation);
+  const editing = tabs.active === project && tabs.editing !== undefined ? shapeOfTab(tabs.editing) : undefined;
+
+  const settings = useSettings();
+  useEffect(() => {
+    if (settings) previewPort.set(settings.previewPort);
+  }, [settings]);
+
+  useEffect(() => {
+    const stops = [watchSnapshots(engine, project), watchFileChanges(engine, project), watchComponentPins(engine, project)];
+    return () => {
+      for (const stop of stops) stop();
+    };
+  }, [engine, project]);
+
+  useEffect(() => {
+    if (!doc) return;
+    artifactsOf(doc).project.set(project);
+    applyLateSaves(doc, project);
+    return watchEditorTabs(doc, activation, project);
+  }, [doc, activation, project]);
 
   useEffect(() => watchRunReports(engine, project), [engine, project]);
   const nodesOn = useFeature("nodes");
@@ -137,6 +171,8 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     bindNodeCatalogues(editor);
     const stopCatalogues = watchNodeCatalogues(editor, engine);
     const stopLongPress = installLongPressMenu(editor);
+    const detach = doc?.attach(editor);
+    artifactsOf(editor).canvas.set(editor);
     content.current = { project, engine, minter };
     installExternalContent(editor, content.current);
     const camera = recalledCamera(project);
@@ -159,15 +195,21 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
       stopRenders();
       stopCatalogues();
       stopLongPress();
+      detach?.();
+      if (artifactsOf(editor).canvas.get() === editor) artifactsOf(editor).canvas.set(undefined);
       content.current = undefined;
     };
-  }, [project, engine]);
+  }, [project, engine, doc]);
 
   if (store.status === "error") return <div className="absolute inset-0" data-canvas-refused={project} />;
 
   return (
     <div className="absolute inset-0" data-canvas-project={project}>
       <CanvasProjectContext.Provider value={project}>
+      <CanvasDocContext.Provider value={doc}>
+      {editing !== undefined ? (
+        doc && <EditorPage shapeId={editing} />
+      ) : (
       <Tldraw
         store={store}
         options={options}
@@ -183,6 +225,8 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
         components={COMPONENTS}
         {...(licenseKey ? { licenseKey } : {})}
       />
+      )}
+      </CanvasDocContext.Provider>
       </CanvasProjectContext.Provider>
     </div>
   );

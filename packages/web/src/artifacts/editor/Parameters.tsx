@@ -2,7 +2,6 @@ import { addParameterInstruction, applyParametersInstruction, continuableChat, D
 import { Check, Sparkles } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import type { TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
 import { cn } from "~/lib/utils";
@@ -23,7 +22,7 @@ export const ColumnHeader = ({ children, className }: { readonly children: React
 type Place = "canvas" | "editor";
 
 interface ParametersProps {
-  readonly shapeId: TLShapeId;
+  readonly shapeId: string;
   readonly kind: ArtifactKind;
   readonly title: string;
   readonly announcement: DialsAnnouncement | undefined;
@@ -40,7 +39,7 @@ type Sent = { readonly sent: boolean; readonly openedRail: boolean };
 
 const NOT_SENT: Sent = { sent: false, openedRail: false };
 
-const useArtifactChat = (shapeId: TLShapeId, place: Place, railVisible: boolean) => {
+const useArtifactChat = (shapeId: string, place: Place, railVisible: boolean) => {
   const client = useChatClient(useEngine(), useCanvasProject());
   const { statuses } = useProviders(client);
   const inFlight = useRef(false);

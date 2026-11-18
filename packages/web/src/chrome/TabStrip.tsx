@@ -110,7 +110,6 @@ export const TabStrip = ({
         variant: "secondary",
         attachedTo: project,
         label,
-        context: project,
         icon: <Icon aria-hidden data-kind={kind} className="size-3.5 shrink-0 text-(--project-tab-icon)" />,
         title: `${label} · ${word} in ${project}`,
       };

@@ -185,12 +185,22 @@ const readView = async (engine: ReturnType<typeof useEngine>): Promise<View> => 
   }
 };
 
-export const LibraryDialog = ({ onClose, onAdd, initialType = "all" }: { readonly onClose: () => void; readonly onAdd: (preset: LibraryEntry) => void; readonly initialType?: LibraryControls["type"] }) => {
+export const LibraryDialog = ({
+  onClose,
+  onAdd,
+  initialType = "all",
+  kitsOnly = false,
+}: {
+  readonly onClose: () => void;
+  readonly onAdd: (preset: LibraryEntry) => void;
+  readonly initialType?: LibraryControls["type"];
+  readonly kitsOnly?: boolean;
+}) => {
   const engine = useEngine();
   const [presets, setPresets] = useState<ReadonlyArray<LibraryEntry>>([]);
   const [kits, setKits] = useState<ReadonlyArray<LibraryEntry>>([]);
   const [readFailure, setReadFailure] = useState<string>();
-  const [controls, setControls] = useState<LibraryControls>({ query: "", type: initialType, source: "any", sort: "newest", page: 1 });
+  const [controls, setControls] = useState<LibraryControls>({ query: "", type: kitsOnly ? "kit" : initialType, source: "any", sort: "newest", page: 1 });
   const [view, setView] = useState<View>("card");
   const [deleting, setDeleting] = useState<LibraryEntry>();
   const [confirming, setConfirming] = useState(false);
@@ -283,19 +293,23 @@ export const LibraryDialog = ({ onClose, onAdd, initialType = "all" }: { readonl
               />
             </div>
             <div className="flex items-center gap-2">
-              <Toggles<LibraryControls["type"]>
-                label="Type"
-                value={controls.type}
-                onChange={(type) => change({ type })}
-                options={[
-                  { value: "all", label: "All" },
-                  { value: "recipe", label: "Recipes" },
-                  { value: "group", label: "Groups" },
-                  ...(nodesOn ? [{ value: "flow" as const, label: "Flows" }] : []),
-                  { value: "kit", label: "Kits" },
-                ]}
-              />
-              <Separator orientation="vertical" className="h-5" />
+              {!kitsOnly && (
+                <>
+                  <Toggles<LibraryControls["type"]>
+                    label="Type"
+                    value={controls.type}
+                    onChange={(type) => change({ type })}
+                    options={[
+                      { value: "all", label: "All" },
+                      { value: "recipe", label: "Recipes" },
+                      { value: "group", label: "Groups" },
+                      ...(nodesOn ? [{ value: "flow" as const, label: "Flows" }] : []),
+                      { value: "kit", label: "Kits" },
+                    ]}
+                  />
+                  <Separator orientation="vertical" className="h-5" />
+                </>
+              )}
               <Toggles<LibraryControls["source"]>
                 label="Source"
                 value={controls.source}

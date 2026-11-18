@@ -5,7 +5,7 @@ import { centre, openCanvas, roomShapes, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 import { filledArtifact, projectPath } from "./artifacts.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
-import { editor, frameOf, modeButton, outline, parameters, preparedFile, region, textOf } from "./editorHarness.ts";
+import { editor, frameOf, leaveEditor, modeButton, outline, parameters, preparedFile, region, textOf } from "./editorHarness.ts";
 
 const PAGE = `<!doctype html><html><head><style>body{margin:0;font:16px sans-serif}main{padding:16px}</style></head><body><main><h1 style="font-size: 32px">Welcome</h1><p style="font-size: 16px">Lead text</p></main></body></html>`;
 
@@ -91,7 +91,7 @@ test("the burst commits at once on switching mode, on selecting another element 
 
   await sizeField(page).fill("18");
   await sizeField(page).press("Enter");
-  await region(page).getByRole("button", { name: "Back to canvas" }).click();
+  await leaveEditor(page);
   await expect(editor(page)).toHaveCount(0);
   await expect.poll(() => htmlCount(agent), { timeout: 1200 }).toBe(start + 3);
 });

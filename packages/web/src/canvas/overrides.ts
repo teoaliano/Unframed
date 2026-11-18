@@ -2,6 +2,7 @@ import type { TLUiActionItem, TLUiOverrides, TLUiToolItem } from "tldraw";
 import { addShape, type AddKind } from "./addShapes.ts";
 import { ungroup, wrapSelection } from "./groups.ts";
 import { COMMENT_TOOL, commentsUi } from "../comments/state.ts";
+import { canvasDocOf } from "./doc.ts";
 
 /** Unframed's add-at-pointer keys, as tldraw spells them. */
 const ADD_KEYS: ReadonlyArray<readonly [AddKind, string]> = [
@@ -42,6 +43,9 @@ export const overrides: TLUiOverrides = {
   actions(editor, actions) {
     const redo = actions.redo;
     if (redo) redo.kbd = "cmd+shift+z,ctrl+shift+z,cmd+y,ctrl+y";
+    const undo = actions.undo;
+    if (undo) actions.undo = { ...undo, onSelect: (source) => (editor.getCanUndo() || !canvasDocOf(editor.store)?.undoOwn() ? undo.onSelect(source) : undefined) };
+    if (redo) actions.redo = { ...redo, onSelect: (source) => (editor.getCanRedo() || !canvasDocOf(editor.store)?.redoOwn() ? redo.onSelect(source) : undefined) };
     const replace = (id: string, onSelect: TLUiActionItem["onSelect"]) => {
       const action = actions[id];
       if (action) actions[id] = { ...action, onSelect };

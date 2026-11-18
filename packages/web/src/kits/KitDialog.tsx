@@ -1,6 +1,7 @@
 import { applyKitOps, type KitOp, type KitPreset } from "@unframed/domain";
 import { useEffect, useRef, useState } from "react";
-import { useEditor, useValue, type TLShapeId } from "tldraw";
+import { useValue } from "tldraw";
+import { useCanvasDoc } from "../canvas/doc.ts";
 import { EllipsisIcon } from "lucide-react";
 import { Alert, AlertAction, AlertDescription } from "~/components/ui/alert";
 import { Empty, EmptyContent, EmptyDescription } from "~/components/ui/empty";
@@ -30,10 +31,10 @@ const NO_USE = { tokens: {}, modes: {} } as KitUsageCounts;
 const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
 
 export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => void; readonly onFromLibrary: () => void }) => {
-  const editor = useEditor();
+  const doc = useCanvasDoc();
   const engine = useEngine();
   const project = useCanvasProject();
-  const kit = useValue("kit", () => kitOf(editor), [editor]);
+  const kit = useValue("kit", () => kitOf(doc), [doc]);
   const [problem, setProblem] = useState<string>();
   const [usage, setUsage] = useState<KitUsageCounts>(NO_USE);
   const [ask, setAsk] = useState<Ask>();
@@ -54,14 +55,14 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
   }, [engine, project, kit]);
 
   const apply = (ops: ReadonlyArray<KitOp>): string | undefined => {
-    const result = commitKit(editor, ops);
+    const result = commitKit(doc, ops);
     setProblem(result.ok ? undefined : result.refusal);
     return result.ok ? undefined : result.refusal;
   };
 
   const relink = (presetId: string, revision: number) => {
-    const current = kitOf(editor);
-    if (current !== null) linkKit(editor, linkFor(presetId, revision, current));
+    const current = kitOf(doc);
+    if (current !== null) linkKit(doc, linkFor(presetId, revision, current));
   };
 
   useEffect(() => {
@@ -90,7 +91,7 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
   const updateFromKit = async () => {
     if (kit?.from === undefined) return;
     const found = await libraryKitById(engine, kit.from.presetId);
-    if (found !== undefined) kitUi(editor).update((state) => ({ ...state, merging: found }));
+    if (found !== undefined) kitUi(doc).update((state) => ({ ...state, merging: found }));
   };
 
   const sourceLine = () => {
@@ -117,13 +118,13 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
       .catch((error: unknown) => showError(error instanceof Error ? error.message : String(error)));
   };
 
-  const titleOf = (id: string) => (editor.getShape(id as TLShapeId) as { props?: { title?: string } } | undefined)?.props?.title ?? id;
+  const titleOf = (id: string) => (doc.shape(id)?.props as { title?: string } | undefined)?.title ?? id;
 
   const confirmDelete = () => {
     if (ask === undefined) return;
     if (ask.kind === "token") apply([{ op: "deleteToken", path: ask.path }]);
     else if (ask.kind === "mode") apply([{ op: "deleteMode", name: ask.mode }]);
-    else commitKit(editor, [{ op: "remove" }]);
+    else commitKit(doc, [{ op: "remove" }]);
     setAsk(undefined);
   };
 

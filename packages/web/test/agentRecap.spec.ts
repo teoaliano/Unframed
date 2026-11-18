@@ -3,6 +3,7 @@ import { putRecords } from "./media.ts";
 import { artifactColumn, expect, openRail, say, scriptFolder, startAgentEngine } from "./agent.ts";
 import { test as base } from "./fixtures.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
+import { leaveEditor } from "./editorHarness.ts";
 
 const retitle = (id: string, title: string) => ({ type: "update", id, props: { title } });
 
@@ -76,7 +77,7 @@ test("after a turn the recap card lists what it touched with Editor and Locate, 
   await rows.nth(0).getByRole("button", { name: "Editor" }).click();
   const region = page.getByRole("region", { name: "Editing Intro (red)" });
   await expect(region).toBeVisible();
-  await region.getByRole("button", { name: "Back to canvas" }).click();
+  await leaveEditor(page);
   await expect(region).toHaveCount(0);
 });
 

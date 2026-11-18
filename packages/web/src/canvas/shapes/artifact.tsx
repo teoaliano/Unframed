@@ -8,7 +8,7 @@ import { DropOutline, onFrameEdit } from "../../artifacts/imageDrop.tsx";
 import { ProblemLine, RenderRow } from "../../artifacts/RenderRow.tsx";
 import { Button } from "~/components/ui/button";
 import { fileChangesOf, snapshotsOf, snapshotUrl, stillOf } from "../../artifacts/snapshots.ts";
-import { kitOf } from "../../artifacts/kit.ts";
+import { kitOf } from "../../kits/kitRoom.ts";
 import { artifactsOf, forgetEdit, forgetFrame, hearFrame, isInteractive, isLive, previewPort, reachEdit, reachFrame } from "../../artifacts/state.ts";
 import { Tip } from "../../chrome/ui.tsx";
 import { currentSlots } from "../../chrome/slots.ts";
@@ -162,7 +162,7 @@ const FilledArtifact = ({ shape, kind }: { readonly shape: ArtifactShape; readon
   const holder = useRef<HTMLDivElement>(null);
   const scale = kind === "component" ? 1 : artifactScale(props);
   const layout = { w: props.w / scale, h: props.h / scale };
-  const updates = useValue("component updates", () => updateTagsOf(editor, project, props.file).join(","), [editor, project, props.file]);
+  const updates = useValue("component updates", () => updateTagsOf(editor.getCurrentPageShapes(), project, props.file).join(","), [editor, project, props.file]);
   const editing = useFeature("element-editing");
   return (
     <>

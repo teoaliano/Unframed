@@ -8,7 +8,7 @@ import { clickShape } from "./generation.ts";
 import { putRecords } from "./media.ts";
 import { dialsPage, filledArtifact, insideComposition, insideFrame, projectPath, writeBridge, writeProjectFile } from "./artifacts.ts";
 import { expectToken, inBothSchemes, styleOf } from "./kit.ts";
-import { editor } from "./editorHarness.ts";
+import { editor, leaveEditor } from "./editorHarness.ts";
 
 const editorFrame = (page: Page): FrameLocator => editor(page).frameLocator("iframe[data-artifact-frame]");
 const shown = async (frame: FrameLocator) => JSON.parse((await frame.locator("#values").textContent()) ?? "null");
@@ -49,7 +49,7 @@ test("an artifact that declares parameters shows them as DialKit controls; one t
   expect(Math.abs(box! - title!)).toBeLessThanOrEqual(1);
   await page.keyboard.press("Escape");
   await expect(editor(page).getByRole("button", { name: "Add a parameter" })).toBeFocused();
-  await editor(page).getByRole("button", { name: "Back to canvas" }).click();
+  await leaveEditor(page);
 
   await page.mouse.click(640, 600);
   await openEditor(page, "shape:plain", "Plain");
@@ -102,7 +102,7 @@ test("a change made just before the editor closes is still saved", async ({ page
   await page.keyboard.press("ArrowRight");
   await page.keyboard.press("ArrowRight");
   await page.keyboard.press("ArrowRight");
-  await editor(page).getByRole("button", { name: "Back to canvas" }).click();
+  await leaveEditor(page);
   await expect(editor(page)).toHaveCount(0);
   await expect.poll(() => dialsOf(agent, "shape:tuned"), { timeout: 10_000 }).toEqual({ size: 13 });
 });

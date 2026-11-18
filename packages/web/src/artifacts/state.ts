@@ -1,7 +1,8 @@
 import { farOffscreen, isArtifactKind, liveArtifacts, LIVE_SELECTED_LIMIT, PIN_LIMIT, type DialsAnnouncement } from "@unframed/domain";
 import type { RenderStatus } from "@unframed/contracts";
-import { atom, computed, react, type Atom, type Computed, type Editor, type TLShapeId } from "tldraw";
+import { atom, computed, react, type Atom, type Computed, type Editor, type TLShapeId, type TLStore } from "tldraw";
 import { isDeviceClient } from "../deviceMode.ts";
+import type { StoreOwner } from "../canvas/doc.ts";
 
 export const previewPort: Atom<number | undefined> = atom("preview port", undefined);
 
@@ -30,7 +31,7 @@ export const togglePin = (project: string, id: string): boolean => {
 
 interface CanvasArtifacts {
   readonly project: Atom<string>;
-  readonly editing: Atom<TLShapeId | undefined>;
+  readonly canvas: Atom<Editor | undefined>;
   readonly tuning: Atom<TLShapeId | undefined>;
   readonly updatesOpen: Atom<TLShapeId | undefined>;
   readonly heard: Atom<ReadonlyMap<string, DialsAnnouncement>>;
@@ -51,23 +52,24 @@ export interface DropHit {
   readonly box: { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
 }
 
-const canvases = new WeakMap<Editor, CanvasArtifacts>();
+const canvases = new WeakMap<TLStore, CanvasArtifacts>();
 
 const hasFile = (editor: Editor, id: TLShapeId): boolean => {
   const shape = editor.getShape(id);
   return !!shape && isArtifactKind(shape.type) && (shape.props as { file?: string }).file !== "";
 };
 
-export const artifactsOf = (editor: Editor): CanvasArtifacts => {
-  let found = canvases.get(editor);
+export const artifactsOf = (owner: StoreOwner): CanvasArtifacts => {
+  let found = canvases.get(owner.store);
   if (!found) {
-    const editing = atom<TLShapeId | undefined>("editing artifact", undefined);
+    const canvas = atom<Editor | undefined>("mounted canvas", undefined);
     const tuning = atom<TLShapeId | undefined>("tuning artifact", undefined);
     const updatesOpen = atom<TLShapeId | undefined>("component updates open", undefined);
     const project = atom("artifact project", "");
     const dropHolds = atom<ReadonlySet<string>>("image drop holds", new Set());
     const live = computed<ReadonlySet<string>>("live artifacts", () => {
-      if (editing.get() !== undefined) return new Set();
+      const editor = canvas.get();
+      if (editor === undefined) return new Set();
       const selected = editor.getSelectedShapeIds().filter((id) => hasFile(editor, id));
       const centreOf = (id: TLShapeId) => editor.getShapePageBounds(id)?.center ?? { x: 0, y: 0 };
       const found = liveArtifacts({
@@ -81,7 +83,7 @@ export const artifactsOf = (editor: Editor): CanvasArtifacts => {
     });
     found = {
       project,
-      editing,
+      canvas,
       tuning,
       updatesOpen,
       heard: atom("artifact announcements", new Map()),
@@ -94,7 +96,7 @@ export const artifactsOf = (editor: Editor): CanvasArtifacts => {
       dropHit: atom<DropHit | undefined>("image drop hit", undefined),
       dropHolds,
     };
-    canvases.set(editor, found);
+    canvases.set(owner.store, found);
   }
   return found;
 };
@@ -114,8 +116,8 @@ export const isInteractive = (editor: Editor, id: TLShapeId): boolean =>
   !artifactsOf(editor).hold.get() &&
   !editor.isInAny("select.translating", "select.resizing", "select.rotating", "select.dragging_handle", "select.pointing_shape", "select.pointing_selection", "select.pointing_resize_handle");
 
-export const setProblem = (editor: Editor, id: string, message: string | undefined): void => {
-  artifactsOf(editor).problems.update((current) => {
+export const setProblem = (owner: StoreOwner, id: string, message: string | undefined): void => {
+  artifactsOf(owner).problems.update((current) => {
     const next = new Map(current);
     if (message === undefined) next.delete(id);
     else next.set(id, message);
@@ -180,12 +182,12 @@ export const toggleTuning = (editor: Editor, id: TLShapeId): void => {
 };
 
 export const installTuningWatch = (editor: Editor): (() => void) => {
-  const { tuning, editing } = artifactsOf(editor);
+  const { tuning } = artifactsOf(editor);
   const stop = react("tuning follows the selection", () => {
     const id = tuning.get();
     if (id === undefined) return;
     const selected = editor.getSelectedShapeIds();
-    if (editing.get() !== undefined || selected.length !== 1 || selected[0] !== id || !hasFile(editor, id)) tuning.set(undefined);
+    if (selected.length !== 1 || selected[0] !== id || !hasFile(editor, id)) tuning.set(undefined);
   });
   return () => {
     stop();

@@ -1,6 +1,6 @@
 import { GUIDANCE_CHOICE, mergeKit, replaceKit, type Kit, type KitPreset, type MergeChoices, type MergeResult, type Token } from "@unframed/domain";
 import { useState } from "react";
-import type { Editor } from "tldraw";
+import type { CanvasDoc } from "../canvas/doc.ts";
 import { AlertDialog, AlertDialogClose, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogPopup, AlertDialogTitle } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogClose, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
@@ -21,25 +21,32 @@ const kitFrom = (preset: KitPreset): Kit => ({
 
 const applied = (name: string) => showNotice(`Applied “${name}” to this project.`, "info");
 
-export const applyLibraryKit = (editor: Editor, preset: KitPreset, confirm: () => void): void => {
-  const kit = kitOf(editor);
+const applyLibraryKit = (doc: CanvasDoc, preset: KitPreset, confirm: () => void): void => {
+  const kit = kitOf(doc);
   if (kit === null) {
-    writeKit(editor, kitFrom(preset));
+    writeKit(doc, kitFrom(preset));
     applied(preset.name);
     return;
   }
   if (kit.from?.presetId === preset.id) {
-    kitUi(editor).update((state) => ({ ...state, merging: preset }));
+    kitUi(doc).update((state) => ({ ...state, merging: preset }));
     return;
   }
   confirm();
 };
 
-export const ReplaceKitDialog = ({ editor, preset, onClose }: { readonly editor: Editor; readonly preset: KitPreset; readonly onClose: () => void }) => {
-  const current = kitOf(editor);
+export const useLibraryKit = (doc: CanvasDoc) => {
+  const [replacing, setReplacing] = useState<KitPreset>();
+  const apply = (preset: KitPreset) => applyLibraryKit(doc, preset, () => setReplacing(preset));
+  const dialog = replacing !== undefined && <ReplaceKitDialog doc={doc} preset={replacing} onClose={() => setReplacing(undefined)} />;
+  return [apply, dialog] as const;
+};
+
+const ReplaceKitDialog = ({ doc, preset, onClose }: { readonly doc: CanvasDoc; readonly preset: KitPreset; readonly onClose: () => void }) => {
+  const current = kitOf(doc);
   const replace = () => {
     if (current !== null) {
-      writeKit(editor, { ...replaceKit(current, kitFrom(preset)), from: linkFor(preset.id, preset.revision, preset.kit) });
+      writeKit(doc, { ...replaceKit(current, kitFrom(preset)), from: linkFor(preset.id, preset.revision, preset.kit) });
       applied(preset.name);
     }
     onClose();
@@ -94,14 +101,14 @@ const ValueText = ({ colour, text }: { readonly colour: boolean; readonly text: 
   </span>
 );
 
-export const UpdateFromKitDialog = ({ editor, preset, onClose }: { readonly editor: Editor; readonly preset: KitPreset; readonly onClose: () => void }) => {
-  const project = kitOf(editor);
+export const UpdateFromKitDialog = ({ doc, preset, onClose }: { readonly doc: CanvasDoc; readonly preset: KitPreset; readonly onClose: () => void }) => {
+  const project = kitOf(doc);
   const [choices, setChoices] = useState<MergeChoices>({});
   if (project === null) return null;
   const result = mergeWith(project, preset, choices);
   const types = new Map(project.tokens.map((token) => [token.path, token.type]));
   const update = () => {
-    writeKit(editor, { ...result.kit, from: linkFor(preset.id, preset.revision, preset.kit) });
+    writeKit(doc, { ...result.kit, from: linkFor(preset.id, preset.revision, preset.kit) });
     onClose();
   };
   return (

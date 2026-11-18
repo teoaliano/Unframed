@@ -84,7 +84,8 @@ import { CompactControlsMenu, ContextMeter, declaredTraits, latestUsage, ModelPi
 import { chipOfToken, PromptEditor, type CaretMark, type PromptEditorHandle, type Trigger } from "./PromptEditor.tsx";
 import { UpNext } from "./UpNext.tsx";
 import { useRestingComposer, useRestingTransition } from "./resting.ts";
-import { useMaybeEditor, useValue } from "tldraw";
+import { useValue } from "tldraw";
+import { useCanvasReader } from "../../canvas/reader.ts";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Input } from "~/components/ui/input";
 import { composerGlassClass } from "../../chrome/composerSurface.ts";
@@ -155,7 +156,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const running = chat?.latestTurn?.state === "running";
   const noProvider = noProviderReady(statuses);
   const ready = readyProviders(statuses);
-  const canvas = useMaybeEditor();
+  const canvas = useCanvasReader();
   const box = useRef<PromptEditorHandle>(null);
   const draftKey: string | undefined = variant === "rail" ? (chatId ?? NEW_CHAT) : TOOLBAR_DRAFT;
   const [initialDraft] = useState(() => (draftKey === undefined ? EMPTY_DRAFT : client.draft(draftKey)));
@@ -1248,7 +1249,7 @@ const ARTIFACT_TYPES = new Set(["page", "motion"]);
 
 export const ToolbarAgentTray = ({ project, close, onMenuOpen }: SlotProps) => {
   const client = useChatClient(useEngine(), project);
-  const canvas = useMaybeEditor();
+  const canvas = useCanvasReader();
   const chats = useChats(client);
   const artifactKey = useValue(
     "selected artifacts",

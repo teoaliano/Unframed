@@ -6,6 +6,7 @@ import { expect, test } from "./agent.ts";
 import { filledArtifact, writeProjectFile } from "./artifacts.ts";
 import { componentShape, SHEET_FILE } from "./components.ts";
 import { putRecords } from "./media.ts";
+import { leaveEditor } from "./editorHarness.ts";
 
 const kitWith = (light: string, dark: string): Kit => ({
   format: 1,
@@ -49,7 +50,7 @@ test("a token change restyles a component's board and a page's instances at once
   await writeKit(agent, kitWith("#e53935", "#8ab4f8"));
   await expect(instanceButton(page)).toHaveCSS("background-color", "rgb(229, 57, 53)", { timeout: 20_000 });
 
-  await page.getByRole("button", { name: "Back to canvas" }).click();
+  await leaveEditor(page);
   await openEditorOn(page, "shape:card");
   await expect(region(page, "Price card")).toBeVisible();
   const board = region(page, "Price card").frameLocator("iframe[data-artifact-frame]").locator("uf-price-card").first().locator("button");

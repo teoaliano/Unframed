@@ -4,7 +4,7 @@ import { createChat, expect, openRail, test } from "./agent.ts";
 import { putRecords } from "./media.ts";
 import { artifactShape, filledArtifact } from "./artifacts.ts";
 import { connectTab } from "../../engine/test/syncClient.ts";
-import { column, editor, preparedFile } from "./editorHarness.ts";
+import { column, editor, leaveEditor, preparedFile } from "./editorHarness.ts";
 import { expectSlot, expectToken, inBothSchemes, styleOf, tokenColor } from "./kit.ts";
 
 const openParameters = (page: Page) => editor(page).locator('[data-editor-column="parameters"]').getByRole("tab", { name: "Parameters" }).click();
@@ -36,7 +36,7 @@ test("double-click opens the editor: rail, live frame and parameters, with Back 
   await expect(editor(page).locator("[data-editor-column]")).toHaveCount(3);
   await expect(column(page, "rail").getByRole("complementary", { name: "Agent" })).toBeVisible();
   await expect(column(page, "rail").getByRole("button", { name: "Close" })).toHaveCount(0);
-  await expect(region.getByRole("button", { name: "Back to canvas" })).toBeVisible();
+  await expect(region.getByRole("button", { name: "Back to canvas" })).toHaveCount(0);
   await expect(region.getByTestId("artifact-editor-title")).toHaveText("Landing");
   await expect(region.getByTestId("artifact-editor-kind")).toHaveText("page");
   await expect(region.getByRole("button", { name: "Open in a new tab" })).toBeVisible();
@@ -44,12 +44,13 @@ test("double-click opens the editor: rail, live frame and parameters, with Back 
   await expect(frame).not.toHaveAttribute("loading", "lazy");
   await expect(region.frameLocator("iframe[data-artifact-frame]").getByRole("heading", { name: "Welcome" })).toBeVisible();
   await expect(column(page, "parameters")).toContainText("Parameters");
-  await expect(shapeOnScreen(page, "shape:landing").locator("iframe")).toHaveCount(0);
+  await expect(page.locator(".tl-container")).toHaveCount(0);
+  await expect(page.locator(".tl-watermark_SEE-LICENSE")).toHaveCount(0);
+
+  await leaveEditor(page);
+  await expect(editor(page)).toHaveCount(0);
   await expect(page.locator(".tl-watermark_SEE-LICENSE")).toBeVisible();
   expect(await hitIsWatermark(page)).toBe(true);
-
-  await region.getByRole("button", { name: "Back to canvas" }).click();
-  await expect(editor(page)).toHaveCount(0);
   expect(await shapeOnScreen(page, "shape:landing").boundingBox()).toEqual(before);
   expect((await roomRecords(agent, "default")).filter((record) => record.type === "text")).toHaveLength(2);
 
@@ -66,7 +67,7 @@ test("double-click opens the editor: rail, live frame and parameters, with Back 
   expect(await shapeOnScreen(page, "shape:landing").boundingBox()).toEqual(moved);
 });
 
-test("the three columns start the margin below the top bar and run to the window's bottom edge at the same margin, and the watermark sits over the parameters corner without covering a control", async ({ page, agent }) => {
+test("the three columns start the margin below the top bar and run to the window's bottom edge at the same margin, with nothing of tldraw's on the page", async ({ page, agent }) => {
   await onBoard(page, agent);
   const at = await centre(shapeOnScreen(page, "shape:landing"));
   await page.mouse.dblclick(at.x, at.y);
@@ -86,29 +87,20 @@ test("the three columns start the margin below the top bar and run to the window
   expect(rail.x).toBeCloseTo(margin, 0);
   expect(parameters.x + parameters.width).toBeCloseTo(width - margin, 0);
 
-  const watermark = (await page.locator(".tl-watermark_SEE-LICENSE").boundingBox())!;
-  expect(watermark.y + watermark.height).toBeLessThanOrEqual(height);
-  expect(await hitIsWatermark(page)).toBe(true);
-  const strays = await page.evaluate(({ x, y, w, h, bar }) => {
+  await expect(page.locator(".tl-watermark_SEE-LICENSE")).toHaveCount(0);
+  const strays = await page.evaluate(({ bar }) => {
     const editor = document.querySelector("[data-testid='artifact-editor']")!;
     const hits: string[] = [];
     for (let px = 16; px < window.innerWidth; px += 32) {
       for (let py = 16; py < window.innerHeight; py += 32) {
-        if (px >= x && px <= x + w && py >= y && py <= y + h) continue;
         if (py < bar) continue;
         const hit = document.elementFromPoint(px, py);
         if (hit && !editor.contains(hit)) hits.push(`${px},${py} ${hit.tagName}.${hit.className.toString().slice(0, 30)}`);
       }
     }
     return hits;
-  }, { x: watermark.x, y: watermark.y, w: watermark.width, h: watermark.height, bar: bar.height });
+  }, { bar: bar.height });
   expect(strays).toEqual([]);
-  await openParameters(page);
-  await column(page, "parameters").getByRole("button", { name: "Add a parameter" }).click();
-  for (const control of [column(page, "parameters").getByRole("button", { name: "Add", exact: true }), column(page, "parameters").getByPlaceholder(/Describe a parameter/)]) {
-    const box = (await control.boundingBox())!;
-    expect(box.y + box.height).toBeLessThanOrEqual(watermark.y);
-  }
 });
 
 test("the whole top bar stays on screen above the editor and works from it: its tabs, its All projects button and Settings", async ({ page, agent }) => {
@@ -126,9 +118,9 @@ test("the whole top bar stays on screen above the editor and works from it: its 
     expect(hit, `${region} is not covered`).toBe(true);
   }
   await expect(page.getByTestId("tab-strip").getByRole("tab", { name: "default", exact: true })).toBeVisible();
-  await expect(page.getByTestId("tab-strip").getByRole("tab", { name: "Landing, default" })).toBeVisible();
+  await expect(page.getByTestId("tab-strip").getByRole("tab", { name: "Landing" })).toBeVisible();
   const railHeader = column(page, "rail").locator("header").first();
-  const back = column(page, "centre").getByRole("button", { name: "Back to canvas" });
+  const back = column(page, "centre").getByRole("button", { name: "Open in a new tab" });
   const middle = async (locator: typeof railHeader) => {
     const box = (await locator.boundingBox())!;
     return box.y + box.height / 2;
@@ -232,7 +224,7 @@ test("nothing covers the editor's chat header, with the canvas rail docked or cl
     await expect(railHeader).toBeVisible();
     await page.waitForTimeout(100);
     expect(await headerUncovered(), `rail docked ${docked}`).toBe(true);
-    expect(Math.abs((await middle(railHeader)) - (await middle(column(page, "centre").getByRole("button", { name: "Back to canvas" }))))).toBeLessThanOrEqual(1);
+    expect(Math.abs((await middle(railHeader)) - (await middle(column(page, "centre").getByRole("button", { name: "Open in a new tab" }))))).toBeLessThanOrEqual(1);
     await page.keyboard.press("Escape");
     await expect(editor(page)).toHaveCount(0);
     if (panel) {
@@ -259,7 +251,7 @@ test("Escape typed in the composer or the parameter box stays in the editor, and
   await expect(region).toBeVisible();
   await expect(editor(page).getByRole("textbox", { name: "Add a parameter" })).toHaveCount(0);
 
-  await region.getByRole("button", { name: "Back to canvas" }).focus();
+  await region.getByRole("button", { name: "Open in a new tab" }).focus();
   await page.keyboard.press("Delete");
   await page.keyboard.press("Backspace");
   await page.keyboard.press("r");
@@ -339,24 +331,22 @@ test("the editor's columns, header actions and parameter box are the kit's, in b
   expect(frame.width).toBeGreaterThan(centreColumn.width - 4);
   expect(frame.y + frame.height).toBeGreaterThan(centreColumn.y + centreColumn.height - 4);
 
-  const back = region.getByRole("button", { name: "Back to canvas" });
   const newTab = region.getByRole("button", { name: "Open in a new tab" });
   await openParameters(page);
   await editor(page).getByRole("button", { name: "Add a parameter" }).click();
   const box = editor(page).getByRole("textbox", { name: "Add a parameter" });
   const add = editor(page).getByRole("button", { name: "Add", exact: true });
-  await expectSlot(back, "tooltip-trigger");
   await expectSlot(newTab, "tooltip-trigger");
   await expectSlot(box, "textarea");
   await expectSlot(add, "button");
-  expect((await back.boundingBox())!.height).toBe(32);
+  expect((await newTab.boundingBox())!.height).toBe(32);
   await page.mouse.move(640, 700);
   await inBothSchemes(page, async () => {
     for (const name of ["rail", "centre", "parameters"] as const) {
       await expectToken(column(page, name), "background-color", "--artifact-editor-column-surface");
       await expectToken(column(page, name), "border-top-color", "--artifact-editor-column-border");
     }
-    expect(await styleOf(back, "background-color")).toBe(await tokenColor(page, "--button-ghost-surface"));
+    expect(await styleOf(newTab, "background-color")).toBe(await tokenColor(page, "--button-ghost-surface"));
     await expectToken(region.getByTestId("artifact-editor-title"), "color", "--artifact-editor-foreground");
     await expectToken(region.getByTestId("artifact-editor-kind"), "color", "--artifact-editor-meta");
     await expectToken(editor(page).getByText("The agent writes it"), "color", "--artifact-editor-meta");
@@ -500,7 +490,7 @@ test("in a narrow window the editor's header never overflows: the title stays, a
     const bounds = (await header.boundingBox())!;
     const title = (await region.getByTestId("artifact-editor-title").boundingBox())!;
     expect(title.width).toBeGreaterThanOrEqual(40);
-    for (const name of ["Back to canvas", "Preview size", "Render", "Open in a new tab"]) {
+    for (const name of ["Preview size", "Render", "Open in a new tab"]) {
       const box = (await region.getByRole("button", { name, exact: true }).boundingBox())!;
       expect(box.x).toBeGreaterThanOrEqual(bounds.x);
       expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width);
