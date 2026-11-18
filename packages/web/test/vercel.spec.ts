@@ -230,9 +230,9 @@ test("switching provider resets the props to what the new model declares, so no 
     const sidecar = JSON.parse((await engine.request(`/api/file/default/${made!.meta.unframed.result.sidecar}`)).text);
     expect(sidecar.recipe).toMatchObject({ provider: "vercel", params: {} });
     expect(vercel.calls.find((call) => call.path === "/v1/images/generations")!.body).toEqual({ model: "openai/gpt-image-2", prompt: expect.any(String), n: 1, response_format: "b64_json" });
-    const stored = (await (await engine.rpc()).call("preferences.get", { keys: ["lastUsed.image"] })).values["lastUsed.image"] as { provider?: string; props?: Record<string, unknown> };
-    expect(stored.provider).toBe("vercel");
-    expect(Object.keys(stored.props ?? {}).filter((key) => key !== "runs")).toEqual([]);
+    const stored = async () => (await (await engine.rpc()).call("preferences.get", { keys: ["lastUsed.image"] })).values["lastUsed.image"] as { provider?: string; props?: Record<string, unknown> } | undefined;
+    await expect.poll(async () => (await stored())?.provider).toBe("vercel");
+    expect(Object.keys((await stored())?.props ?? {}).filter((key) => key !== "runs")).toEqual([]);
   } finally {
     await engine.dispose();
   }
