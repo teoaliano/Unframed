@@ -16,6 +16,7 @@ import { OVERLAY_UTILS } from "../chrome/selectionLook.ts";
 import { connectionMonitor } from "../connection/monitor.ts";
 import { CanvasProjectContext, useEngine, useSettings } from "../context.ts";
 import { EditorPage } from "../artifacts/EditorPage.tsx";
+import { useChatClient } from "../agent/store.ts";
 import { artifactsOf, previewPort } from "../artifacts/state.ts";
 import { watchComponentPins } from "../artifacts/componentPins.ts";
 import { applyLateSaves } from "../artifacts/editor/lateSaves.ts";
@@ -92,6 +93,7 @@ const REFUSALS: Record<string, string> = {
 export const CanvasHost = ({ project, activation }: { readonly project: string; readonly activation: ProjectActivation }) => {
   const licenseKey = useContext(LicenseKeyContext);
   const engine = useEngine();
+  useChatClient(engine, project);
   const content = useRef<ContentContext | undefined>(undefined);
   const options = useMemo(() => ({ ...TLDRAW_OPTIONS, ...clipboardOptions({ project, context: () => content.current }) }), [project]);
   const socket = useRef<SyncSocket | undefined>(undefined);
