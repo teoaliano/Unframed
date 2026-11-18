@@ -118,7 +118,9 @@ test("delivery and Advanced popovers: values, Reset, Remove and re-add, the Adva
   await tray(page).getByRole("button", { name: "+ add prop" }).click();
   await page.getByRole("menuitem", { name: /^Stability/ }).click();
   await expect(chip(page, "stability")).toHaveText("Stability 0.50");
+  await expect(popup).toBeVisible();
   await page.keyboard.press("Escape");
+  await expect(popup).toHaveCount(0);
 
   await chip(page, "advanced").click();
   const advanced = page.getByRole("dialog", { name: "Advanced" });
