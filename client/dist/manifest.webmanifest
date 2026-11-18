@@ -1,0 +1,17 @@
+{
+  "name": "Unframed",
+  "short_name": "Unframed",
+  "display": "standalone",
+  "start_url": "/",
+  "scope": "/",
+  "background_color": "#fcfcfc",
+  "theme_color": "#fcfcfc",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
