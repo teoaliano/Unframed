@@ -6,9 +6,9 @@
 import { UnframedError, type RenderStatus } from "@unframed/contracts";
 import { artifactTitle } from "@unframed/domain";
 import { Clapperboard } from "lucide-react";
-import { useValue, type TLStore } from "tldraw";
+import { useValue } from "tldraw";
 import { Button } from "~/components/ui/button";
-import { useCanvasDoc, type CanvasDoc } from "../canvas/doc.ts";
+import { useCanvasDoc, type CanvasDoc, type StoreOwner } from "../canvas/doc.ts";
 import { useCanvasProject, useEngine } from "../context.ts";
 import type { EngineConnection } from "../rpc/engine.ts";
 import { artifactsOf, setProblem } from "./state.ts";
@@ -18,9 +18,7 @@ const POLL_MS = 700;
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
-type Owner = { readonly store: TLStore };
-
-const setRender = (owner: Owner, id: string, view: { starting: boolean; status?: RenderStatus } | undefined) =>
+const setRender = (owner: StoreOwner, id: string, view: { starting: boolean; status?: RenderStatus } | undefined) =>
   artifactsOf(owner).renders.update((current) => {
     const next = new Map(current);
     if (view === undefined) next.delete(id);
@@ -28,9 +26,9 @@ const setRender = (owner: Owner, id: string, view: { starting: boolean; status?:
     return next;
   });
 
-export const renderOf = (owner: Owner, id: string) => artifactsOf(owner).renders.get().get(id);
+export const renderOf = (owner: StoreOwner, id: string) => artifactsOf(owner).renders.get().get(id);
 
-export const isRendering = (owner: Owner, id: string): boolean => {
+export const isRendering = (owner: StoreOwner, id: string): boolean => {
   const view = renderOf(owner, id);
   return !!view && (view.starting || view.status?.status === "queued" || view.status?.status === "rendering");
 };

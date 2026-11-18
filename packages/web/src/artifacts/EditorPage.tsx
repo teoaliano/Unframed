@@ -8,7 +8,6 @@ import { openArtifactTab } from "./editorTabs.ts";
 
 const ArtifactEditor = lazy(() => import("./editor/ArtifactEditor.tsx").then((module) => ({ default: module.ArtifactEditor })));
 
-/** An editor tab's page (spec 09): it takes the canvas's place, and tldraw is not mounted under it. */
 export const EditorPage = ({ shapeId }: { readonly shapeId: string }) => {
   const doc = useCanvasDoc();
   const activation = useActivation();
@@ -21,7 +20,6 @@ export const EditorPage = ({ shapeId }: { readonly shapeId: string }) => {
   const leave = useCallback((commit: () => Promise<void>) => activation.setBeforeLeave(commit), [activation]);
 
   useEffect(() => registerSlot("artifactEditorOpen", true), []);
-  // The rail's composer takes the selection as context, as it did with the canvas mounted under the editor.
   useEffect(() => doc.select([shapeId]), [doc, shapeId]);
 
   return (

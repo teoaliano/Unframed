@@ -3,7 +3,7 @@ import { shapeKind, shapeLabel, type ShapeKind } from "@unframed/domain";
 import { AlignLeft, AppWindow, AudioLines, Cable, Clapperboard, Component, Group, Image, PenLine, SquareMousePointer, SquarePlay, Workflow, X, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useValue, type TLShapeId } from "tldraw";
-import type { CanvasReader } from "../../canvas/doc.ts";
+import type { CanvasReader } from "../../canvas/reader.ts";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 

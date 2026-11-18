@@ -185,7 +185,6 @@ const readView = async (engine: ReturnType<typeof useEngine>): Promise<View> => 
   }
 };
 
-/** `kitsOnly` keeps the type on Kits with no Type toggle: an editor tab has no canvas to add anything else to. */
 export const LibraryDialog = ({
   onClose,
   onAdd,

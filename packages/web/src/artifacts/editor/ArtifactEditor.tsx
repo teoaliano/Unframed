@@ -65,6 +65,7 @@ import { useEditSession, type EditMode } from "./editSession.ts";
 import { makeEditableInstruction, tellAgent } from "./tellAgent.ts";
 import { MotionTimeline } from "../timeline/MotionTimeline.tsx";
 import { MotionTransport, type TransportZone } from "../timeline/transport.ts";
+import { kitOf } from "../../kits/kitRoom.ts";
 
 const RAIL_FOLDS = "(max-width: 999px)";
 const PARAMETERS_FOLD = "(max-width: 719px)";
@@ -127,7 +128,7 @@ export const ArtifactEditor = ({
   const doc = useCanvasDoc();
   const project = useCanvasProject();
   const engine = useEngine();
-  const kit = useValue("project kit", () => doc.kit(), [doc]);
+  const kit = useValue("project kit", () => kitOf(doc), [doc]);
   const chatClient = useChatClient(engine, project);
   const { statuses } = useProviders(chatClient);
   const facts = useValue(

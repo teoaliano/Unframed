@@ -2,7 +2,7 @@ import { recapRows, revertSkipLine, roomShapeId, shapeKind, type ChatActivity, t
 import { Crosshair, ExternalLink, FileDiff, Undo2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useValue, type TLShapeId } from "tldraw";
-import type { CanvasReader } from "../../canvas/doc.ts";
+import type { CanvasReader } from "../../canvas/reader.ts";
 import { Button } from "~/components/ui/button";
 import { Tip } from "../../chrome/ui.tsx";
 import { KIND_ICONS } from "../composer/chips.tsx";

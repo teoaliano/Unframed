@@ -21,7 +21,7 @@ const kitFrom = (preset: KitPreset): Kit => ({
 
 const applied = (name: string) => showNotice(`Applied “${name}” to this project.`, "info");
 
-export const applyLibraryKit = (doc: CanvasDoc, preset: KitPreset, confirm: () => void): void => {
+const applyLibraryKit = (doc: CanvasDoc, preset: KitPreset, confirm: () => void): void => {
   const kit = kitOf(doc);
   if (kit === null) {
     writeKit(doc, kitFrom(preset));
@@ -35,7 +35,14 @@ export const applyLibraryKit = (doc: CanvasDoc, preset: KitPreset, confirm: () =
   confirm();
 };
 
-export const ReplaceKitDialog = ({ doc, preset, onClose }: { readonly doc: CanvasDoc; readonly preset: KitPreset; readonly onClose: () => void }) => {
+export const useLibraryKit = (doc: CanvasDoc) => {
+  const [replacing, setReplacing] = useState<KitPreset>();
+  const apply = (preset: KitPreset) => applyLibraryKit(doc, preset, () => setReplacing(preset));
+  const dialog = replacing !== undefined && <ReplaceKitDialog doc={doc} preset={replacing} onClose={() => setReplacing(undefined)} />;
+  return [apply, dialog] as const;
+};
+
+const ReplaceKitDialog = ({ doc, preset, onClose }: { readonly doc: CanvasDoc; readonly preset: KitPreset; readonly onClose: () => void }) => {
   const current = kitOf(doc);
   const replace = () => {
     if (current !== null) {

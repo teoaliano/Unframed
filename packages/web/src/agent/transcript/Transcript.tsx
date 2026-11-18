@@ -2,7 +2,7 @@ import { activityLabel, agentShapeId, resetMoment, roomShapeId, shapeLabel, buil
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Brain, ChevronDown, ChevronRight, Undo2 } from "lucide-react";
 import type { TLShapeId } from "tldraw";
-import { useCanvasReader } from "../../canvas/doc.ts";
+import { useCanvasReader } from "../../canvas/reader.ts";
 import { Badge } from "~/components/ui/badge";
 import { Button, InlineButton } from "~/components/ui/button";
 import { describeShape } from "../composer/chips.tsx";

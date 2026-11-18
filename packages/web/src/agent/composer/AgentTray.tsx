@@ -85,7 +85,7 @@ import { chipOfToken, PromptEditor, type CaretMark, type PromptEditorHandle, typ
 import { UpNext } from "./UpNext.tsx";
 import { useRestingComposer, useRestingTransition } from "./resting.ts";
 import { useValue } from "tldraw";
-import { useCanvasReader } from "../../canvas/doc.ts";
+import { useCanvasReader } from "../../canvas/reader.ts";
 import { Alert, AlertDescription } from "~/components/ui/alert";
 import { Input } from "~/components/ui/input";
 import { composerGlassClass } from "../../chrome/composerSurface.ts";

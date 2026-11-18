@@ -43,7 +43,6 @@ export const overrides: TLUiOverrides = {
   actions(editor, actions) {
     const redo = actions.redo;
     if (redo) redo.kbd = "cmd+shift+z,ctrl+shift+z,cmd+y,ctrl+y";
-    // Edits made on an editor tab are kept by the doc, under tldraw's history (spec 09).
     const undo = actions.undo;
     if (undo) actions.undo = { ...undo, onSelect: (source) => (editor.getCanUndo() || !canvasDocOf(editor.store)?.undoOwn() ? undo.onSelect(source) : undefined) };
     if (redo) actions.redo = { ...redo, onSelect: (source) => (editor.getCanRedo() || !canvasDocOf(editor.store)?.redoOwn() ? redo.onSelect(source) : undefined) };

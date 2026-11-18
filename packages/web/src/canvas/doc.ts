@@ -1,57 +1,42 @@
-import type { Kit } from "@unframed/domain";
 import { createContext, useContext } from "react";
-import { isPageId, TLDOCUMENT_ID, TLINSTANCE_ID, useMaybeEditor, type Editor, type TLAsset, type TLAssetId, type TLParentId, type TLRecord, type TLShape, type TLShapeId, type TLStore } from "tldraw";
+import { computed, TLDOCUMENT_ID, TLINSTANCE_ID, type Computed, type Editor, type TLRecord, type TLShape, type TLShapeId, type TLStore } from "tldraw";
+import { DocHistory } from "./docHistory.ts";
 
-/** A shape as the app reads it: no tldraw types past this file. */
 export interface DocShape {
   readonly id: string;
   readonly type: string;
   readonly props: object;
 }
 
-/**
- * The editor reads the agent's composer and transcript make, which a mounted canvas answers itself and the
- * doc answers on an editor tab.
- */
-export type CanvasReader = Pick<Editor, "getShape" | "getAsset" | "getSelectedShapeIds" | "getSelectedShapes" | "getSortedChildIdsForParent" | "getCurrentPageShapesSorted">;
+export type StoreOwner = { readonly store: TLStore };
 
-interface Change {
-  readonly before: TLRecord;
-  readonly after: TLRecord;
-}
-
-/** One undo step; a sealed one takes no unmarked change after it. */
-type Step = Change[] & { sealed?: boolean };
+const byIndex = (a: TLShape, b: TLShape) => (a.index < b.index ? -1 : a.index > b.index ? 1 : 0);
 
 const docs = new WeakMap<TLStore, CanvasDoc>();
 
-/** The doc over a store, for canvas code that only has the editor. */
 export const canvasDocOf = (store: TLStore): CanvasDoc | undefined => docs.get(store);
 
-/** The doc's own undo steps; older ones drop off. */
-const KEPT_STEPS = 100;
-
-/**
- * The open project's synced canvas, read and written without a mounted tldraw editor, so the artifact
- * editor can live on its own page while the canvas is unmounted. Reads are reactive (signia).
- *
- * Undo: while the canvas is mounted it attaches its editor and writes join tldraw's history. Without one
- * the doc keeps its own steps. They outlive the next mount, which starts with an empty tldraw history, and
- * the canvas reaches them through `undo`/`redo` once tldraw has nothing left to undo or redo, so an edit made
- * on the editor tab is still one Cmd-Z away back on the canvas. Steps made after the canvas did something
- * undoable would undo out of order, so a detach that leaves tldraw history behind drops them.
- */
 export class CanvasDoc {
   private editor: Editor | undefined;
-  private past: Step[] = [];
-  private future: Step[] = [];
+  private readonly history = new DocHistory();
   private restoring = false;
   private disposed = false;
 
   readonly store: TLStore;
+  private readonly children: Computed<ReadonlyMap<string, ReadonlyArray<TLShape>>>;
 
   constructor(store: TLStore) {
     this.store = store;
+    this.children = computed("canvas doc children", () => {
+      const index = new Map<string, TLShape[]>();
+      for (const shape of store.query.records("shape").get()) {
+        const siblings = index.get(shape.parentId);
+        if (siblings) siblings.push(shape);
+        else index.set(shape.parentId, [shape]);
+      }
+      for (const siblings of index.values()) siblings.sort(byIndex);
+      return index;
+    });
     docs.set(store, this);
   }
 
@@ -68,7 +53,7 @@ export class CanvasDoc {
     this.editor = editor;
     const stopListening = this.store.listen(
       () => {
-        if (!this.restoring) this.future = [];
+        if (!this.restoring) this.history.dropRedo();
       },
       { source: "user", scope: "document" },
     );
@@ -76,10 +61,7 @@ export class CanvasDoc {
       stopListening();
       if (this.editor !== editor) return;
       this.editor = undefined;
-      if (editor.getCanUndo() || editor.getCanRedo()) {
-        this.past = [];
-        this.future = [];
-      }
+      if (editor.getCanUndo() || editor.getCanRedo()) this.history.clear();
     };
   }
 
@@ -88,14 +70,27 @@ export class CanvasDoc {
     return record?.typeName === "shape" ? record : undefined;
   }
 
-  /** The shapes on the current page, nested ones included, like `editor.getCurrentPageShapes()`. */
-  pageShapes(): DocShape[] {
-    const page = this.currentPage();
-    if (page === undefined) return [];
-    return this.store.query.records("shape").get().filter((shape) => this.pageOf(shape) === page);
+  childrenOf(parent: string): ReadonlyArray<TLShape> {
+    return this.children.get().get(parent) ?? [];
   }
 
-  /** Selects `ids` on the current page, as `editor.select` would, without an editor. */
+  pageShapes(): TLShape[] {
+    const page = this.currentPage();
+    const sorted: TLShape[] = [];
+    const walk = (parent: string) => {
+      for (const child of this.childrenOf(parent)) {
+        sorted.push(child);
+        walk(child.id);
+      }
+    };
+    if (page !== undefined) walk(page);
+    return sorted;
+  }
+
+  selectedShapeIds(): TLShapeId[] {
+    return this.pageState()?.selectedShapeIds ?? [];
+  }
+
   select(ids: ReadonlyArray<string>): void {
     const state = this.pageState();
     if (state === undefined || this.editor) return;
@@ -103,38 +98,6 @@ export class CanvasDoc {
     if (!same) this.store.put([{ ...state, selectedShapeIds: [...ids] as TLShapeId[] }]);
   }
 
-  readonly reader: CanvasReader = {
-    getShape: ((id: TLShapeId | TLShape) => this.store.get((typeof id === "string" ? id : id.id) as TLShapeId)) as CanvasReader["getShape"],
-    getAsset: ((id: TLAssetId | TLAsset) => this.store.get((typeof id === "string" ? id : id.id) as TLAssetId)) as CanvasReader["getAsset"],
-    getSelectedShapeIds: () => this.pageState()?.selectedShapeIds ?? [],
-    getSelectedShapes: () => (this.pageState()?.selectedShapeIds ?? []).flatMap((id) => this.store.get(id) ?? []),
-    getSortedChildIdsForParent: ((parent: TLParentId | TLShape) => this.childrenOf(typeof parent === "string" ? parent : parent.id).map((shape) => shape.id)) as CanvasReader["getSortedChildIdsForParent"],
-    getCurrentPageShapesSorted: () => {
-      const page = this.currentPage();
-      const sorted: TLShape[] = [];
-      const walk = (parent: string) => {
-        for (const child of this.childrenOf(parent)) {
-          sorted.push(child);
-          walk(child.id);
-        }
-      };
-      if (page !== undefined) walk(page);
-      return sorted;
-    },
-  };
-
-  documentMeta(): Readonly<Record<string, unknown>> {
-    return (this.store.get(TLDOCUMENT_ID)?.meta ?? {}) as Readonly<Record<string, unknown>>;
-  }
-
-  kit(): Kit | null {
-    return (this.documentMeta() as { unframed?: { kit?: Kit } }).unframed?.kit ?? null;
-  }
-
-  /**
-   * Merges `props` into the shape's; a key set to `undefined` is removed. A `label` starts a new undo step;
-   * without one the change joins the step before, as tldraw's unmarked changes do.
-   */
   update(id: string, props: Readonly<Record<string, unknown>>, label?: string): void {
     const before = this.store.get(id as TLShapeId);
     if (before?.typeName !== "shape") return;
@@ -143,7 +106,6 @@ export class CanvasDoc {
     this.write(before, { ...before, props: merged } as TLShape, label);
   }
 
-  /** Replaces the document's meta (the project kit lives there) as one undo step of its own. */
   setDocumentMeta(meta: Readonly<Record<string, unknown>>, label: string): void {
     const before = this.store.get(TLDOCUMENT_ID);
     if (!before) return;
@@ -159,15 +121,7 @@ export class CanvasDoc {
       return;
     }
     this.store.put([after]);
-    const last = this.past.at(-1);
-    if (label === undefined && last && !last.sealed) last.push({ before, after });
-    else {
-      const step: Step = [{ before, after }];
-      if (sealed) step.sealed = true;
-      this.past.push(step);
-    }
-    if (this.past.length > KEPT_STEPS) this.past.shift();
-    this.future = [];
+    this.history.record(before, after, label, sealed);
   }
 
   undo(): void {
@@ -180,26 +134,18 @@ export class CanvasDoc {
     this.redoOwn();
   }
 
-  /** Takes back the doc's own latest step; false when it has none. */
   undoOwn(): boolean {
-    const step = this.past.pop();
-    if (!step) return false;
-    this.restore(step.map((change) => change.before).reverse());
-    this.future.push(step);
-    return true;
+    return this.restore(this.history.takeUndo());
   }
 
   redoOwn(): boolean {
-    const step = this.future.pop();
-    if (!step) return false;
-    this.restore(step.map((change) => change.after));
-    this.past.push(step);
-    return true;
+    return this.restore(this.history.takeRedo());
   }
 
-  private restore(records: TLRecord[]): void {
+  private restore(records: TLRecord[] | undefined): boolean {
+    if (records === undefined) return false;
     const present = records.filter((record) => this.store.has(record.id));
-    if (present.length === 0) return;
+    if (present.length === 0) return true;
     const editor = this.editor;
     this.restoring = true;
     try {
@@ -208,14 +154,7 @@ export class CanvasDoc {
     } finally {
       this.restoring = false;
     }
-  }
-
-  private childrenOf(parent: string): TLShape[] {
-    return this.store.query
-      .records("shape")
-      .get()
-      .filter((shape) => shape.parentId === parent)
-      .sort((a, b) => (a.index < b.index ? -1 : a.index > b.index ? 1 : 0));
+    return true;
   }
 
   private pageState() {
@@ -228,29 +167,11 @@ export class CanvasDoc {
     if (instance && this.store.has(instance.currentPageId)) return instance.currentPageId;
     return this.store.query.records("page").get().sort((a, b) => (a.index < b.index ? -1 : 1))[0]?.id;
   }
-
-  private pageOf(shape: TLRecord): string | undefined {
-    let parent = (shape as TLShape).parentId as string;
-    for (let depth = 0; depth < 64; depth++) {
-      if (isPageId(parent)) return parent;
-      const next = this.store.get(parent as TLShapeId);
-      if (next?.typeName !== "shape") return undefined;
-      parent = next.parentId;
-    }
-    return undefined;
-  }
 }
 
 export const CanvasDocContext = createContext<CanvasDoc | undefined>(undefined);
 
 export const useMaybeCanvasDoc = (): CanvasDoc | undefined => useContext(CanvasDocContext);
-
-/** The mounted canvas when there is one, else the doc's reader: what the agent's composer and transcript read. */
-export const useCanvasReader = (): CanvasReader | null => {
-  const editor = useMaybeEditor();
-  const doc = useContext(CanvasDocContext);
-  return editor ?? doc?.reader ?? null;
-};
 
 export const useCanvasDoc = (): CanvasDoc => {
   const doc = useContext(CanvasDocContext);

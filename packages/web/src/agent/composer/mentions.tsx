@@ -1,7 +1,7 @@
 import { agentShapeId, isMintedRef, plainText, readRef, shapeKind, shapeLabel } from "@unframed/domain";
 import { File } from "lucide-react";
 import type { TLAssetId, TLShape } from "tldraw";
-import type { CanvasReader } from "../../canvas/doc.ts";
+import type { CanvasReader } from "../../canvas/reader.ts";
 import { KIND_ICONS } from "./chips.tsx";
 import type { MenuItem } from "./ComposerMenu.tsx";
 import type { DraftChip } from "./PromptEditor.tsx";

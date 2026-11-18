@@ -1,12 +1,15 @@
 import { applyKitOps, type Kit, type KitLink, type KitOp } from "@unframed/domain";
-import type { CanvasDoc } from "../canvas/doc.ts";
+import { TLDOCUMENT_ID } from "tldraw";
+import type { CanvasDoc, StoreOwner } from "../canvas/doc.ts";
 
-export const kitOf = (doc: CanvasDoc): Kit | null => doc.kit();
+const metaOf = (owner: StoreOwner): Readonly<Record<string, unknown>> => owner.store.get(TLDOCUMENT_ID)?.meta ?? {};
+
+export const kitOf = (owner: StoreOwner): Kit | null => (metaOf(owner) as { unframed?: { kit?: Kit } }).unframed?.kit ?? null;
 
 type KitCommit = { readonly ok: true } | { readonly ok: false; readonly refusal: string };
 
 export const writeKit = (doc: CanvasDoc, kit: Kit | null): void => {
-  const meta = doc.documentMeta();
+  const meta = metaOf(doc);
   const unframed: Record<string, unknown> = { ...((meta.unframed as Record<string, unknown> | undefined) ?? {}) };
   if (kit === null) delete unframed.kit;
   else unframed.kit = kit;

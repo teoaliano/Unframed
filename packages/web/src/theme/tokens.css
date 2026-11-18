@@ -1265,7 +1265,6 @@
   --project-menu-width: 220px;
   --project-tab-active-surface: var(--surface-accent);
   --project-tab-border: var(--border-default);
-  --project-tab-context: var(--text-muted);
   --project-tab-divider: var(--border-default);
   --project-tab-foreground: var(--text-muted);
   --project-tab-foreground-active: var(--text-default);

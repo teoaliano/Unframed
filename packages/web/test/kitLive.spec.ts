@@ -23,7 +23,6 @@ const swatchPage = () =>
 const frameState = async (page: Page, file: string) => {
   const frame = page.frames().find((candidate: Frame) => candidate.url().endsWith(`/${file}`));
   if (!frame) return undefined;
-  // Opening the editor unmounts the canvas, so the canvas's frame for the same file can detach mid-read.
   return frame
     .evaluate(() => {
       const swatch = document.getElementById("swatch");

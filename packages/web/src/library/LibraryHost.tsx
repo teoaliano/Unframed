@@ -1,13 +1,13 @@
 import { UnframedError } from "@unframed/contracts";
-import type { KitPreset, LibraryEntry } from "@unframed/domain";
-import { useEffect, useState } from "react";
+import type { LibraryEntry } from "@unframed/domain";
+import { useEffect } from "react";
 import { TldrawUiButtonIcon, TldrawUiToolbarButton, useEditor, useValue } from "tldraw";
 import { useCanvasDoc } from "../canvas/doc.ts";
 import { registerSlot } from "../chrome/slots.ts";
 import { useCanvasProject, useEngine, useSettings } from "../context.ts";
 import { showError } from "../toasts.tsx";
 import { AddToLibraryDialog } from "./AddToLibraryDialog.tsx";
-import { applyLibraryKit, ReplaceKitDialog } from "../kits/KitApply.tsx";
+import { useLibraryKit } from "../kits/KitApply.tsx";
 import { insertPreset } from "./insertPreset.ts";
 import { LibraryDialog } from "./LibraryDialog.tsx";
 import { captureSelection, libraryUi } from "./state.ts";
@@ -32,7 +32,7 @@ export const LibraryHost = () => {
   const project = useCanvasProject();
   const settings = useSettings();
   const ui = useValue("library", () => libraryUi(editor).get(), [editor]);
-  const [replacing, setReplacing] = useState<KitPreset>();
+  const [applyKit, replaceDialog] = useLibraryKit(doc);
 
   useEffect(() => {
     const stopButton = registerSlot("libraryButton", LibraryButton);
@@ -49,7 +49,7 @@ export const LibraryHost = () => {
   const add = (entry: LibraryEntry) => {
     libraryUi(editor).update((state) => ({ ...state, open: false }));
     if (entry.kind === "kit") {
-      applyLibraryKit(doc, entry, () => setReplacing(entry));
+      applyKit(entry);
       return;
     }
     insertPreset({ editor, engine, project, preset: entry, textModel: settings?.textModel }).catch((error: unknown) => showError(messageOf(error)));
@@ -58,7 +58,7 @@ export const LibraryHost = () => {
   return (
     <>
       {ui.open && <LibraryDialog onClose={() => libraryUi(editor).update((state) => ({ ...state, open: false }))} onAdd={add} initialType={ui.type ?? "all"} />}
-      {replacing !== undefined && <ReplaceKitDialog doc={doc} preset={replacing} onClose={() => setReplacing(undefined)} />}
+      {replaceDialog}
       {ui.saving && <AddToLibraryDialog captured={ui.saving} onClose={() => libraryUi(editor).update((state) => ({ ...state, saving: undefined }))} />}
     </>
   );

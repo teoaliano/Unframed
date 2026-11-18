@@ -2,6 +2,7 @@ import { farOffscreen, isArtifactKind, liveArtifacts, LIVE_SELECTED_LIMIT, PIN_L
 import type { RenderStatus } from "@unframed/contracts";
 import { atom, computed, react, type Atom, type Computed, type Editor, type TLShapeId, type TLStore } from "tldraw";
 import { isDeviceClient } from "../deviceMode.ts";
+import type { StoreOwner } from "../canvas/doc.ts";
 
 export const previewPort: Atom<number | undefined> = atom("preview port", undefined);
 
@@ -30,7 +31,6 @@ export const togglePin = (project: string, id: string): boolean => {
 
 interface CanvasArtifacts {
   readonly project: Atom<string>;
-  /** The mounted canvas, if any: the state outlives it, keyed by the project's store. */
   readonly canvas: Atom<Editor | undefined>;
   readonly tuning: Atom<TLShapeId | undefined>;
   readonly updatesOpen: Atom<TLShapeId | undefined>;
@@ -59,7 +59,7 @@ const hasFile = (editor: Editor, id: TLShapeId): boolean => {
   return !!shape && isArtifactKind(shape.type) && (shape.props as { file?: string }).file !== "";
 };
 
-export const artifactsOf = (owner: { readonly store: TLStore }): CanvasArtifacts => {
+export const artifactsOf = (owner: StoreOwner): CanvasArtifacts => {
   let found = canvases.get(owner.store);
   if (!found) {
     const canvas = atom<Editor | undefined>("mounted canvas", undefined);
@@ -116,7 +116,7 @@ export const isInteractive = (editor: Editor, id: TLShapeId): boolean =>
   !artifactsOf(editor).hold.get() &&
   !editor.isInAny("select.translating", "select.resizing", "select.rotating", "select.dragging_handle", "select.pointing_shape", "select.pointing_selection", "select.pointing_resize_handle");
 
-export const setProblem = (owner: { readonly store: TLStore }, id: string, message: string | undefined): void => {
+export const setProblem = (owner: StoreOwner, id: string, message: string | undefined): void => {
   artifactsOf(owner).problems.update((current) => {
     const next = new Map(current);
     if (message === undefined) next.delete(id);

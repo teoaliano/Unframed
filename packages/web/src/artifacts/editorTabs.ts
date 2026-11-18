@@ -21,7 +21,6 @@ export const openArtifactTab = (doc: CanvasDoc, activation: ProjectActivation, p
   else void activation.openEditor(project, shapeId, about);
 };
 
-/** Editor tabs follow their artifacts: a tab closes when its artifact goes and takes its title when it changes. */
 export const watchEditorTabs = (doc: CanvasDoc, activation: ProjectActivation, project: string): (() => void) => {
   const tabState = atom("editor tabs", activation.tabState());
   const stopTabs = activation.subscribe(() => tabState.set(activation.tabState()));

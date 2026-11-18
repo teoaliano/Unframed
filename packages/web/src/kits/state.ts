@@ -1,5 +1,6 @@
 import type { KitPreset } from "@unframed/domain";
 import { atom, type Atom, type TLStore } from "tldraw";
+import type { StoreOwner } from "../canvas/doc.ts";
 
 interface KitUi {
   readonly open: boolean;
@@ -8,7 +9,7 @@ interface KitUi {
 
 const states = new WeakMap<TLStore, Atom<KitUi>>();
 
-export const kitUi = (owner: { readonly store: TLStore }): Atom<KitUi> => {
+export const kitUi = (owner: StoreOwner): Atom<KitUi> => {
   let state = states.get(owner.store);
   if (!state) {
     state = atom<KitUi>("kit", { open: false });

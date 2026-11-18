@@ -3,16 +3,17 @@ import { useValue } from "tldraw";
 import { useCanvasDoc, type CanvasDoc } from "../canvas/doc.ts";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Tip } from "../chrome/ui.tsx";
+import { kitOf } from "../kits/kitRoom.ts";
 
 const setShapeMode = (doc: CanvasDoc, shapeId: string, mode: string): void => {
-  const kit = doc.kit();
+  const kit = kitOf(doc);
   if (!doc.shape(shapeId) || !kit || !kit.modes.includes(mode)) return;
   doc.update(shapeId, { mode: mode === kit.modes[0] ? undefined : mode });
 };
 
 export const KitModePicker = ({ shapeId, variant }: { readonly shapeId: string; readonly variant: "header" | "toolbar" }) => {
   const doc = useCanvasDoc();
-  const kit = useValue("project kit", () => doc.kit(), [doc]);
+  const kit = useValue("project kit", () => kitOf(doc), [doc]);
   const stored = useValue("artifact mode", () => (doc.shape(shapeId)?.props as { mode?: string } | undefined)?.mode, [doc, shapeId]);
   if (!kit || kit.modes.length < 2) return null;
   const current = stored !== undefined && kit.modes.includes(stored) ? stored : kit.modes[0]!;

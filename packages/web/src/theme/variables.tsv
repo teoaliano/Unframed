@@ -1829,7 +1829,6 @@ Components	project-dialog/width	FLOAT	360
 Components	project-menu/width	FLOAT	220		
 Components	project-tab/active/surface	COLOR	{surface/accent}		
 Components	project-tab/border	COLOR	{border/default}		
-Components	project-tab/context	COLOR	{text/muted}		
 Components	project-tab/divider	COLOR	{border/default}		
 Components	project-tab/foreground	COLOR	{text/muted}		
 Components	project-tab/foreground-active	COLOR	{text/default}		

@@ -8,7 +8,7 @@ import { DropOutline, onFrameEdit } from "../../artifacts/imageDrop.tsx";
 import { ProblemLine, RenderRow } from "../../artifacts/RenderRow.tsx";
 import { Button } from "~/components/ui/button";
 import { fileChangesOf, snapshotsOf, snapshotUrl, stillOf } from "../../artifacts/snapshots.ts";
-import { kitOf } from "../../artifacts/kit.ts";
+import { kitOf } from "../../kits/kitRoom.ts";
 import { artifactsOf, forgetEdit, forgetFrame, hearFrame, isInteractive, isLive, previewPort, reachEdit, reachFrame } from "../../artifacts/state.ts";
 import { Tip } from "../../chrome/ui.tsx";
 import { currentSlots } from "../../chrome/slots.ts";
