@@ -57,6 +57,9 @@ test("a motion with a file opens its timeline under the frame, and a page has no
   const centreColumn = await boxOf(column(page, "centre"));
   expect(Math.abs(strip.x - centreColumn.x)).toBeLessThanOrEqual(1);
   expect(strip.width).toBeCloseTo(centreColumn.width, 0);
+  expect(strip.y).toBeCloseTo(centreColumn.y + centreColumn.height, 0);
+  expect(await timeline(page).evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("1px");
+  expect(await timeline(page).evaluate((element) => getComputedStyle(element).borderTopLeftRadius)).toBe("0px");
   await expect(region(page).frameLocator("iframe[data-artifact-frame]").locator("hyperframes-player")).not.toHaveAttribute("controls", "");
 });
 
@@ -95,7 +98,7 @@ test("the timeline resizes by its top border between 120 px and 60 % of the colu
   await expect.poll(async () => (await boxOf(timeline(page))).height).toBeCloseTo(120, 0);
 
   await dragBy(page, timeline(page).getByRole("separator", { name: "Resize the timeline" }), -2000);
-  const fullColumn = async () => (await boxOf(column(page, "centre"))).height + (await boxOf(timeline(page))).height + 12;
+  const fullColumn = async () => (await boxOf(column(page, "centre"))).height + (await boxOf(timeline(page))).height;
   const cap = Math.floor((await fullColumn()) * 0.6);
   await expect.poll(async () => (await boxOf(timeline(page))).height).toBeCloseTo(cap, 0);
 

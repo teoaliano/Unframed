@@ -625,7 +625,7 @@ export const ArtifactEditor = ({
       ref={grid}
       data-testid="artifact-editor"
       className={cn(
-        "pointer-events-auto absolute inset-x-0 bottom-0 z-[700] box-border grid gap-3 bg-(--artifact-editor-surface) p-3 font-sans text-(--artifact-editor-foreground)",
+        "pointer-events-auto absolute inset-x-0 bottom-0 z-[700] box-border grid bg-(--artifact-editor-surface) font-sans text-(--artifact-editor-foreground)",
         timeline
           ? "grid-rows-[minmax(0,1fr)_auto]"
           : "grid-rows-[minmax(0,1fr)]",
@@ -636,7 +636,7 @@ export const ArtifactEditor = ({
       {!railFolded && (
         <section
           data-editor-column="rail"
-          className={cn(COLUMN, "col-start-1 row-span-full")}
+          className={cn(COLUMN, "col-start-1 row-span-full border-r")}
         >
           <AgentRail
             project={project}
@@ -962,7 +962,7 @@ export const ArtifactEditor = ({
           className={cn(
             COLUMN,
             railFolded ? "col-start-2" : "col-start-3",
-            "row-span-full pb-10 max-[1279px]:row-span-1 max-[1279px]:row-start-1",
+            "row-span-full border-l pb-10 max-[1279px]:row-span-1 max-[1279px]:row-start-1",
           )}
         >
           {parametersBody}

@@ -1130,7 +1130,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
       data-testid="motion-timeline"
       data-open={open ? "true" : "false"}
       style={{ height }}
-      className={cn("relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-(--motion-timeline-border) bg-(--motion-timeline-surface)", className)}
+      className={cn("relative flex min-h-0 min-w-0 flex-col overflow-hidden border-t border-(--motion-timeline-border) bg-(--motion-timeline-surface)", className)}
     >
       {open && (
         <div
@@ -1146,6 +1146,8 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
           onPointerCancel={onResizeUp}
         />
       )}
+      {/* The preview iframe sits flush above the strip and would take the drag's pointer events. */}
+      {dragging !== undefined && <div aria-hidden className="fixed inset-0 z-20 cursor-row-resize" />}
       <header data-testid="timeline-transport" className="flex min-h-10 flex-none flex-wrap items-center gap-x-1 gap-y-1 border-b px-2 py-1">
         <Tip label={playing ? "Pause (Space)" : "Play (Space)"}>
           <Button variant="ghost" size="icon-sm" aria-label={playing ? "Pause (Space)" : "Play (Space)"} onClick={() => transport.togglePlay()}>

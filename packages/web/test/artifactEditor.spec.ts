@@ -67,25 +67,35 @@ test("double-click opens the editor: rail, live frame and parameters, with Back 
   expect(await shapeOnScreen(page, "shape:landing").boundingBox()).toEqual(moved);
 });
 
-test("the three columns start the margin below the top bar and run to the window's bottom edge at the same margin, with nothing of tldraw's on the page", async ({ page, agent }) => {
+test("the three columns sit flush from the top bar to the window's edges, split by single borders, with nothing of tldraw's on the page", async ({ page, agent }) => {
   await onBoard(page, agent);
   const at = await centre(shapeOnScreen(page, "shape:landing"));
   await page.mouse.dblclick(at.x, at.y);
   await expect(page.getByRole("region", { name: "Editing Landing" })).toBeVisible();
 
   const { width, height } = page.viewportSize()!;
-  const margin = 12;
   const bar = (await page.locator("[data-slot='top-bar']").boundingBox())!;
   expect(bar.y).toBe(0);
   for (const name of ["rail", "centre", "parameters"] as const) {
     const box = (await column(page, name).boundingBox())!;
-    expect(box.y, `${name} top`).toBeCloseTo(bar.height + margin, 0);
-    expect(box.y + box.height, `${name} bottom`).toBeCloseTo(height - margin, 0);
+    expect(box.y, `${name} top`).toBeCloseTo(bar.height, 0);
+    expect(box.y + box.height, `${name} bottom`).toBeCloseTo(height, 0);
   }
   const rail = (await column(page, "rail").boundingBox())!;
+  const middle = (await column(page, "centre").boundingBox())!;
   const parameters = (await column(page, "parameters").boundingBox())!;
-  expect(rail.x).toBeCloseTo(margin, 0);
-  expect(parameters.x + parameters.width).toBeCloseTo(width - margin, 0);
+  expect(rail.x).toBeCloseTo(0, 0);
+  expect(middle.x).toBeCloseTo(rail.x + rail.width, 0);
+  expect(parameters.x).toBeCloseTo(middle.x + middle.width, 0);
+  expect(parameters.x + parameters.width).toBeCloseTo(width, 0);
+  expect(await styleOf(column(page, "rail"), "border-right-width")).toBe("1px");
+  expect(await styleOf(column(page, "parameters"), "border-left-width")).toBe("1px");
+  for (const name of ["rail", "centre", "parameters"] as const) {
+    expect(await styleOf(column(page, name), "border-top-left-radius"), `${name} radius`).toBe("0px");
+    expect(await styleOf(column(page, name), "border-top-width"), `${name} top border`).toBe("0px");
+  }
+  expect(await styleOf(column(page, "centre"), "border-left-width")).toBe("0px");
+  expect(await styleOf(column(page, "centre"), "border-right-width")).toBe("0px");
 
   await expect(page.locator(".tl-watermark_SEE-LICENSE")).toHaveCount(0);
   const strays = await page.evaluate(({ bar }) => {
@@ -167,7 +177,7 @@ test("the right column's tabs fill its width and sit flush on the header's one b
   expect(tabs).toHaveLength(3);
   const boxes = await Promise.all(tabs.map(async (tab) => (await tab.boundingBox())!));
   expect(boxes[0]!.x).toBeCloseTo(col.x + 1, 0);
-  expect(boxes[2]!.x + boxes[2]!.width).toBeCloseTo(col.x + col.width - 1, 0);
+  expect(boxes[2]!.x + boxes[2]!.width).toBeCloseTo(col.x + col.width, 0);
   for (const [index, box] of boxes.entries()) {
     if (index > 0) expect(box.x).toBeCloseTo(boxes[index - 1]!.x + boxes[index - 1]!.width, 0);
     expect(box.y).toBeCloseTo(head.y, 0);
@@ -325,8 +335,8 @@ test("the editor's columns, header actions and parameter box are the kit's, in b
   expect((await column(page, "rail").boundingBox())!.width).toBe(360);
   expect((await column(page, "parameters").boundingBox())!.width).toBe(320);
   const [rail, centreColumn] = [(await column(page, "rail").boundingBox())!, (await column(page, "centre").boundingBox())!];
-  expect(centreColumn.x - (rail.x + rail.width)).toBe(12);
-  expect(rail.x).toBe(12);
+  expect(centreColumn.x - (rail.x + rail.width)).toBe(0);
+  expect(rail.x).toBe(0);
   const frame = (await region.locator("iframe[data-artifact-frame]").boundingBox())!;
   expect(frame.width).toBeGreaterThan(centreColumn.width - 4);
   expect(frame.y + frame.height).toBeGreaterThan(centreColumn.y + centreColumn.height - 4);
@@ -344,7 +354,7 @@ test("the editor's columns, header actions and parameter box are the kit's, in b
   await inBothSchemes(page, async () => {
     for (const name of ["rail", "centre", "parameters"] as const) {
       await expectToken(column(page, name), "background-color", "--artifact-editor-column-surface");
-      await expectToken(column(page, name), "border-top-color", "--artifact-editor-column-border");
+      await expectToken(column(page, name), "border-right-color", "--artifact-editor-column-border");
     }
     expect(await styleOf(newTab, "background-color")).toBe(await tokenColor(page, "--button-ghost-surface"));
     await expectToken(region.getByTestId("artifact-editor-title"), "color", "--artifact-editor-foreground");
