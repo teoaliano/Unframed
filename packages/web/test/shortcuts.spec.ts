@@ -31,7 +31,7 @@ test("I, U, Shift+P and Shift+M add an empty image, video, page and motion at th
 
 test("the add keys type into a prompt being edited or a dialog's field instead", async ({ page, engine }) => {
   await openCanvas(page, engine);
-  const subject = shapeOnScreen(page, "shape:starter-subject");
+  const subject = shapeOnScreen(page, "shape:sample-subject");
   await subject.dblclick();
   await editorFocused(page);
   // Editing starts with all text selected, so typing replaces it.

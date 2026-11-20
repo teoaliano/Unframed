@@ -16,7 +16,7 @@ import { useNarrowWindow } from "../chrome/narrowWindow.ts";
 import { ToolbarAgentTray } from "./composer/AgentTray.tsx";
 import { providerMessage } from "./providers.ts";
 import { QueueSender } from "./queue.tsx";
-import { useChatClient, useProviders, useRailUi, type ChatClient } from "./store.ts";
+import { EMPTY_DRAFT, NEW_CHAT, useChatClient, useProviders, useRailUi, type ChatClient } from "./store.ts";
 
 
 /** How long the rail waits for its own transitionend before it unmounts anyway: a hidden tab fires none. */
@@ -103,7 +103,23 @@ export const AgentHost = () => {
   useEffect(() => {
     const Button = () => <AgentBarButton client={client} />;
     const OnToolbar = ({ onOpen }: { readonly onOpen: () => void }) => <ToolbarAgentButton client={client} onOpen={onOpen} />;
-    const stops = [registerSlot("agentButton", Button), registerSlot("agentTray", ToolbarAgentTray), registerSlot("agentToolbarButton", OnToolbar)];
+    const controls = {
+      open: () => {
+        void client.loadProviders();
+        client.setUi({ open: true });
+      },
+      startChat: (text: string) => {
+        void client.loadProviders();
+        client.setUi({ open: true, chosen: NEW_CHAT, pinned: null });
+        client.setDraft(NEW_CHAT, { ...EMPTY_DRAFT, text });
+      },
+    };
+    const stops = [
+      registerSlot("agentButton", Button),
+      registerSlot("agentTray", ToolbarAgentTray),
+      registerSlot("agentToolbarButton", OnToolbar),
+      registerSlot("agentControls", controls),
+    ];
     return () => {
       for (const stop of stops) stop();
     };

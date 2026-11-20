@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { openCanvas, plainText, waitForRoom } from "./canvas.ts";
+import { openCanvas, waitForRoom } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf, tokenColor } from "./kit.ts";
 
@@ -44,7 +44,7 @@ test("All projects lists every project, checks the active one and opens a row in
   await expect(page.locator("[role=tab][data-active='true']")).toHaveText("beta");
 });
 
-test("New project refuses an empty or taken name, and creates, opens and seeds a new one", async ({ page, engine }) => {
+test("New project refuses an empty or taken name, and creates and opens a new, empty one", async ({ page, engine }) => {
   await openCanvas(page, engine, "default");
   await (await engine.rpc()).call("projects.create", { name: "beta" });
 
@@ -81,11 +81,8 @@ test("New project refuses an empty or taken name, and creates, opens and seeds a
   await expect(again).toBeHidden();
   await expect(page.locator("[data-canvas-project='product-shots'] .tl-canvas")).toBeVisible();
   await expect(page.locator("[role=tab][data-active='true']")).toHaveText("product-shots");
-  const prompts = await waitForRoom(engine, "product-shots", (records) => {
-    const texts = records.filter((record) => record.type === "text");
-    return texts.length === 2 ? texts : undefined;
-  });
-  expect(prompts.map(plainText)).toContain("lone red fox");
+  const records = await waitForRoom(engine, "product-shots", (each) => (each.some((record) => record.typeName === "page") ? each : undefined));
+  expect(records.filter((record) => record.typeName === "shape")).toEqual([]);
 });
 
 test("the project menu, the name dialog and the delete confirm are the kit's menu, dialog and alert dialog", async ({ page, engine }) => {

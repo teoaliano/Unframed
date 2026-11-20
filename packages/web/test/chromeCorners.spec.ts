@@ -117,7 +117,7 @@ test("the toolbar names text Prompt and frame Group, and the zoom controls sit b
 
 test("the Design panel docks to the window's right edge from the bar's bottom border to the window's bottom, under the watermark", async ({ page, engine }) => {
   await openCanvas(page, engine);
-  const subject = await centre(shapeOnScreen(page, "shape:starter-subject"));
+  const subject = await centre(shapeOnScreen(page, "shape:sample-subject"));
   await page.mouse.click(subject.x, subject.y);
   const panel = page.getByTestId("design-panel");
   await page.getByTestId("selection-toolbar").getByRole("button", { name: "Design panel", exact: true }).click();
@@ -144,7 +144,7 @@ test("the Design panel, once opened, shows only while a drawing tool is on or th
   const panel = page.getByTestId("design-panel");
   await expect(panel).toHaveCount(0);
   await expect(page.locator(".tlui-style-panel")).toHaveCount(0);
-  const subject = await centre(shapeOnScreen(page, "shape:starter-subject"));
+  const subject = await centre(shapeOnScreen(page, "shape:sample-subject"));
   await page.mouse.click(subject.x, subject.y);
   await expect(panel).toHaveCount(0);
   await page.getByTestId("selection-toolbar").getByRole("button", { name: "Design panel", exact: true }).click();

@@ -105,7 +105,7 @@ test("with both keys: the provider switch, the vercel's catalogue and price, a v
   const { engine, vercel, images } = await start();
   try {
     await openCanvas(page, engine);
-    await clickShape(page, "shape:starter-subject");
+    await clickShape(page, "shape:sample-subject");
     await openComposer(page);
     await expect(providerSwitch(page).getByRole("radio")).toHaveText(["OpenRouter", "Vercel"]);
     await expect(providerSwitch(page).getByRole("radio", { name: "OpenRouter" })).toHaveAttribute("aria-checked", "true");
@@ -139,7 +139,7 @@ test("with both keys: the provider switch, the vercel's catalogue and price, a v
     expect(vercel.calls.filter((call) => call.path === "/v1/images/generations")).toHaveLength(2);
 
     await page.mouse.click(10, 400);
-    await clickShape(page, "shape:starter-subject");
+    await clickShape(page, "shape:sample-subject");
     await openComposer(page);
     await expect(providerSwitch(page).getByRole("radio", { name: "Vercel" })).toHaveAttribute("aria-checked", "true");
     await expect(composer(page).getByTestId("model-chip")).toHaveText("flux-kontext-pro");
@@ -152,7 +152,7 @@ test("with only a vercel key: no switch, image runs through it, and video says w
   const { engine, vercel } = await start({ openRouter: false });
   try {
     await openCanvas(page, engine);
-    await clickShape(page, "shape:starter-subject");
+    await clickShape(page, "shape:sample-subject");
     await openComposer(page);
     await expect(providerSwitch(page)).toHaveCount(0);
     await expect(composer(page).getByTestId("no-key-blocker")).toHaveCount(0);
@@ -173,7 +173,7 @@ test("a recipe made through Vercel runs through OpenRouter once Vercel key is go
   const { engine, images } = await start();
   try {
     await openCanvas(page, engine);
-    await clickShape(page, "shape:starter-subject");
+    await clickShape(page, "shape:sample-subject");
     await openComposer(page);
     await providerSwitch(page).getByRole("radio", { name: "Vercel" }).click();
     await expect(composer(page).getByTestId("model-chip")).toHaveText("gpt-image-2");
@@ -199,7 +199,7 @@ test.describe("recipe groups", () => {
     const { engine } = await start();
     try {
       await openCanvas(page, engine);
-      await clickShape(page, "shape:starter-subject");
+      await clickShape(page, "shape:sample-subject");
       await page.keyboard.press("ControlOrMeta+g");
       await openComposer(page);
       await providerSwitch(page).getByRole("radio", { name: "Vercel" }).click();
@@ -218,7 +218,7 @@ test("switching provider resets the props to what the new model declares, so no 
   const { engine, vercel } = await start();
   try {
     await openCanvas(page, engine);
-    await clickShape(page, "shape:starter-subject");
+    await clickShape(page, "shape:sample-subject");
     await openComposer(page);
     await expect(composer(page).locator("[data-prop]")).not.toHaveCount(0);
     await providerSwitch(page).getByRole("radio", { name: "Vercel" }).click();
@@ -242,7 +242,7 @@ test("a text run through Vercel: its catalogue in the model dialog, the chat cal
   const { engine, vercel } = await start();
   try {
     await openCanvas(page, engine);
-    await clickShape(page, "shape:starter-subject");
+    await clickShape(page, "shape:sample-subject");
     await openComposer(page);
     await composer(page).getByRole("radiogroup", { name: "Medium" }).getByRole("radio", { name: "text" }).click();
     await providerSwitch(page).getByRole("radio", { name: "Vercel" }).click();
@@ -269,7 +269,7 @@ test.describe("catalogue calls", () => {
     const { engine } = await start({ vercel: false });
     try {
       await openCanvas(page, engine);
-      await clickShape(page, "shape:starter-subject");
+      await clickShape(page, "shape:sample-subject");
       await openComposer(page);
       await composer(page).getByRole("radiogroup", { name: "Medium" }).getByRole("radio", { name: "text" }).click();
       await expect(composer(page).getByTestId("model-chip")).toHaveText("gemini-3.5-flash-lite");
@@ -285,7 +285,7 @@ test.describe("catalogue calls", () => {
     const { engine } = await start({ openRouter: false });
     try {
       await openCanvas(page, engine);
-      await clickShape(page, "shape:starter-subject");
+      await clickShape(page, "shape:sample-subject");
       await openComposer(page);
       await expect(composer(page).getByTestId("model-chip")).toHaveText("flux-kontext-pro");
       expect(count(engine.vercel!.requests, "/v1/models")).toBe(1);

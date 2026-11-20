@@ -1,6 +1,11 @@
 import { useSyncExternalStore, type ComponentType } from "react";
 import type { Editor, TLShapeId } from "tldraw";
 
+export interface AgentControls {
+  readonly open: () => void;
+  readonly startChat: (text: string) => void;
+}
+
 export interface AgentTrayProps {
   readonly project: string;
   readonly close: () => void;
@@ -15,6 +20,7 @@ interface ChromeSlots {
   toolbarEnd?: ComponentType;
   addToLibrary?: (editor: Editor) => void;
   agentTray?: ComponentType<AgentTrayProps>;
+  agentControls?: AgentControls;
   agentToolbarButton?: ComponentType<{ readonly onOpen: () => void }>;
   openArtifact?: (editor: Editor, shapeId: TLShapeId) => void;
   renderButton?: ComponentType<{ shapeId: TLShapeId }>;

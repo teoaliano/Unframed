@@ -43,7 +43,7 @@ describe("run.text", () => {
         instruction: "describe it",
         prompt: "a lone red fox\n\ndescribe it",
         references: [{ kind: "image", file: photo }],
-        sources: ["shape:starter-subject"],
+        sources: ["shape:sample-subject"],
         anchor: { x: 40, y: 60, w: 320, h: 300 },
       }),
     );
@@ -65,7 +65,7 @@ describe("run.text", () => {
             runIndex: 1,
             runCount: 1,
             cost: null,
-            sources: ["shape:starter-subject"],
+            sources: ["shape:sample-subject"],
           },
         },
       },
@@ -101,7 +101,7 @@ describe("run.text", () => {
       runIndex: 1,
       runCount: 1,
       cost: 0.0012,
-      sources: ["shape:starter-subject"],
+      sources: ["shape:sample-subject"],
     });
 
     const sidecar = await readSidecar(texting, sidecarName!);
@@ -122,7 +122,7 @@ describe("run.text", () => {
         selectionPrompt: "a lone red fox",
         instruction: "describe it",
         references: [{ kind: "image", file: photo }],
-        sources: ["shape:starter-subject"],
+        sources: ["shape:sample-subject"],
       },
     });
     expect(await texting.rpc.call("recipe.read", { project: "board", shapeId: started.placeholders[0]! })).toEqual(sidecar.recipe);

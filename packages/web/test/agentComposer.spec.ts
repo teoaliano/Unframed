@@ -13,7 +13,7 @@ import { leaveEditor } from "./editorHarness.ts";
 /** A toast's second line, by its text. */
 const toastDescription = (page: Page, text: string) => page.locator("[data-slot='toast-description']").filter({ hasText: text });
 
-/** A page and two filled images, left of the starter prompts. */
+/** A page and two filled images, left of the sample prompts. */
 const pageAndImages = async (page: Page, engine: TestEngine) => {
   await openCanvas(page, engine);
   await putRecords(engine, artifactColumn([{ id: "shape:p1", title: "Alpha" }]));

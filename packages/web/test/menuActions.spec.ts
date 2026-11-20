@@ -75,7 +75,7 @@ test("Copy as image puts the picture on the clipboard, and says when it cannot",
 
 test("Copy @id puts the reference on the clipboard, and says when it cannot", async ({ page, engine }) => {
   await openCanvas(page, engine);
-  const subject = await centre(shapeOnScreen(page, "shape:starter-subject"));
+  const subject = await centre(shapeOnScreen(page, "shape:sample-subject"));
   await choose(page, subject, "Copy @100");
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("@100");
 

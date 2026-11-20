@@ -10,7 +10,7 @@ const sidecarOf = async (generation: TextGeneration, shape: AnyRecord) =>
 
 const openOnSubject = async (page: Page) => {
   await page.mouse.click(10, 400);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
 };
 

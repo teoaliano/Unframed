@@ -12,6 +12,7 @@ import { ArtifactsHost } from "../artifacts/ArtifactsHost.tsx";
 import { NodeChrome } from "../nodes/NodeChrome.tsx";
 import { CommentsHost } from "../comments/CommentsHost.tsx";
 import { useFeature } from "../features.ts";
+import { OnboardingProbe } from "../onboarding/OnboardingProbe.tsx";
 
 export const InFront = () => {
   useEffect(() => registerSlot("toolbarEnd", ToolbarEnd), []);
@@ -28,6 +29,7 @@ export const InFront = () => {
     <KitHost />
     <AgentHost />
     <ArtifactsHost />
+    <OnboardingProbe />
   </>
   );
 };

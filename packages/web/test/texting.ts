@@ -64,8 +64,8 @@ export const sendText = async (page: Page): Promise<void> => {
   await expect(composer(page)).toHaveCount(0);
 };
 
-/** Runs `shapeId` (the starter subject by default) through the text medium and answers the landed text result. */
-export const makeTextResult = async (page: Page, generation: TextGeneration, shapeId = "shape:starter-subject"): Promise<AnyRecord> => {
+/** Runs `shapeId` (the sample subject by default) through the text medium and answers the landed text result. */
+export const makeTextResult = async (page: Page, generation: TextGeneration, shapeId = "shape:sample-subject"): Promise<AnyRecord> => {
   const before = new Set((await textResults(generation)).map((shape) => shape.id));
   await page.mouse.click(10, 400);
   await clickShape(page, shapeId);

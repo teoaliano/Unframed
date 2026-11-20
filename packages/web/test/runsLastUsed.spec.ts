@@ -8,7 +8,7 @@ const stored = async (generation: TextGeneration, medium: "image" | "text") =>
 
 const reopen = async (page: Page) => {
   await page.mouse.click(10, 400);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
 };
 

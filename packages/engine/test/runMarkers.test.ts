@@ -198,7 +198,7 @@ describe("stale markers", () => {
 describe("recipe.read", () => {
   it("answers a result's recipe from its sidecar, and says so when the sidecar is gone", async () => {
     const generating = await startGenerating();
-    const started = await generating.rpc.call("run.image", runRequest({ params: { quality: "high" }, instruction: "moody", sources: ["shape:starter-subject"] }));
+    const started = await generating.rpc.call("run.image", runRequest({ params: { quality: "high" }, instruction: "moody", sources: ["shape:sample-subject"] }));
     await finished(generating.events, started.runId);
     const id = started.placeholders[0]!;
     expect(await generating.rpc.call("recipe.read", { project: "board", shapeId: id })).toEqual({
@@ -208,7 +208,7 @@ describe("recipe.read", () => {
       selectionPrompt: "a lone red fox",
       instruction: "moody",
       references: [],
-      sources: ["shape:starter-subject"],
+      sources: ["shape:sample-subject"],
     });
 
     const sidecar = (await shapeIn(generating, id)).meta.unframed.result.sidecar;
@@ -217,7 +217,7 @@ describe("recipe.read", () => {
       code: "not_found",
       message: "This result's recipe is no longer in the project folder.",
     });
-    await expect(generating.rpc.call("recipe.read", { project: "board", shapeId: "shape:starter-subject" })).rejects.toMatchObject({ code: "not_found" });
+    await expect(generating.rpc.call("recipe.read", { project: "board", shapeId: "shape:sample-subject" })).rejects.toMatchObject({ code: "not_found" });
     await generating.engine.dispose();
   });
 });

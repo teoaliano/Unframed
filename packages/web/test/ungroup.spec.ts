@@ -38,7 +38,7 @@ test("Cmd-Shift-G removes the group and leaves its members where they are, selec
 
   // The members are selected: deleting takes both and leaves the prompts.
   await page.keyboard.press("Delete");
-  await expect.poll(() => shapeIds(engine)).toEqual(["shape:starter-scene", "shape:starter-subject"]);
+  await expect.poll(() => shapeIds(engine)).toEqual(["shape:sample-scene", "shape:sample-subject"]);
 });
 
 test("deleting a group deletes its members, and one undo brings them all back", async ({ page, engine }) => {
@@ -48,10 +48,10 @@ test("deleting a group deletes its members, and one undo brings them all back", 
 
   await selectGroup(page, "shape:group");
   await page.keyboard.press("Delete");
-  await expect.poll(() => shapeIds(engine)).toEqual(["shape:starter-scene", "shape:starter-subject"]);
+  await expect.poll(() => shapeIds(engine)).toEqual(["shape:sample-scene", "shape:sample-subject"]);
 
   await page.keyboard.press("ControlOrMeta+z");
-  await expect.poll(() => shapeIds(engine)).toEqual(["shape:a", "shape:b", "shape:group", "shape:starter-scene", "shape:starter-subject"]);
+  await expect.poll(() => shapeIds(engine)).toEqual(["shape:a", "shape:b", "shape:group", "shape:sample-scene", "shape:sample-subject"]);
   const records = await roomRecords(engine, "default");
   expect(records.find((record) => record.id === "shape:a")!.parentId).toBe("shape:group");
 });

@@ -91,7 +91,7 @@ test("Agent on the toolbar is an outline button, and opens the Agent tray saying
   await expect(toolbar(page).getByRole("button", { name: "Agent" })).toBeVisible();
 
   // Nothing the chats know selected: a new chat, and nothing to switch to.
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await toolbar(page).getByRole("button", { name: "Agent" }).click();
   await expect(target(page).getByTestId("agent-target-line")).toHaveText("new chat");
   await expect(target(page).getByRole("button", { name: "Continue the earlier chat" })).toHaveCount(0);
@@ -173,7 +173,7 @@ test("with no provider ready, the toolbar's Agent tooltip is the provider's mess
   const engine = await startDetectingEngine(await mkdtemp(join(tmpdir(), "unframed-agent-toolbar-")));
   try {
     await openCanvas(page, engine);
-    await clickShape(page, "shape:starter-subject");
+    await clickShape(page, "shape:sample-subject");
     // The first hover asks for the statuses; the tooltip reads the message once they are in.
     await toolbar(page).getByRole("button", { name: "Agent" }).hover();
     await expect(toolbar(page).getByRole("button", { name: "Agent" })).toHaveAttribute("title", "Claude is not installed or not on PATH.", { timeout: 15_000 });

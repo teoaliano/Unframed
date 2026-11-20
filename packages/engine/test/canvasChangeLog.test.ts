@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { promptShape } from "./canvasRecords.ts";
+import { promptShape, seedSamplePrompts } from "./canvasRecords.ts";
 import { startEngine, type TestEngine } from "./harness.ts";
 import { connectTab } from "./syncClient.ts";
 
@@ -27,11 +27,13 @@ describe("the canvas change log", () => {
   let engine: TestEngine;
   beforeAll(async () => {
     engine = await startEngine({ env: { UNFRAMED_TEST_CANVAS: "1" } });
-    await (await engine.rpc()).call("projects.create", { name: "board" });
+    const rpc = await engine.rpc();
+    await rpc.call("projects.create", { name: "board" });
+    await seedSamplePrompts(rpc, "board");
   });
   afterAll(() => engine.dispose());
 
-  it("records every committed change with its origin: seeding, a tab's session, an engine-side call", async () => {
+  it("records every committed change with its origin: a test seed, a tab's session, an engine-side call", async () => {
     const rpc = await engine.rpc();
     const tab = await connectTab(engine.port, "board", { sessionId: "tab-one" });
     await tab.loaded;
@@ -45,7 +47,7 @@ describe("the canvas change log", () => {
     await tab.close();
 
     const log = changeLog(engine, "board");
-    expect(log[0]).toMatchObject({ origin: { kind: "system", id: "starter" }, put: ["shape:starter-scene", "shape:starter-subject"], removed: [] });
+    expect(log[0]).toMatchObject({ origin: { kind: "system", id: "test-seed" }, put: ["shape:sample-scene", "shape:sample-subject"], removed: [] });
     expect(log.slice(1).map((entry) => ({ origin: entry.origin, put: entry.put, removed: entry.removed }))).toEqual([
       { origin: { kind: "session", id: "tab-one" }, put: ["shape:from-tab"], removed: [] },
       { origin: { kind: "session", id: "tab-one" }, put: [], removed: ["shape:from-tab"] },
@@ -62,23 +64,23 @@ describe("the canvas change log", () => {
     const { clock } = await rpc.call("testCanvas.read", { project: "board" });
     const tab = await connectTab(engine.port, "board");
     await tab.loaded;
-    const scene = tab.get("shape:starter-scene")!;
+    const scene = tab.get("shape:sample-scene")!;
     await tab.put([{ ...scene, x: scene.x + 30 } as typeof scene]);
     await rpc.call("testCanvas.apply", {
       project: "board",
-      change: { put: [{ ...tab.get("shape:starter-subject")!, y: 999 }], remove: [] },
+      change: { put: [{ ...tab.get("shape:sample-subject")!, y: 999 }], remove: [] },
       origin: { kind: "server", id: "chat:c1" },
     });
     const { ids } = await rpc.call("testCanvas.changedSince", {
       project: "board",
-      recordIds: ["shape:starter-scene", "shape:starter-subject", "shape:never"],
+      recordIds: ["shape:sample-scene", "shape:sample-subject", "shape:never"],
       clock,
     });
-    expect(ids).toEqual(["shape:starter-scene"]);
+    expect(ids).toEqual(["shape:sample-scene"]);
 
     const { clock: later } = await rpc.call("testCanvas.read", { project: "board" });
     expect(
-      (await rpc.call("testCanvas.changedSince", { project: "board", recordIds: ["shape:starter-scene"], clock: later })).ids,
+      (await rpc.call("testCanvas.changedSince", { project: "board", recordIds: ["shape:sample-scene"], clock: later })).ids,
     ).toEqual([]);
     await tab.close();
   });

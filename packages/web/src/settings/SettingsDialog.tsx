@@ -12,6 +12,7 @@ import { Spinner } from "~/components/ui/spinner";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "~/components/ui/tabs";
 import { useActivation, useEngine } from "../context.ts";
 import { loadCatalogue } from "../generate/catalogue.ts";
+import { restartOnboarding } from "../onboarding/store.ts";
 import { setThemeChoice, THEME_CHOICES, THEME_KEY, themeChoice, themeChoiceOf, type ThemeChoice } from "../theme/theme.ts";
 import { showNotice } from "../toasts.tsx";
 import { Copy, linkClass, ModelSelect, SectionHeading } from "./fields.tsx";
@@ -624,6 +625,22 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
           )}
         </div>
       </section>
+      {!device && (
+        <section className="flex flex-col gap-2 border-t border-(--settings-dialog-divider) pt-4" aria-label="Getting started">
+          <SectionHeading>Getting started</SectionHeading>
+          <p className="m-0 text-xs text-(--settings-dialog-description)">Bring back the Get started checklist: check your local agents, build a prototype with the agent and try a generation.</p>
+          <Button
+            variant="outline"
+            className="self-start"
+            onClick={() => {
+              void restartOnboarding(engine);
+              requestClose();
+            }}
+          >
+            Show the checklist again
+          </Button>
+        </section>
+      )}
     </>
   );
 

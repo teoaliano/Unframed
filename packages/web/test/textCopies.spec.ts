@@ -17,7 +17,7 @@ test("a copied text result is still a text result, in this project and pasted in
   await copySelection(page);
   await page.keyboard.press("ControlOrMeta+v");
   await expect.poll(async () => (await roomShapes(engine, "default", "text")).length).toBe(4);
-  const copy = (await roomShapes(engine, "default", "text")).find((shape) => ![result.id, "shape:starter-subject", "shape:starter-scene"].includes(shape.id))!;
+  const copy = (await roomShapes(engine, "default", "text")).find((shape) => ![result.id, "shape:sample-subject", "shape:sample-scene"].includes(shape.id))!;
   expect(copy.meta.unframed.result).toEqual(result.meta.unframed.result);
   expect(plainText(copy)).toBe("an answer about @100");
   await expect(shapeOnScreen(page, copy.id).locator("[data-shape-label]")).toHaveText(`$0.0012 · @${copy.meta.ref}`);

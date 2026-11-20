@@ -45,11 +45,11 @@ describe("the import trigger", () => {
     expect(records.filter((record) => record.typeName === "shape")).toHaveLength(1);
   });
 
-  it("seeds starter content, and imports nothing, in a folder without an old graph", async () => {
+  it("opens an empty canvas, and imports nothing, in a folder without an old graph", async () => {
     const { engine, folder } = await startLegacyEngine();
     await mkdir(folder("fresh"));
     const shapes = (await canvasRecords(engine, "fresh")).filter((record) => record.typeName === "shape");
-    expect(shapes.map((shape) => plainText(shape.props.richText))).toContain("lone red fox");
+    expect(shapes).toEqual([]);
     expect(await (await engine.rpc()).call("legacyImport.report", { project: "fresh" })).toBeNull();
   });
 });

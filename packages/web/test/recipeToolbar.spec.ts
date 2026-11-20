@@ -129,7 +129,7 @@ test("a recipe run leaves the composer's last-used values as they were", async (
   const { values } = await (await engine.rpc()).call("preferences.get", { keys: ["lastUsed.image"] });
   expect(values).toEqual({});
   await page.mouse.click(10, 400);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await expect(tray(page).getByTestId("model-chip")).toHaveText("gpt-image-2");
 });

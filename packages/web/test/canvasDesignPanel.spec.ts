@@ -97,7 +97,7 @@ const openPanel = async (page: Page) => {
 test("the Design panel replaces tldraw's style panel and sets a prompt's font, size, weight, align, colour and opacity exactly", async ({ page, engine }) => {
   await openCanvas(page, engine);
   await expect(panel(page)).toHaveCount(0);
-  await select(page, "shape:starter-subject");
+  await select(page, "shape:sample-subject");
   await expect(page.getByTestId("style-row")).toBeVisible();
   await expect(panel(page)).toHaveCount(0);
   await openPanel(page);
@@ -105,24 +105,24 @@ test("the Design panel replaces tldraw's style panel and sets a prompt's font, s
   await expect(panel(page).getByRole("group", { name: "Text" })).toBeVisible();
 
   await typeNumber(page, "Size", "40");
-  await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:starter-subject")?.meta?.unframed?.design?.fontSize === 40);
-  await expect(shapeOnScreen(page, "shape:starter-subject").locator(".tl-rich-text").first()).toHaveCSS("font-size", "40px");
+  await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:sample-subject")?.meta?.unframed?.design?.fontSize === 40);
+  await expect(shapeOnScreen(page, "shape:sample-subject").locator(".tl-rich-text").first()).toHaveCSS("font-size", "40px");
 
   await pickSelect(page, "Font", "Georgia");
-  await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:starter-subject")?.meta?.unframed?.design?.fontFamily === "Georgia");
+  await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:sample-subject")?.meta?.unframed?.design?.fontFamily === "Georgia");
 
   await pickSelect(page, "Weight", "700");
-  await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:starter-subject")?.meta?.unframed?.design?.fontWeight === "700");
-  await expect(shapeOnScreen(page, "shape:starter-subject").locator(".tl-rich-text-wrapper").first()).toHaveCSS("font-weight", "700");
+  await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:sample-subject")?.meta?.unframed?.design?.fontWeight === "700");
+  await expect(shapeOnScreen(page, "shape:sample-subject").locator(".tl-rich-text-wrapper").first()).toHaveCSS("font-weight", "700");
 
   await panel(page).getByRole("radio", { name: "Centre" }).click();
-  await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:starter-subject")?.props?.textAlign === "middle");
+  await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:sample-subject")?.props?.textAlign === "middle");
 
   await pickColour(page, "Colour", "#ff0044");
-  await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:starter-subject")?.meta?.unframed?.design?.textColor === "#ff0044");
+  await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:sample-subject")?.meta?.unframed?.design?.textColor === "#ff0044");
 
   await typeNumber(page, "Opacity", "50");
-  await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:starter-subject")?.opacity === 0.5);
+  await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:sample-subject")?.opacity === 0.5);
 });
 
 test("a rectangle's label, fill, border and corners, and a sticky note's background, are set from the Design panel", async ({ page, engine }) => {
@@ -164,7 +164,7 @@ test("a rectangle's label, fill, border and corners, and a sticky note's backgro
 test("the Design panel hides for media and sets a drawing tool's next stroke before it is drawn", async ({ page, engine }) => {
   await openCanvas(page, engine);
   await putRecords(engine, [emptyMedia("shape:still", "image", "180", { x: -400, y: 300 })]);
-  await select(page, "shape:starter-subject");
+  await select(page, "shape:sample-subject");
   await openPanel(page);
   await page.keyboard.press("Escape");
   await select(page, "shape:still");

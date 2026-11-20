@@ -5,6 +5,7 @@
  * HTTP, IPC messages, stdout and the files it writes.
  */
 import { fork, spawn, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
@@ -26,6 +27,8 @@ export interface EngineOptions {
   env?: Record<string, string | undefined>;
   /** Text written to `<data folder>/.env` before boot. */
   dotenv?: string;
+  /** Preferences written to `<data folder>/preferences.json` before boot, unless the folder already has one. `undefined` writes none. */
+  preferences?: Record<string, unknown> | undefined;
   /** Reuse a data folder, for restarts. A new temporary one otherwise. */
   dataDir?: string;
   /** The entry to fork: the source `main.ts` by default, or a bundle's `server/index.js`. */
@@ -242,6 +245,7 @@ export const startEngine = async (options: EngineOptions = {}): Promise<TestEngi
   const dataDir = options.dataDir ?? (await makeTempDir());
   const nativeLogPath = join(dataDir, ".native-log.jsonl");
   if (options.dotenv !== undefined) await writeFile(join(dataDir, ".env"), options.dotenv);
+  if (options.preferences !== undefined && !existsSync(join(dataDir, "preferences.json"))) await writeFile(join(dataDir, "preferences.json"), JSON.stringify(options.preferences));
   const stub = options.openRouterStub === false ? undefined : await startOpenRouterStub(options.stub);
   const elevenLabs = options.elevenLabs === undefined ? undefined : await startOpenRouterStub(options.elevenLabs === true ? undefined : options.elevenLabs);
   const vercel = options.vercel === undefined ? undefined : await startOpenRouterStub(options.vercel === true ? undefined : options.vercel);

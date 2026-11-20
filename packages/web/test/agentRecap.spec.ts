@@ -30,7 +30,7 @@ const test = base.extend<{ agent: TestEngine }>({
   },
 });
 
-/** Two motions: Intro beside the starter prompts, Outro far off to the right, out of view. */
+/** Two motions: Intro beside the sample prompts, Outro far off to the right, out of view. */
 const twoMotions = async (engine: TestEngine) => {
   const [intro, outro] = artifactColumn([
     { id: "shape:m1", kind: "motion", title: "Intro" },

@@ -4,7 +4,7 @@ import { clickShape, composer, expect, openAndEscape, openComposer, sendRun, sta
 import { expectSlot, inBothSchemes, resolvedColor, styleOf, tokenColor } from "./kit.ts";
 
 const openOnSubject = async (page: Page) => {
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
 };
 

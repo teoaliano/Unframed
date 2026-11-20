@@ -5,7 +5,7 @@ export const SYNC_TABLE_PREFIX = "tldraw_";
 
 /**
  * tldraw's sync storage tables, as its own storage migration 3 leaves them. The metadata
- * row's empty schema means "never initialised", so the room seeds the starter content the
+ * row's empty schema means "never initialised", so the room writes its initial snapshot the
  * first time it opens, and tldraw's own migrations continue from version 3.
  */
 export const createSyncStorageTables = (db: DatabaseSync): void => {

@@ -8,7 +8,7 @@ const afterStyle = (locator: Locator, property: string) =>
 
 test("tldraw's toolbar, the Design panel, zoom controls, menus and shortcuts dialog take the kit's tokens, font and radii", async ({ page, engine }) => {
   await openCanvas(page, engine);
-  const subject = await centre(shapeOnScreen(page, "shape:starter-subject"));
+  const subject = await centre(shapeOnScreen(page, "shape:sample-subject"));
   await page.mouse.click(subject.x, subject.y);
   // tldraw's tools sit in Unframed's one bottom bar, which carries the panel fill.
   const toolbar = page.getByTestId("bottom-toolbar");
