@@ -61,7 +61,7 @@ describe("run.image validation", () => {
       code: "unavailable",
       message: "Generating needs OpenRouter. Connect it in Settings, under Generation.",
     });
-    expect((await rpc.call("testCanvas.read", { project: "board" })).records.filter((record: any) => record.typeName === "shape")).toHaveLength(2);
+    expect((await rpc.call("testCanvas.read", { project: "board" })).records.filter((record: any) => record.typeName === "shape")).toEqual([]);
   });
 });
 
@@ -98,7 +98,7 @@ describe("run.image, one output", () => {
             ],
           },
         ],
-        sources: ["shape:starter-subject"],
+        sources: ["shape:sample-subject"],
         anchor: { x: 40, y: 60, w: 320, h: 300 },
       }),
     );
@@ -121,7 +121,7 @@ describe("run.image, one output", () => {
             runIndex: 1,
             runCount: 1,
             cost: null,
-            sources: ["shape:starter-subject"],
+            sources: ["shape:sample-subject"],
           },
         },
       },
@@ -177,7 +177,7 @@ describe("run.image, one output", () => {
           { kind: "video", file: clip },
           { kind: "video", url: "https://example.com/linked.mp4" },
         ],
-        sources: ["shape:starter-subject"],
+        sources: ["shape:sample-subject"],
       },
     });
 

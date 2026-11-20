@@ -25,7 +25,7 @@ const stage = async (page: Page, instruction = "") => {
   await page.mouse.click(10, 400);
   await clearOfDesignPanel(page);
   await clickShape(page, "shape:list");
-  await clickShape(page, "shape:starter-scene", ["Shift"]);
+  await clickShape(page, "shape:sample-scene", ["Shift"]);
   await clickShape(page, "shape:photo", ["Shift"]);
   await openComposer(page);
   await setFree(page, true);

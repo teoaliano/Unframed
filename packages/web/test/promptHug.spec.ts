@@ -21,7 +21,7 @@ const makePrompt = async (page: Page, engine: Parameters<typeof openCanvas>[1], 
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
   return waitForRoom(engine, "default", (records) =>
-    records.find((record) => record.type === "text" && record.id.startsWith("shape:") && !record.id.startsWith("shape:starter") && plainText(record) === text),
+    records.find((record) => record.type === "text" && record.id.startsWith("shape:") && !record.id.startsWith("shape:sample") && plainText(record) === text),
   );
 };
 

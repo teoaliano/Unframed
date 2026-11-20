@@ -1,3 +1,4 @@
+import { seedSamplePrompts } from "./canvasRecords.ts";
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -198,7 +199,7 @@ describe("collecting a completed job", () => {
 
   it("puts a seeded record with no landing at all right of the rightmost shape, top-aligned with the topmost", async () => {
     const rendering = await startRendering({ seed: [pendingRecord("gen-old")] });
-    // The starter canvas's two prompts are the shapes on it.
+    await seedSamplePrompts(rendering.rpc, "board");
     rendering.jobs.status((id) => completed(rendering.stubOrigin, id));
     await poll(rendering, "gen-old");
     const created = await eventually(async () => (await roomShapes(rendering)).find((each) => each.type === "video"), "the new result");

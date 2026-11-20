@@ -90,11 +90,11 @@ test("on empty canvas the menu offers the add items, then tldraw's own groups; n
 test("a right-clicked prompt is selected alone and offers its reference and the edit items", async ({ page, engine }) => {
   await withEmptyClipboard(page);
   await openCanvas(page, engine);
-  const scene = shapeOnScreen(page, "shape:starter-scene");
+  const scene = shapeOnScreen(page, "shape:sample-scene");
   await page.mouse.click(...Object.values(await centre(scene)) as [number, number]);
 
   const { shortcut } = await platformOf(page);
-  const { headings, items } = await rightClick(page, await centre(shapeOnScreen(page, "shape:starter-subject")));
+  const { headings, items } = await rightClick(page, await centre(shapeOnScreen(page, "shape:sample-subject")));
   // A selection always gets the Library section, whose Add to library the canvas registers.
   expect(headings).toEqual(["Reference", "Edit", "Library"]);
   const edits = [`Cut ${shortcut("X")}`, `Copy ${shortcut("C")}`, `Group ${shortcut("G")}`];
@@ -105,7 +105,7 @@ test("a right-clicked prompt is selected alone and offers its reference and the 
 
   // The subject alone is selected now: deleting it leaves the scene.
   await page.keyboard.press("Delete");
-  await expect(shapeOnScreen(page, "shape:starter-subject")).toHaveCount(0);
+  await expect(shapeOnScreen(page, "shape:sample-subject")).toHaveCount(0);
   await expect(scene).toHaveCount(1);
 });
 

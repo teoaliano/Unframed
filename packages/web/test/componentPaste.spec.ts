@@ -1,5 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import { compiledFileName } from "@unframed/domain";
+import { seedSamplePrompts } from "../../engine/test/canvasRecords.ts";
 import { centre, copySelection, openCanvas, roomShapes, shapeOnScreen, waitForRoom } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 import { componentShape, SHEET_FILE, writeSheet } from "./components.ts";
@@ -35,6 +36,7 @@ test("pasting a component shape makes a new component with its own tag and sheet
 test("pasting a page into another project brings the component files it pins", async ({ page, engine }) => {
   const rpc = await engine.rpc();
   await rpc.call("projects.create", { name: "alpha" });
+  await seedSamplePrompts(rpc, "alpha");
   await rpc.call("projects.create", { name: "beta" });
   await rpc.call("preferences.set", { key: "project.active", value: "alpha" });
   await openCanvas(page, engine, "alpha");

@@ -17,7 +17,7 @@ test("without an ElevenLabs key the audio medium says so, and with nothing to sp
   const audio = await startAudio({ elevenLabs: false });
   try {
     await openCanvas(page, audio.engine);
-    await clickShape(page, "shape:starter-subject");
+    await clickShape(page, "shape:sample-subject");
     await openComposer(page);
     await chooseAudio(page);
     await expect(status(page)).toContainText("No ElevenLabs key yet. Add one in Settings, under ElevenLabs.");
@@ -45,7 +45,7 @@ test("the placeholder shows Generating… until the line lands", async ({ page, 
     return { kind: "audio" };
   };
   await openCanvas(page, audio.engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await chooseAudio(page);
   await pickVoice(page, "Olivia");
@@ -59,7 +59,7 @@ test("the placeholder shows Generating… until the line lands", async ({ page, 
 
 test("a model change removes Speed on v4, unsets a language the model does not list, and keeps format and seed", async ({ page, audio }) => {
   await openCanvas(page, audio.engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await chooseAudio(page);
   await pickVoice(page, "Olivia");
@@ -93,7 +93,7 @@ test("a model change removes Speed on v4, unsets a language the model does not l
 test("Regenerate's second take lands beside the result; Remove on a result keeps its recipe, as on an image", async ({ page, audio }) => {
   const { engine } = audio;
   await openCanvas(page, engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await chooseAudio(page);
   await pickVoice(page, "Olivia");

@@ -22,8 +22,8 @@ test("copied prompts paste with fresh refs, and references between them follow t
 
   // The originals keep their refs and still reference each other.
   const originals = await roomRecords(engine, "default");
-  expect(originals.find((record) => record.id === "shape:starter-subject")!.meta.ref).toBe("100");
-  expect(plainText(originals.find((record) => record.id === "shape:starter-scene"))).toBe("A @100 on a windswept cliff at golden hour, cinematic, 35mm");
+  expect(originals.find((record) => record.id === "shape:sample-subject")!.meta.ref).toBe("100");
+  expect(plainText(originals.find((record) => record.id === "shape:sample-scene"))).toBe("A @100 on a windswept cliff at golden hour, cinematic, 35mm");
 
   // Cut takes the selection away and pastes it back with fresh refs again.
   await page.keyboard.press("ControlOrMeta+x");

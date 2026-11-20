@@ -40,13 +40,17 @@ test.describe("project activation", () => {
     expect(await openCanvas(page, engine)).toBe("alpha");
   });
 
-  test("creates and opens default, with its starter prompts, when there are no projects", async ({ page, engine }) => {
-    expect(await openCanvas(page, engine)).toBe("default");
-    const rpc = await engine.rpc();
-    expect((await rpc.call("projects.list")).projects).toEqual(["default"]);
-    const prompts = await roomShapes(engine, "default", "text");
-    expect(prompts.map(plainText).sort()).toEqual(["A @100 on a windswept cliff at golden hour, cinematic, 35mm", "lone red fox"]);
-    await expect(page.locator(".tl-shape[data-shape-type='text']")).toHaveCount(2);
+  test("creates and opens an empty default when there are no projects", async ({ page }) => {
+    const engine = await startHostedEngine({ samplePrompts: false });
+    try {
+      expect(await openCanvas(page, engine)).toBe("default");
+      const rpc = await engine.rpc();
+      expect((await rpc.call("projects.list")).projects).toEqual(["default"]);
+      expect(await roomShapes(engine, "default")).toEqual([]);
+      await expect(page.locator(".tl-shape")).toHaveCount(0);
+    } finally {
+      await engine.dispose();
+    }
   });
 
   test("a switch made while the initial load is still in flight wins over the load", async ({ page, engine }) => {

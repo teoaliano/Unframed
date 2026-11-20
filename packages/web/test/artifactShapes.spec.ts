@@ -31,7 +31,7 @@ test("an empty artifact, selected, offers Agent in the toolbar, which opens the 
   await expect(composer(page)).toHaveAttribute("data-tray", "agent");
   await expect(composer(page).getByRole("list", { name: "Context" }).getByRole("listitem")).toHaveCount(1);
   await expect(shapeOnScreen(page, "shape:empty")).toHaveAttribute("data-label-active", "true");
-  await expect(shapeOnScreen(page, "shape:starter-subject")).not.toHaveAttribute("data-label-active", "true");
+  await expect(shapeOnScreen(page, "shape:sample-subject")).not.toHaveAttribute("data-label-active", "true");
 });
 
 test("a filled artifact drops its card, shows its title above the corner, and resizes freely on both axes", async ({ page, engine }) => {

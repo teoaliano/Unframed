@@ -9,7 +9,7 @@ test("the text medium: the switch offers text, the tray holds only the model, th
   await openCanvas(page, engine);
   await filledMedia(engine, { id: "shape:photo", type: "image", ref: "300", at: { x: 420, y: 320 }, bytes: pngBytes(30, 30), name: "photo.png", mime: "image/png", natural: { w: 30, h: 30 }, width: 140 });
 
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await expect(mediumOption(page, "text")).toBeVisible();
   await chooseText(page);

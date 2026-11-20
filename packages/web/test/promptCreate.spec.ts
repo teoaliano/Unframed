@@ -43,7 +43,7 @@ test.describe("making a prompt", () => {
 
   test("a new ref skips a number some prompt already mentions, even when nothing holds it", async ({ page, engine }) => {
     await openCanvas(page, engine);
-    const scene = (await roomShapes(engine, "default", "text")).find((record) => record.id === "shape:starter-scene")!;
+    const scene = (await roomShapes(engine, "default", "text")).find((record) => record.id === "shape:sample-scene")!;
     await (await engine.rpc()).call("testCanvas.apply", {
       project: "default",
       change: {
@@ -52,7 +52,7 @@ test.describe("making a prompt", () => {
       },
       origin: { kind: "server", id: "test" },
     });
-    await expect(shapeOnScreen(page, "shape:starter-scene")).toContainText("see @140");
+    await expect(shapeOnScreen(page, "shape:sample-scene")).toContainText("see @140");
     const point = await emptyCanvasPoint(page);
     await page.mouse.dblclick(point.x, point.y);
     await editorFocused(page);

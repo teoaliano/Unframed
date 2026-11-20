@@ -7,12 +7,12 @@ import { expectSlot, expectToken, tokenColor } from "./kit.ts";
 
 const results = async (generation: GenerationEngine) => (await roomShapes(generation.engine, "default", "image")).filter((shape) => shape.meta?.unframed?.result);
 
-/** Generates from the starter subject and answers the landed result. */
+/** Generates from the sample subject and answers the landed result. */
 const makeResult = async (page: Page, generation: GenerationEngine, instruction = "") => {
   const before = (await results(generation)).length;
   // From nothing selected, so the click selects the prompt rather than editing it.
   await page.mouse.click(10, 400);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   if (instruction !== "") await page.keyboard.type(instruction);
   await sendRun(page);
@@ -33,12 +33,12 @@ test("results land to the right of the selection, placeholder first, and a selec
     return { kind: "image", bytes: pngBytes(96, 64), cost: 0.19, mediaType: "image/png" };
   });
   await openCanvas(page, generation.engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await sendRun(page);
 
   const [placeholder] = await results(generation);
-  const subject = (await roomRecords(generation.engine, "default")).find((record) => record.id === "shape:starter-subject")!;
+  const subject = (await roomRecords(generation.engine, "default")).find((record) => record.id === "shape:sample-subject")!;
   expect(placeholder!.x).toBeGreaterThan(subject.x!);
   expect(placeholder!.y).toBe(subject.y);
   await expect(shapeOnScreen(page, placeholder!.id).getByRole("status")).toHaveText("Generating…");
@@ -89,7 +89,7 @@ test("results land to the right of the selection, placeholder first, and a selec
 test("a failed run says why in a toast, a partial run counts its successes, and a full success says nothing", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
   generation.answer(() => ({ kind: "status", status: 500, body: { error: { message: "model overloaded" } } }));
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await pressSend(page);
   await expect(toast(page, "0 of 1 succeeded. OpenRouter (500): model overloaded")).toBeVisible();
@@ -119,13 +119,13 @@ test("a failed run says why in a toast, a partial run counts its successes, and 
 
 test("the tether runs from each surviving source to the selected result, selects nothing and goes on deselect", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
-  await clickShape(page, "shape:starter-subject");
-  await clickShape(page, "shape:starter-scene", ["Shift"]);
+  await clickShape(page, "shape:sample-subject");
+  await clickShape(page, "shape:sample-scene", ["Shift"]);
   await openComposer(page);
   await sendRun(page);
   await expect.poll(async () => (await results(generation)).filter((shape) => shape.props.assetId).length).toBe(1);
   const [result] = await results(generation);
-  expect(result!.meta.unframed.result.sources.sort()).toEqual(["shape:starter-scene", "shape:starter-subject"]);
+  expect(result!.meta.unframed.result.sources.sort()).toEqual(["shape:sample-scene", "shape:sample-subject"]);
 
   await page.mouse.click(10, 400);
   await expect(page.getByTestId("tether")).toHaveCount(0);
@@ -137,11 +137,11 @@ test("the tether runs from each surviving source to the selected result, selects
 
   // Delete one source: its line goes, the other stays.
   await page.mouse.click(10, 400);
-  await clickShape(page, "shape:starter-scene");
+  await clickShape(page, "shape:sample-scene");
   await page.keyboard.press("Delete");
   await clickShape(page, result!.id);
   await expect(lines).toHaveCount(1);
-  await expect(lines).toHaveAttribute("data-tether-from", "shape:starter-subject");
+  await expect(lines).toHaveAttribute("data-tether-from", "shape:sample-subject");
   await page.mouse.click(10, 400);
   await expect(page.getByTestId("tether")).toHaveCount(0);
 });
@@ -150,9 +150,9 @@ test("Regenerate sends the recorded run again from the composer, beside the old 
   await openCanvas(page, generation.engine);
   const first = await makeResult(page, generation, "at dawn");
   await page.mouse.click(10, 400);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await page.keyboard.press("Delete");
-  await expect(shapeOnScreen(page, "shape:starter-subject")).toHaveCount(0);
+  await expect(shapeOnScreen(page, "shape:sample-subject")).toHaveCount(0);
 
   const before = generation.requests.length;
   await clickShape(page, first.id);
@@ -176,7 +176,7 @@ test("Regenerate sends the recorded run again from the composer, beside the old 
 
 test("Regenerate reopens the composer on the recorded run to change it; a selection change leaves recipe mode and keeps the tray and box", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await composer(page).locator("[data-prop]").filter({ hasText: "low" }).click();
   await page.getByRole("menu", { name: "Quality" }).getByRole("menuitemradio", { name: "high" }).click();
@@ -226,7 +226,7 @@ test("Regenerate reopens the composer on the recorded run to change it; a select
   await composer(page).locator("[data-prop]").filter({ hasText: "high" }).click();
   await page.getByRole("menu", { name: "Quality" }).getByRole("menuitemradio", { name: "medium" }).click();
   // The composer clears the result's label, so it covers the scene's middle: click its left end.
-  const scene = (await shapeOnScreen(page, "shape:starter-scene").boundingBox())!;
+  const scene = (await shapeOnScreen(page, "shape:sample-scene").boundingBox())!;
   await page.mouse.click(scene.x + 30, scene.y + scene.height / 2);
   await expect(composer(page).getByTestId("source-count")).toHaveText("2 selected");
   await expect(instructionBox(page)).toHaveText("moody");

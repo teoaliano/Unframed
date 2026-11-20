@@ -2,7 +2,7 @@
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
 /**
- * Distinct fractional indices, in the order shapes are made, above the starter prompts'
+ * Distinct fractional indices, in the order shapes are made, above the sample prompts'
  * a1 and a2, so no two shapes tie in z (tldraw cannot place a shape between two equal ones).
  */
 let nextIndex = 0;

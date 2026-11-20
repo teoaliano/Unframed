@@ -22,7 +22,7 @@ const withRenderer = test.extend<{ renderer: "ok" | "fail" }>({
 
 const motionOnBoard = async (page: Page, engine: TestEngine, project = "default") => {
   await openCanvas(page, engine, project === "default" ? undefined : project);
-  // Left of the starter prompts, where the view opens, with room below it for the render row.
+  // Left of the sample prompts, where the view opens, with room below it for the render row.
   const { file } = await filledArtifact(engine, { id: "shape:intro", kind: "motion", ref: "150", at: { x: -420, y: -40 }, size: { w: 400, h: 240 }, title: "Intro", html: COMPOSITION, project });
   const shape = shapeOnScreen(page, "shape:intro");
   await expect(shape).toBeVisible();

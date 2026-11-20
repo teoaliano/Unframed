@@ -12,17 +12,17 @@ import { projectChat, type Chat, type ChatEvent } from "@unframed/domain";
 import { FIXTURES } from "../../engine/test/agent.ts";
 import { fakeCodex, fakeShell, fakeSignedInClaude } from "../../engine/test/agentFakes.ts";
 import type { EngineOptions, TestEngine } from "../../engine/test/engineProcess.ts";
-import { expect, FIXTURE_KEY, startHostedEngine, test as base } from "./fixtures.ts";
+import { expect, FIXTURE_KEY, startHostedEngine, test as base, type HostedEngineOptions } from "./fixtures.ts";
 
 export { FIXTURES };
 
 /** An engine serving the built web whose chats run on the scripted agent. */
-export const startAgentEngine = (options: EngineOptions & { script?: string } = {}): Promise<TestEngine> => {
+export const startAgentEngine = (options: HostedEngineOptions & { script?: string } = {}): Promise<TestEngine> => {
   const { script, ...rest } = options;
   return startHostedEngine({ ...rest, env: { UNFRAMED_TEST_AGENT_SCRIPT: script ?? FIXTURES, ...rest.env } });
 };
 
-export const startDetectingEngine = async (dir: string, options: EngineOptions = {}): Promise<TestEngine> => {
+export const startDetectingEngine = async (dir: string, options: HostedEngineOptions = {}): Promise<TestEngine> => {
   const shell = await fakeShell(join(dir, "shell"));
   return startHostedEngine({
     ...options,
@@ -108,7 +108,7 @@ export const rpcOf = (engine: TestEngine): ReturnType<TestEngine["rpc"]> => {
 };
 
 /**
- * Small pages (and motions) in a column right of the starter prompts, so the view that
+ * Small pages (and motions) in a column right of the sample prompts, so the view that
  * opens on them keeps them clear of the rail on the left. Put them before opening the canvas.
  */
 export const artifactColumn = (items: ReadonlyArray<{ id: string; kind?: "page" | "motion"; title: string; file?: string }>) =>

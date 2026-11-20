@@ -18,7 +18,7 @@ test("a group is referenceable: the @ menu lists it with no preview, and Copy @i
   await menu.getByRole("menuitem", { name: "Copy @character" }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("@character");
 
-  const subject = (await shapeOnScreen(page, "shape:starter-subject").boundingBox())!;
+  const subject = (await shapeOnScreen(page, "shape:sample-subject").boundingBox())!;
   await page.mouse.dblclick(subject.x + subject.width / 2, subject.y + subject.height / 2);
   await editorFocused(page);
   await page.keyboard.type("a portrait of @cha");
@@ -26,5 +26,5 @@ test("a group is referenceable: the @ menu lists it with no preview, and Copy @i
   await expect(mentions.getByRole("option")).toHaveText(["@character"]);
   await page.keyboard.press("Enter");
   await page.keyboard.press("Escape");
-  await expect(shapeOnScreen(page, "shape:starter-subject")).toContainText("a portrait of @character");
+  await expect(shapeOnScreen(page, "shape:sample-subject")).toContainText("a portrait of @character");
 });

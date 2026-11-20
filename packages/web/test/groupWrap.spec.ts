@@ -63,5 +63,5 @@ test("Cmd-G wraps the shapes that may be members in a new named group, keeps the
   await page.keyboard.press("Delete");
   await expect
     .poll(async () => (await roomRecords(engine, "default")).filter((record) => record.typeName === "shape").map((record) => record.id).sort())
-    .toEqual(["shape:old", "shape:page", "shape:starter-scene", "shape:starter-subject"]);
+    .toEqual(["shape:old", "shape:page", "shape:sample-scene", "shape:sample-subject"]);
 });

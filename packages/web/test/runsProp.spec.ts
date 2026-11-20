@@ -5,7 +5,7 @@ import { expectSlot, tokenColor } from "./kit.ts";
 import { addRuns, expect, runsChip, runsField, runsPopup, setRuns, test, tray } from "./texting.ts";
 
 const openOnSubject = async (page: Page) => {
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
 };
 

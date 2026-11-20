@@ -6,8 +6,8 @@ test("a reload and a second tab show the same board, and the second tab sees an 
   const other = await context.newPage();
   await openCanvas(other, engine);
 
-  const subject = shapeOnScreen(page, "shape:starter-subject");
-  const before = (await roomRecords(engine, "default")).find((record) => record.id === "shape:starter-subject")!;
+  const subject = shapeOnScreen(page, "shape:sample-subject");
+  const before = (await roomRecords(engine, "default")).find((record) => record.id === "shape:sample-subject")!;
   const from = await centre(subject);
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
@@ -16,19 +16,19 @@ test("a reload and a second tab show the same board, and the second tab sees an 
   const movedAt = Date.now();
 
   await expect
-    .poll(async () => (await roomRecords(engine, "default")).find((record) => record.id === "shape:starter-subject")!.x, { timeout: 5000 })
+    .poll(async () => (await roomRecords(engine, "default")).find((record) => record.id === "shape:sample-subject")!.x, { timeout: 5000 })
     .toBeGreaterThan(before.x! + 10);
 
   const target = await centre(subject);
-  await expect.poll(async () => Math.round((await centre(shapeOnScreen(other, "shape:starter-subject"))).x)).toBe(Math.round(target.x));
+  await expect.poll(async () => Math.round((await centre(shapeOnScreen(other, "shape:sample-subject"))).x)).toBe(Math.round(target.x));
   expect(Date.now() - movedAt).toBeLessThan(1500);
   // The drag reached the room move by move; compare against where it stopped.
-  const moved = (await settledRecord(engine, "default", "shape:starter-subject"))!;
+  const moved = (await settledRecord(engine, "default", "shape:sample-subject"))!;
 
   await page.reload();
   await openCanvas(page, engine);
   const afterReload = await roomRecords(engine, "default");
-  expect(afterReload.find((record) => record.id === "shape:starter-subject")).toMatchObject({ x: moved.x, y: moved.y });
-  await expect(shapeOnScreen(page, "shape:starter-subject")).toBeVisible();
-  await expect(shapeOnScreen(page, "shape:starter-scene")).toBeVisible();
+  expect(afterReload.find((record) => record.id === "shape:sample-subject")).toMatchObject({ x: moved.x, y: moved.y });
+  await expect(shapeOnScreen(page, "shape:sample-subject")).toBeVisible();
+  await expect(shapeOnScreen(page, "shape:sample-scene")).toBeVisible();
 });

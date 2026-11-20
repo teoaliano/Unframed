@@ -16,7 +16,7 @@ test("a copied generating placeholder pastes as an empty image with no marker; a
     return { kind: "image", bytes: pngBytes(96, 64) };
   });
   await openCanvas(page, generation.engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await sendRun(page);
   const [placeholder] = await results(generation);
@@ -60,7 +60,7 @@ test("a result pasted into another project brings its sidecar and its reference 
   await filledMedia(engine, { id: "shape:ref", type: "image", ref: "400", at: { x: -300, y: 0 }, bytes: pngBytes(30, 30), name: "ref.png", mime: "image/png", natural: { w: 30, h: 30 }, width: 140 });
   await expect(shapeOnScreen(page, "shape:ref").locator("img")).toBeVisible();
   await clickShape(page, "shape:ref");
-  await clickShape(page, "shape:starter-subject", ["Shift"]);
+  await clickShape(page, "shape:sample-subject", ["Shift"]);
   await openComposer(page);
   await sendRun(page);
   await expect.poll(async () => (await results(generation)).filter((shape) => shape.props.assetId).length).toBe(1);

@@ -66,8 +66,8 @@ test("one selected group reads by its name: the hint on the bar, one @name chip 
 
   // Two shapes are a count, not a chip.
   await page.keyboard.press("Escape");
-  await clickShape(page, "shape:starter-subject");
-  await clickShape(page, "shape:starter-scene", ["Shift"]);
+  await clickShape(page, "shape:sample-subject");
+  await clickShape(page, "shape:sample-scene", ["Shift"]);
   await openComposer(page);
   await expect(source).toHaveText("2 selected");
   await expect(source).not.toHaveAttribute("data-chip", "group");

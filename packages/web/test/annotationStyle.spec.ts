@@ -49,7 +49,7 @@ const fit = async (page: Page) => {
   let last: unknown;
   await expect
     .poll(async () => {
-      const box = JSON.stringify(await shapeOnScreen(page, "shape:starter-subject").boundingBox());
+      const box = JSON.stringify(await shapeOnScreen(page, "shape:sample-subject").boundingBox());
       const settled = box === last;
       last = box;
       return settled;
@@ -137,7 +137,7 @@ test("each kind shows its own controls, a mixed selection what it shares, and a 
   await put(page, engine, [STICKIES[0]!, rectangle("shape:box", { x: -500, y: 600 }, "b23"), groupRecord("shape:board", "board", { x: 200, y: 600 }, { w: 200, h: 140 })]);
   await fit(page);
 
-  await select(page, "shape:starter-subject");
+  await select(page, "shape:sample-subject");
   await expectControls(row(page), ["textColor", "font", "size", "bold", "align"]);
 
   await select(page, "shape:box");
@@ -221,12 +221,12 @@ test("fill None and solid on a rectangle, a stroke swatch, and a typed text colo
   await pickSwatch(page, "Stroke", "Blue");
   await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:box")?.meta?.unframed?.design?.strokeColor === "#3e63dd");
 
-  await select(page, "shape:starter-subject");
+  await select(page, "shape:sample-subject");
   await row(page).getByRole("button", { name: "Text colour", exact: true }).click();
   const hex = page.getByRole("dialog", { name: "Text colour" }).getByRole("textbox", { name: "Custom color value" });
   await hex.fill("#ff0044");
   await hex.press("Enter");
-  await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:starter-subject")?.meta?.unframed?.design?.textColor === "#ff0044");
+  await waitForRoom(engine, "default", (records) => shapeNamed(records, "shape:sample-subject")?.meta?.unframed?.design?.textColor === "#ff0044");
 });
 
 test("stroke width is a number field with a stepper on hover, and the stroke style menu previews each line", async ({ page, engine }) => {
@@ -270,8 +270,8 @@ test("stroke width is a number field with a stepper on hover, and the stroke sty
 
 test("font, size, bold and align on a prompt write as the panel writes them, and Align cycles left, centre, right", async ({ page, engine }) => {
   await openCanvas(page, engine);
-  await select(page, "shape:starter-subject");
-  const id = "shape:starter-subject";
+  await select(page, "shape:sample-subject");
+  const id = "shape:sample-subject";
 
   await row(page).getByRole("button", { name: "Font", exact: true }).click();
   const fonts = page.getByRole("menu", { name: "Font" });
@@ -358,7 +358,7 @@ test("the row is absent for one artifact and while the composer is open", async 
   ]);
   await fit(page);
 
-  await select(page, "shape:starter-subject");
+  await select(page, "shape:sample-subject");
   await expect(row(page)).toBeVisible();
   await toolbar(page).getByRole("button", { name: "Generate" }).click();
   await expect(toolbar(page)).toHaveAttribute("data-expanded", "true");
@@ -436,7 +436,7 @@ test("the tool tray follows the picked tool, closes on Select, and gives way to 
   await page.getByTestId("tools.select").click();
   await expect(tray(page)).toHaveCount(0);
 
-  await select(page, "shape:starter-subject");
+  await select(page, "shape:sample-subject");
   await row(page).getByRole("button", { name: "Design panel", exact: true }).click();
   await page.keyboard.press("Escape");
   await page.getByTestId("tools.draw").click();
@@ -446,8 +446,8 @@ test("the tool tray follows the picked tool, closes on Select, and gives way to 
 
 test("a burst of stepper clicks is one undo step", async ({ page, engine }) => {
   await openCanvas(page, engine);
-  await select(page, "shape:starter-subject");
-  const id = "shape:starter-subject";
+  await select(page, "shape:sample-subject");
+  const id = "shape:sample-subject";
   await field(row(page), "Size").hover();
   for (let step = 0; step < 4; step += 1) await row(page).getByRole("button", { name: "Increase", exact: true }).click();
   await waitForRoom(engine, "default", (records) => shapeNamed(records, id)?.meta?.unframed?.design?.fontSize === 22);

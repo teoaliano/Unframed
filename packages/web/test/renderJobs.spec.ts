@@ -77,7 +77,7 @@ test("a failed render says why on its placeholder", async ({ page, videoEngine: 
 test("a failed render keeps its recipe: Regenerate, sent from the composer, starts the same render again beside it", async ({ page, videoEngine: video }) => {
   video.jobs.status((id) => ({ kind: "data", data: { id, status: "failed", error: { message: "Output flagged" } } }));
   await openCanvas(page, video.engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await chooseVideo(page);
   await sendRun(page);
@@ -191,7 +191,7 @@ test("Generate reads Starting… and stays disabled until video.start answers; a
     return { kind: "job", id: "gen-ui" };
   });
   await openCanvas(page, video.engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await chooseVideo(page);
   await pressSend(page);

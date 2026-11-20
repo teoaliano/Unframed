@@ -1,4 +1,5 @@
 import { test as base, type Page, type WebSocket } from "@playwright/test";
+import { seedSamplePrompts } from "../../engine/test/canvasRecords.ts";
 import { startEngine, type EngineOptions, type TestEngine } from "../../engine/test/engineProcess.ts";
 
 export const webDist = (): string => {
@@ -15,9 +16,18 @@ const NO_AGENT_CLI = { CLAUDE_PATH: "/nonexistent/unframed-test/claude", CODEX_P
 /** The key a hosted engine has unless the test gives it a `.env` of its own. */
 export const FIXTURE_KEY = "sk-or-v1-test-key-0000abcd";
 
-export const startHostedEngine = (options: EngineOptions = {}): Promise<TestEngine> =>
-  startEngine({
+// Every test but the onboarding's starts past the first-run checklist, on the `default` project.
+export const ONBOARDING_DONE = { onboarding: { done: true, seen: [] } };
+
+export interface HostedEngineOptions extends EngineOptions {
+  /** Create `default` with the two sample prompts on it before the app opens (default true). New projects start empty. */
+  readonly samplePrompts?: boolean;
+}
+
+export const startHostedEngine = async ({ samplePrompts = true, ...options }: HostedEngineOptions = {}): Promise<TestEngine> => {
+  const engine = await startEngine({
     clientDist: webDist(),
+    preferences: ONBOARDING_DONE,
     ...options,
     env: {
       UNFRAMED_TEST_CANVAS: "1",
@@ -28,6 +38,16 @@ export const startHostedEngine = (options: EngineOptions = {}): Promise<TestEngi
       ...options.env,
     },
   });
+  if (samplePrompts) {
+    const rpc = await engine.rpc();
+    await rpc.call("projects.create", { name: "default" }).then(
+      () => seedSamplePrompts(rpc, "default"),
+      () => undefined,
+    );
+    await rpc.close();
+  }
+  return engine;
+};
 
 type Fixtures = { engine: TestEngine };
 

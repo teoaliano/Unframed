@@ -49,20 +49,20 @@ test("the device pans its own view and leaves the Mac's where it was", async ({ 
   let device: DeviceClient | undefined;
   try {
     const project = await openCanvas(page, engine);
-    const starter = "shape:starter-scene";
-    await expect(shapeOnScreen(page, starter)).toBeVisible();
+    const sample = "shape:sample-scene";
+    await expect(shapeOnScreen(page, sample)).toBeVisible();
     device = await openDevice(engine, project);
     const onDevice = device.page;
-    await expect(shapeOnScreen(onDevice, starter)).toBeVisible({ timeout: 20_000 });
+    await expect(shapeOnScreen(onDevice, sample)).toBeVisible({ timeout: 20_000 });
 
-    const macBefore = await centre(shapeOnScreen(page, starter));
-    const deviceBefore = await centre(shapeOnScreen(onDevice, starter));
+    const macBefore = await centre(shapeOnScreen(page, sample));
+    const deviceBefore = await centre(shapeOnScreen(onDevice, sample));
 
     await onDevice.mouse.move(600, 400);
     await onDevice.mouse.wheel(0, 240);
-    await expect.poll(async () => Math.round((await centre(shapeOnScreen(onDevice, starter))).y)).not.toBe(Math.round(deviceBefore.y));
+    await expect.poll(async () => Math.round((await centre(shapeOnScreen(onDevice, sample))).y)).not.toBe(Math.round(deviceBefore.y));
 
-    const macAfter = await centre(shapeOnScreen(page, starter));
+    const macAfter = await centre(shapeOnScreen(page, sample));
     expect(Math.round(macAfter.x)).toBe(Math.round(macBefore.x));
     expect(Math.round(macAfter.y)).toBe(Math.round(macBefore.y));
   } finally {

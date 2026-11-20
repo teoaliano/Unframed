@@ -17,16 +17,16 @@ test("Cmd-Z undoes only this tab's edit: another tab's edit and an engine-side c
   await openCanvas(page, engine);
   const other = await context.newPage();
   await openCanvas(other, engine);
-  const scene = (await record(engine, "shape:starter-scene"))!;
-  const subject = (await record(engine, "shape:starter-subject"))!;
+  const scene = (await record(engine, "shape:sample-scene"))!;
+  const subject = (await record(engine, "shape:sample-subject"))!;
 
-  await dragBy(page, "shape:starter-scene", 80, 0);
-  await expect.poll(async () => (await record(engine, "shape:starter-scene"))!.x).toBeGreaterThan(scene.x! + 5);
-  const movedScene = (await settledRecord(engine, "default", "shape:starter-scene"))!;
+  await dragBy(page, "shape:sample-scene", 80, 0);
+  await expect.poll(async () => (await record(engine, "shape:sample-scene"))!.x).toBeGreaterThan(scene.x! + 5);
+  const movedScene = (await settledRecord(engine, "default", "shape:sample-scene"))!;
 
-  await dragBy(other, "shape:starter-subject", 0, 60);
-  await expect.poll(async () => (await record(engine, "shape:starter-subject"))!.y).toBeGreaterThan(subject.y! + 5);
-  const movedSubject = (await settledRecord(engine, "default", "shape:starter-subject"))!;
+  await dragBy(other, "shape:sample-subject", 0, 60);
+  await expect.poll(async () => (await record(engine, "shape:sample-subject"))!.y).toBeGreaterThan(subject.y! + 5);
+  const movedSubject = (await settledRecord(engine, "default", "shape:sample-subject"))!;
 
   const placeholder: AnyRecord = {
     ...subject,
@@ -43,15 +43,15 @@ test("Cmd-Z undoes only this tab's edit: another tab's edit and an engine-side c
   await expect(shapeOnScreen(page, "shape:from-engine")).toBeVisible();
 
   await page.keyboard.press("ControlOrMeta+z");
-  await expect.poll(async () => (await record(engine, "shape:starter-scene"))!.x).toBe(scene.x);
-  expect((await record(engine, "shape:starter-subject"))!.y).toBe(movedSubject.y);
+  await expect.poll(async () => (await record(engine, "shape:sample-scene"))!.x).toBe(scene.x);
+  expect((await record(engine, "shape:sample-subject"))!.y).toBe(movedSubject.y);
   expect(await record(engine, "shape:from-engine")).toBeDefined();
 
   await page.keyboard.press("ControlOrMeta+Shift+z");
-  await expect.poll(async () => (await record(engine, "shape:starter-scene"))!.x).toBe(movedScene.x);
+  await expect.poll(async () => (await record(engine, "shape:sample-scene"))!.x).toBe(movedScene.x);
 
   await page.keyboard.press("ControlOrMeta+z");
-  await expect.poll(async () => (await record(engine, "shape:starter-scene"))!.x).toBe(scene.x);
+  await expect.poll(async () => (await record(engine, "shape:sample-scene"))!.x).toBe(scene.x);
   await page.keyboard.press("ControlOrMeta+y");
-  await expect.poll(async () => (await record(engine, "shape:starter-scene"))!.x).toBe(movedScene.x);
+  await expect.poll(async () => (await record(engine, "shape:sample-scene"))!.x).toBe(movedScene.x);
 });

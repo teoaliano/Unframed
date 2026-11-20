@@ -58,7 +58,7 @@ describe("run.audio", () => {
         selectionPrompt: "[whispers] Hello there",
         instruction: "slowly",
         prompt: "[whispers] Hello there\n\nslowly",
-        sources: ["shape:starter-subject"],
+        sources: ["shape:sample-subject"],
         anchor: { x: 40, y: 60, w: 320, h: 300 },
       }),
     );
@@ -70,7 +70,7 @@ describe("run.audio", () => {
       meta: {
         unframed: {
           run: { runId: started.runId, runIndex: 1 },
-          result: { sidecar: null, medium: "audio", model: "eleven_multilingual_v2", runIndex: 1, runCount: 1, cost: null, credits: null, sources: ["shape:starter-subject"] },
+          result: { sidecar: null, medium: "audio", model: "eleven_multilingual_v2", runIndex: 1, runCount: 1, cost: null, credits: null, sources: ["shape:sample-subject"] },
         },
       },
     });
@@ -122,7 +122,7 @@ describe("run.audio", () => {
         selectionPrompt: "[whispers] Hello there",
         instruction: "slowly",
         references: [],
-        sources: ["shape:starter-subject"],
+        sources: ["shape:sample-subject"],
       },
     });
     expect("cost" in sidecar).toBe(false);

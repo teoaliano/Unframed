@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { toast } from "./canvas.ts";
-import { expect, startHostedEngine, test } from "./fixtures.ts";
+import { expect, ONBOARDING_DONE, startHostedEngine, test } from "./fixtures.ts";
 
 const LOST = "Lost the connection to the local server. Reconnecting…";
 
@@ -27,7 +27,7 @@ test.describe("the initial load", () => {
   });
 
   test("tries a list that fails while connected once more after a second, then shows the sticky failed-list toast and opens nothing", async ({ page }) => {
-    const engine = await startHostedEngine({ dotenv: "OUTPUT_DIR=./blocked\n" });
+    const engine = await startHostedEngine({ dotenv: "OUTPUT_DIR=./blocked\n", samplePrompts: false });
     try {
       await writeFile(join(engine.dataDir, "blocked"), "a file where the folder should be");
       const lists: number[] = [];
@@ -45,7 +45,7 @@ test.describe("the initial load", () => {
       await expect(failed).toBeVisible();
       expect(lists).toHaveLength(2);
       await expect(page.locator("[data-canvas-project]")).toHaveCount(0);
-      expect((await (await engine.rpc()).call("preferences.get", {})).values).toEqual({});
+      expect((await (await engine.rpc()).call("preferences.get", {})).values).toEqual(ONBOARDING_DONE);
     } finally {
       await engine.dispose();
     }
