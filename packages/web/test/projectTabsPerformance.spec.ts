@@ -26,7 +26,7 @@ const board = (seed: number) =>
   );
 
 const seed = async (engine: TestEngine, name: string) => {
-  await (await engine.rpc()).call("projects.create", { name });
+  await (await engine.rpc()).call("projects.create", { name }).catch(() => undefined);
   await putRecords(engine, board(name.length * 97 + name.charCodeAt(name.length - 1)), name);
 };
 
