@@ -88,6 +88,32 @@ describe("the built motion viewer relay", () => {
     expect(compositionPosted.map((entry) => (entry[0] as { mode: string }).mode)).toEqual(["edit", "interact"]);
   });
 
+  it("relays a configured https peer and ignores a different https origin", () => {
+    const peer = "https://homebox.tail1234.ts.net:5173";
+    const listeners: Listener[] = [];
+    const composition = { postMessage: (...args: unknown[]) => compositionPosted.push(args) };
+    const compositionPosted: unknown[][] = [];
+    const player = {
+      attributes: {} as Record<string, string>,
+      setAttribute(name: string, value: string) {
+        this.attributes[name] = value;
+      },
+      iframeElement: { contentWindow: composition },
+    };
+    const win = {
+      location: { origin: OWN, search: "?c=comp.html" },
+      addEventListener: (_type: string, listener: Listener) => listeners.push(listener),
+    };
+    viewerRelay(win, player, [peer, "https://evil.example/nope"]);
+    const from = (source: unknown, origin: string, data: unknown) => {
+      for (const listener of listeners) listener({ source, origin, data });
+    };
+    const canvas = { postMessage() {} };
+    from(canvas, "https://other.example", { type: "unframed:dials:set", values: { speed: 2 } });
+    from(canvas, peer, { type: "unframed:dials:set", values: { speed: 3 } });
+    expect(compositionPosted).toEqual([[{ type: "unframed:dials:set", values: { speed: 3 } }, OWN]]);
+  });
+
   it("ignores edit messages from an origin that is neither its own nor loopback", () => {
     const { canvas, from, compositionPosted, canvasPosted } = stubViewer();
     from(canvas, "https://evil.example", { type: "unframed:edit:hello" });

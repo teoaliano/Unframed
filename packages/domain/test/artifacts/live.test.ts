@@ -32,6 +32,12 @@ describe("live viewer names", () => {
       "http://localhost:18787/p/my%20board/unframed-live.html?s=landing",
     );
     expect(liveViewerUrl({ appHostname: "localhost", previewPort: 18787, project: "board", shapeId: "shape:x" })).toBe("http://127.0.0.1:18787/p/board/unframed-live.html?s=x");
+    expect(liveViewerUrl({ appHostname: "localhost", previewPort: 18787, project: "board", shapeId: "shape:x", previewOrigin: "https://homebox.tail1234.ts.net:18787" })).toBe(
+      "https://homebox.tail1234.ts.net:18787/p/board/unframed-live.html?s=x",
+    );
+    expect(liveViewerUrl({ appHostname: "localhost", previewPort: 18787, project: "board", shapeId: "shape:x", previewOrigin: "https://homebox.tail1234.ts.net:18787/p" })).toBe(
+      "http://127.0.0.1:18787/p/board/unframed-live.html?s=x",
+    );
   });
 
   it("writes the pointer as one call to the viewer's unframedLive, and nothing when the viewer is not there", () => {

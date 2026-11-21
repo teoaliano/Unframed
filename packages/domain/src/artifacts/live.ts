@@ -1,3 +1,4 @@
+import { bareOrigin } from "../devShare.ts";
 import { previewHostFor, type ArtifactKind } from "./artifactRules.ts";
 
 export const LIVE_VIEWER_FILE = "unframed-live.html";
@@ -68,10 +69,13 @@ export const liveViewerUrl = (input: {
   readonly previewPort: number;
   readonly project: string;
   readonly shapeId: string;
+  readonly previewOrigin?: string | undefined;
 }): string | undefined => {
   const key = liveKey(input.shapeId);
   if (key === undefined) return undefined;
-  return `http://${previewHostFor(input.appHostname)}:${input.previewPort}/p/${encodeURIComponent(input.project)}/${LIVE_VIEWER_FILE}?s=${key}`;
+  const origin = bareOrigin(input.previewOrigin);
+  const root = origin ?? `http://${previewHostFor(input.appHostname)}:${input.previewPort}`;
+  return `${root}/p/${encodeURIComponent(input.project)}/${LIVE_VIEWER_FILE}?s=${key}`;
 };
 
 interface LiveFrame {

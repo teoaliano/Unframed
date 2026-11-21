@@ -188,4 +188,34 @@ describe("the preview origin", () => {
     expect(gone.status).toBe(404);
     expect(gone.text).toContain("This file is no longer in the project.");
   });
+
+  it("names one dev share origin in frame-ancestors and still refuses a non-loopback host", async () => {
+    const share = "https://homebox.tail1234.ts.net:5173";
+    const engine = await startEngine({ env: { UNFRAMED_DEV_SHARE_ORIGIN: share } });
+    await (await engine.rpc()).call("projects.create", { name: "board" });
+    await writeFile(join(engine.dataDir, "output", "board", "landing.html"), "<h1>Hello</h1>");
+    const served = await preview(engine, "/p/board/landing.html");
+    expect(served.status).toBe(200);
+    expect(served.headers["content-security-policy"]).toBe(`${CSP} ${share}`);
+    const bridge = await preview(engine, "/p/board/unframed-dials.js");
+    expect(bridge.status).toBe(200);
+    expect(bridge.text).toContain(share);
+    const edit = await preview(engine, "/p/board/unframed-edit.js");
+    expect(edit.status).toBe(200);
+    expect(edit.text).toContain(share);
+    const foreignHost = await preview(engine, "/p/board/landing.html", { headers: { host: `homebox.tail1234.ts.net:${engine.previewPort}` } });
+    expect(foreignHost.status).toBe(403);
+    expect(foreignHost.text).toBe("Unframed answers only requests addressed to localhost.");
+    const foreignOrigin = await preview(engine, "/p/board/landing.html", { headers: { origin: share } });
+    expect(foreignOrigin.status).toBe(403);
+    expect(foreignOrigin.text).toBe("Unframed answers only same-machine requests.");
+  });
+
+  it("ignores a dev share origin that is not a bare https origin", async () => {
+    const engine = await startEngine({ env: { UNFRAMED_DEV_SHARE_ORIGIN: "https://homebox.tail1234.ts.net:5173/app" } });
+    await (await engine.rpc()).call("projects.create", { name: "board" });
+    await writeFile(join(engine.dataDir, "output", "board", "landing.html"), "<h1>Hello</h1>");
+    const served = await preview(engine, "/p/board/landing.html");
+    expect(served.headers["content-security-policy"]).toBe(CSP);
+  });
 });
