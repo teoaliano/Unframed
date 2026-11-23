@@ -3,19 +3,21 @@ import { loopbackGuard } from "../src/index.ts";
 
 const SAME_MACHINE = { allowed: false, status: 403, error: "Unframed answers only same-machine requests." };
 const LOCALHOST = { allowed: false, status: 403, error: "Unframed answers only requests addressed to localhost." };
+const OWN_PAGES = { allowed: false, status: 403, error: "Unframed answers only its own pages." };
 const ALLOWED = { allowed: true };
 
 describe("loopback guard", () => {
   it.each([
-    ["http://localhost", "localhost:8787"],
     ["http://localhost:5173", "localhost:5173"],
     ["https://localhost:5173", "localhost:5173"],
     ["http://127.0.0.1:8787", "127.0.0.1:8787"],
     ["http://127.0.0.1", "127.0.0.1"],
+    ["http://localhost", "127.0.0.1:80"],
+    ["http://127.0.0.1:8787", "localhost:8787"],
     ["http://[::1]:8787", "[::1]:8787"],
     ["http://[::1]", "[::1]"],
     ["http://LOCALHOST:8787", "LOCALHOST:8787"],
-    ["HTTP://LocalHost:1", "localhost"],
+    ["HTTP://LocalHost:1", "localhost:1"],
   ])("allows loopback origin %s with host %s", (origin, host) => {
     expect(loopbackGuard({ origin, host })).toEqual(ALLOWED);
   });
@@ -62,6 +64,16 @@ describe("loopback guard", () => {
   it("refuses an absent Host", () => {
     expect(loopbackGuard({})).toEqual(LOCALHOST);
     expect(loopbackGuard({ origin: "http://localhost:5173" })).toEqual(LOCALHOST);
+  });
+
+  it.each([
+    ["http://localhost:5173", "localhost:8787"],
+    ["http://127.0.0.1:3000", "127.0.0.1:8787"],
+    ["http://[::1]:4000", "localhost:8787"],
+    ["http://localhost", "localhost:8787"],
+    ["https://localhost:443", "localhost:8787"],
+  ])("refuses loopback origin %s on another port than host %s, as a page an Instance serves", (origin, host) => {
+    expect(loopbackGuard({ origin, host })).toEqual(OWN_PAGES);
   });
 
   it("checks Origin before Host", () => {

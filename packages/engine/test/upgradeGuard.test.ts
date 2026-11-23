@@ -41,6 +41,18 @@ describe("WebSocket upgrade guard", () => {
     });
   });
 
+  it("refuses a loopback Origin on another port, so a page an Instance serves cannot reach the engine", async () => {
+    for (const path of ["/ws", "/sync/board?sessionId=abc"]) {
+      const result = await outcome(engine.socket({ path, headers: { origin: "http://127.0.0.1:3000" } }));
+      expect(result, path).toEqual({
+        opened: false,
+        status: 403,
+        body: JSON.stringify({ error: "Unframed answers only its own pages." }),
+        upgrade: undefined,
+      });
+    }
+  });
+
   it("refuses a non-loopback Host with a plain 403 and no handshake", async () => {
     const result = await outcome(engine.socket({ headers: { host: `rebound.example:${engine.port}` } }));
     expect(result).toEqual({

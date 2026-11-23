@@ -175,6 +175,15 @@ describe("the preview origin", () => {
     expect(response.text).toBe("Unframed answers only same-machine requests.");
   });
 
+  it("serves its own pages' requests and refuses a loopback page on another port", async () => {
+    const { engine } = await withProject({ "landing.html": "<h1>Hello</h1>" });
+    const own = await preview(engine, "/p/board/landing.html", { headers: { origin: `http://127.0.0.1:${engine.previewPort}` } });
+    expect(own.status).toBe(200);
+    const foreign = await preview(engine, "/p/board/landing.html", { headers: { origin: "http://127.0.0.1:3000" } });
+    expect(foreign.status).toBe(403);
+    expect(foreign.text).toBe("Unframed answers only its own pages.");
+  });
+
   it("follows an output folder change without a restart", async () => {
     const { engine } = await withProject({ "landing.html": "<h1>old</h1>" });
     const next = join(await makeTempDir(), "moved");
