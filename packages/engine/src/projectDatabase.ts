@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { UnframedError, unframedError } from "@unframed/contracts";
@@ -10,6 +11,7 @@ import { createChatTables } from "./agent/chatTables.ts";
 import { createCommentChatsTable } from "./agent/commentChats.ts";
 import { ImportFailed, makeLegacyImporter, type ImportState } from "./legacy/importer.ts";
 import { createLegacyImportReportTable } from "./legacy/reportTable.ts";
+import { createRepositoryTables } from "./repositories/tables.ts";
 import { errorText } from "./log.ts";
 import { OpenProjects } from "./openProjects.ts";
 import { Config } from "./services.ts";
@@ -35,6 +37,7 @@ export const MIGRATIONS: ReadonlyArray<Migration> = [
   { id: 3, name: "chat store and turn_changes", up: createChatTables },
   { id: 4, name: "legacy_import_report", up: createLegacyImportReportTable },
   { id: 5, name: "comment_chats", up: createCommentChatsTable },
+  { id: 6, name: "project_info and repository", up: createRepositoryTables },
 ];
 
 /** `UNFRAMED_TEST_MIGRATION`'s extra migration, numbered far past any real one. */
@@ -92,6 +95,7 @@ export class ProjectDatabase extends Context.Service<
     readonly importState: (project: string) => Effect.Effect<ImportState>;
     /** Forgets a failed import, so the next `open` runs it again. */
     readonly retryImport: (project: string) => Effect.Effect<void>;
+    readonly peek: <A>(project: string, read: (db: DatabaseSync) => A) => Effect.Effect<A | undefined>;
   }
 >()("unframed/engine/ProjectDatabase") {}
 
@@ -160,8 +164,27 @@ export const projectDatabaseLayer = Layer.effect(
         return handle;
       });
 
+    const peek = <A>(project: string, read: (db: DatabaseSync) => A) =>
+      Effect.map(folderOf(project), (folder) => {
+        const path = join(folder, DATABASE_FILE);
+        const cached = handles.get(path);
+        if (cached) return read(cached.db);
+        if (!existsSync(path)) return undefined;
+        let db: DatabaseSync | undefined;
+        try {
+          db = new DatabaseSync(path);
+          db.exec("PRAGMA busy_timeout = 5000");
+          return read(db);
+        } catch {
+          return undefined;
+        } finally {
+          db?.close();
+        }
+      });
+
     return ProjectDatabase.of({
       open,
+      peek,
       importState: (project) => Effect.map(folderOf(project), (folder) => importer.state(folder)),
       retryImport: (project) => Effect.map(folderOf(project), (folder) => importer.forgetFailure(folder)),
     });

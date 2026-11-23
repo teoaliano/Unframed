@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { UnframedError, UnframedRpcs, unframedError, type ResultRecipe } from "@unframed/contracts";
 import { connectionSetup } from "@unframed/domain";
 import { AgentConnections } from "../agentConnections/layer.ts";
@@ -17,7 +18,7 @@ import { clearStoredModels } from "../lastUsed.ts";
 import { Native } from "../native.ts";
 import { Catalogue } from "../openRouter/catalogue.ts";
 import { ElevenLabsError, listAudioModels, listVoices, subscriptionStatus } from "../elevenLabs/client.ts";
-import { ELEVENLABS_NO_KEY, FEATURE_OFF_MESSAGES, featureList, GENERATION_PROVIDERS, providerServesMessage } from "@unframed/domain";
+import { ELEVENLABS_NO_KEY, FEATURE_OFF_MESSAGES, REPOSITORY_FOLDER_PROMPT, featureList, GENERATION_PROVIDERS, providerServesMessage } from "@unframed/domain";
 import type { Feature } from "@unframed/contracts";
 import { vercelCredits } from "../vercel/client.ts";
 import { providerCatalogues } from "../runs/providers.ts";
@@ -26,6 +27,7 @@ import { Runs } from "../runs/runs.ts";
 import { RenderJobs } from "../video/renderJobs.ts";
 import { PreferencesStore } from "../preferencesStore.ts";
 import { Projects } from "../projects.ts";
+import { Repositories } from "../repositories/layer.ts";
 import { filePath, revealFiles } from "../reveal.ts";
 import { Config } from "../services.ts";
 import { SettingsStore } from "../settingsStore.ts";
@@ -53,6 +55,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
   Effect.gen(function* () {
     const settings = yield* SettingsStore;
     const projects = yield* Projects;
+    const repositories = yield* Repositories;
     const native = yield* Native;
     const preferences = yield* PreferencesStore;
     const rooms = yield* CanvasRooms;
@@ -139,7 +142,9 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "projects.delete": ({ name, confirmRenders }) => lifecycle.deleteProject(name, confirmRenders === true),
       "settings.pickFolder": () =>
         Effect.map(Effect.flatMap(settings.outputDir, native.pickFolder), (path) => ({ path })),
-      "projects.list": () => Effect.map(projects.list, (list) => ({ projects: [...list] })),
+      "projects.list": () => Effect.flatMap(projects.list, (list) => Effect.map(repositories.kinds(list), (kinds) => ({ projects: [...list], kinds }))),
+      "repositories.pickFolder": () => featureOn("repositories", () => Effect.map(native.pickFolder(homedir(), REPOSITORY_FOLDER_PROMPT), (path) => ({ path }))),
+      "repositories.add": ({ path, name }) => featureOn("repositories", () => repositories.add(path, name)),
       "projects.activity": () =>
         projectActivityStream({
           list: projects.list,

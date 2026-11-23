@@ -132,6 +132,8 @@ describe("allowedForDevice", () => {
     "files.reveal",
     "files.path",
     "settings.pickFolder",
+    "repositories.pickFolder",
+    "repositories.add",
     "oauth.start",
     "oauth.cancel",
     "agentConnections.create",

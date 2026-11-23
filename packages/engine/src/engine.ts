@@ -34,6 +34,7 @@ import { installRoot } from "./paths.ts";
 import { preferencesStoreLayer } from "./preferencesStore.ts";
 import { projectDatabaseLayer } from "./projectDatabase.ts";
 import { Projects, projectsLayer } from "./projects.ts";
+import { repositoriesLayer } from "./repositories/layer.ts";
 import { rpcHandlersLayer } from "./rpc/handlers.ts";
 import { lifecycleLayer } from "./lifecycle.ts";
 import { OAuth, oauthLayer } from "./oauth/oauth.ts";
@@ -124,7 +125,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
     Layer.provideMerge(videoCatalogueLayer),
     Layer.provideMerge(mediaStoreLayer),
     Layer.provideMerge(canvasRoomsLayer),
-    Layer.provideMerge(nativeLayer),
+    Layer.provideMerge(Layer.mergeAll(nativeLayer, repositoriesLayer)),
     Layer.provideMerge(Layer.mergeAll(preferencesStoreLayer, agentConnectionsLayer, selectionHubLayer, ipadLayer)),
     Layer.provideMerge(projectsLayer),
     Layer.provideMerge(projectDatabaseLayer),

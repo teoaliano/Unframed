@@ -22,7 +22,7 @@ export class Native extends Context.Service<
     /** `files` are absolute paths that exist. Answers the count revealed, or `"folder"`. */
     readonly reveal: (folder: string, files: ReadonlyArray<string>) => Effect.Effect<number | "folder">;
     /** Answers the chosen path, `''` when cancelled. */
-    readonly pickFolder: (currentOutputDir: string) => Effect.Effect<string, UnframedError>;
+    readonly pickFolder: (location: string, prompt?: string) => Effect.Effect<string, UnframedError>;
   }
 >()("unframed/engine/Native") {}
 
@@ -85,10 +85,10 @@ export const nativeLayer = Layer.effect(
         return plan.revealed;
       });
 
-    const pickFolder = (currentOutputDir: string) =>
+    const pickFolder = (location: string, prompt?: string) =>
       Effect.gen(function* () {
         const outcome = yield* Effect.promise(() =>
-          runner.run(folderPickerPlan(config.platform, currentOutputDir)).catch(() => undefined),
+          runner.run(folderPickerPlan(config.platform, location, prompt)).catch(() => undefined),
         );
         if (outcome === undefined) return yield* unframedError("unavailable", NO_PICKER);
         return folderPickerResult(outcome.exitCode, outcome.stdout);

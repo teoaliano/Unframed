@@ -8,7 +8,7 @@ describe("projects.list", () => {
     const engine = await startEngine({ dotenv: "OUTPUT_DIR=./not/there/yet\n" });
     const output = join(engine.dataDir, "not/there/yet");
     await expect(stat(output)).rejects.toThrow();
-    expect(await (await engine.rpc()).call("projects.list")).toEqual({ projects: [] });
+    expect(await (await engine.rpc()).call("projects.list")).toEqual({ projects: [], kinds: {} });
     expect((await stat(output)).isDirectory()).toBe(true);
   });
 
@@ -22,7 +22,17 @@ describe("projects.list", () => {
     await writeFile(join(output, "stray.png"), "");
     expect(await (await engine.rpc()).call("projects.list")).toEqual({
       projects: ["10-numbers", "alpha", "middle-2", "zebra"],
+      kinds: { "10-numbers": "whiteboard", alpha: "whiteboard", "middle-2": "whiteboard", zebra: "whiteboard" },
     });
+  });
+
+  it("answers whiteboard for every existing project, opened or not, without creating a database", async () => {
+    const engine = await startEngine();
+    const rpc = await engine.rpc();
+    await rpc.call("projects.create", { name: "opened" });
+    await mkdir(join(engine.dataDir, "output", "never-opened"), { recursive: true });
+    expect(await rpc.call("projects.list")).toEqual({ projects: ["never-opened", "opened"], kinds: { "never-opened": "whiteboard", opened: "whiteboard" } });
+    expect(await readdir(join(engine.dataDir, "output", "never-opened"))).toEqual([]);
   });
 
   it("answers internal when the output folder path is taken by a file, and keeps answering", async () => {
@@ -43,7 +53,7 @@ describe("projects.create", () => {
     const rpc = await engine.rpc();
     expect(await rpc.call("projects.create", { name: "  My First Board!  " })).toEqual({ name: "my-first-board" });
     expect((await stat(join(engine.dataDir, "output", "my-first-board"))).isDirectory()).toBe(true);
-    expect(await rpc.call("projects.list")).toEqual({ projects: ["my-first-board"] });
+    expect(await rpc.call("projects.list")).toEqual({ projects: ["my-first-board"], kinds: { "my-first-board": "whiteboard" } });
   });
 
   it("refuses a name whose slug is taken with conflict", async () => {
@@ -70,7 +80,7 @@ describe("projects.create", () => {
         message: "Enter a project name.",
       });
     }
-    expect(await rpc.call("projects.list")).toEqual({ projects: [] });
+    expect(await rpc.call("projects.list")).toEqual({ projects: [], kinds: {} });
   });
 
   it("keeps a name inside the output folder", async () => {

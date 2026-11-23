@@ -11,6 +11,7 @@ const listTools = (token: string) => ({
 
 const NODES_OFF = { code: "unavailable", message: "Nodes are not available in this build." };
 const EDITING_OFF = { code: "unavailable", message: "Element editing is not available in this build." };
+const REPOSITORIES_OFF = { code: "unavailable", message: "Repositories are not available in this build." };
 
 const toolsOf = async (features: string | undefined) => {
   const agent = await startAgentEngine({ env: { UNFRAMED_FEATURES: features } });
@@ -27,7 +28,7 @@ describe("UNFRAMED_FEATURES", () => {
   it.each([
     [undefined, []],
     ["element-editing,teleport", ["element-editing"]],
-    ["all", ["nodes", "element-editing"]],
+    ["all", ["nodes", "element-editing", "repositories"]],
   ])("with UNFRAMED_FEATURES=%j, server.health reports %j", async (value, features) => {
     const engine = await startEngine({ env: { UNFRAMED_FEATURES: value } });
     expect((await (await engine.rpc()).call("server.health")).features).toEqual(features);
@@ -56,5 +57,14 @@ describe("UNFRAMED_FEATURES", () => {
     expect(await rpc.call("node.renders", { project, files: [] })).toEqual({ renders: {} });
     await expect(rpc.call("artifact.prepareEdit", { project, shapeId: "shape:p" })).rejects.toMatchObject(EDITING_OFF);
     await expect(rpc.call("artifact.edit", { project, shapeId: "shape:p", baseFile: "1-page.html", edits: [] })).rejects.toMatchObject(EDITING_OFF);
+  });
+
+  it("with repositories off, refuses every Repository RPC and never opens the picker", async () => {
+    const engine = await startEngine({ env: { UNFRAMED_FEATURES: undefined, UNFRAMED_TEST_PICK_FOLDER: "/Users/someone/app" } });
+    const rpc = await engine.rpc();
+    await expect(rpc.call("repositories.pickFolder")).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("repositories.add", { path: engine.dataDir })).rejects.toMatchObject(REPOSITORIES_OFF);
+    expect(await engine.nativeLog()).toEqual([]);
+    expect((await rpc.call("projects.list")).projects).toEqual([]);
   });
 });

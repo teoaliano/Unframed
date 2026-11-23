@@ -20,3 +20,4 @@ export * from "./spend.ts";
 export * from "./nodes.ts";
 export * from "./vercel.ts";
 export * from "./ipad.ts";
+export * from "./repositories.ts";
