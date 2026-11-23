@@ -32,17 +32,35 @@ const server = http.createServer((req, res) => {
     res.writeHead(302, { "set-cookie": "session=signed-in; Path=/; SameSite=Lax; HttpOnly", location: "http://localhost:" + port + "/" });
     return res.end();
   }
-  if (url.pathname === "/__fake/info") {
+  if (url.pathname.endsWith("/__fake/info")) {
     res.writeHead(200, { "content-type": "application/json" });
-    return res.end(JSON.stringify({ argv: args, envPort: process.env.PORT ?? null, cwd: process.cwd(), pid: process.pid, host: req.headers.host ?? null, cookie: req.headers.cookie ?? null }));
+    return res.end(JSON.stringify({ argv: args, envPort: process.env.PORT ?? null, cwd: process.cwd(), pid: process.pid, host: req.headers.host ?? null, cookie: req.headers.cookie ?? null, origin: req.headers.origin ?? null, acceptEncoding: req.headers["accept-encoding"] ?? null }));
+  }
+  if (url.pathname === "/deny") {
+    res.writeHead(200, { "content-type": "text/html", "x-frame-options": "DENY", "content-security-policy": "frame-ancestors 'none'; script-src 'self' 'nonce-fake123'" });
+    return res.end("<html><head><title>Deny</title></head><body>deny</body></html>");
+  }
+  if (url.pathname === "/split") {
+    res.writeHead(200, { "content-type": "text/html" });
+    res.write("<!doctype html><html><he");
+    return setTimeout(() => res.end("ad><title>Split</title></head><body>split</body></html>"), 50);
+  }
+  if (url.pathname === "/headless") {
+    res.writeHead(200, { "content-type": "text/html" });
+    return res.end("<body>no head here</body>");
+  }
+  const html = "<!doctype html><html><head><title>Fake app</title></head><body><h1>Fake app</h1><p id=\\"path\\">" + url.pathname + "</p></body></html>";
+  if (/gzip/.test(req.headers["accept-encoding"] || "")) {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8", "content-encoding": "gzip" });
+    return res.end(require("node:zlib").gzipSync(html));
   }
   res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-  res.end("<!doctype html><html><head><title>Fake app</title></head><body><h1>Fake app</h1><p id=\\"path\\">" + url.pathname + "</p></body></html>");
+  res.end(html);
 });
 server.on("upgrade", (req, socket) => {
   const accept = crypto.createHash("sha1").update(req.headers["sec-websocket-key"] + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest("base64");
   socket.write("HTTP/1.1 101 Switching Protocols\\r\\nUpgrade: websocket\\r\\nConnection: Upgrade\\r\\nSec-WebSocket-Accept: " + accept + "\\r\\n\\r\\n");
-  const payload = Buffer.from("hello " + req.url);
+  const payload = Buffer.from("hello " + req.url + " from " + (req.headers.origin || "nowhere") + " at " + (req.headers.host || ""));
   socket.write(Buffer.concat([Buffer.from([0x81, payload.length]), payload]));
   socket.on("error", () => {});
 });

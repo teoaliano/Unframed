@@ -21,6 +21,7 @@ import {
   mergeExclude,
   movedPort,
   neverListened,
+  proxyFailed,
   packageScripts,
   projectSlug,
   serverExited,
@@ -45,6 +46,7 @@ import { readKind, readRepository, type StoredRepository } from "../repositories
 import { Config } from "../services.ts";
 import { Shutdown } from "../shutdown.ts";
 import { answers, freePort, spawnTracked, stopTracked, sweepLeftovers, type Tracked } from "./processes.ts";
+import { startInstanceProxy, type InstanceProxy } from "./proxy.ts";
 import { insertInstance, markInstalled, markRemoved, readInstances, type StoredInstance } from "./tables.ts";
 
 const LOG_TAIL_CHARS = 16_000;
@@ -87,6 +89,8 @@ interface Live {
   error: string | null;
   log: string;
   process: Tracked | undefined;
+  proxy: InstanceProxy | undefined;
+  lastProxyPort: number | null;
   stopping: boolean;
   queue: Promise<unknown>;
   logTimer: NodeJS.Timeout | undefined;
@@ -126,7 +130,7 @@ export const instancesLayer = Layer.effect(
       baseRef: live.stored.baseRef,
       worktree: live.stored.worktree,
       state: live.state,
-      proxyPort: null,
+      proxyPort: live.proxy?.port ?? null,
       upstreamPort: live.upstreamPort,
       error: live.error,
       log: live.log,
@@ -168,6 +172,8 @@ export const instancesLayer = Layer.effect(
       error: null,
       log: "",
       process: undefined,
+      proxy: undefined,
+      lastProxyPort: null,
       stopping: false,
       queue: Promise.resolve(),
       logTimer: undefined,
@@ -284,14 +290,31 @@ export const instancesLayer = Layer.effect(
         const tracked = yield* spawnFor(live, shaped.command, shaped.env, (chunk) => (output = appendLogTail(output, chunk, LOG_TAIL_CHARS)));
         const verdict = yield* Effect.promise(() => awaitListening(live, tracked, port, () => output));
         if (verdict.kind === "live") {
-          setState(live, "live", { upstreamPort: port });
-          void tracked.exited.then((code) => {
-            if (live.process !== tracked) return;
-            live.process = undefined;
-            live.reservedPort = null;
-            if (live.stopping || live.state === "removed") return;
-            setState(live, "failed", { upstreamPort: null, error: serverExited(code) });
-          });
+          const proxied = yield* Effect.result(
+            Effect.tryPromise({
+              try: () => startInstanceProxy({ upstreamPort: port, preferredPort: live.lastProxyPort }),
+              catch: (error) => proxyFailed(errorText(error)),
+            }),
+          );
+          if (proxied._tag === "Success") {
+            live.proxy = proxied.success;
+            live.lastProxyPort = proxied.success.port;
+            setState(live, "live", { upstreamPort: port });
+            void tracked.exited.then(async (code) => {
+              if (live.process !== tracked) return;
+              live.process = undefined;
+              live.reservedPort = null;
+              const expected = live.stopping || live.state === "removed";
+              await closeProxy(live);
+              if (expected) return;
+              setState(live, "failed", { upstreamPort: null, error: serverExited(code) });
+            });
+            return undefined;
+          }
+          yield* Effect.promise(() => stopTracked(tracked, STOP_GRACE_MS));
+          if (live.process === tracked) live.process = undefined;
+          live.reservedPort = null;
+          if (!isRemoved(live)) setState(live, "failed", { upstreamPort: null, error: proxied.failure });
           return undefined;
         }
         yield* Effect.promise(() => stopTracked(tracked, STOP_GRACE_MS));
@@ -301,12 +324,19 @@ export const instancesLayer = Layer.effect(
         return undefined;
       });
 
+    const closeProxy = async (live: Live) => {
+      const proxy = live.proxy;
+      live.proxy = undefined;
+      await proxy?.close();
+    };
+
     const halt = (live: Live) =>
       Effect.promise(async () => {
         live.stopping = true;
         try {
           if (live.process !== undefined) await stopTracked(live.process, STOP_GRACE_MS);
           await live.queue;
+          await closeProxy(live);
         } finally {
           live.stopping = false;
           live.process = undefined;
@@ -468,6 +498,7 @@ export const instancesLayer = Layer.effect(
           [...lives.values()].map(async (live) => {
             live.stopping = true;
             if (live.process !== undefined) await stopTracked(live.process, SHUTDOWN_GRACE_MS);
+            await closeProxy(live);
           }),
         ),
       ),

@@ -18,6 +18,7 @@ export const movedPort = (expected: number, actual: number): string =>
   `The dev server listened on port ${actual} instead of ${expected}, so its port cannot be chosen.`;
 export const serverExited = (code: number | null): string => `The dev server exited${code === null ? "" : ` with code ${code}`}.`;
 export const neverListened = (port: number, seconds: number): string => `The dev server did not listen on port ${port} within ${seconds} seconds.`;
+export const proxyFailed = (reason: string): string => `Unframed could not open the proxy for this Instance: ${reason}`;
 export const setupFailed = (code: number | null): string => `The setup command failed${code === null ? "" : ` with code ${code}`}.`;
 
 const PACKAGE_MANAGERS: ReadonlyArray<PackageManager> = ["npm", "pnpm", "yarn", "bun"];
