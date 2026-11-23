@@ -27,6 +27,7 @@ import { uploadRoute } from "./http/upload.ts";
 import { startPreviewOrigin } from "./http/preview.ts";
 import { listenLoopback, LOOPBACK_HOST } from "./listen.ts";
 import { errorText, logError, logInfo } from "./log.ts";
+import { loginShellLayer } from "./loginShell.ts";
 import { Ipc, nativeLayer } from "./native.ts";
 import { OpenProjects, openProjectsLayer } from "./openProjects.ts";
 import { installRoot } from "./paths.ts";
@@ -129,7 +130,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
     Layer.provideMerge(projectDatabaseLayer),
     Layer.provideMerge(openProjectsLayer),
     Layer.provideMerge(settingsStoreLayer({ fileVars, processEnv: host.env, previewPort })),
-    Layer.provideMerge(Layer.mergeAll(presenceLayer, shutdownLayer)),
+    Layer.provideMerge(Layer.mergeAll(presenceLayer, shutdownLayer, loginShellLayer)),
     Layer.provideMerge(Layer.succeed(Config, config)),
     Layer.provideMerge(Layer.succeed(Ipc, { send: host.send })),
   );
