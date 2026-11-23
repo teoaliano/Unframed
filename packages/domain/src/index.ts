@@ -133,3 +133,4 @@ export * from "./comments/index.ts";
 export * from "./onboarding.ts";
 export * from "./repositories.ts";
 export * from "./instances.ts";
+export * from "./instanceProxy.ts";
