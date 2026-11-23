@@ -42,6 +42,24 @@ export const Repository = Schema.Struct({
 });
 export type Repository = typeof Repository.Type;
 
+export const INSTANCE_STATES = ["creating", "installing", "starting", "live", "stopped", "failed", "removed"] as const;
+export const InstanceState = Schema.Literals(INSTANCE_STATES);
+export type InstanceState = typeof InstanceState.Type;
+
+export const Instance = Schema.Struct({
+  id: Schema.String,
+  repository: Schema.String,
+  branch: Schema.String,
+  baseRef: Schema.String,
+  worktree: Schema.String,
+  state: InstanceState,
+  proxyPort: Schema.NullOr(Schema.Number),
+  upstreamPort: Schema.NullOr(Schema.Number),
+  error: Schema.NullOr(Schema.String),
+  log: Schema.String,
+});
+export type Instance = typeof Instance.Type;
+
 export const RepositoriesPickFolder = Rpc.make("repositories.pickFolder", {
   success: Schema.Struct({ path: Schema.String }),
   error: UnframedError,
@@ -49,6 +67,39 @@ export const RepositoriesPickFolder = Rpc.make("repositories.pickFolder", {
 
 export const RepositoriesAdd = Rpc.make("repositories.add", {
   payload: Schema.Struct({ path: Schema.String, name: Schema.optionalKey(Schema.String) }),
-  success: Schema.Struct({ name: Schema.String, repository: Repository, uncommitted: Schema.Boolean }),
+  success: Schema.Struct({ name: Schema.String, repository: Repository, uncommitted: Schema.Boolean, instance: Instance }),
   error: UnframedError,
+});
+
+const InstanceRef = Schema.Struct({ project: Schema.String, id: Schema.String });
+
+export const InstancesCreate = Rpc.make("instances.create", {
+  payload: Schema.Struct({ project: Schema.String, base: Schema.optionalKey(Schema.String), branch: Schema.optionalKey(Schema.String) }),
+  success: Instance,
+  error: UnframedError,
+});
+
+export const InstancesRemove = Rpc.make("instances.remove", {
+  payload: Schema.Struct({ project: Schema.String, id: Schema.String, force: Schema.optionalKey(Schema.Boolean), deleteBranch: Schema.optionalKey(Schema.Boolean) }),
+  success: Instance,
+  error: UnframedError,
+});
+
+export const InstancesList = Rpc.make("instances.list", {
+  payload: Schema.Struct({ project: Schema.String }),
+  success: Schema.Struct({ instances: Schema.Array(Instance) }),
+  error: UnframedError,
+});
+
+export const InstancesStatus = Rpc.make("instances.status", { payload: InstanceRef, success: Instance, error: UnframedError });
+
+export const InstancesStart = Rpc.make("instances.start", { payload: InstanceRef, success: Instance, error: UnframedError });
+
+export const InstancesStop = Rpc.make("instances.stop", { payload: InstanceRef, success: Instance, error: UnframedError });
+
+export const InstancesSubscribe = Rpc.make("instances.subscribe", {
+  payload: Schema.Struct({ project: Schema.String }),
+  success: Instance,
+  error: UnframedError,
+  stream: true,
 });

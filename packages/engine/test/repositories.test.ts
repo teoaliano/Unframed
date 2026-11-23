@@ -10,6 +10,7 @@ const treeOf = async (root: string): Promise<Record<string, string>> => {
   const tree: Record<string, string> = {};
   const walk = async (dir: string) => {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
+      if (entry.name === ".git") continue;
       const path = join(dir, entry.name);
       const info = await stat(path);
       tree[relative(root, path)] = entry.isDirectory() ? "dir" : `${info.size}:${info.mtimeMs}`;
@@ -38,6 +39,7 @@ describe("repositories.add", () => {
         setup: null,
         addedAt: expect.any(String),
       },
+      instance: expect.objectContaining({ repository: "my-app", baseRef: "trunk" }),
     });
     expect(await rpc.call("projects.list")).toEqual({ projects: ["my-app"], kinds: { "my-app": "repository" } });
     expect(await readdir(join(engine.dataDir, "output", "my-app"))).toContain("unframed.sqlite");

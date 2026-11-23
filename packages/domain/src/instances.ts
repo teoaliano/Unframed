@@ -3,8 +3,8 @@ import type { PackageManager, RepositorySetup } from "@unframed/contracts";
 export const INSTANCE_NOT_FOUND = "That Instance does not exist.";
 export const INSTANCE_REMOVED = "That Instance was removed.";
 export const NOT_A_REPOSITORY_PROJECT = "That project is not a Repository.";
+export const REPOSITORY_NOT_FOUND = "Repository not found.";
 export const NO_RUN_COMMAND = "Unframed does not know how to run this repository yet. Setup finds the run command.";
-export const INSTANCE_BUSY = "That Instance is still being created.";
 export const branchTaken = (branch: string): string => `A branch named "${branch}" already exists.`;
 export const badBranchName = (branch: string): string => `"${branch}" is not a valid branch name.`;
 export const unknownBase = (base: string): string => `There is no branch or commit named "${base}".`;
@@ -16,6 +16,7 @@ export const exitedBeforeListening = (code: number | null, port: number): string
   `The dev server exited${code === null ? "" : ` with code ${code}`} before it listened on port ${port}.`;
 export const movedPort = (expected: number, actual: number): string =>
   `The dev server listened on port ${actual} instead of ${expected}, so its port cannot be chosen.`;
+export const serverExited = (code: number | null): string => `The dev server exited${code === null ? "" : ` with code ${code}`}.`;
 export const neverListened = (port: number, seconds: number): string => `The dev server did not listen on port ${port} within ${seconds} seconds.`;
 export const setupFailed = (code: number | null): string => `The setup command failed${code === null ? "" : ` with code ${code}`}.`;
 

@@ -27,6 +27,7 @@ import { Runs } from "../runs/runs.ts";
 import { RenderJobs } from "../video/renderJobs.ts";
 import { PreferencesStore } from "../preferencesStore.ts";
 import { Projects } from "../projects.ts";
+import { Instances } from "../instances/layer.ts";
 import { Repositories } from "../repositories/layer.ts";
 import { filePath, revealFiles } from "../reveal.ts";
 import { Config } from "../services.ts";
@@ -56,6 +57,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const settings = yield* SettingsStore;
     const projects = yield* Projects;
     const repositories = yield* Repositories;
+    const instances = yield* Instances;
     const native = yield* Native;
     const preferences = yield* PreferencesStore;
     const rooms = yield* CanvasRooms;
@@ -145,6 +147,18 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "projects.list": () => Effect.flatMap(projects.list, (list) => Effect.map(repositories.kinds(list), (kinds) => ({ projects: [...list], kinds }))),
       "repositories.pickFolder": () => featureOn("repositories", () => Effect.map(native.pickFolder(homedir(), REPOSITORY_FOLDER_PROMPT), (path) => ({ path }))),
       "repositories.add": ({ path, name }) => featureOn("repositories", () => repositories.add(path, name)),
+      "instances.create": ({ project, base, branch }) =>
+        featureOn("repositories", () => instances.create(project, { ...(base === undefined ? {} : { base }), ...(branch === undefined ? {} : { branch }) })),
+      "instances.remove": ({ project, id, force, deleteBranch }) =>
+        featureOn("repositories", () =>
+          instances.remove(project, id, { ...(force === undefined ? {} : { force }), ...(deleteBranch === undefined ? {} : { deleteBranch }) }),
+        ),
+      "instances.list": ({ project }) => featureOn("repositories", () => Effect.map(instances.list(project), (list) => ({ instances: [...list] }))),
+      "instances.status": ({ project, id }) => featureOn("repositories", () => instances.status(project, id)),
+      "instances.start": ({ project, id }) => featureOn("repositories", () => instances.start(project, id)),
+      "instances.stop": ({ project, id }) => featureOn("repositories", () => instances.stop(project, id)),
+      "instances.subscribe": ({ project }) =>
+        config.features.has("repositories") ? instances.changes(project) : Stream.fail(unframedError("unavailable", FEATURE_OFF_MESSAGES.repositories)),
       "projects.activity": () =>
         projectActivityStream({
           list: projects.list,

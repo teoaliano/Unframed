@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { realpath, stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
-import { UnframedError, unframedError, type ProjectKind, type Repository } from "@unframed/contracts";
+import { UnframedError, unframedError, type Instance, type ProjectKind, type Repository } from "@unframed/contracts";
 import {
   NO_GIT,
   NOT_A_FOLDER,
@@ -16,17 +16,18 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { errorText } from "../log.ts";
-import { LoginShell, runCommand, type Spawned } from "../loginShell.ts";
+import { Instances } from "../instances/layer.ts";
+import { LoginShell } from "../loginShell.ts";
 import { ProjectDatabase } from "../projectDatabase.ts";
 import { Projects } from "../projects.ts";
+import { gitOutput as output, makeGit } from "./git.ts";
 import { readKind, readRepository, writeRepository, type StoredRepository } from "./tables.ts";
-
-const GIT_TIMEOUT_MS = 15_000;
 
 export interface AddedRepository {
   readonly name: string;
   readonly repository: Repository;
   readonly uncommitted: boolean;
+  readonly instance: Instance;
 }
 
 export class Repositories extends Context.Service<
@@ -48,14 +49,8 @@ export const repositoriesLayer = Layer.effect(
   Effect.gen(function* () {
     const database = yield* ProjectDatabase;
     const projects = yield* Projects;
-    const loginShell = yield* LoginShell;
-
-    const git = (cwd: string, args: ReadonlyArray<string>): Effect.Effect<Spawned> =>
-      Effect.flatMap(Effect.all([loginShell.setup, loginShell.resolve("git")]), ([{ env }, executable]) =>
-        Effect.promise(() => runCommand(executable, args, { ...env, GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0" }, GIT_TIMEOUT_MS, cwd)),
-      );
-
-    const output = (ran: Spawned): string | undefined => (ran.kind === "exited" && ran.code === 0 ? ran.output : undefined);
+    const instances = yield* Instances;
+    const git = makeGit(yield* LoginShell);
 
     const kinds = (names: ReadonlyArray<string>) =>
       Effect.map(
@@ -105,7 +100,8 @@ export const repositoriesLayer = Layer.effect(
           try: () => writeRepository(handle.db, stored),
           catch: (error) => unframedError("internal", `Could not save the repository: ${errorText(error)}`),
         });
-        return { name: slug, repository: asRepository(stored), uncommitted };
+        const instance = yield* instances.create(slug, {});
+        return { name: slug, repository: asRepository(stored), uncommitted, instance };
       });
 
     return Repositories.of({ kinds, read, add });

@@ -32,7 +32,18 @@ import { AgentConnectionsCreate, AgentConnectionsCreateAnswer, AgentConnectionsL
 import { SelectionApply, SelectionReport, SelectionSnapshotResult, SelectionSubscribe } from "./selection.ts";
 import { IpadDevicesAnswer, IpadExportProfileAnswer, IpadPairStartAnswer, IpadRevoke, IpadSetAvailability, IpadStatus } from "./ipad.ts";
 import { ArtifactEdit, ArtifactImages, ArtifactPrepareEdit, ArtifactSourceTree } from "./elementEdits.ts";
-import { ProjectKind, RepositoriesAdd, RepositoriesPickFolder } from "./repositories.ts";
+import {
+  InstancesCreate,
+  InstancesList,
+  InstancesRemove,
+  InstancesStart,
+  InstancesStatus,
+  InstancesStop,
+  InstancesSubscribe,
+  ProjectKind,
+  RepositoriesAdd,
+  RepositoriesPickFolder,
+} from "./repositories.ts";
 
 const Empty = Schema.Struct({});
 
@@ -337,6 +348,13 @@ export const UnframedRpcs = RpcGroup.make(
   ProjectsCreate,
   RepositoriesPickFolder,
   RepositoriesAdd,
+  InstancesCreate,
+  InstancesRemove,
+  InstancesList,
+  InstancesStatus,
+  InstancesStart,
+  InstancesStop,
+  InstancesSubscribe,
   SettingsRemoveKey,
   OAuthStart,
   OAuthPending,

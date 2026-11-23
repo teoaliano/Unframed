@@ -64,6 +64,15 @@ describe("UNFRAMED_FEATURES", () => {
     const rpc = await engine.rpc();
     await expect(rpc.call("repositories.pickFolder")).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("repositories.add", { path: engine.dataDir })).rejects.toMatchObject(REPOSITORIES_OFF);
+    const instance = { project: "app", id: "a1b2c3d4" };
+    await expect(rpc.call("instances.create", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("instances.remove", instance)).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("instances.list", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("instances.status", instance)).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("instances.start", instance)).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("instances.stop", instance)).rejects.toMatchObject(REPOSITORIES_OFF);
+    const states = rpc.subscribe("instances.subscribe", { project: "app" });
+    await expect(states.next()).rejects.toMatchObject(REPOSITORIES_OFF);
     expect(await engine.nativeLog()).toEqual([]);
     expect((await rpc.call("projects.list")).projects).toEqual([]);
   });

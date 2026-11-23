@@ -11,6 +11,7 @@ import { createChatTables } from "./agent/chatTables.ts";
 import { createCommentChatsTable } from "./agent/commentChats.ts";
 import { ImportFailed, makeLegacyImporter, type ImportState } from "./legacy/importer.ts";
 import { createLegacyImportReportTable } from "./legacy/reportTable.ts";
+import { createInstanceTables } from "./instances/tables.ts";
 import { createRepositoryTables } from "./repositories/tables.ts";
 import { errorText } from "./log.ts";
 import { OpenProjects } from "./openProjects.ts";
@@ -38,6 +39,7 @@ export const MIGRATIONS: ReadonlyArray<Migration> = [
   { id: 4, name: "legacy_import_report", up: createLegacyImportReportTable },
   { id: 5, name: "comment_chats", up: createCommentChatsTable },
   { id: 6, name: "project_info and repository", up: createRepositoryTables },
+  { id: 7, name: "instances", up: createInstanceTables },
 ];
 
 /** `UNFRAMED_TEST_MIGRATION`'s extra migration, numbered far past any real one. */
