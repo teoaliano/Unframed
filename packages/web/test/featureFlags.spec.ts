@@ -1,10 +1,12 @@
 import { centre, emptyCanvasPoint, openCanvas, roomRecords, shapeOnScreen, waitForRoom } from "./canvas.ts";
 import { expect, startAgentEngine, test as base } from "./agent.ts";
-import type { TestEngine } from "../../engine/test/engineProcess.ts";
+import { makeTempDir, type TestEngine } from "../../engine/test/engineProcess.ts";
 import { filledArtifact } from "./artifacts.ts";
 import { column, frameOf, region } from "./editorHarness.ts";
 import { toolbar } from "./generation.ts";
 import { clickShape, nodeCard, nodeShape, promptShape, seedBoard, wireShape } from "./nodes.ts";
+import { makeRepo } from "../../engine/test/gitRepos.ts";
+import { startHostedEngine } from "./fixtures.ts";
 
 const test = base.extend<{ plain: TestEngine }>({
   plain: async ({}, use) => {
@@ -66,4 +68,21 @@ test("with element editing off, the editor opens on the preview and Parameters, 
   await region(page).getByTestId("artifact-editor-title").click();
   await page.keyboard.press("v");
   await expect(region(page).getByRole("group", { name: "Mode" })).toHaveCount(0);
+});
+
+test("with repositories off, the project menu offers Add project alone and still lists an existing Repository with its kind", async ({ page }) => {
+  const root = await makeRepo("shop");
+  const dataDir = await makeTempDir();
+  const on = await startHostedEngine({ dataDir });
+  await (await on.rpc()).call("repositories.add", { path: root });
+  await on.dispose();
+  const off = await startHostedEngine({ dataDir, samplePrompts: false, env: { UNFRAMED_FEATURES: undefined } });
+  try {
+    await openCanvas(page, off, "default");
+    await page.getByRole("button", { name: "All projects" }).click();
+    await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["default", "shop", "Add project"]);
+    await expect(page.getByRole("menuitemradio", { name: "shop" }).getByLabel("Repository")).toBeVisible();
+  } finally {
+    await off.dispose();
+  }
 });

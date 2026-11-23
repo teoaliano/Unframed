@@ -1,33 +1,10 @@
-import { execFileSync } from "node:child_process";
-import { mkdir, readdir, realpath, stat, writeFile } from "node:fs/promises";
+import { readdir, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative } from "node:path";
 import { folderPickerPlan } from "@unframed/domain";
 import { describe, expect, it } from "vitest";
+import { makeRepo } from "./gitRepos.ts";
 import { makeTempDir, startEngine } from "./harness.ts";
-
-const gitEnv = {
-  ...process.env,
-  GIT_AUTHOR_NAME: "Test",
-  GIT_AUTHOR_EMAIL: "test@example.com",
-  GIT_COMMITTER_NAME: "Test",
-  GIT_COMMITTER_EMAIL: "test@example.com",
-  GIT_CONFIG_GLOBAL: "/dev/null",
-  GIT_CONFIG_NOSYSTEM: "1",
-};
-
-const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, env: gitEnv, stdio: ["ignore", "pipe", "pipe"] }).toString();
-
-const makeRepo = async (name = "My App") => {
-  const root = join(await makeTempDir("unframed-repo-"), name);
-  await mkdir(join(root, "src", "pages"), { recursive: true });
-  await writeFile(join(root, "package.json"), '{ "scripts": { "dev": "node server.js" } }\n');
-  await writeFile(join(root, "src", "pages", "index.html"), "<h1>Hello</h1>\n");
-  git(root, "init", "-q", "-b", "trunk");
-  git(root, "add", ".");
-  git(root, "commit", "-q", "-m", "first");
-  return realpath(root);
-};
 
 const treeOf = async (root: string): Promise<Record<string, string>> => {
   const tree: Record<string, string> = {};
