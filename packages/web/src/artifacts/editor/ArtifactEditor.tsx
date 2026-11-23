@@ -643,7 +643,7 @@ export const ArtifactEditor = ({
       {!railFolded && (
         <section
           data-editor-column="rail"
-          className={cn(COLUMN, "col-start-1 row-span-full [&_header:has(>h2)]:border-b [&_header:has(>h2)]:border-b-(--border-default)")}
+          className={cn(COLUMN, "col-start-1 row-span-full [&_header:has(>h2)]:border-b")}
         >
           <AgentRail
             project={project}
