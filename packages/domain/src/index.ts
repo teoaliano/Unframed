@@ -134,3 +134,4 @@ export * from "./onboarding.ts";
 export * from "./repositories.ts";
 export * from "./instances.ts";
 export * from "./instanceProxy.ts";
+export * from "./instanceBudget.ts";
