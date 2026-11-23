@@ -539,7 +539,7 @@ export const ArtifactEditor = ({
     : "grid-cols-[var(--artifact-editor-rail-width)_minmax(0,1fr)_var(--artifact-editor-parameters-width)]";
   const parametersBody = (
     <>
-      {editing || component ? (
+      {editing ? (
         <ColumnHeader className="px-0">
           <Tabs value={shownPanel} onValueChange={(next) => setPanel(String(next) as Panel)} className="h-full min-w-0">
             <TabsList variant="underline" fill aria-label="Editor panels">
