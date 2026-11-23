@@ -539,20 +539,27 @@ export const ArtifactEditor = ({
     : "grid-cols-[var(--artifact-editor-rail-width)_minmax(0,1fr)_var(--artifact-editor-parameters-width)]";
   const parametersBody = (
     <>
-      <ColumnHeader className="px-0">
-        <Tabs value={shownPanel} onValueChange={(next) => setPanel(String(next) as Panel)} className="h-full min-w-0">
-          <TabsList variant="underline" fill aria-label="Editor panels">
-            {editing && <TabsTab value="design">Design</TabsTab>}
-            {editing && <TabsTab value="layers">Layers</TabsTab>}
-            {!component && (
-              <TabsTab value="parameters">
-                <SlidersHorizontal aria-hidden />
-                Parameters
-              </TabsTab>
-            )}
-          </TabsList>
-        </Tabs>
-      </ColumnHeader>
+      {editing || component ? (
+        <ColumnHeader className="px-0">
+          <Tabs value={shownPanel} onValueChange={(next) => setPanel(String(next) as Panel)} className="h-full min-w-0">
+            <TabsList variant="underline" fill aria-label="Editor panels">
+              {editing && <TabsTab value="design">Design</TabsTab>}
+              {editing && <TabsTab value="layers">Layers</TabsTab>}
+              {!component && (
+                <TabsTab value="parameters">
+                  <SlidersHorizontal aria-hidden />
+                  Parameters
+                </TabsTab>
+              )}
+            </TabsList>
+          </Tabs>
+        </ColumnHeader>
+      ) : (
+        <ColumnHeader className="gap-1 pl-3.5">
+          <SlidersHorizontal aria-hidden className="size-4 shrink-0 text-(--artifact-editor-icon)" />
+          <h2 className="m-0 ml-1 flex-1 text-sm font-medium">Parameters</h2>
+        </ColumnHeader>
+      )}
       {shownPanel === "design" && (
         <DesignTab
           session={session}
