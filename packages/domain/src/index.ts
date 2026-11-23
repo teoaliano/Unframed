@@ -132,3 +132,4 @@ export * from "./ipad/index.ts";
 export * from "./comments/index.ts";
 export * from "./onboarding.ts";
 export * from "./repositories.ts";
+export * from "./instances.ts";
