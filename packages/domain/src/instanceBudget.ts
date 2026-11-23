@@ -59,3 +59,10 @@ export const processTreeRss = (rows: ReadonlyArray<ProcessRow>, root: number): n
   }
   return rows.reduce((sum, row) => (members.has(row.pid) ? sum + row.rssKb * 1024 : sum), 0);
 };
+
+const NOT_SOURCE = new Set([".git", "node_modules", ".next", ".turbo", ".svelte-kit", ".vite", ".nuxt", ".output", ".astro", ".vercel", ".cache", ".parcel-cache", "dist", "build", "coverage"]);
+
+export const countsAsChange = (path: string): boolean => {
+  const parts = path.split(/[\\/]/).filter((part) => part !== "");
+  return parts.length > 0 && !parts.some((part) => NOT_SOURCE.has(part));
+};

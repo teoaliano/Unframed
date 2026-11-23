@@ -157,6 +157,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "instances.status": ({ project, id }) => featureOn("repositories", () => instances.status(project, id)),
       "instances.start": ({ project, id }) => featureOn("repositories", () => instances.start(project, id)),
       "instances.stop": ({ project, id }) => featureOn("repositories", () => instances.stop(project, id)),
+      "instances.demand": ({ project, client, ids }) => featureOn("repositories", () => Effect.map(instances.demand(project, client, ids), (list) => ({ instances: [...list] }))),
       "instances.subscribe": ({ project }) =>
         config.features.has("repositories") ? instances.changes(project) : Stream.fail(unframedError("unavailable", FEATURE_OFF_MESSAGES.repositories)),
       "projects.activity": () =>

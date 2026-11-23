@@ -34,6 +34,7 @@ import { IpadDevicesAnswer, IpadExportProfileAnswer, IpadPairStartAnswer, IpadRe
 import { ArtifactEdit, ArtifactImages, ArtifactPrepareEdit, ArtifactSourceTree } from "./elementEdits.ts";
 import {
   InstancesCreate,
+  InstancesDemand,
   InstancesList,
   InstancesRemove,
   InstancesStart,
@@ -354,6 +355,7 @@ export const UnframedRpcs = RpcGroup.make(
   InstancesStatus,
   InstancesStart,
   InstancesStop,
+  InstancesDemand,
   InstancesSubscribe,
   SettingsRemoveKey,
   OAuthStart,

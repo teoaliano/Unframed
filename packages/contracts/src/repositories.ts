@@ -97,6 +97,12 @@ export const InstancesStart = Rpc.make("instances.start", { payload: InstanceRef
 
 export const InstancesStop = Rpc.make("instances.stop", { payload: InstanceRef, success: Instance, error: UnframedError });
 
+export const InstancesDemand = Rpc.make("instances.demand", {
+  payload: Schema.Struct({ project: Schema.String, client: Schema.String, ids: Schema.Array(Schema.String) }),
+  success: Schema.Struct({ instances: Schema.Array(Instance) }),
+  error: UnframedError,
+});
+
 export const InstancesSubscribe = Rpc.make("instances.subscribe", {
   payload: Schema.Struct({ project: Schema.String }),
   success: Instance,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INSTANCE_IDLE_MS, evictionsOverBudget, idleToStop, instanceMemoryBudget, parseProcessTable, processTreeRss } from "../src/index.ts";
+import { INSTANCE_IDLE_MS, countsAsChange, evictionsOverBudget, idleToStop, instanceMemoryBudget, parseProcessTable, processTreeRss } from "../src/index.ts";
 
 const GB = 1024 ** 3;
 
@@ -41,6 +41,19 @@ describe("idle stop", () => {
     expect(idleToStop({ demanded: false, lastDemandedAt: now - INSTANCE_IDLE_MS, lastChangeAt: now - INSTANCE_IDLE_MS - 1, now, idleMs: INSTANCE_IDLE_MS })).toBe(true);
     expect(idleToStop({ demanded: false, lastDemandedAt: now - INSTANCE_IDLE_MS + 1, lastChangeAt: 0, now, idleMs: INSTANCE_IDLE_MS })).toBe(false);
     expect(idleToStop({ demanded: false, lastDemandedAt: 0, lastChangeAt: now - 1000, now, idleMs: INSTANCE_IDLE_MS })).toBe(false);
+  });
+
+  it.each([
+    ["src/App.tsx", true],
+    [".env.local", true],
+    ["node_modules/.vite/deps/react.js", false],
+    [".next/cache/webpack/x.pack", false],
+    ["packages/web/node_modules/x.js", false],
+    [".git/index", false],
+    ["apps/site/dist/index.html", false],
+    ["", false],
+  ])("counts a change to %j as a file change: %j", (path, counts) => {
+    expect(countsAsChange(path)).toBe(counts);
   });
 
   it("never stops a demanded Instance", () => {

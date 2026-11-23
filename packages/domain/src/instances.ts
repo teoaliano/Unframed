@@ -18,6 +18,10 @@ export const movedPort = (expected: number, actual: number): string =>
   `The dev server listened on port ${actual} instead of ${expected}, so its port cannot be chosen.`;
 export const serverExited = (code: number | null): string => `The dev server exited${code === null ? "" : ` with code ${code}`}.`;
 export const neverListened = (port: number, seconds: number): string => `The dev server did not listen on port ${port} within ${seconds} seconds.`;
+export const singlePortMoved = (expected: number, actual: number): string =>
+  `The dev server listened on port ${actual} instead of ${expected}. Unframed now runs this Repository on port ${actual}.`;
+export const stoppedForBudget = "Unframed stopped this Instance to stay within the memory budget.";
+export const stoppedWhenIdle = "Unframed stopped this Instance after it sat unused with no file changes.";
 export const proxyFailed = (reason: string): string => `Unframed could not open the proxy for this Instance: ${reason}`;
 export const setupFailed = (code: number | null): string => `The setup command failed${code === null ? "" : ` with code ${code}`}.`;
 

@@ -1,10 +1,13 @@
+import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, watch, type FSWatcher } from "node:fs";
 import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { totalmem } from "node:os";
 import type { DatabaseSync } from "node:sqlite";
 import { dirname, join } from "node:path";
 import { UnframedError, unframedError, type Instance, type InstanceState, type RepositorySetup } from "@unframed/contracts";
 import {
+  INSTANCE_IDLE_MS,
   INSTANCE_NOT_FOUND,
   INSTANCE_REMOVED,
   NO_RUN_COMMAND,
@@ -14,7 +17,11 @@ import {
   badBranchName,
   branchTaken,
   copiedEnvFiles,
+  countsAsChange,
   defaultInstanceBranch,
+  evictionsOverBudget,
+  idleToStop,
+  instanceMemoryBudget,
   exitedBeforeListening,
   inferredSetup,
   listenedPorts,
@@ -23,10 +30,15 @@ import {
   neverListened,
   proxyFailed,
   packageScripts,
+  parseProcessTable,
+  processTreeRss,
   projectSlug,
   serverExited,
   setupFailed,
   shapeRunCommand,
+  singlePortMoved,
+  stoppedForBudget,
+  stoppedWhenIdle,
   uncommittedWork,
   unknownBase,
   unsavedWork,
@@ -42,7 +54,7 @@ import { LoginShell } from "../loginShell.ts";
 import { ProjectDatabase } from "../projectDatabase.ts";
 import { Projects } from "../projects.ts";
 import { makeGit, gitOutput } from "../repositories/git.ts";
-import { readKind, readRepository, type StoredRepository } from "../repositories/tables.ts";
+import { readKind, readRepository, writeRepository, type StoredRepository } from "../repositories/tables.ts";
 import { Config } from "../services.ts";
 import { Shutdown } from "../shutdown.ts";
 import { answers, freePort, spawnTracked, stopTracked, sweepLeftovers, type Tracked } from "./processes.ts";
@@ -56,6 +68,7 @@ const PROBE_EVERY_MS = 150;
 const STOP_GRACE_MS = 3_000;
 const SHUTDOWN_GRACE_MS = 1_500;
 const SETUP_FILES_FOLDER = "setup-files";
+const SAMPLE_EVERY_MS = 15_000;
 
 export interface CreateOptions {
   readonly base?: string;
@@ -76,6 +89,7 @@ export class Instances extends Context.Service<
     readonly status: (project: string, id: string) => Effect.Effect<Instance, UnframedError>;
     readonly start: (project: string, id: string) => Effect.Effect<Instance, UnframedError>;
     readonly stop: (project: string, id: string) => Effect.Effect<Instance, UnframedError>;
+    readonly demand: (project: string, client: string, ids: ReadonlyArray<string>) => Effect.Effect<ReadonlyArray<Instance>, UnframedError>;
     readonly changes: (project: string) => Stream.Stream<Instance, UnframedError>;
   }
 >()("unframed/engine/Instances") {}
@@ -91,6 +105,13 @@ interface Live {
   process: Tracked | undefined;
   proxy: InstanceProxy | undefined;
   lastProxyPort: number | null;
+  watcher: FSWatcher | undefined;
+  demandOrder: number;
+  lastDemandedAt: number;
+  lastChangeAt: number;
+  rss: number;
+  suppressed: boolean;
+  retry: boolean;
   stopping: boolean;
   queue: Promise<unknown>;
   logTimer: NodeJS.Timeout | undefined;
@@ -174,6 +195,13 @@ export const instancesLayer = Layer.effect(
       process: undefined,
       proxy: undefined,
       lastProxyPort: null,
+      watcher: undefined,
+      demandOrder: 0,
+      lastDemandedAt: 0,
+      lastChangeAt: 0,
+      rss: 0,
+      suppressed: false,
+      retry: false,
       stopping: false,
       queue: Promise.resolve(),
       logTimer: undefined,
@@ -257,20 +285,45 @@ export const instancesLayer = Layer.effect(
 
     const reservedPorts = () => new Set([...lives.values()].flatMap((live) => (live.reservedPort === null ? [] : [live.reservedPort])));
 
-    type Verdict = { readonly kind: "live" } | { readonly kind: "failed"; readonly error: string } | { readonly kind: "stopped" };
+    type Verdict =
+      | { readonly kind: "live"; readonly port: number }
+      | { readonly kind: "failed"; readonly error: string }
+      | { readonly kind: "stopped" };
 
-    const awaitListening = async (live: Live, tracked: Tracked, port: number, output: () => string): Promise<Verdict> => {
+    const awaitListening = async (live: Live, tracked: Tracked, port: number, output: () => string, keepMoved: boolean): Promise<Verdict> => {
       const deadline = Date.now() + START_TIMEOUT_MS;
       for (;;) {
         if (live.stopping || live.state === "removed") return { kind: "stopped" };
         if (tracked.hasExited()) return { kind: "failed", error: exitedBeforeListening(await tracked.exited, port) };
-        if (await answers(port)) return { kind: "live" };
+        if (await answers(port)) return { kind: "live", port };
         const other = listenedPorts(output()).find((candidate) => candidate !== port);
-        if (other !== undefined && (await answers(other))) return { kind: "failed", error: movedPort(port, other) };
+        if (other !== undefined && (await answers(other))) return keepMoved ? { kind: "live", port: other } : { kind: "failed", error: movedPort(port, other) };
         if (Date.now() > deadline) return { kind: "failed", error: neverListened(port, START_TIMEOUT_MS / 1000) };
         await new Promise((resolve) => setTimeout(resolve, PROBE_EVERY_MS));
       }
     };
+
+    const watchWorktree = (live: Live): FSWatcher | undefined => {
+      try {
+        const watcher = watch(live.stored.worktree, { recursive: true }, (_event, file) => {
+          if (file === null || countsAsChange(String(file))) live.lastChangeAt = Date.now();
+        });
+        watcher.on("error", () => watcher.close());
+        watcher.unref();
+        return watcher;
+      } catch {
+        return undefined;
+      }
+    };
+
+    const recordSinglePort = (slug: string, port: number) =>
+      Effect.ignore(
+        writeDb(slug, (db) => {
+          const repository = readRepository(db);
+          if (repository?.setup?.portMode.mode !== "single") return;
+          writeRepository(db, { ...repository, setup: { ...repository.setup, portMode: { mode: "single", port } } });
+        }),
+      );
 
     const startNow = (context: RepositoryContext, live: Live) =>
       Effect.gen(function* () {
@@ -280,6 +333,7 @@ export const instancesLayer = Layer.effect(
         if (!live.stored.installed && setup.setupCommand.trim() !== "") {
           if (!(yield* runSetup(live, setup.setupCommand))) return undefined;
         }
+        const single = setup.portMode.mode === "single";
         const port = setup.portMode.mode === "single" ? setup.portMode.port : yield* Effect.promise(() => freePort(reservedPorts()));
         const packageJson = yield* Effect.promise(() => readFile(join(live.stored.worktree, "package.json"), "utf8").catch(() => undefined));
         const shaped = shapeRunCommand({ command: setup.runCommand, port, scripts: packageScripts(packageJson) });
@@ -288,18 +342,26 @@ export const instancesLayer = Layer.effect(
         appendLog(live, `$ ${shaped.command}\n`);
         let output = "";
         const tracked = yield* spawnFor(live, shaped.command, shaped.env, (chunk) => (output = appendLogTail(output, chunk, LOG_TAIL_CHARS)));
-        const verdict = yield* Effect.promise(() => awaitListening(live, tracked, port, () => output));
+        const verdict = yield* Effect.promise(() => awaitListening(live, tracked, port, () => output, single));
         if (verdict.kind === "live") {
+          const upstream = verdict.port;
+          if (upstream !== port) {
+            appendLog(live, `${singlePortMoved(port, upstream)}\n`);
+            live.reservedPort = upstream;
+            yield* recordSinglePort(context.slug, upstream);
+          }
           const proxied = yield* Effect.result(
             Effect.tryPromise({
-              try: () => startInstanceProxy({ upstreamPort: port, preferredPort: live.lastProxyPort }),
+              try: () => startInstanceProxy({ upstreamPort: upstream, preferredPort: live.lastProxyPort }),
               catch: (error) => proxyFailed(errorText(error)),
             }),
           );
           if (proxied._tag === "Success") {
             live.proxy = proxied.success;
             live.lastProxyPort = proxied.success.port;
-            setState(live, "live", { upstreamPort: port });
+            live.lastChangeAt = Date.now();
+            live.watcher = watchWorktree(live);
+            setState(live, "live", { upstreamPort: upstream });
             void tracked.exited.then(async (code) => {
               if (live.process !== tracked) return;
               live.process = undefined;
@@ -327,6 +389,9 @@ export const instancesLayer = Layer.effect(
     const closeProxy = async (live: Live) => {
       const proxy = live.proxy;
       live.proxy = undefined;
+      live.watcher?.close();
+      live.watcher = undefined;
+      live.rss = 0;
       await proxy?.close();
     };
 
@@ -419,7 +484,7 @@ export const instancesLayer = Layer.effect(
           return view(live);
         }
         setState(live, "installing");
-        void enqueue(live, runSetup(live, setup.setupCommand));
+        void enqueue(live, runSetup(live, setup.setupCommand)).then(kick);
         return view(live);
       });
 
@@ -460,11 +525,37 @@ export const instancesLayer = Layer.effect(
 
     const status = (project: string, id: string) => Effect.map(find(project, id), ({ live }) => view(live));
 
+    const stopNow = async (live: Live, note?: string) => {
+      if (live.state === "removed") return;
+      await Effect.runPromise(halt(live));
+      if (note !== undefined) appendLog(live, `${note}\n`);
+      if (!isRemoved(live)) setState(live, "stopped", { upstreamPort: null });
+    };
+
+    const repositoryLocks = new Map<string, Promise<unknown>>();
+
+    const singlePort = (context: RepositoryContext) => context.repository.setup?.portMode.mode === "single";
+
+    const startInstance = (context: RepositoryContext, live: Live): Promise<UnframedError | undefined> => {
+      if (!singlePort(context)) return enqueue(live, startNow(context, live));
+      const run = (repositoryLocks.get(context.slug) ?? Promise.resolve()).then(async () => {
+        for (const other of lives.values()) {
+          if (other !== live && other.project === context.slug && (other.state === "live" || other.state === "starting")) await stopNow(other);
+        }
+        return enqueue(live, startNow(context, live));
+      });
+      repositoryLocks.set(
+        context.slug,
+        run.catch(() => undefined),
+      );
+      return run;
+    };
+
     const start = (project: string, id: string) =>
       Effect.gen(function* () {
         const { context, live } = yield* find(project, id);
         if (live.state === "removed") return yield* unframedError("conflict", INSTANCE_REMOVED);
-        const refused = yield* Effect.promise(() => enqueue(live, startNow(context, live)));
+        const refused = yield* Effect.promise(() => startInstance(context, live));
         if (refused !== undefined) return yield* refused;
         return view(live);
       });
@@ -472,11 +563,132 @@ export const instancesLayer = Layer.effect(
     const stop = (project: string, id: string) =>
       Effect.gen(function* () {
         const { live } = yield* find(project, id);
-        if (live.state === "removed") return view(live);
-        yield* halt(live);
-        if (!isRemoved(live)) setState(live, "stopped", { upstreamPort: null });
+        yield* Effect.promise(() => stopNow(live));
         return view(live);
       });
+
+    const idleMs = config.testInstanceIdleMs ?? INSTANCE_IDLE_MS;
+    const sampleMs = config.testInstanceSampleMs ?? SAMPLE_EVERY_MS;
+    const budget = config.testInstanceBudgetBytes ?? instanceMemoryBudget(totalmem());
+    const demands = new Map<string, Map<string, ReadonlySet<string>>>();
+    let demandCounter = 0;
+    let scheduled: Promise<void> = Promise.resolve();
+
+    const demandedIn = (slug: string): Set<string> => new Set([...(demands.get(slug)?.values() ?? [])].flatMap((ids) => [...ids]));
+
+    const isDemanded = (live: Live) => demandedIn(live.project).has(live.stored.id);
+
+    const schedule = (run: () => Promise<void>): Promise<void> => {
+      scheduled = scheduled.then(run).catch(() => undefined);
+      return scheduled;
+    };
+
+    const processTable = (): Promise<string> =>
+      new Promise((resolve) => {
+        if (process.platform === "win32") return resolve("");
+        execFile("ps", ["-A", "-o", "pid=,ppid=,pgid=,rss="], { maxBuffer: 16 * 1024 * 1024 }, (error, stdout) => resolve(error === null ? stdout : ""));
+      });
+
+    const running = () => [...lives.values()].filter((live) => live.state === "live" && live.process?.child.pid !== undefined);
+
+    const measure = async () => {
+      const live = running();
+      if (live.length === 0) return;
+      const rows = parseProcessTable(await processTable());
+      for (const instance of live) instance.rss = processTreeRss(rows, instance.process!.child.pid!);
+    };
+
+    const enforceBudget = async () => {
+      await measure();
+      const live = running();
+      const byKey = new Map(live.map((instance) => [keyOf(instance.project, instance.stored.id), instance]));
+      const evicted = evictionsOverBudget(
+        live.map((instance) => ({ id: keyOf(instance.project, instance.stored.id), rss: instance.rss, lastDemandedAt: instance.demandOrder, demanded: isDemanded(instance) })),
+        budget,
+      );
+      for (const key of evicted) {
+        const instance = byKey.get(key)!;
+        if (isDemanded(instance)) instance.suppressed = true;
+        await stopNow(instance, stoppedForBudget);
+      }
+    };
+
+    const stopIdle = async () => {
+      const now = Date.now();
+      for (const instance of running()) {
+        if (idleToStop({ demanded: isDemanded(instance), lastDemandedAt: instance.lastDemandedAt, lastChangeAt: instance.lastChangeAt, now, idleMs })) {
+          await stopNow(instance, stoppedWhenIdle);
+        }
+      }
+    };
+
+    const reconcile = async () => {
+      const pending: Array<{ readonly context: RepositoryContext; readonly live: Live }> = [];
+      for (const slug of demands.keys()) {
+        const wanted = demandedIn(slug);
+        if (wanted.size === 0) continue;
+        const found = await Effect.runPromise(Effect.result(repositoryOf(slug)));
+        if (found._tag === "Failure") continue;
+        const context = found.success;
+        const candidates = [...wanted]
+          .flatMap((id) => {
+            const live = lives.get(keyOf(slug, id));
+            return live === undefined || isRemoved(live) || live.suppressed ? [] : [live];
+          })
+          .sort((a, b) => b.demandOrder - a.demandOrder);
+        for (const live of singlePort(context) ? candidates.slice(0, 1) : candidates) {
+          if (live.state === "stopped" || (live.state === "failed" && live.retry)) pending.push({ context, live });
+        }
+      }
+      pending.sort((a, b) => b.live.demandOrder - a.live.demandOrder);
+      for (const { context, live } of pending) {
+        live.retry = false;
+        if (!isDemanded(live) || live.suppressed || (live.state !== "stopped" && live.state !== "failed")) continue;
+        const refused = await startInstance(context, live).catch(() => undefined);
+        if (refused !== undefined && !isRemoved(live)) setState(live, "failed", { error: refused.message });
+        await enforceBudget();
+      }
+    };
+
+    const kick = () => void schedule(reconcile);
+
+    const demand = (project: string, client: string, ids: ReadonlyArray<string>) =>
+      Effect.gen(function* () {
+        const { slug } = yield* repositoryOf(project);
+        const before = demandedIn(slug);
+        const clients = demands.get(slug) ?? new Map<string, ReadonlySet<string>>();
+        const wanted = [...new Set(ids)].filter((id) => lives.has(keyOf(slug, id)));
+        if (wanted.length === 0) clients.delete(client);
+        else clients.set(client, new Set(wanted));
+        if (clients.size === 0) demands.delete(slug);
+        else demands.set(slug, clients);
+        const after = demandedIn(slug);
+        const now = Date.now();
+        for (const id of before) {
+          if (after.has(id)) continue;
+          const live = lives.get(keyOf(slug, id))!;
+          live.demandOrder = ++demandCounter;
+          live.lastDemandedAt = now;
+        }
+        for (const id of [...wanted].reverse()) {
+          if (before.has(id)) continue;
+          const live = lives.get(keyOf(slug, id))!;
+          live.demandOrder = ++demandCounter;
+          live.suppressed = false;
+          live.retry = true;
+        }
+        for (const id of after) lives.get(keyOf(slug, id))!.lastDemandedAt = now;
+        kick();
+        return [...after].map((id) => view(lives.get(keyOf(slug, id))!));
+      });
+
+    const ticker = setInterval(() => {
+      void schedule(async () => {
+        await enforceBudget();
+        await stopIdle();
+      });
+    }, sampleMs);
+    ticker.unref();
 
     const changes = (project: string) =>
       Stream.unwrap(
@@ -493,17 +705,18 @@ export const instancesLayer = Layer.effect(
 
     yield* shutdown.register(
       "dev servers",
-      Effect.promise(() =>
-        Promise.all(
+      Effect.promise(() => {
+        clearInterval(ticker);
+        return Promise.all(
           [...lives.values()].map(async (live) => {
             live.stopping = true;
             if (live.process !== undefined) await stopTracked(live.process, SHUTDOWN_GRACE_MS);
             await closeProxy(live);
           }),
-        ),
-      ),
+        );
+      }),
     );
 
-    return Instances.of({ create, remove, list, status, start, stop, changes });
+    return Instances.of({ create, remove, list, status, start, stop, demand, changes });
   }),
 );

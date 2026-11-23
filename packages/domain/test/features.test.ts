@@ -19,8 +19,8 @@ describe("UNFRAMED_FEATURES", () => {
     ["nodes", ["nodes"]],
     ["element-editing", ["element-editing"]],
     [" Element-Editing , nodes ", ["nodes", "element-editing"]],
-    ["all", ["nodes", "element-editing"]],
-    ["nodes,all", ["nodes", "element-editing"]],
+    ["all", ["nodes", "element-editing", "repositories"]],
+    ["nodes,all", ["nodes", "element-editing", "repositories"]],
     ["teleport,nodes,,", ["nodes"]],
     ["teleport", []],
   ])("reads %j as %j", (value, expected) => {
