@@ -52,7 +52,7 @@ test("with nodes off, Node is in neither add menu, and an existing node and wire
 
 const PAGE = `<!doctype html><html><body><main><h1>Welcome</h1></main></body></html>`;
 
-test("with element editing off, the editor opens on the preview and Parameters, with no Mode toggle and no Design or Layers tab", async ({ page, plain }) => {
+test("with element editing off, the editor opens on the preview and a Parameters header set like the Agent one, with no Mode toggle and no tabs", async ({ page, plain }) => {
   await openCanvas(page, plain);
   await filledArtifact(plain, { id: "shape:landing", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 400, h: 260 }, title: "Landing", html: PAGE });
   await expect(shapeOnScreen(page, "shape:landing")).toBeVisible();
@@ -61,7 +61,13 @@ test("with element editing off, the editor opens on the preview and Parameters, 
   await page.mouse.dblclick(at.x, at.y);
   await expect(region(page)).toBeVisible();
   await expect(frameOf(page).getByRole("heading", { name: "Welcome" })).toBeVisible();
-  await expect(column(page, "parameters").getByRole("tablist").getByRole("tab")).toHaveText(["Parameters"]);
+  const parameters = column(page, "parameters");
+  await expect(parameters.getByRole("tablist")).toHaveCount(0);
+  const heading = parameters.getByRole("heading", { level: 2, name: "Parameters" });
+  await expect(heading).toBeVisible();
+  const agent = column(page, "rail").getByRole("heading", { level: 2, name: "Agent" });
+  const type = (target: typeof heading) => target.evaluate((el) => { const style = getComputedStyle(el); return [style.fontSize, style.fontWeight]; });
+  expect(await type(heading)).toEqual(await type(agent));
   await expect(region(page).getByRole("group", { name: "Mode" })).toHaveCount(0);
   await region(page).getByTestId("artifact-editor-title").click();
   await page.keyboard.press("v");
