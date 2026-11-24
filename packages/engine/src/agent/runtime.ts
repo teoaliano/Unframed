@@ -51,7 +51,7 @@ import {
 } from "@unframed/domain";
 import type { ArtifactDiffFile, ElementChip } from "@unframed/contracts";
 import type { TLRecord } from "@tldraw/tlschema";
-import { agentSystemPrompt, repositorySystemPrompt, SETUP_SYSTEM_PROMPT, type Features, type Kit } from "@unframed/domain";
+import { agentSystemPrompt, repositorySystemPrompt, SETUP_SYSTEM_PROMPT, WHITEBOARD_ONLY_TOOLS, type Features, type Kit } from "@unframed/domain";
 import type { Applied, CanvasChange, ChangeLogRow, ChangeOrigin } from "../canvas/rooms.ts";
 import { errorText, logError, logInfo } from "../log.ts";
 import type { AdapterContext, ProviderAdapter, TurnAttachment } from "./adapter.ts";
@@ -137,8 +137,6 @@ export interface AgentRepository {
   readonly setupChat: string | null;
   readonly worktreeOf: (instance: string) => Promise<string | undefined>;
 }
-
-const WHITEBOARD_ONLY_TOOLS = new Set(["page_write", "motion_write"]);
 
 const offeredIn = (repository: AgentRepository | undefined, chatId: string) => (tool: McpTool): boolean => {
   if (tool.scope === "repository") return repository !== undefined;

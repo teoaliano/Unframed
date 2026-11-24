@@ -22,6 +22,10 @@ export const hasUncommittedChanges = (porcelain: string): boolean => porcelain.t
 
 export const repositoryStatus = (stored: StoredRepositoryStatus, rootExists: boolean): RepositoryStatus => (rootExists ? stored : "missing");
 
+export const WHITEBOARD_ONLY_TOOLS: ReadonlySet<string> = new Set(["page_write", "motion_write"]);
+
+export const noPagesInRepository = (project: string): string => `${project} is a Repository: there are no pages or motions to write there. Edit its code with your own file tools.`;
+
 export const NO_SETUP_OPEN = "Setup is not running for this Repository.";
 export const REJECTION_NEEDS_NOTE = "Say what is still wrong, so Setup can keep trying.";
 

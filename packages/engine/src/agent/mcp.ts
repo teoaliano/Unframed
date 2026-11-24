@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import http from "node:http";
+import type { ProjectKind } from "@unframed/contracts";
 import { OUTSIDE_AGENT_INSTRUCTIONS, OUTSIDE_PROJECTS_LIST_DESCRIPTION } from "@unframed/domain";
 import type { Route } from "../http/api.ts";
 import { readJsonBody } from "../http/body.ts";
@@ -146,6 +147,7 @@ export interface OutsideSession {
 
 export interface OutsideProject {
   readonly name: string;
+  readonly kind: ProjectKind;
   readonly folder: string;
   readonly active: boolean;
 }

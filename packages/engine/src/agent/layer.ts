@@ -3,7 +3,7 @@ import { NodeRuns } from "../nodes/nodeRuns.ts";
 import { MediaStore } from "../media/mediaStore.ts";
 import type { ClientChatCommand, ShellStreamItem, ThreadSearchMatch, ThreadStreamItem, TurnDiff } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
-import { defaultModel, NO_SETUP_OPEN, NOT_A_REPOSITORY_PROJECT, projectSlug, REJECTION_NEEDS_NOTE, SETUP_FIRST_MESSAGE, setupRejection, type AgentProvider, type ClientCommand } from "@unframed/domain";
+import { defaultModel, noPagesInRepository, NO_SETUP_OPEN, NOT_A_REPOSITORY_PROJECT, WHITEBOARD_ONLY_TOOLS, projectSlug, REJECTION_NEEDS_NOTE, SETUP_FIRST_MESSAGE, setupRejection, type AgentProvider, type ClientCommand } from "@unframed/domain";
 import type { Repository } from "@unframed/contracts";
 import { randomUUID } from "node:crypto";
 import { SetupTools } from "../repositories/setupTools.ts";
@@ -21,7 +21,7 @@ import { SettingsStore } from "../settingsStore.ts";
 import { AttachmentRefused } from "./attachmentStore.ts";
 import { realAdapter } from "./adapters/real.ts";
 import { ProviderDetection } from "./detection.ts";
-import { mcpRoute, type OutsideProject } from "./mcp.ts";
+import { mcpRoute, refusal, type OutsideProject } from "./mcp.ts";
 import { AgentConnections } from "../agentConnections/layer.ts";
 import { SelectionHub } from "../selection/liveSelection.ts";
 import { Runs } from "../runs/runs.ts";
@@ -96,10 +96,11 @@ export const agentsLayer = Layer.effect(
           const names = yield* projects.list;
           const prefs = yield* preferences.get(["project.active"]);
           const active = typeof prefs["project.active"] === "string" ? prefs["project.active"] : undefined;
+          const kinds = yield* repositories.kinds(names);
           const entries: OutsideProject[] = [];
           for (const name of [...names].sort()) {
             const folder = yield* projects.folder(name);
-            if (folder !== undefined) entries.push({ name, folder, active: name === active });
+            if (folder !== undefined) entries.push({ name, kind: kinds[name] ?? "whiteboard", folder, active: name === active });
           }
           return entries;
         }),
@@ -359,7 +360,10 @@ export const agentsLayer = Layer.effect(
             const names = await projects.list.pipe(Effect.runPromise);
             return names.includes(slug) ? slug : undefined;
           },
-          call: (call) => runtime.outside.call(call),
+          call: async (call) => {
+            if (WHITEBOARD_ONLY_TOOLS.has(call.tool.name) && (await run(repositories.kinds([call.slug])))[call.slug] === "repository") return refusal(noPagesInRepository(call.slug));
+            return runtime.outside.call(call);
+          },
           endSession: (sessionId) => runtime.endOutsideSession(sessionId),
         }),
         ...attachmentRoutes,
