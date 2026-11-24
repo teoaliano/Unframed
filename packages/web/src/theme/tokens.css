@@ -1389,6 +1389,13 @@
   --settings-dialog-sheet-surface: var(--surface-popover);
   --settings-dialog-unsaved-indicator: var(--action-highlight);
   --settings-dialog-width: 760px;
+  --setup-card-body: var(--text-muted);
+  --setup-card-border: var(--border-default);
+  --setup-card-border-opacity: 80%;
+  --setup-card-error: var(--status-error-text);
+  --setup-card-surface: var(--surface-card);
+  --setup-card-surface-opacity: 70%;
+  --setup-card-title: var(--text-default);
   --shape-label-foreground: var(--text-muted);
   --sheet-backdrop: var(--surface-background);
   --sheet-backdrop-opacity: 60%;

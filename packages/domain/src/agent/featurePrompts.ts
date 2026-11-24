@@ -1,5 +1,6 @@
 import type { Features } from "../features.ts";
 import { AGENT_SYSTEM_PROMPT, CANVAS_READ_DESCRIPTION, CANVAS_WRITE_DESCRIPTION } from "./prompts.ts";
+import { CANVAS_READ_SCREENS, CANVAS_WRITE_SCREENS } from "./repositoryPrompts.ts";
 
 const cut = (text: string, from: string, to: string): string => {
   if (!text.includes(from)) throw new Error(`prompt text moved: ${from.slice(0, 40)}`);
@@ -22,7 +23,11 @@ export const agentSystemPrompt = (features: Features): string =>
 const READ_NODE_START = " A node reports its medium";
 const READ_NODE_END = "a wire reports from, to and its role.";
 
-export const canvasReadDescription = (features: Features): string => {
+const withScreens = (features: Features, text: string, screens: string): string => (features.has("repositories") ? `${text} ${screens}` : text);
+
+export const canvasReadDescription = (features: Features): string => withScreens(features, canvasReadBase(features), CANVAS_READ_SCREENS);
+
+const canvasReadBase = (features: Features): string => {
   if (features.has("nodes")) return CANVAS_READ_DESCRIPTION;
   const start = CANVAS_READ_DESCRIPTION.indexOf(READ_NODE_START);
   const end = CANVAS_READ_DESCRIPTION.indexOf(READ_NODE_END, start);
@@ -33,7 +38,9 @@ export const canvasReadDescription = (features: Features): string => {
 const WRITE_NODE_START = " node (props.medium is";
 const WRITE_NODE_END = "never here; run a node with node_run.";
 
-export const canvasWriteDescription = (features: Features): string => {
+export const canvasWriteDescription = (features: Features): string => withScreens(features, canvasWriteBase(features), CANVAS_WRITE_SCREENS);
+
+const canvasWriteBase = (features: Features): string => {
   if (features.has("nodes")) return CANVAS_WRITE_DESCRIPTION;
   const text = cut(CANVAS_WRITE_DESCRIPTION, "page, motion, node or group and rewrites", "page, motion or group and rewrites");
   const start = text.indexOf(WRITE_NODE_START);

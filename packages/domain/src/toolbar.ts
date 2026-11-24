@@ -30,11 +30,12 @@ export type ToolbarState =
   | { readonly kind: "result"; readonly shapeId: string; readonly generate: boolean }
   | { readonly kind: "generating"; readonly shapeId: string }
   | { readonly kind: "open"; readonly shapeId: string }
+  | { readonly kind: "screen"; readonly shapeId: string }
   | { readonly kind: "generate"; readonly hint: string; readonly drag: boolean }
   | { readonly kind: "recipe"; readonly groupId: string; readonly name: string; readonly runs: RunsValue; readonly drag: boolean }
   | { readonly kind: "agent"; readonly drag: boolean };
 
-const holdsFrame = (shape: ToolbarShape): boolean => (shape.kind === "page" || shape.kind === "motion" || shape.kind === "component") && !!shape.file;
+const holdsFrame = (shape: ToolbarShape): boolean => shape.kind === "screen" || ((shape.kind === "page" || shape.kind === "motion" || shape.kind === "component") && !!shape.file);
 
 export const recipeGroupOf = (selected: ReadonlyArray<ToolbarShape>): ToolbarShape | undefined => {
   const groups = selected.filter((shape) => shape.kind === "group" && shape.recipe !== undefined);
@@ -70,6 +71,7 @@ export const toolbarState = (input: ToolbarInput): ToolbarState => {
       if (only.generating) return { kind: "generating", shapeId: only.id };
       return { kind: "result", shapeId: only.id, generate: input.usable };
     }
+    if (only.kind === "screen") return { kind: "screen", shapeId: only.id };
     if (holdsFrame(only)) return { kind: "open", shapeId: only.id };
   }
   const drag = selected.length > 1 && selected.some(holdsFrame);

@@ -1,7 +1,8 @@
 import { extname, join } from "node:path";
-import { AUDIO_SERVED_TYPES, snapshotFileName } from "@unframed/domain";
+import { AUDIO_SERVED_TYPES, screenSnapshotName, snapshotFileName } from "@unframed/domain";
 import { PREVIEW_FOLDER, previewFileName } from "../media/mediaStore.ts";
 import { SNAPSHOT_FOLDER } from "../artifacts/snapshots.ts";
+import { SCREEN_SNAPSHOT_FOLDER } from "../screens/screenSnapshots.ts";
 import { fileNameOf } from "../paths.ts";
 import type { Route } from "./api.ts";
 import { sendError } from "./respond.ts";
@@ -57,10 +58,15 @@ export const projectFileRoute =
     const snapshot = url.searchParams.get("snapshot");
     const still = snapshot === null ? undefined : /^(\d{1,5})x(\d{1,5})$/.exec(snapshot);
     const stillKit = { mode: url.searchParams.get("mode"), kit: url.searchParams.get("kit") };
+    const screen = url.searchParams.get("screen") !== null && name !== undefined && name.endsWith(".png") ? screenSnapshotName(name.slice(0, -".png".length)) : undefined;
     const path =
       folder === undefined || name === undefined
         ? undefined
-        : still
+        : screen !== undefined
+          ? join(folder, SCREEN_SNAPSHOT_FOLDER, screen)
+          : url.searchParams.get("screen") !== null
+            ? undefined
+            : still
           ? join(folder, SNAPSHOT_FOLDER, snapshotFileName(name, { w: Number(still[1]), h: Number(still[2]) }, stillKit))
           : size !== undefined
             ? join(folder, PREVIEW_FOLDER, previewFileName(name, size))
@@ -75,7 +81,7 @@ export const projectFileRoute =
         res,
         path,
         {
-          "content-type": still ? "image/png" : size === undefined ? contentTypeFor(name) : "image/webp",
+          "content-type": still || screen !== undefined ? "image/png" : size === undefined ? contentTypeFor(name) : "image/webp",
           "cache-control": "no-cache",
           "content-security-policy": "sandbox",
         },

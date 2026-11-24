@@ -1,5 +1,15 @@
-import type { ArtifactShapeProps } from "@unframed/contracts";
-import { artifactTitle, isArtifactKind, type ArtifactKind, type PanelEdge, type PanelPrefs } from "@unframed/domain";
+import type { ArtifactShapeProps, ScreenShapeProps } from "@unframed/contracts";
+import {
+  addScreenParameterInstruction,
+  applyScreenParametersInstruction,
+  artifactTitle,
+  isArtifactKind,
+  NO_BRIDGE,
+  type ArtifactKind,
+  type PanelEdge,
+  type PanelPrefs,
+  type ScreenParametersContext,
+} from "@unframed/domain";
 import { GripVertical, PanelRight, PictureInPicture2, SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useEditor, useValue, type TLShapeId } from "tldraw";
@@ -11,13 +21,22 @@ import { useWheelToCanvasOn } from "../canvas/wheelToCanvas.ts";
 import { DrawerGrip, useDrawerWidth } from "../chrome/drawerGrip.tsx";
 import { useNarrowWindow } from "../chrome/narrowWindow.ts";
 import { Tip } from "../chrome/ui.tsx";
-import { useEngine } from "../context.ts";
-import { ParametersContent } from "./editor/Parameters.tsx";
+import { useCanvasProject, useEngine } from "../context.ts";
+import { repositoryState } from "../repositories/store.ts";
+import { ParametersContent, type ParameterInstructions } from "./editor/Parameters.tsx";
 import { useFloatingPlacement } from "./panelPlacement.ts";
 import { usePanelPrefs } from "./panelPrefs.ts";
 import { artifactsOf } from "./state.ts";
 
 const stop = (event: { stopPropagation(): void }) => event.stopPropagation();
+
+const screenInstructions = (screen: ScreenParametersContext | undefined): ParameterInstructions | undefined =>
+  screen === undefined
+    ? undefined
+    : {
+        add: (wanted) => addScreenParameterInstruction({ ...screen, wanted }),
+        apply: (name, values) => applyScreenParametersInstruction({ ...screen, name, values }),
+      };
 
 type Shown = "float" | "dock" | "sheet";
 
@@ -48,15 +67,23 @@ export const ParametersPanel = ({ shapeId }: { readonly shapeId: TLShapeId }) =>
   const narrow = useNarrowWindow();
   const [prefs, savePrefs] = usePanelPrefs(engine);
   const [element, setElement] = useState<HTMLElement | null>(null);
+  const project = useCanvasProject();
   const facts = useValue(
     "tuned artifact",
-    () => {
+    (): { kind: ArtifactKind; title: string; dials: Readonly<Record<string, unknown>> | undefined; screen?: ScreenParametersContext | undefined; notice?: string | undefined } | undefined => {
       const shape = editor.getShape(shapeId);
+      if (shape?.type === "screen") {
+        const props = shape.props as ScreenShapeProps;
+        const state = repositoryState(project);
+        const instance = state.instances.get().get(props.instance);
+        const screen = instance === undefined ? undefined : { route: props.route, branch: instance.branch, worktree: instance.worktree };
+        return { kind: "page", title: `${props.title} ${props.route}`.trim(), dials: props.dials, screen, notice: state.bridges.get().get(shapeId) === false ? NO_BRIDGE : undefined };
+      }
       if (!shape || !isArtifactKind(shape.type)) return undefined;
       const props = shape.props as ArtifactShapeProps;
       return { kind: shape.type as ArtifactKind, title: artifactTitle(props), dials: props.dials };
     },
-    [editor, shapeId],
+    [editor, shapeId, project],
   );
   const announcement = useValue("tuned announcement", () => artifactsOf(editor).heard.get().get(shapeId), [editor, shapeId]);
   const close = () => artifactsOf(editor).tuning.set(undefined);
@@ -157,7 +184,17 @@ export const ParametersPanel = ({ shapeId }: { readonly shapeId: TLShapeId }) =>
         </Tip>
       </header>
       <div className={cn("min-h-0 flex-1 overflow-y-auto overflow-x-hidden", announcement === undefined && "pb-2.5", shown === "dock" && "pb-16")} data-scrolls="true">
-        <ParametersContent shapeId={shapeId} kind={facts.kind} title={title} announcement={announcement} saved={facts.dials} post={post} place="canvas" />
+        <ParametersContent
+          shapeId={shapeId}
+          kind={facts.kind}
+          title={title}
+          announcement={announcement}
+          saved={facts.dials}
+          post={post}
+          place="canvas"
+          notice={facts.notice}
+          instructions={screenInstructions(facts.screen)}
+        />
       </div>
       {floating &&
         EDGES.map(([edge, place]) => (

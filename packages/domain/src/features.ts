@@ -16,4 +16,5 @@ export const featureList = (features: Features): Feature[] => FEATURES.filter((f
 export const FEATURE_OFF_MESSAGES: Record<Feature, string> = {
   nodes: "Nodes are not available in this build.",
   "element-editing": "Element editing is not available in this build.",
+  repositories: "Repositories are not available in this build.",
 };

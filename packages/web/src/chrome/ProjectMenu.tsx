@@ -1,7 +1,8 @@
-import { UnframedError } from "@unframed/contracts";
+import { UnframedError, type ProjectKind } from "@unframed/contracts";
 import { projectSlug } from "@unframed/domain";
-import { Check, FileText, Plus } from "lucide-react";
+import { Check, FileText, FolderGit2, FolderSearch, Plus, Wrench } from "lucide-react";
 import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
+import { useValue } from "tldraw";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -16,10 +17,13 @@ import { Dialog, DialogClose, DialogFooter, DialogHeader, DialogPanel, DialogPop
 import { Input } from "~/components/ui/input";
 import { Menu, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuRadioItemIndicator, MenuTrigger } from "~/components/ui/menu";
 import { useActivation, useEngine } from "../context.ts";
+import { useIsDevice } from "../deviceMode.ts";
+import { useFeature } from "../features.ts";
+import { refreshRepository, repositoryState } from "../repositories/store.ts";
 import { reportState, useReportState } from "../legacy/reportState.ts";
 import { OPEN_PROJECT_LIST, PROJECT_ACTION, type ProjectActionDetail } from "./tabEvents.ts";
 import { useActiveProject } from "../project/activation.ts";
-import { showError } from "../toasts.tsx";
+import { showError, showNotice } from "../toasts.tsx";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
@@ -155,17 +159,22 @@ export const ProjectMenu = () => {
   const activation = useActivation();
   const active = useActiveProject(activation);
   const [projects, setProjects] = useState<ReadonlyArray<string>>([]);
+  const [kinds, setKinds] = useState<Readonly<Record<string, ProjectKind>>>({});
+  const repositoriesOn = useFeature("repositories");
+  const device = useIsDevice();
   const [menuOpen, setMenuOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [renaming, setRenaming] = useState<string>();
   const [deleting, setDeleting] = useState<Deleting>();
   const [busy, setBusy] = useState(false);
   const imported = useReportState();
+  const missing = useValue("repository missing", () => active !== undefined && repositoryState(active).repository.get()?.status === "missing", [active]);
 
   const refresh = () =>
     engine.call("projects.list").then(
       (answer) => {
         setProjects(answer.projects);
+        setKinds(answer.kinds);
         return answer.projects;
       },
       (error: unknown) => {
@@ -211,6 +220,40 @@ export const ProjectMenu = () => {
     return undefined;
   };
 
+  const addRepository = async () => {
+    try {
+      const { path } = await engine.call("repositories.pickFolder");
+      if (path === "") return;
+      const added = await engine.call("repositories.add", { path });
+      if (added.uncommitted) showNotice("Uncommitted changes in your checkout are not carried into Instances.", "info");
+      await activation.activate(added.name);
+    } catch (error) {
+      showError(messageOf(error));
+    }
+  };
+
+  const locateRepository = async (project: string) => {
+    try {
+      const { path } = await engine.call("repositories.pickFolder");
+      if (path === "") return;
+      const { repository } = await engine.call("repositories.locate", { project, path });
+      repositoryState(project).repository.set(repository);
+      showNotice(`Found the Repository at ${repository.root}.`, "info");
+    } catch (error) {
+      showError(messageOf(error));
+    }
+  };
+
+  const runSetup = async (project: string) => {
+    try {
+      const { chatId } = await engine.call("repositories.setup", { project });
+      await refreshRepository(engine, project);
+      showNotice(chatId === null ? "Setup needs Claude or Codex: set one up in Settings, then run Setup again." : "Setup is running in a new chat.", "info");
+    } catch (error) {
+      showError(messageOf(error));
+    }
+  };
+
   const rename: SubmitName = async (name, slug, close) => {
     const from = renaming;
     if (from === undefined) return undefined;
@@ -224,6 +267,7 @@ export const ProjectMenu = () => {
       const renamed = await engine.call("projects.rename", { name: from, to: name });
       close();
       setProjects((current) => [...current.map((project) => (project === from ? renamed.name : project))].sort());
+      setKinds(({ [from]: kind, ...rest }) => (kind === undefined ? rest : { ...rest, [renamed.name]: kind }));
       activation.renameTab(from, renamed.name);
       if (from === active) await activation.activate(renamed.name);
     } catch (error) {
@@ -289,7 +333,7 @@ export const ProjectMenu = () => {
           {/* The current project is the kit's checked radio item: its check and its tint. */}
           <MenuRadioGroup value={active ?? ""}>
             {projects.map((project) => (
-              <MenuRadioItem key={project} value={project} closeOnClick data-active={project === active ? "true" : undefined} onClick={() => void activation.activate(project)}>
+              <MenuRadioItem key={project} value={project} closeOnClick data-active={project === active ? "true" : undefined} data-kind={kinds[project] ?? "whiteboard"} onClick={() => void activation.activate(project)}>
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="flex size-4 shrink-0 items-center justify-center">
                     <MenuRadioItemIndicator>
@@ -297,6 +341,7 @@ export const ProjectMenu = () => {
                     </MenuRadioItemIndicator>
                   </span>
                   <span className="min-w-0 flex-1 truncate">{project}</span>
+                  {kinds[project] === "repository" && <FolderGit2 aria-label="Repository" className="shrink-0" />}
                 </span>
               </MenuRadioItem>
             ))}
@@ -309,8 +354,26 @@ export const ProjectMenu = () => {
           )}
           <MenuItem onClick={() => setCreating(true)}>
             <Plus aria-hidden />
-            Add project
+            {repositoriesOn ? "New Whiteboard" : "Add project"}
           </MenuItem>
+          {repositoriesOn && !device && active !== undefined && kinds[active] === "repository" && missing && (
+            <MenuItem onClick={() => void locateRepository(active)}>
+              <FolderSearch aria-hidden />
+              Locate Repository…
+            </MenuItem>
+          )}
+          {repositoriesOn && active !== undefined && kinds[active] === "repository" && !missing && (
+            <MenuItem onClick={() => void runSetup(active)}>
+              <Wrench aria-hidden />
+              Run Setup again
+            </MenuItem>
+          )}
+          {repositoriesOn && !device && (
+            <MenuItem onClick={() => void addRepository()}>
+              <FolderGit2 aria-hidden />
+              Add Repository…
+            </MenuItem>
+          )}
         </MenuPopup>
       </Menu>
       <ProjectNameDialog open={creating} onOpenChange={setCreating} title="New project" action="Create" initial="" submit={create} />

@@ -30,7 +30,7 @@ export type SnapshotRenderer = (job: SnapshotJob) => Promise<Buffer | undefined>
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const stubSnapshot = (text: Readonly<Record<string, unknown>>): Buffer => {
+export const stubSnapshotPng = (text: Readonly<Record<string, unknown>>): Buffer => {
   const chunk = (type: string, data: Buffer) => {
     const length = Buffer.alloc(4);
     length.writeUInt32BE(data.length);
@@ -56,7 +56,7 @@ const stubSnapshot = (text: Readonly<Record<string, unknown>>): Buffer => {
 export const stubSnapshotRenderer: SnapshotRenderer = async (job) => {
   const startedAt = Date.now();
   await sleep(150);
-  return stubSnapshot({ url: job.url, file: job.file, w: job.w, h: job.h, dials: job.dials ?? null, mode: job.mode, kit: job.kit, startedAt, finishedAt: Date.now() });
+  return stubSnapshotPng({ url: job.url, file: job.file, w: job.w, h: job.h, dials: job.dials ?? null, mode: job.mode, kit: job.kit, startedAt, finishedAt: Date.now() });
 };
 
 export const chromeSnapshotRenderer =

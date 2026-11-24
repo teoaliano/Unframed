@@ -40,6 +40,9 @@ import { installRename } from "./rename.ts";
 import { watchRunProgress } from "../generate/recipeRuns.ts";
 import { ComponentShapeUtil, MotionShapeUtil, PageShapeUtil } from "./shapes/artifact.tsx";
 import { AudioShapeUtil } from "./shapes/audio.tsx";
+import { ScreenShapeUtil } from "./shapes/screen.tsx";
+import { installScreenDemand } from "../repositories/demand.ts";
+import { watchRepository, watchScreenSnapshots } from "../repositories/store.ts";
 import { NodeShapeUtil } from "../nodes/NodeShapeUtil.tsx";
 import { WireShapeUtil } from "../nodes/WireShapeUtil.tsx";
 import { installNodeSideEffects } from "../nodes/sideEffects.ts";
@@ -56,11 +59,11 @@ import { SyncSocket } from "./syncSocket.ts";
 import { CommentTool } from "../comments/CommentTool.ts";
 import { recalledCamera, rememberCamera } from "../project/tabMemory.ts";
 import { TLDRAW_ASSET_URLS, TLDRAW_CHROME, TLDRAW_OPTIONS } from "./tldrawChrome.tsx";
-import { useFeature } from "../features.ts";
+import { featureOn, useFeature } from "../features.ts";
 import { CanvasDoc, CanvasDocContext } from "./doc.ts";
 
 
-const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, AudioShapeUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil, ComponentShapeUtil, NodeShapeUtil, WireShapeUtil, ...DESIGNED_SHAPE_UTILS];
+const SHAPE_UTILS = [PromptShapeUtil, ImageMediaUtil, VideoMediaUtil, AudioShapeUtil, GroupShapeUtil, PageShapeUtil, MotionShapeUtil, ComponentShapeUtil, ScreenShapeUtil, NodeShapeUtil, WireShapeUtil, ...DESIGNED_SHAPE_UTILS];
 
 const TOOLS = [CommentTool];
 
@@ -126,7 +129,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
   }, [settings]);
 
   useEffect(() => {
-    const stops = [watchSnapshots(engine, project), watchFileChanges(engine, project), watchComponentPins(engine, project)];
+    const stops = [watchSnapshots(engine, project), watchFileChanges(engine, project), watchComponentPins(engine, project), watchScreenSnapshots(engine, project)];
     return () => {
       for (const stop of stops) stop();
     };
@@ -140,6 +143,8 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
   }, [doc, activation, project]);
 
   useEffect(() => watchRunReports(engine, project), [engine, project]);
+  const repositoriesOn = useFeature("repositories");
+  useEffect(() => (repositoriesOn ? watchRepository(engine, project) : undefined), [engine, project, repositoriesOn]);
   const nodesOn = useFeature("nodes");
   useEffect(() => (nodesOn ? watchChainReports(engine, project) : undefined), [engine, project, nodesOn]);
 
@@ -171,6 +176,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     bindNodeCatalogues(editor);
     const stopCatalogues = watchNodeCatalogues(editor, engine);
     const stopLongPress = installLongPressMenu(editor);
+    const stopScreenDemand = featureOn("repositories") ? installScreenDemand(editor, engine, project) : undefined;
     const detach = doc?.attach(editor);
     artifactsOf(editor).canvas.set(editor);
     content.current = { project, engine, minter };
@@ -195,6 +201,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
       stopRenders();
       stopCatalogues();
       stopLongPress();
+      stopScreenDemand?.();
       detach?.();
       if (artifactsOf(editor).canvas.get() === editor) artifactsOf(editor).canvas.set(undefined);
       content.current = undefined;

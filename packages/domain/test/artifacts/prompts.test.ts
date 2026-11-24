@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import {
   ADD_PARAMETER_TEMPLATE,
   APPLY_PARAMETERS_TEMPLATE,
+  APPLY_SCREEN_PARAMETERS_TEMPLATE,
+  ADD_SCREEN_PARAMETER_TEMPLATE,
   ARTIFACT_PERFORMANCE,
   DIALS_CONTRACT,
   DIALS_TIMELINE,
@@ -20,6 +22,21 @@ import {
   PAGE_WRITE_ARGUMENTS,
   PAGE_WRITE_TEXT,
   PREVIEW_TOOL_TEXT,
+  INSTANCE_TOOL_TEXT,
+  CANVAS_READ_SCREENS,
+  CANVAS_WRITE_SCREENS,
+  PREVIEW_OPEN_SCREENS,
+  REPOSITORY_SECTION_TEMPLATE,
+  repositorySection,
+  repositorySystemPrompt,
+  SETUP_FIRST_MESSAGE,
+  SETUP_REJECTION_TEMPLATE,
+  SETUP_SYSTEM_PROMPT,
+  SETUP_TOOL_TEXT,
+  setupRejection,
+  SCREEN_EXPLODE_TEXT,
+  FLOW_INSTRUCTION_TEMPLATE,
+  flowInstruction,
 } from "../../src/index.ts";
 
 const prompts = join(import.meta.dirname, "../../../../assets/prompts");
@@ -49,6 +66,8 @@ describe("the artifact tools' model-facing text is the assets' text", () => {
     expect(ARTIFACT_PERFORMANCE).toBe(blocks("artifact-performance.md")[0]);
     expect(ADD_PARAMETER_TEMPLATE).toBe(blocks("add-parameter-instruction.md")[0]);
     expect(APPLY_PARAMETERS_TEMPLATE).toBe(blocks("apply-parameters-instruction.md")[0]);
+    expect(APPLY_SCREEN_PARAMETERS_TEMPLATE).toBe(blocks("screen-parameters-instructions.md")[0]);
+    expect(ADD_SCREEN_PARAMETER_TEMPLATE).toBe(blocks("screen-parameters-instructions.md")[1]);
   });
 
   it("holds the write arguments and the read tools", () => {
@@ -69,5 +88,56 @@ describe("the artifact tools' model-facing text is the assets' text", () => {
     const expected = Object.fromEntries(sections("preview-tool-descriptions.md").map((section) => [section.name, { description: section.text, arguments: section.args }]));
     expect(Object.keys(expected)).toHaveLength(12);
     expect(PREVIEW_TOOL_TEXT).toEqual(expected);
+  });
+});
+
+describe("the Instance tools' model-facing text is the assets' text", () => {
+  it("holds every Instance tool, its arguments, and the Screen sentences of the canvas and preview tools", () => {
+    const all = sections("instance-tools.md");
+    const tools = all.filter((section) => section.name.startsWith("instance_"));
+    expect(INSTANCE_TOOL_TEXT).toEqual(Object.fromEntries(tools.map((section) => [section.name, { description: section.text, arguments: section.args }])));
+    expect(Object.keys(INSTANCE_TOOL_TEXT)).toEqual(["instance_create", "instance_remove", "instance_status", "instance_start", "instance_stop"]);
+    const extra = Object.fromEntries(all.filter((section) => !section.name.startsWith("instance_")).map((section) => [section.name, section.text]));
+    expect([CANVAS_READ_SCREENS, CANVAS_WRITE_SCREENS, PREVIEW_OPEN_SCREENS]).toEqual([extra.canvas_read, extra.canvas_write, extra.preview_open]);
+  });
+});
+
+describe("the Repository section of the system prompt", () => {
+  it("is the asset's text with the Repository's paths and Setup's files filled in", () => {
+    expect(REPOSITORY_SECTION_TEMPLATE).toBe(blocks("repository-section.md")[0]);
+    const facts = { root: "/Users/me/app", worktrees: "/data/worktrees/app", setupFiles: [".unframed/mock-user.ts", ".env.local"] };
+    const section = repositorySection(facts);
+    expect(section).not.toMatch(/<root>|<worktrees>|<setup files>/);
+    expect(section).toContain("git repository at /Users/me/app");
+    expect(section).toContain("Every worktree sits under /data/worktrees/app");
+    expect(section).toContain("never yours to change or commit: .unframed/mock-user.ts, .env.local.");
+    expect(section).toContain("Never commit");
+    expect(section).toContain("window.unframed?.dials(...)");
+    expect(repositorySection({ ...facts, setupFiles: [] })).toContain("commit: none yet.");
+    expect(repositorySystemPrompt("Base.", facts)).toBe(`Base.\n\n${section}`);
+  });
+});
+
+describe("Setup's model-facing text is the asset's text", () => {
+  it("holds its system section, first message, rejection and tools", () => {
+    const all = Object.fromEntries(sections("setup.md").map((section) => [section.name, section]));
+    expect(SETUP_SYSTEM_PROMPT).toBe(all.System!.text);
+    expect(SETUP_FIRST_MESSAGE).toBe(all["First message"]!.text);
+    expect(SETUP_REJECTION_TEMPLATE).toBe(all.Rejection!.text);
+    expect(setupRejection("  the header is missing ")).toBe("That is not right yet: the header is missing");
+    expect(SETUP_TOOL_TEXT).toEqual(
+      Object.fromEntries(["ask_login", "screen_snapshot", "setup_save"].map((name) => [name, { description: all[name]!.text, arguments: all[name]!.args }])),
+    );
+  });
+});
+
+describe("the Flow's model-facing text is the asset's text", () => {
+  it("holds screen_explode and the instruction that asks the agent for routes", () => {
+    const all = Object.fromEntries(sections("flow.md").map((section) => [section.name, section]));
+    expect(SCREEN_EXPLODE_TEXT).toEqual({ description: all.screen_explode!.text, arguments: all.screen_explode!.args });
+    expect(FLOW_INSTRUCTION_TEMPLATE).toBe(all["Propose routes"]!.text);
+    const text = flowInstruction({ shape: "a1b2", route: "/", branch: "feature/x", worktree: "/data/worktrees/app/x" });
+    expect(text).not.toMatch(/<shape>|<route>|<branch>|<worktree>/);
+    expect(text).toContain('Explode the Screen a1b2 into a Flow: read the router in the Instance\'s worktree at /data/worktrees/app/x (the branch "feature/x")');
   });
 });

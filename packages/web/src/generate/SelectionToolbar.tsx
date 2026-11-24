@@ -26,6 +26,7 @@ import { useWheelToCanvas } from "../canvas/wheelToCanvas.ts";
 import { NodeRunButtons, selectionNodeCount } from "../nodes/NodeChrome.tsx";
 import { selectionTarget, useDesignTarget } from "../canvas/designTarget.ts";
 import { StyleRow } from "../canvas/StyleRow.tsx";
+import { ScreenActions } from "../repositories/ScreenActions.tsx";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
@@ -310,6 +311,7 @@ const RecipeBar = ({ state, agent, style }: { state: Extract<ToolbarState, { kin
 const Bar = ({ state, onGenerate, agent, nodes, style }: { state: Exclude<ToolbarState, { kind: "none" }>; onGenerate: () => void; agent: ReactNode; nodes: number; style: ReactNode }) => {
   const editor = useEditor();
   const { openArtifact, renderButton: Render, parametersButton: ParametersToggle, kitModeButton: KitModeToggle, scaleButton: Scale } = useSlots();
+  const repositoriesOn = useFeature("repositories");
   switch (state.kind) {
     case "recipe":
       return <RecipeBar state={state} agent={agent} style={style} />;
@@ -333,6 +335,15 @@ const Bar = ({ state, onGenerate, agent, nodes, style }: { state: Exclude<Toolba
           {ParametersToggle && editor.getShape(state.shapeId as TLShapeId)?.type !== "component" && <ParametersToggle shapeId={state.shapeId as TLShapeId} />}
           {KitModeToggle && <KitModeToggle shapeId={state.shapeId as TLShapeId} />}
           {Scale && editor.getShape(state.shapeId as TLShapeId)?.type !== "component" && <Scale shapeId={state.shapeId as TLShapeId} />}
+          {agent}
+        </div>
+      );
+    case "screen":
+      return (
+        <div className={barClass}>
+          <DragHandle />
+          {repositoriesOn && <ScreenActions shapeId={state.shapeId as TLShapeId} />}
+          {repositoriesOn && ParametersToggle && <ParametersToggle shapeId={state.shapeId as TLShapeId} />}
           {agent}
         </div>
       );

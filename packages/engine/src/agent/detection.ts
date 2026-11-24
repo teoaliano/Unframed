@@ -1,8 +1,6 @@
-import { spawn } from "node:child_process";
-import { accessSync, constants, existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
 import type { ProviderStatus, ProviderStatuses } from "@unframed/contracts";
 import {
   CLAUDE_CATALOGUE,
@@ -15,23 +13,20 @@ import {
   claudeSkills,
   classifyProvider,
   codexSkills,
-  mergePath,
   mergeSkillOverrides,
   parseCodexLoginStatus,
-  resolveWindowsCommand,
   runEnvironment as buildEnvironment,
-  shellPathFromOutput,
   type AgentProvider,
   type AuthProbe,
   type ModelRow,
   type OfferedCommand,
   type SkillFile,
-  type VersionRun,
 } from "@unframed/domain";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { errorText, logInfo } from "../log.ts";
+import { LoginShell, runCommand } from "../loginShell.ts";
 import { Config } from "../services.ts";
 import { SettingsStore } from "../settingsStore.ts";
 import { CodexRpc, initializeCodex } from "./codexRpc.ts";
@@ -39,7 +34,6 @@ import { ENGINE_VERSION } from "./version.ts";
 
 export const STATUS_CACHE_MS = 5 * 60_000;
 const VERSION_TIMEOUT_MS = 5_000;
-const SHELL_TIMEOUT_MS = 4_000;
 const CLAUDE_PROBE_TIMEOUT_MS = 15_000;
 const CODEX_LOGIN_TIMEOUT_MS = 8_000;
 const CODEX_LIST_TIMEOUT_MS = 10_000;
@@ -68,70 +62,8 @@ export class ProviderDetection extends Context.Service<
   }
 >()("unframed/engine/ProviderDetection") {}
 
-type Spawned = VersionRun & { readonly stderr?: string };
-
-/** Runs a command to completion, capturing stdout and stderr together, killed after `timeoutMs`. */
-export const runCommand = (executable: string, args: ReadonlyArray<string>, env: Record<string, string>, timeoutMs: number): Promise<Spawned> =>
-  new Promise((resolve) => {
-    const [command, commandArgs] = executable.endsWith(".js") ? [process.execPath, [executable, ...args]] : [executable, [...args]];
-    let settled = false;
-    let output = "";
-    const finish = (result: Spawned) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(result);
-    };
-    let child: ReturnType<typeof spawn>;
-    try {
-      child = spawn(command, commandArgs, { env, stdio: ["ignore", "pipe", "pipe"] });
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      finish(code === "ENOENT" ? { kind: "not_found" } : { kind: "spawn_failed", code: code ?? errorText(error) });
-      return;
-    }
-    const timer = setTimeout(() => {
-      child.kill("SIGKILL");
-      finish({ kind: "timed_out" });
-    }, timeoutMs);
-    timer.unref();
-    child.stdout?.setEncoding("utf8").on("data", (chunk: string) => (output += chunk));
-    child.stderr?.setEncoding("utf8").on("data", (chunk: string) => (output += chunk));
-    child.on("error", (error: NodeJS.ErrnoException) => {
-      finish(error.code === "ENOENT" ? { kind: "not_found" } : { kind: "spawn_failed", code: error.code ?? error.message });
-    });
-    child.on("close", (code) => finish({ kind: "exited", code, output }));
-  });
-
 /** The package entry beside an npm `codex` launcher on Windows. */
 const CODEX_PACKAGE_ENTRIES = [["node_modules", "@openai", "codex", "bin", "codex.js"]];
-
-const isExecutable =(path: string): boolean => {
-  try {
-    accessSync(path, constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-/** A bare name found on PATH, else the name itself so spawning it fails as ENOENT. */
-const resolveOnPath = (command: string, path: string, platform: NodeJS.Platform, env: Record<string, string>): string => {
-  if (platform === "win32") {
-    return resolveWindowsCommand(command, {
-      pathDirs: path.split(";"),
-      pathext: env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD",
-      exists: existsSync,
-    }, command.toLowerCase().includes("codex") ? CODEX_PACKAGE_ENTRIES : undefined);
-  }
-  if (command.includes("/")) return command;
-  for (const dir of path.split(delimiter)) {
-    if (dir === "") continue;
-    const candidate = join(dir, command);
-    if (isExecutable(candidate)) return candidate;
-  }
-  return command;
-};
 
 /** A prompt that never yields: the probe's query speaks only control requests. */
 async function* silentPrompt(signal: AbortSignal): AsyncGenerator<never, void> {
@@ -297,27 +229,15 @@ export const providerDetectionLayer = Layer.effect(
   Effect.gen(function* () {
     const config = yield* Config;
     const settings = yield* SettingsStore;
-    let hydrated: Promise<string> | undefined;
-
-    /** PATH with the login shell's entries appended, once per process. */
-    const hydratedPath = (): Promise<string> => {
-      hydrated ??= (async () => {
-        const own = process.env.PATH;
-        if (config.platform === "win32") return own ?? "";
-        const shell = process.env.SHELL?.trim() || "/bin/sh";
-        const answer = await runCommand(shell, ["-lc", 'echo "$PATH"'], { ...(process.env as Record<string, string>) }, SHELL_TIMEOUT_MS);
-        const shellPath = answer.kind === "exited" && answer.code === 0 ? shellPathFromOutput(answer.output) : undefined;
-        return mergePath(own, shellPath, delimiter);
-      })();
-      return hydrated;
-    };
+    const loginShell = yield* LoginShell;
 
     const environmentFor = async (provider: AgentProvider): Promise<RunEnvironment> => {
       const current = Effect.runSync(settings.read);
-      const path = await hydratedPath();
+      const { path } = await Effect.runPromise(loginShell.setup);
       const env = buildEnvironment({ env: process.env, path, claudeConfigDir: current.claudeConfigDir, osHome: homedir() });
       const configured = (provider === "claude" ? current.claudePath : current.codexPath).trim();
-      const executable = resolveOnPath(configured === "" ? provider : configured, path, config.platform, env);
+      const command = configured === "" ? provider : configured;
+      const executable = await Effect.runPromise(loginShell.resolve(command, command.toLowerCase().includes("codex") ? CODEX_PACKAGE_ENTRIES : undefined));
       return { executable, env };
     };
 

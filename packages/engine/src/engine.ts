@@ -27,12 +27,16 @@ import { uploadRoute } from "./http/upload.ts";
 import { startPreviewOrigin } from "./http/preview.ts";
 import { listenLoopback, LOOPBACK_HOST } from "./listen.ts";
 import { errorText, logError, logInfo } from "./log.ts";
+import { loginShellLayer } from "./loginShell.ts";
 import { Ipc, nativeLayer } from "./native.ts";
 import { OpenProjects, openProjectsLayer } from "./openProjects.ts";
 import { installRoot } from "./paths.ts";
 import { preferencesStoreLayer } from "./preferencesStore.ts";
 import { projectDatabaseLayer } from "./projectDatabase.ts";
 import { Projects, projectsLayer } from "./projects.ts";
+import { instancesLayer } from "./instances/layer.ts";
+import { instanceGitLayer } from "./instances/instanceGit.ts";
+import { repositoriesLayer } from "./repositories/layer.ts";
 import { rpcHandlersLayer } from "./rpc/handlers.ts";
 import { lifecycleLayer } from "./lifecycle.ts";
 import { OAuth, oauthLayer } from "./oauth/oauth.ts";
@@ -113,7 +117,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
 
   const services = Layer.mergeAll(RpcServer.layer(UnframedRpcs, { disableTracing: true })).pipe(
     Layer.provideMerge(rpcHandlersLayer),
-    Layer.provideMerge(Layer.mergeAll(rpcSocketsLayer, Layer.provideMerge(lifecycleLayer, oauthLayer))),
+    Layer.provideMerge(Layer.mergeAll(rpcSocketsLayer, instanceGitLayer, Layer.provideMerge(lifecycleLayer, oauthLayer))),
     Layer.provideMerge(Layer.provideMerge(agentsLayer, providerDetectionLayer)),
     Layer.provideMerge(Layer.provideMerge(nodeRunsLayer, Layer.mergeAll(artifactsLayer, renderJobsLayer))),
     Layer.provideMerge(shareLinksLayer),
@@ -123,13 +127,13 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
     Layer.provideMerge(videoCatalogueLayer),
     Layer.provideMerge(mediaStoreLayer),
     Layer.provideMerge(canvasRoomsLayer),
-    Layer.provideMerge(nativeLayer),
+    Layer.provideMerge(Layer.mergeAll(nativeLayer, Layer.provideMerge(repositoriesLayer, instancesLayer))),
     Layer.provideMerge(Layer.mergeAll(preferencesStoreLayer, agentConnectionsLayer, selectionHubLayer, ipadLayer)),
     Layer.provideMerge(projectsLayer),
     Layer.provideMerge(projectDatabaseLayer),
     Layer.provideMerge(openProjectsLayer),
     Layer.provideMerge(settingsStoreLayer({ fileVars, processEnv: host.env, previewPort })),
-    Layer.provideMerge(Layer.mergeAll(presenceLayer, shutdownLayer)),
+    Layer.provideMerge(Layer.mergeAll(presenceLayer, shutdownLayer, loginShellLayer)),
     Layer.provideMerge(Layer.succeed(Config, config)),
     Layer.provideMerge(Layer.succeed(Ipc, { send: host.send })),
   );

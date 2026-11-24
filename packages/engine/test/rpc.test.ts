@@ -9,7 +9,7 @@ describe("RPC socket", () => {
     const health = await rpc.call("server.health");
     expect(health).toEqual({
       ok: true,
-      features: ["nodes", "element-editing"],
+      features: ["nodes", "element-editing", "repositories"],
       hasKey: false,
       keyHint: "",
       imageModel: "openai/gpt-image-2",

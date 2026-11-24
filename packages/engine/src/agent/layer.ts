@@ -3,14 +3,17 @@ import { NodeRuns } from "../nodes/nodeRuns.ts";
 import { MediaStore } from "../media/mediaStore.ts";
 import type { ClientChatCommand, ShellStreamItem, ThreadSearchMatch, ThreadStreamItem, TurnDiff } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
-import { defaultModel, projectSlug, type ClientCommand } from "@unframed/domain";
+import { defaultModel, noPagesInRepository, NO_SETUP_OPEN, NOT_A_REPOSITORY_PROJECT, WHITEBOARD_ONLY_TOOLS, projectSlug, REJECTION_NEEDS_NOTE, SETUP_FIRST_MESSAGE, setupRejection, type AgentProvider, type ClientCommand } from "@unframed/domain";
+import type { Repository } from "@unframed/contracts";
+import { randomUUID } from "node:crypto";
+import { SetupTools } from "../repositories/setupTools.ts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import { CanvasRooms } from "../canvas/rooms.ts";
 import type { Route } from "../http/api.ts";
-import { errorText } from "../log.ts";
+import { errorText, logInfo } from "../log.ts";
 import { OpenProjects } from "../openProjects.ts";
 import { ProjectDatabase } from "../projectDatabase.ts";
 import { Config } from "../services.ts";
@@ -18,7 +21,7 @@ import { SettingsStore } from "../settingsStore.ts";
 import { AttachmentRefused } from "./attachmentStore.ts";
 import { realAdapter } from "./adapters/real.ts";
 import { ProviderDetection } from "./detection.ts";
-import { mcpRoute, type OutsideProject } from "./mcp.ts";
+import { mcpRoute, refusal, type OutsideProject } from "./mcp.ts";
 import { AgentConnections } from "../agentConnections/layer.ts";
 import { SelectionHub } from "../selection/liveSelection.ts";
 import { Runs } from "../runs/runs.ts";
@@ -37,6 +40,9 @@ import { ComponentTools } from "../artifacts/componentTools.ts";
 import { Artifacts } from "../artifacts/layer.ts";
 import { PreviewTools } from "../artifacts/previewTools.ts";
 import { openShell, openThread } from "./subscriptions.ts";
+import { Instances } from "../instances/layer.ts";
+import { InstanceTools } from "../instances/instanceTools.ts";
+import { Repositories } from "../repositories/layer.ts";
 
 export class Agents extends Context.Service<
   Agents,
@@ -50,6 +56,10 @@ export class Agents extends Context.Service<
     readonly createUploadUrl: (input: { name: string; mimeType: string; sizeBytes: number }) => Effect.Effect<{ relativeUrl: string; expiresAt: string }, UnframedError>;
     readonly routes: ReadonlyArray<Route>;
     readonly attachmentRoutes: ReadonlyArray<Route>;
+    readonly openSetup: (project: string) => Effect.Effect<string | null, UnframedError>;
+    readonly confirmLogin: (project: string) => Effect.Effect<boolean>;
+    readonly setupVerdict: (project: string, accepted: boolean, note: string | undefined) => Effect.Effect<Repository, UnframedError>;
+    readonly writeText: (input: { readonly projectDir: string; readonly system: string; readonly prompt: string }) => Effect.Effect<string | undefined>;
   }
 >()("unframed/engine/Agents") {}
 
@@ -73,6 +83,8 @@ export const agentsLayer = Layer.effect(
     const connections = yield* AgentConnections;
     const projects = yield* Projects;
     const preferences = yield* PreferencesStore;
+    const instances = yield* Instances;
+    const repositories = yield* Repositories;
     const context = yield* Effect.context<never>();
     const run = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
       Effect.runPromiseWith(context)(effect).catch((error: unknown) => {
@@ -85,22 +97,36 @@ export const agentsLayer = Layer.effect(
           const names = yield* projects.list;
           const prefs = yield* preferences.get(["project.active"]);
           const active = typeof prefs["project.active"] === "string" ? prefs["project.active"] : undefined;
+          const kinds = yield* repositories.kinds(names);
           const entries: OutsideProject[] = [];
           for (const name of [...names].sort()) {
             const folder = yield* projects.folder(name);
-            if (folder !== undefined) entries.push({ name, folder, active: name === active });
+            if (folder !== undefined) entries.push({ name, kind: kinds[name] ?? "whiteboard", folder, active: name === active });
           }
           return entries;
         }),
       );
 
+    const repositoriesOn = config.features.has("repositories");
+    const instanceTools = new InstanceTools({
+      create: (project, options) => run(instances.create(project, options)),
+      remove: (project, id, options) => run(instances.remove(project, id, options)),
+      list: (project) => run(instances.list(project)),
+      status: (project, id) => run(instances.status(project, id)),
+      start: (project, id) => run(instances.start(project, id)),
+      stop: (project, id) => run(instances.stop(project, id)),
+      read: (project) => run(rooms.read(project)),
+      apply: (project, change, origin) => run(rooms.apply(project, change, origin)),
+    });
+
     const preview = new PreviewTools({
       read: (project) => run(rooms.read(project)),
+      ...(repositoriesOn ? { screen: (project: string, instance: string) => run(instances.start(project, instance)).then(() => run(instances.status(project, instance))), instance: (project: string, instance: string) => run(instances.status(project, instance)) } : {}),
       chrome: artifacts.chrome,
       findChrome: artifacts.findChrome,
       previewPort: () => previewPort,
       registerCloser: (project, close) => void run(openProjects.register(project, "preview tabs", Effect.promise(close))),
-    });
+    }, config.features);
 
     const selection = yield* SelectionHub;
     const runs = yield* Runs;
@@ -157,11 +183,109 @@ export const agentsLayer = Layer.effect(
       saveMedia: (project, input) => media.save(project, input),
       providerCommands: async (provider) => (await run(detection.statuses({})))[provider].commands?.map((command) => command.name),
       realAdapter,
-      extraTools: (tools) => [...new ArtifactTools(tools, () => previewPort).tools(), ...new ComponentTools(tools, () => previewPort).tools(), ...preview.tools()],
+      extraTools: (tools) => [
+        ...new ArtifactTools(tools, () => previewPort).tools(),
+        ...new ComponentTools(tools, () => previewPort).tools(),
+        ...preview.tools(),
+        ...(repositoriesOn ? instanceTools.tools() : []),
+      ],
+      repository: async (project) => {
+        const repository = await run(repositories.read(project));
+        if (repository === undefined) return undefined;
+        return {
+          root: repository.root,
+          setupFiles: repository.setup?.files ?? [],
+          worktrees: join(config.dataDir, "worktrees", project),
+          setupChat: repository.setupChat,
+          worktreeOf: async (id) => {
+            if (!repositoriesOn) return undefined;
+            const instance = await run(instances.status(project, id)).catch(() => undefined);
+            return instance === undefined || instance.state === "removed" ? undefined : instance.worktree;
+          },
+        };
+      },
       onSessionClosed: (_project, chatId) => void preview.closeChat(chatId),
       providerReady: async (provider) => (await run(detection.statuses({})))[provider].status === "ready",
     });
     yield* rooms.afterCommit((project, change) => runtime.commentCommitted(project, change));
+
+    const setupTools = new SetupTools({
+      read: (project) => run(rooms.read(project)),
+      setupScreen: (project, chatId) => runtime.setupScreen(project, chatId),
+      select: (project, shapeIds) => selection.apply(projectSlug(project), shapeIds),
+      activity: (project, chatId, activity) => runtime.appendActivity(project, chatId, activity),
+      turnId: (project, chatId) => runtime.turnIdOf(project, chatId),
+      start: (project, id) => run(instances.start(project, id)),
+      status: (project, id) => run(instances.status(project, id)),
+      render: () => artifacts.screenRenderer,
+      saveSetup: (project, setup, from) => run(instances.saveSetup(project, setup, from)),
+    });
+    if (repositoriesOn) for (const tool of setupTools.tools()) runtime.registry.register(tool);
+
+    const setupProvider = async (): Promise<AgentProvider | undefined> => {
+      if (config.testAgentScript !== undefined) return "claude";
+      const statuses = await run(detection.statuses({}));
+      return (["claude", "codex"] as const).find((provider) => statuses[provider].status === "ready");
+    };
+
+    const now = () => new Date().toISOString();
+
+    const openSetup = (project: string) =>
+      Effect.tryPromise({
+        try: async (): Promise<string | null> => {
+          const slug = projectSlug(project);
+          if ((await run(repositories.read(slug))) === undefined) throw unframedError("bad_request", NOT_A_REPOSITORY_PROJECT);
+          const provider = await setupProvider();
+          if (provider === undefined) return null;
+          const live = new Set((await run(instances.list(slug))).filter((instance) => instance.state !== "removed").map((instance) => instance.id));
+          const screen = (await run(rooms.read(slug))).find(
+            (record) => record.typeName === "shape" && record.type === "screen" && live.has(String((record.props as { instance?: unknown }).instance)),
+          );
+          const chatId = randomUUID();
+          const selected = screen === undefined ? [] : [screen.id as string];
+          await runtime.dispatch({ type: "thread.create", commandId: randomUUID(), projectId: slug, threadId: chatId, modelSelection: { provider, model: "", traits: {} }, tags: selected, createdAt: now() });
+          await runtime.dispatch({ type: "thread.meta.update", commandId: randomUUID(), projectId: slug, threadId: chatId, title: "Setup" });
+          await run(repositories.update(slug, (stored) => ({ ...stored, status: "setting-up", setupChat: chatId })));
+          await runtime.dispatch({
+            type: "thread.turn.start",
+            commandId: randomUUID(),
+            projectId: slug,
+            threadId: chatId,
+            message: { messageId: `setup:${randomUUID()}`, text: SETUP_FIRST_MESSAGE, attachments: [], ...(selected.length === 0 ? {} : { context: { selection: selected } }) },
+            createdAt: now(),
+          });
+          return chatId;
+        },
+        catch: toUnframed,
+      });
+
+    const setupVerdict = (project: string, accepted: boolean, note: string | undefined) =>
+      Effect.tryPromise({
+        try: async (): Promise<Repository> => {
+          const slug = projectSlug(project);
+          const repository = await run(repositories.read(slug));
+          if (repository === undefined) throw unframedError("bad_request", NOT_A_REPOSITORY_PROJECT);
+          const chatId = repository.setupChat;
+          if (chatId === null) throw unframedError("conflict", NO_SETUP_OPEN);
+          if (accepted) {
+            const saved = await run(repositories.update(slug, (stored) => ({ ...stored, status: "ready", setupChat: null })));
+            await runtime.dispatch({ type: "thread.session.stop", commandId: randomUUID(), projectId: slug, threadId: chatId }).catch(() => undefined);
+            return saved;
+          }
+          const text = note?.trim() ?? "";
+          if (text === "") throw unframedError("bad_request", REJECTION_NEEDS_NOTE);
+          await runtime.dispatch({
+            type: "thread.turn.start",
+            commandId: randomUUID(),
+            projectId: slug,
+            threadId: chatId,
+            message: { messageId: `setup:${randomUUID()}`, text: setupRejection(text), attachments: [] },
+            createdAt: now(),
+          });
+          return repository;
+        },
+        catch: toUnframed,
+      });
 
     const opened = (projectId: string) =>
       Effect.tryPromise({ try: () => runtime.project(projectId), catch: toUnframed });
@@ -231,18 +355,33 @@ export const agentsLayer = Layer.effect(
         mcpRoute(runtime.tokens, runtime.registry, undefined, {
           book: connections.book,
           listProjects: () => outsideProjects(),
-          tools: () => [...runtime.registry.list(), ...runtime.outsideTools],
+          tools: () => [...runtime.registry.list().filter((tool) => tool.scope === undefined), ...runtime.outsideTools],
           projectSlug: async (name) => {
             const slug = projectSlug(name);
             const names = await projects.list.pipe(Effect.runPromise);
             return names.includes(slug) ? slug : undefined;
           },
-          call: (call) => runtime.outside.call(call),
+          call: async (call) => {
+            if (WHITEBOARD_ONLY_TOOLS.has(call.tool.name) && (await run(repositories.kinds([call.slug])))[call.slug] === "repository") return refusal(noPagesInRepository(call.slug));
+            return runtime.outside.call(call);
+          },
           endSession: (sessionId) => runtime.endOutsideSession(sessionId),
         }),
         ...attachmentRoutes,
       ],
       attachmentRoutes,
+      openSetup,
+      confirmLogin: (project) => Effect.sync(() => setupTools.confirmLogin(project)),
+      setupVerdict,
+      writeText: (input) =>
+        Effect.promise(async () => {
+          const provider = await setupProvider();
+          if (provider === undefined) return undefined;
+          return runtime.writeText(provider, input).catch((error: unknown) => {
+            logInfo(`no generated text: ${errorText(error)}`);
+            return undefined;
+          });
+        }),
     });
   }),
 );

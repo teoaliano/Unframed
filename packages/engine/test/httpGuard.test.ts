@@ -34,8 +34,19 @@ describe("HTTP loopback guard", () => {
     expect(response.json()).toEqual({ error: "Unframed answers only requests addressed to localhost." });
   });
 
-  it("never sends a CORS allow header, even to a loopback Origin", async () => {
-    for (const origin of [`http://localhost:${engine.port}`, "http://localhost:5173", "http://127.0.0.1:3000"]) {
+  it("refuses a loopback Origin on another port, as a page a dev server serves, with the own-pages message", async () => {
+    for (const origin of ["http://localhost:5173", "http://127.0.0.1:3000", `http://[::1]:${engine.port + 1}`]) {
+      for (const path of ["/", "/api/file/p/a.png", "/api/projects/p/files"]) {
+        const response = await engine.request(path, { method: path === "/" ? "GET" : "POST", headers: { origin } });
+        expect(response.status, `${origin} ${path}`).toBe(403);
+        expect(response.json()).toEqual({ error: "Unframed answers only its own pages." });
+        expect(corsHeaders(response)).toEqual([]);
+      }
+    }
+  });
+
+  it("never sends a CORS allow header, even to its own Origin", async () => {
+    for (const origin of [`http://localhost:${engine.port}`, `http://127.0.0.1:${engine.port}`]) {
       for (const path of ["/", "/api/file/p/a.png", "/api/nothing"]) {
         const response = await engine.request(path, { headers: { origin } });
         expect(response.status).not.toBe(403);
@@ -45,7 +56,7 @@ describe("HTTP loopback guard", () => {
   });
 
   it("answers an OPTIONS preflight 204 with no allow headers", async () => {
-    for (const origin of ["http://localhost:5173", `http://localhost:${engine.port}`]) {
+    for (const origin of [`http://127.0.0.1:${engine.port}`, `http://localhost:${engine.port}`]) {
       const response = await engine.request("/api/projects/p/files", {
         method: "OPTIONS",
         headers: {

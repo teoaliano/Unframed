@@ -45,7 +45,7 @@ test("each project row has a check on the current one; Rename and Delete sit in 
   await openCanvas(page, engine, "default");
   await (await engine.rpc()).call("projects.create", { name: "beta" });
   await menu(page);
-  await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["beta", "default", "Add project"]);
+  await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["beta", "default", "New Whiteboard", "Add Repository…"]);
   await expect(page.getByRole("menuitemradio", { name: "default" }).getByLabel("Active")).toBeVisible();
   await expect(page.getByRole("menuitemradio", { name: "beta" }).getByLabel("Active")).toHaveCount(0);
   // beta has no tab until it is opened from the list; opening it makes it the active project.
@@ -100,7 +100,7 @@ test("renaming the active project renames it everywhere and keeps its canvas; an
   });
   expect(prompts.map(plainText)).toContain("lone red fox");
   await menu(page);
-  await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["beta", "product-shots", "Add project"]);
+  await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["beta", "product-shots", "New Whiteboard", "Add Repository…"]);
 
   // The same slug closes the dialog without a call.
   await tabMenuItem(page, "beta", "Rename project");
@@ -131,7 +131,7 @@ test("deleting asks first, asks again when renders are in progress, and opens th
   expect(jobs.map((job: any) => job.status)).toEqual(["failed", "failed"]);
   await expect(page.locator("[role=tab][data-active='true']")).toHaveText("default");
   await menu(page);
-  await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["default", "Add project"]);
+  await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["default", "New Whiteboard", "Add Repository…"]);
   await page.keyboard.press("Escape");
 
   // The active and last project: a new, empty default replaces it.
@@ -174,7 +174,7 @@ test("after saving a new output folder, the menu lists its projects and the canv
     await expect(page.locator("[role=tab][data-active='true']")).toHaveText("alpha");
     await expect(activeCanvas(page, "alpha")).toBeVisible();
     await menu(page);
-    await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["alpha", "zeta", "Add project"]);
+    await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["alpha", "zeta", "New Whiteboard", "Add Repository…"]);
     await page.keyboard.press("Escape");
 
     const empty = join(await makeTempDir(), "empty");
@@ -190,7 +190,7 @@ test("after saving a new output folder, the menu lists its projects and the canv
     await waitForRoom(engine, "default", (records) => records.some((record) => record.typeName === "page"));
     expect(await roomShapes(engine, "default")).toEqual([]);
     await menu(page);
-    await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["default", "Add project"]);
+    await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["default", "New Whiteboard", "Add Repository…"]);
   } finally {
     await engine.dispose();
   }

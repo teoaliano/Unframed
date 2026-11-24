@@ -51,7 +51,7 @@ test("the chrome, canvas menus and dialogs render every control through the kit"
 
   await page.getByRole("button", { name: "All projects" }).click();
   await sweep(page, false);
-  await page.getByRole("menuitem", { name: "Add project" }).click();
+  await page.getByRole("menuitem", { name: "New Whiteboard" }).click();
   await expect(page.getByRole("dialog", { name: "New project" })).toBeVisible();
   await sweep(page);
 

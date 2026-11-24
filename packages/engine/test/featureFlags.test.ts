@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { startAgentEngine, UNFRAMED_TOOLS } from "./agent.ts";
 import { scriptedSession } from "./agentCanvas.ts";
-import { startEngine } from "./engineProcess.ts";
+import { existsSync } from "node:fs";
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
+import { makeRepo, repoEngineEnv } from "./gitRepos.ts";
+import { makeTempDir, startEngine } from "./harness.ts";
 
 const listTools = (token: string) => ({
   method: "POST",
@@ -11,6 +15,7 @@ const listTools = (token: string) => ({
 
 const NODES_OFF = { code: "unavailable", message: "Nodes are not available in this build." };
 const EDITING_OFF = { code: "unavailable", message: "Element editing is not available in this build." };
+const REPOSITORIES_OFF = { code: "unavailable", message: "Repositories are not available in this build." };
 
 const toolsOf = async (features: string | undefined) => {
   const agent = await startAgentEngine({ env: { UNFRAMED_FEATURES: features } });
@@ -27,7 +32,7 @@ describe("UNFRAMED_FEATURES", () => {
   it.each([
     [undefined, []],
     ["element-editing,teleport", ["element-editing"]],
-    ["all", ["nodes", "element-editing"]],
+    ["all", ["nodes", "element-editing", "repositories"]],
   ])("with UNFRAMED_FEATURES=%j, server.health reports %j", async (value, features) => {
     const engine = await startEngine({ env: { UNFRAMED_FEATURES: value } });
     expect((await (await engine.rpc()).call("server.health")).features).toEqual(features);
@@ -44,6 +49,19 @@ describe("UNFRAMED_FEATURES", () => {
     expect(allTools.map((tool) => tool.name)).toContain("node_run");
   });
 
+  it("with repositories off, says nothing of Screens in the canvas and preview tools", async () => {
+    const { tools } = await toolsOf("nodes");
+    const description = (name: string) => tools.find((tool) => tool.name === name)!.description;
+    expect(description("canvas_read")).not.toMatch(/screen/i);
+    expect(description("canvas_write")).not.toMatch(/screen/i);
+    expect(description("preview_open")).not.toMatch(/Screen/);
+    expect(tools.map((tool) => tool.name).filter((name) => name.startsWith("instance_"))).toEqual([]);
+
+    const { tools: allTools } = await toolsOf("all");
+    expect(allTools.find((tool) => tool.name === "canvas_read")!.description).toContain("a screen shows one route of one Instance");
+    expect(allTools.find((tool) => tool.name === "preview_open")!.description).toContain("shapeId may also name a Screen");
+  });
+
   it("with both off, refuses the RPC methods that run or save nodes and that edit an artifact's source", async () => {
     const { rpc } = await startAgentEngine({ env: { UNFRAMED_FEATURES: undefined } });
     const project = "board";
@@ -56,5 +74,67 @@ describe("UNFRAMED_FEATURES", () => {
     expect(await rpc.call("node.renders", { project, files: [] })).toEqual({ renders: {} });
     await expect(rpc.call("artifact.prepareEdit", { project, shapeId: "shape:p" })).rejects.toMatchObject(EDITING_OFF);
     await expect(rpc.call("artifact.edit", { project, shapeId: "shape:p", baseFile: "1-page.html", edits: [] })).rejects.toMatchObject(EDITING_OFF);
+  });
+
+  it("with repositories off, refuses every Repository RPC and never opens the picker", async () => {
+    const engine = await startEngine({ env: { UNFRAMED_FEATURES: undefined, UNFRAMED_TEST_PICK_FOLDER: "/Users/someone/app" } });
+    const rpc = await engine.rpc();
+    await expect(rpc.call("repositories.pickFolder")).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("repositories.add", { path: engine.dataDir })).rejects.toMatchObject(REPOSITORIES_OFF);
+    const instance = { project: "app", id: "a1b2c3d4" };
+    await expect(rpc.call("instances.create", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("instances.remove", instance)).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("instances.list", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("instances.status", instance)).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("instances.start", instance)).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("instances.stop", instance)).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("instances.demand", { project: "app", client: "window-1", ids: [instance.id] })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("instances.branches", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("instances.diff", instance)).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("instances.gitAction", { ...instance, action: "commit" })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("repositories.read", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("repositories.locate", { project: "app", path: engine.dataDir })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("repositories.setup", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("screens.explode", { project: "app", shapeId: "shape:s", routes: ["/"] })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("repositories.confirmLogin", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("repositories.setupVerdict", { project: "app", accepted: true })).rejects.toMatchObject(REPOSITORIES_OFF);
+    const states = rpc.subscribe("instances.subscribe", { project: "app" });
+    await expect(states.next()).rejects.toMatchObject(REPOSITORIES_OFF);
+    expect(await engine.nativeLog()).toEqual([]);
+    expect((await rpc.call("projects.list")).projects).toEqual([]);
+  });
+
+  it("with repositories off, opens an existing Repository on its Screens' last snapshots and starts no Instance or Setup", { timeout: 90_000 }, async () => {
+    const root = await makeRepo("shop");
+    const dataDir = await makeTempDir();
+    const on = await startEngine({ dataDir, env: await repoEngineEnv({ UNFRAMED_TEST_CANVAS: "1", UNFRAMED_TEST_RENDERER: "ok" }) });
+    const onRpc = await on.rpc();
+    const added = await onRpc.call("repositories.add", { path: root });
+    const snapshots = onRpc.subscribe("screens.snapshots", { project: "shop" });
+    for (let tries = 0; (await onRpc.call("instances.status", { project: "shop", id: added.instance.id })).state !== "stopped"; tries++) {
+      if (tries > 200) throw new Error("the Instance never settled");
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    await onRpc.call("instances.demand", { project: "shop", client: "window-1", ids: [added.instance.id] });
+    const first = await snapshots.next();
+    await on.stop("SIGTERM");
+
+    const off = await startEngine({ dataDir, env: await repoEngineEnv({ UNFRAMED_FEATURES: undefined, UNFRAMED_TEST_CANVAS: "1", UNFRAMED_TEST_RENDERER: "ok" }) });
+    const rpc = await off.rpc();
+    expect((await rpc.call("projects.list")).kinds).toMatchObject({ shop: "repository" });
+    const records = (await rpc.call("testCanvas.read", { project: "shop" })).records as Array<{ type?: string; id: string; props?: { instance?: string } }>;
+    const screen = records.find((record) => record.type === "screen")!;
+    expect(screen.props?.instance).toBe(added.instance.id);
+    const stored = await rpc.subscribe("screens.snapshots", { project: "shop" }).next();
+    expect(stored).toEqual({ ...first, at: expect.any(Number) });
+    const served = await off.request(`/api/file/shop/${screen.id.replace(/^shape:/, "")}.png?screen=1`);
+    expect(served.status).toBe(200);
+    await expect(rpc.call("instances.demand", { project: "shop", client: "window-1", ids: [added.instance.id] })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const pids = join(dataDir, "instance-pids");
+    expect(existsSync(pids) ? await readdir(pids) : []).toEqual([]);
+    const chats = rpc.subscribe("orchestration.subscribeShell", { projectId: "shop" });
+    const shell = await chats.next();
+    expect(shell.kind === "snapshot" ? shell.chats.map((chat) => chat.title) : undefined).toEqual(["Setup"]);
   });
 });

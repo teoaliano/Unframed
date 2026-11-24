@@ -9,6 +9,8 @@ const MAC_ONLY_METHODS: ReadonlySet<string> = new Set([
   "files.reveal",
   "files.path",
   "settings.pickFolder",
+  "repositories.pickFolder",
+  "repositories.add",
   "oauth.start",
   "oauth.cancel",
   "agentConnections.create",

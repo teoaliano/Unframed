@@ -1,10 +1,12 @@
 import { centre, emptyCanvasPoint, openCanvas, roomRecords, shapeOnScreen, waitForRoom } from "./canvas.ts";
 import { expect, startAgentEngine, test as base } from "./agent.ts";
-import type { TestEngine } from "../../engine/test/engineProcess.ts";
+import { makeTempDir, type TestEngine } from "../../engine/test/engineProcess.ts";
 import { filledArtifact } from "./artifacts.ts";
 import { column, frameOf, region } from "./editorHarness.ts";
 import { toolbar } from "./generation.ts";
 import { clickShape, nodeCard, nodeShape, promptShape, seedBoard, wireShape } from "./nodes.ts";
+import { makeRepo, repoEngineEnv } from "../../engine/test/gitRepos.ts";
+import { startHostedEngine } from "./fixtures.ts";
 
 const test = base.extend<{ plain: TestEngine }>({
   plain: async ({}, use) => {
@@ -66,4 +68,61 @@ test("with element editing off, the editor opens on the preview and Parameters, 
   await region(page).getByTestId("artifact-editor-title").click();
   await page.keyboard.press("v");
   await expect(region(page).getByRole("group", { name: "Mode" })).toHaveCount(0);
+});
+
+test("with repositories off, the project menu offers Add project alone and still lists an existing Repository with its kind", async ({ page }) => {
+  const root = await makeRepo("shop");
+  const dataDir = await makeTempDir();
+  const on = await startHostedEngine({ dataDir });
+  await (await on.rpc()).call("repositories.add", { path: root });
+  await on.dispose();
+  const off = await startHostedEngine({ dataDir, samplePrompts: false, env: { UNFRAMED_FEATURES: undefined } });
+  try {
+    await openCanvas(page, off, "default");
+    await page.getByRole("button", { name: "All projects" }).click();
+    await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["default", "shop", "Add project"]);
+    await expect(page.getByRole("menuitemradio", { name: "shop" }).getByLabel("Repository")).toBeVisible();
+    await page.getByRole("menuitemradio", { name: "shop" }).click();
+    await expect(page.locator("[role=tab][data-active='true']")).toHaveText("shop");
+    await page.getByRole("button", { name: "All projects" }).click();
+    await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["default", "shop", "Add project"]);
+  } finally {
+    await off.dispose();
+  }
+});
+
+test("with repositories off, a Repository opens read-only on its Screens' last snapshots, with no Screen actions and no Setup", async ({ page }) => {
+  const root = await makeRepo("shop");
+  const dataDir = await makeTempDir();
+  const on = await startHostedEngine({ dataDir, env: await repoEngineEnv({ UNFRAMED_TEST_RENDERER: "ok" }) });
+  const onRpc = await on.rpc();
+  const added = await onRpc.call("repositories.add", { path: root });
+  const snapshots = onRpc.subscribe("screens.snapshots", { project: "shop" });
+  await expect.poll(async () => (await onRpc.call("instances.status", { project: "shop", id: added.instance.id })).state, { timeout: 30_000 }).toBe("stopped");
+  await onRpc.call("instances.demand", { project: "shop", client: "window-1", ids: [added.instance.id] });
+  await snapshots.next();
+  await on.dispose();
+  const off = await startHostedEngine({ dataDir, samplePrompts: false, env: await repoEngineEnv({ UNFRAMED_FEATURES: undefined, UNFRAMED_TEST_RENDERER: "ok" }) });
+  try {
+    const offRpc = await off.rpc();
+    await offRpc.call("preferences.set", { key: "project.active", value: "shop" });
+    await openCanvas(page, off, "shop");
+    const screen = page.locator("[data-testid=screen]");
+    await expect(screen.locator("[data-testid=screen-snapshot]")).toBeVisible();
+    await expect(screen.locator("iframe")).toHaveCount(0);
+    await expect(screen.locator("[data-testid=screen-overlay]")).toHaveCount(0);
+    const records = await roomRecords(off, "shop");
+    await clickShape(page, records.find((record) => record.type === "screen")!.id);
+    await expect(toolbar(page)).toBeVisible();
+    await expect(page.getByTestId("screen-route")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Fork" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Changes" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Parameters" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "All projects" }).click();
+    await expect(page.getByRole("menuitem", { name: "Run Setup again" })).toHaveCount(0);
+    await expect(offRpc.call("instances.status", { project: "shop", id: added.instance.id })).rejects.toMatchObject({ message: "Repositories are not available in this build." });
+  } finally {
+    await off.dispose();
+  }
 });

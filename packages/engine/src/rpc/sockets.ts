@@ -44,6 +44,7 @@ export class RpcSockets extends Context.Service<
     readonly upgrade: UpgradeRoute;
     /** Closes every socket with `code` and waits (briefly) for them to go. */
     readonly closeAll: (code: number) => Promise<void>;
+    readonly onDisconnect: (listener: (clientId: number) => void) => void;
   }
 >()("unframed/engine/RpcSockets") {}
 
@@ -78,6 +79,7 @@ export const rpcSocketsLayer = Layer.effectContext(
     const clients = new Map<number, WebSocket>();
     const devices = new Map<number, string>();
     let nextClientId = 0;
+    const disconnectListeners: Array<(clientId: number) => void> = [];
 
     const codecs = new Map<string, RpcCodecs>();
     const codecsFor = (tag: string): RpcCodecs | undefined => {
@@ -191,6 +193,7 @@ export const rpcSocketsLayer = Layer.effectContext(
         clients.delete(clientId);
         devices.delete(clientId);
         Queue.offerUnsafe(disconnects, clientId);
+        for (const listener of disconnectListeners) listener(clientId);
       });
     };
 
@@ -221,7 +224,7 @@ export const rpcSocketsLayer = Layer.effectContext(
       );
     };
 
-    return Context.make(RpcSockets, RpcSockets.of({ upgrade, closeAll })).pipe(
+    return Context.make(RpcSockets, RpcSockets.of({ upgrade, closeAll, onDisconnect: (listener) => void disconnectListeners.push(listener) })).pipe(
       Context.add(RpcServer.Protocol, protocol),
     );
   }),

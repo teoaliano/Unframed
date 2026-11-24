@@ -80,3 +80,14 @@ describe("mentionCandidates", () => {
     expect(refs.map((row) => row.ref)).toEqual(["alpha", "zeta", "200", "1000"]);
   });
 });
+
+describe("mentionCandidates on a Repository's canvas", () => {
+  it("offers a Screen by its ref, previewed by its title", () => {
+    const screen = { id: "shape:s1", typeName: "shape", type: "screen", props: { title: "feature/login", instance: "abcd1234", route: "/" }, meta: { ref: "100" } };
+    const untitled = { id: "shape:s2", typeName: "shape", type: "screen", props: { title: "" }, meta: { ref: "101" } };
+    expect(mentionCandidates([screen, untitled], undefined, "10")).toEqual([
+      { id: "shape:s1", ref: "100", kind: "screen", preview: "feature/login" },
+      { id: "shape:s2", ref: "101", kind: "screen", preview: "Screen" },
+    ]);
+  });
+});

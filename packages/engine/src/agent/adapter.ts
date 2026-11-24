@@ -32,6 +32,9 @@ export interface SessionStart {
   readonly firstMessage: string;
   /** The executable and environment, for the adapters that spawn a CLI. */
   readonly environment?: RunEnvironment;
+  readonly tools?: ReadonlyArray<string>;
+  readonly systemPrompt?: string;
+  readonly grantedDirectories?: ReadonlyArray<string>;
 }
 
 export interface TurnInput {
@@ -55,6 +58,14 @@ export interface TitleInput {
   readonly modelSelection: ModelSelection;
   readonly firstMessage: string;
   readonly answer: string;
+  readonly environment?: RunEnvironment;
+}
+
+export interface WriteInput {
+  readonly projectDir: string;
+  readonly modelSelection: ModelSelection;
+  readonly system: string;
+  readonly prompt: string;
   readonly environment?: RunEnvironment;
 }
 
@@ -98,4 +109,5 @@ export interface ProviderAdapter {
   stopAll(): Promise<void>;
   /** One small request on the chat's own provider that names it; `undefined` for no name. */
   title(input: TitleInput): Promise<string | undefined>;
+  write(input: WriteInput): Promise<string | undefined>;
 }

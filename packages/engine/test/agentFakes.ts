@@ -248,8 +248,12 @@ rl.on("close", () => process.exit(0));
 `),
   );
 
-/** A login shell that answers `$SHELL -lc 'echo "$PATH"'` with `FAKE_SHELL_PATH`. */
-export const fakeShell = (dir: string) => write(join(dir, "fake-shell"), `#!/bin/sh\necho "some profile banner"\necho "$FAKE_SHELL_PATH"\n`);
+/** A login shell that answers `$SHELL -ilc 'echo "$PATH"'` with `FAKE_SHELL_PATH`, appending its arguments to `FAKE_SHELL_LOG` when set. */
+export const fakeShell = (dir: string) =>
+  write(
+    join(dir, "fake-shell"),
+    `#!/bin/sh\nif [ -n "$FAKE_SHELL_LOG" ]; then printf '%s\\n' "$*" >> "$FAKE_SHELL_LOG"; fi\necho "some profile banner"\necho "$FAKE_SHELL_PATH"\n`,
+  );
 
 /** Every run the fakes logged. */
 export const fakeRuns = async (log: string): Promise<Array<{ bin: string; args: string[] }>> =>

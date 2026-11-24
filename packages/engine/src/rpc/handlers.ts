@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { UnframedError, UnframedRpcs, unframedError, type ResultRecipe } from "@unframed/contracts";
 import { connectionSetup } from "@unframed/domain";
 import { AgentConnections } from "../agentConnections/layer.ts";
@@ -17,7 +18,7 @@ import { clearStoredModels } from "../lastUsed.ts";
 import { Native } from "../native.ts";
 import { Catalogue } from "../openRouter/catalogue.ts";
 import { ElevenLabsError, listAudioModels, listVoices, subscriptionStatus } from "../elevenLabs/client.ts";
-import { ELEVENLABS_NO_KEY, FEATURE_OFF_MESSAGES, featureList, GENERATION_PROVIDERS, providerServesMessage } from "@unframed/domain";
+import { ELEVENLABS_NO_KEY, FEATURE_OFF_MESSAGES, REPOSITORY_FOLDER_PROMPT, featureList, GENERATION_PROVIDERS, providerServesMessage } from "@unframed/domain";
 import type { Feature } from "@unframed/contracts";
 import { vercelCredits } from "../vercel/client.ts";
 import { providerCatalogues } from "../runs/providers.ts";
@@ -26,6 +27,12 @@ import { Runs } from "../runs/runs.ts";
 import { RenderJobs } from "../video/renderJobs.ts";
 import { PreferencesStore } from "../preferencesStore.ts";
 import { Projects } from "../projects.ts";
+import { Instances } from "../instances/layer.ts";
+import { RpcSockets } from "./sockets.ts";
+import { screenRecord } from "../screens/firstScreen.ts";
+import { explodeScreen, ExplodeRefused } from "../screens/flows.ts";
+import { Repositories } from "../repositories/layer.ts";
+import { InstanceGit } from "../instances/instanceGit.ts";
 import { filePath, revealFiles } from "../reveal.ts";
 import { Config } from "../services.ts";
 import { SettingsStore } from "../settingsStore.ts";
@@ -53,6 +60,11 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
   Effect.gen(function* () {
     const settings = yield* SettingsStore;
     const projects = yield* Projects;
+    const repositories = yield* Repositories;
+    const instanceGit = yield* InstanceGit;
+    const instances = yield* Instances;
+    const sockets = yield* RpcSockets;
+    sockets.onDisconnect((clientId) => Effect.runFork(instances.release(String(clientId))));
     const native = yield* Native;
     const preferences = yield* PreferencesStore;
     const rooms = yield* CanvasRooms;
@@ -139,7 +151,55 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "projects.delete": ({ name, confirmRenders }) => lifecycle.deleteProject(name, confirmRenders === true),
       "settings.pickFolder": () =>
         Effect.map(Effect.flatMap(settings.outputDir, native.pickFolder), (path) => ({ path })),
-      "projects.list": () => Effect.map(projects.list, (list) => ({ projects: [...list] })),
+      "projects.list": () => Effect.flatMap(projects.list, (list) => Effect.map(repositories.kinds(list), (kinds) => ({ projects: [...list], kinds }))),
+      "repositories.pickFolder": () => featureOn("repositories", () => Effect.map(native.pickFolder(homedir(), REPOSITORY_FOLDER_PROMPT), (path) => ({ path }))),
+      "repositories.add": ({ path, name }) =>
+        featureOn("repositories", () =>
+          Effect.gen(function* () {
+            const added = yield* repositories.add(path, name);
+            const records = yield* rooms.read(added.name);
+            yield* rooms.apply(added.name, { put: [screenRecord(records, added.instance, { x: 0, y: 0 })], remove: [] }, { kind: "server", id: "repositories.add" });
+            yield* Effect.ignore(agents.openSetup(added.name));
+            return { ...added, repository: (yield* repositories.read(added.name)) ?? added.repository };
+          }),
+        ),
+      "screens.explode": ({ project, shapeId, routes }) =>
+        featureOn("repositories", () =>
+          Effect.tryPromise({
+            try: () =>
+              explodeScreen(
+                { read: (name) => Effect.runPromise(rooms.read(name)), apply: (name, change, origin) => Effect.runPromise(rooms.apply(name, change, origin)), status: (name, id) => Effect.runPromise(instances.status(name, id)) },
+                project,
+                shapeId,
+                routes,
+                { kind: "server", id: "screens.explode" },
+              ),
+            catch: (error) => (error instanceof ExplodeRefused ? unframedError("bad_request", error.message) : asUnframed(error)),
+          }),
+        ),
+      "repositories.setup": ({ project }) => featureOn("repositories", () => Effect.map(agents.openSetup(project), (chatId) => ({ chatId }))),
+      "repositories.confirmLogin": ({ project }) => featureOn("repositories", () => Effect.map(agents.confirmLogin(project), (waiting) => ({ waiting }))),
+      "repositories.setupVerdict": ({ project, accepted, note }) => featureOn("repositories", () => Effect.map(agents.setupVerdict(project, accepted, note), (repository) => ({ repository }))),
+      "repositories.locate": ({ project, path }) => featureOn("repositories", () => Effect.map(repositories.locate(project, path), (repository) => ({ repository }))),
+      "repositories.read": ({ project }) => featureOn("repositories", () => Effect.map(repositories.read(project), (repository) => ({ repository: repository ?? null }))),
+      "instances.branches": ({ project }) => featureOn("repositories", () => instances.branches(project)),
+      "instances.diff": ({ project, id }) => featureOn("repositories", () => instanceGit.diff(project, id)),
+      "instances.gitAction": ({ project, id, action }) => featureOn("repositories", () => instanceGit.act(project, id, action)),
+      "screens.snapshots": ({ project }) => artifacts.screenSnapshots(project),
+      "instances.create": ({ project, base, branch }) =>
+        featureOn("repositories", () => instances.create(project, { ...(base === undefined ? {} : { base }), ...(branch === undefined ? {} : { branch }) })),
+      "instances.remove": ({ project, id, force, deleteBranch }) =>
+        featureOn("repositories", () =>
+          instances.remove(project, id, { ...(force === undefined ? {} : { force }), ...(deleteBranch === undefined ? {} : { deleteBranch }) }),
+        ),
+      "instances.list": ({ project }) => featureOn("repositories", () => Effect.map(instances.list(project), (list) => ({ instances: [...list] }))),
+      "instances.status": ({ project, id }) => featureOn("repositories", () => instances.status(project, id)),
+      "instances.start": ({ project, id }) => featureOn("repositories", () => instances.start(project, id)),
+      "instances.stop": ({ project, id }) => featureOn("repositories", () => instances.stop(project, id)),
+      "instances.demand": ({ project, client, ids }, { client: connection }) =>
+        featureOn("repositories", () => Effect.map(instances.demand(project, client, ids, String(connection.id)), (list) => ({ instances: [...list] }))),
+      "instances.subscribe": ({ project }) =>
+        config.features.has("repositories") ? instances.changes(project) : Stream.fail(unframedError("unavailable", FEATURE_OFF_MESSAGES.repositories)),
       "projects.activity": () =>
         projectActivityStream({
           list: projects.list,

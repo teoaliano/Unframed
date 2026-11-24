@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergePath, resolveWindowsCommand, runEnvironment, shellPathFromOutput } from "../../src/index.ts";
+import { mergePath, resolveWindowsCommand, runEnvironment, shellPathFromOutput, spawnEnvironment } from "../../src/index.ts";
 
 describe("PATH hydration", () => {
   it("keeps the process's entries first and appends the shell's without duplicates", () => {
@@ -36,6 +36,12 @@ describe("the run environment", () => {
 
   it("uses the hydrated PATH and keeps everything else", () => {
     expect(runEnvironment({ ...base, env: { PATH: "/old", LANG: "en_GB.UTF-8" } })).toMatchObject({ PATH: "/usr/bin", LANG: "en_GB.UTF-8" });
+  });
+
+  it("leaves out the engine's hosting, Electron and esbuild variables", () => {
+    const env = { LANG: "en_GB.UTF-8", ESBUILD_BINARY_PATH: "/app/esbuild", ELECTRON_RUN_AS_NODE: "1", OUTPUT_DIR: "/out", PORT: "0", UNFRAMED_DATA_DIR: "/data", UNFRAMED_FEATURES: "all", UNSET: undefined };
+    expect(spawnEnvironment(env)).toEqual({ LANG: "en_GB.UTF-8" });
+    expect(runEnvironment({ ...base, env })).toEqual({ LANG: "en_GB.UTF-8", PATH: "/usr/bin", HOME: "/Users/os" });
   });
 });
 

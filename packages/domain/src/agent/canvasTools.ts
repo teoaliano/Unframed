@@ -16,6 +16,7 @@ import { wireRefusal } from "../nodes/wires.ts";
 import { GENERATION_PROVIDERS, isGenerationProvider, providerField, providerServesMessage } from "../generationProviders.ts";
 import { VERCEL_BAD_PROVIDER } from "../vercel.ts";
 import { FEATURE_OFF_MESSAGES, type Features } from "../features.ts";
+import { normaliseRoute, SCREEN_DEFAULT_VIEWPORT } from "../screens.ts";
 import { NODE_DEFAULT_SIZE, NODE_MEDIA, NODE_MIN_HEIGHT, NODE_WIDTH, WIRE_ROLES } from "@unframed/contracts";
 
 export interface CanvasRecord {
@@ -47,6 +48,7 @@ export const shapeKind = (type: string | undefined): ShapeKind => {
     case "component":
     case "node":
     case "wire":
+    case "screen":
       return type;
     case "frame":
       return "group";
@@ -278,6 +280,13 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
         if (Array.isArray(props.lockedElements) && props.lockedElements.length > 0) entry.lockedElements = props.lockedElements;
         break;
       }
+      case "screen": {
+        entry.instance = typeof props.instance === "string" ? props.instance : "";
+        entry.route = typeof props.route === "string" ? props.route : "/";
+        entry.title = typeof props.title === "string" ? props.title : "";
+        if (props.dials !== undefined && Object.keys(obj(props.dials)).length > 0) entry.dials = props.dials;
+        break;
+      }
       case "component": {
         const file = typeof props.file === "string" ? props.file : "";
         const declaration = input.declarations?.get(record.id);
@@ -338,7 +347,7 @@ const round = (value: number, places = 2): number => {
 const MAX_OPS = 200;
 
 const OP_TYPES = new Set(["create", "update", "move", "resize", "delete", "reparent", "rename"]);
-const CREATE_KINDS = new Set(["prompt", "image", "video", "audio", "group", "mark", "node", "wire"]);
+const CREATE_KINDS = new Set(["prompt", "image", "video", "audio", "group", "mark", "node", "wire", "screen"]);
 const RUN_FIELDS = ["versions", "currentVersionId", "run", "status", "error"];
 const MARK_TYPES = new Set(["geo", "note", "arrow", "line"]);
 
@@ -557,6 +566,7 @@ const precheck = (ops: ReadonlyArray<unknown>, ctx: BatchContext): void => {
       if (kind === "component") refuse("create: make components with component_write");
       if (typeof kind !== "string" || !CREATE_KINDS.has(kind)) refuse(`create: unknown kind "${String(kind)}"`);
       if ((kind === "node" || kind === "wire") && !ctx.features.has("nodes")) refuse(`create: ${FEATURE_OFF_MESSAGES.nodes}`);
+      if (kind === "screen" && !ctx.features.has("repositories")) refuse(`create: ${FEATURE_OFF_MESSAGES.repositories}`);
       const id = record.id;
       if (typeof id !== "string" || id === "") refuse('create: id must be a string (use "new:<name>" for a fresh id)');
       const key = id as string;
@@ -708,6 +718,18 @@ const create = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
       };
       break;
     }
+    case "screen": {
+      const instance = props.instance;
+      if (typeof instance !== "string" || instance === "") refuse("create: a Screen's props.instance is the id of one of the Repository's Instances");
+      const route = normaliseRoute(typeof props.route === "string" ? props.route : "/");
+      if (route === undefined) refuse(`create: ${SCREEN_ROUTE_REFUSAL}`);
+      record = {
+        ...base,
+        props: { w: w ?? SCREEN_DEFAULT_VIEWPORT.w, h: h ?? SCREEN_DEFAULT_VIEWPORT.h, instance, route, title: typeof props.title === "string" ? props.title : "" },
+        meta: { ref: ref() },
+      };
+      break;
+    }
     case "wire": {
       if (parent) refuse("create: a wire cannot be a member of a group");
       const from = batch.shape("create", props.from);
@@ -734,6 +756,9 @@ const create = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
 };
 
 export const PAGE_NODE_PROVIDER = "A page node runs through OpenRouter.";
+
+const SCREEN_PATCH_KEYS = new Set(["route", "title", "dials", "w", "h"]);
+const SCREEN_ROUTE_REFUSAL = "a Screen's props.route is a path in the app, such as /settings";
 
 const nodeSettings = (op: string, medium: string, props: Record<string, unknown>): Record<string, unknown> => {
   const settings: Record<string, unknown> = { medium, model: "", params: {}, instruction: "" };
@@ -829,6 +854,16 @@ const update = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
     else if (patch.files === null) delete next.files;
     batch.put({ ...shape, props: next, meta: { ...obj(shape.meta), unframed: { ...obj(obj(shape.meta).unframed), chosen: true } } });
     return;
+  }
+  if (kind === "screen") {
+    if (!ctx.features.has("repositories")) refuse(`update: ${FEATURE_OFF_MESSAGES.repositories}`);
+    for (const key of Object.keys(patch)) if (!SCREEN_PATCH_KEYS.has(key)) refuse(`update: a Screen takes route, title, dials, w and h, not ${key}`);
+    if ("route" in patch) {
+      const route = typeof patch.route === "string" ? normaliseRoute(patch.route) : undefined;
+      if (route === undefined) refuse(`update: ${SCREEN_ROUTE_REFUSAL}`);
+      return applyPatch(batch, shape, props, { ...patch, route });
+    }
+    return applyPatch(batch, shape, props, patch);
   }
   if (kind === "group" && "name" in patch) {
     const { name, ...rest } = patch;

@@ -15,7 +15,7 @@ import {
   type RuntimeMode,
 } from "@unframed/domain";
 import { inAppCodexOutsideOffArgs } from "@unframed/domain";
-import type { AdapterContext, ProviderAdapter, SessionStart, TitleInput, TurnInput } from "../adapter.ts";
+import type { AdapterContext, ProviderAdapter, SessionStart, TitleInput, TurnInput, WriteInput } from "../adapter.ts";
 import { CodexRpc, CodexRpcError, initializeCodex } from "../codexRpc.ts";
 import { MCP_SERVER_NAME } from "../mcp.ts";
 import { PermissionGate } from "../permissionGate.ts";
@@ -42,6 +42,7 @@ interface CodexSession {
   turnId: string | undefined;
   codexTurnId: string | undefined;
   toolsFailure: string | undefined;
+  readonly tools: ReadonlyArray<string>;
   /** Codex decides its own approvals; the gate only holds the requests and questions it raises. */
   readonly gate: PermissionGate;
   stopping: boolean;
@@ -99,7 +100,7 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
       const answer = await session.rpc.request<{ data?: Array<{ name?: string; tools?: Record<string, unknown> }> }>("mcpServerStatus/list", {}, 15_000);
       const servers = answer?.data ?? [];
       const tools = servers.flatMap((server) => Object.keys(server.tools ?? {}).map((tool) => `mcp__${server.name ?? ""}__${tool}`));
-      const check = checkCanvasTools(context.registeredTools(), tools);
+      const check = checkCanvasTools(session.tools, tools);
       emit(session.chatId, { type: "session.configured", payload: { tools, foreign: check.foreign, grantedDirectories: [] } });
       session.toolsFailure = check.failure;
     } catch (error) {
@@ -107,15 +108,15 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
     }
   };
 
-  const threadParams = (input: { projectDir: string; runtimeMode: RuntimeMode; model: string }) => {
+  const threadParams = (input: { projectDir: string; runtimeMode: RuntimeMode; model: string; systemPrompt: string }) => {
     const policy = codexPolicy(input.runtimeMode);
-    return {
+  return {
       cwd: input.projectDir,
       approvalPolicy: policy.approvalPolicy,
       sandbox: policy.sandbox,
       approvalsReviewer: policy.approvalsReviewer,
       ...(input.model === "" ? {} : { model: input.model }),
-      developerInstructions: context.systemPrompt,
+      developerInstructions: input.systemPrompt,
     };
   };
 
@@ -126,6 +127,47 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
     session.stopping = true;
     session.gate.cancelAll();
     session.rpc.close();
+  };
+
+  const write = async (input: WriteInput): Promise<string | undefined> => {
+    if (!input.environment) return undefined;
+    let text = "";
+    let resolveDone!: () => void;
+    const done = new Promise<void>((resolve) => (resolveDone = resolve));
+    const rpc = new CodexRpc({
+      executable: input.environment.executable,
+      args: ["app-server"],
+      env: input.environment.env,
+      cwd: input.projectDir,
+      onNotification: (method, params) => {
+        const p = params as { item?: { type?: string; text?: string }; delta?: string };
+        if (method === "item/agentMessage/delta" && typeof p.delta === "string") text += p.delta;
+        if (method === "item/completed" && p.item?.type === "agentMessage" && typeof p.item.text === "string") text = p.item.text;
+        if (method === "turn/completed") resolveDone();
+      },
+      onRequest: async () => {
+        throw new CodexRpcError("method not found", -32601);
+      },
+    });
+    try {
+      await initializeCodex(rpc, ENGINE_VERSION);
+      const thread = threadIdOf(
+        await rpc.request("thread/start", {
+          cwd: input.projectDir,
+          approvalPolicy: "never",
+          sandbox: "read-only",
+          ephemeral: true,
+          ...(input.modelSelection.model === "" ? {} : { model: input.modelSelection.model }),
+          developerInstructions: input.system,
+        }),
+      );
+      await rpc.request("turn/start", { threadId: thread, input: [{ type: "text", text: input.prompt }] });
+      const timer = new Promise<void>((resolve) => setTimeout(resolve, 60_000).unref());
+      await Promise.race([done, timer]);
+      return text.trim() === "" ? undefined : text;
+    } finally {
+      rpc.close();
+    }
   };
 
   return {
@@ -152,7 +194,7 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
       });
       try {
         await initializeCodex(rpc, ENGINE_VERSION);
-        const params = threadParams({ projectDir: input.projectDir, runtimeMode: input.runtimeMode, model: input.modelSelection.model });
+        const params = threadParams({ projectDir: input.projectDir, runtimeMode: input.runtimeMode, model: input.modelSelection.model, systemPrompt: input.systemPrompt ?? context.systemPrompt });
         const stored = (input.resumeCursor as { threadId?: unknown } | undefined)?.threadId;
         let threadId = "";
         if (typeof stored === "string" && stored !== "") {
@@ -171,6 +213,7 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
           turnId: undefined,
           codexTurnId: undefined,
           toolsFailure: undefined,
+          tools: input.tools ?? context.registeredTools(),
           gate: new PermissionGate((draft) => emit(input.chatId, draft)),
           stopping: false,
         };
@@ -271,45 +314,8 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
       for (const chatId of [...sessions.keys()]) stop(chatId);
     },
     async title(input: TitleInput) {
-      if (!input.environment) return undefined;
-      let text = "";
-      let resolveDone!: () => void;
-      const done = new Promise<void>((resolve) => (resolveDone = resolve));
-      const rpc = new CodexRpc({
-        executable: input.environment.executable,
-        args: ["app-server"],
-        env: input.environment.env,
-        cwd: input.projectDir,
-        onNotification: (method, params) => {
-          const p = params as { item?: { type?: string; text?: string }; delta?: string };
-          if (method === "item/agentMessage/delta" && typeof p.delta === "string") text += p.delta;
-          if (method === "item/completed" && p.item?.type === "agentMessage" && typeof p.item.text === "string") text = p.item.text;
-          if (method === "turn/completed") resolveDone();
-        },
-        onRequest: async () => {
-          throw new CodexRpcError("method not found", -32601);
-        },
-      });
-      try {
-        await initializeCodex(rpc, ENGINE_VERSION);
-        const thread = threadIdOf(
-          await rpc.request("thread/start", {
-            cwd: input.projectDir,
-            approvalPolicy: "never",
-            sandbox: "read-only",
-            ephemeral: true,
-            ...(input.modelSelection.model === "" ? {} : { model: input.modelSelection.model }),
-            developerInstructions: CHAT_TITLE_SYSTEM_PROMPT,
-          }),
-        );
-        const prompt = chatTitlePrompt(input.firstMessage, input.answer);
-        await rpc.request("turn/start", { threadId: thread, input: [{ type: "text", text: prompt }] });
-        const timer = new Promise<void>((resolve) => setTimeout(resolve, 60_000).unref());
-        await Promise.race([done, timer]);
-        return text.trim() === "" ? undefined : text;
-      } finally {
-        rpc.close();
-      }
+      return write({ ...input, system: CHAT_TITLE_SYSTEM_PROMPT, prompt: chatTitlePrompt(input.firstMessage, input.answer) });
     },
+    write,
   };
 };

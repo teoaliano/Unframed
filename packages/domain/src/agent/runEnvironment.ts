@@ -23,6 +23,18 @@ export const mergePath = (processPath: string | undefined, shellPath: string | u
   return merged.join(delimiter);
 };
 
+export const LOGIN_SHELL_ARGS: ReadonlyArray<string> = ["-ilc", 'echo "$PATH"'];
+
+const ENGINE_ONLY_VARIABLES: ReadonlySet<string> = new Set(["ESBUILD_BINARY_PATH", "ELECTRON_RUN_AS_NODE", "OUTPUT_DIR", "PORT"]);
+
+export const isEngineOnlyVariable = (name: string): boolean => ENGINE_ONLY_VARIABLES.has(name) || name.startsWith("UNFRAMED_");
+
+export const spawnEnvironment = (env: Readonly<Record<string, string | undefined>>): Record<string, string> => {
+  const spawned: Record<string, string> = {};
+  for (const [name, value] of Object.entries(env)) if (value !== undefined && !isEngineOnlyVariable(name)) spawned[name] = value;
+  return spawned;
+};
+
 export interface RunEnvironmentInput {
   readonly env: Readonly<Record<string, string | undefined>>;
   /** PATH after hydration from the login shell. */
@@ -40,8 +52,7 @@ export interface RunEnvironmentInput {
  * account is expressed only as `CLAUDE_CONFIG_DIR`, set when the setting is not empty.
  */
 export const runEnvironment = (input: RunEnvironmentInput): Record<string, string> => {
-  const env: Record<string, string> = {};
-  for (const [name, value] of Object.entries(input.env)) if (value !== undefined) env[name] = value;
+  const env = spawnEnvironment(input.env);
   env.PATH = input.path;
   if (env.HOME === undefined || env.HOME === "") env.HOME = input.osHome;
   const configDir = input.claudeConfigDir.trim();

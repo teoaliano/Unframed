@@ -32,7 +32,7 @@ test("All projects lists every project, checks the active one and opens a row in
 
   await trigger.click();
   const items = page.locator("[role=menuitem], [role=menuitemradio]");
-  await expect(items).toHaveText(["beta", "default", "Add project"]);
+  await expect(items).toHaveText(["beta", "default", "New Whiteboard", "Add Repository…"]);
   await expect(page.getByRole("menuitemradio", { name: "default" })).toHaveAttribute("data-active", "true");
   await expect(page.getByRole("menuitemradio", { name: "default" }).getByLabel("Active")).toBeVisible();
   await expect(page.getByRole("menuitemradio", { name: "beta" }).getByLabel("Active")).toHaveCount(0);
@@ -50,7 +50,7 @@ test("New project refuses an empty or taken name, and creates and opens a new, e
 
   const openDialog = async () => {
     await page.getByRole("button", { name: "All projects" }).click();
-    await page.getByRole("menuitem", { name: "Add project" }).click();
+    await page.getByRole("menuitem", { name: "New Whiteboard" }).click();
     const dialog = page.getByRole("dialog", { name: "New project" });
     await expect(dialog).toBeVisible();
     return dialog;
@@ -95,16 +95,16 @@ test("the project menu, the name dialog and the delete confirm are the kit's men
     await expect(popup).toBeVisible();
     expect(await styleOf(popup, "background-color")).toBe(await tokenColor(page, "--menu-surface"));
     const rows = page.locator("[role=menuitem], [role=menuitemradio]");
-    // Project rows are the kit's radio items, the current one checked and tinted; Add project is a plain item.
+    // Project rows are the kit's radio items, the current one checked and tinted; New Whiteboard is a plain item.
     for (const row of await rows.all()) {
       expect(["menu-item", "menu-radio-item"]).toContain(await row.getAttribute("data-slot"));
       expect((await row.boundingBox())!.height).toBe(28);
     }
     // Highlight moved elsewhere, the current project keeps the checked tint.
-    await page.getByRole("menuitem", { name: "Add project" }).hover();
+    await page.getByRole("menuitem", { name: "New Whiteboard" }).hover();
     expect(await styleOf(page.getByRole("menuitemradio", { name: "default" }), "background-color")).toBe(await resolvedColor(page, "color-mix(in oklab, var(--menu-item-surface-checked) var(--menu-item-surface-checked-opacity), transparent)"));
 
-    await page.getByRole("menuitem", { name: "Add project" }).click();
+    await page.getByRole("menuitem", { name: "New Whiteboard" }).click();
     const dialog = page.getByRole("dialog", { name: "New project" });
     await expectSlot(dialog, "dialog-popup");
     const title = dialog.locator("[data-slot='dialog-title']");

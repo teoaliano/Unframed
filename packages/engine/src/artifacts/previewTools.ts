@@ -13,8 +13,11 @@ import {
   FILL_VIEWPORT,
   locatorSelector,
   NO_CHROME_PREVIEW_MESSAGE,
+  PREVIEW_OPEN_SCREENS,
   PREVIEW_TOOL_TEXT,
   previewViewport,
+  screenUrl,
+  type Features,
   projectSlug,
   roomShapeId,
   shapeKind,
@@ -22,15 +25,23 @@ import {
   type ArtifactKind,
   type PreviewViewport,
 } from "@unframed/domain";
+import type { Instance } from "@unframed/contracts";
 import type { TLRecord } from "@tldraw/tlschema";
 import type { ElementHandle, KeyInput, Page } from "puppeteer-core";
 import { refusal as refuse, type McpBinding, type McpTool, type ToolAnswer } from "../agent/mcp.ts";
 import { errorText } from "../log.ts";
+import { NotLive, untilLive } from "../instances/liveInstance.ts";
 import type { HeadlessChrome } from "./headlessChrome.ts";
 
 const LOG_LIMIT = 100;
 const TEXT_LIMIT = 20_000;
 const ELEMENT_LIMIT = 200;
+
+interface ScreenTarget {
+  readonly shapeId: string;
+  readonly instance: string;
+  readonly route: string;
+}
 
 interface Entry {
   readonly level: string;
@@ -52,6 +63,8 @@ interface Tab {
   readonly chatId: string;
   readonly page: Page;
   artifact: { readonly shapeId: string; readonly kind: ArtifactKind; readonly title: string; readonly file: string } | undefined;
+  screen: ScreenTarget | undefined;
+  readonly origins: Set<string>;
   viewport: PreviewViewport;
   colorScheme: "light" | "dark" | "system";
   readonly console: Entry[];
@@ -66,6 +79,8 @@ export interface PreviewDeps {
   readonly previewPort: () => number;
   /** Spec 01's open-project registry: the project's closer closes every preview tab of it. */
   readonly registerCloser: (project: string, close: () => Promise<void>) => void;
+  readonly screen?: (project: string, instance: string) => Promise<Instance>;
+  readonly instance?: (project: string, instance: string) => Promise<Instance>;
 }
 
 class Refused extends Error {}
@@ -110,9 +125,11 @@ export class PreviewTools {
   /** Projects whose closer is registered. */
   private readonly registered = new Set<string>();
   private readonly deps: PreviewDeps;
+  private readonly features: Features | undefined;
 
-  constructor(deps: PreviewDeps) {
+  constructor(deps: PreviewDeps, features?: Features) {
     this.deps = deps;
+    this.features = features;
   }
 
   private origins(): string[] {
@@ -121,23 +138,52 @@ export class PreviewTools {
   }
 
   /** Only the preview origin: every rule of that origin holds for the agent's tab too. */
-  private allowed(url: string): boolean {
+  private allowed(url: string, tab?: Tab): boolean {
     if (url.startsWith("data:") || url.startsWith("blob:") || url === "about:blank") return true;
     try {
-      return this.origins().includes(new URL(url).origin);
+      const origin = new URL(url).origin;
+      return this.origins().includes(origin) || tab?.origins.has(origin) === true;
     } catch {
       return false;
     }
   }
 
-  private async artifactOf(project: string, shapeId: unknown): Promise<NonNullable<Tab["artifact"]>> {
+  private async targetOf(project: string, shapeId: unknown): Promise<{ readonly artifact: NonNullable<Tab["artifact"]> } | { readonly screen: ScreenTarget; readonly w: number; readonly h: number }> {
     const id = typeof shapeId === "string" ? shapeId.trim() : "";
     const shape = (await this.deps.read(project)).find((record) => record.id === roomShapeId(id)) as (TLRecord & { type: string; props: Record<string, unknown> }) | undefined;
     if (!shape || shape.typeName !== "shape") throw new Refused(`no shape ${id}`);
+    if (shape.type === "screen" && this.deps.screen !== undefined) {
+      return {
+        screen: { shapeId: agentShapeId(shape.id), instance: String(shape.props.instance ?? ""), route: typeof shape.props.route === "string" ? shape.props.route : "/" },
+        w: Math.max(1, Math.round(Number(shape.props.w) || 1280)),
+        h: Math.max(1, Math.round(Number(shape.props.h) || 800)),
+      };
+    }
     if (shape.type !== "page" && shape.type !== "motion") throw new Refused(`shape ${id} is a ${shapeKind(shape.type)}, not a page or motion`);
     const file = typeof shape.props.file === "string" ? shape.props.file : "";
     if (file === "") throw new Refused(`${shape.type} ${id} has no file yet`);
-    return { shapeId: agentShapeId(shape.id), kind: shape.type, title: artifactTitle(shape.props), file };
+    return { artifact: { shapeId: agentShapeId(shape.id), kind: shape.type, title: artifactTitle(shape.props), file } };
+  }
+
+  private async liveInstance(project: string, id: string): Promise<Instance> {
+    try {
+      return await untilLive(() => this.deps.screen!(project, id), () => this.deps.instance!(project, id));
+    } catch (error) {
+      throw error instanceof NotLive ? new Refused(error.message) : error;
+    }
+  }
+
+  private async showScreen(tab: Tab, target: { readonly screen: ScreenTarget; readonly w: number; readonly h: number }) {
+    const instance = await this.liveInstance(tab.project, target.screen.instance);
+    const url = screenUrl(instance.proxyPort!, target.screen.route);
+    await this.act(tab, `open ${target.screen.shapeId}`, async () => {
+      tab.artifact = undefined;
+      tab.screen = target.screen;
+      tab.origins.add(new URL(url).origin);
+      tab.viewport = { mode: "freeform", width: target.w, height: target.h };
+      await tab.page.setViewport({ width: target.w, height: target.h });
+      await tab.page.goto(url, { waitUntil: "load", timeout: 20_000 });
+    });
   }
 
   private async openTab(binding: McpBinding): Promise<Tab> {
@@ -151,6 +197,8 @@ export class PreviewTools {
       chatId: binding.chatId,
       page,
       artifact: undefined,
+      screen: undefined,
+      origins: new Set(),
       viewport: { mode: "fill", ...FILL_VIEWPORT },
       colorScheme: "system",
       console: [],
@@ -160,7 +208,7 @@ export class PreviewTools {
     await page.setViewport({ width: tab.viewport.width, height: tab.viewport.height });
     await page.setRequestInterception(true);
     page.on("request", (request) => {
-      if (this.allowed(request.url())) void request.continue().catch(() => undefined);
+      if (this.allowed(request.url(), tab)) void request.continue().catch(() => undefined);
       // A navigation away answers 204, which the browser does not navigate to: the artifact stays shown.
       else if (request.isNavigationRequest()) void request.respond({ status: 204, body: "" }).catch(() => undefined);
       else void request.abort("blockedbyclient").catch(() => undefined);
@@ -193,12 +241,13 @@ export class PreviewTools {
   }
 
   private async status(tab: Tab | undefined) {
-    if (!tab || tab.page.isClosed()) return { exists: false, artifact: null, url: null, title: null, loading: false, viewport: null };
+    if (!tab || tab.page.isClosed()) return { exists: false, artifact: null, screen: null, url: null, title: null, loading: false, viewport: null };
     const loading = await tab.page.evaluate("document.readyState !== 'complete'").catch(() => true);
     const viewport = tab.page.viewport();
     return {
       exists: true,
       artifact: tab.artifact ?? null,
+      screen: tab.screen ?? null,
       url: tab.page.url(),
       title: await tab.page.title().catch(() => ""),
       loading: loading === true,
@@ -227,6 +276,7 @@ export class PreviewTools {
   private async show(tab: Tab, artifact: NonNullable<Tab["artifact"]>) {
     await this.act(tab, `open ${artifact.shapeId}`, async () => {
       tab.artifact = artifact;
+      tab.screen = undefined;
       const url = artifactUrl({ appHostname: "localhost", previewPort: this.deps.previewPort(), project: tab.project, file: artifact.file, kind: artifact.kind });
       await tab.page.goto(url, { waitUntil: "load", timeout: 20_000 });
     });
@@ -257,9 +307,10 @@ export class PreviewTools {
         return { value: await this.status(this.tabs.get(binding.chatId)) };
       case "preview_open":
       case "preview_navigate": {
-        const artifact = await this.artifactOf(binding.project, args.shapeId);
+        const target = await this.targetOf(binding.project, args.shapeId);
         const tab = await this.openTab(binding);
-        await this.show(tab, artifact);
+        if ("artifact" in target) await this.show(tab, target.artifact);
+        else await this.showScreen(tab, target);
         return { value: await this.status(tab) };
       }
       case "preview_resize": {
@@ -452,9 +503,10 @@ export class PreviewTools {
       ["preview_evaluate", schema("preview_evaluate", { expression: string }, ["expression"])],
       ["preview_wait_for", schema("preview_wait_for", { locator: string, selector: string, text: string, timeoutMs: number })],
     ];
+    const screens = this.features?.has("repositories") === true;
     return definitions.map(([name, inputSchema]) => ({
       name,
-      description: text(name).description,
+      description: screens && (name === "preview_open" || name === "preview_navigate") ? `${text(name).description} ${PREVIEW_OPEN_SCREENS}` : text(name).description,
       inputSchema,
       call: (binding, args) => this.call(binding, name, args),
     }));

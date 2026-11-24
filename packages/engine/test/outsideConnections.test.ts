@@ -1,6 +1,7 @@
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { makeRepo, repoEngineEnv } from "./gitRepos.ts";
 import { makeTempDir, startEngine, type TestEngine } from "./harness.ts";
 
 const mcpPost = (token: string | undefined, body: unknown, extra: Record<string, string | undefined> = {}) => ({
@@ -133,6 +134,26 @@ describe("the MCP endpoint with a connection token", () => {
     expect(payload.projects[0]).toMatchObject({ active: true });
     expect(payload.projects[0].folder).toMatch(/alpha-board$/);
     expect(payload.projects[1]).toMatchObject({ active: false });
+  });
+
+  it("lists each project's kind, and refuses page_write and motion_write in a Repository as the in-app agent does", { timeout: 60_000 }, async () => {
+    const root = await makeRepo("shop");
+    const engine = await startEngine({ env: await repoEngineEnv() });
+    const { rpc, token } = await connect(engine);
+    await rpc.call("repositories.add", { path: root });
+    await rpc.call("projects.create", { name: "Board" });
+    const session = await openSession(engine, token);
+
+    const listed = await engine.request("/mcp", mcpPost(token, rpcBody(2, "tools/call", { name: "projects_list", arguments: {} }), { "mcp-session-id": session }));
+    const projects = JSON.parse(listed.json().result.content[0].text).projects as Array<{ name: string; kind: string }>;
+    expect(Object.fromEntries(projects.map((project) => [project.name, project.kind]))).toMatchObject({ shop: "repository", board: "whiteboard" });
+
+    for (const name of ["page_write", "motion_write"]) {
+      const answer = await engine.request("/mcp", mcpPost(token, rpcBody(3, "tools/call", { name, arguments: { project: "shop", html: "<p>hi</p>" } }), { "mcp-session-id": session }));
+      const result = answer.json().result;
+      expect(result.isError).toBe(true);
+      expect(JSON.parse(result.content.at(-1).text).error).toBe(`shop is a Repository: there are no pages or motions to write there. Edit its code with your own file tools.`);
+    }
   });
 
   it("refuses a tool name the outside list does not carry", async () => {

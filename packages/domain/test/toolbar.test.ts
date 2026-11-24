@@ -20,6 +20,8 @@ describe("the toolbar's state", () => {
     ["exactly one result still generating", [result("r", "b-r", null, { generating: true })], true, { kind: "generating", shapeId: "r" }],
     ["exactly one page with a file: Open", [{ id: "a", kind: "page", file: "a.html" }], false, { kind: "open", shapeId: "a" }],
     ["exactly one motion with a file: Open", [{ id: "m", kind: "motion", file: "m.html" }], false, { kind: "open", shapeId: "m" }],
+    ["exactly one Screen: its own bar", [{ id: "s", kind: "screen" }], false, { kind: "screen", shapeId: "s" }],
+    ["several Screens: the drag handle and Agent", [{ id: "s", kind: "screen" }, { id: "t", kind: "screen" }], false, { kind: "agent", drag: true }],
     ["an empty page is not opened", [{ id: "a", kind: "page" }], false, { kind: "agent", drag: false }],
     ["a usable selection: Generate with the count", [promptShape, emptyImage], true, { kind: "generate", hint: "2 selected", drag: false }],
     ["a usable single prompt", [promptShape], true, { kind: "generate", hint: "1 selected", drag: false }],

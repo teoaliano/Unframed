@@ -144,7 +144,7 @@ test("a report shows only the sections it has, and a project never imported has 
     await page.getByRole("menuitemradio", { name: "fresh" }).click();
     await expect(canvasOf(page, "fresh")).toBeVisible({ timeout: 20_000 });
     await page.getByRole("button", { name: "All projects" }).click();
-    await expect(page.getByRole("menuitem", { name: "Add project" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "New Whiteboard" })).toBeVisible();
     await expect(page.getByRole("menuitem", { name: "Import report" })).toHaveCount(0);
   } finally {
     await app.dispose();

@@ -39,13 +39,13 @@ export const revealPlan = (platform: string, files: ReadonlyArray<string>, folde
 const FOLDER_PROMPT = "Choose where Unframed saves its output";
 
 /** The OS folder dialog, started at the current output folder. It only answers a path. */
-export const folderPickerPlan = (platform: string, currentOutputDir: string): NativeCommand => {
+export const folderPickerPlan = (platform: string, currentOutputDir: string, prompt: string = FOLDER_PROMPT): NativeCommand => {
   if (platform === "darwin") {
     return {
       cmd: "osascript",
       args: [
         "-e",
-        `POSIX path of (choose folder with prompt "${FOLDER_PROMPT}" default location POSIX file ${appleScriptString(currentOutputDir)})`,
+        `POSIX path of (choose folder with prompt ${appleScriptString(prompt)} default location POSIX file ${appleScriptString(currentOutputDir)})`,
       ],
     };
   }
@@ -54,7 +54,7 @@ export const folderPickerPlan = (platform: string, currentOutputDir: string): Na
     const script = [
       "Add-Type -AssemblyName System.Windows.Forms",
       "$dialog = New-Object System.Windows.Forms.FolderBrowserDialog",
-      `$dialog.Description = '${FOLDER_PROMPT}'`,
+      `$dialog.Description = '${prompt.replace(/'/g, "''")}'`,
       `$dialog.SelectedPath = ${current}`,
       "if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $dialog.SelectedPath } else { exit 1 }",
     ].join("; ");

@@ -1955,6 +1955,13 @@ Components	settings-dialog/sheet/divider	COLOR	{border/default}
 Components	settings-dialog/sheet/surface	COLOR	{surface/popover}		
 Components	settings-dialog/unsaved/indicator	COLOR	{action/highlight}		
 Components	settings-dialog/width	FLOAT	760		
+Components	setup-card/body	COLOR	{text/muted}		
+Components	setup-card/border	COLOR	{border/default}		
+Components	setup-card/border-opacity	FLOAT	{opacity/80}		
+Components	setup-card/error	COLOR	{status/error-text}		
+Components	setup-card/surface	COLOR	{surface/card}		
+Components	setup-card/surface-opacity	FLOAT	{opacity/70}		
+Components	setup-card/title	COLOR	{text/default}		
 Components	shape-label/foreground	COLOR	{text/muted}		
 Components	sheet/backdrop	COLOR	{surface/background}		
 Components	sheet/backdrop-opacity	FLOAT	{opacity/60}		

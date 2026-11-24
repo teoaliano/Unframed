@@ -40,7 +40,7 @@ test("the add keys type into a prompt being edited or a dialog's field instead",
   await expect(subject.locator(".tl-rich-text")).toHaveText("iu");
 
   await page.getByRole("button", { name: "All projects" }).click();
-  await page.getByRole("menuitem", { name: "Add project" }).click();
+  await page.getByRole("menuitem", { name: "New Whiteboard" }).click();
   await page.getByLabel("Project name").pressSequentially("iu");
   await expect(page.getByLabel("Project name")).toHaveValue("iu");
   await page.getByRole("button", { name: "Cancel" }).click();

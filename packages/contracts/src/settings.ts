@@ -24,7 +24,7 @@ export const Settings = Schema.Struct({
 });
 export type Settings = typeof Settings.Type;
 
-export const FEATURES = ["nodes", "element-editing"] as const;
+export const FEATURES = ["nodes", "element-editing", "repositories"] as const;
 export const Feature = Schema.Literals(FEATURES);
 export type Feature = typeof Feature.Type;
 

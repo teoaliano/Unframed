@@ -32,6 +32,29 @@ import { AgentConnectionsCreate, AgentConnectionsCreateAnswer, AgentConnectionsL
 import { SelectionApply, SelectionReport, SelectionSnapshotResult, SelectionSubscribe } from "./selection.ts";
 import { IpadDevicesAnswer, IpadExportProfileAnswer, IpadPairStartAnswer, IpadRevoke, IpadSetAvailability, IpadStatus } from "./ipad.ts";
 import { ArtifactEdit, ArtifactImages, ArtifactPrepareEdit, ArtifactSourceTree } from "./elementEdits.ts";
+import {
+  InstancesBranches,
+  InstancesDiff,
+  InstancesGitAction,
+  InstancesCreate,
+  InstancesDemand,
+  InstancesList,
+  InstancesRemove,
+  InstancesStart,
+  InstancesStatus,
+  InstancesStop,
+  InstancesSubscribe,
+  ProjectKind,
+  RepositoriesAdd,
+  RepositoriesPickFolder,
+  RepositoriesRead,
+  RepositoriesLocate,
+  RepositoriesSetup,
+  RepositoriesConfirmLogin,
+  RepositoriesSetupVerdict,
+  ScreensExplode,
+  ScreensSnapshots,
+} from "./repositories.ts";
 
 const Empty = Schema.Struct({});
 
@@ -137,7 +160,7 @@ export const SettingsPickFolder = Rpc.make("settings.pickFolder", {
 });
 
 export const ProjectsList = Rpc.make("projects.list", {
-  success: Schema.Struct({ projects: Schema.Array(Schema.String) }),
+  success: Schema.Struct({ projects: Schema.Array(Schema.String), kinds: Schema.Record(Schema.String, ProjectKind) }),
   error: UnframedError,
 });
 
@@ -334,6 +357,26 @@ export const UnframedRpcs = RpcGroup.make(
   SettingsPickFolder,
   ProjectsList,
   ProjectsCreate,
+  RepositoriesPickFolder,
+  RepositoriesAdd,
+  InstancesCreate,
+  InstancesRemove,
+  InstancesList,
+  InstancesStatus,
+  InstancesStart,
+  InstancesStop,
+  InstancesDemand,
+  InstancesSubscribe,
+  InstancesBranches,
+  InstancesDiff,
+  InstancesGitAction,
+  RepositoriesRead,
+  RepositoriesLocate,
+  RepositoriesSetup,
+  RepositoriesConfirmLogin,
+  RepositoriesSetupVerdict,
+  ScreensExplode,
+  ScreensSnapshots,
   SettingsRemoveKey,
   OAuthStart,
   OAuthPending,

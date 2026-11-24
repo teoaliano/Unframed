@@ -95,7 +95,7 @@ test("a project the Mac has not opened is one extra tab on the device alone", as
   }
 });
 
-test("the device's strip has no close button and no tab menu, and keeps Add project", async ({ page }) => {
+test("the device's strip has no close button and no tab menu, and keeps New Whiteboard", async ({ page }) => {
   const { engine } = await ipadEngine();
   let device: DeviceClient | undefined;
   try {
@@ -112,7 +112,7 @@ test("the device's strip has no close button and no tab menu, and keeps Add proj
     await page.keyboard.press("Escape");
 
     await device.page.getByTestId("all-projects").getByRole("button").click();
-    await expect(device.page.getByRole("menuitem", { name: "Add project" })).toBeVisible();
+    await expect(device.page.getByRole("menuitem", { name: "New Whiteboard" })).toBeVisible();
     await device.page.keyboard.press("Escape");
 
     await openInTab(page, engine, "beta");
