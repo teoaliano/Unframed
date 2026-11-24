@@ -51,7 +51,7 @@ import {
 } from "@unframed/domain";
 import type { ArtifactDiffFile, ElementChip } from "@unframed/contracts";
 import type { TLRecord } from "@tldraw/tlschema";
-import { agentSystemPrompt, type Features, type Kit } from "@unframed/domain";
+import { agentSystemPrompt, repositorySystemPrompt, type Features, type Kit } from "@unframed/domain";
 import type { Applied, CanvasChange, ChangeLogRow, ChangeOrigin } from "../canvas/rooms.ts";
 import { errorText, logError, logInfo } from "../log.ts";
 import type { AdapterContext, ProviderAdapter, TurnAttachment } from "./adapter.ts";
@@ -131,6 +131,8 @@ interface AgentRuntimeDeps {
 }
 
 export interface AgentRepository {
+  readonly root: string;
+  readonly setupFiles: ReadonlyArray<string>;
   readonly worktrees: string;
   readonly setupChat: string | null;
   readonly worktreeOf: (instance: string) => Promise<string | undefined>;
@@ -349,7 +351,8 @@ export class AgentRuntime {
     const tools = this.registry.list().filter(offeredIn(repository, chat.id)).map((tool) => tool.name);
     if (repository === undefined) return { projectDir: agent.folder, shape: { tools } };
     const worktree = await this.workingWorktree(agent, chat, repository);
-    return { projectDir: worktree ?? agent.folder, shape: { tools, grantedDirectories: [repository.worktrees] } };
+    const systemPrompt = repositorySystemPrompt(agentSystemPrompt(this.deps.features), { root: repository.root, worktrees: repository.worktrees, setupFiles: repository.setupFiles });
+    return { projectDir: worktree ?? agent.folder, shape: { tools, systemPrompt, grantedDirectories: [repository.worktrees] } };
   }
 
   private async workingWorktree(agent: ProjectAgent, chat: Chat, repository: AgentRepository): Promise<string | undefined> {

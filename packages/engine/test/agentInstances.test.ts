@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { chromeCandidates } from "@unframed/domain";
+import { agentSystemPrompt, ALL_FEATURES, chromeCandidates, repositorySection } from "@unframed/domain";
 import { describe, expect, it } from "vitest";
 import { toolResults } from "./agentCanvas.ts";
 import { McpClient } from "../src/agent/mcp.ts";
@@ -185,5 +185,24 @@ describe("a thread's working Instance", () => {
     await agent.send(plain, "look around");
     await agent.settled(plain, 1);
     expect((await agent.session(plain)).cwd).toBe(join(agent.engine.dataDir, "output", agent.project));
+  });
+});
+
+describe("the system prompt in a Repository", () => {
+  it("gains the Repository section with the checkout and worktree folder, and a Whiteboard's does not", { timeout: 60_000 }, async () => {
+    const agent = await startRepositoryAgent();
+    await agent.script("look", { when: "^look", turns: [{ text: "Looked." }] });
+    const chatId = await agent.createChat();
+    await agent.send(chatId, "look around");
+    await agent.settled(chatId, 1);
+    const prompt = (await agent.session(chatId)).systemPrompt!;
+    expect(prompt.startsWith(agentSystemPrompt(ALL_FEATURES))).toBe(true);
+    expect(prompt).toContain(repositorySection({ root: agent.root, worktrees: dirname(agent.instance.worktree), setupFiles: [] }));
+
+    await agent.rpc.call("projects.create", { name: "board" });
+    const boardChat = await agent.createChat("board");
+    await agent.send(boardChat, "look around", { project: "board" });
+    await agent.settled(boardChat, 1, "board");
+    expect((await agent.session(boardChat)).systemPrompt).toBe(agentSystemPrompt(ALL_FEATURES));
   });
 });

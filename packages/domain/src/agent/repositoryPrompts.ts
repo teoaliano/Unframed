@@ -9,3 +9,18 @@ export const INSTANCE_TOOL_TEXT: Readonly<Record<string, { readonly description:
 export const CANVAS_READ_SCREENS = "In a Repository, a screen shows one route of one Instance at one viewport: it reports its instance (the Instance's id), route, title, w and h (the viewport), and dials when the person has set Parameters on it.";
 export const CANVAS_WRITE_SCREENS = "In a Repository you can also create a screen (props.instance is an Instance's id, props.route a path such as /settings, w and h the viewport) and update a screen's route, title, dials, w or h.";
 export const PREVIEW_OPEN_SCREENS = "In a Repository, shapeId may also name a Screen: the tab opens that Screen's route of its Instance through the Instance's proxy, at the Screen's viewport, and starts the Instance first when it is stopped.";
+
+export const REPOSITORY_SECTION_TEMPLATE = "This project is a Repository: the person's own git repository at <root>, shown on the canvas as running Instances of its frontend. An Instance is one branch checked out in its own worktree, running its dev server; a Screen shows one route of one Instance at one viewport. Every worktree sits under <worktrees>, one folder per Instance, and instance_status lists each Instance's branch and worktree. When this thread was started from a Screen, your working folder is that Instance's worktree. Edit an Instance's code in its worktree with your own file tools and absolute paths, never in <root>, which is the person's own checkout. There are no pages or motions to write here.\nNever commit, push, or create or switch branches unless the person asks: leave your changes uncommitted for them to review.\nLeave Setup's files alone. They make the app run on the canvas, are listed in .git/info/exclude, and are never yours to change or commit: <setup files>.\nGuard every unframed.dials call as `window.unframed?.dials(...)`, so the app runs unchanged outside Unframed.";
+
+export interface RepositoryPromptFacts {
+  readonly root: string;
+  readonly worktrees: string;
+  readonly setupFiles: ReadonlyArray<string>;
+}
+
+export const repositorySection = (facts: RepositoryPromptFacts): string =>
+  REPOSITORY_SECTION_TEMPLATE.replaceAll("<root>", facts.root)
+    .replaceAll("<worktrees>", facts.worktrees)
+    .replaceAll("<setup files>", facts.setupFiles.length === 0 ? "none yet" : facts.setupFiles.join(", "));
+
+export const repositorySystemPrompt = (base: string, facts: RepositoryPromptFacts): string => `${base}\n\n${repositorySection(facts)}`;

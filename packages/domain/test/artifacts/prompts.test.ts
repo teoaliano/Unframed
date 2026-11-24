@@ -26,6 +26,9 @@ import {
   CANVAS_READ_SCREENS,
   CANVAS_WRITE_SCREENS,
   PREVIEW_OPEN_SCREENS,
+  REPOSITORY_SECTION_TEMPLATE,
+  repositorySection,
+  repositorySystemPrompt,
 } from "../../src/index.ts";
 
 const prompts = join(import.meta.dirname, "../../../../assets/prompts");
@@ -88,5 +91,21 @@ describe("the Instance tools' model-facing text is the assets' text", () => {
     expect(Object.keys(INSTANCE_TOOL_TEXT)).toEqual(["instance_create", "instance_remove", "instance_status", "instance_start", "instance_stop"]);
     const extra = Object.fromEntries(all.filter((section) => !section.name.startsWith("instance_")).map((section) => [section.name, section.text]));
     expect([CANVAS_READ_SCREENS, CANVAS_WRITE_SCREENS, PREVIEW_OPEN_SCREENS]).toEqual([extra.canvas_read, extra.canvas_write, extra.preview_open]);
+  });
+});
+
+describe("the Repository section of the system prompt", () => {
+  it("is the asset's text with the Repository's paths and Setup's files filled in", () => {
+    expect(REPOSITORY_SECTION_TEMPLATE).toBe(blocks("repository-section.md")[0]);
+    const facts = { root: "/Users/me/app", worktrees: "/data/worktrees/app", setupFiles: [".unframed/mock-user.ts", ".env.local"] };
+    const section = repositorySection(facts);
+    expect(section).not.toMatch(/<root>|<worktrees>|<setup files>/);
+    expect(section).toContain("git repository at /Users/me/app");
+    expect(section).toContain("Every worktree sits under /data/worktrees/app");
+    expect(section).toContain("never yours to change or commit: .unframed/mock-user.ts, .env.local.");
+    expect(section).toContain("Never commit");
+    expect(section).toContain("window.unframed?.dials(...)");
+    expect(repositorySection({ ...facts, setupFiles: [] })).toContain("commit: none yet.");
+    expect(repositorySystemPrompt("Base.", facts)).toBe(`Base.\n\n${section}`);
   });
 });

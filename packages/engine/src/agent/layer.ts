@@ -185,6 +185,8 @@ export const agentsLayer = Layer.effect(
         const repository = await run(repositories.read(project));
         if (repository === undefined) return undefined;
         return {
+          root: repository.root,
+          setupFiles: repository.setup?.files ?? [],
           worktrees: join(config.dataDir, "worktrees", project),
           setupChat: null,
           worktreeOf: async (id) => {
