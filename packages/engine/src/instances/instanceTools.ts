@@ -1,10 +1,11 @@
 import type { Instance } from "@unframed/contracts";
-import { agentShapeId, INSTANCE_TOOL_TEXT, logTail, roomShapeId } from "@unframed/domain";
+import { agentShapeId, INSTANCE_TOOL_TEXT, logTail, roomShapeId, SCREEN_EXPLODE_TEXT } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import { refusal, type McpBinding, type McpTool, type ToolAnswer } from "../agent/mcp.ts";
 import type { Applied, CanvasChange, ChangeOrigin } from "../canvas/rooms.ts";
 import { errorText } from "../log.ts";
 import { isScreenShape, screenBeside } from "../screens/firstScreen.ts";
+import { explodeScreen, ExplodeRefused } from "../screens/flows.ts";
 
 const LOG_LINES = 60;
 
@@ -34,7 +35,7 @@ const summary = (instance: Instance) => ({
 
 const detail = (instance: Instance) => ({ ...summary(instance), log: logTail(instance.log, LOG_LINES) });
 
-const text = (name: string) => INSTANCE_TOOL_TEXT[name]!;
+const text = (name: string): { readonly description: string; readonly arguments: Readonly<Record<string, string>> } => (name === "screen_explode" ? SCREEN_EXPLODE_TEXT : INSTANCE_TOOL_TEXT[name]!);
 
 const idOf = (args: Record<string, unknown>): string => {
   const id = typeof args.id === "string" ? args.id.trim() : "";
@@ -79,6 +80,13 @@ export class InstanceTools {
         return { value: summary(await this.deps.start(binding.project, idOf(args))) };
       case "instance_stop":
         return { value: summary(await this.deps.stop(binding.project, idOf(args))) };
+      case "screen_explode": {
+        const shapeId = optionalString(args.shapeId);
+        if (shapeId === undefined) throw new Refused("name a Screen with shapeId");
+        const routes = Array.isArray(args.routes) ? args.routes.filter((route): route is string => typeof route === "string") : [];
+        const exploded = await explodeScreen(this.deps, binding.project, shapeId, routes, { kind: "server", id: `chat:${binding.chatId}` });
+        return { value: { group: agentShapeId(exploded.group), screens: exploded.screens.map(agentShapeId) } };
+      }
       default:
         return refusal(`no such Instance tool ${name}`);
     }
@@ -88,7 +96,7 @@ export class InstanceTools {
     try {
       return await this.run(binding, name, args);
     } catch (error) {
-      return refusal(error instanceof Refused ? error.message : errorText(error));
+      return refusal(error instanceof Refused || error instanceof ExplodeRefused ? error.message : errorText(error));
     }
   }
 
@@ -105,6 +113,15 @@ export class InstanceTools {
       ["instance_status", schema("instance_status", { id: "string" })],
       ["instance_start", schema("instance_start", { id: "string" }, ["id"])],
       ["instance_stop", schema("instance_stop", { id: "string" }, ["id"])],
+      [
+        "screen_explode",
+        {
+          type: "object",
+          properties: { shapeId: { type: "string", description: text("screen_explode").arguments.shapeId }, routes: { type: "array", items: { type: "string" }, description: text("screen_explode").arguments.routes } },
+          required: ["shapeId", "routes"],
+          additionalProperties: false,
+        },
+      ],
     ];
     return definitions.map(([name, inputSchema]) => ({
       name,

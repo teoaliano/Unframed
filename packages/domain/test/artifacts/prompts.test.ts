@@ -34,6 +34,9 @@ import {
   SETUP_SYSTEM_PROMPT,
   SETUP_TOOL_TEXT,
   setupRejection,
+  SCREEN_EXPLODE_TEXT,
+  FLOW_INSTRUCTION_TEMPLATE,
+  flowInstruction,
 } from "../../src/index.ts";
 
 const prompts = join(import.meta.dirname, "../../../../assets/prompts");
@@ -125,5 +128,16 @@ describe("Setup's model-facing text is the asset's text", () => {
     expect(SETUP_TOOL_TEXT).toEqual(
       Object.fromEntries(["ask_login", "screen_snapshot", "setup_save"].map((name) => [name, { description: all[name]!.text, arguments: all[name]!.args }])),
     );
+  });
+});
+
+describe("the Flow's model-facing text is the asset's text", () => {
+  it("holds screen_explode and the instruction that asks the agent for routes", () => {
+    const all = Object.fromEntries(sections("flow.md").map((section) => [section.name, section]));
+    expect(SCREEN_EXPLODE_TEXT).toEqual({ description: all.screen_explode!.text, arguments: all.screen_explode!.args });
+    expect(FLOW_INSTRUCTION_TEMPLATE).toBe(all["Propose routes"]!.text);
+    const text = flowInstruction({ shape: "a1b2", route: "/", branch: "feature/x", worktree: "/data/worktrees/app/x" });
+    expect(text).not.toMatch(/<shape>|<route>|<branch>|<worktree>/);
+    expect(text).toContain('Explode the Screen a1b2 into a Flow: read the router in the Instance\'s worktree at /data/worktrees/app/x (the branch "feature/x")');
   });
 });

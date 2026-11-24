@@ -21,7 +21,7 @@ export const screenRecord = (records: ReadonlyArray<TLRecord>, instance: Instanc
   } as unknown as TLRecord;
 };
 
-type ScreenShape = TLRecord & { type: "screen"; x: number; y: number; parentId: string; props: { w: number; h: number; instance: string; route: string } };
+export type ScreenShape = TLRecord & { type: "screen"; x: number; y: number; parentId: string; props: { w: number; h: number; instance: string; route: string } };
 
 export const isScreenShape = (record: TLRecord | undefined): record is ScreenShape => record?.typeName === "shape" && (record as { type?: string }).type === "screen";
 

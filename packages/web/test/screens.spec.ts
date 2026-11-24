@@ -8,7 +8,7 @@ import { openCanvas } from "./canvas.ts";
 import { clickShape } from "./generation.ts";
 import { expect, startHostedEngine, test } from "./fixtures.ts";
 import { engineChat, engineChats, FIXTURES, openRail, scriptFolder, tabs } from "./agent.ts";
-import { applyScreenParametersInstruction, NO_BRIDGE, setupRejection } from "@unframed/domain";
+import { applyScreenParametersInstruction, flowInstruction, NO_BRIDGE, setupRejection, slugName } from "@unframed/domain";
 
 const withRepository = async (page: Page, env: Record<string, string>, use: (engine: TestEngine, project: string, root: string) => Promise<void>, prepare?: (root: string) => Promise<void>) => {
   const root = await makeRepo("My App");
@@ -277,5 +277,45 @@ test("Setup's login request shows in its chat until the person says they are log
     await card.getByRole("button", { name: "I'm logged in" }).click();
     await expect(panel.getByText("Thanks, the session works.")).toBeVisible({ timeout: 30_000 });
     await expect(panel.getByTestId("setup-card")).toHaveCount(0);
+  });
+});
+
+test("a selected Screen explodes into a Flow of typed routes, or asks the agent for its routes", async ({ page }) => {
+  await withRepository(page, { UNFRAMED_TEST_AGENT_SCRIPT: FIXTURES }, async (engine, project) => {
+    const [first] = await screenShapes(engine, project);
+    await clickShape(page, first.id);
+    await page.getByRole("button", { name: "Explode into a Flow" }).click();
+    const routes = page.getByRole("textbox", { name: "Routes, one per line" });
+    await expect(routes).toHaveValue("/");
+    await routes.fill("/\n/pricing\nnot a route");
+    await page.getByRole("button", { name: "Explode", exact: true }).click();
+    await expect(page.getByText("not a route is not a route in the app")).toBeVisible();
+    await routes.fill("/\n/pricing\n/about");
+    await page.getByRole("button", { name: "Explode", exact: true }).click();
+    await expect.poll(async () => (await screenShapes(engine, project)).length).toBe(4);
+    const rpc = await engine.rpc();
+    const records = (await rpc.call("testCanvas.read", { project })).records as any[];
+    await rpc.close();
+    const frame = records.find((record) => record.type === "frame");
+    expect(frame.props.name).toBe(slugName(first.props.title));
+    expect(records.filter((record) => record.parentId === frame.id && record.type === "screen").map((record) => record.props.route)).toEqual(["/", "/pricing", "/about"]);
+    expect(records.filter((record) => record.parentId === frame.id && record.type === "arrow")).toHaveLength(2);
+
+    await clickShape(page, first.id);
+    await page.getByRole("button", { name: "Explode into a Flow" }).click();
+    await page.getByRole("button", { name: "Ask the agent" }).click();
+    await expect.poll(async () => (await engineChats(engine, project)).filter((chat) => chat.title !== "Setup").length).toBe(1);
+    const [asked] = (await engineChats(engine, project)).filter((chat) => chat.title !== "Setup");
+    const instance = await (async () => {
+      const client = await engine.rpc();
+      try {
+        return await client.call("instances.status", { project, id: first.props.instance });
+      } finally {
+        await client.close();
+      }
+    })();
+    expect((await engineChat(engine, asked!.id, project)).messages.find((message) => message.role === "user")?.text).toBe(
+      flowInstruction({ shape: first.id.replace(/^shape:/, ""), route: "/", branch: instance.branch, worktree: instance.worktree }),
+    );
   });
 });

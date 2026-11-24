@@ -17,8 +17,10 @@ export const GROUP_MIN: Size = { w: 180, h: 96 };
 export const GROUP_MAX: Size = { w: 4000, h: 4000 };
 export const GROUP_DEFAULT: Size = { w: 420, h: 280 };
 
-const SIDE_MARGIN = 28;
-const TOP_MARGIN = 56;
+export const GROUP_SIDE_MARGIN = 28;
+export const GROUP_TOP_MARGIN = 56;
+const SIDE_MARGIN = GROUP_SIDE_MARGIN;
+const TOP_MARGIN = GROUP_TOP_MARGIN;
 
 export const mayBeGroupMember = (type: string): boolean =>
   type !== "frame" && type !== "page" && type !== "motion" && type !== "group" && type !== "audio" && type !== "wire";
