@@ -367,7 +367,7 @@ const buildSchema = (refusalOf?: (kit: Kit) => string | null): TLSchema => {
       audio: { props: audioProps, meta: refMeta, migrations: audioMigrations() },
       node: { props: nodeProps, meta: refMeta, migrations: firstMigration("node") },
       wire: { props: wireProps, meta: unframedMeta, migrations: firstMigration("wire") },
-      screen: { props: screenProps, meta: unframedMeta, migrations: firstMigration("screen") },
+      screen: { props: screenProps, meta: { ...unframedMeta, ref: T.string.optional() }, migrations: firstMigration("screen") },
       page: { props: artifactProps, meta: refMeta, migrations: artifactMigrations("page") },
       motion: { props: artifactProps, meta: refMeta, migrations: artifactMigrations("motion") },
       component: {

@@ -25,8 +25,8 @@ const preview = (text: string): string => {
 
 const NUMERIC = /^\d+$/;
 
-const KIND_WORDS: Readonly<Record<string, string>> = { image: "Image", video: "Video", page: "Page", motion: "Motion" };
-const KINDS: Readonly<Record<string, ShapeKind>> = { text: "prompt", frame: "group", image: "image", video: "video", page: "page", motion: "motion" };
+const KIND_WORDS: Readonly<Record<string, string>> = { image: "Image", video: "Video", page: "Page", motion: "Motion", screen: "Screen" };
+const KINDS: Readonly<Record<string, ShapeKind>> = { text: "prompt", frame: "group", image: "image", video: "video", page: "page", motion: "motion", screen: "screen" };
 
 /** A prompt's text, an artifact's title, else the kind word; a group has none. */
 const previewOf = (shape: CanvasRecordLike): string | undefined => {
@@ -34,7 +34,7 @@ const previewOf = (shape: CanvasRecordLike): string | undefined => {
   if (text !== undefined) return preview(text);
   const kind = shape.type === undefined ? undefined : KIND_WORDS[shape.type];
   if (kind === undefined) return undefined;
-  const title = shape.type === "page" || shape.type === "motion" ? artifactTitle((shape.props ?? {}) as { title?: unknown; fileName?: unknown }) : "";
+  const title = shape.type === "page" || shape.type === "motion" || shape.type === "screen" ? artifactTitle((shape.props ?? {}) as { title?: unknown; fileName?: unknown }) : "";
   return title === "" ? kind : preview(title);
 };
 

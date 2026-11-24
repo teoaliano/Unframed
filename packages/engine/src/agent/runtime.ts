@@ -93,7 +93,7 @@ import { ChatEngine, CommandRejected } from "./chatEngine.ts";
 import type { RunEnvironment } from "./detection.ts";
 import { McpTokens, McpToolRegistry, MCP_PATH, type McpBinding, type McpTool, type ToolAnswer } from "./mcp.ts";
 import type { AgentToolContext } from "../artifacts/artifactTools.ts";
-import { ProviderService, SESSION_IDLE_MS } from "./providerService.ts";
+import { ProviderService, SESSION_IDLE_MS, type SessionShape } from "./providerService.ts";
 import { writeTurnSidecar } from "./sidecar.ts";
 import { planRevert, TurnChanges } from "./turnChanges.ts";
 import { planKitRevert } from "../kits/kitTurn.ts";
@@ -127,7 +127,26 @@ interface AgentRuntimeDeps {
   readonly onSessionClosed?: (project: string, chatId: string) => void;
   readonly providerReady?: (provider: AgentProvider) => Promise<boolean>;
   readonly features: Features;
+  /** The project's Repository as the agent sees it, or `undefined` for a Whiteboard. */
+  readonly repository?: (project: string) => Promise<AgentRepository | undefined>;
 }
+
+export interface AgentRepository {
+  /** The folder every worktree of this Repository sits in. */
+  readonly worktrees: string;
+  /** The Setup thread, while there is one. */
+  readonly setupChat: string | null;
+  /** An Instance's worktree, when the Instance exists and has not been removed. */
+  readonly worktreeOf: (instance: string) => Promise<string | undefined>;
+}
+
+const WHITEBOARD_ONLY_TOOLS = new Set(["page_write", "motion_write"]);
+
+const offeredIn = (repository: AgentRepository | undefined, chatId: string) => (tool: McpTool): boolean => {
+  if (tool.scope === "repository") return repository !== undefined;
+  if (tool.scope === "setup") return repository !== undefined && repository.setupChat === chatId;
+  return repository === undefined || !WHITEBOARD_ONLY_TOOLS.has(tool.name);
+};
 
 const runKey = (chatId: string, turn: number): string => `${chatId}:${turn}`;
 
@@ -312,6 +331,7 @@ export class AgentRuntime {
       book: deps.generationRuns.book,
     });
     if (deps.features.has("nodes")) this.registry.register(nodeRunTool((binding, args) => this.nodeRunFor(binding, args)));
+    this.registry.setFilter(async (binding) => offeredIn(await this.repositoryOf(binding.project), binding.chatId));
     this.providers = new ProviderService({
       adapterFor: (provider) => this.adapterFor(provider),
       tokens: this.tokens,
@@ -322,6 +342,17 @@ export class AgentRuntime {
       onIdleClose: (project, chatId) => void this.idleClosed(project, chatId),
       ...(deps.onSessionClosed === undefined ? {} : { onClosed: deps.onSessionClosed }),
     });
+  }
+
+  private repositoryOf(project: string): Promise<AgentRepository | undefined> {
+    return this.deps.repository?.(projectSlug(project)).catch(() => undefined) ?? Promise.resolve(undefined);
+  }
+
+  private async sessionShape(agent: ProjectAgent, chat: Chat): Promise<{ readonly projectDir: string; readonly shape: SessionShape }> {
+    const repository = await this.repositoryOf(agent.slug);
+    const tools = this.registry.list().filter(offeredIn(repository, chat.id)).map((tool) => tool.name);
+    if (repository === undefined) return { projectDir: agent.folder, shape: { tools } };
+    return { projectDir: agent.folder, shape: { tools } };
   }
 
   commentCommitted(project: string, change: CommittedChange): void {
@@ -586,7 +617,7 @@ export class AgentRuntime {
 
   private async artifactsAmong(project: string, ids: ReadonlyArray<string>): Promise<string[]> {
     const records = await this.deps.rooms.read(project);
-    const artifacts = new Set(records.filter((item) => item.typeName === "shape" && (item.type === "page" || item.type === "motion")).map((item) => item.id as string));
+    const artifacts = new Set(records.filter((item) => item.typeName === "shape" && (item.type === "page" || item.type === "motion" || item.type === "screen")).map((item) => item.id as string));
     return ids.filter((id) => artifacts.has(id));
   }
 
@@ -722,7 +753,9 @@ export class AgentRuntime {
       const preamble = command ? "" : await this.preamble(agent, chat, message?.context?.selection ?? [], message?.context?.elements ?? [], message?.attachments ?? [], records);
       const live = this.providers.has(chatId);
       if (!live) await this.internal(agent, chatId, { type: "thread.session.set", session: { status: "starting", activeTurnId: String(requested.turnId), lastError: null } });
-      await this.providers.ensure(agent.slug, agent.engine.chat(chatId) ?? chat, agent.folder, agent.engine, selection);
+      const current = agent.engine.chat(chatId) ?? chat;
+      const session = await this.sessionShape(agent, current);
+      await this.providers.ensure(agent.slug, current, session.projectDir, agent.engine, selection, session.shape);
       await this.providers.sendTurn(chatId, {
         chatId,
         turnId: String(requested.turnId),
@@ -1121,8 +1154,8 @@ export class AgentRuntime {
       logError(`chat ${chatId}: could not restore the canvas: ${errorText(error)}`);
     }
     if (rewind.dropped > 0) {
-      await this.providers
-        .ensure(agent.slug, chat, agent.folder, agent.engine)
+      await this.sessionShape(agent, chat)
+        .then((session) => this.providers.ensure(agent.slug, chat, session.projectDir, agent.engine, chat.modelSelection, session.shape))
         .then(() => this.providers.rollback(chatId, rewind.dropped))
         .catch((error: unknown) => logError(`chat ${chatId}: rollback: ${errorText(error)}`));
     }

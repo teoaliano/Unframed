@@ -32,6 +32,12 @@ export interface SessionStart {
   readonly firstMessage: string;
   /** The executable and environment, for the adapters that spawn a CLI. */
   readonly environment?: RunEnvironment;
+  /** The Unframed tools this session is offered, when they differ from every registered tool. */
+  readonly tools?: ReadonlyArray<string>;
+  /** The system prompt for this session, when it differs from the context's. */
+  readonly systemPrompt?: string;
+  /** More folders granted beyond the attachments folder, such as a Repository's worktrees. */
+  readonly grantedDirectories?: ReadonlyArray<string>;
 }
 
 export interface TurnInput {

@@ -37,6 +37,9 @@ import { ComponentTools } from "../artifacts/componentTools.ts";
 import { Artifacts } from "../artifacts/layer.ts";
 import { PreviewTools } from "../artifacts/previewTools.ts";
 import { openShell, openThread } from "./subscriptions.ts";
+import { Instances } from "../instances/layer.ts";
+import { InstanceTools } from "../instances/instanceTools.ts";
+import { Repositories } from "../repositories/layer.ts";
 
 export class Agents extends Context.Service<
   Agents,
@@ -73,6 +76,8 @@ export const agentsLayer = Layer.effect(
     const connections = yield* AgentConnections;
     const projects = yield* Projects;
     const preferences = yield* PreferencesStore;
+    const instances = yield* Instances;
+    const repositories = yield* Repositories;
     const context = yield* Effect.context<never>();
     const run = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
       Effect.runPromiseWith(context)(effect).catch((error: unknown) => {
@@ -94,13 +99,26 @@ export const agentsLayer = Layer.effect(
         }),
       );
 
+    const repositoriesOn = config.features.has("repositories");
+    const instanceTools = new InstanceTools({
+      create: (project, options) => run(instances.create(project, options)),
+      remove: (project, id, options) => run(instances.remove(project, id, options)),
+      list: (project) => run(instances.list(project)),
+      status: (project, id) => run(instances.status(project, id)),
+      start: (project, id) => run(instances.start(project, id)),
+      stop: (project, id) => run(instances.stop(project, id)),
+      read: (project) => run(rooms.read(project)),
+      apply: (project, change, origin) => run(rooms.apply(project, change, origin)),
+    });
+
     const preview = new PreviewTools({
       read: (project) => run(rooms.read(project)),
+      ...(repositoriesOn ? { screen: (project: string, instance: string) => run(instances.start(project, instance)).then(() => run(instances.status(project, instance))), instance: (project: string, instance: string) => run(instances.status(project, instance)) } : {}),
       chrome: artifacts.chrome,
       findChrome: artifacts.findChrome,
       previewPort: () => previewPort,
       registerCloser: (project, close) => void run(openProjects.register(project, "preview tabs", Effect.promise(close))),
-    });
+    }, config.features);
 
     const selection = yield* SelectionHub;
     const runs = yield* Runs;
@@ -157,7 +175,25 @@ export const agentsLayer = Layer.effect(
       saveMedia: (project, input) => media.save(project, input),
       providerCommands: async (provider) => (await run(detection.statuses({})))[provider].commands?.map((command) => command.name),
       realAdapter,
-      extraTools: (tools) => [...new ArtifactTools(tools, () => previewPort).tools(), ...new ComponentTools(tools, () => previewPort).tools(), ...preview.tools()],
+      extraTools: (tools) => [
+        ...new ArtifactTools(tools, () => previewPort).tools(),
+        ...new ComponentTools(tools, () => previewPort).tools(),
+        ...preview.tools(),
+        ...(repositoriesOn ? instanceTools.tools() : []),
+      ],
+      repository: async (project) => {
+        const repository = await run(repositories.read(project));
+        if (repository === undefined) return undefined;
+        return {
+          worktrees: join(config.dataDir, "worktrees", project),
+          setupChat: null,
+          worktreeOf: async (id) => {
+            if (!repositoriesOn) return undefined;
+            const instance = await run(instances.status(project, id)).catch(() => undefined);
+            return instance === undefined || instance.state === "removed" ? undefined : instance.worktree;
+          },
+        };
+      },
       onSessionClosed: (_project, chatId) => void preview.closeChat(chatId),
       providerReady: async (provider) => (await run(detection.statuses({})))[provider].status === "ready",
     });
@@ -231,7 +267,7 @@ export const agentsLayer = Layer.effect(
         mcpRoute(runtime.tokens, runtime.registry, undefined, {
           book: connections.book,
           listProjects: () => outsideProjects(),
-          tools: () => [...runtime.registry.list(), ...runtime.outsideTools],
+          tools: () => [...runtime.registry.list().filter((tool) => tool.scope === undefined), ...runtime.outsideTools],
           projectSlug: async (name) => {
             const slug = projectSlug(name);
             const names = await projects.list.pipe(Effect.runPromise);

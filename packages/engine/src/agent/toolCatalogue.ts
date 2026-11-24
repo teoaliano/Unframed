@@ -25,7 +25,7 @@ export const unframedToolCatalogue = (features: Features): Array<Pick<McpTool, "
     ...new CommentTools(inert).tools(),
     ...new ArtifactTools(inert, () => 0).tools(),
     ...new ComponentTools(inert, () => 0).tools(),
-    ...new PreviewTools(inert).tools(),
+    ...new PreviewTools(inert, features).tools(),
     ...new KitTools(inert).tools(),
     generateTool(inert),
     ...outsideSelectionTools({ hub: inert, read: inert.read }),

@@ -22,6 +22,10 @@ import {
   PAGE_WRITE_ARGUMENTS,
   PAGE_WRITE_TEXT,
   PREVIEW_TOOL_TEXT,
+  INSTANCE_TOOL_TEXT,
+  CANVAS_READ_SCREENS,
+  CANVAS_WRITE_SCREENS,
+  PREVIEW_OPEN_SCREENS,
 } from "../../src/index.ts";
 
 const prompts = join(import.meta.dirname, "../../../../assets/prompts");
@@ -73,5 +77,16 @@ describe("the artifact tools' model-facing text is the assets' text", () => {
     const expected = Object.fromEntries(sections("preview-tool-descriptions.md").map((section) => [section.name, { description: section.text, arguments: section.args }]));
     expect(Object.keys(expected)).toHaveLength(12);
     expect(PREVIEW_TOOL_TEXT).toEqual(expected);
+  });
+});
+
+describe("the Instance tools' model-facing text is the assets' text", () => {
+  it("holds every Instance tool, its arguments, and the Screen sentences of the canvas and preview tools", () => {
+    const all = sections("instance-tools.md");
+    const tools = all.filter((section) => section.name.startsWith("instance_"));
+    expect(INSTANCE_TOOL_TEXT).toEqual(Object.fromEntries(tools.map((section) => [section.name, { description: section.text, arguments: section.args }])));
+    expect(Object.keys(INSTANCE_TOOL_TEXT)).toEqual(["instance_create", "instance_remove", "instance_status", "instance_start", "instance_stop"]);
+    const extra = Object.fromEntries(all.filter((section) => !section.name.startsWith("instance_")).map((section) => [section.name, section.text]));
+    expect([CANVAS_READ_SCREENS, CANVAS_WRITE_SCREENS, PREVIEW_OPEN_SCREENS]).toEqual([extra.canvas_read, extra.canvas_write, extra.preview_open]);
   });
 });

@@ -42,6 +42,7 @@ interface CodexSession {
   turnId: string | undefined;
   codexTurnId: string | undefined;
   toolsFailure: string | undefined;
+  readonly tools: ReadonlyArray<string>;
   /** Codex decides its own approvals; the gate only holds the requests and questions it raises. */
   readonly gate: PermissionGate;
   stopping: boolean;
@@ -99,7 +100,7 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
       const answer = await session.rpc.request<{ data?: Array<{ name?: string; tools?: Record<string, unknown> }> }>("mcpServerStatus/list", {}, 15_000);
       const servers = answer?.data ?? [];
       const tools = servers.flatMap((server) => Object.keys(server.tools ?? {}).map((tool) => `mcp__${server.name ?? ""}__${tool}`));
-      const check = checkCanvasTools(context.registeredTools(), tools);
+      const check = checkCanvasTools(session.tools, tools);
       emit(session.chatId, { type: "session.configured", payload: { tools, foreign: check.foreign, grantedDirectories: [] } });
       session.toolsFailure = check.failure;
     } catch (error) {
@@ -107,7 +108,7 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
     }
   };
 
-  const threadParams = (input: { projectDir: string; runtimeMode: RuntimeMode; model: string }) => {
+  const threadParams = (input: { projectDir: string; runtimeMode: RuntimeMode; model: string; systemPrompt: string }) => {
     const policy = codexPolicy(input.runtimeMode);
     return {
       cwd: input.projectDir,
@@ -115,7 +116,7 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
       sandbox: policy.sandbox,
       approvalsReviewer: policy.approvalsReviewer,
       ...(input.model === "" ? {} : { model: input.model }),
-      developerInstructions: context.systemPrompt,
+      developerInstructions: input.systemPrompt,
     };
   };
 
@@ -152,7 +153,7 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
       });
       try {
         await initializeCodex(rpc, ENGINE_VERSION);
-        const params = threadParams({ projectDir: input.projectDir, runtimeMode: input.runtimeMode, model: input.modelSelection.model });
+        const params = threadParams({ projectDir: input.projectDir, runtimeMode: input.runtimeMode, model: input.modelSelection.model, systemPrompt: input.systemPrompt ?? context.systemPrompt });
         const stored = (input.resumeCursor as { threadId?: unknown } | undefined)?.threadId;
         let threadId = "";
         if (typeof stored === "string" && stored !== "") {
@@ -171,6 +172,7 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
           turnId: undefined,
           codexTurnId: undefined,
           toolsFailure: undefined,
+          tools: input.tools ?? context.registeredTools(),
           gate: new PermissionGate((draft) => emit(input.chatId, draft)),
           stopping: false,
         };

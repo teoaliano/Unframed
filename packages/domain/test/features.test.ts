@@ -4,7 +4,9 @@ import {
   agentSystemPrompt,
   ALL_FEATURES,
   CANVAS_READ_DESCRIPTION,
+  CANVAS_READ_SCREENS,
   CANVAS_WRITE_DESCRIPTION,
+  CANVAS_WRITE_SCREENS,
   canvasReadDescription,
   canvasWriteDescription,
   featureList,
@@ -29,10 +31,11 @@ describe("UNFRAMED_FEATURES", () => {
 });
 
 describe("the agent's text without nodes", () => {
-  it("is the assets' text when nodes are on", () => {
+  it("is the assets' text when nodes are on, with the Screen sentences when Repositories are", () => {
     expect(agentSystemPrompt(ALL_FEATURES)).toBe(AGENT_SYSTEM_PROMPT);
-    expect(canvasReadDescription(ALL_FEATURES)).toBe(CANVAS_READ_DESCRIPTION);
-    expect(canvasWriteDescription(ALL_FEATURES)).toBe(CANVAS_WRITE_DESCRIPTION);
+    expect(canvasReadDescription(ALL_FEATURES)).toBe(`${CANVAS_READ_DESCRIPTION} ${CANVAS_READ_SCREENS}`);
+    expect(canvasWriteDescription(ALL_FEATURES)).toBe(`${CANVAS_WRITE_DESCRIPTION} ${CANVAS_WRITE_SCREENS}`);
+    expect(canvasReadDescription(readFeatures("nodes"))).toBe(CANVAS_READ_DESCRIPTION);
   });
 
   it("drops the node sentence from the system prompt, and node from the kinds with a ref", () => {

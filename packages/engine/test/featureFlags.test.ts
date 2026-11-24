@@ -45,6 +45,19 @@ describe("UNFRAMED_FEATURES", () => {
     expect(allTools.map((tool) => tool.name)).toContain("node_run");
   });
 
+  it("with repositories off, says nothing of Screens in the canvas and preview tools", async () => {
+    const { tools } = await toolsOf("nodes");
+    const description = (name: string) => tools.find((tool) => tool.name === name)!.description;
+    expect(description("canvas_read")).not.toMatch(/screen/i);
+    expect(description("canvas_write")).not.toMatch(/screen/i);
+    expect(description("preview_open")).not.toMatch(/Screen/);
+    expect(tools.map((tool) => tool.name).filter((name) => name.startsWith("instance_"))).toEqual([]);
+
+    const { tools: allTools } = await toolsOf("all");
+    expect(allTools.find((tool) => tool.name === "canvas_read")!.description).toContain("a screen shows one route of one Instance");
+    expect(allTools.find((tool) => tool.name === "preview_open")!.description).toContain("shapeId may also name a Screen");
+  });
+
   it("with both off, refuses the RPC methods that run or save nodes and that edit an artifact's source", async () => {
     const { rpc } = await startAgentEngine({ env: { UNFRAMED_FEATURES: undefined } });
     const project = "board";

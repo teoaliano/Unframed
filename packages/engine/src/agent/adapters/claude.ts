@@ -73,6 +73,7 @@ interface ClaudeSession {
   readonly gate: PermissionGate;
   readonly projectDir: string;
   readonly attachmentsDir: string;
+  readonly tools: ReadonlyArray<string>;
   state: ClaudeMapState;
   turnId: string | undefined;
   interactionMode: InteractionMode;
@@ -128,7 +129,7 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
       for await (const message of session.query) {
         const mapped = mapClaudeMessage(session.state, message, {
           turnId: session.turnId,
-          registeredTools: context.registeredTools(),
+          registeredTools: session.tools,
           compacting: session.compacting,
         });
         session.state = mapped.state;
@@ -220,13 +221,13 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
         pathToClaudeCodeExecutable: input.environment.executable,
         env: input.environment.env,
         cwd: input.projectDir,
-        additionalDirectories: [input.attachmentsDir],
+        additionalDirectories: [input.attachmentsDir, ...(input.grantedDirectories ?? [])],
         ...(input.modelSelection.model === "" ? {} : { model: input.modelSelection.model }),
         ...(traits.effort === undefined ? {} : { effort: traits.effort }),
         ...(Object.keys(settings).length > 0 ? { settings } : {}),
-        systemPrompt: { type: "preset", preset: "claude_code", append: context.systemPrompt },
+        systemPrompt: { type: "preset", preset: "claude_code", append: input.systemPrompt ?? context.systemPrompt },
         tools: { type: "preset", preset: "claude_code" },
-        allowedTools: context.registeredTools().map((name) => `${UNFRAMED_TOOL_PREFIX}${name}`),
+        allowedTools: (input.tools ?? context.registeredTools()).map((name) => `${UNFRAMED_TOOL_PREFIX}${name}`),
         // The outside connection's server never serves an in-app session (spec 14).
         disallowedTools: inAppClaudeDisallowedTools(),
         settingSources: ["user", "project", "local"],
@@ -249,6 +250,7 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
         gate,
         projectDir: input.projectDir,
         attachmentsDir: input.attachmentsDir,
+        tools: input.tools ?? context.registeredTools(),
         state: { ...initialClaudeState(), ...(stored.sessionId === undefined ? {} : { sessionId: stored.sessionId }), ...(stored.resumeSessionAt === undefined ? {} : { lastAssistantUuid: stored.resumeSessionAt }) },
         turnId: undefined,
         interactionMode: "default",

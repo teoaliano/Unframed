@@ -74,12 +74,24 @@ export interface McpTool {
   readonly description: string;
   readonly inputSchema: Record<string, unknown>;
   readonly workLogRow?: false;
+  readonly scope?: "repository" | "setup";
   readonly call: (binding: McpBinding, args: Record<string, unknown>) => Promise<ToolAnswer>;
 }
 
 /** The tools the Unframed server registers. Spec 09 adds its artifact and preview tools here. */
 export class McpToolRegistry {
   private readonly tools = new Map<string, McpTool>();
+  private filter: (binding: McpBinding) => Promise<(tool: McpTool) => boolean> = async () => () => true;
+
+  /** Decides, per session, which registered tools it is offered. */
+  setFilter(filter: (binding: McpBinding) => Promise<(tool: McpTool) => boolean>): void {
+    this.filter = filter;
+  }
+
+  async offered(binding: McpBinding): Promise<McpTool[]> {
+    const keep = await this.filter(binding);
+    return this.list().filter(keep);
+  }
 
   register(tool: McpTool): void {
     this.tools.set(tool.name, tool);
@@ -337,11 +349,11 @@ const handle = async (
       return rpcResult(message.id, {});
     case "tools/list":
       return rpcResult(message.id, {
-        tools: registry.list().map((tool) => ({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema })),
+        tools: (await registry.offered(binding)).map((tool) => ({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema })),
       });
     case "tools/call": {
       const params = (message.params ?? {}) as { name?: unknown; arguments?: unknown };
-      const tool = typeof params.name === "string" ? registry.get(params.name) : undefined;
+      const tool = typeof params.name === "string" ? (await registry.offered(binding)).find((known) => known.name === params.name) : undefined;
       if (!tool) return rpcError(message.id, -32602, `Unknown tool: ${String(params.name)}`);
       onCall?.(binding);
       const args = typeof params.arguments === "object" && params.arguments !== null ? (params.arguments as Record<string, unknown>) : {};

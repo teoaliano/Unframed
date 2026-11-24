@@ -45,6 +45,7 @@ export * from "./agent/providerStatus.ts";
 export * from "./agent/runEnvironment.ts";
 export * from "./agent/prompts.ts";
 export * from "./agent/featurePrompts.ts";
+export * from "./agent/repositoryPrompts.ts";
 export * from "./agent/claudeCatalogue.ts";
 export * from "./agent/skills.ts";
 export * from "./agent/chatModel.ts";

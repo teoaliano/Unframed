@@ -1,10 +1,13 @@
 import type { AgentProvider, Chat, ModelSelection, RuntimeMode } from "@unframed/domain";
-import type { ProviderAdapter, TurnInput } from "./adapter.ts";
+import type { ProviderAdapter, SessionStart, TurnInput } from "./adapter.ts";
 import type { ChatEngine } from "./chatEngine.ts";
 import type { RunEnvironment } from "./detection.ts";
 import type { McpTokens } from "./mcp.ts";
 
 export const SESSION_IDLE_MS = 10 * 60_000;
+
+/** What a session is given beyond its project folder: its tools, its system prompt and more folders. */
+export type SessionShape = Pick<SessionStart, "tools" | "systemPrompt" | "grantedDirectories">;
 
 interface LiveSession {
   readonly project: string;
@@ -64,7 +67,7 @@ export class ProviderService {
   }
 
   /** Starts the chat's session, or resumes it from its stored cursor. Answers whether it was already live. */
-  async ensure(project: string, chat: Chat, projectDir: string, engine: ChatEngine, modelSelection: ModelSelection = chat.modelSelection): Promise<boolean> {
+  async ensure(project: string, chat: Chat, projectDir: string, engine: ChatEngine, modelSelection: ModelSelection = chat.modelSelection, shape: SessionShape = {}): Promise<boolean> {
     if (this.has(chat.id)) return true;
     const stale = this.sessions.get(chat.id);
     if (stale) this.forget(stale);
@@ -86,6 +89,7 @@ export class ProviderService {
         attachmentsDir: this.options.attachmentsDir,
         firstMessage: chat.messages.find((message) => message.role === "user")?.text ?? "",
         ...(environment === undefined ? {} : { environment }),
+        ...shape,
       });
       this.sessions.set(chat.id, { project, chatId: chat.id, adapter, token, engine, idle: undefined });
       engine.writeSessionRuntime(chat.id, {

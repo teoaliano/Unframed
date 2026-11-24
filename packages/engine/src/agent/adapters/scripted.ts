@@ -49,6 +49,7 @@ interface ScriptedSession {
   readonly chatId: string;
   /** The folders granted beyond the project folder, as a session reports them. */
   readonly granted: ReadonlyArray<string>;
+  readonly tools: ReadonlyArray<string>;
   readonly script: AgentScript | undefined;
   readonly pickError: string | undefined;
   readonly mcp: McpClient;
@@ -67,17 +68,17 @@ const nothing = () => {};
  * its provider tool calls through the real permission decision; no provider tool ever runs.
  */
 export const scriptedAdapter = (scriptPath: string, context: AdapterContext): ProviderAdapter => {
-  let loaded: Promise<AgentScript[]> | undefined;
-  const scripts = () => (loaded ??= loadScripts(scriptPath));
+  const scripts = () => loadScripts(scriptPath);
   const sessions = new Map<string, ScriptedSession>();
   let items = 0;
 
   const emit = (chatId: string, draft: RuntimeEventDraft) => context.emit(chatId, draft);
 
-  const recordSession = async (chatId: string, url: string, token: string) => {
+  const recordSession = async (input: SessionStart, granted: ReadonlyArray<string>) => {
     const folder = join(context.dataDir, "scripted-agent");
     await mkdir(folder, { recursive: true });
-    await writeFile(join(folder, `${chatId}.json`), JSON.stringify({ url, token, startedAt: new Date().toISOString() }));
+    const record = { url: input.mcp.url, token: input.mcp.token, cwd: input.projectDir, systemPrompt: input.systemPrompt ?? context.systemPrompt, granted, startedAt: new Date().toISOString() };
+    await writeFile(join(folder, `${input.chatId}.json`), JSON.stringify(record));
   };
 
   const runTurn = async (session: ScriptedSession, input: TurnInput, abort: AbortController) => {
@@ -108,7 +109,7 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
       } catch (error) {
         context.log(chatId, `scripted MCP: ${errorText(error)}`);
       }
-      const check = checkCanvasTools(context.registeredTools(), tools);
+      const check = checkCanvasTools(session.tools, tools);
       emit(chatId, { type: "session.configured", payload: { tools, foreign: check.foreign, grantedDirectories: session.granted } });
       if (check.failure) return fail(check.failure);
     }
@@ -258,7 +259,8 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
       }
       const session: ScriptedSession = {
         chatId: input.chatId,
-        granted: [input.attachmentsDir],
+        granted: [input.attachmentsDir, ...(input.grantedDirectories ?? [])],
+        tools: input.tools ?? context.registeredTools(),
         script,
         pickError,
         mcp: new McpClient(input.mcp.url, input.mcp.token),
@@ -268,7 +270,7 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
         turn: undefined,
       };
       sessions.set(input.chatId, session);
-      await recordSession(input.chatId, input.mcp.url, input.mcp.token).catch(nothing);
+      await recordSession(input, session.granted).catch(nothing);
       emit(input.chatId, { type: "session.started", payload: input.resumeCursor === undefined ? {} : { resume: input.resumeCursor } });
       return { resumeCursor: { script: script?.name ?? null, resumed: input.resumeCursor !== undefined } };
     },
