@@ -1,4 +1,5 @@
 import type { Instance, RepositorySetup, RepositoryStatus } from "@unframed/contracts";
+import { NO_RUN_COMMAND } from "./instances.ts";
 
 export interface ScreenViewport {
   readonly name: string;
@@ -37,7 +38,8 @@ export const normaliseRoute = (input: string): string | undefined => {
 
 export type ScreenOverlay =
   | { readonly kind: "none" }
-  | { readonly kind: "progress"; readonly label: string }
+  | { readonly kind: "progress"; readonly label: string; readonly detail?: string }
+  | { readonly kind: "waiting"; readonly label: string; readonly detail: string }
   | { readonly kind: "failed"; readonly message: string; readonly log: string }
   | { readonly kind: "removed"; readonly label: string }
   | { readonly kind: "missing"; readonly label: string };
@@ -48,11 +50,33 @@ const PROGRESS: Partial<Record<Instance["state"], string>> = {
   starting: "Starting the dev server…",
 };
 
-export const screenOverlay = (input: { readonly instance: Instance | undefined; readonly loaded: boolean; readonly repository: RepositoryStatus | undefined }): ScreenOverlay => {
+export type SetupChatState = "running" | "asking" | "idle";
+
+export const SETUP_FINDING = "Setup is finding how to run this repository…";
+export const SETUP_FOLLOW = "Follow along in the Setup chat.";
+export const SETUP_ASKING = "Setup needs your answer";
+export const SETUP_ASKING_DETAIL = "Reply in the Setup chat to keep it going.";
+export const SETUP_STALLED = "Setup has not found how to run this repository yet";
+export const SETUP_STALLED_DETAIL = "Open the Setup chat to keep it going.";
+
+const awaitingSetup = (instance: Instance, repository: RepositoryStatus | undefined, setupChat: SetupChatState | undefined): boolean =>
+  (instance.state === "failed" && instance.error === NO_RUN_COMMAND) || (instance.state === "stopped" && repository === "setting-up" && setupChat === "running");
+
+export const screenOverlay = (input: {
+  readonly instance: Instance | undefined;
+  readonly loaded: boolean;
+  readonly repository: RepositoryStatus | undefined;
+  readonly setupChat?: SetupChatState | undefined;
+}): ScreenOverlay => {
   if (input.repository === "missing") return { kind: "missing", label: "Repository not found" };
   if (!input.loaded) return { kind: "none" };
   const { instance } = input;
   if (instance === undefined || instance.state === "removed") return { kind: "removed", label: "Instance removed" };
+  if (awaitingSetup(instance, input.repository, input.setupChat)) {
+    if (input.setupChat === "running") return { kind: "progress", label: SETUP_FINDING, detail: SETUP_FOLLOW };
+    if (input.setupChat === "asking") return { kind: "waiting", label: SETUP_ASKING, detail: SETUP_ASKING_DETAIL };
+    return { kind: "waiting", label: SETUP_STALLED, detail: SETUP_STALLED_DETAIL };
+  }
   const progress = PROGRESS[instance.state];
   if (progress !== undefined) return { kind: "progress", label: progress };
   if (instance.state === "failed") return { kind: "failed", message: instance.error ?? "The dev server failed.", log: logTail(instance.log, 8) };

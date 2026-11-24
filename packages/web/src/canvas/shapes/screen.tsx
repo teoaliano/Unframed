@@ -1,11 +1,12 @@
 import type { ScreenShapeProps } from "@unframed/contracts";
-import { screenOverlay, screenUrl, setupTag, type DialsAnnouncement } from "@unframed/domain";
+import { screenOverlay, screenUrl, setupTag, type DialsAnnouncement, type SetupChatState } from "@unframed/domain";
 import { useEffect, useRef, useState } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
 import { Badge } from "~/components/ui/badge";
 import { Spinner } from "~/components/ui/spinner";
 import { forgetFrame, hearFrame, isInteractive, reachFrame } from "../../artifacts/state.ts";
-import { useCanvasProject } from "../../context.ts";
+import { useChatClient, useChats } from "../../agent/store.ts";
+import { useCanvasProject, useEngine } from "../../context.ts";
 import { isDeviceClient } from "../../deviceMode.ts";
 import { useFeature } from "../../features.ts";
 import { noteRender } from "../../fps/renders.ts";
@@ -102,12 +103,23 @@ const LiveScreen = ({ shapeId, url, dials, interactive, onPainted, onBridge }: {
   );
 };
 
+const useSetupChat = (project: string): SetupChatState | undefined => {
+  const client = useChatClient(useEngine(), project);
+  const chats = useChats(client);
+  const id = useValue("setup chat", () => repositoryState(project).repository.get()?.setupChat ?? null, [project]);
+  const chat = id === null ? undefined : chats.find((summary) => summary.id === id);
+  if (chat === undefined) return undefined;
+  if (chat.hasPendingUserInput || chat.hasPendingApproval) return "asking";
+  return chat.status === "running" ? "running" : "idle";
+};
+
 const Overlay = ({ project, instance }: { readonly project: string; readonly instance: string }) => {
   const state = repositoryState(project);
+  const setupChat = useSetupChat(project);
   const overlay = useValue(
     "screen overlay",
-    () => screenOverlay({ instance: state.instances.get().get(instance), loaded: state.loaded.get(), repository: state.repository.get()?.status }),
-    [state, instance],
+    () => screenOverlay({ instance: state.instances.get().get(instance), loaded: state.loaded.get(), repository: state.repository.get()?.status, setupChat }),
+    [state, instance, setupChat],
   );
   if (overlay.kind === "none") return null;
   return (
@@ -118,6 +130,7 @@ const Overlay = ({ project, instance }: { readonly project: string; readonly ins
     >
       {overlay.kind === "progress" && <Spinner size="lg" tone="muted" />}
       <span className="font-medium text-(--artifact-card-title)">{overlay.kind === "failed" ? overlay.message : overlay.label}</span>
+      {(overlay.kind === "progress" || overlay.kind === "waiting") && overlay.detail !== undefined && <span data-testid="screen-overlay-detail">{overlay.detail}</span>}
       {overlay.kind === "failed" && overlay.log !== "" && (
         <pre className="max-w-full overflow-hidden text-start font-mono text-xs whitespace-pre-wrap" data-testid="screen-log">
           {overlay.log}
