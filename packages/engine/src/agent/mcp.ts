@@ -83,7 +83,6 @@ export class McpToolRegistry {
   private readonly tools = new Map<string, McpTool>();
   private filter: (binding: McpBinding) => Promise<(tool: McpTool) => boolean> = async () => () => true;
 
-  /** Decides, per session, which registered tools it is offered. */
   setFilter(filter: (binding: McpBinding) => Promise<(tool: McpTool) => boolean>): void {
     this.filter = filter;
   }

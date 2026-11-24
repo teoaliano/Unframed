@@ -1,5 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import { chromeCandidates } from "@unframed/domain";
 import { describe, expect, it } from "vitest";
 import { toolResults } from "./agentCanvas.ts";
@@ -164,5 +165,25 @@ describe("the agent in a Repository", () => {
     expect(evaluated).toMatchObject({ status: "completed", result: { value: "/pricing" } });
     expect(snapshot!.result.visibleText).toContain("Fake app");
     expect(opened!.result.viewport.measured).toEqual({ width: 390, height: 844 });
+  });
+});
+
+describe("a thread's working Instance", () => {
+  it("runs a thread started from a Screen in that Instance's worktree, with the Repository's worktrees granted, and others in the project folder", { timeout: 60_000 }, async () => {
+    const agent = await startRepositoryAgent();
+    await agent.script("look", { when: "^look", turns: [{ text: "Looked." }, { text: "Again." }] });
+    const fromScreen = await agent.createChat();
+    await agent.send(fromScreen, "look at this", { selection: [agent.screen.id] });
+    const chat = await agent.settled(fromScreen, 1);
+    const session = await agent.session(fromScreen);
+    expect(session.cwd).toBe(agent.instance.worktree);
+    const worktrees = dirname(agent.instance.worktree);
+    expect(session.granted).toContain(worktrees);
+    expect(chat.activities.find((activity) => activity.kind === "session.configured")?.payload).toMatchObject({ grantedDirectories: expect.arrayContaining([worktrees]) });
+
+    const plain = await agent.createChat();
+    await agent.send(plain, "look around");
+    await agent.settled(plain, 1);
+    expect((await agent.session(plain)).cwd).toBe(join(agent.engine.dataDir, "output", agent.project));
   });
 });

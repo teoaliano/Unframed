@@ -6,7 +6,6 @@ import type { McpTokens } from "./mcp.ts";
 
 export const SESSION_IDLE_MS = 10 * 60_000;
 
-/** What a session is given beyond its project folder: its tools, its system prompt and more folders. */
 export type SessionShape = Pick<SessionStart, "tools" | "systemPrompt" | "grantedDirectories">;
 
 interface LiveSession {

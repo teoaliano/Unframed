@@ -44,7 +44,6 @@ const idOf = (args: Record<string, unknown>): string => {
 
 const optionalString = (value: unknown): string | undefined => (typeof value === "string" && value.trim() !== "" ? value.trim() : undefined);
 
-/** The agent's Instance tools (spec: Repositories, "Agent"): offered only in a Repository's chats. */
 export class InstanceTools {
   private readonly deps: InstanceToolDeps;
 

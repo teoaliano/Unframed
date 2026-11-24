@@ -81,7 +81,6 @@ export interface PreviewDeps {
   readonly previewPort: () => number;
   /** Spec 01's open-project registry: the project's closer closes every preview tab of it. */
   readonly registerCloser: (project: string, close: () => Promise<void>) => void;
-  /** Starts a Screen's Instance and answers its state; absent when Repositories are off. */
   readonly screen?: (project: string, instance: string) => Promise<Instance>;
   readonly instance?: (project: string, instance: string) => Promise<Instance>;
 }

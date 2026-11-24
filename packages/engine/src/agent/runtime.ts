@@ -127,16 +127,12 @@ interface AgentRuntimeDeps {
   readonly onSessionClosed?: (project: string, chatId: string) => void;
   readonly providerReady?: (provider: AgentProvider) => Promise<boolean>;
   readonly features: Features;
-  /** The project's Repository as the agent sees it, or `undefined` for a Whiteboard. */
   readonly repository?: (project: string) => Promise<AgentRepository | undefined>;
 }
 
 export interface AgentRepository {
-  /** The folder every worktree of this Repository sits in. */
   readonly worktrees: string;
-  /** The Setup thread, while there is one. */
   readonly setupChat: string | null;
-  /** An Instance's worktree, when the Instance exists and has not been removed. */
   readonly worktreeOf: (instance: string) => Promise<string | undefined>;
 }
 
@@ -352,7 +348,19 @@ export class AgentRuntime {
     const repository = await this.repositoryOf(agent.slug);
     const tools = this.registry.list().filter(offeredIn(repository, chat.id)).map((tool) => tool.name);
     if (repository === undefined) return { projectDir: agent.folder, shape: { tools } };
-    return { projectDir: agent.folder, shape: { tools } };
+    const worktree = await this.workingWorktree(agent, chat, repository);
+    return { projectDir: worktree ?? agent.folder, shape: { tools, grantedDirectories: [repository.worktrees] } };
+  }
+
+  private async workingWorktree(agent: ProjectAgent, chat: Chat, repository: AgentRepository): Promise<string | undefined> {
+    const byId = new Map((await this.deps.rooms.read(agent.slug)).map((item) => [item.id as string, item]));
+    for (const id of chat.tags) {
+      const shape = byId.get(id) as { typeName?: string; type?: string; props?: { instance?: unknown } } | undefined;
+      if (shape?.typeName !== "shape" || shape.type !== "screen" || typeof shape.props?.instance !== "string") continue;
+      const worktree = await repository.worktreeOf(shape.props.instance);
+      if (worktree !== undefined) return worktree;
+    }
+    return undefined;
   }
 
   commentCommitted(project: string, change: CommittedChange): void {
