@@ -141,6 +141,20 @@ export const ScreensExplode = Rpc.make("screens.explode", {
   error: UnframedError,
 });
 
+export const DiffFile = Schema.Struct({ path: Schema.String, additions: Schema.Number, deletions: Schema.Number, binary: Schema.Boolean });
+export type DiffFile = typeof DiffFile.Type;
+
+export const InstanceDiff = Schema.Struct({
+  base: Schema.String,
+  baseRef: Schema.String,
+  files: Schema.Array(DiffFile),
+  patch: Schema.String,
+  truncated: Schema.Boolean,
+});
+export type InstanceDiff = typeof InstanceDiff.Type;
+
+export const InstancesDiff = Rpc.make("instances.diff", { payload: InstanceRef, success: InstanceDiff, error: UnframedError });
+
 export const InstancesBranches = Rpc.make("instances.branches", {
   payload: Schema.Struct({ project: Schema.String }),
   success: Schema.Struct({ branches: Schema.Array(Schema.String), current: Schema.String }),

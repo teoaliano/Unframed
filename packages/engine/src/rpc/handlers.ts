@@ -32,6 +32,7 @@ import { RpcSockets } from "./sockets.ts";
 import { screenRecord } from "../screens/firstScreen.ts";
 import { explodeScreen, ExplodeRefused } from "../screens/flows.ts";
 import { Repositories } from "../repositories/layer.ts";
+import { InstanceGit } from "../instances/instanceGit.ts";
 import { filePath, revealFiles } from "../reveal.ts";
 import { Config } from "../services.ts";
 import { SettingsStore } from "../settingsStore.ts";
@@ -60,6 +61,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const settings = yield* SettingsStore;
     const projects = yield* Projects;
     const repositories = yield* Repositories;
+    const instanceGit = yield* InstanceGit;
     const instances = yield* Instances;
     const sockets = yield* RpcSockets;
     sockets.onDisconnect((clientId) => Effect.runFork(instances.release(String(clientId))));
@@ -180,6 +182,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "repositories.setupVerdict": ({ project, accepted, note }) => featureOn("repositories", () => Effect.map(agents.setupVerdict(project, accepted, note), (repository) => ({ repository }))),
       "repositories.read": ({ project }) => featureOn("repositories", () => Effect.map(repositories.read(project), (repository) => ({ repository: repository ?? null }))),
       "instances.branches": ({ project }) => featureOn("repositories", () => instances.branches(project)),
+      "instances.diff": ({ project, id }) => featureOn("repositories", () => instanceGit.diff(project, id)),
       "screens.snapshots": ({ project }) => artifacts.screenSnapshots(project),
       "instances.create": ({ project, base, branch }) =>
         featureOn("repositories", () => instances.create(project, { ...(base === undefined ? {} : { base }), ...(branch === undefined ? {} : { branch }) })),

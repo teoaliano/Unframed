@@ -35,6 +35,7 @@ import { preferencesStoreLayer } from "./preferencesStore.ts";
 import { projectDatabaseLayer } from "./projectDatabase.ts";
 import { Projects, projectsLayer } from "./projects.ts";
 import { instancesLayer } from "./instances/layer.ts";
+import { instanceGitLayer } from "./instances/instanceGit.ts";
 import { repositoriesLayer } from "./repositories/layer.ts";
 import { rpcHandlersLayer } from "./rpc/handlers.ts";
 import { lifecycleLayer } from "./lifecycle.ts";
@@ -116,7 +117,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
 
   const services = Layer.mergeAll(RpcServer.layer(UnframedRpcs, { disableTracing: true })).pipe(
     Layer.provideMerge(rpcHandlersLayer),
-    Layer.provideMerge(Layer.mergeAll(rpcSocketsLayer, Layer.provideMerge(lifecycleLayer, oauthLayer))),
+    Layer.provideMerge(Layer.mergeAll(rpcSocketsLayer, instanceGitLayer, Layer.provideMerge(lifecycleLayer, oauthLayer))),
     Layer.provideMerge(Layer.provideMerge(agentsLayer, providerDetectionLayer)),
     Layer.provideMerge(Layer.provideMerge(nodeRunsLayer, Layer.mergeAll(artifactsLayer, renderJobsLayer))),
     Layer.provideMerge(shareLinksLayer),

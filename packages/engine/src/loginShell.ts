@@ -10,7 +10,7 @@ import { Config } from "./services.ts";
 
 const SHELL_TIMEOUT_MS = 5_000;
 
-export type Spawned = VersionRun & { readonly stderr?: string };
+export type Spawned = VersionRun & { readonly stderr?: string; readonly stdout?: string };
 
 export const runCommand = (
   executable: string,
@@ -23,6 +23,7 @@ export const runCommand = (
     const [command, commandArgs] = executable.endsWith(".js") ? [process.execPath, [executable, ...args]] : [executable, [...args]];
     let settled = false;
     let output = "";
+    let stdout = "";
     const finish = (result: Spawned) => {
       if (settled) return;
       settled = true;
@@ -42,12 +43,15 @@ export const runCommand = (
       finish({ kind: "timed_out" });
     }, timeoutMs);
     timer.unref();
-    child.stdout?.setEncoding("utf8").on("data", (chunk: string) => (output += chunk));
+    child.stdout?.setEncoding("utf8").on("data", (chunk: string) => {
+      output += chunk;
+      stdout += chunk;
+    });
     child.stderr?.setEncoding("utf8").on("data", (chunk: string) => (output += chunk));
     child.on("error", (error: NodeJS.ErrnoException) => {
       finish(error.code === "ENOENT" ? { kind: "not_found" } : { kind: "spawn_failed", code: error.code ?? error.message });
     });
-    child.on("close", (code) => finish({ kind: "exited", code, output }));
+    child.on("close", (code) => finish({ kind: "exited", code, output, stdout }));
   });
 
 const isExecutable = (path: string): boolean => {
