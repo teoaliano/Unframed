@@ -21,3 +21,6 @@ export const gitRoots = (output: string): { readonly root: string; readonly gitC
 export const hasUncommittedChanges = (porcelain: string): boolean => porcelain.trim() !== "";
 
 export const repositoryStatus = (stored: StoredRepositoryStatus, rootExists: boolean): RepositoryStatus => (rootExists ? stored : "missing");
+
+export const NO_SETUP_OPEN = "Setup is not running for this Repository.";
+export const REJECTION_NEEDS_NOTE = "Say what is still wrong, so Setup can keep trying.";

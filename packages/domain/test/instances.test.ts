@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   appendLogTail,
+  setupFilePath,
   branchSlug,
   copiedEnvFiles,
   defaultInstanceBranch,
@@ -129,5 +130,21 @@ describe("dev server output", () => {
   it("keeps only the tail of the log", () => {
     expect(appendLogTail("abc", "def", 4)).toBe("cdef");
     expect(appendLogTail("", "hello", 10)).toBe("hello");
+  });
+});
+
+describe("setupFilePath", () => {
+  it.each([
+    [".unframed/mock-user.ts", ".unframed/mock-user.ts"],
+    ["./.env.unframed", ".env.unframed"],
+    ["src//mocks/./user.ts", "src/mocks/user.ts"],
+    ["/etc/passwd", undefined],
+    ["../outside.ts", undefined],
+    ["src/../../outside.ts", undefined],
+    [".git/config", undefined],
+    ["", undefined],
+    ["a\\b.ts", undefined],
+  ])("reads %j as %j", (file, expected) => {
+    expect(setupFilePath(file)).toBe(expected);
   });
 });

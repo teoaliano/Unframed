@@ -88,5 +88,7 @@ export const makeRepo = async (name = "My App") => {
 
 export const repoEngineEnv = async (env: Record<string, string | undefined> = {}) => {
   const dir = await makeTempDir("unframed-repo-shell-");
-  return { SHELL: await fakeShell(join(dir, "shell")), FAKE_SHELL_PATH: "", ...env };
+  const scripts = join(dir, "no-scripts");
+  await mkdir(scripts);
+  return { SHELL: await fakeShell(join(dir, "shell")), FAKE_SHELL_PATH: "", UNFRAMED_TEST_AGENT_SCRIPT: scripts, ...env };
 };

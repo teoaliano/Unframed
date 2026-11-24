@@ -39,6 +39,7 @@ export const Repository = Schema.Struct({
   status: RepositoryStatus,
   setup: Schema.NullOr(RepositorySetup),
   addedAt: Schema.String,
+  setupChat: Schema.NullOr(Schema.String),
 });
 export type Repository = typeof Repository.Type;
 
@@ -113,6 +114,24 @@ export const InstancesSubscribe = Rpc.make("instances.subscribe", {
 export const RepositoriesRead = Rpc.make("repositories.read", {
   payload: Schema.Struct({ project: Schema.String }),
   success: Schema.Struct({ repository: Schema.NullOr(Repository) }),
+  error: UnframedError,
+});
+
+export const RepositoriesSetup = Rpc.make("repositories.setup", {
+  payload: Schema.Struct({ project: Schema.String }),
+  success: Schema.Struct({ chatId: Schema.NullOr(Schema.String) }),
+  error: UnframedError,
+});
+
+export const RepositoriesConfirmLogin = Rpc.make("repositories.confirmLogin", {
+  payload: Schema.Struct({ project: Schema.String }),
+  success: Schema.Struct({ waiting: Schema.Boolean }),
+  error: UnframedError,
+});
+
+export const RepositoriesSetupVerdict = Rpc.make("repositories.setupVerdict", {
+  payload: Schema.Struct({ project: Schema.String, accepted: Schema.Boolean, note: Schema.optionalKey(Schema.String) }),
+  success: Schema.Struct({ repository: Repository }),
   error: UnframedError,
 });
 

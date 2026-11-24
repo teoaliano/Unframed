@@ -29,6 +29,11 @@ import {
   REPOSITORY_SECTION_TEMPLATE,
   repositorySection,
   repositorySystemPrompt,
+  SETUP_FIRST_MESSAGE,
+  SETUP_REJECTION_TEMPLATE,
+  SETUP_SYSTEM_PROMPT,
+  SETUP_TOOL_TEXT,
+  setupRejection,
 } from "../../src/index.ts";
 
 const prompts = join(import.meta.dirname, "../../../../assets/prompts");
@@ -107,5 +112,18 @@ describe("the Repository section of the system prompt", () => {
     expect(section).toContain("window.unframed?.dials(...)");
     expect(repositorySection({ ...facts, setupFiles: [] })).toContain("commit: none yet.");
     expect(repositorySystemPrompt("Base.", facts)).toBe(`Base.\n\n${section}`);
+  });
+});
+
+describe("Setup's model-facing text is the asset's text", () => {
+  it("holds its system section, first message, rejection and tools", () => {
+    const all = Object.fromEntries(sections("setup.md").map((section) => [section.name, section]));
+    expect(SETUP_SYSTEM_PROMPT).toBe(all.System!.text);
+    expect(SETUP_FIRST_MESSAGE).toBe(all["First message"]!.text);
+    expect(SETUP_REJECTION_TEMPLATE).toBe(all.Rejection!.text);
+    expect(setupRejection("  the header is missing ")).toBe("That is not right yet: the header is missing");
+    expect(SETUP_TOOL_TEXT).toEqual(
+      Object.fromEntries(["ask_login", "screen_snapshot", "setup_save"].map((name) => [name, { description: all[name]!.text, arguments: all[name]!.args }])),
+    );
   });
 });

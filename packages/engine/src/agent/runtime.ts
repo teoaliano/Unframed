@@ -51,7 +51,7 @@ import {
 } from "@unframed/domain";
 import type { ArtifactDiffFile, ElementChip } from "@unframed/contracts";
 import type { TLRecord } from "@tldraw/tlschema";
-import { agentSystemPrompt, repositorySystemPrompt, type Features, type Kit } from "@unframed/domain";
+import { agentSystemPrompt, repositorySystemPrompt, SETUP_SYSTEM_PROMPT, type Features, type Kit } from "@unframed/domain";
 import type { Applied, CanvasChange, ChangeLogRow, ChangeOrigin } from "../canvas/rooms.ts";
 import { errorText, logError, logInfo } from "../log.ts";
 import type { AdapterContext, ProviderAdapter, TurnAttachment } from "./adapter.ts";
@@ -351,19 +351,42 @@ export class AgentRuntime {
     const tools = this.registry.list().filter(offeredIn(repository, chat.id)).map((tool) => tool.name);
     if (repository === undefined) return { projectDir: agent.folder, shape: { tools } };
     const worktree = await this.workingWorktree(agent, chat, repository);
-    const systemPrompt = repositorySystemPrompt(agentSystemPrompt(this.deps.features), { root: repository.root, worktrees: repository.worktrees, setupFiles: repository.setupFiles });
+    const withRepository = repositorySystemPrompt(agentSystemPrompt(this.deps.features), { root: repository.root, worktrees: repository.worktrees, setupFiles: repository.setupFiles });
+    const systemPrompt = repository.setupChat === chat.id ? `${withRepository}\n\n${SETUP_SYSTEM_PROMPT}` : withRepository;
     return { projectDir: worktree ?? agent.folder, shape: { tools, systemPrompt, grantedDirectories: [repository.worktrees] } };
   }
 
-  private async workingWorktree(agent: ProjectAgent, chat: Chat, repository: AgentRepository): Promise<string | undefined> {
+  private async workingScreens(agent: ProjectAgent, chat: Chat): Promise<Array<{ readonly id: string; readonly instance: string }>> {
     const byId = new Map((await this.deps.rooms.read(agent.slug)).map((item) => [item.id as string, item]));
-    for (const id of chat.tags) {
+    return chat.tags.flatMap((id) => {
       const shape = byId.get(id) as { typeName?: string; type?: string; props?: { instance?: unknown } } | undefined;
-      if (shape?.typeName !== "shape" || shape.type !== "screen" || typeof shape.props?.instance !== "string") continue;
-      const worktree = await repository.worktreeOf(shape.props.instance);
+      return shape?.typeName === "shape" && shape.type === "screen" && typeof shape.props?.instance === "string" ? [{ id, instance: shape.props.instance }] : [];
+    });
+  }
+
+  private async workingWorktree(agent: ProjectAgent, chat: Chat, repository: AgentRepository): Promise<string | undefined> {
+    for (const screen of await this.workingScreens(agent, chat)) {
+      const worktree = await repository.worktreeOf(screen.instance);
       if (worktree !== undefined) return worktree;
     }
     return undefined;
+  }
+
+  async setupScreen(project: string, chatId: string): Promise<string | undefined> {
+    const agent = await this.project(project);
+    const chat = agent.engine.chat(chatId);
+    return chat === undefined ? undefined : (await this.workingScreens(agent, chat))[0]?.id;
+  }
+
+  turnIdOf(project: string, chatId: string): string | null {
+    return this.chatTurn(project, chatId).turnId ?? null;
+  }
+
+  appendActivity(project: string, chatId: string, activity: ActivityInput): void {
+    void this.project(project).then(
+      (agent) => this.activity(agent, chatId, activity),
+      () => undefined,
+    );
   }
 
   commentCommitted(project: string, change: CommittedChange): void {

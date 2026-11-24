@@ -15,7 +15,6 @@ import {
   NO_CHROME_PREVIEW_MESSAGE,
   PREVIEW_OPEN_SCREENS,
   PREVIEW_TOOL_TEXT,
-  logTail,
   previewViewport,
   screenUrl,
   type Features,
@@ -31,6 +30,7 @@ import type { TLRecord } from "@tldraw/tlschema";
 import type { ElementHandle, KeyInput, Page } from "puppeteer-core";
 import { refusal as refuse, type McpBinding, type McpTool, type ToolAnswer } from "../agent/mcp.ts";
 import { errorText } from "../log.ts";
+import { NotLive, untilLive } from "../instances/liveInstance.ts";
 import type { HeadlessChrome } from "./headlessChrome.ts";
 
 const LOG_LIMIT = 100;
@@ -42,8 +42,6 @@ interface ScreenTarget {
   readonly instance: string;
   readonly route: string;
 }
-
-const SCREEN_LIVE_TIMEOUT_MS = 90_000;
 
 interface Entry {
   readonly level: string;
@@ -168,16 +166,11 @@ export class PreviewTools {
   }
 
   private async liveInstance(project: string, id: string): Promise<Instance> {
-    let instance = await this.deps.screen!(project, id);
-    const deadline = Date.now() + SCREEN_LIVE_TIMEOUT_MS;
-    while (instance.state !== "live" || instance.proxyPort === null) {
-      if (instance.state === "failed") throw new Refused(`the Instance failed: ${instance.error ?? "its dev server stopped"}\n${logTail(instance.log, 20)}`);
-      if (instance.state === "removed") throw new Refused("that Screen's Instance was removed");
-      if (Date.now() > deadline) throw new Refused(`the Instance is still ${instance.state} after ${SCREEN_LIVE_TIMEOUT_MS / 1000} s; read instance_status for its log`);
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      instance = await this.deps.instance!(project, id);
+    try {
+      return await untilLive(() => this.deps.screen!(project, id), () => this.deps.instance!(project, id));
+    } catch (error) {
+      throw error instanceof NotLive ? new Refused(error.message) : error;
     }
-    return instance;
   }
 
   private async showScreen(tab: Tab, target: { readonly screen: ScreenTarget; readonly w: number; readonly h: number }) {

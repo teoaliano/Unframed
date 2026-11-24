@@ -152,12 +152,17 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "repositories.pickFolder": () => featureOn("repositories", () => Effect.map(native.pickFolder(homedir(), REPOSITORY_FOLDER_PROMPT), (path) => ({ path }))),
       "repositories.add": ({ path, name }) =>
         featureOn("repositories", () =>
-          Effect.tap(repositories.add(path, name), (added) =>
-            Effect.flatMap(rooms.read(added.name), (records) =>
-              rooms.apply(added.name, { put: [screenRecord(records, added.instance, { x: 0, y: 0 })], remove: [] }, { kind: "server", id: "repositories.add" }),
-            ),
-          ),
+          Effect.gen(function* () {
+            const added = yield* repositories.add(path, name);
+            const records = yield* rooms.read(added.name);
+            yield* rooms.apply(added.name, { put: [screenRecord(records, added.instance, { x: 0, y: 0 })], remove: [] }, { kind: "server", id: "repositories.add" });
+            yield* Effect.ignore(agents.openSetup(added.name));
+            return { ...added, repository: (yield* repositories.read(added.name)) ?? added.repository };
+          }),
         ),
+      "repositories.setup": ({ project }) => featureOn("repositories", () => Effect.map(agents.openSetup(project), (chatId) => ({ chatId }))),
+      "repositories.confirmLogin": ({ project }) => featureOn("repositories", () => Effect.map(agents.confirmLogin(project), (waiting) => ({ waiting }))),
+      "repositories.setupVerdict": ({ project, accepted, note }) => featureOn("repositories", () => Effect.map(agents.setupVerdict(project, accepted, note), (repository) => ({ repository }))),
       "repositories.read": ({ project }) => featureOn("repositories", () => Effect.map(repositories.read(project), (repository) => ({ repository: repository ?? null }))),
       "instances.branches": ({ project }) => featureOn("repositories", () => instances.branches(project)),
       "screens.snapshots": ({ project }) => artifacts.screenSnapshots(project),

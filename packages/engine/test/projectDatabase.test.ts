@@ -74,6 +74,7 @@ describe("project database migrations", () => {
       { id: 5, name: "comment_chats" },
       { id: 6, name: "project_info and repository" },
       { id: 7, name: "instances" },
+      { id: 8, name: "repository setup_chat" },
       { id: 1_000_000, name: "test migration" },
     ]);
     expect(tables(path)).toEqual([
@@ -107,7 +108,7 @@ describe("project database migrations", () => {
     await (await second.rpc()).call("projects.create", { name: "Two" });
     await second.stop();
     expect(readLedger(path).rows).toEqual(ledger);
-    expect(readLedger(join(dataDir, "output", "two", "unframed.sqlite")).rows.map((row) => row.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 1_000_000]);
+    expect(readLedger(join(dataDir, "output", "two", "unframed.sqlite")).rows.map((row) => row.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 1_000_000]);
   });
 
   it("rolls a failing migration back whole and answers the failure", async () => {
@@ -120,7 +121,7 @@ describe("project database migrations", () => {
     await engine.stop();
     const path = join(engine.dataDir, "output", "broken", "unframed.sqlite");
     expect(tables(path)).not.toContain("probe");
-    expect(readLedger(path).rows.map((row) => row.id)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(readLedger(path).rows.map((row) => row.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
   });
 });
 

@@ -21,6 +21,10 @@ export const createRepositoryTables = (db: DatabaseSync): void => {
   `);
 };
 
+export const addSetupChatColumn = (db: DatabaseSync): void => {
+  db.exec("ALTER TABLE repository ADD COLUMN setup_chat TEXT");
+};
+
 export interface StoredRepository {
   readonly root: string;
   readonly gitCommonDir: string;
@@ -28,6 +32,7 @@ export interface StoredRepository {
   readonly status: StoredStatus;
   readonly setup: RepositorySetup | null;
   readonly addedAt: string;
+  readonly setupChat: string | null;
 }
 
 const decodeStatus = Schema.decodeUnknownOption(StoredRepositoryStatus);
@@ -52,7 +57,7 @@ export const readKind = (db: DatabaseSync): ProjectKind => {
 };
 
 export const readRepository = (db: DatabaseSync): StoredRepository | undefined => {
-  const row = db.prepare("SELECT root, git_common_dir, base_branch, status, setup, added_at FROM repository WHERE id = 1").get();
+  const row = db.prepare("SELECT root, git_common_dir, base_branch, status, setup, added_at, setup_chat FROM repository WHERE id = 1").get();
   if (row === undefined) return undefined;
   const status = decodeStatus(row.status);
   return {
@@ -62,6 +67,7 @@ export const readRepository = (db: DatabaseSync): StoredRepository | undefined =
     status: status._tag === "Some" ? status.value : "setting-up",
     setup: parsedSetup(row.setup),
     addedAt: String(row.added_at),
+    setupChat: typeof row.setup_chat === "string" ? row.setup_chat : null,
   };
 };
 
@@ -70,7 +76,7 @@ export const writeRepository = (db: DatabaseSync, repository: StoredRepository):
   try {
     db.prepare("INSERT OR REPLACE INTO project_info (id, kind) VALUES (1, 'repository')").run();
     db.prepare(
-      "INSERT OR REPLACE INTO repository (id, root, git_common_dir, base_branch, status, setup, added_at) VALUES (1, ?, ?, ?, ?, ?, ?)",
+      "INSERT OR REPLACE INTO repository (id, root, git_common_dir, base_branch, status, setup, added_at, setup_chat) VALUES (1, ?, ?, ?, ?, ?, ?, ?)",
     ).run(
       repository.root,
       repository.gitCommonDir,
@@ -78,6 +84,7 @@ export const writeRepository = (db: DatabaseSync, repository: StoredRepository):
       repository.status,
       repository.setup === null ? null : JSON.stringify(repository.setup),
       repository.addedAt,
+      repository.setupChat,
     );
     db.exec("COMMIT");
   } catch (error) {

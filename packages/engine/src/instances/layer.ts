@@ -35,6 +35,10 @@ import {
   projectSlug,
   serverExited,
   setupFailed,
+  setupFileMissing,
+  setupFileOutside,
+  setupFilePath,
+  setupFileTracked,
   shapeRunCommand,
   singlePortMoved,
   stoppedForBudget,
@@ -92,6 +96,7 @@ export class Instances extends Context.Service<
     readonly demand: (project: string, client: string, ids: ReadonlyArray<string>, connection?: string) => Effect.Effect<ReadonlyArray<Instance>, UnframedError>;
     readonly release: (connection: string) => Effect.Effect<void>;
     readonly branches: (project: string) => Effect.Effect<{ readonly branches: ReadonlyArray<string>; readonly current: string }, UnframedError>;
+    readonly saveSetup: (project: string, setup: RepositorySetup, from: string) => Effect.Effect<{ readonly copiedInto: ReadonlyArray<string> }, UnframedError>;
     readonly everyChange: Stream.Stream<Instance>;
     readonly changes: (project: string) => Stream.Stream<Instance, UnframedError>;
   }
@@ -449,6 +454,49 @@ export const instancesLayer = Layer.effect(
         });
       });
 
+    const mergeIntoExclude = async (gitCommonDir: string, files: ReadonlyArray<string>) => {
+      const exclude = join(gitCommonDir, "info", "exclude");
+      const existing = await readFile(exclude, "utf8").catch(() => "");
+      const merged = mergeExclude(existing, files.map((file) => `/${file}`));
+      if (merged === existing) return;
+      await mkdir(dirname(exclude), { recursive: true });
+      await writeFile(exclude, merged);
+    };
+
+    const copyOver = async (from: string, to: string, files: ReadonlyArray<string>) => {
+      for (const file of files) {
+        await mkdir(dirname(join(to, file)), { recursive: true });
+        await copyFile(join(from, file), join(to, file));
+      }
+    };
+
+    const saveSetup = (project: string, setup: RepositorySetup, from: string) =>
+      Effect.gen(function* () {
+        const { context, live } = yield* find(project, from);
+        if (isRemoved(live)) return yield* unframedError("bad_request", INSTANCE_REMOVED);
+        const files: string[] = [];
+        for (const file of setup.files) {
+          const path = setupFilePath(file);
+          if (path === undefined) return yield* unframedError("bad_request", setupFileOutside(file));
+          if (gitOutput(yield* git(live.stored.worktree, ["ls-files", "--error-unmatch", "--", path])) !== undefined) return yield* unframedError("bad_request", setupFileTracked(path));
+          if (!(yield* Effect.promise(() => fileExists(join(live.stored.worktree, path))))) return yield* unframedError("bad_request", setupFileMissing(path));
+          if (!files.includes(path)) files.push(path);
+        }
+        const folder = yield* projects.folder(context.slug);
+        if (folder === undefined) return yield* unframedError("not_found", REPOSITORY_NOT_FOUND);
+        const others = [...lives.values()].filter((other) => other.project === context.slug && other !== live && !isRemoved(other));
+        yield* Effect.tryPromise({
+          try: async () => {
+            await copyOver(live.stored.worktree, join(folder, SETUP_FILES_FOLDER), files);
+            for (const other of others) await copyOver(join(folder, SETUP_FILES_FOLDER), other.stored.worktree, files);
+            await mergeIntoExclude(context.repository.gitCommonDir, files);
+          },
+          catch: (error) => unframedError("internal", `Could not copy Setup's files: ${errorText(error)}`),
+        });
+        yield* writeDb(context.slug, (db) => writeRepository(db, { ...(readRepository(db) ?? context.repository), setup: { ...setup, files } }));
+        return { copiedInto: others.map((other) => other.stored.id) };
+      });
+
     const create = (project: string, options: CreateOptions) =>
       Effect.gen(function* () {
         const context = yield* repositoryOf(project);
@@ -755,6 +803,6 @@ export const instancesLayer = Layer.effect(
 
     const everyChange = Stream.unwrap(Effect.map(PubSub.subscribe(events), (subscription) => Stream.fromSubscription(subscription)));
 
-    return Instances.of({ create, remove, list, status, start, stop, demand, release, branches, everyChange, changes });
+    return Instances.of({ create, remove, list, status, start, stop, demand, release, branches, saveSetup, everyChange, changes });
   }),
 );

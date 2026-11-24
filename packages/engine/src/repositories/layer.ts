@@ -6,6 +6,7 @@ import {
   NO_GIT,
   NOT_A_FOLDER,
   NOT_A_REPOSITORY,
+  NOT_A_REPOSITORY_PROJECT,
   gitRoots,
   hasUncommittedChanges,
   projectSlug,
@@ -36,6 +37,7 @@ export class Repositories extends Context.Service<
     readonly kinds: (projects: ReadonlyArray<string>) => Effect.Effect<Record<string, ProjectKind>>;
     readonly read: (project: string) => Effect.Effect<Repository | undefined>;
     readonly add: (path: string, name?: string) => Effect.Effect<AddedRepository, UnframedError>;
+    readonly update: (project: string, change: (stored: StoredRepository) => StoredRepository) => Effect.Effect<Repository, UnframedError>;
   }
 >()("unframed/engine/Repositories") {}
 
@@ -94,6 +96,7 @@ export const repositoriesLayer = Layer.effect(
           status: "setting-up",
           setup: null,
           addedAt: new Date().toISOString(),
+          setupChat: null,
         };
         const handle = yield* database.open(slug);
         yield* Effect.try({
@@ -104,6 +107,22 @@ export const repositoriesLayer = Layer.effect(
         return { name: slug, repository: asRepository(stored), uncommitted, instance };
       });
 
-    return Repositories.of({ kinds, read, add });
+    const update = (project: string, change: (stored: StoredRepository) => StoredRepository) =>
+      Effect.gen(function* () {
+        const slug = projectSlug(project);
+        const known = slug === "" ? undefined : yield* database.peek(slug, (db) => (readKind(db) === "repository" ? readRepository(db) : undefined));
+        if (known === undefined) return yield* unframedError("bad_request", NOT_A_REPOSITORY_PROJECT);
+        const { db } = yield* database.open(slug);
+        return yield* Effect.try({
+          try: () => {
+            const next = change(readRepository(db) ?? known);
+            writeRepository(db, next);
+            return asRepository(next);
+          },
+          catch: (error) => unframedError("internal", `Could not save the repository: ${errorText(error)}`),
+        });
+      });
+
+    return Repositories.of({ kinds, read, add, update });
   }),
 );

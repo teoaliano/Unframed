@@ -69,6 +69,7 @@ export class Artifacts extends Context.Service<
     readonly images: (project: string) => Effect.Effect<{ images: ArtifactImage[] }, UnframedError>;
     readonly findChrome: () => Promise<string | undefined>;
     readonly chrome: HeadlessChrome;
+    readonly screenRenderer: ScreenRenderer | undefined;
   }
 >()("unframed/engine/Artifacts") {}
 
@@ -280,6 +281,7 @@ export const artifactsLayer = Layer.effect(
       });
 
     return Artifacts.of({
+      screenRenderer,
       upload,
       timeline,
       renderStart: (input) => Effect.tryPromise({ try: () => renderer.start(input), catch: refused }),

@@ -26,9 +26,10 @@ export interface RepositoryAgent {
   session(chatId: string): Promise<{ url: string; token: string; cwd?: string; systemPrompt?: string; granted?: string[] }>;
 }
 
-export const startRepositoryAgent = async (env: Record<string, string> = {}): Promise<RepositoryAgent> => {
+export const startRepositoryAgent = async (env: Record<string, string> = {}, initial: Record<string, unknown> = {}): Promise<RepositoryAgent> => {
   const root = await makeRepo();
   const scripts = await makeTempDir("unframed-scripts-");
+  for (const [name, script] of Object.entries(initial)) await writeFile(join(scripts, `${name}.json`), JSON.stringify(script));
   const engine = await startEngine({ env: await repoEngineEnv({ UNFRAMED_TEST_AGENT_SCRIPT: scripts, UNFRAMED_TEST_CANVAS: "1", ...env }) });
   const rpc = await engine.rpc();
   const added = await rpc.call("repositories.add", { path: root });

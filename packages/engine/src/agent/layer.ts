@@ -3,7 +3,10 @@ import { NodeRuns } from "../nodes/nodeRuns.ts";
 import { MediaStore } from "../media/mediaStore.ts";
 import type { ClientChatCommand, ShellStreamItem, ThreadSearchMatch, ThreadStreamItem, TurnDiff } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
-import { defaultModel, projectSlug, type ClientCommand } from "@unframed/domain";
+import { defaultModel, NO_SETUP_OPEN, NOT_A_REPOSITORY_PROJECT, projectSlug, REJECTION_NEEDS_NOTE, SETUP_FIRST_MESSAGE, setupRejection, type AgentProvider, type ClientCommand } from "@unframed/domain";
+import type { Repository } from "@unframed/contracts";
+import { randomUUID } from "node:crypto";
+import { SetupTools } from "../repositories/setupTools.ts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -53,6 +56,9 @@ export class Agents extends Context.Service<
     readonly createUploadUrl: (input: { name: string; mimeType: string; sizeBytes: number }) => Effect.Effect<{ relativeUrl: string; expiresAt: string }, UnframedError>;
     readonly routes: ReadonlyArray<Route>;
     readonly attachmentRoutes: ReadonlyArray<Route>;
+    readonly openSetup: (project: string) => Effect.Effect<string | null, UnframedError>;
+    readonly confirmLogin: (project: string) => Effect.Effect<boolean>;
+    readonly setupVerdict: (project: string, accepted: boolean, note: string | undefined) => Effect.Effect<Repository, UnframedError>;
   }
 >()("unframed/engine/Agents") {}
 
@@ -188,7 +194,7 @@ export const agentsLayer = Layer.effect(
           root: repository.root,
           setupFiles: repository.setup?.files ?? [],
           worktrees: join(config.dataDir, "worktrees", project),
-          setupChat: null,
+          setupChat: repository.setupChat,
           worktreeOf: async (id) => {
             if (!repositoriesOn) return undefined;
             const instance = await run(instances.status(project, id)).catch(() => undefined);
@@ -200,6 +206,84 @@ export const agentsLayer = Layer.effect(
       providerReady: async (provider) => (await run(detection.statuses({})))[provider].status === "ready",
     });
     yield* rooms.afterCommit((project, change) => runtime.commentCommitted(project, change));
+
+    const setupTools = new SetupTools({
+      read: (project) => run(rooms.read(project)),
+      setupScreen: (project, chatId) => runtime.setupScreen(project, chatId),
+      select: (project, shapeIds) => selection.apply(projectSlug(project), shapeIds),
+      activity: (project, chatId, activity) => runtime.appendActivity(project, chatId, activity),
+      turnId: (project, chatId) => runtime.turnIdOf(project, chatId),
+      start: (project, id) => run(instances.start(project, id)),
+      status: (project, id) => run(instances.status(project, id)),
+      render: () => artifacts.screenRenderer,
+      saveSetup: (project, setup, from) => run(instances.saveSetup(project, setup, from)),
+    });
+    if (repositoriesOn) for (const tool of setupTools.tools()) runtime.registry.register(tool);
+
+    const setupProvider = async (): Promise<AgentProvider | undefined> => {
+      if (config.testAgentScript !== undefined) return "claude";
+      const statuses = await run(detection.statuses({}));
+      return (["claude", "codex"] as const).find((provider) => statuses[provider].status === "ready");
+    };
+
+    const now = () => new Date().toISOString();
+
+    const openSetup = (project: string) =>
+      Effect.tryPromise({
+        try: async (): Promise<string | null> => {
+          const slug = projectSlug(project);
+          if ((await run(repositories.read(slug))) === undefined) throw unframedError("bad_request", NOT_A_REPOSITORY_PROJECT);
+          const provider = await setupProvider();
+          if (provider === undefined) return null;
+          const live = new Set((await run(instances.list(slug))).filter((instance) => instance.state !== "removed").map((instance) => instance.id));
+          const screen = (await run(rooms.read(slug))).find(
+            (record) => record.typeName === "shape" && record.type === "screen" && live.has(String((record.props as { instance?: unknown }).instance)),
+          );
+          const chatId = randomUUID();
+          const selected = screen === undefined ? [] : [screen.id as string];
+          await runtime.dispatch({ type: "thread.create", commandId: randomUUID(), projectId: slug, threadId: chatId, modelSelection: { provider, model: "", traits: {} }, tags: selected, createdAt: now() });
+          await runtime.dispatch({ type: "thread.meta.update", commandId: randomUUID(), projectId: slug, threadId: chatId, title: "Setup" });
+          await run(repositories.update(slug, (stored) => ({ ...stored, status: "setting-up", setupChat: chatId })));
+          await runtime.dispatch({
+            type: "thread.turn.start",
+            commandId: randomUUID(),
+            projectId: slug,
+            threadId: chatId,
+            message: { messageId: `setup:${randomUUID()}`, text: SETUP_FIRST_MESSAGE, attachments: [], ...(selected.length === 0 ? {} : { context: { selection: selected } }) },
+            createdAt: now(),
+          });
+          return chatId;
+        },
+        catch: toUnframed,
+      });
+
+    const setupVerdict = (project: string, accepted: boolean, note: string | undefined) =>
+      Effect.tryPromise({
+        try: async (): Promise<Repository> => {
+          const slug = projectSlug(project);
+          const repository = await run(repositories.read(slug));
+          if (repository === undefined) throw unframedError("bad_request", NOT_A_REPOSITORY_PROJECT);
+          const chatId = repository.setupChat;
+          if (chatId === null) throw unframedError("conflict", NO_SETUP_OPEN);
+          if (accepted) {
+            const saved = await run(repositories.update(slug, (stored) => ({ ...stored, status: "ready", setupChat: null })));
+            await runtime.dispatch({ type: "thread.session.stop", commandId: randomUUID(), projectId: slug, threadId: chatId }).catch(() => undefined);
+            return saved;
+          }
+          const text = note?.trim() ?? "";
+          if (text === "") throw unframedError("bad_request", REJECTION_NEEDS_NOTE);
+          await runtime.dispatch({
+            type: "thread.turn.start",
+            commandId: randomUUID(),
+            projectId: slug,
+            threadId: chatId,
+            message: { messageId: `setup:${randomUUID()}`, text: setupRejection(text), attachments: [] },
+            createdAt: now(),
+          });
+          return repository;
+        },
+        catch: toUnframed,
+      });
 
     const opened = (projectId: string) =>
       Effect.tryPromise({ try: () => runtime.project(projectId), catch: toUnframed });
@@ -281,6 +365,9 @@ export const agentsLayer = Layer.effect(
         ...attachmentRoutes,
       ],
       attachmentRoutes,
+      openSetup,
+      confirmLogin: (project) => Effect.sync(() => setupTools.confirmLogin(project)),
+      setupVerdict,
     });
   }),
 );

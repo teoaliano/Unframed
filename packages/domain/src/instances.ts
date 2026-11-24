@@ -144,3 +144,15 @@ export const appendLogTail = (tail: string, chunk: string, maxChars: number): st
   const next = tail + chunk;
   return next.length > maxChars ? next.slice(next.length - maxChars) : next;
 };
+
+export const setupFilePath = (file: string): string | undefined => {
+  const trimmed = file.trim().replace(/^\.\/+/, "");
+  if (trimmed === "" || trimmed.startsWith("/") || /\\|\0/.test(trimmed)) return undefined;
+  const parts = trimmed.split("/").filter((part) => part !== "" && part !== ".");
+  if (parts.length === 0 || parts.some((part) => part === "..") || parts[0] === ".git") return undefined;
+  return parts.join("/");
+};
+
+export const setupFileOutside = (file: string): string => `${file} is not a path inside the worktree.`;
+export const setupFileTracked = (file: string): string => `${file} is tracked by git. Setup adds new files only: explain to the person why it would need to change it instead.`;
+export const setupFileMissing = (file: string): string => `${file} is not in the worktree.`;

@@ -12,7 +12,7 @@ import { createCommentChatsTable } from "./agent/commentChats.ts";
 import { ImportFailed, makeLegacyImporter, type ImportState } from "./legacy/importer.ts";
 import { createLegacyImportReportTable } from "./legacy/reportTable.ts";
 import { createInstanceTables } from "./instances/tables.ts";
-import { createRepositoryTables } from "./repositories/tables.ts";
+import { addSetupChatColumn, createRepositoryTables } from "./repositories/tables.ts";
 import { errorText } from "./log.ts";
 import { OpenProjects } from "./openProjects.ts";
 import { Config } from "./services.ts";
@@ -40,6 +40,7 @@ export const MIGRATIONS: ReadonlyArray<Migration> = [
   { id: 5, name: "comment_chats", up: createCommentChatsTable },
   { id: 6, name: "project_info and repository", up: createRepositoryTables },
   { id: 7, name: "instances", up: createInstanceTables },
+  { id: 8, name: "repository setup_chat", up: addSetupChatColumn },
 ];
 
 /** `UNFRAMED_TEST_MIGRATION`'s extra migration, numbered far past any real one. */
