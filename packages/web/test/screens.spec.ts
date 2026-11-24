@@ -146,3 +146,35 @@ test("a selected Screen opens in the browser, changes route and changes viewport
     await expect.poll(async () => (await screenShapes(engine, project))[0].props).toMatchObject({ route: "/settings?tab=2", w: 390, h: 844 });
   });
 });
+
+test("forking a Screen makes a new Instance on a named branch from its HEAD, with a Screen beside it; New Instance starts from a picked base", async ({ page }) => {
+  await withRepository(page, {}, async (engine, project, root) => {
+    git(root, "branch", "feature/login");
+    const screens = page.locator("[data-testid=screen]");
+    await expect(screens.first()).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
+    const [first] = await screenShapes(engine, project);
+    await clickShape(page, first.id);
+
+    await page.getByRole("button", { name: "Fork" }).click();
+    const name = page.getByRole("textbox", { name: "Branch name" });
+    await expect(name).toHaveValue(`${first.props.title}-2`);
+    await name.fill("try/darker");
+    await page.getByRole("button", { name: "Fork", exact: true }).last().click();
+    await expect(screens).toHaveCount(2);
+    await expect.poll(async () => (await screenShapes(engine, project)).length).toBe(2);
+    const forked = (await screenShapes(engine, project)).find((shape) => shape.id !== first.id);
+    expect(forked).toMatchObject({ x: first.x + 1280 + 80, y: first.y, props: { route: "/", w: 1280, h: 800, title: "try/darker" } });
+    const rpc = await engine.rpc();
+    const made = await rpc.call("instances.status", { project, id: forked.props.instance });
+    expect(made).toMatchObject({ branch: "try/darker", baseRef: first.props.title });
+
+    await page.getByRole("button", { name: "New Instance" }).click();
+    await page.getByRole("combobox", { name: "Base branch" }).click();
+    await page.getByRole("option", { name: "feature/login" }).click();
+    await page.getByRole("button", { name: "Create Instance" }).click();
+    await expect.poll(async () => (await screenShapes(engine, project)).length).toBe(3);
+    const instances = (await rpc.call("instances.list", { project })).instances;
+    expect(instances.find((instance) => instance.baseRef === "feature/login")?.branch).toMatch(/^unframed\//);
+    await rpc.close();
+  });
+});

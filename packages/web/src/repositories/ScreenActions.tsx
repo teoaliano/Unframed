@@ -1,14 +1,16 @@
 import type { ScreenShapeProps } from "@unframed/contracts";
-import { normaliseRoute, SCREEN_VIEWPORTS, screenUrl } from "@unframed/domain";
-import { ChevronDown, ExternalLink, MonitorSmartphone, Route } from "lucide-react";
-import { useState } from "react";
-import { useEditor, useValue, type Editor, type TLShape, type TLShapeId } from "tldraw";
+import { UnframedError, type Instance } from "@unframed/contracts";
+import { forkBranchName, normaliseRoute, SCREEN_GAP, SCREEN_VIEWPORTS, screenUrl } from "@unframed/domain";
+import { ChevronDown, ExternalLink, GitBranchPlus, GitFork, MonitorSmartphone, Route } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { createShapeId, useEditor, useValue, type Editor, type TLShape, type TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuRadioItemIndicator, MenuTrigger } from "~/components/ui/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Tip } from "../chrome/ui.tsx";
-import { useCanvasProject } from "../context.ts";
+import { useCanvasProject, useEngine } from "../context.ts";
 import { repositoryState } from "./store.ts";
 
 export const BAD_ROUTE = "A route starts with / and has no spaces, like /settings?tab=2.";
@@ -133,10 +135,117 @@ const ViewportMenu = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   );
 };
 
+const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
+
+export const placeScreenBeside = (editor: Editor, shapeId: TLShapeId, instance: Instance): void => {
+  const shape = editor.getShape(shapeId);
+  const props = screenPropsOf(editor, shapeId);
+  if (!shape || props === undefined) return;
+  const bounds = editor.getShapePageBounds(shapeId)!;
+  const id = createShapeId();
+  editor.markHistoryStoppingPoint("screen for a new instance");
+  editor.createShape({ id, type: "screen", x: bounds.maxX + SCREEN_GAP, y: bounds.minY, props: { w: props.w, h: props.h, instance: instance.id, route: props.route, title: instance.branch } });
+  editor.select(id);
+};
+
+const BranchForm = ({ shapeId, label, icon, title, submit, base }: {
+  readonly shapeId: TLShapeId;
+  readonly label: string;
+  readonly icon: ReactNode;
+  readonly title: string;
+  readonly submit: string;
+  readonly base: "fork" | "pick";
+}) => {
+  const editor = useEditor();
+  const engine = useEngine();
+  const project = useCanvasProject();
+  const [open, setOpen] = useState(false);
+  const [branches, setBranches] = useState<ReadonlyArray<string>>([]);
+  const [from, setFrom] = useState("");
+  const [name, setName] = useState("");
+  const [problem, setProblem] = useState<string | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  const forkedFrom = () => {
+    const props = screenPropsOf(editor, shapeId);
+    return props === undefined ? undefined : repositoryState(project).instances.get().get(props.instance);
+  };
+  const prepare = async () => {
+    setProblem(undefined);
+    setName("");
+    try {
+      const answer = await engine.call("instances.branches", { project });
+      setBranches(answer.branches);
+      const source = forkedFrom();
+      if (base === "fork") {
+        setFrom(source?.branch ?? answer.current);
+        if (source !== undefined) setName(forkBranchName(source.branch, answer.branches));
+      } else setFrom(answer.current);
+    } catch (error) {
+      setProblem(messageOf(error));
+    }
+  };
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) void prepare();
+      }}
+    >
+      <Tip label={title}>
+        <PopoverTrigger render={<Button variant="ghost" size="icon-sm" aria-label={label} />}>{icon}</PopoverTrigger>
+      </Tip>
+      <PopoverPopup side="bottom" align="start" sideOffset={6} padding="compact" className="w-80" aria-label={title}>
+        <form
+          className="flex flex-col gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (busy || from === "") return;
+            setBusy(true);
+            setProblem(undefined);
+            engine
+              .call("instances.create", { project, base: from, ...(name.trim() === "" ? {} : { branch: name.trim() }) })
+              .then((instance) => {
+                placeScreenBeside(editor, shapeId, instance);
+                setOpen(false);
+              })
+              .catch((error: unknown) => setProblem(messageOf(error)))
+              .finally(() => setBusy(false));
+          }}
+        >
+          {base === "pick" ? (
+            <Select value={from} onValueChange={(value) => value && setFrom(value)}>
+              <SelectTrigger aria-label="Base branch">
+                <SelectValue>{from}</SelectValue>
+              </SelectTrigger>
+              <SelectPopup alignItemWithTrigger={false}>
+                {branches.map((branch) => (
+                  <SelectItem key={branch} value={branch}>
+                    {branch}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+          ) : (
+            <span className="text-xs text-(--selection-toolbar-hint)">{from === "" ? "" : `From ${from}`}</span>
+          )}
+          <Input aria-label="Branch name" placeholder={base === "pick" ? "A new branch, named for you" : undefined} value={name} autoFocus onChange={(event) => setName(event.target.value)} />
+          {problem !== undefined && <span className="text-xs text-(--artifact-editor-error-foreground)">{problem}</span>}
+          <Button type="submit" size="sm" className="self-end" disabled={busy || from === ""}>
+            {submit}
+          </Button>
+        </form>
+      </PopoverPopup>
+    </Popover>
+  );
+};
+
 export const ScreenActions = ({ shapeId }: { readonly shapeId: TLShapeId }) => (
   <>
     <RouteField shapeId={shapeId} />
     <ViewportMenu shapeId={shapeId} />
     <OpenInBrowser shapeId={shapeId} />
+    <BranchForm shapeId={shapeId} base="fork" label="Fork" title="Fork into a new Instance" submit="Fork" icon={<GitFork aria-hidden />} />
+    <BranchForm shapeId={shapeId} base="pick" label="New Instance" title="New Instance from a branch" submit="Create Instance" icon={<GitBranchPlus aria-hidden />} />
   </>
 );
