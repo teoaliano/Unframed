@@ -2,12 +2,15 @@ import type { ScreenShapeProps } from "@unframed/contracts";
 import { screenOverlay, screenUrl, setupTag, type DialsAnnouncement, type SetupChatState } from "@unframed/domain";
 import { useEffect, useRef, useState } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
+import { TriangleAlert } from "lucide-react";
 import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
 import { forgetFrame, hearFrame, isInteractive, reachFrame } from "../../artifacts/state.ts";
 import { useChatClient, useChats } from "../../agent/store.ts";
 import { useCanvasProject, useEngine } from "../../context.ts";
 import { isDeviceClient } from "../../deviceMode.ts";
+import { Tip } from "../../chrome/ui.tsx";
 import { useFeature } from "../../features.ts";
 import { noteRender } from "../../fps/renders.ts";
 import { screenOnScreen } from "../../repositories/demand.ts";
@@ -140,23 +143,38 @@ const Overlay = ({ project, instance }: { readonly project: string; readonly ins
   );
 };
 
-const SetupTags = ({ project }: { readonly project: string }) => {
+const SetupBadges = ({ project }: { readonly project: string }) => {
   const setup = useValue("repository setup", () => repositoryState(project).repository.get()?.setup ?? null, [project]);
   const tag = setupTag(setup);
   const warnings = setup?.warnings ?? [];
   if (tag === undefined && warnings.length === 0) return null;
   return (
-    <div className="pointer-events-none absolute top-2 left-2 flex max-w-[calc(100%-1rem)] flex-wrap gap-1">
+    <div className="pointer-events-none absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1" data-testid="screen-setup-badges">
       {tag !== undefined && (
-        <Badge variant="secondary" data-testid="screen-mock-tag">
-          {tag}
-        </Badge>
+        <Tip label={`Mocked by Setup: ${tag}`}>
+          <Badge size="sm" variant="secondary" className="pointer-events-auto min-w-0 shrink" data-testid="screen-mock-tag">
+            <span className="truncate">{tag}</span>
+          </Badge>
+        </Tip>
       )}
-      {warnings.map((warning) => (
-        <Badge key={warning} variant="warning" data-testid="screen-warning">
-          {warning}
-        </Badge>
-      ))}
+      {warnings.length > 0 && (
+        <Tip
+          label={
+            <ul className="m-0 flex list-none flex-col gap-1 p-0" data-testid="screen-warnings">
+              {warnings.map((warning) => (
+                <li key={warning} data-testid="screen-warning">
+                  {warning}
+                </li>
+              ))}
+            </ul>
+          }
+        >
+          <Button variant="warning-outline" size="micro" className="pointer-events-auto" data-testid="screen-warnings-badge" aria-label={warnings.length === 1 ? "1 Setup warning" : `${warnings.length} Setup warnings`}>
+            <TriangleAlert aria-hidden />
+            {warnings.length}
+          </Button>
+        </Tip>
+      )}
     </div>
   );
 };
@@ -205,7 +223,7 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
           </div>
         ))}
       <Overlay project={project} instance={props.instance} />
-      <SetupTags project={project} />
+      <SetupBadges project={project} />
     </HTMLContainer>
   );
 };
