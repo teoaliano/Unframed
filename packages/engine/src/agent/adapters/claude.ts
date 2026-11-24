@@ -269,7 +269,6 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
         ...(mode.allowDangerouslySkipPermissions ? { allowDangerouslySkipPermissions: true } : {}),
         canUseTool,
         includePartialMessages: true,
-        maxTurns: 30,
         ...(stored.sessionId === undefined ? {} : { resume: stored.sessionId, ...(stored.resumeSessionAt === undefined ? {} : { resumeSessionAt: stored.resumeSessionAt }) }),
         abortController: abort,
         stderr: (data) => context.log(input.chatId, data.trimEnd()),
