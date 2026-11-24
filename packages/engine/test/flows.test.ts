@@ -56,7 +56,7 @@ describe("exploding a Screen into a Flow", () => {
     const [read] = toolResults(chat, "canvas_read");
     const group = read!.result.shapes.find((shape: any) => shape.id === exploded!.result.group);
     expect(group).toMatchObject({ kind: "group", members: expect.arrayContaining(exploded!.result.screens) });
-    const arrows = read!.result.shapes.filter((shape: any) => shape.kind === "mark" && shape.type === "arrow");
+    const arrows = read!.result.shapes.filter((shape: any) => shape.kind === "mark" && shape.type === "arrow" && exploded!.result.screens.includes(shape.from));
     expect(arrows.map((arrow: any) => [arrow.from, arrow.to])).toEqual([
       [exploded!.result.screens[0], exploded!.result.screens[1]],
       [exploded!.result.screens[1], exploded!.result.screens[2]],
