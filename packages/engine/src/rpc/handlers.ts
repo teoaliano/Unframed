@@ -183,6 +183,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "repositories.read": ({ project }) => featureOn("repositories", () => Effect.map(repositories.read(project), (repository) => ({ repository: repository ?? null }))),
       "instances.branches": ({ project }) => featureOn("repositories", () => instances.branches(project)),
       "instances.diff": ({ project, id }) => featureOn("repositories", () => instanceGit.diff(project, id)),
+      "instances.gitAction": ({ project, id, action }) => featureOn("repositories", () => instanceGit.act(project, id, action)),
       "screens.snapshots": ({ project }) => artifacts.screenSnapshots(project),
       "instances.create": ({ project, base, branch }) =>
         featureOn("repositories", () => instances.create(project, { ...(base === undefined ? {} : { base }), ...(branch === undefined ? {} : { branch }) })),

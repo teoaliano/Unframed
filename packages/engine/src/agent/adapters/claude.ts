@@ -18,7 +18,7 @@ import {
   type RuntimeEventDraft,
   type RuntimeMode,
 } from "@unframed/domain";
-import type { AdapterContext, ProviderAdapter, SessionStart, TitleInput, TurnInput } from "../adapter.ts";
+import type { AdapterContext, ProviderAdapter, SessionStart, TitleInput, TurnInput, WriteInput } from "../adapter.ts";
 import { MCP_SERVER_NAME } from "../mcp.ts";
 import { PermissionGate } from "../permissionGate.ts";
 import { errorText } from "../../log.ts";
@@ -171,6 +171,39 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
       session.query.close();
     } catch {
       // already closed
+    }
+  };
+
+  const write = async (input: WriteInput): Promise<string | undefined> => {
+    if (!input.environment) return undefined;
+    const { query } = await import("@anthropic-ai/claude-agent-sdk");
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), 60_000);
+    timer.unref();
+    try {
+      const handle = query({
+        prompt: input.prompt,
+        options: {
+          pathToClaudeCodeExecutable: input.environment.executable,
+          env: input.environment.env,
+          cwd: input.projectDir,
+          systemPrompt: input.system,
+          settingSources: [],
+          tools: [],
+          mcpServers: {},
+          maxTurns: 1,
+          persistSession: false,
+          abortController: abort,
+          ...(input.modelSelection.model === "" ? {} : { model: input.modelSelection.model }),
+        },
+      });
+      for await (const message of handle) {
+        if (message.type === "result") return message.subtype === "success" ? message.result : undefined;
+      }
+      return undefined;
+    } finally {
+      clearTimeout(timer);
+      abort.abort();
     }
   };
 
@@ -332,37 +365,9 @@ export const claudeAdapter = (context: AdapterContext): ProviderAdapter => {
       for (const chatId of [...sessions.keys()]) stop(chatId);
     },
     async title(input: TitleInput) {
-      if (!input.environment) return undefined;
-      const { query } = await import("@anthropic-ai/claude-agent-sdk");
-      const abort = new AbortController();
-      const timer = setTimeout(() => abort.abort(), 60_000);
-      timer.unref();
-      try {
-        const handle = query({
-          prompt: chatTitlePrompt(input.firstMessage, input.answer),
-          options: {
-            pathToClaudeCodeExecutable: input.environment.executable,
-            env: input.environment.env,
-            cwd: input.projectDir,
-            systemPrompt: CHAT_TITLE_SYSTEM_PROMPT,
-            settingSources: [],
-            tools: [],
-            mcpServers: {},
-            maxTurns: 1,
-            persistSession: false,
-            abortController: abort,
-            ...(input.modelSelection.model === "" ? {} : { model: input.modelSelection.model }),
-          },
-        });
-        for await (const message of handle) {
-          if (message.type === "result") return message.subtype === "success" ? message.result : undefined;
-        }
-        return undefined;
-      } finally {
-        clearTimeout(timer);
-        abort.abort();
-      }
+      return write({ ...input, system: CHAT_TITLE_SYSTEM_PROMPT, prompt: chatTitlePrompt(input.firstMessage, input.answer) });
     },
+    write,
   };
 };
 

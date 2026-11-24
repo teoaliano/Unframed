@@ -181,6 +181,27 @@ test("forking a Screen makes a new Instance on a named branch from its HEAD, wit
   });
 });
 
+test("a selected Screen lists its Instance's changes and commits them", async ({ page }) => {
+  const identity = { GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "Person", GIT_AUTHOR_EMAIL: "person@example.com", GIT_COMMITTER_NAME: "Person", GIT_COMMITTER_EMAIL: "person@example.com" };
+  await withRepository(page, identity, async (engine, project) => {
+    const [first] = await screenShapes(engine, project);
+    const rpc = await engine.rpc();
+    const instance = await rpc.call("instances.status", { project, id: first.props.instance });
+    await rpc.close();
+    await writeFile(join(instance.worktree, "src", "pages", "pricing.html"), "<h1>Pricing</h1>\n");
+    await clickShape(page, first.id);
+
+    await page.getByRole("button", { name: "Changes" }).click();
+    await expect(page.getByTestId("changed-file")).toHaveText(["src/pages/pricing.html+1 −0"]);
+    await page.getByRole("button", { name: "Commit", exact: true }).click();
+    await expect(page.getByTestId("git-action-result")).toHaveText('Committed "Update src/pages/pricing.html".');
+    await expect(page.getByTestId("changed-file")).toHaveText(["src/pages/pricing.html+1 −0"]);
+    expect(git(instance.worktree, "log", "-1", "--format=%s")).toBe("Update src/pages/pricing.html\n");
+    await page.getByRole("button", { name: "Commit", exact: true }).click();
+    await expect(page.getByText("There is nothing to commit in this Instance.")).toBeVisible();
+  });
+});
+
 const putShapes = async (engine: TestEngine, project: string, put: any[]) => {
   const rpc = await engine.rpc();
   try {

@@ -74,6 +74,7 @@ export interface EngineConfig {
   readonly testInstanceIdleMs: number | undefined;
   readonly testInstanceSampleMs: number | undefined;
   readonly testInstanceBudgetBytes: number | undefined;
+  readonly githubApi: string;
   readonly features: Features;
   readonly platform: NodeJS.Platform;
 }
@@ -140,6 +141,7 @@ export const loadConfig = (
       testInstanceIdleMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_INSTANCE_IDLE_MS)),
       testInstanceSampleMs: wholeMs(nonEmpty(env.UNFRAMED_TEST_INSTANCE_SAMPLE_MS)),
       testInstanceBudgetBytes: wholeMs(nonEmpty(env.UNFRAMED_TEST_INSTANCE_BUDGET_BYTES)),
+      githubApi: acceptTestOrigin(nonEmpty(env.UNFRAMED_TEST_GITHUB_API) ?? "") ?? "https://api.github.com",
       features: readFeatures(env.UNFRAMED_FEATURES),
       platform,
     },

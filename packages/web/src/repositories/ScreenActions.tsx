@@ -1,7 +1,7 @@
 import type { ScreenShapeProps } from "@unframed/contracts";
-import { UnframedError, type Instance } from "@unframed/contracts";
+import { UnframedError, type GitAction, type GitActionResult, type Instance, type InstanceDiff } from "@unframed/contracts";
 import { DEFAULT_RUNTIME_MODE, flowInstruction, flowRoutes, forkBranchName, normaliseRoute, SCREEN_GAP, SCREEN_VIEWPORTS, screenUrl } from "@unframed/domain";
-import { ChevronDown, ExternalLink, GitBranchPlus, GitFork, MonitorSmartphone, Route, Workflow } from "lucide-react";
+import { ChevronDown, ExternalLink, FileDiff, GitBranchPlus, GitFork, MonitorSmartphone, Route, Workflow } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { createShapeId, useEditor, useValue, type Editor, type TLShape, type TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
@@ -324,6 +324,108 @@ const ExplodeForm = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   );
 };
 
+const GIT_ACTION_LABELS: ReadonlyArray<readonly [GitAction, string]> = [
+  ["commit", "Commit"],
+  ["commit_push", "Commit and push"],
+  ["commit_push_pr", "Commit, push and open PR"],
+];
+
+const gitActionSummary = (result: GitActionResult): string =>
+  [
+    result.commit === null ? undefined : `Committed "${result.commit.subject}".`,
+    result.push === null ? undefined : `Pushed to ${result.push.remote}/${result.push.branch}.`,
+    result.pr === null ? undefined : `${result.pr.existing ? "Pull request" : "Opened pull request"} #${result.pr.number} is open.`,
+  ]
+    .filter((line) => line !== undefined)
+    .join(" ");
+
+const ChangesForm = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
+  const editor = useEditor();
+  const engine = useEngine();
+  const project = useCanvasProject();
+  const [open, setOpen] = useState(false);
+  const [diff, setDiff] = useState<InstanceDiff | undefined>(undefined);
+  const [result, setResult] = useState<GitActionResult | undefined>(undefined);
+  const [problem, setProblem] = useState<string | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  const instanceId = () => screenPropsOf(editor, shapeId)?.instance;
+  const load = async () => {
+    const id = instanceId();
+    if (id === undefined) return;
+    setDiff(await engine.call("instances.diff", { project, id }));
+  };
+  const act = (action: GitAction) => {
+    const id = instanceId();
+    if (busy || id === undefined) return;
+    setBusy(true);
+    setProblem(undefined);
+    engine
+      .call("instances.gitAction", { project, id, action })
+      .then(async (answer) => {
+        setResult(answer);
+        await load();
+      })
+      .catch((error: unknown) => setProblem(messageOf(error)))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) {
+          setDiff(undefined);
+          setResult(undefined);
+          setProblem(undefined);
+          load().catch((error: unknown) => setProblem(messageOf(error)));
+        }
+      }}
+    >
+      <Tip label="Changes">
+        <PopoverTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Changes" />}>
+          <FileDiff aria-hidden />
+        </PopoverTrigger>
+      </Tip>
+      <PopoverPopup side="bottom" align="start" sideOffset={6} padding="compact" className="w-80" aria-label="Changes">
+        <div className="flex flex-col gap-2">
+          {diff === undefined ? (
+            problem === undefined && <span className="text-xs text-(--selection-toolbar-hint)">Reading changes…</span>
+          ) : diff.files.length === 0 ? (
+            <span className="text-xs text-(--selection-toolbar-hint)">No changes against {diff.baseRef}.</span>
+          ) : (
+            <ul className="flex max-h-60 flex-col gap-1 overflow-auto font-mono text-xs" aria-label="Changed files">
+              {diff.files.map((file) => (
+                <li key={file.path} className="flex justify-between gap-2" data-testid="changed-file">
+                  <span className="truncate">{file.path}</span>
+                  <span className="shrink-0 text-(--selection-toolbar-hint)">{file.binary ? "binary" : `+${file.additions} −${file.deletions}`}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {result !== undefined && (
+            <span className="text-xs" data-testid="git-action-result">
+              {gitActionSummary(result)}{" "}
+              {result.pr !== null && (
+                <a className="underline" href={result.pr.url} target="_blank" rel="noopener noreferrer">
+                  Open it
+                </a>
+              )}
+            </span>
+          )}
+          {problem !== undefined && <span className="text-xs text-(--artifact-editor-error-foreground)">{problem}</span>}
+          <div className="flex flex-wrap justify-end gap-2">
+            {GIT_ACTION_LABELS.map(([action, label]) => (
+              <Button key={action} type="button" variant={action === "commit" ? "default" : "outline"} size="sm" disabled={busy || diff === undefined} onClick={() => act(action)}>
+                {label}
+              </Button>
+            ))}
+          </div>
+        </div>
+      </PopoverPopup>
+    </Popover>
+  );
+};
+
 export const ScreenActions = ({ shapeId }: { readonly shapeId: TLShapeId }) => (
   <>
     <RouteField shapeId={shapeId} />
@@ -332,5 +434,6 @@ export const ScreenActions = ({ shapeId }: { readonly shapeId: TLShapeId }) => (
     <BranchForm shapeId={shapeId} base="fork" label="Fork" title="Fork into a new Instance" submit="Fork" icon={<GitFork aria-hidden />} />
     <BranchForm shapeId={shapeId} base="pick" label="New Instance" title="New Instance from a branch" submit="Create Instance" icon={<GitBranchPlus aria-hidden />} />
     <ExplodeForm shapeId={shapeId} />
+    <ChangesForm shapeId={shapeId} />
   </>
 );

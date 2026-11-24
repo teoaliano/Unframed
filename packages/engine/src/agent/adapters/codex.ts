@@ -15,7 +15,7 @@ import {
   type RuntimeMode,
 } from "@unframed/domain";
 import { inAppCodexOutsideOffArgs } from "@unframed/domain";
-import type { AdapterContext, ProviderAdapter, SessionStart, TitleInput, TurnInput } from "../adapter.ts";
+import type { AdapterContext, ProviderAdapter, SessionStart, TitleInput, TurnInput, WriteInput } from "../adapter.ts";
 import { CodexRpc, CodexRpcError, initializeCodex } from "../codexRpc.ts";
 import { MCP_SERVER_NAME } from "../mcp.ts";
 import { PermissionGate } from "../permissionGate.ts";
@@ -110,7 +110,7 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
 
   const threadParams = (input: { projectDir: string; runtimeMode: RuntimeMode; model: string; systemPrompt: string }) => {
     const policy = codexPolicy(input.runtimeMode);
-    return {
+  return {
       cwd: input.projectDir,
       approvalPolicy: policy.approvalPolicy,
       sandbox: policy.sandbox,
@@ -127,6 +127,47 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
     session.stopping = true;
     session.gate.cancelAll();
     session.rpc.close();
+  };
+
+  const write = async (input: WriteInput): Promise<string | undefined> => {
+    if (!input.environment) return undefined;
+    let text = "";
+    let resolveDone!: () => void;
+    const done = new Promise<void>((resolve) => (resolveDone = resolve));
+    const rpc = new CodexRpc({
+      executable: input.environment.executable,
+      args: ["app-server"],
+      env: input.environment.env,
+      cwd: input.projectDir,
+      onNotification: (method, params) => {
+        const p = params as { item?: { type?: string; text?: string }; delta?: string };
+        if (method === "item/agentMessage/delta" && typeof p.delta === "string") text += p.delta;
+        if (method === "item/completed" && p.item?.type === "agentMessage" && typeof p.item.text === "string") text = p.item.text;
+        if (method === "turn/completed") resolveDone();
+      },
+      onRequest: async () => {
+        throw new CodexRpcError("method not found", -32601);
+      },
+    });
+    try {
+      await initializeCodex(rpc, ENGINE_VERSION);
+      const thread = threadIdOf(
+        await rpc.request("thread/start", {
+          cwd: input.projectDir,
+          approvalPolicy: "never",
+          sandbox: "read-only",
+          ephemeral: true,
+          ...(input.modelSelection.model === "" ? {} : { model: input.modelSelection.model }),
+          developerInstructions: input.system,
+        }),
+      );
+      await rpc.request("turn/start", { threadId: thread, input: [{ type: "text", text: input.prompt }] });
+      const timer = new Promise<void>((resolve) => setTimeout(resolve, 60_000).unref());
+      await Promise.race([done, timer]);
+      return text.trim() === "" ? undefined : text;
+    } finally {
+      rpc.close();
+    }
   };
 
   return {
@@ -273,45 +314,8 @@ export const codexAdapter = (context: AdapterContext): ProviderAdapter => {
       for (const chatId of [...sessions.keys()]) stop(chatId);
     },
     async title(input: TitleInput) {
-      if (!input.environment) return undefined;
-      let text = "";
-      let resolveDone!: () => void;
-      const done = new Promise<void>((resolve) => (resolveDone = resolve));
-      const rpc = new CodexRpc({
-        executable: input.environment.executable,
-        args: ["app-server"],
-        env: input.environment.env,
-        cwd: input.projectDir,
-        onNotification: (method, params) => {
-          const p = params as { item?: { type?: string; text?: string }; delta?: string };
-          if (method === "item/agentMessage/delta" && typeof p.delta === "string") text += p.delta;
-          if (method === "item/completed" && p.item?.type === "agentMessage" && typeof p.item.text === "string") text = p.item.text;
-          if (method === "turn/completed") resolveDone();
-        },
-        onRequest: async () => {
-          throw new CodexRpcError("method not found", -32601);
-        },
-      });
-      try {
-        await initializeCodex(rpc, ENGINE_VERSION);
-        const thread = threadIdOf(
-          await rpc.request("thread/start", {
-            cwd: input.projectDir,
-            approvalPolicy: "never",
-            sandbox: "read-only",
-            ephemeral: true,
-            ...(input.modelSelection.model === "" ? {} : { model: input.modelSelection.model }),
-            developerInstructions: CHAT_TITLE_SYSTEM_PROMPT,
-          }),
-        );
-        const prompt = chatTitlePrompt(input.firstMessage, input.answer);
-        await rpc.request("turn/start", { threadId: thread, input: [{ type: "text", text: prompt }] });
-        const timer = new Promise<void>((resolve) => setTimeout(resolve, 60_000).unref());
-        await Promise.race([done, timer]);
-        return text.trim() === "" ? undefined : text;
-      } finally {
-        rpc.close();
-      }
+      return write({ ...input, system: CHAT_TITLE_SYSTEM_PROMPT, prompt: chatTitlePrompt(input.firstMessage, input.answer) });
     },
+    write,
   };
 };

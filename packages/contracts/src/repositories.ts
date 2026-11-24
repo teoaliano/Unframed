@@ -155,6 +155,24 @@ export type InstanceDiff = typeof InstanceDiff.Type;
 
 export const InstancesDiff = Rpc.make("instances.diff", { payload: InstanceRef, success: InstanceDiff, error: UnframedError });
 
+export const GIT_ACTIONS = ["commit", "commit_push", "commit_push_pr"] as const;
+export const GitAction = Schema.Literals(GIT_ACTIONS);
+export type GitAction = typeof GitAction.Type;
+
+export const GitActionResult = Schema.Struct({
+  action: GitAction,
+  commit: Schema.NullOr(Schema.Struct({ sha: Schema.String, subject: Schema.String })),
+  push: Schema.NullOr(Schema.Struct({ remote: Schema.String, branch: Schema.String })),
+  pr: Schema.NullOr(Schema.Struct({ number: Schema.Number, url: Schema.String, title: Schema.String, existing: Schema.Boolean })),
+});
+export type GitActionResult = typeof GitActionResult.Type;
+
+export const InstancesGitAction = Rpc.make("instances.gitAction", {
+  payload: Schema.Struct({ project: Schema.String, id: Schema.String, action: GitAction }),
+  success: GitActionResult,
+  error: UnframedError,
+});
+
 export const InstancesBranches = Rpc.make("instances.branches", {
   payload: Schema.Struct({ project: Schema.String }),
   success: Schema.Struct({ branches: Schema.Array(Schema.String), current: Schema.String }),

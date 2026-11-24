@@ -1098,6 +1098,12 @@ export class AgentRuntime {
     if (turn.turnCount === 1 && outcome.state === "completed" && settled && settled.titledBy !== "user") void this.title(agent, settled);
   }
 
+  async writeText(provider: AgentProvider, input: { readonly projectDir: string; readonly system: string; readonly prompt: string }): Promise<string | undefined> {
+    const adapter = this.adapterFor(provider);
+    const environment = adapter.provider === "scripted" ? undefined : await this.deps.runEnvironment(provider);
+    return adapter.write({ ...input, modelSelection: { provider, model: "", traits: {} }, ...(environment === undefined ? {} : { environment }) });
+  }
+
   private async title(agent: ProjectAgent, chat: Chat): Promise<void> {
     if (chat.modelSelection.provider === "outside") return;
     try {

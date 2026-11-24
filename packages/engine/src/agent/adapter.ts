@@ -61,6 +61,14 @@ export interface TitleInput {
   readonly environment?: RunEnvironment;
 }
 
+export interface WriteInput {
+  readonly projectDir: string;
+  readonly modelSelection: ModelSelection;
+  readonly system: string;
+  readonly prompt: string;
+  readonly environment?: RunEnvironment;
+}
+
 /**
  * What every adapter needs from the runtime: where its events go, the chat's current
  * runtime mode (read at each tool call), the tools the Unframed server registers, a debug
@@ -101,4 +109,5 @@ export interface ProviderAdapter {
   stopAll(): Promise<void>;
   /** One small request on the chat's own provider that names it; `undefined` for no name. */
   title(input: TitleInput): Promise<string | undefined>;
+  write(input: WriteInput): Promise<string | undefined>;
 }

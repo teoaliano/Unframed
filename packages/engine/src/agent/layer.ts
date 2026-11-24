@@ -13,7 +13,7 @@ import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import { CanvasRooms } from "../canvas/rooms.ts";
 import type { Route } from "../http/api.ts";
-import { errorText } from "../log.ts";
+import { errorText, logInfo } from "../log.ts";
 import { OpenProjects } from "../openProjects.ts";
 import { ProjectDatabase } from "../projectDatabase.ts";
 import { Config } from "../services.ts";
@@ -59,6 +59,7 @@ export class Agents extends Context.Service<
     readonly openSetup: (project: string) => Effect.Effect<string | null, UnframedError>;
     readonly confirmLogin: (project: string) => Effect.Effect<boolean>;
     readonly setupVerdict: (project: string, accepted: boolean, note: string | undefined) => Effect.Effect<Repository, UnframedError>;
+    readonly writeText: (input: { readonly projectDir: string; readonly system: string; readonly prompt: string }) => Effect.Effect<string | undefined>;
   }
 >()("unframed/engine/Agents") {}
 
@@ -372,6 +373,15 @@ export const agentsLayer = Layer.effect(
       openSetup,
       confirmLogin: (project) => Effect.sync(() => setupTools.confirmLogin(project)),
       setupVerdict,
+      writeText: (input) =>
+        Effect.promise(async () => {
+          const provider = await setupProvider();
+          if (provider === undefined) return undefined;
+          return runtime.writeText(provider, input).catch((error: unknown) => {
+            logInfo(`no generated text: ${errorText(error)}`);
+            return undefined;
+          });
+        }),
     });
   }),
 );

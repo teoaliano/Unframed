@@ -15,7 +15,7 @@ import {
   type RuntimeEventDraft,
   type ScriptTurn,
 } from "@unframed/domain";
-import type { AdapterContext, ProviderAdapter, SessionStart, TitleInput, TurnInput } from "../adapter.ts";
+import type { AdapterContext, ProviderAdapter, SessionStart, TitleInput, TurnInput, WriteInput } from "../adapter.ts";
 import { McpClient } from "../mcp.ts";
 import { PermissionGate } from "../permissionGate.ts";
 import { errorText } from "../../log.ts";
@@ -318,6 +318,10 @@ export const scriptedAdapter = (scriptPath: string, context: AdapterContext): Pr
       if (!("script" in picked)) return undefined;
       const title = picked.script.turns[0]?.title;
       return title === undefined || title.trim() === "" ? undefined : title;
+    },
+    async write(input: WriteInput) {
+      const matched = (await scripts()).find((script) => script.when !== undefined && new RegExp(script.when, "i").test(input.prompt));
+      return matched?.turns[0]?.text;
     },
   };
 };
