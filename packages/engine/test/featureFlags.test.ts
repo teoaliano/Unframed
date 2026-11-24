@@ -93,6 +93,7 @@ describe("UNFRAMED_FEATURES", () => {
     await expect(rpc.call("instances.diff", instance)).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("instances.gitAction", { ...instance, action: "commit" })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("repositories.read", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("repositories.locate", { project: "app", path: engine.dataDir })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("repositories.setup", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("screens.explode", { project: "app", shapeId: "shape:s", routes: ["/"] })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("repositories.confirmLogin", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);

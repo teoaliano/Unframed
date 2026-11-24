@@ -3,6 +3,7 @@ import { realpath, stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 import { UnframedError, unframedError, type Instance, type ProjectKind, type Repository } from "@unframed/contracts";
 import {
+  DIFFERENT_REPOSITORY,
   NO_GIT,
   NOT_A_FOLDER,
   NOT_A_REPOSITORY,
@@ -23,6 +24,7 @@ import { ProjectDatabase } from "../projectDatabase.ts";
 import { Projects } from "../projects.ts";
 import { gitOutput as output, makeGit } from "./git.ts";
 import { readKind, readRepository, writeRepository, type StoredRepository } from "./tables.ts";
+import { readInstances } from "../instances/tables.ts";
 
 export interface AddedRepository {
   readonly name: string;
@@ -38,6 +40,7 @@ export class Repositories extends Context.Service<
     readonly read: (project: string) => Effect.Effect<Repository | undefined>;
     readonly add: (path: string, name?: string) => Effect.Effect<AddedRepository, UnframedError>;
     readonly update: (project: string, change: (stored: StoredRepository) => StoredRepository) => Effect.Effect<Repository, UnframedError>;
+    readonly locate: (project: string, path: string) => Effect.Effect<Repository, UnframedError>;
   }
 >()("unframed/engine/Repositories") {}
 
@@ -76,7 +79,7 @@ export const repositoriesLayer = Layer.effect(
         catch: (error) => unframedError("internal", `Could not read that folder: ${errorText(error)}`),
       });
 
-    const add = (path: string, name?: string) =>
+    const repositoryAt = (path: string) =>
       Effect.gen(function* () {
         const folder = yield* folderOf(path.trim());
         if (folder === undefined) return yield* unframedError("bad_request", NOT_A_FOLDER);
@@ -84,6 +87,12 @@ export const repositoriesLayer = Layer.effect(
         if (roots.kind === "not_found") return yield* unframedError("unavailable", NO_GIT);
         const found = gitRoots(output(roots) ?? "");
         if (found === undefined) return yield* unframedError("bad_request", NOT_A_REPOSITORY);
+        return found;
+      });
+
+    const add = (path: string, name?: string) =>
+      Effect.gen(function* () {
+        const found = yield* repositoryAt(path);
         const branch = output(yield* git(found.root, ["symbolic-ref", "--quiet", "--short", "HEAD"]))?.trim();
         const baseBranch = branch || output(yield* git(found.root, ["rev-parse", "HEAD"]))?.trim() || "HEAD";
         const uncommitted = hasUncommittedChanges(output(yield* git(found.root, ["status", "--porcelain"])) ?? "");
@@ -123,6 +132,21 @@ export const repositoriesLayer = Layer.effect(
         });
       });
 
-    return Repositories.of({ kinds, read, add, update });
+    const locate = (project: string, path: string) =>
+      Effect.gen(function* () {
+        const slug = projectSlug(project);
+        if ((yield* read(slug)) === undefined) return yield* unframedError("bad_request", NOT_A_REPOSITORY_PROJECT);
+        const found = yield* repositoryAt(path);
+        const known = (yield* database.peek(slug, readInstances)) ?? [];
+        for (const commit of new Set(known.map((instance) => instance.baseCommit))) {
+          if (output(yield* git(found.root, ["cat-file", "-e", `${commit}^{commit}`])) === undefined) return yield* unframedError("bad_request", DIFFERENT_REPOSITORY);
+        }
+        const worktrees = known.filter((instance) => instance.removedAt === null && existsSync(instance.worktree)).map((instance) => instance.worktree);
+        if (worktrees.length > 0) yield* git(found.root, ["worktree", "repair", ...worktrees]);
+        yield* git(found.root, ["worktree", "prune"]);
+        return yield* update(slug, (stored) => ({ ...stored, root: found.root, gitCommonDir: found.gitCommonDir }));
+      });
+
+    return Repositories.of({ kinds, read, add, update, locate });
   }),
 );

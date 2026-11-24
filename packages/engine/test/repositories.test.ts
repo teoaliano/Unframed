@@ -1,9 +1,9 @@
-import { readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative } from "node:path";
 import { folderPickerPlan } from "@unframed/domain";
 import { describe, expect, it } from "vitest";
-import { makeRepo, repoEngineEnv } from "./gitRepos.ts";
+import { git, makeRepo, repoEngineEnv } from "./gitRepos.ts";
 import { makeTempDir, startEngine } from "./harness.ts";
 
 const treeOf = async (root: string): Promise<Record<string, string>> => {
@@ -106,5 +106,42 @@ describe("repositories.pickFolder", () => {
   it("answers '' for a cancelled dialog", async () => {
     const engine = await startEngine({ env: { UNFRAMED_TEST_PICK_FOLDER: "cancel" } });
     expect(await (await engine.rpc()).call("repositories.pickFolder")).toEqual({ path: "" });
+  });
+});
+
+describe("a Repository that moved", () => {
+  it("is missing while its folder is gone, and is located again at its new folder with its worktrees repaired", { timeout: 60_000 }, async () => {
+    const root = await makeRepo();
+    const engine = await startEngine({ env: await repoEngineEnv() });
+    const rpc = await engine.rpc();
+    const added = await rpc.call("repositories.add", { path: root });
+    const project = added.name;
+    for (let tries = 0; ["creating", "installing"].includes((await rpc.call("instances.status", { project, id: added.instance.id })).state); tries++) {
+      if (tries > 200) throw new Error("the Instance never settled");
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    const moved = `${root}-moved`;
+    await rename(root, moved);
+    expect((await rpc.call("repositories.read", { project })).repository).toMatchObject({ status: "missing", root });
+    await expect(rpc.call("instances.create", { project })).rejects.toMatchObject({ message: "Repository not found." });
+
+    const plain = await makeTempDir("unframed-plain-");
+    await expect(rpc.call("repositories.locate", { project, path: plain })).rejects.toMatchObject({ message: "That folder is not in a git repository." });
+    const other = join(await makeTempDir("unframed-other-"), "other");
+    await mkdir(other);
+    await writeFile(join(other, "README.md"), "another project\n");
+    git(other, "init", "-q", "-b", "trunk");
+    git(other, "add", ".");
+    git(other, "commit", "-q", "-m", "other");
+    await expect(rpc.call("repositories.locate", { project, path: other })).rejects.toMatchObject({ message: "That folder is a different repository." });
+
+    const located = await rpc.call("repositories.locate", { project, path: join(moved, "src") });
+    expect(located.repository).toMatchObject({ root: moved, gitCommonDir: join(moved, ".git"), baseBranch: "trunk", status: "setting-up" });
+    expect((await rpc.call("repositories.read", { project })).repository).toMatchObject({ root: moved, status: "setting-up" });
+    expect(git(added.instance.worktree, "rev-parse", "--path-format=absolute", "--git-common-dir").trim()).toBe(join(moved, ".git"));
+    await writeFile(join(added.instance.worktree, "src", "pages", "about.html"), "<h1>About</h1>\n");
+    expect((await rpc.call("instances.diff", { project, id: added.instance.id })).files.map((file) => file.path)).toEqual(["src/pages/about.html"]);
+    const second = await rpc.call("instances.create", { project });
+    expect(git(moved, "worktree", "list")).toContain(second.worktree);
   });
 });

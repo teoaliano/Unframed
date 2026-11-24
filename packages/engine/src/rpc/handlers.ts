@@ -180,6 +180,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "repositories.setup": ({ project }) => featureOn("repositories", () => Effect.map(agents.openSetup(project), (chatId) => ({ chatId }))),
       "repositories.confirmLogin": ({ project }) => featureOn("repositories", () => Effect.map(agents.confirmLogin(project), (waiting) => ({ waiting }))),
       "repositories.setupVerdict": ({ project, accepted, note }) => featureOn("repositories", () => Effect.map(agents.setupVerdict(project, accepted, note), (repository) => ({ repository }))),
+      "repositories.locate": ({ project, path }) => featureOn("repositories", () => Effect.map(repositories.locate(project, path), (repository) => ({ repository }))),
       "repositories.read": ({ project }) => featureOn("repositories", () => Effect.map(repositories.read(project), (repository) => ({ repository: repository ?? null }))),
       "instances.branches": ({ project }) => featureOn("repositories", () => instances.branches(project)),
       "instances.diff": ({ project, id }) => featureOn("repositories", () => instanceGit.diff(project, id)),

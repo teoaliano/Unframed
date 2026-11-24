@@ -1,7 +1,8 @@
 import { UnframedError, type ProjectKind } from "@unframed/contracts";
 import { projectSlug } from "@unframed/domain";
-import { Check, FileText, FolderGit2, Plus, Wrench } from "lucide-react";
+import { Check, FileText, FolderGit2, FolderSearch, Plus, Wrench } from "lucide-react";
 import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
+import { useValue } from "tldraw";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -18,7 +19,7 @@ import { Menu, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuRadioItem
 import { useActivation, useEngine } from "../context.ts";
 import { useIsDevice } from "../deviceMode.ts";
 import { useFeature } from "../features.ts";
-import { refreshRepository } from "../repositories/store.ts";
+import { refreshRepository, repositoryState } from "../repositories/store.ts";
 import { reportState, useReportState } from "../legacy/reportState.ts";
 import { OPEN_PROJECT_LIST, PROJECT_ACTION, type ProjectActionDetail } from "./tabEvents.ts";
 import { useActiveProject } from "../project/activation.ts";
@@ -167,6 +168,7 @@ export const ProjectMenu = () => {
   const [deleting, setDeleting] = useState<Deleting>();
   const [busy, setBusy] = useState(false);
   const imported = useReportState();
+  const missing = useValue("repository missing", () => active !== undefined && repositoryState(active).repository.get()?.status === "missing", [active]);
 
   const refresh = () =>
     engine.call("projects.list").then(
@@ -225,6 +227,18 @@ export const ProjectMenu = () => {
       const added = await engine.call("repositories.add", { path });
       if (added.uncommitted) showNotice("Uncommitted changes in your checkout are not carried into Instances.", "info");
       await activation.activate(added.name);
+    } catch (error) {
+      showError(messageOf(error));
+    }
+  };
+
+  const locateRepository = async (project: string) => {
+    try {
+      const { path } = await engine.call("repositories.pickFolder");
+      if (path === "") return;
+      const { repository } = await engine.call("repositories.locate", { project, path });
+      repositoryState(project).repository.set(repository);
+      showNotice(`Found the Repository at ${repository.root}.`, "info");
     } catch (error) {
       showError(messageOf(error));
     }
@@ -342,7 +356,13 @@ export const ProjectMenu = () => {
             <Plus aria-hidden />
             {repositoriesOn ? "New Whiteboard" : "Add project"}
           </MenuItem>
-          {repositoriesOn && active !== undefined && kinds[active] === "repository" && (
+          {repositoriesOn && !device && active !== undefined && kinds[active] === "repository" && missing && (
+            <MenuItem onClick={() => void locateRepository(active)}>
+              <FolderSearch aria-hidden />
+              Locate Repository…
+            </MenuItem>
+          )}
+          {repositoriesOn && active !== undefined && kinds[active] === "repository" && !missing && (
             <MenuItem onClick={() => void runSetup(active)}>
               <Wrench aria-hidden />
               Run Setup again

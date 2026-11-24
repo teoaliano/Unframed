@@ -117,6 +117,12 @@ export const RepositoriesRead = Rpc.make("repositories.read", {
   error: UnframedError,
 });
 
+export const RepositoriesLocate = Rpc.make("repositories.locate", {
+  payload: Schema.Struct({ project: Schema.String, path: Schema.String }),
+  success: Schema.Struct({ repository: Repository }),
+  error: UnframedError,
+});
+
 export const RepositoriesSetup = Rpc.make("repositories.setup", {
   payload: Schema.Struct({ project: Schema.String }),
   success: Schema.Struct({ chatId: Schema.NullOr(Schema.String) }),

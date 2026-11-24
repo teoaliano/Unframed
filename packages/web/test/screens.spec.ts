@@ -124,6 +124,33 @@ test("a Screen tags mocks and lists warnings from Setup, and says when its Insta
   });
 });
 
+test("a Repository whose folder moved says so on its Screens, and Locate Repository… finds it again", async ({ page }) => {
+  const root = await makeRepo("My App");
+  const moved = `${root}-moved`;
+  const engine = await startHostedEngine({ env: await repoEngineEnv({ UNFRAMED_TEST_PICK_FOLDER: moved }) });
+  try {
+    const rpc = await engine.rpc();
+    await rpc.call("repositories.add", { path: root });
+    await rpc.call("preferences.set", { key: "project.active", value: "my-app" });
+    await rpc.close();
+    await rename(root, moved);
+    await openCanvas(page, engine, "my-app");
+    const screen = page.locator("[data-testid=screen]");
+    await expect(screen.locator("[data-testid=screen-overlay]")).toHaveText("Repository not found");
+
+    await page.getByRole("button", { name: "All projects" }).click();
+    await expect(page.getByRole("menuitem", { name: "Run Setup again" })).toHaveCount(0);
+    await page.getByRole("menuitem", { name: "Locate Repository…" }).click();
+    await expect(page.getByText(`Found the Repository at ${moved}.`)).toBeVisible();
+    await expect(screen.locator("[data-testid=screen-overlay]")).toHaveCount(0);
+    await expect(page.frameLocator("[data-testid=screen] iframe[data-screen-frame]").getByRole("heading", { name: "Fake app" })).toBeVisible({ timeout: 30_000 });
+    await page.getByRole("button", { name: "All projects" }).click();
+    await expect(page.getByRole("menuitem", { name: "Locate Repository…" })).toHaveCount(0);
+  } finally {
+    await engine.dispose();
+  }
+});
+
 test("a selected Screen opens in the browser, changes route and changes viewport", async ({ page }) => {
   await withRepository(page, {}, async (engine, project) => {
     const screen = page.locator("[data-testid=screen]");
