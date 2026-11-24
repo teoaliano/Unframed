@@ -1,7 +1,7 @@
 import type { ScreenShapeProps } from "@unframed/contracts";
 import { UnframedError, type GitAction, type GitActionResult, type Instance, type InstanceDiff } from "@unframed/contracts";
-import { DEFAULT_RUNTIME_MODE, flowInstruction, flowRoutes, forkBranchName, normaliseRoute, SCREEN_GAP, SCREEN_VIEWPORTS, screenUrl } from "@unframed/domain";
-import { ChevronDown, ExternalLink, FileDiff, GitBranchPlus, GitFork, MonitorSmartphone, Route, Workflow } from "lucide-react";
+import { DEFAULT_RUNTIME_MODE, flowInstruction, flowRoutes, forkBranchName, normaliseRoute, SCREEN_GAP, SCREEN_VIEWPORTS, screenUrl, setupTag } from "@unframed/domain";
+import { ChevronDown, ExternalLink, FileDiff, GitBranchPlus, GitFork, Info, MonitorSmartphone, Route, TriangleAlert, Workflow } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { createShapeId, useEditor, useValue, type Editor, type TLShape, type TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
@@ -426,11 +426,53 @@ const ChangesForm = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   );
 };
 
+const SetupNotes = () => {
+  const project = useCanvasProject();
+  const setup = useValue("repository setup", () => repositoryState(project).repository.get()?.setup ?? null, [project]);
+  const tag = setupTag(setup);
+  const warnings = setup?.warnings ?? [];
+  if (tag === undefined && warnings.length === 0) return null;
+  const label = warnings.length === 0 ? "From Setup" : warnings.length === 1 ? "1 Setup warning" : `${warnings.length} Setup warnings`;
+  return (
+    <Popover>
+      <Tip label={label}>
+        <PopoverTrigger
+          render={warnings.length === 0 ? <Button variant="ghost" size="icon-sm" aria-label={label} /> : <Button variant="warning-outline" size="sm" aria-label={label} />}
+          data-testid="screen-setup-notes"
+        >
+          {warnings.length === 0 ? <Info aria-hidden /> : <TriangleAlert aria-hidden />}
+          {warnings.length > 0 && warnings.length}
+        </PopoverTrigger>
+      </Tip>
+      <PopoverPopup side="bottom" align="start" sideOffset={6} padding="compact" className="w-80" aria-label="From Setup">
+        <div className="flex flex-col gap-2 text-xs">
+          {warnings.length > 0 && (
+            <ul className="m-0 flex list-disc flex-col gap-1 ps-4" aria-label="Setup warnings">
+              {warnings.map((warning) => (
+                <li key={warning} data-testid="setup-note-warning">
+                  {warning}
+                </li>
+              ))}
+            </ul>
+          )}
+          {tag !== undefined && (
+            <span data-testid="setup-note-mocks">
+              <span className="text-(--selection-toolbar-hint)">Mocked: </span>
+              {tag}
+            </span>
+          )}
+        </div>
+      </PopoverPopup>
+    </Popover>
+  );
+};
+
 export const ScreenActions = ({ shapeId }: { readonly shapeId: TLShapeId }) => (
   <>
     <RouteField shapeId={shapeId} />
     <ViewportMenu shapeId={shapeId} />
     <OpenInBrowser shapeId={shapeId} />
+    <SetupNotes />
     <BranchForm shapeId={shapeId} base="fork" label="Fork" title="Fork into a new Instance" submit="Fork" icon={<GitFork aria-hidden />} />
     <BranchForm shapeId={shapeId} base="pick" label="New Instance" title="New Instance from a branch" submit="Create Instance" icon={<GitBranchPlus aria-hidden />} />
     <ExplodeForm shapeId={shapeId} />
