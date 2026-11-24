@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { PackageManager, type Instance, type RepositorySetup } from "@unframed/contracts";
-import { agentShapeId, type ActivityInput, NO_CHROME_PREVIEW_MESSAGE, projectSlug, roomShapeId, screenUrl, SETUP_TOOL_TEXT } from "@unframed/domain";
+import { agentShapeId, SETUP_LOGIN_REQUESTED, SETUP_LOGIN_RESOLVED, SETUP_PROPOSED, type ActivityInput, NO_CHROME_PREVIEW_MESSAGE, projectSlug, roomShapeId, screenUrl, SETUP_TOOL_TEXT } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import * as Schema from "effect/Schema";
 import { refusal, type McpBinding, type McpTool, type ToolAnswer } from "../agent/mcp.ts";
@@ -11,9 +11,6 @@ import type { ScreenRenderer } from "../screens/screenSnapshots.ts";
 
 export const LOGIN_WAIT_MS = 15 * 60_000;
 
-export const SETUP_LOGIN_REQUESTED = "setup.login.requested";
-export const SETUP_LOGIN_RESOLVED = "setup.login.resolved";
-export const SETUP_PROPOSED = "setup.proposed";
 
 export interface SetupToolDeps {
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;

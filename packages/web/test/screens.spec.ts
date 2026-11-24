@@ -7,8 +7,8 @@ import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { openCanvas } from "./canvas.ts";
 import { clickShape } from "./generation.ts";
 import { expect, startHostedEngine, test } from "./fixtures.ts";
-import { engineChat, engineChats, FIXTURES } from "./agent.ts";
-import { applyScreenParametersInstruction, NO_BRIDGE } from "@unframed/domain";
+import { engineChat, engineChats, FIXTURES, openRail, scriptFolder, tabs } from "./agent.ts";
+import { applyScreenParametersInstruction, NO_BRIDGE, setupRejection } from "@unframed/domain";
 
 const withRepository = async (page: Page, env: Record<string, string>, use: (engine: TestEngine, project: string, root: string) => Promise<void>, prepare?: (root: string) => Promise<void>) => {
   const root = await makeRepo("My App");
@@ -211,7 +211,7 @@ test("Screens of one Instance keep their own Parameters through the bridge, and 
     const rpc = await engine.rpc();
     const instance = await rpc.call("instances.status", { project, id: first.props.instance });
     await rpc.close();
-    const chats = await engineChats(engine, project);
+    const chats = (await engineChats(engine, project)).filter((chat) => chat.title !== "Setup");
     expect(chats).toHaveLength(1);
     expect((await engineChat(engine, chats[0]!.id, project)).messages.filter((message) => message.role === "user").map((message) => message.text)).toEqual([applyScreenParametersInstruction({ route: "/dials", branch: instance.branch, worktree: instance.worktree, name: "Look", values: { accent: "#00ff00" } })]);
   });
@@ -226,5 +226,56 @@ test("a Screen whose page did not load the bridge says in one line why it has no
     await clickShape(page, first.id);
     await page.getByTestId("selection-toolbar").getByRole("button", { name: "Parameters" }).click();
     await expect(page.getByTestId("artifact-parameters-panel").getByTestId("parameters-note")).toHaveText(NO_BRIDGE);
+  });
+});
+
+const SAVE = { name: "setup_save", input: { runCommand: "npm run dev", packageManager: "npm", files: [], mocks: ["mock user"], warnings: [] } };
+
+test("Setup proposes done in its chat: Not yet sends the person's note back, and Looks right closes Setup", async ({ page }) => {
+  const scripts = await scriptFolder({
+    setup: {
+      when: "^Set up this Repository",
+      turns: [
+        { text: "The Screen shows the app. Check it, please.", tools: [SAVE] },
+        { text: "Added the header back.", tools: [SAVE] },
+      ],
+    },
+  });
+  await withRepository(page, { UNFRAMED_TEST_AGENT_SCRIPT: scripts }, async (engine, project) => {
+    const panel = await openRail(page);
+    await tabs(page).filter({ hasText: "Setup" }).click();
+    const card = panel.getByTestId("setup-card");
+    await expect(card).toHaveAttribute("data-kind", "proposed", { timeout: 30_000 });
+    await expect(card.getByRole("heading")).toHaveText("Does the Screen show your app?");
+
+    await card.getByRole("button", { name: "Not yet" }).click();
+    await card.getByRole("textbox", { name: "What is still wrong" }).fill("The header is missing.");
+    await card.getByRole("button", { name: "Send to Setup" }).click();
+    await expect(panel.getByTestId("message-text").last()).toHaveText(setupRejection("The header is missing."));
+    await expect(panel.getByText("Added the header back.")).toBeVisible({ timeout: 30_000 });
+    await expect(card).toHaveAttribute("data-kind", "proposed");
+
+    await card.getByRole("button", { name: "Looks right" }).click();
+    await expect(panel.getByTestId("setup-card")).toHaveCount(0);
+    const rpc = await engine.rpc();
+    const { repository } = await rpc.call("repositories.read", { project });
+    await rpc.close();
+    expect(repository).toMatchObject({ status: "ready", setupChat: null });
+  });
+});
+
+test("Setup's login request shows in its chat until the person says they are logged in", async ({ page }) => {
+  const scripts = await scriptFolder({
+    setup: { when: "^Set up this Repository", turns: [{ text: "Thanks, the session works.", tools: [{ name: "ask_login", input: { message: "Log in to Acme with your work account." } }] }] },
+  });
+  await withRepository(page, { UNFRAMED_TEST_AGENT_SCRIPT: scripts }, async () => {
+    const panel = await openRail(page);
+    await tabs(page).filter({ hasText: "Setup" }).click();
+    const card = panel.getByTestId("setup-card");
+    await expect(card).toHaveAttribute("data-kind", "login", { timeout: 30_000 });
+    await expect(card).toContainText("Log in to Acme with your work account.");
+    await card.getByRole("button", { name: "I'm logged in" }).click();
+    await expect(panel.getByText("Thanks, the session works.")).toBeVisible({ timeout: 30_000 });
+    await expect(panel.getByTestId("setup-card")).toHaveCount(0);
   });
 });

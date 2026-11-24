@@ -1,6 +1,6 @@
 import { UnframedError, type ProjectKind } from "@unframed/contracts";
 import { projectSlug } from "@unframed/domain";
-import { Check, FileText, FolderGit2, Plus } from "lucide-react";
+import { Check, FileText, FolderGit2, Plus, Wrench } from "lucide-react";
 import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
 import {
   AlertDialog,
@@ -18,6 +18,7 @@ import { Menu, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuRadioItem
 import { useActivation, useEngine } from "../context.ts";
 import { useIsDevice } from "../deviceMode.ts";
 import { useFeature } from "../features.ts";
+import { refreshRepository } from "../repositories/store.ts";
 import { reportState, useReportState } from "../legacy/reportState.ts";
 import { OPEN_PROJECT_LIST, PROJECT_ACTION, type ProjectActionDetail } from "./tabEvents.ts";
 import { useActiveProject } from "../project/activation.ts";
@@ -229,6 +230,16 @@ export const ProjectMenu = () => {
     }
   };
 
+  const runSetup = async (project: string) => {
+    try {
+      const { chatId } = await engine.call("repositories.setup", { project });
+      await refreshRepository(engine, project);
+      showNotice(chatId === null ? "Setup needs Claude or Codex: set one up in Settings, then run Setup again." : "Setup is running in a new chat.", "info");
+    } catch (error) {
+      showError(messageOf(error));
+    }
+  };
+
   const rename: SubmitName = async (name, slug, close) => {
     const from = renaming;
     if (from === undefined) return undefined;
@@ -331,6 +342,12 @@ export const ProjectMenu = () => {
             <Plus aria-hidden />
             {repositoriesOn ? "New Whiteboard" : "Add project"}
           </MenuItem>
+          {repositoriesOn && active !== undefined && kinds[active] === "repository" && (
+            <MenuItem onClick={() => void runSetup(active)}>
+              <Wrench aria-hidden />
+              Run Setup again
+            </MenuItem>
+          )}
           {repositoriesOn && !device && (
             <MenuItem onClick={() => void addRepository()}>
               <FolderGit2 aria-hidden />

@@ -82,6 +82,10 @@ test("with repositories off, the project menu offers Add project alone and still
     await page.getByRole("button", { name: "All projects" }).click();
     await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["default", "shop", "Add project"]);
     await expect(page.getByRole("menuitemradio", { name: "shop" }).getByLabel("Repository")).toBeVisible();
+    await page.getByRole("menuitemradio", { name: "shop" }).click();
+    await expect(page.locator("[role=tab][data-active='true']")).toHaveText("shop");
+    await page.getByRole("button", { name: "All projects" }).click();
+    await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["default", "shop", "Add project"]);
   } finally {
     await off.dispose();
   }

@@ -24,3 +24,31 @@ export const repositoryStatus = (stored: StoredRepositoryStatus, rootExists: boo
 
 export const NO_SETUP_OPEN = "Setup is not running for this Repository.";
 export const REJECTION_NEEDS_NOTE = "Say what is still wrong, so Setup can keep trying.";
+
+export const SETUP_LOGIN_REQUESTED = "setup.login.requested";
+export const SETUP_LOGIN_RESOLVED = "setup.login.resolved";
+export const SETUP_PROPOSED = "setup.proposed";
+
+export type SetupCard =
+  | { readonly kind: "none" }
+  | { readonly kind: "login"; readonly message: string }
+  | { readonly kind: "proposed" };
+
+interface SetupActivity {
+  readonly kind: string;
+  readonly summary: string;
+  readonly turnId: string | null;
+}
+
+export const setupCard = (input: {
+  readonly chatId: string;
+  readonly setupChat: string | null | undefined;
+  readonly activities: ReadonlyArray<SetupActivity>;
+  readonly latestTurn: { readonly turnId: string; readonly state: string } | null;
+}): SetupCard => {
+  if (input.setupChat !== input.chatId || input.latestTurn === null) return { kind: "none" };
+  const turn = input.latestTurn;
+  const login = [...input.activities].reverse().find((activity) => activity.kind === SETUP_LOGIN_REQUESTED || activity.kind === SETUP_LOGIN_RESOLVED);
+  if (turn.state === "running") return login?.kind === SETUP_LOGIN_REQUESTED && login.turnId === turn.turnId ? { kind: "login", message: login.summary } : { kind: "none" };
+  return input.activities.some((activity) => activity.kind === SETUP_PROPOSED && activity.turnId === turn.turnId) ? { kind: "proposed" } : { kind: "none" };
+};

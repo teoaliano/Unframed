@@ -2,6 +2,7 @@ import { addParameterInstruction, applyParametersInstruction, continuableChat, D
 import { Check, Sparkles } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
+import { repositoryState } from "../../repositories/store.ts";
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
 import { cn } from "~/lib/utils";
@@ -83,7 +84,10 @@ const useArtifactChat = (shapeId: string, place: Place, railVisible: boolean) =>
         return { sent: true, openedRail: false };
       }
       const target =
-        continuableChat(client.chats(), [shapeId])?.id ??
+        continuableChat(
+          client.chats().filter((chat) => chat.id !== repositoryState(client.project).repository.get()?.setupChat),
+          [shapeId],
+        )?.id ??
         (await createChat(
           client,
           { modelSelection: { provider: ready[0]!, model: "", traits: {} }, runtimeMode: DEFAULT_RUNTIME_MODE, interactionMode: "default", tags: [shapeId] },

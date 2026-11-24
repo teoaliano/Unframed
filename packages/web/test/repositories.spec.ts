@@ -29,7 +29,7 @@ test("Add Repository… picks a folder, opens the Repository in a tab and lists 
     expect(await engine.nativeLog()).toHaveLength(1);
 
     await page.getByRole("button", { name: "All projects" }).click();
-    await expect(menuItems(page)).toHaveText(["default", "my-app", "New Whiteboard", "Add Repository…"]);
+    await expect(menuItems(page)).toHaveText(["default", "my-app", "New Whiteboard", "Run Setup again", "Add Repository…"]);
     const repository = page.getByRole("menuitemradio", { name: "my-app" });
     await expect(repository).toHaveAttribute("data-kind", "repository");
     await expect(repository.getByLabel("Repository")).toBeVisible();

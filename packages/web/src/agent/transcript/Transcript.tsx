@@ -14,6 +14,7 @@ import { ChatMarkdown } from "./ChatMarkdown.tsx";
 import { PlanCard } from "./PlanCard.tsx";
 import { RecapCard } from "./RecapCard.tsx";
 import { record } from "../record.ts";
+import { SetupCard } from "../../repositories/SetupCard.tsx";
 
 export const EMPTY_CHAT = "Ask about what is on the canvas, or say what should change or be made. Whatever is selected comes with the message as context.";
 
@@ -215,6 +216,7 @@ export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }:
             </div>
           );
         })}
+        <SetupCard project={client.project} chat={chat} />
         <LimitLine chat={chat} />
         {running && !streaming && latest && (
           <ActivityLine label={chat.outside === undefined ? activityLabel(chat.activities, latest.turnId) : "Working from outside Unframed…"} since={latest.startedAt ?? latest.requestedAt} />
