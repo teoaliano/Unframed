@@ -187,7 +187,7 @@ export const installTuningWatch = (editor: Editor): (() => void) => {
     const id = tuning.get();
     if (id === undefined) return;
     const selected = editor.getSelectedShapeIds();
-    if (selected.length !== 1 || selected[0] !== id || !hasFile(editor, id)) tuning.set(undefined);
+    if (selected.length !== 1 || selected[0] !== id || !(hasFile(editor, id) || editor.getShape(id)?.type === "screen")) tuning.set(undefined);
   });
   return () => {
     stop();

@@ -7,6 +7,8 @@ import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { openCanvas } from "./canvas.ts";
 import { clickShape } from "./generation.ts";
 import { expect, startHostedEngine, test } from "./fixtures.ts";
+import { engineChat, engineChats, FIXTURES } from "./agent.ts";
+import { applyScreenParametersInstruction, NO_BRIDGE } from "@unframed/domain";
 
 const withRepository = async (page: Page, env: Record<string, string>, use: (engine: TestEngine, project: string, root: string) => Promise<void>, prepare?: (root: string) => Promise<void>) => {
   const root = await makeRepo("My App");
@@ -176,5 +178,53 @@ test("forking a Screen makes a new Instance on a named branch from its HEAD, wit
     const instances = (await rpc.call("instances.list", { project })).instances;
     expect(instances.find((instance) => instance.baseRef === "feature/login")?.branch).toMatch(/^unframed\//);
     await rpc.close();
+  });
+});
+
+const putShapes = async (engine: TestEngine, project: string, put: any[]) => {
+  const rpc = await engine.rpc();
+  try {
+    await rpc.call("testCanvas.apply", { project, change: { put, remove: [] }, origin: { kind: "server", id: "test" } });
+  } finally {
+    await rpc.close();
+  }
+};
+
+test("Screens of one Instance keep their own Parameters through the bridge, and Apply asks the agent to write them in that Instance's worktree", async ({ page }) => {
+  await withRepository(page, { UNFRAMED_TEST_AGENT_SCRIPT: FIXTURES }, async (engine, project) => {
+    const [first] = await screenShapes(engine, project);
+    await putShapes(engine, project, [
+      { ...first, props: { ...first.props, route: "/dials", dials: { accent: "#00ff00" } } },
+      { ...first, id: "shape:second", x: first.x, y: first.y + 900, props: { ...first.props, route: "/dials", dials: { accent: "#0000ff" } } },
+    ]);
+    const frames = page.locator("[data-testid=screen] iframe[data-screen-frame]");
+    await expect(frames).toHaveCount(2, { timeout: 30_000 });
+    await expect(page.frameLocator(`[data-shape-id="${first.id}"] iframe[data-screen-frame]`).locator("#title")).toHaveAttribute("data-accent", "#00ff00");
+    await expect(page.frameLocator('[data-shape-id="shape:second"] iframe[data-screen-frame]').locator("#title")).toHaveAttribute("data-accent", "#0000ff");
+
+    await clickShape(page, first.id);
+    await page.getByTestId("selection-toolbar").getByRole("button", { name: "Parameters" }).click();
+    const panel = page.getByTestId("artifact-parameters-panel");
+    await expect(panel.getByRole("textbox", { name: "Accent color value" })).toHaveValue("#00ff00");
+    await panel.getByRole("button", { name: "Apply" }).click();
+    await expect(panel.getByRole("button", { name: "Sent" })).toBeVisible({ timeout: 10_000 });
+    const rpc = await engine.rpc();
+    const instance = await rpc.call("instances.status", { project, id: first.props.instance });
+    await rpc.close();
+    const chats = await engineChats(engine, project);
+    expect(chats).toHaveLength(1);
+    expect((await engineChat(engine, chats[0]!.id, project)).messages.filter((message) => message.role === "user").map((message) => message.text)).toEqual([applyScreenParametersInstruction({ route: "/dials", branch: instance.branch, worktree: instance.worktree, name: "Look", values: { accent: "#00ff00" } })]);
+  });
+});
+
+test("a Screen whose page did not load the bridge says in one line why it has no Parameters", async ({ page }) => {
+  await withRepository(page, {}, async (engine, project) => {
+    const [first] = await screenShapes(engine, project);
+    await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/headless" } }]);
+    const screen = page.locator("[data-testid=screen]");
+    await expect(screen).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
+    await clickShape(page, first.id);
+    await page.getByTestId("selection-toolbar").getByRole("button", { name: "Parameters" }).click();
+    await expect(page.getByTestId("artifact-parameters-panel").getByTestId("parameters-note")).toHaveText(NO_BRIDGE);
   });
 });

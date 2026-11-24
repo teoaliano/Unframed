@@ -10,7 +10,7 @@ import { isDeviceClient } from "../../deviceMode.ts";
 import { useFeature } from "../../features.ts";
 import { noteRender } from "../../fps/renders.ts";
 import { screenOnScreen } from "../../repositories/demand.ts";
-import { repositoryState, screenSnapshotUrl } from "../../repositories/store.ts";
+import { noteBridge, repositoryState, screenSnapshotUrl } from "../../repositories/store.ts";
 import { artifactCardClass } from "./looks.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
 
@@ -170,7 +170,6 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
   const url = proxyPort === null ? undefined : screenUrl(proxyPort, props.route);
   const [painted, setPainted] = useState<string | undefined>(undefined);
   const shownPainted = live && painted === url;
-  const [, setBridge] = useState<boolean | undefined>(undefined);
   return (
     <HTMLContainer
       id={shape.id}
@@ -182,7 +181,7 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
       style={{ width: props.w, height: props.h }}
     >
       <ShapeLabel shapeId={shape.id} kind="screen" width={props.w} text={`${props.title} ${props.route}`.trim()} />
-      {live && url !== undefined && <LiveScreen key={url} shapeId={shape.id} url={url} dials={props.dials} interactive={interactive} onPainted={() => setPainted(url)} onBridge={setBridge} />}
+      {live && url !== undefined && <LiveScreen key={url} shapeId={shape.id} url={url} dials={props.dials} interactive={interactive} onPainted={() => setPainted(url)} onBridge={(bridge) => noteBridge(project, shape.id, bridge)} />}
       {!shownPainted &&
         (snapshot !== undefined ? (
           <img className="pointer-events-none absolute inset-0 block size-full object-cover select-none" data-testid="screen-snapshot" src={screenSnapshotUrl(project, snapshot)} alt="" draggable={false} />

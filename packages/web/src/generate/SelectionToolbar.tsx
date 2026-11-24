@@ -342,6 +342,7 @@ const Bar = ({ state, onGenerate, agent, nodes, style }: { state: Exclude<Toolba
         <div className={barClass}>
           <DragHandle />
           <ScreenActions shapeId={state.shapeId as TLShapeId} />
+          {ParametersToggle && <ParametersToggle shapeId={state.shapeId as TLShapeId} />}
           {agent}
         </div>
       );

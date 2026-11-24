@@ -31,6 +31,13 @@ interface ParametersProps {
   readonly onWrite?: (values: Readonly<Record<string, unknown>>) => void;
   readonly place: Place;
   readonly railVisible?: boolean;
+  readonly instructions?: ParameterInstructions | undefined;
+  readonly notice?: string | undefined;
+}
+
+export interface ParameterInstructions {
+  readonly add: (wanted: string) => string;
+  readonly apply: (name: string, values: Readonly<Record<string, unknown>>) => string;
 }
 
 const NO_PROVIDER = "Connect Claude or Codex first.";
@@ -246,7 +253,7 @@ const ApplyButton = ({ onApply, sending, busy }: { readonly onApply: () => Promi
   );
 };
 
-export const ParametersContent = ({ shapeId, kind, title, announcement, saved, post, onWrite, place, railVisible = true }: ParametersProps) => {
+export const ParametersContent = ({ shapeId, kind, title, announcement, saved, post, onWrite, place, railVisible = true, instructions, notice }: ParametersProps) => {
   const chat = useArtifactChat(shapeId, place, railVisible);
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -273,14 +280,15 @@ export const ParametersContent = ({ shapeId, kind, title, announcement, saved, p
     setComposing(!composing);
   };
   const addParameter = async (wanted: string) => {
-    const result = await chat.send("add", addParameterInstruction({ wanted, kind, title }), false);
+    const result = await chat.send("add", instructions ? instructions.add(wanted) : addParameterInstruction({ wanted, kind, title }), false);
     if (result.sent) fold(!result.openedRail);
     return result.sent;
   };
   const apply = async () => {
     if (!chrome || kind === "component") return false;
     const values = chrome.values();
-    return (await chat.send("apply", applyParametersInstruction({ name: announcement?.name || "Parameters", kind, title, values }), true)).sent;
+    const name = announcement?.name || "Parameters";
+    return (await chat.send("apply", instructions ? instructions.apply(name, values) : applyParametersInstruction({ name, kind, title, values }), true)).sent;
   };
 
   const composer = composing && (
@@ -302,8 +310,10 @@ export const ParametersContent = ({ shapeId, kind, title, announcement, saved, p
     return (
       <div className="flex flex-col gap-2 px-2.5 pt-2.5">
         <div className="flex items-center gap-2">
-          <p className="m-0 flex-1 text-sm text-(--artifact-editor-note)">No parameters yet.</p>
-          {toggler}
+          <p className="m-0 flex-1 text-sm text-(--artifact-editor-note)" data-testid="parameters-note">
+            {notice ?? "No parameters yet."}
+          </p>
+          {notice === undefined && toggler}
         </div>
         {composer}
       </div>

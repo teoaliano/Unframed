@@ -1,6 +1,6 @@
 import type { Instance } from "@unframed/contracts";
 import { describe, expect, it } from "vitest";
-import { forkBranchName, logTail, normaliseRoute, screenOverlay, screenSnapshotName, screenUrl, SCREEN_VIEWPORTS, setupTag } from "../src/index.ts";
+import { addScreenParameterInstruction, applyScreenParametersInstruction, forkBranchName, logTail, normaliseRoute, screenOverlay, screenSnapshotName, screenUrl, SCREEN_VIEWPORTS, setupTag } from "../src/index.ts";
 
 const instance = (state: Instance["state"], extra: Partial<Instance> = {}): Instance => ({
   id: "abc123",
@@ -79,5 +79,22 @@ describe("Screens", () => {
   it("name a Screen's snapshot after its shape, and nothing else", () => {
     expect(screenSnapshotName("shape:abc_D-1")).toBe("abc_D-1.png");
     expect(screenSnapshotName("shape:../x")).toBeUndefined();
+  });
+});
+
+describe("Screen parameter instructions", () => {
+  const screen = { route: "/settings", branch: "try/darker", worktree: "/data/worktrees/my-app/try-darker-ab12" };
+
+  it("ask to apply values in the Instance's worktree, guarded and uncommitted", () => {
+    const text = applyScreenParametersInstruction({ ...screen, name: "Look", values: { accent: "#ff0000", scene: { speed: 2 } } });
+    expect(text).toContain('Update the unframed.dials configuration for "Look" in the app shown at /settings on the branch "try/darker"');
+    expect(text).toContain('"scene.speed": 2');
+    expect(text).toContain("Work in the Instance's worktree at /data/worktrees/my-app/try-darker-ab12, and nowhere else.");
+    expect(text).toContain("leave the change uncommitted");
+  });
+
+  it("ask to add a parameter, or several", () => {
+    expect(addScreenParameterInstruction({ ...screen, wanted: " the accent colour " })).toMatch(/^Add the accent colour as a parameter in the app shown at \/settings/);
+    expect(addScreenParameterInstruction({ ...screen, wanted: "accent and radius" })).toMatch(/^Add accent and radius as parameters/);
   });
 });

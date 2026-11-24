@@ -1,6 +1,6 @@
 import { isArtifactScale } from "@unframed/contracts";
 import { projectSlug } from "../slug.ts";
-import { ADD_PARAMETER_TEMPLATE, APPLY_PARAMETERS_TEMPLATE } from "./prompts.ts";
+import { ADD_PARAMETER_TEMPLATE, ADD_SCREEN_PARAMETER_TEMPLATE, APPLY_PARAMETERS_TEMPLATE, APPLY_SCREEN_PARAMETERS_TEMPLATE } from "./prompts.ts";
 
 export type ArtifactKind = "page" | "motion" | "component";
 
@@ -138,6 +138,30 @@ export const applyParametersInstruction = (input: { readonly name: string; reado
     .replace("<kind>", input.kind)
     .replace("<title>", () => input.title)
     .replace("<values>", () => JSON.stringify(parameterPaths(input.values, "", {}), null, 2));
+
+export interface ScreenParametersContext {
+  readonly route: string;
+  readonly branch: string;
+  readonly worktree: string;
+}
+
+const fillScreen = (template: string, screen: ScreenParametersContext): string =>
+  template
+    .replace("<route>", () => screen.route)
+    .replace("<branch>", () => screen.branch)
+    .replace("<worktree>", () => screen.worktree);
+
+export const applyScreenParametersInstruction = (input: ScreenParametersContext & { readonly name: string; readonly values: Readonly<Record<string, unknown>> }): string =>
+  fillScreen(APPLY_SCREEN_PARAMETERS_TEMPLATE, input)
+    .replace("<name>", () => input.name)
+    .replace("<values>", () => JSON.stringify(parameterPaths(input.values, "", {}), null, 2));
+
+export const addScreenParameterInstruction = (input: ScreenParametersContext & { readonly wanted: string }): string => {
+  const wanted = input.wanted.trim();
+  return fillScreen(ADD_SCREEN_PARAMETER_TEMPLATE, input)
+    .replace("<wanted>", () => wanted)
+    .replace("<a parameter | parameters>", /,|\band\b/i.test(wanted) ? "parameters" : "a parameter");
+};
 
 export const compositionSize = (html: string): { w: number; h: number } => {
   const root = /<[a-z][^>]*\bdata-composition-id\s*=[^>]*>/i.exec(html)?.[0] ?? /<[a-z][^>]*\bid\s*=\s*["']?root\b[^>]*>/i.exec(html)?.[0];

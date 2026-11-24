@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import {
   ADD_PARAMETER_TEMPLATE,
   APPLY_PARAMETERS_TEMPLATE,
+  APPLY_SCREEN_PARAMETERS_TEMPLATE,
+  ADD_SCREEN_PARAMETER_TEMPLATE,
   ARTIFACT_PERFORMANCE,
   DIALS_CONTRACT,
   DIALS_TIMELINE,
@@ -49,6 +51,8 @@ describe("the artifact tools' model-facing text is the assets' text", () => {
     expect(ARTIFACT_PERFORMANCE).toBe(blocks("artifact-performance.md")[0]);
     expect(ADD_PARAMETER_TEMPLATE).toBe(blocks("add-parameter-instruction.md")[0]);
     expect(APPLY_PARAMETERS_TEMPLATE).toBe(blocks("apply-parameters-instruction.md")[0]);
+    expect(APPLY_SCREEN_PARAMETERS_TEMPLATE).toBe(blocks("screen-parameters-instructions.md")[0]);
+    expect(ADD_SCREEN_PARAMETER_TEMPLATE).toBe(blocks("screen-parameters-instructions.md")[1]);
   });
 
   it("holds the write arguments and the read tools", () => {
