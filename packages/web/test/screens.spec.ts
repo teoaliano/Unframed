@@ -1,11 +1,14 @@
+import { rename, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import type { Page } from "@playwright/test";
-import { makeRepo, repoEngineEnv } from "../../engine/test/gitRepos.ts";
+import { git, makeRepo, repoEngineEnv } from "../../engine/test/gitRepos.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { openCanvas } from "./canvas.ts";
 import { clickShape } from "./generation.ts";
 import { expect, startHostedEngine, test } from "./fixtures.ts";
 
-const withRepository = async (page: Page, env: Record<string, string>, use: (engine: TestEngine, project: string) => Promise<void>, prepare?: (root: string) => Promise<void>) => {
+const withRepository = async (page: Page, env: Record<string, string>, use: (engine: TestEngine, project: string, root: string) => Promise<void>, prepare?: (root: string) => Promise<void>) => {
   const root = await makeRepo("My App");
   await prepare?.(root);
   const engine = await startHostedEngine({ env: await repoEngineEnv({ UNFRAMED_TEST_PICK_FOLDER: root, ...env }) });
@@ -14,7 +17,7 @@ const withRepository = async (page: Page, env: Record<string, string>, use: (eng
     await page.getByRole("button", { name: "All projects" }).click();
     await page.getByRole("menuitem", { name: "Add Repository…" }).click();
     await expect(page.locator("[data-canvas-project='my-app'] .tl-canvas")).toBeVisible();
-    await use(engine, "my-app");
+    await use(engine, "my-app", root);
   } finally {
     await engine.dispose();
   }
@@ -56,5 +59,90 @@ test("a new Repository's first Screen goes live through the proxy at /, keeps it
     await expect(screen.locator("iframe")).toHaveCount(0);
     await expect(screen.locator("[data-testid=screen-snapshot]")).toHaveCount(1);
     expect((await screenShapes(engine, project))[0].props).toMatchObject({ route: "/", w: 1280, h: 800 });
+  });
+});
+
+const saveSetup = (engine: TestEngine, project: string, setup: Record<string, unknown>) => {
+  const db = new DatabaseSync(join(engine.dataDir, "output", project, "unframed.sqlite"));
+  try {
+    const full = { setupCommand: "", runCommand: "npm run dev", packageManager: "npm", portMode: { mode: "free" }, files: [], mocks: [], warnings: [], ...setup };
+    db.prepare("UPDATE repository SET setup = ? WHERE id = 1").run(JSON.stringify(full));
+  } finally {
+    db.close();
+  }
+};
+
+const firstScreenId = async (engine: TestEngine, project: string) => (await screenShapes(engine, project))[0].id as string;
+
+test("a Screen shows Setup's progress while its Instance installs, then the app", async ({ page }) => {
+  const slowInstall = async (root: string) => {
+    await writeFile(join(root, "install.js"), 'setTimeout(() => require("node:fs").writeFileSync("installed.txt", "yes\\n"), 4000);\n');
+    git(root, "commit", "-qam", "slow install");
+  };
+  await withRepository(
+    page,
+    {},
+    async () => {
+      const screen = page.locator("[data-testid=screen]");
+      await expect(screen.locator("[data-testid=screen-overlay]")).toHaveText("Installing dependencies…");
+      await expect(screen.locator("[data-testid=screen-overlay]")).toHaveCount(0, { timeout: 30_000 });
+      await expect(screen).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
+    },
+    slowInstall,
+  );
+});
+
+test("a Screen whose server fails shows the failure with the log's last lines", async ({ page }) => {
+  await withRepository(page, { FAKE_DEV_EXIT_CODE: "1" }, async () => {
+    const overlay = page.locator("[data-testid=screen] [data-testid=screen-overlay]");
+    await expect(overlay).toHaveAttribute("data-overlay", "failed", { timeout: 30_000 });
+    await expect(overlay).toContainText("The dev server exited with code 1");
+    await expect(overlay.locator("[data-testid=screen-log]")).toContainText("fake dev server: giving up");
+  });
+});
+
+test("a Screen tags mocks and lists warnings from Setup, and says when its Instance is removed or its Repository is gone", async ({ page }) => {
+  await withRepository(page, {}, async (engine, project, root) => {
+    const screen = page.locator("[data-testid=screen]");
+    saveSetup(engine, project, { mocks: ["mock user", "fixtures"], warnings: ["Payments are stubbed."] });
+    await page.reload();
+    await expect(screen.locator("[data-testid=screen-mock-tag]")).toHaveText("mock user · fixtures");
+    await expect(screen.locator("[data-testid=screen-warning]")).toHaveText(["Payments are stubbed."]);
+
+    const rpc = await engine.rpc();
+    const shape = (await screenShapes(engine, project))[0];
+    await rpc.call("instances.remove", { project, id: shape.props.instance, force: true });
+    await rpc.close();
+    await expect(screen.locator("[data-testid=screen-overlay]")).toHaveText("Instance removed");
+    await expect(screen.locator("iframe")).toHaveCount(0);
+
+    await rename(root, `${root}-moved`);
+    await page.reload();
+    await expect(screen.locator("[data-testid=screen-overlay]")).toHaveText("Repository not found");
+  });
+});
+
+test("a selected Screen opens in the browser, changes route and changes viewport", async ({ page }) => {
+  await withRepository(page, {}, async (engine, project) => {
+    const screen = page.locator("[data-testid=screen]");
+    await expect(screen).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
+    await clickShape(page, await firstScreenId(engine, project));
+
+    const popup = page.waitForEvent("popup");
+    await page.getByRole("button", { name: "Open in browser" }).click();
+    expect((await popup).url()).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/$/);
+
+    await page.getByTestId("screen-route").click();
+    await page.getByRole("textbox", { name: "Route" }).fill("https://example.com/");
+    await page.getByRole("button", { name: "Show route" }).click();
+    await expect(page.getByText("A route starts with / and has no spaces, like /settings?tab=2.")).toBeVisible();
+    await page.getByRole("textbox", { name: "Route" }).fill("settings?tab=2");
+    await page.getByRole("button", { name: "Show route" }).click();
+    await expect(screen).toHaveAttribute("data-route", "/settings?tab=2");
+    await expect(page.frameLocator("[data-testid=screen] iframe[data-screen-frame]").locator("#path")).toHaveText("/settings");
+
+    await page.getByTestId("screen-viewport").click();
+    await page.getByRole("menuitemradio", { name: /Phone/ }).click();
+    await expect.poll(async () => (await screenShapes(engine, project))[0].props).toMatchObject({ route: "/settings?tab=2", w: 390, h: 844 });
   });
 });
