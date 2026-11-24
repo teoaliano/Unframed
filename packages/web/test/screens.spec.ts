@@ -328,6 +328,43 @@ test("Setup's login request shows in its chat until the person says they are log
   });
 });
 
+test("a Screen with no run command yet shows Setup waiting for an answer, then that Setup has not found one, instead of a failure", async ({ page }) => {
+  const scripts = await scriptFolder({
+    setup: {
+      when: "^Set up this Repository",
+      turns: [
+        {
+          question: { questions: [{ id: "run", header: "Run", question: "Which folder holds the app?", options: [{ label: "web", description: "" }, { label: "app", description: "" }], multiSelect: false }] },
+          text: "I could not find a dev server there either.",
+        },
+      ],
+    },
+  });
+  const noRunScript = async (root: string) => {
+    await writeFile(join(root, "package.json"), '{ "name": "fake-app", "private": true }\n');
+    git(root, "commit", "-qam", "no dev script");
+  };
+  await withRepository(
+    page,
+    { UNFRAMED_TEST_AGENT_SCRIPT: scripts },
+    async () => {
+      const overlay = page.locator("[data-testid=screen] [data-testid=screen-overlay]");
+      await expect(overlay).toHaveAttribute("data-overlay", "waiting", { timeout: 30_000 });
+      await expect(overlay).toContainText("Setup needs your answer");
+      await expect(overlay.getByTestId("screen-overlay-detail")).toHaveText("Reply in the Setup chat to keep it going.");
+
+      const panel = await openRail(page);
+      await tabs(page).filter({ hasText: "Setup" }).click();
+      await panel.getByTestId("question-panel").getByRole("radio", { name: /web/ }).click();
+      await panel.getByRole("button", { name: "Submit answer" }).click();
+      await expect(panel.getByText("I could not find a dev server there either.")).toBeVisible({ timeout: 30_000 });
+      await expect(overlay).toContainText("Setup has not found how to run this repository yet");
+      await expect(overlay.getByTestId("screen-overlay-detail")).toHaveText("Open the Setup chat to keep it going.");
+    },
+    noRunScript,
+  );
+});
+
 test("a selected Screen explodes into a Flow of typed routes, or asks the agent for its routes", async ({ page }) => {
   await withRepository(page, { UNFRAMED_TEST_AGENT_SCRIPT: FIXTURES }, async (engine, project) => {
     const [first] = await screenShapes(engine, project);

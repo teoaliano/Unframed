@@ -1,6 +1,6 @@
 import type { Instance } from "@unframed/contracts";
 import { describe, expect, it } from "vitest";
-import { addScreenParameterInstruction, applyScreenParametersInstruction, forkBranchName, logTail, normaliseRoute, screenOverlay, screenSnapshotName, screenUrl, SCREEN_VIEWPORTS, setupTag } from "../src/index.ts";
+import { NO_RUN_COMMAND, addScreenParameterInstruction, applyScreenParametersInstruction, forkBranchName, logTail, normaliseRoute, screenOverlay, screenSnapshotName, screenUrl, SCREEN_VIEWPORTS, setupTag } from "../src/index.ts";
 
 const instance = (state: Instance["state"], extra: Partial<Instance> = {}): Instance => ({
   id: "abc123",
@@ -56,6 +56,29 @@ describe("Screens", () => {
     expect(screenOverlay({ instance: instance("live"), loaded: true, repository: "missing" })).toEqual({ kind: "missing", label: "Repository not found" });
     expect(screenOverlay({ instance: instance("live"), loaded: true, repository: "ready" })).toEqual({ kind: "none" });
     expect(screenOverlay({ instance: instance("stopped"), loaded: true, repository: "ready" })).toEqual({ kind: "none" });
+  });
+
+  it("show Setup at work instead of a failure while it finds the run command", () => {
+    const noRun = instance("failed", { error: NO_RUN_COMMAND });
+    expect(screenOverlay({ instance: noRun, loaded: true, repository: "setting-up", setupChat: "running" })).toEqual({
+      kind: "progress",
+      label: "Setup is finding how to run this repository…",
+      detail: "Follow along in the Setup chat.",
+    });
+    expect(screenOverlay({ instance: instance("stopped"), loaded: true, repository: "setting-up", setupChat: "running" })).toMatchObject({ kind: "progress" });
+    expect(screenOverlay({ instance: noRun, loaded: true, repository: "setting-up", setupChat: "asking" })).toEqual({
+      kind: "waiting",
+      label: "Setup needs your answer",
+      detail: "Reply in the Setup chat to keep it going.",
+    });
+    expect(screenOverlay({ instance: noRun, loaded: true, repository: "setting-up", setupChat: "idle" })).toEqual({
+      kind: "waiting",
+      label: "Setup has not found how to run this repository yet",
+      detail: "Open the Setup chat to keep it going.",
+    });
+    expect(screenOverlay({ instance: noRun, loaded: true, repository: "setting-up" })).toMatchObject({ kind: "waiting" });
+    expect(screenOverlay({ instance: instance("stopped"), loaded: true, repository: "ready", setupChat: "running" })).toEqual({ kind: "none" });
+    expect(screenOverlay({ instance: instance("failed", { error: "The dev server exited with code 1." }), loaded: true, repository: "ready", setupChat: "running" })).toMatchObject({ kind: "failed" });
   });
 
   it("keep the last lines of a log", () => {
