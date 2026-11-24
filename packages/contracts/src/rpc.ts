@@ -33,6 +33,7 @@ import { SelectionApply, SelectionReport, SelectionSnapshotResult, SelectionSubs
 import { IpadDevicesAnswer, IpadExportProfileAnswer, IpadPairStartAnswer, IpadRevoke, IpadSetAvailability, IpadStatus } from "./ipad.ts";
 import { ArtifactEdit, ArtifactImages, ArtifactPrepareEdit, ArtifactSourceTree } from "./elementEdits.ts";
 import {
+  InstancesBranches,
   InstancesCreate,
   InstancesDemand,
   InstancesList,
@@ -44,6 +45,8 @@ import {
   ProjectKind,
   RepositoriesAdd,
   RepositoriesPickFolder,
+  RepositoriesRead,
+  ScreensSnapshots,
 } from "./repositories.ts";
 
 const Empty = Schema.Struct({});
@@ -357,6 +360,9 @@ export const UnframedRpcs = RpcGroup.make(
   InstancesStop,
   InstancesDemand,
   InstancesSubscribe,
+  InstancesBranches,
+  RepositoriesRead,
+  ScreensSnapshots,
   SettingsRemoveKey,
   OAuthStart,
   OAuthPending,

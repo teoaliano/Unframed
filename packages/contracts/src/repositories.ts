@@ -109,3 +109,25 @@ export const InstancesSubscribe = Rpc.make("instances.subscribe", {
   error: UnframedError,
   stream: true,
 });
+
+export const RepositoriesRead = Rpc.make("repositories.read", {
+  payload: Schema.Struct({ project: Schema.String }),
+  success: Schema.Struct({ repository: Schema.NullOr(Repository) }),
+  error: UnframedError,
+});
+
+export const InstancesBranches = Rpc.make("instances.branches", {
+  payload: Schema.Struct({ project: Schema.String }),
+  success: Schema.Struct({ branches: Schema.Array(Schema.String), current: Schema.String }),
+  error: UnframedError,
+});
+
+export const ScreenSnapshot = Schema.Struct({ shape: Schema.String, w: Schema.Number, h: Schema.Number, at: Schema.Number });
+export type ScreenSnapshot = typeof ScreenSnapshot.Type;
+
+export const ScreensSnapshots = Rpc.make("screens.snapshots", {
+  payload: Schema.Struct({ project: Schema.String }),
+  success: ScreenSnapshot,
+  error: UnframedError,
+  stream: true,
+});

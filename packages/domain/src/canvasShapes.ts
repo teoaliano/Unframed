@@ -1,6 +1,6 @@
 import type { Box } from "./grouping.ts";
 
-export type ShapeKind = "prompt" | "image" | "video" | "audio" | "group" | "page" | "motion" | "component" | "node" | "wire" | "mark";
+export type ShapeKind = "prompt" | "image" | "video" | "audio" | "group" | "page" | "motion" | "component" | "node" | "wire" | "screen" | "mark";
 
 export interface Crop {
   readonly topLeft: { readonly x: number; readonly y: number };

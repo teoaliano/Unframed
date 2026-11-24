@@ -178,6 +178,7 @@ export const composeSelection = (input: CompositionInput): Composition => {
       case "component":
       case "audio":
       case "node":
+      case "screen":
         roles[shape.id] = UNUSED_ROLE;
         break;
       case "wire":

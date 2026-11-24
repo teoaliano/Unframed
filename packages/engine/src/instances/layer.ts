@@ -89,7 +89,10 @@ export class Instances extends Context.Service<
     readonly status: (project: string, id: string) => Effect.Effect<Instance, UnframedError>;
     readonly start: (project: string, id: string) => Effect.Effect<Instance, UnframedError>;
     readonly stop: (project: string, id: string) => Effect.Effect<Instance, UnframedError>;
-    readonly demand: (project: string, client: string, ids: ReadonlyArray<string>) => Effect.Effect<ReadonlyArray<Instance>, UnframedError>;
+    readonly demand: (project: string, client: string, ids: ReadonlyArray<string>, connection?: string) => Effect.Effect<ReadonlyArray<Instance>, UnframedError>;
+    readonly release: (connection: string) => Effect.Effect<void>;
+    readonly branches: (project: string) => Effect.Effect<{ readonly branches: ReadonlyArray<string>; readonly current: string }, UnframedError>;
+    readonly everyChange: Stream.Stream<Instance>;
     readonly changes: (project: string) => Stream.Stream<Instance, UnframedError>;
   }
 >()("unframed/engine/Instances") {}
@@ -652,34 +655,58 @@ export const instancesLayer = Layer.effect(
 
     const kick = () => void schedule(reconcile);
 
-    const demand = (project: string, client: string, ids: ReadonlyArray<string>) =>
+    const clientKey = (connection: string | undefined, client: string) => (connection === undefined ? client : `${connection}\n${client}`);
+
+    const setDemand = (slug: string, key: string, ids: ReadonlyArray<string>) => {
+      const before = demandedIn(slug);
+      const clients = demands.get(slug) ?? new Map<string, ReadonlySet<string>>();
+      const wanted = [...new Set(ids)].filter((id) => lives.has(keyOf(slug, id)));
+      if (wanted.length === 0) clients.delete(key);
+      else clients.set(key, new Set(wanted));
+      if (clients.size === 0) demands.delete(slug);
+      else demands.set(slug, clients);
+      return { before, wanted };
+    };
+
+    const settleDemand = (slug: string, before: ReadonlySet<string>, wanted: ReadonlyArray<string>) => {
+      const after = demandedIn(slug);
+      const now = Date.now();
+      for (const id of before) {
+        if (after.has(id)) continue;
+        const live = lives.get(keyOf(slug, id))!;
+        live.demandOrder = ++demandCounter;
+        live.lastDemandedAt = now;
+      }
+      for (const id of [...wanted].reverse()) {
+        if (before.has(id)) continue;
+        const live = lives.get(keyOf(slug, id))!;
+        live.demandOrder = ++demandCounter;
+        live.suppressed = false;
+        live.retry = true;
+      }
+      for (const id of after) lives.get(keyOf(slug, id))!.lastDemandedAt = now;
+      kick();
+      return after;
+    };
+
+    const demand = (project: string, client: string, ids: ReadonlyArray<string>, connection?: string) =>
       Effect.gen(function* () {
         const { slug } = yield* repositoryOf(project);
-        const before = demandedIn(slug);
-        const clients = demands.get(slug) ?? new Map<string, ReadonlySet<string>>();
-        const wanted = [...new Set(ids)].filter((id) => lives.has(keyOf(slug, id)));
-        if (wanted.length === 0) clients.delete(client);
-        else clients.set(client, new Set(wanted));
-        if (clients.size === 0) demands.delete(slug);
-        else demands.set(slug, clients);
-        const after = demandedIn(slug);
-        const now = Date.now();
-        for (const id of before) {
-          if (after.has(id)) continue;
-          const live = lives.get(keyOf(slug, id))!;
-          live.demandOrder = ++demandCounter;
-          live.lastDemandedAt = now;
-        }
-        for (const id of [...wanted].reverse()) {
-          if (before.has(id)) continue;
-          const live = lives.get(keyOf(slug, id))!;
-          live.demandOrder = ++demandCounter;
-          live.suppressed = false;
-          live.retry = true;
-        }
-        for (const id of after) lives.get(keyOf(slug, id))!.lastDemandedAt = now;
-        kick();
+        const { before, wanted } = setDemand(slug, clientKey(connection, client), ids);
+        const after = settleDemand(slug, before, wanted);
         return [...after].map((id) => view(lives.get(keyOf(slug, id))!));
+      });
+
+    const release = (connection: string) =>
+      Effect.sync(() => {
+        for (const [slug, clients] of [...demands]) {
+          const keys = [...clients.keys()].filter((key) => key.startsWith(`${connection}\n`));
+          if (keys.length === 0) continue;
+          const before = demandedIn(slug);
+          for (const key of keys) clients.delete(key);
+          if (clients.size === 0) demands.delete(slug);
+          settleDemand(slug, before, []);
+        }
       });
 
     const ticker = setInterval(() => {
@@ -717,6 +744,17 @@ export const instancesLayer = Layer.effect(
       }),
     );
 
-    return Instances.of({ create, remove, list, status, start, stop, demand, changes });
+    const branches = (project: string) =>
+      Effect.gen(function* () {
+        const { repository } = yield* repositoryOf(project);
+        if (!existsSync(repository.root)) return yield* unframedError("not_found", REPOSITORY_NOT_FOUND);
+        const listed = gitOutput(yield* git(repository.root, ["for-each-ref", "--sort=-committerdate", "--format=%(refname:short)", "refs/heads"])) ?? "";
+        const current = gitOutput(yield* git(repository.root, ["symbolic-ref", "--quiet", "--short", "HEAD"]))?.trim() || repository.baseBranch;
+        return { branches: listed.split("\n").map((line) => line.trim()).filter((line) => line !== ""), current };
+      });
+
+    const everyChange = Stream.unwrap(Effect.map(PubSub.subscribe(events), (subscription) => Stream.fromSubscription(subscription)));
+
+    return Instances.of({ create, remove, list, status, start, stop, demand, release, branches, everyChange, changes });
   }),
 );

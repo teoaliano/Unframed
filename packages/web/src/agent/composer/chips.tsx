@@ -1,6 +1,6 @@
 import type { ElementChip } from "@unframed/contracts";
 import { shapeKind, shapeLabel, type ShapeKind } from "@unframed/domain";
-import { AlignLeft, AppWindow, AudioLines, Cable, Clapperboard, Component, Group, Image, PenLine, SquareMousePointer, SquarePlay, Workflow, X, type LucideIcon } from "lucide-react";
+import { AlignLeft, AppWindow, AudioLines, Cable, Clapperboard, Component, Group, Image, Monitor, PenLine, SquareMousePointer, SquarePlay, Workflow, X, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useValue, type TLShapeId } from "tldraw";
 import type { CanvasReader } from "../../canvas/reader.ts";
@@ -18,6 +18,7 @@ export const KIND_ICONS: Record<ShapeKind, LucideIcon> = {
   component: Component,
   node: Workflow,
   wire: Cable,
+  screen: Monitor,
   mark: PenLine,
 };
 
@@ -32,6 +33,7 @@ const KIND_NOUNS: Record<ShapeKind, string> = {
   component: "component",
   node: "node",
   wire: "wire",
+  screen: "screen",
   mark: "mark",
 };
 

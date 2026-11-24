@@ -133,6 +133,19 @@ describe("driving Instances from canvas demand", () => {
     expect(stopped.log).toContain("Unframed stopped this Instance after it sat unused with no file changes.");
   });
 
+  it("drops a window's demand when its connection closes, so its Instances go idle", async () => {
+    const { engine, rpc, project, a } = await twoInstances({ UNFRAMED_TEST_INSTANCE_IDLE_MS: "1500", UNFRAMED_TEST_INSTANCE_SAMPLE_MS: "200" });
+    const window = await engine.rpc();
+    await window.call("instances.demand", { project, client: "window-2", ids: [a] });
+    await becomes(rpc, project, a, "live");
+    await pause(2500);
+    expect((await stateOf(rpc, project, a)).state).toBe("live");
+
+    await window.close();
+    const stopped = await becomes(rpc, project, a, "stopped");
+    expect(stopped.log).toContain("Unframed stopped this Instance after it sat unused with no file changes.");
+  });
+
   it("keeps one Instance live on the fixed port of a single-port Repository", async () => {
     const fixed = await freePort();
     const { rpc, project, a, b } = await twoInstances({}, async (engine, slug) => setSinglePort(engine, slug, fixed));

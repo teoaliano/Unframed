@@ -28,6 +28,8 @@ import { RenderJobs } from "../video/renderJobs.ts";
 import { PreferencesStore } from "../preferencesStore.ts";
 import { Projects } from "../projects.ts";
 import { Instances } from "../instances/layer.ts";
+import { RpcSockets } from "./sockets.ts";
+import { screenRecord } from "../screens/firstScreen.ts";
 import { Repositories } from "../repositories/layer.ts";
 import { filePath, revealFiles } from "../reveal.ts";
 import { Config } from "../services.ts";
@@ -58,6 +60,8 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const projects = yield* Projects;
     const repositories = yield* Repositories;
     const instances = yield* Instances;
+    const sockets = yield* RpcSockets;
+    sockets.onDisconnect((clientId) => Effect.runFork(instances.release(String(clientId))));
     const native = yield* Native;
     const preferences = yield* PreferencesStore;
     const rooms = yield* CanvasRooms;
@@ -146,7 +150,17 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
         Effect.map(Effect.flatMap(settings.outputDir, native.pickFolder), (path) => ({ path })),
       "projects.list": () => Effect.flatMap(projects.list, (list) => Effect.map(repositories.kinds(list), (kinds) => ({ projects: [...list], kinds }))),
       "repositories.pickFolder": () => featureOn("repositories", () => Effect.map(native.pickFolder(homedir(), REPOSITORY_FOLDER_PROMPT), (path) => ({ path }))),
-      "repositories.add": ({ path, name }) => featureOn("repositories", () => repositories.add(path, name)),
+      "repositories.add": ({ path, name }) =>
+        featureOn("repositories", () =>
+          Effect.tap(repositories.add(path, name), (added) =>
+            Effect.flatMap(rooms.read(added.name), (records) =>
+              rooms.apply(added.name, { put: [screenRecord(records, added.instance, { x: 0, y: 0 })], remove: [] }, { kind: "server", id: "repositories.add" }),
+            ),
+          ),
+        ),
+      "repositories.read": ({ project }) => featureOn("repositories", () => Effect.map(repositories.read(project), (repository) => ({ repository: repository ?? null }))),
+      "instances.branches": ({ project }) => featureOn("repositories", () => instances.branches(project)),
+      "screens.snapshots": ({ project }) => artifacts.screenSnapshots(project),
       "instances.create": ({ project, base, branch }) =>
         featureOn("repositories", () => instances.create(project, { ...(base === undefined ? {} : { base }), ...(branch === undefined ? {} : { branch }) })),
       "instances.remove": ({ project, id, force, deleteBranch }) =>
@@ -157,7 +171,8 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "instances.status": ({ project, id }) => featureOn("repositories", () => instances.status(project, id)),
       "instances.start": ({ project, id }) => featureOn("repositories", () => instances.start(project, id)),
       "instances.stop": ({ project, id }) => featureOn("repositories", () => instances.stop(project, id)),
-      "instances.demand": ({ project, client, ids }) => featureOn("repositories", () => Effect.map(instances.demand(project, client, ids), (list) => ({ instances: [...list] }))),
+      "instances.demand": ({ project, client, ids }, { client: connection }) =>
+        featureOn("repositories", () => Effect.map(instances.demand(project, client, ids, String(connection.id)), (list) => ({ instances: [...list] }))),
       "instances.subscribe": ({ project }) =>
         config.features.has("repositories") ? instances.changes(project) : Stream.fail(unframedError("unavailable", FEATURE_OFF_MESSAGES.repositories)),
       "projects.activity": () =>

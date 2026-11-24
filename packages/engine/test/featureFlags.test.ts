@@ -72,6 +72,8 @@ describe("UNFRAMED_FEATURES", () => {
     await expect(rpc.call("instances.start", instance)).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("instances.stop", instance)).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("instances.demand", { project: "app", client: "window-1", ids: [instance.id] })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("instances.branches", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("repositories.read", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
     const states = rpc.subscribe("instances.subscribe", { project: "app" });
     await expect(states.next()).rejects.toMatchObject(REPOSITORIES_OFF);
     expect(await engine.nativeLog()).toEqual([]);

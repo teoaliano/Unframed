@@ -142,6 +142,34 @@ const componentTag = T.string.check((tag) => {
   }
 });
 
+export interface ScreenShapeProps {
+  w: number;
+  h: number;
+  instance: string;
+  route: string;
+  title: string;
+  dials?: Record<string, unknown>;
+  mode?: string;
+}
+
+export const SCREEN_ROUTE_MAX = 2048;
+
+const screenRoute = T.string.check((route) => {
+  if (!route.startsWith("/") || route.startsWith("//") || route.length > SCREEN_ROUTE_MAX || /[\s\\]/.test(route)) {
+    throw new T.ValidationError(`Expected a route starting with one slash, got ${JSON.stringify(route)}`);
+  }
+});
+
+const screenProps = {
+  w: T.nonZeroNumber,
+  h: T.nonZeroNumber,
+  instance: T.string,
+  route: screenRoute,
+  title: T.string,
+  dials: T.dict(T.string, T.jsonValue).optional(),
+  mode: T.string.optional(),
+};
+
 export interface AudioShapeProps {
   w: number;
   h: number;
@@ -278,10 +306,11 @@ declare module "@tldraw/tlschema" {
     page: ArtifactShapeProps;
     motion: ArtifactShapeProps;
     component: ComponentShapeProps;
+    screen: ScreenShapeProps;
   }
 }
 
-type UnframedKind = "prompt" | "image" | "video" | "audio" | "group" | "page" | "motion" | "component" | "node" | "wire";
+type UnframedKind = "prompt" | "image" | "video" | "audio" | "group" | "page" | "motion" | "component" | "node" | "wire" | "screen";
 
 export const kindOfShapeType = (type: string): UnframedKind | "mark" => {
   switch (type) {
@@ -295,6 +324,7 @@ export const kindOfShapeType = (type: string): UnframedKind | "mark" => {
     case "component":
     case "node":
     case "wire":
+    case "screen":
       return type;
     case "frame":
       return "group";
@@ -337,6 +367,7 @@ const buildSchema = (refusalOf?: (kit: Kit) => string | null): TLSchema => {
       audio: { props: audioProps, meta: refMeta, migrations: audioMigrations() },
       node: { props: nodeProps, meta: refMeta, migrations: firstMigration("node") },
       wire: { props: wireProps, meta: unframedMeta, migrations: firstMigration("wire") },
+      screen: { props: screenProps, meta: unframedMeta, migrations: firstMigration("screen") },
       page: { props: artifactProps, meta: refMeta, migrations: artifactMigrations("page") },
       motion: { props: artifactProps, meta: refMeta, migrations: artifactMigrations("motion") },
       component: {

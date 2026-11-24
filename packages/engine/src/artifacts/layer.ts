@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { TLRecord } from "@tldraw/tlschema";
-import type { ArtifactFileChange, ArtifactImage, ArtifactSnapshot, ComponentPins as ComponentPinsItem, ComponentUpdate, MotionTimelineReading, OffTokenFound, RenderStatus, SourceEdit, SourceTreeElement } from "@unframed/contracts";
+import type { ArtifactFileChange, ArtifactImage, ArtifactSnapshot, ScreenSnapshot, ComponentPins as ComponentPinsItem, ComponentUpdate, MotionTimelineReading, OffTokenFound, RenderStatus, SourceEdit, SourceTreeElement } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
 import { projectSlug, shapeKind } from "@unframed/domain";
 import { motionTimeline } from "@unframed/domain/motion";
@@ -34,6 +34,8 @@ import { componentUpdatesOf } from "./componentUpdates.ts";
 import { watchFolder } from "./folderWatch.ts";
 import { chromeSnapshotRenderer, Snapshots, stubSnapshotRenderer, type SnapshotRenderer } from "./snapshots.ts";
 import { SettingsStore } from "../settingsStore.ts";
+import { Instances } from "../instances/layer.ts";
+import { chromeScreenRenderer, ScreenSnapshots, stubScreenRenderer, type ScreenRenderer } from "../screens/screenSnapshots.ts";
 import { Shutdown } from "../shutdown.ts";
 
 const UPLOAD_LIMIT = 20 * 1_048_576;
@@ -54,6 +56,7 @@ export class Artifacts extends Context.Service<
     }) => Effect.Effect<{ id: string; status: "queued"; placeholder: string }, UnframedError>;
     readonly renderStatus: (project: string, id: string) => Effect.Effect<RenderStatus, UnframedError>;
     readonly snapshots: (project: string) => Stream.Stream<ArtifactSnapshot, UnframedError>;
+    readonly screenSnapshots: (project: string) => Stream.Stream<ScreenSnapshot, UnframedError>;
     readonly fileChanges: (project: string) => Stream.Stream<ArtifactFileChange, UnframedError>;
     readonly timeline: (project: string, file: string) => Effect.Effect<MotionTimelineReading, UnframedError>;
     readonly componentPins: (project: string) => Stream.Stream<ComponentPinsItem, UnframedError>;
@@ -103,6 +106,23 @@ export const artifactsLayer = Layer.effect(
       previewPort: (yield* settings.view).previewPort,
       publish: (project, snapshot) => void run(PubSub.publish(written, { project, snapshot })),
     });
+    const instances = yield* Instances;
+    const screenRenderer: ScreenRenderer | undefined =
+      config.testRenderer === "ok" ? stubScreenRenderer : config.testRenderer === "fail" || config.testRenderer === "no-chrome" ? undefined : chromeScreenRenderer(headless);
+    const screensWritten = yield* PubSub.unbounded<{ readonly project: string; readonly snapshot: ScreenSnapshot }>();
+    const screens = new ScreenSnapshots({
+      renderer: screenRenderer,
+      folder: (project) => media.folder(project),
+      read: (project) => run(rooms.read(project)),
+      instance: (project, id) => run(Effect.orElseSucceed(instances.status(project, id), () => undefined)),
+      publish: (project, snapshot) => void run(PubSub.publish(screensWritten, { project, snapshot })),
+    });
+    Effect.runForkWith(context)(Stream.runForEach(instances.everyChange, (instance) => Effect.sync(() => screens.instanceChanged(instance))));
+    yield* rooms.afterOpen((project, room) => {
+      screens.opened(project, room.read());
+      void run(openProjects.register(project, "screen snapshots", Effect.sync(() => screens.forget(project))));
+    });
+    yield* rooms.afterCommit((project, change) => screens.committed(project, [...change.records.values()]));
     const fileChanges = yield* PubSub.unbounded<{ readonly project: string; readonly change: ArtifactFileChange }>();
     let lastStamp = 0;
     const nextStamp = () => (lastStamp = Math.max(lastStamp + 1, Date.now()));
@@ -270,6 +290,19 @@ export const artifactsLayer = Layer.effect(
             const slug = projectSlug(project);
             return Stream.concat(
               Stream.unwrap(Effect.map(Effect.promise(() => snapshots.list(slug)), (known) => Stream.fromIterable(known))),
+              Stream.fromSubscription(subscription).pipe(
+                Stream.filter((item) => item.project === slug),
+                Stream.map((item) => item.snapshot),
+              ),
+            );
+          }),
+        ),
+      screenSnapshots: (project) =>
+        Stream.unwrap(
+          Effect.map(PubSub.subscribe(screensWritten), (subscription) => {
+            const slug = projectSlug(project);
+            return Stream.concat(
+              Stream.unwrap(Effect.map(Effect.promise(() => screens.list(slug)), (known) => Stream.fromIterable(known))),
               Stream.fromSubscription(subscription).pipe(
                 Stream.filter((item) => item.project === slug),
                 Stream.map((item) => item.snapshot),
