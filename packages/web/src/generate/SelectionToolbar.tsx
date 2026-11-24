@@ -311,6 +311,7 @@ const RecipeBar = ({ state, agent, style }: { state: Extract<ToolbarState, { kin
 const Bar = ({ state, onGenerate, agent, nodes, style }: { state: Exclude<ToolbarState, { kind: "none" }>; onGenerate: () => void; agent: ReactNode; nodes: number; style: ReactNode }) => {
   const editor = useEditor();
   const { openArtifact, renderButton: Render, parametersButton: ParametersToggle, kitModeButton: KitModeToggle, scaleButton: Scale } = useSlots();
+  const repositoriesOn = useFeature("repositories");
   switch (state.kind) {
     case "recipe":
       return <RecipeBar state={state} agent={agent} style={style} />;
@@ -341,8 +342,8 @@ const Bar = ({ state, onGenerate, agent, nodes, style }: { state: Exclude<Toolba
       return (
         <div className={barClass}>
           <DragHandle />
-          <ScreenActions shapeId={state.shapeId as TLShapeId} />
-          {ParametersToggle && <ParametersToggle shapeId={state.shapeId as TLShapeId} />}
+          {repositoriesOn && <ScreenActions shapeId={state.shapeId as TLShapeId} />}
+          {repositoriesOn && ParametersToggle && <ParametersToggle shapeId={state.shapeId as TLShapeId} />}
           {agent}
         </div>
       );

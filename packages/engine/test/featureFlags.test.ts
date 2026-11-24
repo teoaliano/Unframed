@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { startAgentEngine, UNFRAMED_TOOLS } from "./agent.ts";
 import { scriptedSession } from "./agentCanvas.ts";
-import { startEngine } from "./engineProcess.ts";
+import { existsSync } from "node:fs";
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
+import { makeRepo, repoEngineEnv } from "./gitRepos.ts";
+import { makeTempDir, startEngine } from "./harness.ts";
 
 const listTools = (token: string) => ({
   method: "POST",
@@ -97,5 +101,39 @@ describe("UNFRAMED_FEATURES", () => {
     await expect(states.next()).rejects.toMatchObject(REPOSITORIES_OFF);
     expect(await engine.nativeLog()).toEqual([]);
     expect((await rpc.call("projects.list")).projects).toEqual([]);
+  });
+
+  it("with repositories off, opens an existing Repository on its Screens' last snapshots and starts no Instance or Setup", { timeout: 90_000 }, async () => {
+    const root = await makeRepo("shop");
+    const dataDir = await makeTempDir();
+    const on = await startEngine({ dataDir, env: await repoEngineEnv({ UNFRAMED_TEST_CANVAS: "1", UNFRAMED_TEST_RENDERER: "ok" }) });
+    const onRpc = await on.rpc();
+    const added = await onRpc.call("repositories.add", { path: root });
+    const snapshots = onRpc.subscribe("screens.snapshots", { project: "shop" });
+    for (let tries = 0; (await onRpc.call("instances.status", { project: "shop", id: added.instance.id })).state !== "stopped"; tries++) {
+      if (tries > 200) throw new Error("the Instance never settled");
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    await onRpc.call("instances.demand", { project: "shop", client: "window-1", ids: [added.instance.id] });
+    const first = await snapshots.next();
+    await on.stop("SIGTERM");
+
+    const off = await startEngine({ dataDir, env: await repoEngineEnv({ UNFRAMED_FEATURES: undefined, UNFRAMED_TEST_CANVAS: "1", UNFRAMED_TEST_RENDERER: "ok" }) });
+    const rpc = await off.rpc();
+    expect((await rpc.call("projects.list")).kinds).toMatchObject({ shop: "repository" });
+    const records = (await rpc.call("testCanvas.read", { project: "shop" })).records as Array<{ type?: string; id: string; props?: { instance?: string } }>;
+    const screen = records.find((record) => record.type === "screen")!;
+    expect(screen.props?.instance).toBe(added.instance.id);
+    const stored = await rpc.subscribe("screens.snapshots", { project: "shop" }).next();
+    expect(stored).toEqual({ ...first, at: expect.any(Number) });
+    const served = await off.request(`/api/file/shop/${screen.id.replace(/^shape:/, "")}.png?screen=1`);
+    expect(served.status).toBe(200);
+    await expect(rpc.call("instances.demand", { project: "shop", client: "window-1", ids: [added.instance.id] })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const pids = join(dataDir, "instance-pids");
+    expect(existsSync(pids) ? await readdir(pids) : []).toEqual([]);
+    const chats = rpc.subscribe("orchestration.subscribeShell", { projectId: "shop" });
+    const shell = await chats.next();
+    expect(shell.kind === "snapshot" ? shell.chats.map((chat) => chat.title) : undefined).toEqual(["Setup"]);
   });
 });
