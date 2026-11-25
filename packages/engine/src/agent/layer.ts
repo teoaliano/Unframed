@@ -43,6 +43,7 @@ import { openShell, openThread } from "./subscriptions.ts";
 import { Instances } from "../instances/layer.ts";
 import { InstanceTools } from "../instances/instanceTools.ts";
 import { Repositories } from "../repositories/layer.ts";
+import { isScreenShape } from "../screens/firstScreen.ts";
 
 export class Agents extends Context.Service<
   Agents,
@@ -238,9 +239,7 @@ export const agentsLayer = Layer.effect(
           const provider = await setupProvider();
           if (provider === undefined) return null;
           const live = new Set((await run(instances.list(slug))).filter((instance) => instance.state !== "removed").map((instance) => instance.id));
-          const screen = (await run(rooms.read(slug))).find(
-            (record) => record.typeName === "shape" && record.type === "screen" && live.has(String((record.props as { instance?: unknown }).instance)),
-          );
+          const screen = (await run(rooms.read(slug))).find((record) => isScreenShape(record) && live.has(record.props.instance));
           const chatId = randomUUID();
           const selected = screen === undefined ? [] : [screen.id as string];
           await runtime.dispatch({ type: "thread.create", commandId: randomUUID(), projectId: slug, threadId: chatId, modelSelection: { provider, model: "", traits: {} }, tags: selected, createdAt: now() });
