@@ -207,7 +207,6 @@ process.on("exit", () => {
 
 const TEMP_OWNER = /^unframed-[a-z0-9-]*?p(\d+)-[A-Za-z0-9]{6}$/;
 
-/** Removes the temporary folders `makeTempDir` named after a test process that is gone. */
 export const sweepTempDirs = async (root = tmpdir()): Promise<string[]> => {
   const removed: string[] = [];
   for (const name of await readdir(root).catch(() => [] as string[])) {
@@ -227,7 +226,6 @@ export const setCleanupRegistrar = (registrar: (cleanup: () => Promise<void>) =>
   registerCleanup = registrar;
 };
 
-/** A fresh temporary folder, removed when the test finishes (when a runner registered cleanups) or else when this process exits. */
 export const makeTempDir = async (prefix = "unframed-test-"): Promise<string> => {
   const dir = await mkdtemp(join(tmpdir(), `${prefix}p${process.pid}-`));
   tempDirs.add(dir);
