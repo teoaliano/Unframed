@@ -42,3 +42,23 @@ export const tellAgent = (client: ChatClient, shapeId: string, elements: Readonl
   client.setDraft(key, { ...stored, text, elements: merged });
   client.setUi({ chosen: key, pinned: null });
 };
+
+export interface ScreenDraft {
+  readonly text: string;
+  readonly chips: ReadonlyArray<ElementChip>;
+}
+
+export const NO_SCREEN_DRAFT: ScreenDraft = { text: "", chips: [] };
+
+export const draftScreenEdits = (client: ChatClient, shapeId: string, elements: ReadonlyArray<ChipElement>, instruction: string, written: ScreenDraft): ScreenDraft => {
+  const chips = elements.map((element) => elementChip(element, { shapeId }));
+  const target = continuableChat(client.chats(), [shapeId]);
+  const key = target?.id ?? NEW_CHAT;
+  const stored = client.draft(key);
+  const kept = (stored.elements ?? []).filter((existing) => !written.chips.some((chip) => sameChip(chip, existing)));
+  const merged = [...kept, ...chips.filter((chip) => !kept.some((existing) => sameChip(existing, chip)))];
+  const ours = stored.text.trim() === "" || stored.text === written.text;
+  client.setDraft(key, { ...stored, text: ours ? instruction : stored.text, elements: merged });
+  client.setUi({ chosen: key, pinned: null });
+  return { text: ours ? instruction : written.text, chips: chips.filter((chip) => !kept.some((existing) => sameChip(existing, chip))) };
+};
