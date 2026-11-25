@@ -31,6 +31,7 @@ import {
   proxyFailed,
   packageScripts,
   parseProcessTable,
+  portInUse,
   processTreeRss,
   projectSlug,
   serverExited,
@@ -57,8 +58,8 @@ import { errorText } from "../log.ts";
 import { LoginShell } from "../loginShell.ts";
 import { ProjectDatabase } from "../projectDatabase.ts";
 import { Projects } from "../projects.ts";
-import { makeGit, gitOutput } from "../repositories/git.ts";
-import { readKind, readRepository, writeRepository, type StoredRepository } from "../repositories/tables.ts";
+import { makeGit, gitOutput, gitStdout } from "../repositories/git.ts";
+import { readRepository, readRepositoryProject, writeRepository, type StoredRepository } from "../repositories/tables.ts";
 import { Config } from "../services.ts";
 import { Shutdown } from "../shutdown.ts";
 import { answers, freePort, spawnTracked, stopTracked, sweepLeftovers, type Tracked } from "./processes.ts";
@@ -69,6 +70,7 @@ const LOG_TAIL_CHARS = 16_000;
 const LOG_PUBLISH_MS = 500;
 const START_TIMEOUT_MS = 120_000;
 const PROBE_EVERY_MS = 150;
+const PORT_RELEASE_MS = 3_000;
 const STOP_GRACE_MS = 3_000;
 const SHUTDOWN_GRACE_MS = 1_500;
 const SETUP_FILES_FOLDER = "setup-files";
@@ -218,8 +220,7 @@ export const instancesLayer = Layer.effect(
     const repositoryOf = (project: string) =>
       Effect.gen(function* () {
         const slug = projectSlug(project);
-        const repository =
-          slug === "" ? undefined : yield* database.peek(slug, (db) => (readKind(db) === "repository" ? readRepository(db) : undefined));
+        const repository = slug === "" ? undefined : yield* database.peek(slug, readRepositoryProject);
         if (repository === undefined) return yield* unframedError("bad_request", NOT_A_REPOSITORY_PROJECT);
         const { db } = yield* database.open(slug);
         if (!loaded.has(slug)) {
@@ -311,6 +312,15 @@ export const instancesLayer = Layer.effect(
       }
     };
 
+    const heldAfterRelease = async (port: number): Promise<boolean> => {
+      const deadline = Date.now() + PORT_RELEASE_MS;
+      while (await answers(port)) {
+        if (Date.now() > deadline) return true;
+        await new Promise((resolve) => setTimeout(resolve, PROBE_EVERY_MS));
+      }
+      return false;
+    };
+
     const watchWorktree = (live: Live): FSWatcher | undefined => {
       try {
         const watcher = watch(live.stored.worktree, { recursive: true }, (_event, file) => {
@@ -343,6 +353,10 @@ export const instancesLayer = Layer.effect(
         }
         const single = setup.portMode.mode === "single";
         const port = setup.portMode.mode === "single" ? setup.portMode.port : yield* Effect.promise(() => freePort(reservedPorts()));
+        if (single && (yield* Effect.promise(() => heldAfterRelease(port)))) {
+          setState(live, "failed", { upstreamPort: null, error: portInUse(port) });
+          return undefined;
+        }
         const packageJson = yield* Effect.promise(() => readFile(join(live.stored.worktree, "package.json"), "utf8").catch(() => undefined));
         const shaped = shapeRunCommand({ command: setup.runCommand, port, scripts: packageScripts(packageJson) });
         live.reservedPort = port;
@@ -417,17 +431,23 @@ export const instancesLayer = Layer.effect(
         }
       });
 
-    const copyInto = async (from: string, to: string, files: ReadonlyArray<string>): Promise<string[]> => {
-      const copied: string[] = [];
+    const copyInto = async (from: string, to: string, files: ReadonlyArray<string>): Promise<void> => {
       for (const file of files) {
         const source = join(from, file);
         const target = join(to, file);
         if (!(await fileExists(source)) || existsSync(target)) continue;
         await mkdir(dirname(target), { recursive: true });
         await copyFile(source, target);
-        copied.push(file);
       }
-      return copied;
+    };
+
+    const mergeIntoExclude = async (gitCommonDir: string, files: ReadonlyArray<string>) => {
+      const exclude = join(gitCommonDir, "info", "exclude");
+      const existing = await readFile(exclude, "utf8").catch(() => "");
+      const merged = mergeExclude(existing, files.map((file) => `/${file}`));
+      if (merged === existing) return;
+      await mkdir(dirname(exclude), { recursive: true });
+      await writeFile(exclude, merged);
     };
 
     const prepareWorktree = (context: RepositoryContext, live: Live) =>
@@ -439,29 +459,13 @@ export const instancesLayer = Layer.effect(
         const folder = yield* projects.folder(context.slug);
         yield* Effect.tryPromise({
           try: async () => {
-            const copied = await copyInto(root, live.stored.worktree, envFiles);
-            if (folder !== undefined) copied.push(...(await copyInto(join(folder, SETUP_FILES_FOLDER), live.stored.worktree, setupFiles)));
-            const entries = [...envFiles, ...setupFiles].map((file) => `/${file}`);
-            const exclude = join(gitCommonDir, "info", "exclude");
-            const existing = await readFile(exclude, "utf8").catch(() => "");
-            const merged = mergeExclude(existing, entries);
-            if (merged !== existing) {
-              await mkdir(dirname(exclude), { recursive: true });
-              await writeFile(exclude, merged);
-            }
+            await copyInto(root, live.stored.worktree, envFiles);
+            if (folder !== undefined) await copyInto(join(folder, SETUP_FILES_FOLDER), live.stored.worktree, setupFiles);
+            await mergeIntoExclude(gitCommonDir, [...envFiles, ...setupFiles]);
           },
           catch: (error) => unframedError("internal", `Could not prepare the worktree: ${errorText(error)}`),
         });
       });
-
-    const mergeIntoExclude = async (gitCommonDir: string, files: ReadonlyArray<string>) => {
-      const exclude = join(gitCommonDir, "info", "exclude");
-      const existing = await readFile(exclude, "utf8").catch(() => "");
-      const merged = mergeExclude(existing, files.map((file) => `/${file}`));
-      if (merged === existing) return;
-      await mkdir(dirname(exclude), { recursive: true });
-      await writeFile(exclude, merged);
-    };
 
     const copyOver = async (from: string, to: string, files: ReadonlyArray<string>) => {
       for (const file of files) {
@@ -555,8 +559,8 @@ export const instancesLayer = Layer.effect(
             const upstream = gitOutput(yield* git(root, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", `refs/heads/${branch}@{upstream}`]))?.trim();
             const baseResolves = gitOutput(yield* git(root, ["rev-parse", "--verify", "--quiet", `${baseRef}^{commit}`])) !== undefined;
             const not = [baseCommit, ...(baseResolves ? [baseRef] : []), ...(upstream ? [upstream] : [])];
-            const ahead = gitOutput(yield* git(root, ["rev-list", "--count", `refs/heads/${branch}`, "--not", ...not]));
-            if (ahead === undefined || Number(ahead.trim()) > 0) return yield* unframedError("conflict", unsavedWork(branch));
+            const ahead = gitStdout(yield* git(root, ["rev-list", "--count", `refs/heads/${branch}`, "--not", ...not]))?.trim();
+            if (ahead !== "0") return yield* unframedError("conflict", unsavedWork(branch));
           }
         }
         yield* halt(live);

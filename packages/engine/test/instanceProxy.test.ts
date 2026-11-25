@@ -100,6 +100,12 @@ describe("serving a live Instance through its proxy", () => {
     expect((await rawRequest(proxy, "/headless", { headers: { ...at(proxy), accept: "text/html" } })).text).toBe("<body>no head here</body>");
   });
 
+  it("ends a page whose compressed body is corrupt and keeps serving", async () => {
+    const { proxy } = await liveInstance();
+    await rawRequest(proxy, "/corrupt", { headers: { ...at(proxy), accept: "text/html" } }).catch(() => undefined);
+    expect((await rawRequest(proxy, "/", { headers: { ...at(proxy), accept: "text/html" } })).text).toContain("<title>Fake app</title>");
+  });
+
   it("strips frame refusals, keeps the rest of the CSP and puts its nonce on the bridge tag", async () => {
     const { proxy } = await liveInstance();
     const page = await rawRequest(proxy, "/deny", { headers: { ...at(proxy), accept: "text/html" } });
@@ -142,5 +148,20 @@ describe("serving a live Instance through its proxy", () => {
   it("refuses a request addressed to a host that is not this machine", async () => {
     const { proxy } = await liveInstance();
     expect((await rawRequest(proxy, "/", { headers: { host: "evil.example" } })).status).toBe(403);
+  });
+
+  it("refuses a page on another origin, over HTTP and WebSocket, before its Origin is rewritten", async () => {
+    const { proxy, engine } = await liveInstance();
+    for (const origin of ["https://evil.example", `http://127.0.0.1:${engine.port}`]) {
+      expect((await rawRequest(proxy, "/_next/__fake/info", { headers: { ...at(proxy), origin } })).status).toBe(403);
+      await expect(firstMessage(proxy, "/_next/webpack-hmr", { origin, ...at(proxy) })).rejects.toThrow(/403/);
+    }
+  });
+
+  it("leaves the app's own requests to the app: a POST with Origin null reaches it with that Origin", async () => {
+    const { proxy } = await liveInstance();
+    const answer = await rawRequest(proxy, "/__fake/info", { method: "POST", body: "user=me", headers: { ...at(proxy), origin: "null", "content-type": "application/x-www-form-urlencoded" } });
+    expect(answer.status).toBe(200);
+    expect(answer.json().origin).toBe("null");
   });
 });

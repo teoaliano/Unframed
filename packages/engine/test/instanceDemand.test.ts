@@ -160,6 +160,30 @@ describe("driving Instances from canvas demand", () => {
     expect((await stateOf(rpc, project, b)).state).toBe("stopped");
   });
 
+  it("switches a single-port Repository to another Instance while the old server is still letting go of the port", async () => {
+    const fixed = await freePort();
+    const { rpc, project, a, b } = await twoInstances({ FAKE_DEV_LINGER_MS: "1000" }, async (engine, slug) => setSinglePort(engine, slug, fixed));
+    expect(await rpc.call("instances.start", { project, id: a })).toMatchObject({ state: "live", upstreamPort: fixed });
+    expect(await rpc.call("instances.start", { project, id: b })).toMatchObject({ state: "live", upstreamPort: fixed, error: null });
+    expect((await stateOf(rpc, project, a)).state).toBe("stopped");
+  });
+
+  it("fails a single-port Instance whose fixed port something else already answers on", async () => {
+    const fixed = await freePort();
+    const { rpc, project, a } = await twoInstances({}, async (engine, slug) => setSinglePort(engine, slug, fixed));
+    const other = net.createServer((socket) => socket.on("error", () => undefined).end("HTTP/1.1 200 OK\r\ncontent-length: 5\r\n\r\nother"));
+    await new Promise<void>((resolve) => other.listen(fixed, "127.0.0.1", resolve));
+    try {
+      expect(await rpc.call("instances.start", { project, id: a })).toMatchObject({
+        state: "failed",
+        proxyPort: null,
+        error: `Something else is already listening on port ${fixed}, the fixed port this Repository runs on. Stop it, then start the Instance again.`,
+      });
+    } finally {
+      await new Promise((resolve) => other.close(resolve));
+    }
+  });
+
   it("records the port a single-port server binds when it is not the one asked for", async () => {
     const fixed = await freePort();
     const bound = await freePort();

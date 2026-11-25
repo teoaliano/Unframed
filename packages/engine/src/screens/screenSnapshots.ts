@@ -6,6 +6,7 @@ import type { TLRecord } from "@tldraw/tlschema";
 import type { HeadlessChrome } from "../artifacts/headlessChrome.ts";
 import { stubSnapshotPng } from "../artifacts/snapshots.ts";
 import { errorText, logError } from "../log.ts";
+import { isScreenShape, type ScreenShape } from "./firstScreen.ts";
 
 export const SCREEN_SNAPSHOT_FOLDER = join(".cache", "screens");
 
@@ -47,10 +48,6 @@ export const chromeScreenRenderer =
       }
     });
 
-type ScreenRecord = TLRecord & { type: "screen"; props: { w: number; h: number; instance: string; route: string; dials?: Record<string, unknown> } };
-
-const isScreen = (record: TLRecord | undefined): record is ScreenRecord => record?.typeName === "shape" && record.type === "screen";
-
 interface Signature {
   readonly instance: string;
   readonly route: string;
@@ -59,7 +56,7 @@ interface Signature {
   readonly dials: Readonly<Record<string, unknown>> | null;
 }
 
-const signatureOf = (shape: ScreenRecord): Signature => ({
+const signatureOf = (shape: ScreenShape): Signature => ({
   instance: shape.props.instance,
   route: shape.props.route,
   w: Math.round(shape.props.w),
@@ -117,7 +114,7 @@ export class ScreenSnapshots {
     if (!live || was || state === undefined) return;
     state.sessions.set(instance.id, ++this.session);
     void this.deps.read(instance.repository).then(
-      (records) => this.consider(instance.repository, records.filter((record) => isScreen(record) && record.props.instance === instance.id)),
+      (records) => this.consider(instance.repository, records.filter((record) => isScreenShape(record) && record.props.instance === instance.id)),
       () => undefined,
     );
   }
@@ -143,7 +140,7 @@ export class ScreenSnapshots {
     const state = this.projects.get(project);
     if (state === undefined) return;
     for (const record of records) {
-      if (!isScreen(record) || screenSnapshotName(record.id) === undefined) continue;
+      if (!isScreenShape(record) || screenSnapshotName(record.id) === undefined) continue;
       clearTimeout(state.timers.get(record.id));
       const timer = setTimeout(() => {
         state.timers.delete(record.id);
@@ -159,7 +156,7 @@ export class ScreenSnapshots {
     if (renderer === undefined || this.projects.get(project) !== state) return;
     const shape = (await this.deps.read(project)).find((record) => record.id === shapeId);
     const name = screenSnapshotName(shapeId);
-    if (!isScreen(shape) || name === undefined) return;
+    if (!isScreenShape(shape) || name === undefined) return;
     const instance = await this.deps.instance(project, shape.props.instance);
     if (instance === undefined || instance.state !== "live" || instance.proxyPort === null) return;
     const folder = await this.deps.folder(project);

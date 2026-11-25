@@ -14,7 +14,7 @@ import { Tip } from "../../chrome/ui.tsx";
 import { useFeature } from "../../features.ts";
 import { noteRender } from "../../fps/renders.ts";
 import { screenOnScreen } from "../../repositories/demand.ts";
-import { noteBridge, repositoryState, screenSnapshotUrl } from "../../repositories/store.ts";
+import { noteBridge, repositoryState, screenSnapshotUrl, useRepositorySetup } from "../../repositories/store.ts";
 import { artifactCardClass } from "./looks.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
 
@@ -144,7 +144,7 @@ const Overlay = ({ project, instance }: { readonly project: string; readonly ins
 };
 
 const SetupBadges = ({ project }: { readonly project: string }) => {
-  const setup = useValue("repository setup", () => repositoryState(project).repository.get()?.setup ?? null, [project]);
+  const setup = useRepositorySetup(project);
   const tag = setupTag(setup);
   const warnings = setup?.warnings ?? [];
   if (tag === undefined && warnings.length === 0) return null;

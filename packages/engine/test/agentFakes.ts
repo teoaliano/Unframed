@@ -248,7 +248,6 @@ rl.on("close", () => process.exit(0));
 `),
   );
 
-/** A login shell that answers `$SHELL -ilc 'echo "$PATH"'` with `FAKE_SHELL_PATH`, appending its arguments to `FAKE_SHELL_LOG` when set. */
 export const fakeShell = (dir: string) =>
   write(
     join(dir, "fake-shell"),

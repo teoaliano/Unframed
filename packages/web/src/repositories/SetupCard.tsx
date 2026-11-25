@@ -5,8 +5,8 @@ import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
 import { useEngine } from "../context.ts";
 import { useFeature } from "../features.ts";
-import { messageOf } from "../agent/store.ts";
 import { repositoryState } from "./store.ts";
+import { usePendingWork } from "./pendingWork.ts";
 
 const CARD_CLASS = "flex flex-col gap-2.5 rounded-3xl border border-(--setup-card-border)/(--setup-card-border-opacity) bg-(--setup-card-surface)/(--setup-card-surface-opacity) p-4";
 
@@ -16,24 +16,16 @@ export const SetupCard = ({ project, chat }: { readonly project: string; readonl
   const repository = useValue("setup repository", () => repositoryState(project).repository.get(), [project]);
   const [rejecting, setRejecting] = useState(false);
   const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | undefined>(undefined);
+  const { busy, problem, run } = usePendingWork();
   const card = setupCard({ chatId: chat.id, setupChat: repository?.setupChat, activities: chat.activities, latestTurn: chat.latestTurn });
   if (!on || card.kind === "none") return null;
 
-  const act = async (work: () => Promise<unknown>) => {
-    setBusy(true);
-    setProblem(undefined);
-    try {
+  const act = (work: () => Promise<unknown>) =>
+    run(async () => {
       await work();
       setRejecting(false);
       setNote("");
-    } catch (error) {
-      setProblem(messageOf(error));
-    } finally {
-      setBusy(false);
-    }
-  };
+    });
   const verdict = (accepted: boolean) =>
     act(async () => {
       const answer = await engine.call("repositories.setupVerdict", { project, accepted, ...(accepted ? {} : { note }) });

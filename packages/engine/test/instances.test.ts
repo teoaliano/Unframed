@@ -201,6 +201,19 @@ describe("removing an Instance", () => {
     expect(existsSync(second.worktree)).toBe(false);
     expect(git(root, "branch", "--list", second.branch).trim()).toBe("");
   });
+
+  it("refuses unpushed commits when git warns that the base name is ambiguous", async () => {
+    const { root, rpc, project, first } = await addRepository();
+    git(root, "tag", first.baseRef);
+    await writeFile(join(first.worktree, "draft.txt"), "draft\n");
+    git(first.worktree, "add", ".");
+    git(first.worktree, "commit", "-q", "-m", "draft");
+    await expect(rpc.call("instances.remove", { project, id: first.id, deleteBranch: true })).rejects.toMatchObject({
+      code: "conflict",
+      message: `The branch "${first.branch}" has work that is not pushed or merged. Remove it anyway to lose that work.`,
+    });
+    expect(git(root, "branch", "--list", first.branch).trim()).not.toBe("");
+  });
 });
 
 describe("running an Instance", () => {

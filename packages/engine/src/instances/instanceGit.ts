@@ -53,7 +53,7 @@ export interface InstanceTarget {
   readonly branch: string;
   readonly baseRef: string;
   readonly baseCommit: string;
-  readonly setupFiles: ReadonlyArray<string>;
+  readonly pathspec: ReadonlyArray<string>;
   readonly baseBranch: string;
 }
 
@@ -82,7 +82,7 @@ export const instanceGitLayer = Layer.effect(
           branch: instance.branch,
           baseRef: instance.baseRef,
           baseCommit: stored?.baseCommit ?? instance.baseRef,
-          setupFiles: repository.setup?.files ?? [],
+          pathspec: ["--", ".", ...excludedPathspecs(repository.setup?.files ?? [])],
           baseBranch: repository.baseBranch,
         } satisfies InstanceTarget;
       });
@@ -111,13 +111,12 @@ export const instanceGitLayer = Layer.effect(
       Effect.gen(function* () {
         const at = yield* target(project, id);
         const base = yield* mergeBaseOf(at);
-        const paths = ["--", ".", ...excludedPathspecs(at.setupFiles)];
         return yield* withTemporaryIndex(at, (env) =>
           Effect.gen(function* () {
-            const added = yield* git(at.worktree, ["add", "-A", ...paths], env);
+            const added = yield* git(at.worktree, ["add", "-A", ...at.pathspec], env);
             if (gitOutput(added) === undefined) return yield* failed("Could not read the Instance's changes", added);
-            const numstat = yield* git(at.worktree, ["diff", "--cached", "--no-renames", "--numstat", "-z", base, ...paths], env);
-            const patch = yield* git(at.worktree, ["diff", "--cached", "--no-renames", "--no-color", "--no-ext-diff", base, ...paths], env);
+            const numstat = yield* git(at.worktree, ["diff", "--cached", "--no-renames", "--numstat", "-z", base, ...at.pathspec], env);
+            const patch = yield* git(at.worktree, ["diff", "--cached", "--no-renames", "--no-color", "--no-ext-diff", base, ...at.pathspec], env);
             const numstatText = gitStdout(numstat);
             const patchText = gitStdout(patch);
             if (numstatText === undefined) return yield* failed("Could not diff the Instance", numstat);
@@ -182,15 +181,15 @@ export const instanceGitLayer = Layer.effect(
       return [typeof json?.message === "string" ? json.message : answer.text.slice(0, 200), ...details].join(" ");
     };
 
-    const commitAll = (at: InstanceTarget, paths: ReadonlyArray<string>) =>
+    const commitAll = (at: InstanceTarget) =>
       Effect.gen(function* () {
-        const added = yield* git(at.worktree, ["add", "-A", ...paths]);
+        const added = yield* git(at.worktree, ["add", "-A", ...at.pathspec]);
         if (gitOutput(added) === undefined) return yield* failed("Could not stage the Instance's changes", added);
-        const staged = yield* git(at.worktree, ["diff", "--cached", "--quiet", ...paths]);
+        const staged = yield* git(at.worktree, ["diff", "--cached", "--quiet", ...at.pathspec]);
         if (staged.kind === "exited" && staged.code === 0) return null;
-        const files = (gitStdout(yield* git(at.worktree, ["diff", "--cached", "--name-only", ...paths])) ?? "").split("\n").filter((line) => line !== "");
-        const stat = gitStdout(yield* git(at.worktree, ["diff", "--cached", "--stat", ...paths])) ?? "";
-        const patch = gitStdout(yield* git(at.worktree, ["diff", "--cached", "--no-color", "--no-ext-diff", ...paths])) ?? "";
+        const files = (gitStdout(yield* git(at.worktree, ["diff", "--cached", "--name-only", ...at.pathspec])) ?? "").split("\n").filter((line) => line !== "");
+        const stat = gitStdout(yield* git(at.worktree, ["diff", "--cached", "--stat", ...at.pathspec])) ?? "";
+        const patch = gitStdout(yield* git(at.worktree, ["diff", "--cached", "--no-color", "--no-ext-diff", ...at.pathspec])) ?? "";
         const reply = yield* agents.writeText({ projectDir: at.worktree, system: COMMIT_SYSTEM_PROMPT, prompt: commitPrompt({ branch: at.branch, files: stat, patch }) });
         const message = commitMessageOf(reply, files);
         const committed = yield* git(at.worktree, ["commit", "-q", "-m", message.subject, ...(message.body === "" ? [] : ["-m", message.body])]);
@@ -211,7 +210,7 @@ export const instanceGitLayer = Layer.effect(
         return typeof fallback === "string" && fallback !== "" ? fallback : at.baseBranch;
       });
 
-    const openPullRequest = (at: InstanceTarget, remote: string, token: string, repository: { readonly owner: string; readonly repo: string }, base: string, lastCommit: { readonly subject: string; readonly body: string } | null, paths: ReadonlyArray<string>) =>
+    const openPullRequest = (at: InstanceTarget, remote: string, token: string, repository: { readonly owner: string; readonly repo: string }, base: string, lastCommit: { readonly subject: string; readonly body: string } | null) =>
       Effect.gen(function* () {
         const prefix = `/repos/${repository.owner}/${repository.repo}/pulls`;
         const open = yield* github(token, "GET", `${prefix}?head=${encodeURIComponent(`${repository.owner}:${at.branch}`)}&state=open`);
@@ -221,8 +220,8 @@ export const instanceGitLayer = Layer.effect(
         }
         const mergeBase = yield* mergeBaseOf(at);
         const commits = gitStdout(yield* git(at.worktree, ["log", "--format=%s%n%b", `${mergeBase}..HEAD`])) ?? "";
-        const stat = gitStdout(yield* git(at.worktree, ["diff", "--stat", `${mergeBase}..HEAD`, ...paths])) ?? "";
-        const patch = gitStdout(yield* git(at.worktree, ["diff", "--no-color", "--no-ext-diff", `${mergeBase}..HEAD`, ...paths])) ?? "";
+        const stat = gitStdout(yield* git(at.worktree, ["diff", "--stat", `${mergeBase}..HEAD`, ...at.pathspec])) ?? "";
+        const patch = gitStdout(yield* git(at.worktree, ["diff", "--no-color", "--no-ext-diff", `${mergeBase}..HEAD`, ...at.pathspec])) ?? "";
         const reply = yield* agents.writeText({ projectDir: at.worktree, system: PR_SYSTEM_PROMPT, prompt: pullRequestPrompt({ base, head: at.branch, commits, files: stat, patch }) });
         const firstCommit = commits.split("\n")[0]?.trim() || at.branch;
         const content = pullRequestOf(reply, lastCommit ?? { subject: firstCommit, body: "" });
@@ -235,7 +234,6 @@ export const instanceGitLayer = Layer.effect(
     const act = (project: string, id: string, action: GitAction) =>
       Effect.gen(function* () {
         const at = yield* target(project, id);
-        const paths = ["--", ".", ...excludedPathspecs(at.setupFiles)];
         const pushing = action !== "commit";
         const remote = pushing ? yield* remoteOf(at) : undefined;
         let pr: { readonly token: string; readonly repository: { readonly owner: string; readonly repo: string } } | undefined;
@@ -245,7 +243,7 @@ export const instanceGitLayer = Layer.effect(
           if (repository === undefined) return yield* refused(notGithub(remote, url));
           pr = { token: yield* githubToken, repository };
         }
-        const commit = yield* commitAll(at, paths);
+        const commit = yield* commitAll(at);
         if (commit === null && action === "commit") return yield* refused(NOTHING_TO_COMMIT);
         let push: GitActionResult["push"] = null;
         if (remote !== undefined) {
@@ -260,7 +258,7 @@ export const instanceGitLayer = Layer.effect(
         const opened =
           pr === undefined || remote === undefined
             ? null
-            : yield* openPullRequest(at, remote, pr.token, pr.repository, yield* pullRequestBase(at, remote, pr.token, pr.repository), commit, paths);
+            : yield* openPullRequest(at, remote, pr.token, pr.repository, yield* pullRequestBase(at, remote, pr.token, pr.repository), commit);
         return { action, commit: commit === null ? null : { sha: commit.sha, subject: commit.subject }, push, pr: opened } satisfies GitActionResult;
       });
 

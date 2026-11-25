@@ -1,31 +1,16 @@
 import http from "node:http";
 import net from "node:net";
 import { StringDecoder } from "node:string_decoder";
-import { Transform, type Readable } from "node:stream";
+import { pipeline, Transform, type Readable } from "node:stream";
 import zlib from "node:zlib";
-import { BRIDGE_PATH, bridgeTag, htmlInjector, loopbackGuard, proxiedResponseHeaders, screenBridgeSource, upstreamRequestHeaders } from "@unframed/domain";
+import { BRIDGE_PATH, bridgeTag, htmlInjector, loopbackGuard, proxiedResponseHeaders, rewritesOrigin, screenBridgeSource, upstreamRequestHeaders } from "@unframed/domain";
 import { listenLoopback } from "../listen.ts";
-
-const UPSTREAM_HOSTS = ["127.0.0.1", "::1"] as const;
-const PROBE_TIMEOUT_MS = 300;
+import { listeningHost } from "./processes.ts";
 
 export interface InstanceProxy {
   readonly port: number;
   readonly close: () => Promise<void>;
 }
-
-const connects = (host: string, port: number): Promise<boolean> =>
-  new Promise((resolve) => {
-    const socket = net.connect({ host, port });
-    const done = (value: boolean) => {
-      socket.destroy();
-      resolve(value);
-    };
-    socket.setTimeout(PROBE_TIMEOUT_MS);
-    socket.once("connect", () => done(true));
-    socket.once("error", () => done(false));
-    socket.once("timeout", () => done(false));
-  });
 
 const injecting = (tag: string): Transform => {
   const decoder = new StringDecoder("utf8");
@@ -44,7 +29,7 @@ const injecting = (tag: string): Transform => {
 const decoded = (body: Readable, encoding: string): Readable | undefined => {
   if (encoding === "" || encoding === "identity") return body;
   const decoder = encoding === "gzip" || encoding === "x-gzip" ? zlib.createGunzip() : encoding === "br" ? zlib.createBrotliDecompress() : encoding === "deflate" ? zlib.createInflate() : undefined;
-  return decoder === undefined ? undefined : body.pipe(decoder);
+  return decoder === undefined ? undefined : pipeline(body, decoder, () => undefined);
 };
 
 const rawHead = (req: http.IncomingMessage, headers: Record<string, unknown>): string => {
@@ -64,13 +49,10 @@ export const startInstanceProxy = async (input: { readonly upstreamPort: number;
 
   const hostFor = async (): Promise<string> => {
     if (upstreamHost !== undefined) return upstreamHost;
-    for (const host of UPSTREAM_HOSTS) {
-      if (await connects(host, upstreamPort)) {
-        upstreamHost = host;
-        return host;
-      }
-    }
-    return UPSTREAM_HOSTS[0];
+    const host = await listeningHost(upstreamPort);
+    if (host === undefined) return "127.0.0.1";
+    upstreamHost = host;
+    return host;
   };
 
   const forget = (error: NodeJS.ErrnoException) => {
@@ -79,7 +61,7 @@ export const startInstanceProxy = async (input: { readonly upstreamPort: number;
 
   const sockets = new Set<net.Socket>();
   const server = http.createServer((req, res) => {
-    const decision = loopbackGuard({ host: req.headers.host });
+    const decision = loopbackGuard({ origin: rewritesOrigin(req.url ?? "/", false) ? req.headers.origin : undefined, host: req.headers.host });
     if (!decision.allowed) {
       res.writeHead(decision.status, { "content-type": "text/plain; charset=utf-8" });
       res.end(decision.error);
@@ -108,7 +90,7 @@ export const startInstanceProxy = async (input: { readonly upstreamPort: number;
         delete out["content-length"];
         delete out["content-encoding"];
         res.writeHead(status, out);
-        body.pipe(injecting(bridgeTag(rewritten.nonce))).pipe(res);
+        pipeline(body, injecting(bridgeTag(rewritten.nonce)), res, () => undefined);
       });
       upstream.on("error", (error: NodeJS.ErrnoException) => {
         forget(error);
@@ -121,7 +103,7 @@ export const startInstanceProxy = async (input: { readonly upstreamPort: number;
 
   server.on("upgrade", (req: http.IncomingMessage, socket: net.Socket, head: Buffer) => {
     socket.on("error", () => socket.destroy());
-    const decision = loopbackGuard({ host: req.headers.host });
+    const decision = loopbackGuard({ origin: req.headers.origin, host: req.headers.host });
     if (!decision.allowed) {
       socket.end(`HTTP/1.1 ${decision.status} Forbidden\r\nConnection: close\r\n\r\n`);
       return;

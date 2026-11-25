@@ -1,5 +1,5 @@
 import type { ScreenShapeProps } from "@unframed/contracts";
-import { UnframedError, type GitAction, type GitActionResult, type Instance, type InstanceDiff } from "@unframed/contracts";
+import type { GitAction, GitActionResult, Instance, InstanceDiff } from "@unframed/contracts";
 import { DEFAULT_RUNTIME_MODE, flowInstruction, flowRoutes, forkBranchName, normaliseRoute, SCREEN_GAP, SCREEN_VIEWPORTS, screenUrl, setupTag } from "@unframed/domain";
 import { ChevronDown, ExternalLink, FileDiff, GitBranchPlus, GitFork, Info, MonitorSmartphone, Route, TriangleAlert, Workflow } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -12,10 +12,11 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/c
 import { Textarea } from "~/components/ui/textarea";
 import { readyProviders } from "../agent/providers.ts";
 import { createChat, sendMessage } from "../agent/send.ts";
-import { useChatClient } from "../agent/store.ts";
+import { messageOf, useChatClient } from "../agent/store.ts";
 import { Tip } from "../chrome/ui.tsx";
 import { useCanvasProject, useEngine } from "../context.ts";
-import { repositoryState } from "./store.ts";
+import { usePendingWork } from "./pendingWork.ts";
+import { repositoryState, useRepositorySetup } from "./store.ts";
 
 export const BAD_ROUTE = "A route starts with / and has no spaces, like /settings?tab=2.";
 
@@ -139,8 +140,6 @@ const ViewportMenu = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   );
 };
 
-const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
-
 export const placeScreenBeside = (editor: Editor, shapeId: TLShapeId, instance: Instance): void => {
   const shape = editor.getShape(shapeId);
   const props = screenPropsOf(editor, shapeId);
@@ -167,8 +166,7 @@ const BranchForm = ({ shapeId, label, icon, title, submit, base }: {
   const [branches, setBranches] = useState<ReadonlyArray<string>>([]);
   const [from, setFrom] = useState("");
   const [name, setName] = useState("");
-  const [problem, setProblem] = useState<string | undefined>(undefined);
-  const [busy, setBusy] = useState(false);
+  const { busy, problem, setProblem, run } = usePendingWork();
   const forkedFrom = () => {
     const props = screenPropsOf(editor, shapeId);
     return props === undefined ? undefined : repositoryState(project).instances.get().get(props.instance);
@@ -204,17 +202,12 @@ const BranchForm = ({ shapeId, label, icon, title, submit, base }: {
           className="flex flex-col gap-2"
           onSubmit={(event) => {
             event.preventDefault();
-            if (busy || from === "") return;
-            setBusy(true);
-            setProblem(undefined);
-            engine
-              .call("instances.create", { project, base: from, ...(name.trim() === "" ? {} : { branch: name.trim() }) })
-              .then((instance) => {
-                placeScreenBeside(editor, shapeId, instance);
-                setOpen(false);
-              })
-              .catch((error: unknown) => setProblem(messageOf(error)))
-              .finally(() => setBusy(false));
+            if (from === "") return;
+            run(async () => {
+              const instance = await engine.call("instances.create", { project, base: from, ...(name.trim() === "" ? {} : { branch: name.trim() }) });
+              placeScreenBeside(editor, shapeId, instance);
+              setOpen(false);
+            });
           }}
         >
           {base === "pick" ? (
@@ -253,23 +246,14 @@ const ExplodeForm = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   const client = useChatClient(engine, project);
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
-  const [problem, setProblem] = useState<string | undefined>(undefined);
-  const [busy, setBusy] = useState(false);
-  const run = (work: () => Promise<void>) => {
-    if (busy) return;
-    setBusy(true);
-    setProblem(undefined);
-    work()
-      .then(() => setOpen(false))
-      .catch((error: unknown) => setProblem(messageOf(error)))
-      .finally(() => setBusy(false));
-  };
+  const { busy, problem, setProblem, run } = usePendingWork();
   const explode = () =>
     run(async () => {
       const routes = flowRoutes(text);
       if ("error" in routes) throw new Error(routes.error);
       const { group } = await engine.call("screens.explode", { project, shapeId, routes: [...routes.routes] });
       editor.select(group as TLShapeId);
+      setOpen(false);
     });
   const ask = () =>
     run(async () => {
@@ -283,6 +267,7 @@ const ExplodeForm = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
       const chatId = await createChat(client, { modelSelection: { provider: ready[0]!, model: "", traits: {} }, runtimeMode: DEFAULT_RUNTIME_MODE, interactionMode: "default", tags: [shapeId] }, instruction);
       client.setUi({ open: true, chosen: chatId, pinned: null });
       await sendMessage(client, chatId, { text: instruction, selection: [shapeId], attachments: [] });
+      setOpen(false);
     });
   return (
     <Popover
@@ -346,8 +331,7 @@ const ChangesForm = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   const [open, setOpen] = useState(false);
   const [diff, setDiff] = useState<InstanceDiff | undefined>(undefined);
   const [result, setResult] = useState<GitActionResult | undefined>(undefined);
-  const [problem, setProblem] = useState<string | undefined>(undefined);
-  const [busy, setBusy] = useState(false);
+  const { busy, problem, setProblem, run } = usePendingWork();
   const instanceId = () => screenPropsOf(editor, shapeId)?.instance;
   const load = async () => {
     const id = instanceId();
@@ -356,17 +340,11 @@ const ChangesForm = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   };
   const act = (action: GitAction) => {
     const id = instanceId();
-    if (busy || id === undefined) return;
-    setBusy(true);
-    setProblem(undefined);
-    engine
-      .call("instances.gitAction", { project, id, action })
-      .then(async (answer) => {
-        setResult(answer);
-        await load();
-      })
-      .catch((error: unknown) => setProblem(messageOf(error)))
-      .finally(() => setBusy(false));
+    if (id === undefined) return;
+    run(async () => {
+      setResult(await engine.call("instances.gitAction", { project, id, action }));
+      await load();
+    });
   };
   return (
     <Popover
@@ -428,7 +406,7 @@ const ChangesForm = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
 
 const SetupNotes = () => {
   const project = useCanvasProject();
-  const setup = useValue("repository setup", () => repositoryState(project).repository.get()?.setup ?? null, [project]);
+  const setup = useRepositorySetup(project);
   const tag = setupTag(setup);
   const warnings = setup?.warnings ?? [];
   if (tag === undefined && warnings.length === 0) return null;

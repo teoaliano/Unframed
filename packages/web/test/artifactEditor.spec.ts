@@ -179,6 +179,19 @@ test("the right column's tabs fill its width and sit flush on the header's one b
   expect(indicator.width).toBeCloseTo(boxes[0]!.width, 0);
 });
 
+test("the agent column's header ends on a divider level with the page column's header", async ({ page, agent }) => {
+  await onBoard(page, agent);
+  const at = await centre(shapeOnScreen(page, "shape:landing"));
+  await page.mouse.dblclick(at.x, at.y);
+  await expect(page.getByRole("region", { name: "Editing Landing" })).toBeVisible();
+  const agentHeader = column(page, "rail").locator("header", { has: page.getByRole("heading", { name: "Agent" }) });
+  const pageHeader = column(page, "centre").locator("header").first();
+  expect(await styleOf(agentHeader, "border-bottom-width")).toBe("1px");
+  expect(await styleOf(agentHeader, "border-bottom-color")).toBe(await styleOf(pageHeader, "border-bottom-color"));
+  const [left, middle] = [(await agentHeader.boundingBox())!, (await pageHeader.boundingBox())!];
+  expect(left.y + left.height).toBeCloseTo(middle.y + middle.height, 0);
+});
+
 test("Escape closes the editor from a button in its chat column, though not from the composer", async ({ page, agent }) => {
   await onBoard(page, agent);
   await createChat(agent, { title: "Brief", tags: ["shape:landing"] });

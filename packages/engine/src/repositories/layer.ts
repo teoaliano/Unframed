@@ -23,7 +23,7 @@ import { LoginShell } from "../loginShell.ts";
 import { ProjectDatabase } from "../projectDatabase.ts";
 import { Projects } from "../projects.ts";
 import { gitOutput as output, makeGit } from "./git.ts";
-import { readKind, readRepository, writeRepository, type StoredRepository } from "./tables.ts";
+import { readKind, readRepository, readRepositoryProject, writeRepository, type StoredRepository } from "./tables.ts";
 import { readInstances } from "../instances/tables.ts";
 
 export interface AddedRepository {
@@ -64,9 +64,7 @@ export const repositoriesLayer = Layer.effect(
       );
 
     const read = (project: string) =>
-      Effect.map(database.peek(project, (db) => (readKind(db) === "repository" ? readRepository(db) : undefined)), (stored) =>
-        stored === undefined ? undefined : asRepository(stored),
-      );
+      Effect.map(database.peek(project, readRepositoryProject), (stored) => (stored === undefined ? undefined : asRepository(stored)));
 
     const folderOf = (path: string) =>
       Effect.tryPromise({
@@ -119,7 +117,7 @@ export const repositoriesLayer = Layer.effect(
     const update = (project: string, change: (stored: StoredRepository) => StoredRepository) =>
       Effect.gen(function* () {
         const slug = projectSlug(project);
-        const known = slug === "" ? undefined : yield* database.peek(slug, (db) => (readKind(db) === "repository" ? readRepository(db) : undefined));
+        const known = slug === "" ? undefined : yield* database.peek(slug, readRepositoryProject);
         if (known === undefined) return yield* unframedError("bad_request", NOT_A_REPOSITORY_PROJECT);
         const { db } = yield* database.open(slug);
         return yield* Effect.try({

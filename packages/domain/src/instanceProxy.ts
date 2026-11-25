@@ -14,12 +14,14 @@ export const rewriteLocation = (location: string, upstreamPort: number, proxyOri
 
 const first = (value: ProxyHeaderValue): string | undefined => (typeof value === "string" ? value : value?.[0]);
 
+export const rewritesOrigin = (path: string, upgrade: boolean): boolean => upgrade || NEXT_DEV_PATH.test(path);
+
 export const upstreamRequestHeaders = (
   headers: ProxyHeaders,
   input: { readonly upstreamPort: number; readonly path: string; readonly upgrade: boolean },
 ): Record<string, ProxyHeaderValue> => {
   const next: Record<string, ProxyHeaderValue> = { ...headers };
-  if (next.origin !== undefined && (input.upgrade || NEXT_DEV_PATH.test(input.path))) next.origin = `http://localhost:${input.upstreamPort}`;
+  if (next.origin !== undefined && rewritesOrigin(input.path, input.upgrade)) next.origin = `http://localhost:${input.upstreamPort}`;
   if (!input.upgrade && /text\/html/i.test(first(next.accept) ?? "")) next["accept-encoding"] = "identity";
   return next;
 };

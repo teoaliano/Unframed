@@ -23,6 +23,14 @@ if (process.env.FAKE_DEV_EXIT_CODE) {
   console.error("fake dev server: giving up");
   process.exit(Number(process.env.FAKE_DEV_EXIT_CODE));
 }
+if (process.env.FAKE_DEV_LINGER_MS && !process.env.FAKE_DEV_DETACHED) {
+  const child = require("node:child_process").spawn(process.execPath, [__filename, ...args], { detached: true, stdio: "inherit", env: { ...process.env, FAKE_DEV_DETACHED: "1" } });
+  process.on("SIGTERM", () => {
+    child.kill("SIGTERM");
+    process.exit(0);
+  });
+  return;
+}
 const flag = args.indexOf("--port");
 const port = Number(process.env.FAKE_DEV_LISTEN_PORT || (flag >= 0 ? args[flag + 1] : process.env.PORT) || 3000);
 const host = process.env.FAKE_DEV_HOST || "127.0.0.1";
@@ -49,6 +57,10 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "text/html" });
     return res.end("<!doctype html><html><head><title>Dials</title></head><body><h1 id=\\"title\\">Tuned</h1><script>window.unframed?.dials(\\"Look\\", { accent: \\"#ff0000\\" }, function (v) { document.getElementById(\\"title\\").dataset.accent = v.accent; }, { accent: \\"The heading colour\\" });</script></body></html>");
   }
+  if (url.pathname === "/corrupt") {
+    res.writeHead(200, { "content-type": "text/html", "content-encoding": "gzip" });
+    return res.end("this is not gzip");
+  }
   if (url.pathname === "/headless") {
     res.writeHead(200, { "content-type": "text/html" });
     return res.end("<body>no head here</body>");
@@ -69,7 +81,7 @@ server.on("upgrade", (req, socket) => {
   socket.on("error", () => {});
 });
 server.listen(port, host, () => console.log("  ➜  Local:   http://localhost:" + port + "/"));
-process.on("SIGTERM", () => process.exit(0));
+process.on("SIGTERM", () => (process.env.FAKE_DEV_DETACHED ? setTimeout(() => process.exit(0), Number(process.env.FAKE_DEV_LINGER_MS)) : process.exit(0)));
 `;
 
 export const makeRepo = async (name = "My App") => {
