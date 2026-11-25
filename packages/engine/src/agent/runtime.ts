@@ -5,6 +5,7 @@ import {
   answersWithFiles,
   buildPreamble,
   agentShapeId,
+  editorTabFacts,
   elementContext,
   roomShapeId,
   changeNote,
@@ -854,14 +855,20 @@ export class AgentRuntime {
     if (chat.lastClock !== null) {
       note = changeNote(await this.deps.rooms.changeLog(agent.slug, chat.lastClock), chat.id);
     }
-    const listed = new Map<string, { shapeId: string; kind: "page" | "motion"; label: string }>();
+    const listed = new Map<string, { shapeId: string; kind: "page" | "motion" | "screen"; label: string }>();
     const chips = elements.map((chip) => ({ ...chip, shapeId: agentShapeId(chip.shapeId) }));
     for (const chip of chips) {
       const shape = byId.get(roomShapeId(chip.shapeId));
       if (shape === undefined || shape.typeName !== "shape" || listed.has(chip.shapeId)) continue;
+      const props = record(shape.props);
+      if (shape.type === "screen") {
+        if (!this.deps.features.has("repositories")) continue;
+        const facts = editorTabFacts({ type: shape.type, props }, { screens: true });
+        listed.set(chip.shapeId, { shapeId: chip.shapeId, kind: "screen", label: facts?.title ?? "" });
+        continue;
+      }
       const kind = shapeKind(shape.type);
       if (kind !== "page" && kind !== "motion") continue;
-      const props = record(shape.props);
       listed.set(chip.shapeId, { shapeId: chip.shapeId, kind, label: selectionLabel({ ...(typeof props.title === "string" ? { title: props.title } : {}), ...(typeof props.fileName === "string" ? { fileName: props.fileName } : {}) }) ?? "" });
     }
     const elementsPart = elementContext(chips, [...listed.values()]);

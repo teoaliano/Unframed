@@ -57,6 +57,13 @@ export const pageShape = (id: string, ref: string, props: Record<string, unknown
     meta: { ref },
   }) as unknown as TLRecord;
 
+export const screenShape = (id: string, props: Record<string, unknown> = {}, at: At = {}): TLRecord =>
+  ({
+    ...base(id, "screen", at),
+    props: { w: 1280, h: 800, instance: "i1", route: "/", title: "", ...props },
+    meta: {},
+  }) as unknown as TLRecord;
+
 export const componentShape = (id: string, tag: string, props: Record<string, unknown> = {}, at: At = {}): TLRecord =>
   ({
     ...base(id, "component", at),
