@@ -198,6 +198,8 @@ describe("the system prompt in a Repository", () => {
     const prompt = (await agent.session(chatId)).systemPrompt!;
     expect(prompt.startsWith(agentSystemPrompt(ALL_FEATURES))).toBe(true);
     expect(prompt).toContain(repositorySection({ root: agent.root, worktrees: dirname(agent.instance.worktree), setupFiles: [] }));
+    expect(prompt).toContain("call screen_state once per state");
+    expect(prompt).toContain("with mocks rather than by changing code");
 
     await agent.rpc.call("projects.create", { name: "board" });
     const boardChat = await agent.createChat("board");
