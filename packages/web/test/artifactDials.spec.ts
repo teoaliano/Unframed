@@ -598,3 +598,51 @@ test("each one-row parameter control is a pill, the colour swatch a circle with 
   await expect(plane).toBeVisible();
   expect(await styleOf(plane, "border-top-left-radius")).toBe("8px");
 });
+
+test("on the canvas panel, a wheel over an open select's list scrolls the list and leaves the canvas where it was", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await writeBridge(agent);
+  const options = Array.from({ length: 30 }, (_, index) => `Colour ${index + 1}`);
+  await filledArtifact(agent, { id: "shape:tuned", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Tuned", html: dialsPage({ fill: { type: "select", options } }) });
+  await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible();
+  await clickShape(page, "shape:tuned");
+  await parametersToggle(page).click();
+  const panel = canvasPanel(page, "Tuned");
+  await expect(panel).toBeVisible();
+  await panel.locator(".dialkit-select-trigger").click();
+  const list = page.locator(".dialkit-select-dropdown");
+  await expect(list).toBeVisible();
+  expect(await list.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  const before = (await shapeOnScreen(page, "shape:tuned").boundingBox())!;
+  const box = (await list.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, 200);
+  await expect.poll(() => list.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await expect(list).toBeVisible();
+  expect(await shapeOnScreen(page, "shape:tuned").boundingBox()).toEqual(before);
+});
+
+test("on the canvas panel, a long select value or label stays inside its control, cut short with an ellipsis and clear of the other", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await writeBridge(agent);
+  const long = "Interface-Button-Hover-Surface-Secondary-Background";
+  await filledArtifact(agent, { id: "shape:tuned", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Tuned", html: dialsPage({ fill: { type: "select", options: [long, "Transparent"] }, closeIconColourThatIsLong: "#a78bfa" }) });
+  await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible();
+  await clickShape(page, "shape:tuned");
+  await parametersToggle(page).click();
+  const panel = canvasPanel(page, "Tuned");
+  const trigger = panel.locator(".dialkit-select-trigger");
+  await expect(trigger.locator(".dialkit-select-value")).toHaveText(long);
+  for (const [control, label, value] of [
+    [trigger, trigger.locator(".dialkit-select-label"), trigger.locator(".dialkit-select-value")],
+    [panel.locator(".dialkit-color-control"), panel.locator(".dialkit-color-label"), panel.locator(".dialkit-color-swatch")],
+  ] as const) {
+    const [outer, left, right] = [(await control.boundingBox())!, (await label.boundingBox())!, (await value.boundingBox())!];
+    expect(right.x + right.width).toBeLessThanOrEqual(outer.x + outer.width);
+    expect(right.x).toBeGreaterThanOrEqual(left.x + left.width);
+    expect(left.width).toBeLessThanOrEqual(outer.width / 2);
+  }
+  expect(await styleOf(trigger.locator(".dialkit-select-value"), "text-overflow")).toBe("ellipsis");
+  expect(await trigger.locator(".dialkit-select-value").evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+  expect(await styleOf(panel.locator(".dialkit-color-label"), "text-overflow")).toBe("ellipsis");
+});

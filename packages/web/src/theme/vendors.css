@@ -149,6 +149,23 @@
   padding-right: calc(var(--spacing) * 1.5);
 }
 
+:root .dialkit-root[data-theme] .dialkit-select-trigger {
+  gap: calc(var(--spacing) * 3);
+}
+
+:root .dialkit-root[data-theme] .dialkit-select-right {
+  min-width: 0;
+}
+
+:root .dialkit-root[data-theme] :is(.dialkit-select-label, .dialkit-color-label, .dialkit-labeled-control-label, .dialkit-text-label) {
+  display: block;
+  min-width: 0;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 :root .dialkit-root[data-theme] .dialkit-toggle {
   height: var(--dial-row-height);
   padding: 0 calc(var(--spacing) * 3);
