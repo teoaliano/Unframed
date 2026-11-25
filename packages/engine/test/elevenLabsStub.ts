@@ -5,6 +5,7 @@ import type { RunEvent } from "@unframed/contracts";
 import { startEngine, type EngineOptions, type StubHandler, type TestEngine } from "./harness.ts";
 import { json } from "./openRouterStub.ts";
 import type { Subscription, TestRpcClient } from "./rpcClient.ts";
+import { seedSamplePrompts } from "./canvasRecords.ts";
 
 export const ELEVENLABS_KEY = "sk_0123456789abcdef0123456789abcdef";
 export const OPENROUTER_KEY = "sk-or-v1-test-key-0000abcd";
@@ -150,7 +151,10 @@ export const startSpeaking = async (options: EngineOptions & { script?: ElevenLa
     elevenLabs: live.handler,
   });
   const rpc = await engine.rpc();
-  await rpc.call("projects.create", { name: "board" }).catch(() => undefined);
+  await rpc.call("projects.create", { name: "board" }).then(
+    () => seedSamplePrompts(rpc, "board"),
+    () => undefined,
+  );
   const events = rpc.subscribe("run.subscribe", { project: "board" });
   return { engine, rpc, events, speech: live.speech, script };
 };

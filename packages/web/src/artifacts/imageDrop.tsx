@@ -56,7 +56,7 @@ export const DropOutline = ({ shapeId, scale = 1 }: { readonly shapeId: string; 
     <div
       aria-hidden
       data-drop-outline=""
-      className="pointer-events-none absolute border-2 border-primary"
+      className="pointer-events-none absolute border-2 border-(--image-drop-indicator)"
       style={{ left: hit.box.x * scale, top: hit.box.y * scale, width: hit.box.w * scale, height: hit.box.h * scale }}
     />
   );

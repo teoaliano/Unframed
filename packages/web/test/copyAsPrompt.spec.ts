@@ -14,7 +14,7 @@ test("Copy as prompt places a plain prompt with the answer beside the text resul
   await menu.getByRole("menuitem", { name: "Copy as prompt" }).click();
 
   await expect.poll(async () => (await roomShapes(generation.engine, "default", "text")).length).toBe(4);
-  const copy = (await roomShapes(generation.engine, "default", "text")).find((shape) => ![result.id, "shape:starter-subject", "shape:starter-scene"].includes(shape.id))!;
+  const copy = (await roomShapes(generation.engine, "default", "text")).find((shape) => ![result.id, "shape:sample-subject", "shape:sample-scene"].includes(shape.id))!;
   expect(plainText(copy)).toBe("a portrait of @100");
   expect(copy.meta.unframed?.result).toBeUndefined();
   expect(copy.meta.ref).not.toBe(result.meta.ref);

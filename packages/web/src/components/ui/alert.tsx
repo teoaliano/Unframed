@@ -4,7 +4,7 @@ import type * as React from "react";
 
 import { cn } from "~/lib/utils";
 
-const alertVariants = cva("relative rounded-xl border px-3.5 py-3 text-card-foreground text-sm", {
+const alertVariants = cva("relative rounded-xl border px-3.5 py-3 text-(--alert-foreground) text-sm [--alert-tint:transparent] data-[variant=error]:[--alert-tint:var(--alert-error-tint)] data-[variant=info]:[--alert-tint:var(--alert-info-tint)] data-[variant=success]:[--alert-tint:var(--alert-success-tint)] data-[variant=warning]:[--alert-tint:var(--alert-warning-tint)]", {
   defaultVariants: {
     surface: "default",
     variant: "default",
@@ -16,15 +16,15 @@ const alertVariants = cva("relative rounded-xl border px-3.5 py-3 text-card-fore
       glass: "alert-glass",
     },
     variant: {
-      default: "bg-transparent dark:bg-input/32 [&_svg]:text-muted-foreground",
+      default: "border-(--alert-default-border) bg-(--alert-default-surface)/(--alert-default-surface-opacity) [&_svg]:text-(--alert-default-icon)",
       sidebar:
-        "rounded-lg border-sidebar-border bg-sidebar-control-surface px-2 py-1.5 text-[11px] leading-4 [&_[data-slot=alert-description]]:block [&_[data-slot=alert-description]]:text-sidebar-muted-foreground",
+        "rounded-lg border-(--alert-sidebar-border) bg-(--alert-sidebar-surface) px-2 py-1.5 text-2xs leading-4 [&_[data-slot=alert-description]]:block [&_[data-slot=alert-description]]:text-(--alert-sidebar-description)",
       error:
-        "border-error/32 bg-error-surface text-error-foreground [&_[data-slot=alert-description]]:text-error-foreground/80 [&_svg]:text-error",
-      info: "border-info/32 bg-info/4 [&_svg]:text-info",
-      success: "border-success/32 bg-success/4 [&_svg]:text-success",
+        "border-(--alert-error-border)/(--alert-error-border-opacity) bg-(--alert-error-surface) text-(--alert-error-foreground) [&_[data-slot=alert-description]]:text-(--alert-error-description)/(--alert-error-description-opacity) [&_svg]:text-(--alert-error-icon)",
+      info: "border-(--alert-info-border)/(--alert-info-border-opacity) bg-(--alert-info-surface)/(--alert-info-surface-opacity) [&_svg]:text-(--alert-info-icon)",
+      success: "border-(--alert-success-border)/(--alert-success-border-opacity) bg-(--alert-success-surface)/(--alert-success-surface-opacity) [&_svg]:text-(--alert-success-icon)",
       warning:
-        "border-warning/32 bg-warning-surface text-warning-foreground [&_[data-slot=alert-description]]:text-warning-foreground/80 [&_svg]:text-warning",
+        "border-(--alert-warning-border)/(--alert-warning-border-opacity) bg-(--alert-warning-surface) text-(--alert-warning-foreground) [&_[data-slot=alert-description]]:text-(--alert-warning-description)/(--alert-warning-description-opacity) [&_svg]:text-(--alert-warning-icon)",
     },
   },
 });
@@ -132,7 +132,7 @@ function AlertTitle({ className, ...props }: React.ComponentProps<"div">) {
 function AlertDescription({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
-      className={cn("flex flex-col gap-2.5 text-muted-foreground", className)}
+      className={cn("flex flex-col gap-2.5 text-(--alert-description)", className)}
       data-slot="alert-description"
       {...props}
     />

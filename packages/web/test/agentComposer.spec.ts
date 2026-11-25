@@ -8,11 +8,12 @@ import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
 import { platformOf } from "./platform.ts";
 import { writeProjectFile } from "./artifacts.ts";
+import { leaveEditor } from "./editorHarness.ts";
 
 /** A toast's second line, by its text. */
 const toastDescription = (page: Page, text: string) => page.locator("[data-slot='toast-description']").filter({ hasText: text });
 
-/** A page and two filled images, left of the starter prompts. */
+/** A page and two filled images, left of the sample prompts. */
 const pageAndImages = async (page: Page, engine: TestEngine) => {
   await openCanvas(page, engine);
   await putRecords(engine, artifactColumn([{ id: "shape:p1", title: "Alpha" }]));
@@ -465,7 +466,6 @@ test("ArrowUp recalls a repeated message once, moves through a wrapped line befo
   }
 });
 
-const MENU_GLASS = "color-mix(in srgb, var(--popover) 18%, color-mix(in srgb, var(--popover) var(--glass-opacity), transparent))";
 
 test("the Agent tray is t3code's composer on the kit: the rounded shell, kit chips and controls, the round Send, the kit menu look", async ({ page, agent }) => {
   await enablePlanMode(agent);
@@ -500,7 +500,7 @@ test("the Agent tray is t3code's composer on the kit: the rounded shell, kit chi
     await promptBox(tray).pressSequentially("@");
     const mentions = page.getByRole("listbox", { name: "Mentions" });
     await expect(mentions).toBeVisible();
-    expect(await styleOf(mentions, "background-color")).toBe(await resolvedColor(page, MENU_GLASS));
+    expect(await styleOf(mentions, "background-color")).toBe(await resolvedColor(page, "var(--listbox-surface)"));
     await page.keyboard.press("Backspace");
     await expect(mentions).toHaveCount(0);
   });
@@ -535,7 +535,7 @@ test("a chat's unsent draft follows it between the canvas rail and the editor's 
   await promptBox(editorRail).click();
   await page.keyboard.press("End");
   await page.keyboard.type(" and red");
-  await editor.getByRole("button", { name: "Back to canvas" }).click();
+  await leaveEditor(page);
   await expect(editor).toHaveCount(0);
   await expect(promptBox(panel)).toHaveText("Make the title bigger and red");
 

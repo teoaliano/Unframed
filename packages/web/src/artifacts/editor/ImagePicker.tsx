@@ -72,8 +72,8 @@ export const ImagePicker = ({ project, onChoose }: ImagePickerProps) => {
       <PopoverPopup side="bottom" align="start" sideOffset={6} padding="compact" className="w-70" aria-label="Choose an image" initialFocus={false}>
         <div className="flex flex-col gap-2">
           <Input aria-label="Filter images" placeholder="Filter images" value={filter} onChange={(event) => setFilter(event.currentTarget.value)} />
-          {images !== undefined && images.length === 0 && <p className="m-0 text-sm text-muted-foreground">No images in this project yet.</p>}
-          {images !== undefined && images.length > 0 && shown.length === 0 && <p className="m-0 text-sm text-muted-foreground">No images match.</p>}
+          {images !== undefined && images.length === 0 && <p className="m-0 text-sm text-(--artifact-editor-note)">No images in this project yet.</p>}
+          {images !== undefined && images.length > 0 && shown.length === 0 && <p className="m-0 text-sm text-(--artifact-editor-note)">No images match.</p>}
           <div className="grid max-h-72 grid-cols-3 gap-1.5 overflow-auto">
             {shown.map((image) => (
               <Tip key={image.file} label={image.fileName}>
@@ -89,7 +89,7 @@ export const ImagePicker = ({ project, onChoose }: ImagePickerProps) => {
                   }}
                 >
                   <img alt="" src={previewUrl(project, image.file, 512)} className="aspect-square w-full rounded-sm object-cover" />
-                  <span className="truncate text-xs text-muted-foreground">{image.fileName}</span>
+                  <span className="truncate text-xs text-(--artifact-editor-meta)">{image.fileName}</span>
                 </Button>
               </Tip>
             ))}

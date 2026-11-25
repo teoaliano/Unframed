@@ -107,7 +107,7 @@ test("the strip is the bar's own project tabs: full height, a divider before and
   const [on, off] = [await tab.evaluate(look), await idleTab.evaluate(look)];
   const accent = await page.evaluate(() => {
     const probe = document.createElement("div");
-    probe.style.backgroundColor = "var(--accent)";
+    probe.style.backgroundColor = "var(--project-tab-active-surface)";
     document.body.append(probe);
     const value = getComputedStyle(probe).backgroundColor;
     probe.remove();

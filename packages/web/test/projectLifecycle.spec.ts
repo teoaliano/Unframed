@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { makeTempDir } from "../../engine/test/engineProcess.ts";
-import { openCanvas, plainText, roomShapes, waitForRoom } from "./canvas.ts";
+import { openCanvas, plainText, roomRecords, roomShapes, waitForRoom } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 import { openSettings, showSection, startSettingsEngine } from "./settings.ts";
 import type { Page } from "@playwright/test";
@@ -134,7 +134,7 @@ test("deleting asks first, asks again when renders are in progress, and opens th
   await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["default", "Add project"]);
   await page.keyboard.press("Escape");
 
-  // The active and last project: a new default replaces it, with the starter content.
+  // The active and last project: a new, empty default replaces it.
   await rpc.call("projects.create", { name: "gamma" });
   await menu(page);
   await tabMenuItem(page, "default", "Delete project");
@@ -149,11 +149,12 @@ test("deleting asks first, asks again when renders are in progress, and opens th
   await menu(page);
   await tabMenuItem(page, "gamma", "Delete project");
   await page.getByRole("alertdialog", { name: "Delete project?" }).getByRole("button", { name: "Delete project" }).click();
-  // The last project in the folder is gone: a new default opens with the starter content.
+  // The last project in the folder is gone: a new, empty default opens.
   await expect(page.locator("[role=tab][data-active='true']")).toHaveText("default");
   await expect(activeCanvas(page, "default")).toBeVisible();
   expect((await rpc.call("projects.list")).projects).toEqual(["default"]);
-  await waitForRoom(engine, "default", (records) => records.filter((record) => record.type === "text").length === 2);
+  await waitForRoom(engine, "default", (records) => records.some((record) => record.typeName === "page"));
+  expect((await roomRecords(engine, "default")).filter((record) => record.typeName === "shape")).toEqual([]);
 });
 
 test("after saving a new output folder, the menu lists its projects and the canvas opens one, or a new default", async ({ page }) => {
@@ -186,7 +187,8 @@ test("after saving a new output folder, the menu lists its projects and the canv
     await expect(page.locator("[role=tab][data-active='true']")).toHaveText("default");
     await expect(activeCanvas(page, "default")).toBeVisible();
     expect(existsSync(join(empty, "default"))).toBe(true);
-    await expect.poll(async () => (await roomShapes(engine, "default", "text")).length).toBe(2);
+    await waitForRoom(engine, "default", (records) => records.some((record) => record.typeName === "page"));
+    expect(await roomShapes(engine, "default")).toEqual([]);
     await menu(page);
     await expect(page.locator("[role=menuitem], [role=menuitemradio]")).toHaveText(["default", "Add project"]);
   } finally {

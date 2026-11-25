@@ -8,7 +8,7 @@ import { clickShape } from "./generation.ts";
 import { putRecords } from "./media.ts";
 import { dialsPage, filledArtifact, insideComposition, insideFrame, projectPath, writeBridge, writeProjectFile } from "./artifacts.ts";
 import { expectToken, inBothSchemes, styleOf } from "./kit.ts";
-import { editor } from "./editorHarness.ts";
+import { editor, leaveEditor } from "./editorHarness.ts";
 
 const editorFrame = (page: Page): FrameLocator => editor(page).frameLocator("iframe[data-artifact-frame]");
 const shown = async (frame: FrameLocator) => JSON.parse((await frame.locator("#values").textContent()) ?? "null");
@@ -49,7 +49,7 @@ test("an artifact that declares parameters shows them as DialKit controls; one t
   expect(Math.abs(box! - title!)).toBeLessThanOrEqual(1);
   await page.keyboard.press("Escape");
   await expect(editor(page).getByRole("button", { name: "Add a parameter" })).toBeFocused();
-  await editor(page).getByRole("button", { name: "Back to canvas" }).click();
+  await leaveEditor(page);
 
   await page.mouse.click(640, 600);
   await openEditor(page, "shape:plain", "Plain");
@@ -102,7 +102,7 @@ test("a change made just before the editor closes is still saved", async ({ page
   await page.keyboard.press("ArrowRight");
   await page.keyboard.press("ArrowRight");
   await page.keyboard.press("ArrowRight");
-  await editor(page).getByRole("button", { name: "Back to canvas" }).click();
+  await leaveEditor(page);
   await expect(editor(page)).toHaveCount(0);
   await expect.poll(() => dialsOf(agent, "shape:tuned"), { timeout: 10_000 }).toEqual({ size: 13 });
 });
@@ -173,17 +173,18 @@ test("DialKit follows the app's scheme in the kit's tokens, as one card with its
   await filledArtifact(agent, { id: "shape:tuned", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Tuned", html: dialsPage({ size: [12, 8, 40] }) });
   await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible();
 
-  const themed = async (dials: ReturnType<Page["locator"]>, card: ReturnType<Page["locator"]>) => {
+  const themed = async (dials: ReturnType<Page["locator"]>, card: ReturnType<Page["locator"]>, cardSurface: string) => {
     const panel = dials.locator(".dialkit-panel-inner");
     await expect(dials.locator(".dialkit-folder-title-root")).toHaveText("Look");
     await inBothSchemes(page, async (scheme) => {
       await expect(dials.locator(".dialkit-root")).toHaveAttribute("data-theme", scheme);
-      await expectToken(panel, "background-color", "--card");
-      await expectToken(card, "background-color", "--card");
-      await expectToken(dials.locator(".dialkit-slider"), "background-color", "--background");
-      await expectToken(dials.locator(".dialkit-slider"), "border-top-color", "--input");
-      await expectToken(dials.locator(".dialkit-folder-title-root"), "color", "--foreground");
-      await expectToken(dials.locator(".dialkit-slider-label"), "color", "--muted-foreground");
+      await expectToken(panel, "background-color", "--dial-glass-bg");
+      await expectToken(card, "background-color", cardSurface);
+      await expectToken(panel, "background-color", cardSurface);
+      await expectToken(dials.locator(".dialkit-slider"), "background-color", "--dial-surface");
+      await expectToken(dials.locator(".dialkit-slider"), "border-top-color", "--dial-border");
+      await expectToken(dials.locator(".dialkit-folder-title-root"), "color", "--dial-text-root");
+      await expectToken(dials.locator(".dialkit-slider-label"), "color", "--dial-text-label");
       expect(await styleOf(panel, "font-family")).toBe(await styleOf(page.locator("body"), "font-family"));
       expect(await styleOf(dials.locator(".dialkit-slider-label"), "font-size")).toBe("14px");
       expect(await styleOf(dials.locator(".dialkit-slider-label"), "font-family")).toBe(await styleOf(page.locator("body"), "font-family"));
@@ -194,12 +195,12 @@ test("DialKit follows the app's scheme in the kit's tokens, as one card with its
   await clickShape(page, "shape:tuned");
   await parametersToggle(page).click();
   const canvas = canvasPanel(page, "Tuned");
-  await themed(canvas.getByTestId("artifact-dials"), canvas);
+  await themed(canvas.getByTestId("artifact-dials"), canvas, "--parameters-panel-surface");
   await page.keyboard.press("Escape");
 
   await page.mouse.click(640, 600);
   await openEditor(page, "shape:tuned", "Tuned");
-  await themed(editor(page).getByTestId("artifact-dials"), editor(page).locator('[data-editor-column="parameters"]'));
+  await themed(editor(page).getByTestId("artifact-dials"), editor(page).locator('[data-editor-column="parameters"]'), "--artifact-editor-column-surface");
 });
 
 const dialKitLoaded = (page: Page) =>
@@ -551,4 +552,30 @@ test("the header row shows the Add a parameter button's focus ring whole", async
   await page.keyboard.press("Escape");
   await expect(panel.getByRole("button", { name: "Add a parameter" })).toBeFocused();
   expect(await styleOf(panel.locator(".dialkit-panel-toolbar"), "overflow")).toBe("visible");
+});
+
+test("a slider's fill keeps its colour when the slider takes keyboard focus, at rest and hovered, while the focus ring shows", async ({ page, agent }) => {
+  await openCanvas(page, agent);
+  await writeBridge(agent);
+  await filledArtifact(agent, { id: "shape:tuned", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Tuned", html: dialsPage({ size: [80, 0, 100, 1] }) });
+  await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible();
+  await clickShape(page, "shape:tuned");
+  await parametersToggle(page).click();
+  const panel = canvasPanel(page, "Tuned");
+  const slider = panel.getByRole("slider", { name: "Size" });
+  await expect(slider).toBeVisible();
+  const fill = panel.locator(".dialkit-slider-fill").first();
+  await inBothSchemes(page, async () => {
+    await page.mouse.move(0, 0);
+    await expectToken(fill, "background-color", "--dial-surface-active");
+    await page.keyboard.press("Shift");
+    await slider.focus();
+    await expect.poll(() => slider.evaluate((element) => element.matches(":focus-visible"))).toBe(true);
+    await expectToken(slider, "outline-color", "--dial-focus-ring");
+    await expectToken(fill, "background-color", "--dial-surface-active");
+    await slider.hover();
+    await expectToken(fill, "background-color", "--dial-slider-fill-active");
+    await page.mouse.move(0, 0);
+    await slider.blur();
+  });
 });

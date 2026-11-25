@@ -5,7 +5,7 @@ import { Demos, Section } from "../frame.tsx";
 const Strip = ({ names, status }: { readonly names: ReadonlyArray<string>; readonly status?: Readonly<Record<string, "running" | "finished" | "needs-you">> }) => {
   const [active, setActive] = useState(names[0]);
   return (
-    <div className="flex h-9 overflow-hidden bg-background">
+    <div className="flex h-9 overflow-hidden bg-(--top-bar-surface)">
       <ProjectTabs value={active ?? null} onValueChange={(name) => setActive(String(name))}>
         <ProjectTabsList aria-label="Open projects">
           {names.map((name) => (

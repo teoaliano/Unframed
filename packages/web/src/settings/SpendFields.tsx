@@ -38,14 +38,14 @@ export const SpendFields = ({
   return (
     <div className="flex flex-col gap-3">
       <label className="flex flex-col gap-1.5 text-sm">
-        <span className="text-muted-foreground">Spend limit, in US dollars</span>
+        <span className="text-(--settings-dialog-label)">Spend limit, in US dollars</span>
         <Input aria-label="Spend limit amount" aria-describedby={hintId} inputMode="decimal" placeholder="No limit" value={amount} onChange={(event) => onAmount(event.target.value)} />
-        <span id={hintId} className="text-xs text-muted-foreground" data-testid="spend-limit-hint">
+        <span id={hintId} className="text-xs text-(--settings-dialog-description)" data-testid="spend-limit-hint">
           {SPEND_LIMIT_HINT}
         </span>
       </label>
       <div className="flex flex-col gap-1.5 text-sm">
-        <span id={periodId} className="text-muted-foreground">
+        <span id={periodId} className="text-(--settings-dialog-label)">
           Limit period
         </span>
         <Select value={period ?? ""} onValueChange={(value) => value && onPeriod(value as SpendPeriod)}>

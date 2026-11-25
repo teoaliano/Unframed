@@ -1,4 +1,5 @@
 import {
+  commentSchemaRecords,
   createShapePropsMigrationIds,
   createShapePropsMigrationSequence,
   createTLSchema,
@@ -345,6 +346,7 @@ const buildSchema = (refusalOf?: (kit: Kit) => string | null): TLSchema => {
       },
     },
     bindings: defaultBindingSchemas,
+    records: commentSchemaRecords,
     assets: {
       image: { migrations: imageAssetMigrations, props: { ...imageAssetProps, src: assetSource(false) } },
       video: { migrations: videoAssetMigrations, props: { ...videoAssetProps, src: assetSource(true) } },

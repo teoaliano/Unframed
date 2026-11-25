@@ -49,7 +49,7 @@ test("a component's page shows its examples, the variants read from its source a
 
 test("the tokens page resolves the theme's tokens in the current scheme", async ({ page }) => {
   await page.goto(`${origin}/design-system/#tokens`);
-  const background = page.locator("[data-token='--background']");
+  const background = page.locator("[data-token='--surface-background']");
   await expect(background).toBeVisible();
   await expect(background).not.toContainText("not emitted");
 });

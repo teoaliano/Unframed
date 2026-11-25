@@ -1,13 +1,3 @@
-/*
- * Third-party adapters (spec 12): each library's look set from the kit's tokens. The
- * tldraw adapter lives beside this file; t3code's .chat-markdown rules for react-markdown
- * are in theme.css.
- */
-
-/*
- * Tiptap: the Generate composer's instruction box, after t3code's
- * .composer-tiptap, keyed on the box's own attribute.
- */
 [data-generate-prompt] {
   min-height: 1lh;
   outline: none;
@@ -23,13 +13,10 @@
   content: attr(data-placeholder);
   float: left;
   height: 0;
-  color: color-mix(in srgb, var(--color-placeholder) 75%, transparent);
+  color: color-mix(in srgb, var(--composer-placeholder) var(--composer-placeholder-opacity), transparent);
   pointer-events: none;
 }
 
-/* Tiptap: the Agent tray's prompt editor. */
-
-/* t3code's composer editor rules (its .composer-tiptap), keyed on the agent prompt's own attribute. */
 [data-agent-prompt] p {
   margin: 0;
 }
@@ -38,85 +25,56 @@
   content: attr(data-placeholder);
   float: left;
   height: 0;
-  color: color-mix(in srgb, var(--contrast-placeholder) 75%, transparent);
+  color: color-mix(in srgb, var(--composer-placeholder) var(--composer-placeholder-opacity), transparent);
   pointer-events: none;
 }
 
 [data-agent-prompt] .ProseMirror-selectednode {
-  outline: 2px solid var(--ring);
+  outline: 2px solid var(--composer-selected-node-ring);
   outline-offset: 1px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
-/* @pierre/diffs: t3code's diff colours and injected diff CSS. */
-
-/*
- * The renderer paints in a shadow root that no stylesheet reaches, so t3code's injected
- * diff CSS goes in through its unsafeCSS option (theme/diffs.ts, beside this file). The tokens it
- * reads inherit into the shadow root: the --diff-* colours and --diffs-font-family in
- * theme.css, and the code surface tokens.
- */
-
-/* DialKit: its variables from the kit's tokens. */
-
-/*
- * DialKit follows the app's scheme (spec 09): the controls set its data-theme from
- * data-unframed-theme, and these variables read the tokens, which change with the scheme, so
- * its panel is the card it sits on. :root outranks DialKit's own .dialkit-root and
- * [data-theme="light"] rules, which load after this file with the first panel.
- *
- * The controls are the kit's fields and buttons: a fill of --background with a --input border
- * (the kit's Input), --accent for the hover and pressed states, the kit's control radius, and
- * the kit's ring for focus. Its numbers and colour values use the app's mono font, as the kit's
- * Input does with font="mono".
- */
 :root .dialkit-root[data-theme] {
-  --dial-glass-bg: var(--card);
-  --dial-dropdown-bg: var(--popover);
-  --dial-surface: var(--background);
-  --dial-surface-hover: var(--accent);
-  --dial-surface-active: var(--accent);
-  --dial-surface-subtle: var(--border);
-  --dial-border: var(--input);
-  --dial-border-hover: var(--muted-foreground);
-  --dial-text-root: var(--foreground);
-  --dial-text-focus: var(--foreground);
-  --dial-text-primary: var(--foreground);
-  --dial-text-section: var(--muted-foreground);
-  --dial-text-label: var(--muted-foreground);
-  --dial-text-secondary: var(--muted-foreground);
-  --dial-text-tertiary: var(--muted-foreground);
-  --dial-focus-ring: var(--ring);
-  --dial-radius: var(--control-radius);
-  --dial-row-height: 2rem;
-  --dial-row-gap: 0.375rem;
-  --dial-shadow-dropdown: 0 4px 16px rgb(0 0 0 / 8%);
+  --dial-glass-bg: inherit;
+  --dial-dropdown-bg: inherit;
+  --dial-surface: inherit;
+  --dial-surface-hover: inherit;
+  --dial-surface-active: inherit;
+  --dial-surface-subtle: inherit;
+  --dial-border: inherit;
+  --dial-border-hover: inherit;
+  --dial-text-root: inherit;
+  --dial-text-focus: inherit;
+  --dial-text-primary: inherit;
+  --dial-text-section: inherit;
+  --dial-text-label: inherit;
+  --dial-text-secondary: inherit;
+  --dial-text-tertiary: inherit;
+  --dial-focus-ring: inherit;
+  --dial-radius: var(--radius-md);
+  --dial-row-height: calc(var(--spacing) * 8);
+  --dial-row-gap: calc(var(--spacing) * 1.5);
+  --dial-shadow-dropdown: inherit;
   font-family: var(--font-sans);
 }
 
 :root :is([data-shown="dock"], [data-shown="sheet"]) .dialkit-root[data-theme] {
-  --dial-glass-bg: var(--background);
+  --dial-glass-bg: var(--dial-glass-bg-docked);
 }
 
-/* The editor's Parameters column insets its header and its prompt box 10 px: DialKit's panel matches. */
 :root .dialkit-root[data-theme] .dialkit-panel-inline {
-  padding: 10px;
+  padding: calc(var(--spacing) * 2.5);
 }
 
-/*
- * DialKit's sticky headers paint a band 12 px wider than themselves on each side. Inside the 10 px
- * inset that band pokes 2 px past the panel and makes it scroll sideways, so the band takes the inset.
- */
 :root .dialkit-root[data-theme] :is(.dialkit-panel-inline > .dialkit-folder-root > .dialkit-panel-header, .dialkit-folder-section > .dialkit-folder-header)::before {
-  inset: 0 -10px;
+  inset: 0 calc(var(--spacing) * -2.5);
 }
 
-/* The header row holds the kit's buttons beside the versions picker: their focus rings show whole. */
 :root .dialkit-root[data-theme] .dialkit-panel-toolbar {
   overflow: visible;
 }
 
-/* The kit's type: 14 px labels and values, not DialKit's 13 px. */
 :root .dialkit-root[data-theme]
   :is(
     .dialkit-folder-title,
@@ -140,48 +98,42 @@
     .dialkit-preset-trigger,
     .dialkit-preset-label
   ) {
-  font-size: 0.875rem;
+  font-size: var(--text-sm);
   font-family: var(--font-sans);
 }
 
-/* Numbers, colour values and pad values read as the kit's mono fields. */
 :root .dialkit-root[data-theme]
   :is(.dialkit-slider-value, .dialkit-slider-input, .dialkit-color-value, .dialkit-pad-value) {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
-/* The kit's focus ring, on every control DialKit focuses. */
 :root .dialkit-root[data-theme] :where(button, [role="slider"], [role="button"], .dialkit-color-plane, .dialkit-pad-surface):focus-visible {
-  outline: 2px solid var(--ring);
+  outline: 2px solid var(--dial-focus-ring);
   outline-offset: 1px;
 }
 
-/* A control's own edge, as the kit's Input draws it. */
 :root .dialkit-root[data-theme] :is(.dialkit-slider, .dialkit-text-control, .dialkit-select-trigger, .dialkit-preset-trigger, .dialkit-color-control, .dialkit-labeled-control, .dialkit-image-control, .dialkit-toggle) {
-  border: 1px solid var(--input);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+  border: 1px solid var(--dial-border);
+  box-shadow: 0 1px 2px var(--dial-control-shadow);
 }
 
-/* A row is the kit's row height, so a toggle's segments fit inside it rather than setting it. */
 :root .dialkit-root[data-theme] .dialkit-toggle {
   height: var(--dial-row-height);
-  padding: 0 12px;
+  padding: 0 calc(var(--spacing) * 3);
 }
 
 :root .dialkit-root[data-theme] .dialkit-toggle .dialkit-segmented {
   flex: none;
-  padding: 2px;
+  padding: calc(var(--spacing) * 0.5);
 }
 
 :root .dialkit-root[data-theme] .dialkit-segmented-button {
-  height: 1.25rem;
-  padding: 0 8px;
-  line-height: 1.25rem;
+  height: calc(var(--spacing) * 5);
+  padding: 0 calc(var(--spacing) * 2);
+  line-height: calc(var(--spacing) * 5);
 }
 
-/* A slider's label and value sit centred on the row: the flex box centres the glyphs, where a translate
-   offset them by the font's own metrics. */
 :root .dialkit-root[data-theme] :is(.dialkit-slider-label, .dialkit-slider-value) {
   top: 0;
   bottom: 0;
@@ -192,11 +144,6 @@
   border-bottom: 0;
 }
 
-/*
- * Hovered or dragged, the fill and the ticks take the muted tone, which is also the label's colour, so
- * the label vanished into the fill. The fill takes the border tone instead, and the label takes the
- * foreground and sits above the fill and the ticks. The ticks stop short of the label.
- */
 :root .dialkit-root[data-theme] .dialkit-slider-label {
   z-index: 1;
 }
@@ -209,6 +156,10 @@
   color: var(--dial-text-focus);
 }
 
+:root .dialkit-root[data-theme] .dialkit-slider:where(:focus-visible) .dialkit-slider-fill {
+  background: var(--dial-surface-active);
+}
+
 :root .dialkit-root[data-theme] .dialkit-slider-active .dialkit-slider-fill {
-  background: var(--border);
+  background: var(--dial-slider-fill-active);
 }

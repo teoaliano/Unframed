@@ -9,17 +9,17 @@ import { useRender } from "@base-ui/react/use-render";
  */
 
 const ROUND =
-  "relative isolate flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full shadow-xs outline-none transition-all duration-150 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background enabled:cursor-pointer enabled:inset-shadow-2xs enabled:inset-shadow-primary-foreground/16 hover:scale-105 active:shadow-none disabled:pointer-events-none disabled:opacity-64 disabled:shadow-none disabled:hover:scale-100 motion-reduce:transition-none motion-reduce:hover:scale-100";
+  "relative isolate flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full shadow-xs outline-none transition-all duration-150 focus-visible:ring-2 focus-visible:ring-(--message-action-ring-focus) focus-visible:ring-offset-1 focus-visible:ring-offset-(--message-action-ring-offset) enabled:cursor-pointer enabled:inset-shadow-2xs hover:scale-105 active:shadow-none disabled:pointer-events-none disabled:opacity-64 disabled:shadow-none disabled:hover:scale-100 motion-reduce:transition-none motion-reduce:hover:scale-100";
 
 const PILL =
-  "inline-flex h-8 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap bg-message-action font-medium text-sm text-message-action-foreground shadow-xs shadow-message-action/24 outline-none hover:bg-message-action-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-64 disabled:shadow-none sm:h-7 [&_svg]:size-3.5 [&_svg]:shrink-0";
+  "inline-flex h-8 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap bg-(--message-action-pill-surface) font-medium text-sm text-(--message-action-pill-foreground) shadow-xs shadow-(color:--message-action-pill-shadow) outline-none hover:bg-(--message-action-pill-surface-hover) focus-visible:ring-2 focus-visible:ring-(--message-action-ring-focus) focus-visible:ring-offset-1 focus-visible:ring-offset-(--message-action-ring-offset) disabled:pointer-events-none disabled:opacity-64 disabled:shadow-none sm:h-7 [&_svg]:size-3.5 [&_svg]:shrink-0";
 
 const TONES = {
-  send: `${ROUND} bg-message-action text-message-action-foreground enabled:shadow-message-action/24 hover:bg-message-action-hover`,
-  stop: `${ROUND} bg-destructive/90 text-primary-foreground shadow-destructive/24 hover:bg-destructive`,
+  send: `${ROUND} bg-(--message-action-send-surface) text-(--message-action-send-foreground) enabled:inset-shadow-(color:--message-action-send-inset) enabled:shadow-(color:--message-action-send-shadow) hover:bg-(--message-action-send-surface-hover)`,
+  stop: `${ROUND} bg-(--message-action-stop-surface)/(--message-action-stop-surface-opacity) text-(--message-action-stop-foreground) enabled:inset-shadow-(color:--message-action-stop-inset) shadow-(color:--message-action-stop-shadow) hover:bg-(--message-action-stop-surface)/(--message-action-stop-surface-hover-opacity)`,
   pill: `${PILL} rounded-full px-3`,
   pillStart: `${PILL} rounded-l-full rounded-r-none ps-3 pe-2.5`,
-  pillEnd: `${PILL} rounded-l-none rounded-r-full border-l border-message-action-foreground/12 px-2`,
+  pillEnd: `${PILL} rounded-l-none rounded-r-full border-l border-(--message-action-pill-end-divider)/(--message-action-pill-end-divider-opacity) px-2`,
 } as const;
 
 export const MessageAction = ({ tone, render, ...props }: useRender.ComponentProps<"button"> & { readonly tone: keyof typeof TONES }) => {

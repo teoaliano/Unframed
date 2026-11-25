@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import type { Page } from "@playwright/test";
 import { openCanvas, toast } from "./canvas.ts";
 import { expect, startHostedEngine, test } from "./fixtures.ts";
-import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
+import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf, tokenColor } from "./kit.ts";
 import { libraryDialog, openLibrary, presetItem, presetsFile, shownNames, userPreset, writePresets } from "./library.ts";
 
 const toggle = (page: Page, group: string, name: string) => libraryDialog(page).getByRole("group", { name: group }).getByRole("button", { name, exact: true });
@@ -99,7 +99,7 @@ test("cards and rows show the name, summary, needs and chips, Add, and delete on
   await expect(presetItem(page, "Prose to JSON").getByRole("button", { name: /^Delete/ })).toHaveCount(0);
 });
 
-test("the Library is the kit's Dialog with its search, Select and segmented toggles, cards on --card, chips as label Badges in their hues, ghost pagination and a destructive AlertDialog", async ({ page, engine }) => {
+test("the Library is the kit's Dialog with its search, Select and segmented toggles, cards on their surface token, chips as label Badges in their hues, ghost pagination and a destructive AlertDialog", async ({ page, engine }) => {
   const many = Array.from({ length: 10 }, (_, index) => userPreset(`user-${index}`, `Preset ${index}`, { savedAt: new Date(Date.UTC(2026, 0, 1 + index)).toISOString() }));
   await writePresets(engine, [userPreset("user-a", "Portrait retouch", { savedAt: "2027-01-01T00:00:00.000Z", summary: "Soft light for faces", recipe: { medium: "image" } }), ...many]);
   await openCanvas(page, engine);
@@ -120,11 +120,11 @@ test("the Library is the kit's Dialog with its search, Select and segmented togg
   await expectSlot(next, "button");
   await inBothSchemes(page, async (scheme) => {
     await page.mouse.move(5, 5);
-    await expectToken(card, "background-color", "--card");
-    expect(await styleOf(next, "background-color")).toBe("rgba(0, 0, 0, 0)");
+    await expectToken(card, "background-color", "--library-dialog-card-surface");
+    expect(await styleOf(next, "background-color")).toBe(await tokenColor(page, "--button-ghost-surface"));
     const hue = { "[data-chip='recipe']": "purple", "[data-chip='image']": "teal", "[data-chip='user']": "green" };
     for (const [selector, name] of Object.entries(hue)) {
-      const tint = `color-mix(in srgb, var(--color-${name}-500) ${scheme === "light" ? 30 : 45}%, var(--color-foreground))`;
+      const tint = `color-mix(in srgb, var(--color-${name}-500) ${scheme === "light" ? 30 : 45}%, var(--badge-label-foreground))`;
       await expect.poll(async () => (await styleOf(card.locator(selector), "color")) === (await resolvedColor(page, tint))).toBe(true);
     }
   });
@@ -132,7 +132,7 @@ test("the Library is the kit's Dialog with its search, Select and segmented togg
   await card.getByRole("button", { name: "Delete Portrait retouch" }).click();
   const alert = page.getByRole("alertdialog");
   await expectSlot(alert, "alert-dialog-popup");
-  await expectToken(alert.getByRole("button", { name: "Delete preset" }), "background-color", "--destructive");
+  await expectToken(alert.getByRole("button", { name: "Delete preset" }), "background-color", "--button-destructive-surface");
   await alert.getByRole("button", { name: "Cancel" }).click();
   await expect(alert).toHaveCount(0);
 });

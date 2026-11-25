@@ -49,7 +49,7 @@ describe("the atomic write", () => {
     const db = new DatabaseSync(join(folder("legacy-snapshot"), DATABASE), { readOnly: true });
     try {
       const migrations = db.prepare("SELECT id FROM unframed_migrations ORDER BY id").all().map((row) => Number(row.id));
-      expect(migrations).toEqual([1, 2, 3, 4]);
+      expect(migrations).toEqual([1, 2, 3, 4, 5]);
       expect(Number(db.prepare("SELECT count(*) AS n FROM legacy_import_report").get()!.n)).toBe(1);
       const log = db.prepare("SELECT origin_kind, origin_id, put FROM canvas_changes ORDER BY clock").all();
       expect(log).toHaveLength(1);

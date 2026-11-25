@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { editorFocused, emptyCanvasPoint, openCanvas, plainText, roomShapes, shapeOnScreen, waitForRoom } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 
-const SUBJECT = "shape:starter-subject";
+const SUBJECT = "shape:sample-subject";
 
 const editing = (page: Page) =>
   page.evaluate(() => {
@@ -46,7 +46,7 @@ test.describe("editing a prompt", () => {
     await page.mouse.click(5, 400);
 
     const empty = await waitForRoom(engine, "default", (records) =>
-      records.find((record) => record.type === "text" && !record.id.startsWith("shape:starter")),
+      records.find((record) => record.type === "text" && !record.id.startsWith("shape:sample")),
     );
     await page.waitForTimeout(500);
     expect((await roomShapes(engine, "default", "text")).map((record) => record.id)).toContain(empty.id);

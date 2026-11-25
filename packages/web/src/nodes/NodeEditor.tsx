@@ -81,7 +81,7 @@ const InputList = ({ shape }: { readonly shape: NodeShape }) => {
   const [over, setOver] = useState<string>();
   if (wires.length === 0) {
     return (
-      <p className="m-0 rounded-lg border border-dashed px-2.5 py-2 text-xs text-muted-foreground" data-testid="node-inputs-empty">
+      <p className="m-0 rounded-lg border border-dashed px-2.5 py-2 text-xs text-(--node-editor-note)" data-testid="node-inputs-empty">
         No inputs yet. Drag from the dot on a shape's right edge onto this node.
       </p>
     );
@@ -99,7 +99,7 @@ const InputList = ({ shape }: { readonly shape: NodeShape }) => {
         <li
           key={wire.id}
           draggable
-          className={`flex items-center gap-1.5 rounded-md border bg-background px-1.5 py-1 text-xs ${over === wire.id ? "border-ring" : ""}`}
+          className={`flex items-center gap-1.5 rounded-md border px-1.5 py-1 text-xs bg-(--node-editor-input-surface) ${over === wire.id ? "border-(--node-editor-input-border-dragging)" : "border-(--node-editor-input-border)"}`}
           data-testid="node-input"
           data-wire-id={wire.id}
           onDragStart={(event) => {
@@ -115,9 +115,9 @@ const InputList = ({ shape }: { readonly shape: NodeShape }) => {
           onDrop={(event) => drop(event, wire.id)}
           onClick={() => editor.select(wire.id as TLShapeId)}
         >
-          <GripVertical className="size-3.5 shrink-0 cursor-grab text-muted-foreground" aria-hidden />
+          <GripVertical className="size-3.5 shrink-0 cursor-grab text-(--node-editor-icon)" aria-hidden />
           <span className="min-w-0 flex-1 truncate">{wire.name}</span>
-          <span className="shrink-0 text-muted-foreground" data-testid="node-input-role">
+          <span className="shrink-0 text-(--node-editor-meta)" data-testid="node-input-role">
             {wire.role === "choose" ? "Choose what it sends" : wire.role}
           </span>
         </li>
@@ -147,7 +147,7 @@ const RunRow = ({ shape, estimate, blocked }: { readonly shape: NodeShape; reado
   return (
     <div className="flex items-center justify-end gap-2">
       {estimate !== undefined && (
-        <span className="mr-auto text-xs text-muted-foreground tabular-nums" data-testid="node-estimate">
+        <span className="mr-auto text-xs text-(--node-editor-meta) tabular-nums" data-testid="node-estimate">
           {estimate}
         </span>
       )}
@@ -275,7 +275,7 @@ export const NodeEditor = ({ shape, footer }: { readonly shape: NodeShape; reado
       </ToggleGroup>
       <InputList shape={shape} />
       <div
-        className="relative flex min-h-20 flex-col rounded-lg border border-input bg-background px-3 pt-2 pb-2 shadow-xs/5 ring-ring/24 transition-shadow has-focus-visible:border-ring has-focus-visible:ring-[3px] dark:bg-input/32"
+        className="relative flex min-h-20 flex-col rounded-lg border border-(--input-border) bg-(--input-surface)/(--input-surface-opacity) px-3 pt-2 pb-2 shadow-xs/5 ring-(--input-ring) transition-shadow has-focus-visible:border-(--input-border-focus) has-focus-visible:ring-3"
         data-testid="node-instruction-box"
         onFocus={() => {
           if (marked.current) return;

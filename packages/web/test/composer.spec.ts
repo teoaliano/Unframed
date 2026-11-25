@@ -10,7 +10,7 @@ const GEO = { geo: "rectangle", dash: "draw", url: "", w: 60, h: 40, growY: 0, s
 
 test("Generate grows the bar into the composer on the same centre and bottom edge; Esc closes it back to the bar", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   const bar = toolbar(page);
   await expect(bar.getByRole("button", { name: "Generate" })).toBeVisible();
   const before = (await bar.boundingBox())!;
@@ -34,7 +34,7 @@ test("Generate grows the bar into the composer on the same centre and bottom edg
 
 test("Esc closes the composer before its box has the focus, as in the frame after a click on a button that goes away", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   for (const tray of ["Generate", "Agent"]) {
     await toolbar(page).getByRole("button", { name: tray }).click();
     await expect(composer(page)).toBeVisible();
@@ -59,7 +59,7 @@ const shadowOf = (page: Page, expression: string) =>
 
 test("the composer is t3code's composer shell, with the kit's segmented medium switch and t3code's message-action send", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   const shell = toolbar(page);
   const media = composer(page).getByRole("radiogroup", { name: "Medium" });
@@ -67,23 +67,20 @@ test("the composer is t3code's composer shell, with the kit's segmented medium s
   for (const option of await media.getByRole("radio").all()) await expectSlot(option, "toggle");
   await expectSlot(sendButton(page), "message-action");
   await expect.poll(async () => Math.round((await shell.boundingBox())!.width)).toBe(420);
-  await inBothSchemes(page, async (scheme) => {
+  await inBothSchemes(page, async () => {
     await page.mouse.move(5, 500);
     await expect.poll(() => styleOf(shell, "border-top-left-radius")).toBe("22px");
-    const glass = scheme === "light" ? "var(--card)" : "var(--surface-raised)";
-    expect(await styleOf(shell, "background-color")).toBe(await resolvedColor(page, `color-mix(in oklab, ${glass} var(--glass-opacity), transparent)`));
-    // Light carries t3code's composer shadow; dark drops it, as t3code does.
-    const composerShadow = await shadowOf(page, "var(--shadow-composer)");
-    if (scheme === "light") expect(await styleOf(shell, "box-shadow")).toContain(composerShadow);
-    else expect(await styleOf(shell, "box-shadow")).not.toContain(composerShadow);
+    expect(await styleOf(shell, "background-color")).toBe(await resolvedColor(page, "color-mix(in oklab, var(--composer-surface) var(--composer-surface-opacity), transparent)"));
+    // The floating panels' shadow, at each scheme's own value.
+    expect(await styleOf(shell, "box-shadow")).toContain(await shadowOf(page, "var(--shadow-app-floating)"));
     await expectToken(sendButton(page), "background-color", "--message-action");
-    await expectToken(composer(page).getByTestId("source-count"), "color", "--color-muted-foreground");
+    await expectToken(composer(page).getByTestId("source-count"), "color", "--generate-tray-note");
   });
 });
 
 test("Agent opens the composer on its Agent tray, the slot spec 08 fills; Esc closes it back to the bar", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await toolbar(page).getByRole("button", { name: "Agent" }).click();
   await expect(composer(page)).toHaveAttribute("data-tray", "agent");
   await expect(composer(page).getByTestId("agent-tray")).toBeVisible();
@@ -95,11 +92,12 @@ test("Agent opens the composer on its Agent tray, the slot spec 08 fills; Esc cl
 
 test("clicking a shape while the composer is open adds it; clicking empty canvas closes it", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await expect(composer(page).getByTestId("source-count")).toHaveText("1 selected");
 
-  await clickShape(page, "shape:starter-scene");
+  const scene = (await shapeOnScreen(page, "shape:sample-scene").boundingBox())!;
+  await page.mouse.click(scene.x + scene.width / 2, scene.y + 8);
   await expect(composer(page).getByTestId("source-count")).toHaveText("2 selected");
   await expect(composer(page)).toBeVisible();
 
@@ -126,7 +124,7 @@ test("the top band offers only the registered media and names the source by coun
 
 test("the box: a placeholder, the @ menu, Enter adds a line, Cmd+Enter sends", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   const box = instructionBox(page);
   await expect(box.locator("p").first()).toHaveAttribute("data-placeholder", "What should this make?");
@@ -173,7 +171,7 @@ test("while a send is acknowledged the button spins and is disabled, and a secon
     await route.continue();
   });
   await clickShape(page, "shape:photo");
-  await clickShape(page, "shape:starter-subject", ["Shift"]);
+  await clickShape(page, "shape:sample-subject", ["Shift"]);
   await openComposer(page);
   await sendButton(page).click();
   await expect(sendButton(page)).toBeDisabled();
@@ -210,7 +208,7 @@ test("warnings and the states that disable send", async ({ page, generation }) =
   // A video in an image run is warned about but still allowed.
   await clickShape(page, "shape:clip");
   await expect(status).toHaveText("A video is selected, but image models do not take video input. It will be sent and probably ignored.");
-  await expectToken(status.locator("[data-kind='warning']"), "color", "--color-muted-foreground");
+  await expectToken(status.locator("[data-kind='warning']"), "color", "--generate-tray-note");
   await expect(sendButton(page)).toBeEnabled();
   await page.keyboard.press("Escape");
 
@@ -226,7 +224,7 @@ test("without a key, send is disabled, the tray says to connect OpenRouter, and 
   try {
     await openCanvas(page, generation.engine);
     await expect(page.getByTestId("settings-dialog")).toHaveCount(0);
-    await clickShape(page, "shape:starter-subject");
+    await clickShape(page, "shape:sample-subject");
     await openComposer(page);
     const blocker = composer(page).getByTestId("no-key-blocker");
     await expect(blocker.locator("[data-slot=alert-title]")).toHaveText("Generating needs OpenRouter. Connect it in Settings, under Generation.");

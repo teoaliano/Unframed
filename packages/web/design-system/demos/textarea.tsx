@@ -39,7 +39,7 @@ export default function TextareaDemo() {
           </div>
         </Row>
         <Row label="unstyled">
-          <div className="w-96 rounded-lg border p-2">
+          <div className="w-96 rounded-lg border border-(--catalogue-demo-border) p-2">
             <Textarea unstyled placeholder="The bare field, for a surface that draws its own frame" />
           </div>
         </Row>

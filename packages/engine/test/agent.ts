@@ -6,6 +6,7 @@ import type { ChatSummary, ClientChatCommand, ShellStreamItem, ThreadStreamItem 
 import { projectChat, type Chat, type ChatEvent } from "@unframed/domain";
 import { makeTempDir, repoRoot, startEngine, type EngineOptions, type TestEngine } from "./harness.ts";
 import type { Subscription, TestRpcClient } from "./rpcClient.ts";
+import { seedSamplePrompts } from "./canvasRecords.ts";
 
 export const FIXTURES = join(repoRoot, "assets", "fixtures");
 export const PROJECT = "board";
@@ -13,6 +14,8 @@ export const PROJECT = "board";
 export const UNFRAMED_TOOLS = [
   "canvas_read",
   "canvas_write",
+  "comments_read",
+  "comment_write",
   "kit_read",
   "kit_write",
   "page_write",
@@ -113,7 +116,10 @@ export const startAgentEngine = async (options: EngineOptions & { script?: strin
     env: { UNFRAMED_TEST_AGENT_SCRIPT: script ?? FIXTURES, UNFRAMED_TEST_CANVAS: "1", ...rest.env },
   });
   const rpc = await engine.rpc();
-  await rpc.call("projects.create", { name: PROJECT }).catch(() => undefined);
+  await rpc.call("projects.create", { name: PROJECT }).then(
+    () => seedSamplePrompts(rpc, PROJECT),
+    () => undefined,
+  );
   const folder = join(engine.dataDir, "output", PROJECT);
   const dispatch = (command: CommandInput) =>
     rpc.call("orchestration.dispatchCommand", { ...command, commandId: randomUUID(), projectId: PROJECT } as ClientChatCommand);

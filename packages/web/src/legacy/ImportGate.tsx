@@ -51,7 +51,7 @@ const ImportReportDialog = ({ project }: { readonly project: string }) => {
   };
   return (
     <Dialog open={open} onOpenChange={(next) => !next && close()}>
-      <DialogPopup data-testid="import-report" className="max-w-[520px]" showCloseButton={false}>
+      <DialogPopup data-testid="import-report" className="max-w-(--legacy-import-report-width)" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>{REPORT_TITLE}</DialogTitle>
           <DialogDescription>{REPORT_BODY}</DialogDescription>
@@ -62,8 +62,8 @@ const ImportReportDialog = ({ project }: { readonly project: string }) => {
             if (items.length === 0) return null;
             return (
               <section key={section} data-section={section} aria-label={title}>
-                <h3 className="m-0 mb-1.5 text-sm font-medium text-foreground">{title}</h3>
-                <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-sm text-foreground">
+                <h3 className="m-0 mb-1.5 text-sm font-medium text-(--legacy-import-report-foreground)">{title}</h3>
+                <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-sm text-(--legacy-import-report-foreground)">
                   {items.map((item, index) => (
                     <li key={index}>{item.text}</li>
                   ))}
@@ -91,7 +91,7 @@ const Standing = ({ gate, onRetry }: { readonly gate: Gate; readonly onRetry: ()
     </Empty>
   ) : gate.kind === "failed" ? (
     <div className="absolute inset-0 flex items-center justify-center p-6" data-import-state="failed">
-      <Alert variant="error" controlAlignment="first-line" className="max-w-[520px]">
+      <Alert variant="error" controlAlignment="first-line" className="max-w-(--legacy-import-alert-width)">
         <CircleAlert aria-hidden />
         <AlertDescription>{gate.message}</AlertDescription>
         <AlertAction>

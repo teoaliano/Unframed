@@ -146,13 +146,13 @@ const PromptShape = ({ shape, util }: { readonly shape: TLTextShape; readonly ut
     >
       <ShapeLabel shapeId={shape.id} kind="prompt" name={ref} width={width} text={`${cost}@${ref ?? ""}`} />
       {running ? (
-        <div className="pointer-events-none absolute top-0 left-0 flex items-center gap-1.5 whitespace-nowrap text-muted-foreground" data-testid="prompt-hint" role="status" style={hintStyle}>
+        <div className="pointer-events-none absolute top-0 left-0 flex items-center gap-1.5 whitespace-nowrap text-(--prompt-shape-hint)" data-testid="prompt-hint" role="status" style={hintStyle}>
           <Spinner size="sm" aria-hidden />
           <span>{PROMPT_RUNNING}</span>
         </div>
       ) : (
         empty && (
-          <div className="pointer-events-none absolute top-0 left-0 whitespace-pre-wrap text-muted-foreground" data-testid="prompt-hint" style={hintStyle}>
+          <div className="pointer-events-none absolute top-0 left-0 whitespace-pre-wrap text-(--prompt-shape-hint)" data-testid="prompt-hint" style={hintStyle}>
             {PROMPT_HINT}
           </div>
         )

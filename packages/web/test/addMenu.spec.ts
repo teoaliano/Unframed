@@ -50,8 +50,8 @@ test("one bottom bar holds tldraw's quick actions and tools, then Library and Ad
   const add = bar.getByRole("button", { name: "Add" });
   await inBothSchemes(page, async () => {
     await page.mouse.move(5, 500);
-    // One panel: the bar carries tldraw's panel fill, mapped onto the kit's popover.
-    await expectToken(bar, "background-color", "--popover");
+    // One panel: the bar carries tldraw's panel fill through its surface token.
+    await expectToken(bar, "background-color", "--bottom-toolbar-surface");
     await add.click();
     const popup = page.locator("[data-slot='menu-popup']");
     await expect(popup).toBeVisible();

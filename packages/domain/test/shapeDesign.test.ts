@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { designDisplayValues, designKeysOf, designPatched, isDesignableType, shapeDesignOf } from "../src/index.ts";
+import { ANNOTATION_SWATCHES, designDisplayValues, designKeysOf, designPatched, isDesignableType, readableTextOn, shapeDesignOf } from "../src/index.ts";
 
 describe("shapeDesignOf", () => {
   it("reads the values a shape's meta holds", () => {
@@ -71,12 +71,30 @@ describe("designDisplayValues", () => {
     expect(designDisplayValues("note", design)).toMatchObject({ noteBackgroundColor: "#eeeeee", borderColor: "#222222", borderWidth: 6 });
   });
 
+  it("sets a note's text black or white by contrast with its colour, whatever text colour it holds", () => {
+    expect(designDisplayValues("note", { ...design, fillColor: "#ffb224" }).labelColor).toBe("#000000");
+    expect(designDisplayValues("note", { ...design, fillColor: "#3e63dd" }).labelColor).toBe("#ffffff");
+    expect(designDisplayValues("note", { textColor: "#ff0000" })).toEqual({});
+    expect(designKeysOf("note")).not.toContain("textColor");
+  });
+
   it("gives a line only its stroke", () => {
     expect(designDisplayValues("line", design)).toEqual({ strokeColor: "#222222", strokeWidth: 6 });
   });
 
   it("keeps a family list as written", () => {
     expect(designDisplayValues("text", { fontFamily: "'Inter', sans-serif" })).toEqual({ fontFamily: "'Inter', sans-serif" });
+  });
+});
+
+describe("readableTextOn", () => {
+  it("gives light colours black text and the rest white", () => {
+    expect(readableTextOn("#ffffff")).toBe("#000000");
+    expect(readableTextOn("#000000")).toBe("#ffffff");
+    expect(readableTextOn("#ffe066")).toBe("#000000");
+    expect(readableTextOn("#8e4ec6")).toBe("#ffffff");
+    expect(readableTextOn("#ffffff80")).toBe("#000000");
+    expect(ANNOTATION_SWATCHES.map((swatch) => readableTextOn(swatch.hex))).toEqual(["#ffffff", "#ffffff", "#ffffff", "#000000", "#000000", "#000000", "#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff"]);
   });
 });
 

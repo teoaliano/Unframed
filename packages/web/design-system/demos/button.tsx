@@ -24,7 +24,7 @@ export default function ButtonDemo() {
           </Row>
         ))}
         <Row label="overlay, media-close">
-          <div className="flex gap-2 rounded-md bg-muted p-2">
+          <div className="flex gap-2 rounded-md bg-(--catalogue-demo-fill) p-2">
             <Button variant="overlay">Overlay</Button>
             <Button variant="media-close" size="icon-sm" aria-label="Close">
               <X />
@@ -33,7 +33,7 @@ export default function ButtonDemo() {
         </Row>
         <Row label="media-navigation">
           {/* The variant places itself at the vertical middle of its positioned parent: an image viewer's frame. */}
-          <div className="flex h-28 w-64 justify-between rounded-md bg-muted-foreground px-1">
+          <div className="flex h-28 w-64 justify-between rounded-md bg-(--catalogue-demo-glass-backdrop) px-1">
             <div className="relative h-full w-8">
               <Button variant="media-navigation" size="icon-sm" aria-label="Previous">
                 <ChevronLeft />

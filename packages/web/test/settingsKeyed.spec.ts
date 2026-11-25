@@ -5,7 +5,7 @@ import { makeTempDir } from "../../engine/test/engineProcess.ts";
 import { liveKey } from "../../engine/test/oauthStub.ts";
 import { gate } from "../../engine/test/openRouterStub.ts";
 import { expect, test } from "./fixtures.ts";
-import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
+import { expectSlot, expectToken, inBothSchemes, styleOf, tokenColor } from "./kit.ts";
 import { platformOf } from "./platform.ts";
 import { IMAGE_MODELS, KEY, openApp, openSettings, settingsDialog, showSection, startSettingsEngine, TEXT_MODELS, VIDEO_MODELS } from "./settings.ts";
 
@@ -298,8 +298,6 @@ test("Plan mode (legacy) is off by default and saves at once without Save, as t3
   }
 });
 
-const MENU_GLASS = "color-mix(in srgb, var(--popover) 18%, color-mix(in srgb, var(--popover) var(--glass-opacity), transparent))";
-
 test("the settings dialog is the kit's dialog at 760 px with a sidebar of sections, with kit fields, comboboxes, select, buttons and banners, in both schemes", async ({ page }) => {
   const { engine } = await startSettingsEngine({ env: { UNFRAMED_TEST_PICK_FOLDER: "none" } });
   try {
@@ -336,15 +334,15 @@ test("the settings dialog is the kit's dialog at 760 px with a sidebar of sectio
     await showSection(dialog, "Generation");
     await page.mouse.move(4, 700);
     await inBothSchemes(page, async () => {
-      await expectToken(save, "background-color", "--primary");
-      expect(await styleOf(dialog.getByRole("button", { name: "Close", exact: true }), "background-color")).toBe("rgba(0, 0, 0, 0)");
-      await expectToken(dialog.getByTestId("key-status"), "color", "--color-muted-foreground");
+      await expectToken(save, "background-color", "--button-default-surface");
+      await expectToken(dialog.getByRole("button", { name: "Close", exact: true }), "background-color", "--button-ghost-surface");
+      await expectToken(dialog.getByTestId("key-status"), "color", "--settings-dialog-description");
 
       const image = dialog.getByRole("combobox", { name: "Image", exact: true });
       await image.click();
       const popup = page.locator("[data-slot='combobox-popup']");
       await expect(popup).toBeVisible();
-      expect(await styleOf(popup.locator(".."), "background-color")).toBe(await resolvedColor(page, MENU_GLASS));
+      expect(await styleOf(popup.locator(".."), "background-color")).toBe(await tokenColor(page, "--listbox-surface"));
       await expectSlot(page.getByRole("combobox", { name: "Search image models" }), "combobox-input");
       for (const option of await page.getByRole("option").all()) await expectSlot(option, "combobox-item");
       await page.keyboard.press("Escape");

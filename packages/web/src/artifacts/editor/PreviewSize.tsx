@@ -59,13 +59,13 @@ export const PreviewSizeControl = ({ size, onChange, scale }: { readonly size: E
         <Icon aria-hidden />
         <span className="@max-[760px]/editor-header:sr-only">{labelOf(size)}</span>
         {scale < 1 && (
-          <span data-testid="artifact-preview-scale" className="text-muted-foreground tabular-nums @max-[760px]/editor-header:sr-only">
+          <span data-testid="artifact-preview-scale" className="text-(--artifact-editor-meta) tabular-nums @max-[760px]/editor-header:sr-only">
             {`${Math.round(scale * 100)}%`}
           </span>
         )}
         <ChevronDown aria-hidden className="size-3 opacity-60" />
       </PopoverTrigger>
-      <PopoverPopup side="bottom" align="end" sideOffset={6} padding="compact" className="w-[248px]" aria-label="Preview size" initialFocus={false}>
+      <PopoverPopup side="bottom" align="end" sideOffset={6} padding="compact" className="w-(--artifact-editor-preview-size-width)" aria-label="Preview size" initialFocus={false}>
         <div role="radiogroup" aria-label="Preview size" className="flex flex-col gap-px">
           {EDITOR_PREVIEW_SIZES.map((each) => (
             <RadioRow
@@ -81,9 +81,9 @@ export const PreviewSizeControl = ({ size, onChange, scale }: { readonly size: E
           ))}
         </div>
         <div ref={width} className="mt-1 flex items-center gap-1.5 border-t px-2 pt-2 pb-1">
-          <span className="flex-1 text-xs text-muted-foreground">Size</span>
+          <span className="flex-1 text-xs text-(--artifact-editor-meta)">Size</span>
           <Side label="Preview width" value={size.custom.width} onCommit={(next) => onChange({ choice: "custom", custom: { ...size.custom, width: next } })} />
-          <span aria-hidden className="shrink-0 text-xs text-muted-foreground">
+          <span aria-hidden className="shrink-0 text-xs text-(--artifact-editor-meta)">
             ×
           </span>
           <Side label="Preview height" value={size.custom.height} onCommit={(next) => onChange({ choice: "custom", custom: { ...size.custom, height: next } })} />

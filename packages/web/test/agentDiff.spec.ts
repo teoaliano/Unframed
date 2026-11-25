@@ -136,15 +136,15 @@ test("the diff panel is t3code's diff panel shell: kit header controls, t3code's
     });
   await inBothSchemes(page, async () => {
     await page.mouse.move(10, 400);
-    await expectToken(diff, "background-color", "--background");
-    await expectToken(diff, "border-top-color", "--color-border");
+    await expectToken(diff, "background-color", "--diff-panel-surface");
+    await expectToken(diff, "border-top-color", "--diff-panel-border");
     await expectSlot(diff.getByRole("button", { name: /^Diff scope/ }), "menu-trigger");
     await expectSlot(diff.getByRole("button", { name: "Stacked diff view" }), "toggle");
     await expectSlot(diff.getByRole("button", { name: "Enable line wrapping" }), "tooltip-trigger");
     const files = diff.getByRole("navigation", { name: "Changed files" });
-    await expectToken(files.getByTestId("diff-additions"), "color", "--diff-addition");
-    await expectToken(files.getByTestId("diff-deletions"), "color", "--diff-deletion");
-    const code = await tokenColor(page, "--code-background");
+    await expectToken(files.getByTestId("diff-additions"), "color", "--diff-panel-addition");
+    await expectToken(files.getByTestId("diff-deletions"), "color", "--diff-panel-deletion");
+    const code = await tokenColor(page, "--diff-panel-code-surface");
     await expect.poll(surface).toBe(code);
   });
 });

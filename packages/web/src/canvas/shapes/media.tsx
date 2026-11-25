@@ -159,7 +159,7 @@ const EmptyMedia = ({ shape, kind }: { readonly shape: MediaShape; readonly kind
           </div>
         )}
         {problem !== undefined && (
-          <p role="alert" className="m-0 text-center text-xs leading-snug text-destructive-foreground">
+          <p role="alert" className="m-0 text-center text-xs leading-snug text-(--media-card-error-foreground)">
             {problem}
           </p>
         )}
@@ -174,7 +174,7 @@ const Generating = ({ shape, kind }: { readonly shape: MediaShape; readonly kind
   return (
     <HTMLContainer id={shape.id} className={mediaCardClass} data-testid="media-empty" data-placeholder="" style={{ width: shape.props.w, height: shape.props.h }}>
       <MediaLabel shape={shape} kind={kind} filled={false} />
-      <div className="box-border flex h-full items-center justify-center gap-2 p-2.5 text-sm text-muted-foreground" role="status">
+      <div className="box-border flex h-full items-center justify-center gap-2 p-2.5 text-sm text-(--media-card-meta)" role="status">
         <Spinner size="md" aria-hidden />
         <span>Generating…</span>
       </div>
@@ -308,7 +308,7 @@ const VideoClip = ({ shape }: { readonly shape: TLVideoShape }) => {
         )}
       </HTMLContainer>
       <div
-        className="pointer-events-auto absolute left-0 mt-1 flex h-7 items-center gap-1.5 font-sans text-2xs text-muted-foreground"
+        className="pointer-events-auto absolute left-0 mt-1 flex h-7 items-center gap-1.5 font-sans text-2xs text-(--video-transport-foreground)"
         data-testid="video-transport"
         style={{ top: shape.props.h, width: shape.props.w }}
         {...events}
@@ -331,7 +331,7 @@ const VideoClip = ({ shape }: { readonly shape: TLVideoShape }) => {
         <input
           type="range"
           aria-label="Position"
-          className="min-w-0 flex-1 accent-highlight"
+          className="min-w-0 flex-1 accent-(--video-transport-track)"
           min={0}
           max={Number.isFinite(duration) && duration > 0 ? duration : 0}
           step={0.01}

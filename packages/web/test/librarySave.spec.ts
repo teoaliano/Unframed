@@ -116,7 +116,7 @@ test("the save dialog counts the shapes and names the recipe, asks for a name, a
   await expectSlot(name, "input");
   await expectSlot(dialog.getByRole("textbox", { name: "Description" }), "input");
   await expectSlot(dialog.getByRole("button", { name: "Cancel" }), "dialog-close");
-  await expectToken(dialog.getByRole("button", { name: "Save" }), "background-color", "--primary");
+  await expectToken(dialog.getByRole("button", { name: "Save" }), "background-color", "--button-default-surface");
 
   await dialog.getByRole("button", { name: "Save" }).click();
   await expect(dialog.getByRole("alert")).toHaveText("Give it a name.");

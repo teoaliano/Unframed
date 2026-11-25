@@ -29,7 +29,7 @@ function ProjectTabsList({ className, onClick, ...props }: TabsPrimitive.List.Pr
     const tab = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-tab-value]") : null;
     if (tab !== null && change !== undefined) change(tab.dataset.tabValue as never, undefined as never);
   };
-  return <TabsPrimitive.List className={cn("relative flex h-full max-w-full items-stretch overflow-hidden border-s", className)} data-slot="project-tabs-list" onClick={handleClick} {...props} />;
+  return <TabsPrimitive.List className={cn("relative flex h-full max-w-full items-stretch overflow-hidden border-s border-(--project-tab-divider)", className)} data-slot="project-tabs-list" onClick={handleClick} {...props} />;
 }
 
 interface ProjectTabProps extends TabsPrimitive.Tab.Props {
@@ -50,11 +50,11 @@ function ProjectTab({ className, children, status, onClose, closeLabel = "Close 
     <span
       data-slot="project-tab-group"
       data-tab-item={item}
-      className="group/tab relative inline-flex h-full shrink-0 border-e border-b bg-background data-dragging:z-10 data-dragging:bg-popover data-dragging:shadow-md/10 data-dragging:ring-1 data-dragging:ring-border data-dragging:[&_[data-slot=project-tab]]:cursor-grabbing [&_svg]:[stroke-width:1.3333] [&_svg_*]:[vector-effect:non-scaling-stroke]"
+      className="group/tab relative inline-flex h-full shrink-0 border-e border-b border-e-(--project-tab-divider) border-b-(--project-tab-border) bg-(--project-tab-surface) data-dragging:z-10 data-dragging:bg-(--project-tab-surface-dragging) data-dragging:shadow-md data-dragging:shadow-(color:--project-tab-shadow-dragging) data-dragging:ring-1 data-dragging:ring-(--project-tab-ring-dragging) data-dragging:[&_[data-slot=project-tab]]:cursor-grabbing [&_svg]:[stroke-width:1.3333] [&_svg_*]:[vector-effect:non-scaling-stroke]"
     >
       <TabsPrimitive.Tab
         className={cn(
-          "peer relative inline-flex h-full min-w-24 max-w-40 shrink-0 cursor-pointer select-none items-center justify-start gap-1 whitespace-nowrap ps-2 pe-7 text-xs font-normal text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-active:bg-accent data-active:font-medium data-active:text-foreground [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_[data-slot=tabs-status][data-status=running]]:text-foreground",
+          "peer relative inline-flex h-full min-w-24 max-w-40 shrink-0 cursor-pointer select-none items-center justify-start gap-1 whitespace-nowrap ps-2 pe-7 text-xs font-normal text-(--project-tab-foreground) outline-none transition-colors hover:text-(--project-tab-foreground-hover) focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-(--project-tab-ring-focus) data-active:bg-(--project-tab-active-surface) data-active:font-medium data-active:text-(--project-tab-foreground-active) [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_[data-slot=tabs-status][data-status=running]]:text-(--project-tab-status-running)",
           className,
         )}
         data-slot="project-tab"

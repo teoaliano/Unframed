@@ -13,7 +13,6 @@ import {
   type DialsAnnouncement,
 } from "@unframed/domain";
 import {
-  ArrowLeft,
   Component,
   ExternalLink,
   Hand,
@@ -29,7 +28,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { useEditor, useValue, type TLShapeId } from "tldraw";
+import { useValue } from "tldraw";
 import { Button } from "~/components/ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Sheet, SheetPopup } from "~/components/ui/sheet";
@@ -40,6 +39,7 @@ import { cn } from "~/lib/utils";
 import { AgentRail } from "../../agent/rail/AgentRail.tsx";
 import { useChatClient, useProviders } from "../../agent/store.ts";
 import { Tip } from "../../chrome/ui.tsx";
+import { useCanvasDoc } from "../../canvas/doc.ts";
 import { useCanvasProject, useEngine } from "../../context.ts";
 import { useFeature } from "../../features.ts";
 import {
@@ -47,7 +47,6 @@ import {
   outsideUrlOf,
   type EditMessage,
 } from "../ArtifactFrame.tsx";
-import { kitOf } from "../kit.ts";
 import { kitUi } from "../../kits/state.ts";
 import { KitModePicker } from "../KitMode.tsx";
 import { countUsing } from "../componentPins.ts";
@@ -66,6 +65,7 @@ import { useEditSession, type EditMode } from "./editSession.ts";
 import { makeEditableInstruction, tellAgent } from "./tellAgent.ts";
 import { MotionTimeline } from "../timeline/MotionTimeline.tsx";
 import { MotionTransport, type TransportZone } from "../timeline/transport.ts";
+import { kitOf } from "../../kits/kitRoom.ts";
 
 const RAIL_FOLDS = "(max-width: 999px)";
 const PARAMETERS_FOLD = "(max-width: 719px)";
@@ -81,7 +81,7 @@ const useWindowQuery = (query: string): boolean =>
   );
 
 interface ArtifactEditorProps {
-  readonly shapeId: TLShapeId;
+  readonly shapeId: string;
   readonly onClose: () => void;
   readonly onOpen: (shapeId: string) => void;
   readonly onLeave?: (commit: () => Promise<void>) => () => void;
@@ -104,7 +104,6 @@ const transportZone = (): TransportZone | undefined => {
     return "body";
   if (active instanceof HTMLIFrameElement) return "frame";
   if (!(active instanceof HTMLElement)) return undefined;
-  if (active.classList.contains("tl-container")) return "frame";
   if (active.hasAttribute("data-timeline-focus")) return "strip";
   if (
     active.closest("[data-testid='timeline-transport']") !== null &&
@@ -112,19 +111,6 @@ const transportZone = (): TransportZone | undefined => {
   )
     return "strip";
   return undefined;
-};
-
-const stop = (event: { stopPropagation(): void }) => event.stopPropagation();
-
-const KEEP_FROM_CANVAS = {
-  onPointerDown: stop,
-  onPointerMove: stop,
-  onPointerUp: stop,
-  onWheel: stop,
-  onTouchStart: stop,
-  onTouchEnd: stop,
-  onDragOver: stop,
-  onDrop: stop,
 };
 
 const isUndo = (event: KeyboardEvent): boolean =>
@@ -139,16 +125,16 @@ export const ArtifactEditor = ({
   onOpen,
   onLeave,
 }: ArtifactEditorProps) => {
-  const editor = useEditor();
+  const doc = useCanvasDoc();
   const project = useCanvasProject();
   const engine = useEngine();
-  const kit = useValue("project kit", () => kitOf(editor), [editor]);
+  const kit = useValue("project kit", () => kitOf(doc), [doc]);
   const chatClient = useChatClient(engine, project);
   const { statuses } = useProviders(chatClient);
   const facts = useValue(
     "edited artifact",
     () => {
-      const shape = editor.getShape(shapeId);
+      const shape = doc.shape(shapeId);
       if (!shape || !isArtifactKind(shape.type)) return undefined;
       const props = shape.props as ArtifactShapeProps;
       return {
@@ -162,26 +148,26 @@ export const ArtifactEditor = ({
         tag: (props as { tag?: string }).tag ?? "",
       };
     },
-    [editor, shapeId],
+    [doc, shapeId],
   );
   const uses = useValue(
     "component uses",
     () => {
       if (facts?.kind !== "component") return 0;
-      const files = editor
-        .getCurrentPageShapes()
+      const files = doc
+        .pageShapes()
         .filter((shape) => shape.type === "page" || shape.type === "motion")
         .map((shape) => (shape.props as { file?: string }).file ?? "");
       return countUsing(project, facts.tag, files);
     },
-    [editor, project, facts?.kind, facts?.tag],
+    [doc, project, facts?.kind, facts?.tag],
   );
   const port = useValue("preview port", () => previewPort.get(), []);
   const gone = facts === undefined;
   const editing = useFeature("element-editing");
 
   const session = useEditSession({
-    editor,
+    doc,
     engine,
     project,
     shapeId,
@@ -206,8 +192,8 @@ export const ArtifactEditor = ({
 
   const updateKey = useValue(
     "component update tags",
-    () => updateTagsOf(editor, project, facts?.file ?? "").join(","),
-    [editor, project, facts?.file],
+    () => updateTagsOf(doc.pageShapes(), project, facts?.file ?? "").join(","),
+    [doc, project, facts?.file],
   );
   const [updateRows, setUpdateRows] = useState<ReadonlyArray<ComponentUpdate>>(
     [],
@@ -229,14 +215,14 @@ export const ArtifactEditor = ({
   }, [updateRows]);
   const badgeRequested = useValue(
     "component updates requested",
-    () => artifactsOf(editor).updatesOpen.get() === shapeId,
-    [editor, shapeId],
+    () => artifactsOf(doc).updatesOpen.get() === shapeId,
+    [doc, shapeId],
   );
   useEffect(() => {
     if (!badgeRequested) return;
     setUpdatesShown(true);
-    artifactsOf(editor).updatesOpen.set(undefined);
-  }, [badgeRequested, editor]);
+    artifactsOf(doc).updatesOpen.set(undefined);
+  }, [badgeRequested, doc]);
   const retries = useRef(0);
   useEffect(() => {
     if (updateKey === "") {
@@ -288,29 +274,16 @@ export const ArtifactEditor = ({
     (id: string, on: boolean) => {
       const current =
         (
-          editor.getShape(shapeId)?.props as
+          doc.shape(shapeId)?.props as
             { lockedElements?: string[] } | undefined
         )?.lockedElements ?? [];
       const next = on
         ? [...current.filter((other) => other !== id), id]
         : current.filter((other) => other !== id);
-      editor.markHistoryStoppingPoint("lock");
-      const shape = editor.getShape(shapeId);
-      if (shape && next.length === 0) {
-        const { lockedElements: _gone, ...rest } = shape.props as {
-          lockedElements?: string[];
-        };
-        editor.store.put([{ ...shape, props: rest } as never]);
-      } else {
-        editor.updateShape({
-          id: shapeId,
-          type: facts?.kind ?? "page",
-          props: { lockedElements: next },
-        } as never);
-      }
+      doc.update(shapeId, { lockedElements: next.length === 0 ? undefined : next }, "lock");
       sessionRef.current.setLocked(next);
     },
-    [editor, shapeId, facts?.kind],
+    [doc, shapeId],
   );
 
   const close = useCallback(() => {
@@ -330,11 +303,11 @@ export const ArtifactEditor = ({
   useEffect(
     () =>
       leaveRef.current?.(() => {
-        if (editor.getShape(shapeId)) return sessionRef.current.commit();
+        if (doc.shape(shapeId)) return sessionRef.current.commit();
         sessionRef.current.discard(true);
         return Promise.resolve();
       }),
-    [editor, shapeId],
+    [doc, shapeId],
   );
 
   useEffect(() => {
@@ -370,7 +343,6 @@ export const ArtifactEditor = ({
       }
       if (
         event.defaultPrevented ||
-        editor.wasEventAlreadyHandled(event) ||
         typingIn(event.target) ||
         typingIn(document.activeElement)
       )
@@ -408,7 +380,7 @@ export const ArtifactEditor = ({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [editor]);
+  }, [transport]);
 
   const [announcement, setAnnouncement] = useState<DialsAnnouncement>();
   const clearAnnouncement = useCallback(() => setAnnouncement(undefined), []);
@@ -527,8 +499,8 @@ export const ArtifactEditor = ({
     tellAgent(chatClient, shapeId, [chip]);
   };
   const componentOf = (tag: string) => {
-    const shape = editor
-      .getCurrentPageShapes()
+    const shape = doc
+      .pageShapes()
       .find(
         (candidate) =>
           candidate.type === "component" &&
@@ -563,24 +535,31 @@ export const ArtifactEditor = ({
   const columns = railFolded
     ? parametersFolded
       ? "grid-cols-[minmax(0,1fr)]"
-      : "grid-cols-[minmax(0,1fr)_320px]"
-    : "grid-cols-[360px_minmax(0,1fr)_320px]";
+      : "grid-cols-[minmax(0,1fr)_var(--artifact-editor-parameters-width)]"
+    : "grid-cols-[var(--artifact-editor-rail-width)_minmax(0,1fr)_var(--artifact-editor-parameters-width)]";
   const parametersBody = (
     <>
-      <ColumnHeader className="px-0">
-        <Tabs value={shownPanel} onValueChange={(next) => setPanel(String(next) as Panel)} className="h-full min-w-0">
-          <TabsList variant="underline" fill aria-label="Editor panels">
-            {editing && <TabsTab value="design">Design</TabsTab>}
-            {editing && <TabsTab value="layers">Layers</TabsTab>}
-            {!component && (
-              <TabsTab value="parameters">
-                <SlidersHorizontal aria-hidden />
-                Parameters
-              </TabsTab>
-            )}
-          </TabsList>
-        </Tabs>
-      </ColumnHeader>
+      {editing ? (
+        <ColumnHeader className="px-0">
+          <Tabs value={shownPanel} onValueChange={(next) => setPanel(String(next) as Panel)} className="h-full min-w-0">
+            <TabsList variant="underline" fill aria-label="Editor panels">
+              {editing && <TabsTab value="design">Design</TabsTab>}
+              {editing && <TabsTab value="layers">Layers</TabsTab>}
+              {!component && (
+                <TabsTab value="parameters">
+                  <SlidersHorizontal aria-hidden />
+                  Parameters
+                </TabsTab>
+              )}
+            </TabsList>
+          </Tabs>
+        </ColumnHeader>
+      ) : (
+        <ColumnHeader className="gap-1 pl-3.5">
+          <SlidersHorizontal aria-hidden className="size-4 shrink-0 text-(--artifact-editor-icon)" />
+          <h2 className="m-0 ml-1 flex-1 text-sm font-medium">Parameters</h2>
+        </ColumnHeader>
+      )}
       {shownPanel === "design" && (
         <DesignTab
           session={session}
@@ -590,7 +569,7 @@ export const ArtifactEditor = ({
           locked={facts.locked}
           kit={kit}
           mode={facts.mode}
-          onOpenKit={() => kitUi(editor).update((state) => ({ ...state, open: true }))}
+          onOpenKit={() => kitUi(doc).update((state) => ({ ...state, open: true }))}
           onTell={tell}
           onAsk={ask}
           onShowOnTimeline={(element, property) =>
@@ -625,7 +604,7 @@ export const ArtifactEditor = ({
         />
       )}
       {shownPanel === undefined && (
-        <p className="m-0 p-3 text-sm text-muted-foreground" data-testid="editor-no-panels">
+        <p className="m-0 p-3 text-sm text-(--artifact-editor-note)" data-testid="editor-no-panels">
           {FEATURE_OFF_MESSAGES["element-editing"]}
         </p>
       )}
@@ -653,19 +632,18 @@ export const ArtifactEditor = ({
       ref={grid}
       data-testid="artifact-editor"
       className={cn(
-        "pointer-events-auto absolute inset-x-0 bottom-0 z-[700] box-border grid gap-3 bg-background p-3 font-sans text-foreground",
+        "pointer-events-auto absolute inset-x-0 bottom-0 z-[700] box-border grid gap-3 bg-(--artifact-editor-surface) p-3 font-sans text-(--artifact-editor-foreground)",
         timeline
           ? "grid-rows-[minmax(0,1fr)_auto]"
           : "grid-rows-[minmax(0,1fr)]",
         columns,
       )}
       style={{ top: TOP_BAR_HEIGHT }}
-      {...KEEP_FROM_CANVAS}
     >
       {!railFolded && (
         <section
           data-editor-column="rail"
-          className={cn(COLUMN, "col-start-1 row-span-full")}
+          className={cn(COLUMN, "col-start-1 row-span-full [&_header:has(>h2)]:border-b")}
         >
           <AgentRail
             project={project}
@@ -686,17 +664,6 @@ export const ArtifactEditor = ({
         aria-label={`Editing ${title}`}
       >
         <ColumnHeader className="@container/editor-header gap-1">
-          <Tip label="Back to canvas (Esc)">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="shrink-0"
-              aria-label="Back to canvas"
-              onClick={close}
-            >
-              <ArrowLeft aria-hidden />
-            </Button>
-          </Tip>
           {railFolded && (
             <Tip label="Show agent">
               <Button
@@ -713,7 +680,7 @@ export const ArtifactEditor = ({
               </Button>
             </Tip>
           )}
-          <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+          <Icon aria-hidden className="size-4 shrink-0 text-(--artifact-editor-icon) @max-[520px]/editor-header:hidden" />
           <span className="flex min-w-0 flex-1 items-baseline gap-2">
             <Tip label={title}>
               <span
@@ -725,14 +692,14 @@ export const ArtifactEditor = ({
             </Tip>
             <span
               data-testid="artifact-editor-kind"
-              className="min-w-0 shrink truncate text-sm text-muted-foreground @max-[760px]/editor-header:hidden"
+              className="min-w-0 shrink truncate text-sm text-(--artifact-editor-meta) @max-[760px]/editor-header:hidden"
             >
               {facts.kind}
             </span>
             {component && uses > 0 && (
               <span
                 data-testid="artifact-editor-uses"
-                className="shrink-0 text-sm text-muted-foreground @max-[520px]/editor-header:hidden"
+                className="shrink-0 text-sm text-(--artifact-editor-meta) @max-[520px]/editor-header:hidden"
               >
                 {uses === 1
                   ? "Used in 1 artifact"
@@ -825,7 +792,7 @@ export const ArtifactEditor = ({
                           <span className="min-w-0 truncate text-sm font-medium">
                             {row.title}
                           </span>
-                          <span className="shrink-0 text-xs text-muted-foreground">
+                          <span className="shrink-0 text-xs text-(--artifact-editor-meta)">
                             {uses === 1 ? "1 instance" : `${uses} instances`}
                           </span>
                           <Button
@@ -842,7 +809,7 @@ export const ArtifactEditor = ({
                         {row.warnings.map((warning) => (
                           <p
                             key={warning}
-                            className="m-0 text-xs text-warning-foreground"
+                            className="m-0 text-xs text-(--artifact-editor-warning-foreground)"
                           >
                             {warning}
                           </p>
@@ -927,7 +894,7 @@ export const ArtifactEditor = ({
           )}
         >
           {facts.file === "" ? (
-            <p className="m-auto p-6 text-center text-sm text-muted-foreground">{`This ${facts.kind} has no file yet. Ask the agent to write one.`}</p>
+            <p className="m-auto p-6 text-center text-sm text-(--artifact-editor-note)">{`This ${facts.kind} has no file yet. Ask the agent to write one.`}</p>
           ) : port === undefined ? null : (
             <div
               data-testid="artifact-preview"
@@ -1043,7 +1010,7 @@ export const ArtifactEditor = ({
           side="left"
           aria-label="Agent"
           showCloseButton={false}
-          className="w-[min(88vw,24rem)]"
+          className="w-[min(88vw,var(--artifact-editor-sheet-width))]"
         >
           <AgentRail
             project={project}
@@ -1062,7 +1029,7 @@ export const ArtifactEditor = ({
           side="right"
           aria-label="Parameters"
           showCloseButton={false}
-          className="w-[min(88vw,24rem)]"
+          className="w-[min(88vw,var(--artifact-editor-sheet-width))]"
         >
           <div className="flex min-h-0 flex-1 flex-col">{parametersBody}</div>
         </SheetPopup>

@@ -71,6 +71,7 @@ test("a recipe group made from an old image output runs from the toolbar with th
     const member = byRef(records, "100");
     expect(member.parentId).toBe(group.id);
     await zoomOnto(page, member.id);
+    await page.keyboard.press("Escape");
     await selectGroup(page, group.id);
     await expect(toolbar(page).getByRole("button", { name: "Generate 3×" })).toBeVisible();
     await toolbar(page).getByRole("button", { name: "Generate 3×" }).click();

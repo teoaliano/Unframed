@@ -86,7 +86,7 @@ test("with only an ElevenLabs key the composer opens on audio, an audio run land
   const audio = await startAudio({ openRouter: false });
   try {
     await openCanvas(page, audio.engine);
-    await clickShape(page, "shape:starter-subject");
+    await clickShape(page, "shape:sample-subject");
     await toolbar(page).getByRole("button", { name: "Generate" }).click();
     await expect(mediumOption(page, "audio")).toHaveAttribute("aria-checked", "true");
     await expect(composer(page).getByTestId("model-chip")).toBeEnabled();

@@ -28,10 +28,10 @@ export default function TldrawUi() {
   return (
     <Demos>
       <Section title="Live editor">
-        <p className="m-0 text-muted-foreground text-xs">
+        <p className="m-0 text-(--catalogue-demo-description) text-xs">
           Right-click for tldraw's default context menu. Pick a tool to see the style panel follow the selection or the tool.
         </p>
-        <div className="relative h-[34rem] overflow-hidden rounded-lg border">
+        <div className="relative h-136 overflow-hidden rounded-lg border border-(--catalogue-demo-border)">
           <Tldraw assetUrls={TLDRAW_ASSET_URLS} options={TLDRAW_OPTIONS} components={TLDRAW_CHROME} colorScheme="system" onMount={seed} />
         </div>
       </Section>

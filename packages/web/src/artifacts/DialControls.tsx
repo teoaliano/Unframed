@@ -2,7 +2,7 @@ import { mergeDialValues, normaliseDials, type DialSchema, type DialsAnnouncemen
 import { createDialKit, createDialRoot, DialStore, type ControlMeta } from "dialkit/vanilla";
 import "dialkit/vanilla/styles.css";
 import { useEffect, useRef, useState } from "react";
-import { useEditor, type TLShapeId } from "tldraw";
+import { useCanvasDoc } from "../canvas/doc.ts";
 import { Tooltip, TooltipPopup } from "~/components/ui/tooltip";
 
 const WRITE_DELAY_MS = 400;
@@ -66,7 +66,7 @@ const withChrome = (target: HTMLElement): DialChrome | undefined => {
 };
 
 interface DialControlsProps {
-  readonly shapeId: TLShapeId;
+  readonly shapeId: string;
   readonly announcement: DialsAnnouncement;
   readonly saved: Readonly<Record<string, unknown>> | undefined;
   readonly post: (values: unknown) => void;
@@ -78,7 +78,7 @@ export const DialControls = ({ shapeId, announcement, saved, post, onWrite, onCh
   const chromeTo = useRef(onChrome);
   chromeTo.current = onChrome;
   const [tip, setTip] = useState<{ readonly anchor: { getBoundingClientRect(): DOMRect }; readonly text: string }>();
-  const editor = useEditor();
+  const doc = useCanvasDoc();
   const writtenTo = useRef(onWrite);
   writtenTo.current = onWrite;
   const host = useRef<HTMLDivElement>(null);
@@ -96,12 +96,11 @@ export const DialControls = ({ shapeId, announcement, saved, post, onWrite, onCh
     clearTimeout(timer.current);
     const values = pending.current;
     pending.current = undefined;
-    const shape = values === undefined ? undefined : editor.getShape(shapeId);
+    const shape = values === undefined ? undefined : doc.shape(shapeId);
     if (!shape || values === undefined) return;
     writtenTo.current?.(values);
     savedNow.current = values;
-    editor.markHistoryStoppingPoint("tune parameters");
-    editor.updateShape({ id: shapeId, type: shape.type, props: { dials: values } } as Parameters<typeof editor.updateShape>[0]);
+    doc.update(shapeId, { dials: values }, "tune parameters");
   };
   const writeNow = useRef(write);
   writeNow.current = write;
@@ -135,7 +134,7 @@ export const DialControls = ({ shapeId, announcement, saved, post, onWrite, onCh
     );
     target.dataset.described = String(described);
     const chrome = withChrome(target);
-    const shapeDials = () => (editor.getShape(shapeId)?.props as { dials?: unknown } | undefined)?.dials ?? null;
+    const shapeDials = () => (doc.shape(shapeId)?.props as { dials?: unknown } | undefined)?.dials ?? null;
     if (chrome) chromeTo.current?.({ ...chrome, values: () => pending.current ?? mergeDialValues(normalised.schema, shapeDials()) });
     let row: HTMLElement | undefined;
     let shown: HTMLElement | undefined;

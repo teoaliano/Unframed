@@ -53,14 +53,14 @@ const Provider = ({
   readonly placeholder: string;
   readonly onPath: (path: string) => void;
 }) => {
-  const dot = status === undefined ? "bg-input" : status.status === "ready" ? "bg-highlight" : "bg-destructive";
+  const dot = status === undefined ? "bg-(--settings-dialog-provider-dot-indicator)" : status.status === "ready" ? "bg-(--settings-dialog-provider-dot-indicator-active)" : "bg-(--settings-dialog-provider-dot-indicator-invalid)";
   const text = status === undefined ? (checking ? "checking…" : "not checked yet") : statusText(status);
   return (
     <div className="flex flex-col gap-1.5" data-provider={name}>
       <div className="flex min-w-0 items-center gap-2 text-sm">
         <span className={`size-1.5 shrink-0 rounded-full ${dot}`} data-testid="provider-dot" data-state={status?.status ?? "unchecked"} aria-hidden />
-        <span className="font-medium text-foreground">{name}</span>
-        <span className="min-w-0 text-muted-foreground" data-testid="provider-status">
+        <span className="font-medium text-(--settings-dialog-foreground)">{name}</span>
+        <span className="min-w-0 text-(--settings-dialog-description)" data-testid="provider-status">
           {text}
         </span>
         {status?.status === "not_installed" && status.install !== "" && (
@@ -107,7 +107,7 @@ export const LocalAgents = (props: LocalAgentsProps) => {
       >
         Local agents
       </SectionHeading>
-      <p className="m-0 text-xs text-muted-foreground">
+      <p className="m-0 text-xs text-(--settings-dialog-description)">
         Claude Code or Codex installed and signed in on this Mac lets the agent run on your own plan. Nothing here is sent to OpenRouter.
       </p>
       <Provider
@@ -168,7 +168,7 @@ export const LocalAgents = (props: LocalAgentsProps) => {
               <SelectItem key={option.value} value={option.value}>
                 <span className="flex flex-col">
                   <span>{option.label}</span>
-                  <span className="text-xs text-muted-foreground">{option.hint}</span>
+                  <span className="text-xs text-(--settings-dialog-description)">{option.hint}</span>
                 </span>
               </SelectItem>
             ))}
@@ -178,7 +178,7 @@ export const LocalAgents = (props: LocalAgentsProps) => {
       <div className="flex items-center justify-between gap-4">
         <div className="flex flex-col gap-0.5">
           <Label htmlFor={planModeId}>Plan mode (legacy)</Label>
-          <span className="text-xs text-muted-foreground">Restore Build/Plan, /plan, /default, and Shift+Tab. Off uses build mode.</span>
+          <span className="text-xs text-(--settings-dialog-description)">Restore Build/Plan, /plan, /default, and Shift+Tab. Off uses build mode.</span>
         </div>
         <Switch id={planModeId} checked={props.planMode} onCheckedChange={props.onPlanMode} />
       </div>

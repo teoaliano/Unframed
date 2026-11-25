@@ -6,11 +6,11 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ToastProvider } from "~/components/ui/toast";
-import { followSystemTheme } from "~/theme/theme.ts";
+import { followTheme } from "~/theme/theme.ts";
 import "~/theme/theme.css";
 import { Catalogue } from "./Catalogue.tsx";
 
-followSystemTheme();
+followTheme();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

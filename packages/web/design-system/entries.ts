@@ -22,6 +22,7 @@ const RECIPES: ReadonlyArray<Omit<Entry, "group">> = [
   { id: "composer-surface", title: "Composer surface", module: "/src/chrome/composerSurface.ts", summary: "The glass fill the Generate and Agent composers share." },
   { id: "hue", title: "Label hues", module: "/src/chrome/hue.ts", summary: "The tints for provider tokens, library chips and role badges." },
   { id: "shape-looks", title: "Shape looks", module: "/src/canvas/shapes/looks.ts", summary: "Shape labels, media cards and artifact cards on the canvas." },
+  { id: "comments", title: "Comments", module: "/src/comments/parts.tsx", summary: "Comment pins, hover preview, composer, thread card and panel rows, built from the kit, the composer surface and the message actions." },
   { id: "chat-tabs", title: "Chat tabs", module: "/src/agent/rail/TabStrip.tsx", summary: "The agent rail's chat tabs: t3code's panel tab look, status marks, More menu. Shown at the rail's 380 px." },
 ];
 
@@ -32,7 +33,7 @@ const title = (file: string) =>
     .join(" ");
 
 export const ENTRIES: readonly Entry[] = [
-  { id: "tokens", title: "Tokens", group: "Foundations", summary: "Every custom property the theme defines, resolved in the current scheme." },
+  { id: "tokens", title: "Tokens", group: "Foundations", summary: "Every Figma variable in the Tokens, Theme and Components collections, by its CSS name, resolved in the current scheme." },
   ...modulesUnder("/src/components/ui/").map((module): Entry => {
     const file = module.slice("/src/components/ui/".length, -".tsx".length);
     return { id: file, title: title(file), group: "Kit components", module };

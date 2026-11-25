@@ -31,12 +31,12 @@ export const NoProvider = ({ client }: { readonly client: ChatClient }) => {
                 const detail = checking ? "checking…" : status === undefined ? "not checked yet" : (status.message ?? status.status);
                 return (
                   <li key={provider} data-provider={provider}>
-                    <strong className="font-medium text-foreground">{providerName(provider)}</strong>
+                    <strong className="font-medium text-(--no-provider-provider-name)">{providerName(provider)}</strong>
                     {` · ${detail}`}
                     {!checking && status?.status === "not_installed" && (
                       <>
                         {" "}
-                        <a href={status.install} target="_blank" rel="noopener noreferrer" className="text-info-foreground underline-offset-4 hover:underline">
+                        <a href={status.install} target="_blank" rel="noopener noreferrer" className="text-(--no-provider-link) underline-offset-4 hover:underline">
                           How to install
                         </a>
                       </>

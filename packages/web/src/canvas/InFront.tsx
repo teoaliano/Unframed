@@ -7,9 +7,12 @@ import { SelectionToolbar } from "../generate/SelectionToolbar.tsx";
 import { KitHost } from "../kits/KitHost.tsx";
 import { LibraryHost } from "../library/LibraryHost.tsx";
 import { MentionMenu } from "./MentionMenu.tsx";
+import { ToolTray } from "./ToolTray.tsx";
 import { ArtifactsHost } from "../artifacts/ArtifactsHost.tsx";
 import { NodeChrome } from "../nodes/NodeChrome.tsx";
+import { CommentsHost } from "../comments/CommentsHost.tsx";
 import { useFeature } from "../features.ts";
+import { OnboardingProbe } from "../onboarding/OnboardingProbe.tsx";
 
 export const InFront = () => {
   useEffect(() => registerSlot("toolbarEnd", ToolbarEnd), []);
@@ -17,13 +20,16 @@ export const InFront = () => {
   return (
   <>
     <Tether />
+    <CommentsHost />
     {nodes && <NodeChrome />}
     <MentionMenu />
     <SelectionToolbar />
+    <ToolTray />
     <LibraryHost />
     <KitHost />
     <AgentHost />
     <ArtifactsHost />
+    <OnboardingProbe />
   </>
   );
 };

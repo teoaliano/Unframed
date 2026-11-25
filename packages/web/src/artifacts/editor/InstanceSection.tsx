@@ -73,8 +73,8 @@ const Row = ({
   readonly label: string;
   readonly children: ReactNode;
 }) => (
-  <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-2">
-    <span className="truncate text-sm text-muted-foreground">{label}</span>
+  <div className="grid grid-cols-[var(--artifact-editor-label-width)_minmax(0,1fr)] items-center gap-2">
+    <span className="truncate text-sm text-(--artifact-editor-meta)">{label}</span>
     <div className="min-w-0">{children}</div>
   </div>
 );
@@ -129,7 +129,7 @@ export const InstanceSection = ({
       <div className="flex min-w-0 items-center gap-2">
         <Component
           aria-hidden
-          className="size-4 shrink-0 text-muted-foreground"
+          className="size-4 shrink-0 text-(--artifact-editor-icon)"
         />
         <span className="min-w-0 truncate text-sm font-semibold">{title}</span>
         <span className="ml-auto shrink-0">
@@ -148,7 +148,7 @@ export const InstanceSection = ({
       </div>
       {older && (
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="text-xs text-muted-foreground">{`This instance uses an older version of ${title}.`}</span>
+          <span className="text-xs text-(--artifact-editor-meta)">{`This instance uses an older version of ${title}.`}</span>
           <Button
             variant="outline"
             size="xs"
@@ -222,7 +222,7 @@ export const InstanceSection = ({
                   />
                 )}
                 {field.value !== null && (
-                  <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
+                  <span className="min-w-0 truncate font-mono text-xs text-(--artifact-editor-meta)">
                     {field.value}
                   </span>
                 )}
@@ -233,7 +233,7 @@ export const InstanceSection = ({
             <>
               <p
                 id={`${noteBase}-${field.name}`}
-                className="m-0 text-xs text-muted-foreground"
+                className="m-0 text-xs text-(--artifact-editor-meta)"
               >
                 Set by the agent's code.
               </p>

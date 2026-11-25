@@ -36,7 +36,7 @@ test("an empty page's bar is Agent alone; its tray has one frame", async ({ page
   await openCanvas(page, agent);
   await putRecords(agent, [artifactShape({ id: "shape:empty", kind: "page", ref: "170", at: { x: 0, y: 0 } })]);
   await clickShape(page, "shape:empty");
-  await expect(toolbar(page).getByRole("button")).toHaveText(["Agent"]);
+  await expect(toolbar(page).locator("button:not([data-testid='style-row'] *)")).toHaveText(["Agent"]);
   await expect(toolbar(page).locator("[data-slot='separator']")).toBeHidden();
   // The same gap on every side of the button, inside the bar's border.
   const insets = await toolbar(page).evaluate((bar) => {
@@ -67,7 +67,7 @@ test("Agent on the toolbar is an outline button, and opens the Agent tray saying
   const button = toolbar(page).getByRole("button", { name: "Agent" });
   await expectSlot(button, "button");
   await page.mouse.move(10, 10);
-  await expectToken(button, "background-color", "--popover");
+  await expectToken(button, "background-color", "--button-outline-surface");
   await expect(button.locator("svg")).toHaveCount(1);
   await button.click();
 
@@ -91,7 +91,7 @@ test("Agent on the toolbar is an outline button, and opens the Agent tray saying
   await expect(toolbar(page).getByRole("button", { name: "Agent" })).toBeVisible();
 
   // Nothing the chats know selected: a new chat, and nothing to switch to.
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await toolbar(page).getByRole("button", { name: "Agent" }).click();
   await expect(target(page).getByTestId("agent-target-line")).toHaveText("new chat");
   await expect(target(page).getByRole("button", { name: "Continue the earlier chat" })).toHaveCount(0);
@@ -173,7 +173,7 @@ test("with no provider ready, the toolbar's Agent tooltip is the provider's mess
   const engine = await startDetectingEngine(await mkdtemp(join(tmpdir(), "unframed-agent-toolbar-")));
   try {
     await openCanvas(page, engine);
-    await clickShape(page, "shape:starter-subject");
+    await clickShape(page, "shape:sample-subject");
     // The first hover asks for the statuses; the tooltip reads the message once they are in.
     await toolbar(page).getByRole("button", { name: "Agent" }).hover();
     await expect(toolbar(page).getByRole("button", { name: "Agent" })).toHaveAttribute("title", "Claude is not installed or not on PATH.", { timeout: 15_000 });

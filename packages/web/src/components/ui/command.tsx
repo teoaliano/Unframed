@@ -27,7 +27,7 @@ function CommandDialogTrigger(props: CommandDialogPrimitive.Trigger.Props) {
 function CommandDialogBackdrop({ className, ...props }: CommandDialogPrimitive.Backdrop.Props) {
   return (
     <CommandDialogPrimitive.Backdrop
-      className={cn(DIALOG_BACKDROP_CLASS, className)}
+      className={cn(DIALOG_BACKDROP_CLASS, "bg-(--command-backdrop)", className)}
       data-slot="command-dialog-backdrop"
       {...props}
     />
@@ -62,7 +62,7 @@ function CommandDialogPopup({
         <CommandDialogPrimitive.Popup
           className={cn(
             DIALOG_POPUP_CLASS,
-            "pointer-events-auto max-h-105 max-w-xl text-foreground",
+            "pointer-events-auto max-h-105 max-w-xl border-(--command-border) bg-(--command-surface) text-(--command-foreground)",
             className,
           )}
           data-slot="command-dialog-popup"
@@ -97,16 +97,16 @@ function CommandInput({
   ...props
 }: React.ComponentProps<typeof AutocompleteInput>) {
   return (
-    <div className="px-[var(--command-shell-inset)] py-1.5 [&_[data-slot=autocomplete-start-addon]]:ps-[calc(var(--command-shell-inset)+0.0625rem)]">
+    <div className="px-(--command-shell-inset) py-1.5 [&_[data-slot=autocomplete-start-addon]]:ps-(--command-shell-inset)">
       <AutocompleteInput
         autoFocus
         className={cn(
-          "border-transparent! bg-transparent! shadow-none before:hidden has-focus-visible:ring-0 placeholder:text-placeholder *:data-[slot=autocomplete-input]:ps-9! sm:*:data-[slot=autocomplete-input]:ps-[calc(var(--command-shell-inset)+1.5rem)]!",
+          "border-transparent! bg-transparent! shadow-none before:hidden has-focus-visible:ring-0 placeholder:text-(--command-input-placeholder) *:data-[slot=autocomplete-input]:ps-9! sm:*:data-[slot=autocomplete-input]:ps-[calc(var(--command-shell-inset)+--spacing(6))]!",
           className,
         )}
         placeholder={placeholder}
         size="lg"
-        startAddon={<SearchIcon className="translate-x-0.5 text-icon-muted" />}
+        startAddon={<SearchIcon className="translate-x-0.5 text-(--command-input-icon)" />}
         {...props}
       />
     </div>
@@ -163,10 +163,10 @@ function CommandItem({
   return (
     <AutocompleteItem
       className={cn(
-        "py-1.5 data-selected:bg-foreground/[0.06] data-highlighted:bg-foreground/[0.09] data-highlighted:text-foreground [&[data-highlighted][data-selected]]:bg-foreground/[0.09] [&[data-highlighted][data-selected]]:text-foreground",
+        "py-1.5 data-selected:bg-(--command-item-surface-selected)/(--command-item-surface-selected-opacity) data-highlighted:bg-(--command-item-surface-highlighted)/(--command-item-surface-highlighted-opacity) data-highlighted:text-(--command-item-foreground-highlighted) [&[data-highlighted][data-selected]]:bg-(--command-item-surface-highlighted)/(--command-item-surface-highlighted-opacity) [&[data-highlighted][data-selected]]:text-(--command-item-foreground-highlighted)",
         active !== undefined &&
           "cursor-pointer hover:bg-transparent hover:text-inherit data-highlighted:bg-transparent data-highlighted:text-inherit data-selected:bg-transparent data-selected:text-inherit [&[data-highlighted][data-selected]]:bg-transparent [&[data-highlighted][data-selected]]:text-inherit",
-        active && "bg-accent! text-accent-foreground!",
+        active && "bg-(--command-item-surface-active)! text-(--command-item-foreground-active)!",
         className,
       )}
       data-active={active || undefined}
@@ -180,7 +180,7 @@ function CommandShortcut({ className, ...props }: React.ComponentProps<"kbd">) {
   return (
     <kbd
       className={cn(
-        "ms-auto font-medium font-sans text-secondary-label text-xs tracking-widest",
+        "ms-auto font-medium font-sans text-(--command-shortcut-foreground) text-xs tracking-widest",
         className,
       )}
       data-slot="command-shortcut"
@@ -193,7 +193,7 @@ function CommandFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "relative flex items-center justify-between gap-2 rounded-b-[calc(var(--radius-2xl)-1px)] bg-foreground/[0.025] px-[var(--command-content-inset)] py-2.5 font-medium text-sm text-muted-foreground [&_[data-slot=kbd-group]]:font-sans [&_[data-slot=kbd]]:bg-foreground/[0.08] [&_[data-slot=kbd]]:text-foreground [&_[data-slot=kbd]]:ring-0",
+        "relative flex items-center justify-between gap-2 rounded-b-2xl bg-(--command-footer-surface)/(--command-footer-surface-opacity) px-(--command-content-inset) py-2.5 font-medium text-sm text-(--command-footer-foreground) [&_[data-slot=kbd-group]]:font-sans [&_[data-slot=kbd]]:bg-(--command-kbd-surface)/(--command-kbd-surface-opacity) [&_[data-slot=kbd]]:text-(--command-kbd-foreground) [&_[data-slot=kbd]]:ring-0",
         className,
       )}
       data-slot="command-footer"

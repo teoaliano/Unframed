@@ -2,10 +2,10 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import { connectEngine } from "./rpc/engine.ts";
-import { followSystemTheme } from "./theme/theme.ts";
+import { followTheme } from "./theme/theme.ts";
 import "./theme/theme.css";
 
-followSystemTheme();
+followTheme();
 
 // The frame meter is its own chunk, fetched only with ?fps=1.
 if (new URLSearchParams(window.location.search).get("fps") === "1") void import("./fps/meter.ts");

@@ -138,7 +138,7 @@ test("audio in other media: the unused mark in every tray, nothing sent, Agent o
   await clickShape(page, "shape:line");
   await expect(toolbar(page).getByRole("button", { name: "Generate" })).toHaveCount(0);
 
-  await clickShape(page, "shape:starter-subject", ["Shift"]);
+  await clickShape(page, "shape:sample-subject", ["Shift"]);
   await openComposer(page);
   for (const medium of ["image", "video", "text"] as const) {
     await composer(page).getByRole("radiogroup", { name: "Medium" }).getByRole("radio", { name: medium }).click();

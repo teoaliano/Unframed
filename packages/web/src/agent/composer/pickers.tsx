@@ -30,7 +30,7 @@ export const ProviderLogo = ({ provider }: { readonly provider: AgentProvider })
 
 /** t3code's picker row: a list row that highlights under the pointer and the keys, the chosen one tinted. */
 const PICKER_ROW =
-  "flex min-h-7 w-full cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1 text-left text-sm text-foreground outline-none data-chosen:bg-foreground/[0.08] data-highlighted:bg-accent data-highlighted:text-accent-foreground";
+  "flex min-h-7 w-full cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1 text-left text-sm text-(--picker-row-foreground) outline-none data-chosen:bg-(--picker-row-surface-chosen)/(--picker-row-surface-chosen-opacity) data-highlighted:bg-(--picker-row-surface-highlighted) data-highlighted:text-(--picker-row-foreground-highlighted)";
 
 
 // ---------------------------------------------------------------------------------------
@@ -129,7 +129,7 @@ export const ModelPicker = ({ statuses, selection, providerLocked, disabled, ope
           <span className="block truncate text-xs font-medium leading-snug" data-testid="model-name">
             {model.name}
           </span>
-          {model.description !== "" && <span className="mt-0.5 block truncate text-xs leading-snug text-muted-foreground">{model.description}</span>}
+          {model.description !== "" && <span className="mt-0.5 block truncate text-xs leading-snug text-(--picker-row-description)">{model.description}</span>}
         </span>
         {chosen && <Check aria-label="Current model" className="size-3.5 shrink-0" />}
         {index < 9 && <Kbd>{mac ? `⌘${index + 1}` : `Ctrl+${index + 1}`}</Kbd>}
@@ -144,7 +144,7 @@ export const ModelPicker = ({ statuses, selection, providerLocked, disabled, ope
         <span className="min-w-0 truncate">{current?.name ?? (selection.model === "" ? providerName(selection.provider) : selection.model)}</span>
         <ChevronDown aria-hidden className="size-3 opacity-60" />
       </PopoverTrigger>
-      <PopoverPopup side="top" align="start" sideOffset={6} padding="compact" className="w-[300px]" aria-label="Models" onKeyDown={onPopupKey}>
+      <PopoverPopup side="top" align="start" sideOffset={6} padding="compact" className="w-(--picker-model-width)" aria-label="Models" onKeyDown={onPopupKey}>
         <div
           ref={tabList}
           role="tablist"
@@ -185,7 +185,7 @@ export const ModelPicker = ({ statuses, selection, providerLocked, disabled, ope
           })}
         </div>
         {status?.status !== "ready" ? (
-          <p className="m-0 px-2 py-1.5 text-xs text-muted-foreground">{status?.message ?? "checking…"}</p>
+          <p className="m-0 px-2 py-1.5 text-xs text-(--picker-status)">{status?.message ?? "checking…"}</p>
         ) : (
           <>
             <Input
@@ -231,11 +231,11 @@ export const ModelPicker = ({ statuses, selection, providerLocked, disabled, ope
                 <Disclosure open={legacyOpen} onToggle={() => setLegacyOpen(!legacyOpen)} className={PICKER_ROW}>
                   <Chevron open={legacyOpen} />
                   <span className="text-xs font-medium">Legacy models</span>
-                  <span className="ml-auto text-xs text-muted-foreground">{`${legacyRows.length} models`}</span>
+                  <span className="ml-auto text-xs text-(--picker-row-meta)">{`${legacyRows.length} models`}</span>
                 </Disclosure>
               )}
               {(legacyOpen || needle !== "") && legacyRows.map(row)}
-              {all.length === 0 && <p className="m-0 px-2 py-1.5 text-xs text-muted-foreground">No models found</p>}
+              {all.length === 0 && <p className="m-0 px-2 py-1.5 text-xs text-(--picker-empty)">No models found</p>}
             </div>
           </>
         )}
@@ -269,7 +269,7 @@ export const RadioRow = ({ checked, label, hint, badge, onSelect }: { readonly c
   <Button variant="ghost" size="sm" role="radio" aria-checked={checked} data-pressed={checked ? "" : undefined} className="w-full justify-start" onClick={onSelect}>
     <span className="flex size-3.5 shrink-0 items-center justify-center">{checked && <Check aria-hidden className="size-3.5" />}</span>
     <span className="shrink-0">{label}</span>
-    {hint !== undefined && <span className="min-w-0 flex-1 truncate text-start text-xs text-muted-foreground">{hint}</span>}
+    {hint !== undefined && <span className="min-w-0 flex-1 truncate text-start text-xs text-(--picker-row-description)">{hint}</span>}
     {badge !== undefined && (
       <Badge variant="outline" size="sm" className="ms-auto">
         {badge}
@@ -278,7 +278,7 @@ export const RadioRow = ({ checked, label, hint, badge, onSelect }: { readonly c
   </Button>
 );
 
-const GROUP_LABEL = "px-2 pt-1.5 pb-1 text-xs font-medium text-muted-foreground";
+const GROUP_LABEL = "px-2 pt-1.5 pb-1 text-xs font-medium text-(--picker-group-label)";
 
 /**
  * The traits picker: radio groups for the traits the chosen model declares (its effort
@@ -311,7 +311,7 @@ export const TraitsPicker = ({
         {traits.fastMode === true && <Zap aria-label="Fast mode" />}
         <ChevronDown aria-hidden className="size-3 opacity-60" />
       </PopoverTrigger>
-      <PopoverPopup side="top" align="start" sideOffset={6} padding="compact" className="w-[280px]" aria-label="Traits">
+      <PopoverPopup side="top" align="start" sideOffset={6} padding="compact" className="w-(--picker-traits-width)" aria-label="Traits">
             {model.efforts.length > 0 && (
               <div role="radiogroup" aria-label="Reasoning" className="flex flex-col gap-px">
                 <p className={`m-0 ${GROUP_LABEL}`}>Reasoning</p>
@@ -384,7 +384,7 @@ export const CompactControlsMenu = ({
     <MenuTrigger render={<Button variant="ghost-muted" size="icon-sm" aria-label="More composer controls" />}>
       <Ellipsis aria-hidden />
     </MenuTrigger>
-    <MenuPopup side="top" align="start" className="w-[300px]">
+    <MenuPopup side="top" align="start" className="w-(--composer-controls-menu-width)">
       {interactionMode !== undefined && onInteractionMode && (
         <>
           <MenuGroup>
@@ -412,7 +412,7 @@ export const CompactControlsMenu = ({
                   <Icon aria-hidden className="mt-0.5 size-3.5 shrink-0" />
                   <span className="flex min-w-0 flex-col">
                     <span>{entry.label}</span>
-                    <span className="text-xs text-muted-foreground">{entry.description}</span>
+                    <span className="text-xs text-(--composer-controls-menu-description)">{entry.description}</span>
                   </span>
                 </span>
               </MenuRadioItem>
@@ -464,13 +464,13 @@ export const ContextMeter = ({ usage, onCompact, compactUnavailable }: { readonl
       >
         <span className="relative flex size-5 items-center justify-center">
           <svg viewBox="0 0 24 24" className="absolute inset-0 mx-0! size-full -rotate-90" aria-hidden>
-            <circle cx="12" cy="12" r={RADIUS} fill="none" className="stroke-muted-foreground/24" strokeWidth="3" />
+            <circle cx="12" cy="12" r={RADIUS} fill="none" className="stroke-(--context-meter-track)/(--context-meter-track-opacity)" strokeWidth="3" />
             <circle
               cx="12"
               cy="12"
               r={RADIUS}
               fill="none"
-              className={view.overloaded ? "stroke-error transition-[stroke-dashoffset,stroke] duration-500 ease-out motion-reduce:transition-none" : "stroke-highlight transition-[stroke-dashoffset,stroke] duration-500 ease-out motion-reduce:transition-none"}
+              className={view.overloaded ? "stroke-(--context-meter-overloaded-fill) transition-[stroke-dashoffset,stroke] duration-500 ease-out motion-reduce:transition-none" : "stroke-(--context-meter-fill) transition-[stroke-dashoffset,stroke] duration-500 ease-out motion-reduce:transition-none"}
               data-testid="context-ring"
               strokeWidth="3"
               strokeLinecap="round"
@@ -481,30 +481,30 @@ export const ContextMeter = ({ usage, onCompact, compactUnavailable }: { readonl
         </span>
       </PopoverTrigger>
       <PopoverPopup tooltipStyle side="top" align="end" sideOffset={6} padding="none" width="sm" aria-label="Context Window">
-        <div className="flex flex-col gap-2 p-(--floating-content-inset) text-left whitespace-normal">
+        <div className="flex flex-col gap-2 p-3 text-left whitespace-normal">
           <div className="flex items-center justify-between gap-3">
-            <span className="text-xs font-medium text-muted-foreground">Context Window</span>
-            <span className="text-2xs text-secondary-label tabular-nums" data-testid="context-numbers">
+            <span className="text-xs font-medium text-(--context-meter-label)">Context Window</span>
+            <span className="text-2xs text-(--context-meter-secondary) tabular-nums" data-testid="context-numbers">
               {view.percentText !== null ? `${view.percentText} · ${view.usedText}/${view.maxText}` : view.usedText}
             </span>
           </div>
           {view.percent !== null && (
-            <div role="progressbar" aria-label="Context window usage" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(filled)} className="h-1.5 w-full overflow-hidden rounded-full bg-muted/60">
-              <div className={view.overloaded ? "h-full rounded-full bg-error" : "h-full rounded-full bg-highlight"} style={{ width: `${filled}%` }} />
+            <div role="progressbar" aria-label="Context window usage" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(filled)} className="h-1.5 w-full overflow-hidden rounded-full bg-(--context-meter-bar-track)/(--context-meter-bar-track-opacity)">
+              <div className={view.overloaded ? "h-full rounded-full bg-(--context-meter-overloaded-fill)" : "h-full rounded-full bg-(--context-meter-fill)"} style={{ width: `${filled}%` }} />
             </div>
           )}
           {view.totalProcessedText !== null && (
             <div className="flex items-center justify-between gap-3 text-2xs leading-4">
-              <span className="text-secondary-label">Total processed</span>
-              <span className="font-medium text-secondary-label tabular-nums">{view.totalProcessedText}</span>
+              <span className="text-(--context-meter-secondary)">Total processed</span>
+              <span className="font-medium text-(--context-meter-secondary) tabular-nums">{view.totalProcessedText}</span>
             </div>
           )}
-          <p className="m-0 mt-1 text-2xs font-medium text-pretty text-secondary-label">Context compacts automatically when needed.</p>
+          <p className="m-0 mt-1 text-2xs font-medium text-pretty text-(--context-meter-secondary)">Context compacts automatically when needed.</p>
           <Button variant="outline" size="xs" className="mt-1 w-full" disabled={compactUnavailable} onClick={onCompact}>
             <Minimize2 aria-hidden />
             Compact context
           </Button>
-          {compactUnavailable && <p className="m-0 text-2xs text-pretty text-secondary-label">Compaction is unavailable for this provider</p>}
+          {compactUnavailable && <p className="m-0 text-2xs text-pretty text-(--context-meter-secondary)">Compaction is unavailable for this provider</p>}
         </div>
       </PopoverPopup>
     </Popover>

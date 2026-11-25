@@ -30,7 +30,7 @@ test("the canvas's place says the import is running, and a second tab waits for 
     await expectSlot(importing, "empty");
     await expect(importing.locator("svg[aria-label='Loading']")).toHaveCount(1);
     await expect(importing.getByRole("status")).toHaveText(IMPORTING);
-    await expectToken(importing.getByRole("status"), "color", "--color-muted-foreground");
+    await expectToken(importing.getByRole("status"), "color", "--empty-description");
     await second.goto(app.engine.origin);
     await expect(second.getByText(IMPORTING)).toBeVisible({ timeout: 20_000 });
     expect(existsSync(join(app.folder("everything"), "unframed.sqlite"))).toBe(false);
@@ -63,7 +63,7 @@ test("a failed import says why, writes no database, and Try again imports once t
     await expectSlot(failure, "alert");
     await expect(failure).toHaveAttribute("data-variant", "error");
     await expectSlot(failure.getByRole("button", { name: "Try again" }), "button");
-    await expectToken(failure.getByRole("button", { name: "Try again" }), "background-color", "--primary");
+    await expectToken(failure.getByRole("button", { name: "Try again" }), "background-color", "--button-default-surface");
     expect(existsSync(join(app.folder("everything"), "unframed.sqlite"))).toBe(false);
 
     // A reload still shows the failure: nothing reruns the import but Try again.
@@ -95,8 +95,8 @@ test("the report shows once across reloads and tabs, with its sections, and the 
       const title = dialog.locator("[data-slot='dialog-title']");
       expect(await styleOf(title, "font-size")).toBe("20px");
       expect(await styleOf(title, "font-weight")).toBe("600");
-      await expectToken(dialog.locator("[data-slot='dialog-description']"), "color", "--color-muted-foreground");
-      await expectToken(dialog.getByRole("button", { name: "Got it" }), "background-color", "--primary");
+      await expectToken(dialog.locator("[data-slot='dialog-description']"), "color", "--dialog-description");
+      await expectToken(dialog.getByRole("button", { name: "Got it" }), "background-color", "--button-default-surface");
     });
     await expect(dialog).toContainText(
       "This project was made with an older version. Its canvas was rebuilt for this one. graph.json and graph.log are still in the project folder, unchanged. Undo history from the old app does not carry over.",

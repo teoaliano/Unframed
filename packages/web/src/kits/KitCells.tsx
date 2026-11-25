@@ -56,7 +56,7 @@ const TextCell = ({ label, value, swatch, invalid, font = "mono", onCommit }: { 
   };
   return (
     <div className={swatch ? "flex min-w-28 flex-1 items-center gap-2" : "flex min-w-0 flex-1 items-center gap-2"}>
-      {swatch && <span aria-hidden className="size-4 shrink-0 rounded-sm border" style={{ background: value }} />}
+      {swatch && <span aria-hidden className="size-4 shrink-0 rounded-sm border border-(--kit-table-swatch-border)" style={{ background: value }} />}
       <Input
         size="sm"
         font={font}
@@ -166,9 +166,9 @@ const AliasList = ({ token, tokens, onUse }: { readonly token: Token; readonly t
   const choices = tokens.filter((candidate) => candidate.type === token.type && candidate.path !== token.path);
   return (
     <div className="grid gap-1">
-      <span className="text-xs font-medium text-muted-foreground">Use a token</span>
+      <span className="text-xs font-medium text-(--kit-table-label)">Use a token</span>
       {choices.length === 0 ? (
-        <span className="text-xs text-muted-foreground">No other {token.type} tokens.</span>
+        <span className="text-xs text-(--kit-table-meta)">No other {token.type} tokens.</span>
       ) : (
         choices.map((choice) => (
           <Button key={choice.path} variant="ghost" size="sm" className="justify-start" onClick={() => onUse(choice.path)}>
@@ -299,7 +299,7 @@ export const ValueCell = ({ token, tokens, label, value, onCommit }: { readonly 
     <div className="grid min-w-0 gap-1">
       <div className="flex min-w-0 items-center gap-1">
         {alias !== undefined && (
-          <span data-alias={alias} className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+          <span data-alias={alias} className="shrink-0 rounded bg-(--kit-table-alias-surface) px-1.5 py-0.5 font-mono text-xs">
             {alias}
           </span>
         )}
@@ -311,7 +311,7 @@ export const ValueCell = ({ token, tokens, label, value, onCommit }: { readonly 
         )}
       </div>
       {problem !== undefined && (
-        <span role="alert" className="text-xs text-destructive">
+        <span role="alert" className="text-xs text-(--kit-table-error-foreground)">
           {problem}
         </span>
       )}

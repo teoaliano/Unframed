@@ -22,7 +22,7 @@ const bolden = (text: string, query: string): ReactNode[] => {
   for (let found = lower.indexOf(needle); found !== -1; found = lower.indexOf(needle, at)) {
     if (found > at) parts.push(text.slice(at, found));
     parts.push(
-      <b key={found} className="font-semibold text-foreground">
+      <b key={found} className="font-semibold text-(--thread-search-match)">
         {text.slice(found, found + needle.length)}
       </b>,
     );
@@ -90,7 +90,7 @@ export const ThreadSearch = ({ client, chats, onClose }: { readonly client: Chat
   };
 
   return (
-    <div className="absolute inset-0 z-[2] flex items-center gap-1 border-b bg-background px-2" role="search">
+    <div className="absolute inset-0 z-[2] flex items-center gap-1 border-b border-(--thread-search-border) bg-(--thread-search-surface) px-2" role="search">
       <Input
         ref={field}
         size="compact"
@@ -127,7 +127,7 @@ export const ThreadSearch = ({ client, chats, onClose }: { readonly client: Chat
         // Focus stays in the field, which moves the highlight: the rows are options, not buttons.
         <div className={`${listboxPopupClass} absolute top-full right-2 left-2 max-h-80`} role="listbox" aria-label="Search results">
           {rows.length === 0 ? (
-            <p className="m-0 px-2 py-1.5 text-sm text-muted-foreground">No chats match.</p>
+            <p className="m-0 px-2 py-1.5 text-sm text-(--thread-search-empty)">No chats match.</p>
           ) : (
             rows.map((row, index) => {
               const chat = byId.get(row.threadId)!;
@@ -137,15 +137,15 @@ export const ThreadSearch = ({ client, chats, onClose }: { readonly client: Chat
                   role="option"
                   aria-selected={index === highlight}
                   data-highlighted={index === highlight ? "" : undefined}
-                  className={cn(listboxRowClass, "flex-col items-start gap-0.5")}
+                  className={cn(listboxRowClass, "flex-col items-start gap-0.5 text-(--thread-search-result-foreground) data-highlighted:bg-(--thread-search-result-surface-highlighted) data-highlighted:text-(--thread-search-result-foreground-highlighted)")}
                   onMouseEnter={() => setHighlight(index)}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => choose(row.threadId)}
                 >
                   <span className="max-w-full truncate font-medium">{row.match ? tabLabel(chat) : bolden(tabLabel(chat), trimmed)}</span>
                   {row.match && (
-                    <span className="text-xs text-muted-foreground">
-                      <span className={row.match.source === "user" ? "text-info-foreground" : "text-success-foreground"}>{row.match.source === "user" ? "You: " : "Agent: "}</span>
+                    <span className="text-xs text-(--thread-search-snippet)">
+                      <span className={row.match.source === "user" ? "text-(--thread-search-source-user)" : "text-(--thread-search-source-agent)"}>{row.match.source === "user" ? "You: " : "Agent: "}</span>
                       {bolden(row.match.snippet, trimmed)}
                     </span>
                   )}

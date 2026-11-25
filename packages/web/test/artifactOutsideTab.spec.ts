@@ -5,6 +5,7 @@ import { centre, openCanvas, roomRecords, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 import { putRecords } from "./media.ts";
 import { dialsPage, filledArtifact, insideComposition, projectPath, writeBridge, writeProjectFile } from "./artifacts.ts";
+import { leaveEditor } from "./editorHarness.ts";
 
 const shown = async (frame: FrameLocator) => JSON.parse((await frame.locator("#values").textContent().catch(() => null)) ?? "null");
 
@@ -26,7 +27,7 @@ test("a page opened in a new tab follows the shape: a new version swaps in witho
   expect(tab.url()).toBe(`http://127.0.0.1:${agent.previewPort}/p/default/unframed-live.html?s=tuned`);
   await expect.poll(() => shown(showing(tab)), { timeout: 10_000 }).toEqual({ size: 20 });
   await tab.evaluate(() => ((window as unknown as { kept: boolean }).kept = true));
-  await page.getByRole("region", { name: "Editing Tuned" }).getByRole("button", { name: "Back to canvas" }).click();
+  await leaveEditor(page);
   await expect(page.getByRole("region", { name: "Editing Tuned" })).toHaveCount(0);
 
   await writeProjectFile(agent, "2-tuned.html", dialsPage({ size: [10, 0, 100] }).replace('<pre id="values">', '<h1>Version two</h1><pre id="values">'));

@@ -44,7 +44,7 @@ export default function EmptyDemo() {
           <Empty size="compact">
             <EmptyHeader>
               <EmptyMedia>
-                <ImageOff className="size-8 text-muted-foreground" />
+                <ImageOff className="size-8 text-(--catalogue-demo-description)" />
               </EmptyMedia>
               <EmptyTitle>No images match</EmptyTitle>
             </EmptyHeader>

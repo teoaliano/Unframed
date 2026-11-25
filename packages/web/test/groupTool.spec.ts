@@ -60,14 +60,14 @@ test("dragging a prompt or image into a group makes it a member; a page, a motio
   await dragShapeTo(page, "shape:image", inside(0.2, 0.2));
   await dragShapeTo(page, "shape:page", inside(0.2, 0.5));
   await dragShapeTo(page, "shape:other", inside(0.6, 0.6), true);
-  await dragShapeTo(page, "shape:starter-subject", inside(0.5, 0.15));
+  await dragShapeTo(page, "shape:sample-subject", inside(0.5, 0.15));
 
   await expect
     .poll(async () => {
       const records = await roomRecords(engine, "default");
-      return Object.fromEntries(["shape:image", "shape:page", "shape:other", "shape:starter-subject"].map((id) => [id, records.find((record) => record.id === id)?.parentId]));
+      return Object.fromEntries(["shape:image", "shape:page", "shape:other", "shape:sample-subject"].map((id) => [id, records.find((record) => record.id === id)?.parentId]));
     })
-    .toEqual({ "shape:image": "shape:group", "shape:page": "page:page", "shape:other": "page:page", "shape:starter-subject": "shape:group" });
+    .toEqual({ "shape:image": "shape:group", "shape:page": "page:page", "shape:other": "page:page", "shape:sample-subject": "shape:group" });
   // The refused shapes did move over the group; they just stayed on the page.
   const records = await roomRecords(engine, "default");
   expect(["shape:page", "shape:other"].map((id) => [id, (records.find((record) => record.id === id)?.x ?? Infinity) < 1040])).toEqual([["shape:page", true], ["shape:other", true]]);

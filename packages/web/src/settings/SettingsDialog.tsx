@@ -1,15 +1,19 @@
 import { UnframedError, type ProviderStatuses, type Settings, type SettingsPatch } from "@unframed/contracts";
 import { ELEVENLABS_KEY, elevenLabsStatusCopy, GENERATION_PROVIDERS, VERCEL_KEY_SAVED_MESSAGE, vercelCreditsCopy, keyStatusCopy, OPENROUTER_KEY, sendShortcutOf, VERCEL_KEY, type SendShortcut } from "@unframed/domain";
 import { Bot, CircleAlert, CircleCheck, FolderOpen, Plug, SlidersHorizontal, Sparkles, Tablet, type LucideIcon } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Spinner } from "~/components/ui/spinner";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "~/components/ui/tabs";
 import { useActivation, useEngine } from "../context.ts";
 import { loadCatalogue } from "../generate/catalogue.ts";
+import { restartOnboarding } from "../onboarding/store.ts";
+import { setThemeChoice, THEME_CHOICES, THEME_KEY, themeChoice, themeChoiceOf, type ThemeChoice } from "../theme/theme.ts";
 import { showNotice } from "../toasts.tsx";
 import { Copy, linkClass, ModelSelect, SectionHeading } from "./fields.tsx";
 import { FOLLOW_UP_KEY, LocalAgents, PLAN_MODE_KEY, SEND_SHORTCUT_KEY, type FollowUp } from "./LocalAgents.tsx";
@@ -118,7 +122,7 @@ const patchOf = (draft: Draft, settings: Settings): SettingsPatch => {
 
 const ModelGroup = ({ title, children }: { readonly title: string; readonly children: ReactNode }) => (
   <div className="flex flex-col gap-3" role="group" aria-label={`${title} default models`}>
-    <p className="m-0 text-xs font-medium text-muted-foreground">{title}</p>
+    <p className="m-0 text-xs font-medium text-(--settings-dialog-label)">{title}</p>
     {children}
   </div>
 );
@@ -146,6 +150,8 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const [followUp, setFollowUp] = useState<FollowUp>("queue");
   const [sendShortcut, setSendShortcut] = useState<SendShortcut>("enter");
   const [planMode, setPlanMode] = useState(false);
+  const [theme, setTheme] = useState<ThemeChoice>(themeChoice);
+  const themeId = useId();
   const keyField = useRef<HTMLInputElement>(null);
   const checks = useRef(0);
   const resetRemovals = useRef(() => {});
@@ -239,10 +245,11 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   useEffect(() => {
     if (!open) return;
     checkProviders(false);
-    return engine.subscribe("preferences.subscribe", { keys: [FOLLOW_UP_KEY, PLAN_MODE_KEY, SEND_SHORTCUT_KEY] }, ({ key, value }) => {
+    return engine.subscribe("preferences.subscribe", { keys: [FOLLOW_UP_KEY, PLAN_MODE_KEY, SEND_SHORTCUT_KEY, THEME_KEY] }, ({ key, value }) => {
       if (key === FOLLOW_UP_KEY) setFollowUp(value === "steer" ? "steer" : "queue");
       if (key === SEND_SHORTCUT_KEY) setSendShortcut(sendShortcutOf(value));
       if (key === PLAN_MODE_KEY) setPlanMode(value === true);
+      if (key === THEME_KEY) setTheme(themeChoiceOf(value));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, engine]);
@@ -367,6 +374,11 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
     setSendShortcut(value);
     engine.call("preferences.set", { key: SEND_SHORTCUT_KEY, value }).catch((error: unknown) => setBanner({ kind: "error", message: messageOf(error) }));
   };
+  const setThemePreference = (value: ThemeChoice) => {
+    setTheme(value);
+    setThemeChoice(value);
+    engine.call("preferences.set", { key: THEME_KEY, value }).catch((error: unknown) => setBanner({ kind: "error", message: messageOf(error) }));
+  };
   const setFollowUpPreference = (value: FollowUp) => {
     setFollowUp(value);
     engine.call("preferences.set", { key: FOLLOW_UP_KEY, value }).catch((error: unknown) => setBanner({ kind: "error", message: messageOf(error) }));
@@ -390,7 +402,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
         <SectionHeading>OpenRouter</SectionHeading>
         {!hasKey && !pending && (
           <div className="flex flex-col items-start gap-3">
-            <p className="m-0 text-sm leading-relaxed text-muted-foreground">
+            <p className="m-0 text-sm leading-relaxed text-(--settings-dialog-description)">
               Unframed has no image model of its own. It sends your prompts to{" "}
               <a href="https://openrouter.ai" target="_blank" rel="noreferrer" className={linkClass}>
                 OpenRouter
@@ -403,9 +415,9 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
 
         {pending && (
           <div className="flex flex-col items-start gap-2" data-testid="settings-waiting">
-            <p className="m-0 text-sm text-foreground">Waiting for OpenRouter in your browser…</p>
+            <p className="m-0 text-sm text-(--settings-dialog-foreground)">Waiting for OpenRouter in your browser…</p>
             {connection !== undefined && (
-              <p className="m-0 text-xs text-muted-foreground">
+              <p className="m-0 text-xs text-(--settings-dialog-description)">
                 Didn't open?{" "}
                 <a href={connection.authorizeUrl} target="_blank" rel="noreferrer" className={linkClass}>
                   Approve Unframed at OpenRouter
@@ -427,7 +439,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
 
         {showsKeySection && (
           <div className="flex flex-col gap-2">
-            {!hasKey && <h4 className="m-0 text-xs font-medium text-muted-foreground">API key</h4>}
+            {!hasKey && <h4 className="m-0 text-xs font-medium text-(--settings-dialog-label)">API key</h4>}
             <div className="flex items-center gap-2">
               <Input
                 ref={keyField}
@@ -445,11 +457,11 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
               />
               {hasKey && <RemoveKeyButton removal={openRouterRemoval} />}
             </div>
-            <p className="m-0 text-xs text-muted-foreground" data-testid="key-status">
+            <p className="m-0 text-xs text-(--settings-dialog-description)" data-testid="key-status">
               <Copy parts={copy.line} />
             </p>
             {copy.expiry !== undefined && (
-              <p className="m-0 text-xs text-foreground" data-testid="key-expiry">
+              <p className="m-0 text-xs text-(--settings-dialog-foreground)" data-testid="key-expiry">
                 {copy.expiry}
               </p>
             )}
@@ -463,10 +475,10 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
         )}
       </section>
 
-      <section className="flex flex-col gap-3 border-t pt-4" aria-label="Vercel AI Gateway">
+      <section className="flex flex-col gap-3 border-t border-(--settings-dialog-divider) pt-4" aria-label="Vercel AI Gateway">
         <SectionHeading>Vercel AI Gateway</SectionHeading>
         {!hasKey && (
-          <p className="m-0 text-xs text-muted-foreground" data-testid="vercel-instead">
+          <p className="m-0 text-xs text-(--settings-dialog-description)" data-testid="vercel-instead">
             No OpenRouter account? Images and text can run through the Vercel AI Gateway instead. Video still needs OpenRouter.
           </p>
         )}
@@ -486,17 +498,17 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
             />
             {hasVercelKey && <RemoveKeyButton removal={vercelRemoval} />}
           </div>
-          <p className="m-0 text-xs text-muted-foreground" data-testid="vercel-status">
+          <p className="m-0 text-xs text-(--settings-dialog-description)" data-testid="vercel-status">
             {vercelCopy}
           </p>
           <KeyWarning removal={vercelRemoval} testId="vercel-warning" />
         </div>
       </section>
 
-      <section className="flex flex-col gap-3 border-t pt-4" aria-label="ElevenLabs">
+      <section className="flex flex-col gap-3 border-t border-(--settings-dialog-divider) pt-4" aria-label="ElevenLabs">
         <SectionHeading>ElevenLabs</SectionHeading>
         {!hasKey && !hasVercelKey && (
-          <p className="m-0 text-xs text-muted-foreground" data-testid="elevenlabs-only-audio">
+          <p className="m-0 text-xs text-(--settings-dialog-description)" data-testid="elevenlabs-only-audio">
             Only want audio? Paste an ElevenLabs key here. Images and text need OpenRouter or the Vercel AI Gateway, and video needs OpenRouter.
           </p>
         )}
@@ -516,14 +528,14 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
             />
             {hasElevenLabsKey && <RemoveKeyButton removal={elevenLabsRemoval} />}
           </div>
-          <p className="m-0 text-xs text-muted-foreground" data-testid="elevenlabs-status">
+          <p className="m-0 text-xs text-(--settings-dialog-description)" data-testid="elevenlabs-status">
             {elevenLabsCopy}
           </p>
           <KeyWarning removal={elevenLabsRemoval} testId="elevenlabs-warning" />
         </div>
       </section>
 
-      <section className="flex flex-col gap-3 border-t pt-4" aria-label="Default models">
+      <section className="flex flex-col gap-3 border-t border-(--settings-dialog-divider) pt-4" aria-label="Default models">
         <SectionHeading>Default models</SectionHeading>
         {(hasKey || hasVercelKey || hasElevenLabsKey) && settings !== undefined ? (
           <>
@@ -544,7 +556,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
               <ModelGroup title="ElevenLabs">
                 <ModelSelect label="Audio" value={draft.audioModel} models={catalogues.audio} onChange={(value) => edit({ audioModel: value })} />
                 {audioModelsProblem !== undefined && (
-                  <p className="m-0 text-xs text-muted-foreground" data-testid="audio-models-problem">
+                  <p className="m-0 text-xs text-(--settings-dialog-description)" data-testid="audio-models-problem">
                     {audioModelsProblem}
                   </p>
                 )}
@@ -552,7 +564,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
             )}
           </>
         ) : (
-          <p className="m-0 text-xs text-muted-foreground" data-testid="models-need-key">
+          <p className="m-0 text-xs text-(--settings-dialog-description)" data-testid="models-need-key">
             Connect OpenRouter or paste a Vercel AI Gateway key to choose the models Generate starts on.
           </p>
         )}
@@ -579,19 +591,57 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   );
 
   const general = (
-    <section className="flex flex-col gap-2">
-      <SectionHeading>Output folder</SectionHeading>
-      <p className="m-0 text-xs text-muted-foreground">Every project is a folder in here, with its files, sidecars and chats.</p>
-      <div className="flex items-center gap-2">
-        <Input aria-label="Output folder" placeholder="./output" font="mono" spellCheck={false} autoComplete="off" value={draft.outputDir} onChange={(event) => edit({ outputDir: event.target.value })} />
-        {!device && (
-          <Button variant="outline" onClick={() => void browse()}>
-            <FolderOpen aria-hidden />
-            Browse…
+    <>
+      <section className="flex flex-col gap-3" aria-label="Appearance">
+        <SectionHeading>Appearance</SectionHeading>
+        <div className="flex flex-col gap-1.5">
+          <Label id={themeId} render={<span />}>
+            Theme
+          </Label>
+          <Select value={theme} onValueChange={(value) => value && setThemePreference(themeChoiceOf(value))}>
+            <SelectTrigger aria-labelledby={themeId}>
+              <SelectValue>{THEME_CHOICES.find((option) => option.value === theme)?.label}</SelectValue>
+            </SelectTrigger>
+            <SelectPopup alignItemWithTrigger={false}>
+              {THEME_CHOICES.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectPopup>
+          </Select>
+        </div>
+      </section>
+      <section className="flex flex-col gap-2 border-t border-(--settings-dialog-divider) pt-4">
+        <SectionHeading>Output folder</SectionHeading>
+        <p className="m-0 text-xs text-(--settings-dialog-description)">Every project is a folder in here, with its files, sidecars and chats.</p>
+        <div className="flex items-center gap-2">
+          <Input aria-label="Output folder" placeholder="./output" font="mono" spellCheck={false} autoComplete="off" value={draft.outputDir} onChange={(event) => edit({ outputDir: event.target.value })} />
+          {!device && (
+            <Button variant="outline" onClick={() => void browse()}>
+              <FolderOpen aria-hidden />
+              Browse…
+            </Button>
+          )}
+        </div>
+      </section>
+      {!device && (
+        <section className="flex flex-col gap-2 border-t border-(--settings-dialog-divider) pt-4" aria-label="Getting started">
+          <SectionHeading>Getting started</SectionHeading>
+          <p className="m-0 text-xs text-(--settings-dialog-description)">Bring back the Get started checklist: check your local agents, build a prototype with the agent and try a generation.</p>
+          <Button
+            variant="outline"
+            className="self-start"
+            onClick={() => {
+              void restartOnboarding(engine);
+              requestClose();
+            }}
+          >
+            Show the checklist again
           </Button>
-        )}
-      </div>
-    </section>
+        </section>
+      )}
+    </>
   );
 
   const current = SECTIONS.find((each) => each.id === section) ?? SECTIONS[0]!;
@@ -613,7 +663,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
         initialFocus={section === "generation" && showsKeySection ? keyField : undefined}
         data-testid="settings-dialog"
         data-section={section}
-        className="h-[min(640px,calc(100dvh-3rem))] max-w-[760px] overflow-hidden"
+        className="h-[min(var(--settings-dialog-height),calc(100dvh-(--spacing(12))))] max-w-(--settings-dialog-width) overflow-hidden"
         render={
           <form
             onSubmit={(event) => {
@@ -626,22 +676,22 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
-        <div className="flex min-h-0 flex-1 border-t">
+        <div className="flex min-h-0 flex-1 border-t border-(--settings-dialog-divider)">
           <Tabs orientation="vertical" value={section} onValueChange={(next) => showSection(next as SettingsSection)} className="min-h-0 flex-1 flex-row">
-            <div className="w-48 shrink-0 border-e bg-muted/40 p-3">
+            <div className="w-48 shrink-0 border-e border-(--settings-dialog-nav-border) bg-(--settings-dialog-nav-surface)/(--settings-dialog-nav-surface-opacity) p-3">
               <TabsList aria-label="Settings sections" variant="sidebar">
                 {SECTIONS.filter(({ id }) => id !== "ipad" || ipadHere).map(({ id, label, icon: Icon }) => (
                   <TabsTab key={id} value={id} data-section={id} data-unsaved={changed.has(id) ? "true" : undefined} aria-description={changed.has(id) ? "Unsaved changes" : undefined}>
                     <Icon aria-hidden />
                     {label}
-                    {changed.has(id) && <span aria-hidden data-testid="unsaved-mark" className="ms-auto size-1.5 rounded-full bg-highlight" />}
+                    {changed.has(id) && <span aria-hidden data-testid="unsaved-mark" className="ms-auto size-1.5 rounded-full bg-(--settings-dialog-unsaved-indicator)" />}
                   </TabsTab>
                 ))}
               </TabsList>
             </div>
             <TabsPanel value={section} className="relative flex min-h-0 min-w-0 flex-1 flex-col" data-testid="settings-section">
               <DialogPanel data-testid="settings-form" inert={paneSheet}>
-                <h2 className="m-0 mt-3 text-base font-semibold text-foreground" data-testid="settings-section-title">
+                <h2 className="m-0 mt-3 text-base font-semibold text-(--settings-dialog-foreground)" data-testid="settings-section-title">
                   {current.label}
                 </h2>
                 {section === "generation" && generation}

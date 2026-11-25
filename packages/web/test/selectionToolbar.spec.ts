@@ -1,6 +1,6 @@
 import { centre, emptyCanvasPoint, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { clickShape, expect, selectGroup, test, toolbar } from "./generation.ts";
-import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
+import { expectSlot, expectToken, inBothSchemes, styleOf, tokenColor } from "./kit.ts";
 import { artifactRecord, emptyMedia, groupRecord, inGroup, promptRecord, putRecords } from "./media.ts";
 
 test("a usable selection gets Generate and its count; a named group reads by its name", async ({ page, generation }) => {
@@ -13,11 +13,11 @@ test("a usable selection gets Generate and its count; a named group reads by its
   ]);
   await expect(shapeOnScreen(page, "shape:inside")).toBeVisible();
 
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await expect(toolbar(page).getByRole("button", { name: "Generate" })).toBeVisible();
   await expect(toolbar(page).getByTestId("selection-hint")).toHaveText("1 selected");
   // The hint and Agent come before Generate, which ends the bar, once spec 08 registers the Agent tray. No dividers.
-  await expect(toolbar(page).getByRole("button")).toHaveText(["Agent", "Generate"]);
+  await expect(toolbar(page).locator("button:not([data-testid='style-row'] *)")).toHaveText(["Agent", "Generate"]);
   await expect(toolbar(page).locator("[data-slot='separator']")).toHaveCount(0);
 
   await page.keyboard.press("ControlOrMeta+a");
@@ -29,21 +29,19 @@ test("a usable selection gets Generate and its count; a named group reads by its
   await expect(toolbar(page).getByTestId("selection-hint")).toHaveText("@character");
 });
 
-const GLASS = "color-mix(in srgb, var(--background) var(--glass-opacity), transparent)";
-
 test("the bar is glass with the kit border and radius; Generate is the kit's primary Button and the hint is muted", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   const bar = toolbar(page);
   const generate = bar.getByRole("button", { name: "Generate" });
   await expectSlot(generate, "button");
   await inBothSchemes(page, async () => {
     await page.mouse.move(5, 500);
-    expect(await styleOf(bar, "background-color")).toBe(await resolvedColor(page, GLASS));
+    expect(await styleOf(bar, "background-color")).toBe(await tokenColor(page, "--selection-toolbar-surface"));
     expect(await styleOf(bar, "border-top-left-radius")).toBe("14px");
-    await expectToken(bar, "border-top-color", "--color-border");
-    await expectToken(generate, "background-color", "--primary");
-    await expectToken(bar.getByTestId("selection-hint"), "color", "--color-muted-foreground");
+    await expectToken(bar, "border-top-color", "--selection-toolbar-border");
+    await expectToken(generate, "background-color", "--button-default-surface");
+    await expectToken(bar.getByTestId("selection-hint"), "color", "--selection-toolbar-hint");
   });
 });
 
@@ -56,7 +54,7 @@ test("a selection with nothing to generate from shows Agent only; a filled page 
   const empty = (await shapeOnScreen(page, "shape:empty").boundingBox())!;
   await page.mouse.click(empty.x + 8, empty.y + 8);
   await expect(page.locator('[data-shape-id="shape:empty"]')).toBeVisible();
-  await expect(toolbar(page).getByRole("button")).toHaveText(["Agent"]);
+  await expect(toolbar(page).locator("button:not([data-testid='style-row'] *)")).toHaveText(["Agent"]);
 
   // A filled page's frame takes the pointer, so its bar leads with the drag handle, an icon button.
   await clickShape(page, "shape:page");
@@ -67,8 +65,8 @@ test("a selection with nothing to generate from shows Agent only; a filled page 
 
 test("the bar sits centred above the selection, flips below it at the top edge and stays inside the canvas", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
-  const subject = shapeOnScreen(page, "shape:starter-subject");
-  await clickShape(page, "shape:starter-subject");
+  const subject = shapeOnScreen(page, "shape:sample-subject");
+  await clickShape(page, "shape:sample-subject");
   const bar = toolbar(page);
   await expect(bar).toBeVisible();
 
@@ -99,7 +97,7 @@ test("the bar sits centred above the selection, flips below it at the top edge a
 
 test("the bar hides while a shape is dragged, the canvas is dragged or a box is drawn, and the wheel over it pans", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
-  const subject = shapeOnScreen(page, "shape:starter-subject");
+  const subject = shapeOnScreen(page, "shape:sample-subject");
   const at = await centre(subject);
   await page.mouse.click(at.x, at.y);
   const bar = toolbar(page);
@@ -153,8 +151,8 @@ test("the bar hides while a shape is dragged, the canvas is dragged or a box is 
 
 test("a selection at the top edge gets its toolbar below the tab strip, its buttons uncovered", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
-  const subject = page.locator("[data-shape-id='shape:starter-subject']");
-  await clickShape(page, "shape:starter-subject");
+  const subject = page.locator("[data-shape-id='shape:sample-subject']");
+  await clickShape(page, "shape:sample-subject");
   const bar = toolbar(page);
   await expect(bar).toBeVisible();
 

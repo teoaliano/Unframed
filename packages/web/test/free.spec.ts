@@ -84,7 +84,7 @@ test("Free with a ready list makes one image per section, the shared context and
   await putRecords(engine, [promptRecord("shape:list", "301", "a fox\n---\na wolf\n  ---  \na hare", { x: 40, y: -80 })]);
   await expect(shapeOnScreen(page, "shape:list")).toBeVisible();
 
-  await freeOn(page, ["shape:list", "shape:starter-scene", "shape:photo"], "in ink");
+  await freeOn(page, ["shape:list", "shape:sample-scene", "shape:photo"], "in ink");
   await sendRun(page);
   await expect.poll(() => generation.requests.length).toBe(3);
   expect(generation.chat).toHaveLength(0);

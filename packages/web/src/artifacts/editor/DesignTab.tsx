@@ -172,7 +172,7 @@ const TokenLine = ({ path, text, colour }: { readonly path: string; readonly tex
   <>
     {colour !== undefined && <Swatch colour={colour} />}
     <span className="truncate font-mono text-xs">{path}</span>
-    <span className="ml-auto truncate text-xs text-muted-foreground">{text}</span>
+    <span className="ml-auto truncate text-xs text-(--artifact-editor-meta)">{text}</span>
   </>
 );
 
@@ -254,7 +254,7 @@ const TokenPicker = ({
           </Button>
         )}
         {kit === null ? (
-          <p className="m-0 text-sm text-muted-foreground">No kit yet.</p>
+          <p className="m-0 text-sm text-(--artifact-editor-note)">No kit yet.</p>
         ) : (
           <div className="flex flex-col gap-1.5">
             <Input aria-label="Search tokens" placeholder="Search tokens…" value={query} onChange={(event) => setQuery(event.currentTarget.value)} />
@@ -371,19 +371,19 @@ const OffTokens = ({
   const [open, setOpen] = useState(false);
   return (
     <fieldset aria-label="Off-token values" className="m-0 flex flex-col gap-2 border-0 p-0">
-      <legend className="mb-1 text-xs font-medium text-muted-foreground">
+      <legend className="mb-1 text-xs font-medium text-(--artifact-editor-label)">
         <Button variant="ghost" size="xs" aria-expanded={open} onClick={() => setOpen(!open)}>{`Off-token values (${values.length})`}</Button>
       </legend>
       {open &&
         (values.length === 0 ? (
-          <p className="m-0 text-sm text-muted-foreground">Every value here is on the kit.</p>
+          <p className="m-0 text-sm text-(--artifact-editor-note)">Every value here is on the kit.</p>
         ) : (
           values.map((value, index) => (
             <div key={`${index}-${value.property}-${value.value}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
               <Button variant="ghost" size="sm" className="min-w-0 justify-start" onClick={() => onSelect(value)}>
                 <span className="flex min-w-0 flex-col items-start">
                   <span className="max-w-full truncate text-sm">{labelOf(value)}</span>
-                  <span className="max-w-full truncate font-mono text-xs text-muted-foreground">{`${value.property}: ${value.value} ${value.exact ? "=" : "≈"} ${value.css}`}</span>
+                  <span className="max-w-full truncate font-mono text-xs text-(--artifact-editor-meta)">{`${value.property}: ${value.value} ${value.exact ? "=" : "≈"} ${value.css}`}</span>
                 </span>
               </Button>
               <Button variant="outline" size="xs" onClick={() => onUse(value)}>
@@ -432,20 +432,20 @@ const normaliserFor = (property: string) => (value: string) => {
 export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, onOpenKit, onTell, onAsk, onShowOnTimeline, component, onAskComponent, componentTitle, componentOf, onGoToMain, onMake, onUpdateComponent }: DesignTabProps) => {
   const [openChip, setOpenChip] = useState<{ readonly field: string; readonly named: { readonly token: Token; readonly suffix?: string } } | null>(null);
   const { selection, reports, tree, preparing, prepareError, pending, families, overridden } = session;
-  if (preparing) return <p className="m-0 p-2.5 text-sm text-muted-foreground">{`Getting this ${kind} ready for editing…`}</p>;
-  if (prepareError !== undefined) return <p className="m-0 p-2.5 text-sm text-destructive-foreground">{prepareError}</p>;
+  if (preparing) return <p className="m-0 p-2.5 text-sm text-(--artifact-editor-note)">{`Getting this ${kind} ready for editing…`}</p>;
+  if (prepareError !== undefined) return <p className="m-0 p-2.5 text-sm text-(--artifact-editor-error-foreground)">{prepareError}</p>;
   if (selection.length === 0) {
     return (
       <div className="flex min-h-0 flex-col gap-3 overflow-auto p-2.5">
         {component && onAskComponent && <ComponentSection declaration={component} onAsk={onAskComponent} />}
-        <div className="flex flex-col gap-1 text-sm text-muted-foreground" data-testid="design-empty">
+        <div className="flex flex-col gap-1 text-sm text-(--artifact-editor-meta)" data-testid="design-empty">
           <p className="m-0">Select an element to edit it.</p>
           {session.mode === "interact" && <p className="m-0">{`Switch to Edit (V) to select in the ${kind}.`}</p>}
         </div>
       </div>
     );
   }
-  if (selection.some((id) => reports[id] === undefined)) return <p className="m-0 p-2.5 text-sm text-muted-foreground">Reading the element…</p>;
+  if (selection.some((id) => reports[id] === undefined)) return <p className="m-0 p-2.5 text-sm text-(--artifact-editor-note)">Reading the element…</p>;
 
   const elements = tree?.elements ?? [];
   const subjects: Subject[] = selection.map((id) => {
@@ -741,11 +741,11 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
   return (
     <div className="flex min-h-0 flex-col gap-3 overflow-auto p-2.5" data-testid="design-tab">
       {variant !== null && componentTitle !== undefined && (
-        <p className="m-0 min-w-0 shrink-0 truncate text-xs text-muted-foreground" data-testid="variant-line">{`Editing ${[componentTitle, ...variant].join(" · ")}`}</p>
+        <p className="m-0 min-w-0 shrink-0 truncate text-xs text-(--artifact-editor-note)" data-testid="variant-line">{`Editing ${[componentTitle, ...variant].join(" · ")}`}</p>
       )}
       <div className="flex min-w-0 flex-wrap items-baseline gap-2">
         <span className="min-w-0 truncate text-sm font-semibold">{name}</span>
-        {single && <span className="shrink-0 text-xs text-muted-foreground">{first!.report.tag}</span>}
+        {single && <span className="shrink-0 text-xs text-(--artifact-editor-meta)">{first!.report.tag}</span>}
         <Button variant="outline" size="sm" className="ml-auto shrink-0" onClick={() => onTell(subjects.map(chipDataOf))}>
           <MessageSquarePlus aria-hidden />
           Tell the agent
@@ -762,7 +762,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
           })()}
       </div>
       {kit !== null && (
-        <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-2 text-xs text-(--artifact-editor-meta)">
           <Button variant="ghost" size="xs" className="min-w-0" onClick={onOpenKit}>{`Kit: ${kit.name}`}</Button>
           <span className="truncate">{currentMode}</span>
         </div>
@@ -938,7 +938,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
 
       {picture !== null && (
         <fieldset aria-label="Image" className="m-0 flex flex-col gap-2 border-0 p-0">
-          <legend className="mb-1 text-xs font-medium text-muted-foreground">Image</legend>
+          <legend className="mb-1 text-xs font-medium text-(--artifact-editor-label)">Image</legend>
           <div className="flex items-center gap-2">
             {fileNameOf(picture.file) !== "" && <img alt="" src={previewUrl(project, fileNameOf(picture.file), 512)} className="size-10 shrink-0 rounded-sm object-cover" />}
             {pictureOwner.owner === "source" && (

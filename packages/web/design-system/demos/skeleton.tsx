@@ -18,7 +18,7 @@ export default function SkeletonDemo() {
       </Section>
       <Section title="Composed">
         <Row label="preset card">
-          <div className="flex w-64 flex-col gap-2 rounded-lg border p-3">
+          <div className="flex w-64 flex-col gap-2 rounded-lg border border-(--catalogue-demo-border) p-3">
             <Skeleton shape="card" className="h-28 w-full" />
             <Skeleton className="h-4 w-3/4" />
             <div className="flex gap-1">

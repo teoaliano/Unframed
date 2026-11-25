@@ -91,7 +91,7 @@ export default function InputGroupDemo() {
             <InputGroup>
               <Textarea unstyled aria-label="Message the agent" placeholder="Ask Claude to arrange the selection" />
               <InputGroupAddon align="block-end">
-                <span className="flex-1 text-muted-foreground text-xs">2 shapes selected</span>
+                <span className="flex-1 text-(--catalogue-demo-description) text-xs">2 shapes selected</span>
                 <Button size="icon-xs" aria-label="Send">
                   <ArrowUp />
                 </Button>

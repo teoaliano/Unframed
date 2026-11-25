@@ -74,11 +74,11 @@ test("a control that waits for a hover on the Mac is already there on the device
 
     const onMac = await openRail(page);
     await say(page, onMac);
-    expect(await actionOpacity(onMac)).toBe("0");
+    await expect.poll(() => actionOpacity(onMac)).toBe("0");
 
     const onDevice = await openSheetRail(device.page);
     await say(device.page, onDevice);
-    expect(await actionOpacity(onDevice)).toBe("1");
+    await expect.poll(() => actionOpacity(onDevice)).toBe("1");
   } finally {
     await device?.close();
     await engine.dispose();

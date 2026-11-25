@@ -41,6 +41,7 @@ import {
 } from "tldraw";
 import { useWheelToCanvas } from "../canvas/wheelToCanvas.ts";
 import { useSlots } from "./slots.ts";
+import { CommentToolbarGroup } from "../comments/CommentToolbar.tsx";
 
 /**
  * tldraw's tools in Unframed's order: the six in the bar, then the arrow and every shape
@@ -103,6 +104,7 @@ export const BottomToolbar = () => {
             <OverflowingToolbar orientation="horizontal" sizingParentClassName="tlui-main-toolbar" minItems={4} maxItems={5} minSizePx={310} maxSizePx={470}>
               <ToolbarContent />
             </OverflowingToolbar>
+            {!readonly && <CommentToolbarGroup />}
             {End && <End />}
           </div>
         </div>

@@ -212,7 +212,7 @@ const UnframedSections = () => {
       {sections.map((section) => (
         <TldrawUiMenuGroup key={section.section} id={`unframed-${section.section}`}>
           {/* tldraw's menu is not a kit Menu, so the heading carries the kit's menu label recipe itself. */}
-          <div data-testid="context-menu-heading" role="presentation" className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+          <div data-testid="context-menu-heading" role="presentation" className="px-2 py-1.5 text-xs font-medium text-(--tldraw-menu-heading)">
             {section.heading}
           </div>
           {section.items.map((item) =>

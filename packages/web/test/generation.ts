@@ -181,9 +181,16 @@ export const openAndEscape = (control: Locator, shows?: string): Promise<EscapeF
     shows ?? null,
   );
 
-/** Clicks the middle of a shape, as a person selects it. */
+export const clearPointOn = async (page: Page, id: string): Promise<{ x: number; y: number }> => {
+  const box = await shapeOnScreen(page, id).boundingBox();
+  if (!box) throw new Error("that element is not on screen");
+  const points = [[0.5, 0.5], ...[0.1, 0.3, 0.5, 0.7, 0.9].flatMap((fy) => [0.1, 0.3, 0.5, 0.7, 0.9].map((fx) => [fx, fy]))].map(([fx, fy]) => ({ x: box.x + box.width * fx!, y: box.y + box.height * fy! }));
+  const free = await page.evaluate((candidates) => candidates.find((point) => document.elementFromPoint(point.x, point.y)?.closest("[data-testid='selection-toolbar']") == null), points);
+  return free ?? points[0]!;
+};
+
 export const clickShape = async (page: Page, id: string, modifiers?: Array<"Shift">): Promise<void> => {
-  const at = await centre(shapeOnScreen(page, id));
+  const at = await clearPointOn(page, id);
   if (modifiers?.includes("Shift")) await page.keyboard.down("Shift");
   await page.mouse.click(at.x, at.y);
   if (modifiers?.includes("Shift")) await page.keyboard.up("Shift");

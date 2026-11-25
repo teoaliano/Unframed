@@ -1,7 +1,7 @@
 import { clearOfDesignPanel, openCanvas, roomRecords, settledRecord, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
 
-const SCENE = "shape:starter-scene";
+const SCENE = "shape:sample-scene";
 
 test("dragging a prompt's edge pins its size, a still press does not, and double-clicking the edge makes it hug again", async ({ page, engine }) => {
   await openCanvas(page, engine);

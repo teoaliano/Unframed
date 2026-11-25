@@ -98,7 +98,7 @@ export const Composer = ({ mode, project, recipe, onCollapse }: ComposerProps) =
   return (
     <div
       ref={root}
-      className="box-border w-[418px] p-3 data-[tray=agent]:w-[416px] data-[tray=agent]:p-0"
+      className="box-border w-(--generate-composer-width) p-3 data-[tray=agent]:w-(--generate-composer-agent-width) data-[tray=agent]:p-0"
       role="group"
       aria-label="Composer"
       data-testid="composer"

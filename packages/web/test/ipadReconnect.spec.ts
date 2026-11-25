@@ -15,8 +15,8 @@ test("a device says the connection is lost when the engine stops, and clears it 
   try {
     await openCanvas(page, first, "default");
     device = await openDevice(first, "default");
-    const starter = "shape:starter-scene";
-    await expect(shapeOnScreen(device.page, starter)).toBeVisible({ timeout: 20_000 });
+    const sample = "shape:sample-scene";
+    await expect(shapeOnScreen(device.page, sample)).toBeVisible({ timeout: 20_000 });
     const apiPort = first.port;
     const listenerPort = await ipadPort(first);
     await expect(toast(device.page, LOST)).toHaveCount(0);

@@ -30,7 +30,7 @@ export const ConfirmDialog = ({
   readonly actions: ReadonlyArray<ConfirmAction>;
 }) => (
   <AlertDialog open={open} onOpenChange={onOpenChange}>
-    <AlertDialogPopup className="max-w-[380px]">
+    <AlertDialogPopup className="max-w-(--confirm-dialog-width)">
       <AlertDialogHeader>
         <AlertDialogTitle>{title}</AlertDialogTitle>
         <AlertDialogDescription>{description}</AlertDialogDescription>

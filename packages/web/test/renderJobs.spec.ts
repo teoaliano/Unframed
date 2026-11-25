@@ -77,7 +77,7 @@ test("a failed render says why on its placeholder", async ({ page, videoEngine: 
 test("a failed render keeps its recipe: Regenerate, sent from the composer, starts the same render again beside it", async ({ page, videoEngine: video }) => {
   video.jobs.status((id) => ({ kind: "data", data: { id, status: "failed", error: { message: "Output flagged" } } }));
   await openCanvas(page, video.engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await chooseVideo(page);
   await sendRun(page);
@@ -88,8 +88,8 @@ test("a failed render keeps its recipe: Regenerate, sent from the composer, star
   await expect(shapeOnScreen(page, failed.id).getByRole("alert")).toHaveText("Output flagged");
   await clickShape(page, failed.id);
   // A failed render has no clip to send, so its bar has no Generate, and Regenerate is the primary action.
-  await expect(toolbar(page).getByRole("button")).toHaveText(["Regenerate", "Agent"]);
-  await expectToken(toolbar(page).getByRole("button", { name: "Regenerate" }), "background-color", "--primary");
+  await expect(toolbar(page).locator("button:not([data-testid='style-row'] *)")).toHaveText(["Regenerate", "Agent"]);
+  await expectToken(toolbar(page).getByRole("button", { name: "Regenerate" }), "background-color", "--button-default-surface");
   await toolbar(page).getByRole("button", { name: "Regenerate" }).click();
   await expect(composer(page).getByTestId("source-count")).toHaveText(/^recipe · /);
   await sendRun(page);
@@ -191,7 +191,7 @@ test("Generate reads Starting… and stays disabled until video.start answers; a
     return { kind: "job", id: "gen-ui" };
   });
   await openCanvas(page, video.engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await chooseVideo(page);
   await pressSend(page);

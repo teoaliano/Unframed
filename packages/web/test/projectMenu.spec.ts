@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
-import { openCanvas, plainText, waitForRoom } from "./canvas.ts";
+import { openCanvas, waitForRoom } from "./canvas.ts";
 import { expect, test } from "./fixtures.ts";
-import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf } from "./kit.ts";
+import { expectSlot, expectToken, inBothSchemes, resolvedColor, styleOf, tokenColor } from "./kit.ts";
 
 /** A tab's right-click menu item for `project`: Rename project, Delete project, Close, Close all tabs. */
 const tabMenuItem = async (page: Page, project: string, item: string) => {
@@ -21,8 +21,6 @@ const tabMenuItem = async (page: Page, project: string, item: string) => {
   await tab.click({ button: "right" });
   await page.getByRole("menuitem", { name: item }).click();
 };
-
-const MENU_GLASS = "color-mix(in srgb, var(--popover) 18%, color-mix(in srgb, var(--popover) var(--glass-opacity), transparent))";
 
 test("All projects lists every project, checks the active one and opens a row in a tab", async ({ page, engine }) => {
   await openCanvas(page, engine, "default");
@@ -46,7 +44,7 @@ test("All projects lists every project, checks the active one and opens a row in
   await expect(page.locator("[role=tab][data-active='true']")).toHaveText("beta");
 });
 
-test("New project refuses an empty or taken name, and creates, opens and seeds a new one", async ({ page, engine }) => {
+test("New project refuses an empty or taken name, and creates and opens a new, empty one", async ({ page, engine }) => {
   await openCanvas(page, engine, "default");
   await (await engine.rpc()).call("projects.create", { name: "beta" });
 
@@ -83,11 +81,8 @@ test("New project refuses an empty or taken name, and creates, opens and seeds a
   await expect(again).toBeHidden();
   await expect(page.locator("[data-canvas-project='product-shots'] .tl-canvas")).toBeVisible();
   await expect(page.locator("[role=tab][data-active='true']")).toHaveText("product-shots");
-  const prompts = await waitForRoom(engine, "product-shots", (records) => {
-    const texts = records.filter((record) => record.type === "text");
-    return texts.length === 2 ? texts : undefined;
-  });
-  expect(prompts.map(plainText)).toContain("lone red fox");
+  const records = await waitForRoom(engine, "product-shots", (each) => (each.some((record) => record.typeName === "page") ? each : undefined));
+  expect(records.filter((record) => record.typeName === "shape")).toEqual([]);
 });
 
 test("the project menu, the name dialog and the delete confirm are the kit's menu, dialog and alert dialog", async ({ page, engine }) => {
@@ -98,7 +93,7 @@ test("the project menu, the name dialog and the delete confirm are the kit's men
     await trigger.click();
     const popup = page.locator("[data-slot='menu-popup']");
     await expect(popup).toBeVisible();
-    expect(await styleOf(popup, "background-color")).toBe(await resolvedColor(page, MENU_GLASS));
+    expect(await styleOf(popup, "background-color")).toBe(await tokenColor(page, "--menu-surface"));
     const rows = page.locator("[role=menuitem], [role=menuitemradio]");
     // Project rows are the kit's radio items, the current one checked and tinted; Add project is a plain item.
     for (const row of await rows.all()) {
@@ -107,7 +102,7 @@ test("the project menu, the name dialog and the delete confirm are the kit's men
     }
     // Highlight moved elsewhere, the current project keeps the checked tint.
     await page.getByRole("menuitem", { name: "Add project" }).hover();
-    expect(await styleOf(page.getByRole("menuitemradio", { name: "default" }), "background-color")).toBe(await resolvedColor(page, "color-mix(in oklab, var(--color-foreground) 8%, transparent)"));
+    expect(await styleOf(page.getByRole("menuitemradio", { name: "default" }), "background-color")).toBe(await resolvedColor(page, "color-mix(in oklab, var(--menu-item-surface-checked) var(--menu-item-surface-checked-opacity), transparent)"));
 
     await page.getByRole("menuitem", { name: "Add project" }).click();
     const dialog = page.getByRole("dialog", { name: "New project" });
@@ -116,7 +111,7 @@ test("the project menu, the name dialog and the delete confirm are the kit's men
     expect(await styleOf(title, "font-size")).toBe("20px");
     expect(await styleOf(title, "font-weight")).toBe("600");
     await expectSlot(dialog.getByLabel("Project name"), "input");
-    await expectToken(dialog.getByRole("button", { name: "Create" }), "background-color", "--primary");
+    await expectToken(dialog.getByRole("button", { name: "Create" }), "background-color", "--button-default-surface");
     // The footer sits inside the dialog's card, below its field.
     const card = (await dialog.boundingBox())!;
     const footer = (await dialog.locator("[data-slot='dialog-footer']").boundingBox())!;
@@ -128,7 +123,7 @@ test("the project menu, the name dialog and the delete confirm are the kit's men
     await tabMenuItem(page, "default", "Delete project");
     const confirm = page.getByRole("alertdialog", { name: "Delete project?" });
     await expectSlot(confirm, "alert-dialog-popup");
-    await expectToken(confirm.getByRole("button", { name: "Delete project" }), "background-color", "--destructive");
+    await expectToken(confirm.getByRole("button", { name: "Delete project" }), "background-color", "--button-destructive-surface");
     await confirm.getByRole("button", { name: "Cancel" }).click();
     await expect(confirm).toHaveCount(0);
   });

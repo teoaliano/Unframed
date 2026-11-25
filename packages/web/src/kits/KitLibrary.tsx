@@ -49,7 +49,7 @@ export const SaveKitDialog = ({ kit, onClose, onSaved }: { readonly kit: Kit; re
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogPopup data-testid="add-to-library" className="max-w-[420px]">
+      <DialogPopup data-testid="add-to-library" className="max-w-(--add-to-library-dialog-width)">
         <DialogHeader>
           <DialogTitle>Add to library</DialogTitle>
           <DialogDescription>{kitSaveSubtitle(kit)}</DialogDescription>
@@ -57,7 +57,7 @@ export const SaveKitDialog = ({ kit, onClose, onSaved }: { readonly kit: Kit; re
         <DialogPanel>
           <Label className="w-full">
             <span className="grid w-full gap-1.5">
-            <span className="text-xs font-medium text-foreground">Name</span>
+            <span className="text-xs font-medium text-(--add-to-library-dialog-label)">Name</span>
             <Input value={name} aria-invalid={problem !== undefined || undefined} onChange={(event) => setName(event.target.value)} />
             </span>
           </Label>
@@ -66,7 +66,7 @@ export const SaveKitDialog = ({ kit, onClose, onSaved }: { readonly kit: Kit; re
           )}
           <Label className="w-full">
             <span className="grid w-full gap-1.5">
-            <span className="text-xs font-medium text-foreground">Description</span>
+            <span className="text-xs font-medium text-(--add-to-library-dialog-label)">Description</span>
             <Input placeholder="What it does, in a line" value={summary} onChange={(event) => setSummary(event.target.value)} />
             </span>
           </Label>

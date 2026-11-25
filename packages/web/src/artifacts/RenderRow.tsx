@@ -16,10 +16,10 @@ export const RenderRow = ({ shape }: { readonly shape: TLShape }) => {
   const props = shape.props as { w: number; h: number };
   const progress = status?.progress ?? 0;
   return (
-    <div role="status" data-testid="render-progress" className="absolute left-0 mt-1 flex h-7.5 items-center gap-2 font-sans text-xs text-muted-foreground" style={{ top: props.h, width: props.w }}>
+    <div role="status" data-testid="render-progress" className="absolute left-0 mt-1 flex h-7.5 items-center gap-2 font-sans text-xs text-(--render-progress-foreground)" style={{ top: props.h, width: props.w }}>
       <Spinner size="xs" aria-hidden />
-      <div aria-hidden className="h-1 w-18 shrink-0 overflow-hidden rounded-full bg-input">
-        <div data-testid="render-fill" className="h-full rounded-full bg-highlight transition-[width] duration-200 ease-out" style={{ width: `${progress}%` }} />
+      <div aria-hidden className="h-1 w-18 shrink-0 overflow-hidden rounded-full bg-(--render-progress-track)">
+        <div data-testid="render-fill" className="h-full rounded-full bg-(--render-progress-fill) transition-[width] duration-200 ease-out" style={{ width: `${progress}%` }} />
       </div>
       <span className="truncate tabular-nums">{status?.message ? `${progress}% · ${status.message}` : `${progress}%`}</span>
     </div>
@@ -32,7 +32,7 @@ export const ProblemLine = ({ shapeId, offset, width }: { readonly shapeId: TLSh
   const problem = useValue("artifact problem", () => artifactsOf(editor).problems.get().get(shapeId), [editor, shapeId]);
   if (problem === undefined) return null;
   return (
-    <p role="alert" className="absolute left-0 mt-1.5 mb-0 font-sans text-xs leading-snug text-destructive-foreground" style={{ top: offset, width }}>
+    <p role="alert" className="absolute left-0 mt-1.5 mb-0 font-sans text-xs leading-snug text-(--artifact-problem-foreground)" style={{ top: offset, width }}>
       {problem}
     </p>
   );

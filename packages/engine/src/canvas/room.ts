@@ -22,13 +22,6 @@ import {
 import type { RawData, WebSocket } from "ws";
 import { errorText, logError } from "../log.ts";
 import { LoggedStorage, type ChangeOrigin, type CommittedChange } from "./loggedStorage.ts";
-import {
-  STARTER_SCENE,
-  STARTER_SCENE_AT,
-  STARTER_SUBJECT,
-  STARTER_SUBJECT_AT,
-  SUBJECT_PLACEHOLDER,
-} from "./starter.ts";
 import { SYNC_TABLE_PREFIX } from "./tables.ts";
 
 export interface CanvasChange {
@@ -146,7 +139,6 @@ export class CanvasRoom {
       schema: roomSchemaOf(),
       log: { error: (...args: unknown[]) => logError(`canvas ${project}: ${args.map((arg) => errorText(arg)).join(" ")}`) },
     });
-    if (fresh) this.seedStarter();
     this.scheduleIdle();
   }
 
@@ -295,48 +287,6 @@ export class CanvasRoom {
     this.sockets.clear();
     this.sessionSockets.clear();
     this.tl.close();
-  }
-
-  private seedStarter(): void {
-    const records = this.read();
-    const page = records.find((record) => record.typeName === "page");
-    if (!page) return;
-    const subjectRef = nextRef(records);
-    const sceneRef = nextRef([...records, { typeName: "shape", type: "text", meta: { ref: subjectRef } }]);
-    const prompt = (id: string, at: { x: number; y: number }, index: string, ref: string, text: string): TLShape =>
-      ({
-        id,
-        typeName: "shape",
-        type: "text",
-        x: at.x,
-        y: at.y,
-        rotation: 0,
-        index,
-        parentId: page.id,
-        isLocked: false,
-        opacity: 1,
-        props: {
-          color: "black",
-          size: "s",
-          w: 320,
-          font: "sans",
-          textAlign: "start",
-          autoSize: false,
-          scale: 1,
-          richText: toRichText(text),
-        },
-        meta: { ref },
-      }) as unknown as TLShape;
-    this.apply(
-      {
-        put: [
-          prompt("shape:starter-scene", STARTER_SCENE_AT, "a1", sceneRef, STARTER_SCENE.replace(SUBJECT_PLACEHOLDER, `@${subjectRef}`)),
-          prompt("shape:starter-subject", STARTER_SUBJECT_AT, "a2", subjectRef, STARTER_SUBJECT),
-        ],
-        remove: [],
-      },
-      { kind: "system", id: "starter" },
-    );
   }
 
   refCollisions(change: CommittedChange): TLShape[] {

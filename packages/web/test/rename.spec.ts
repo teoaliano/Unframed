@@ -338,10 +338,10 @@ for (const kind of ["image", "group"] as const) {
     await expect(menu).toBeHidden();
 
     // Another shape selected: the label's shape replaces it, so Delete acts on the label's shape.
-    await clickShape(page, "shape:starter-subject");
+    await clickShape(page, "shape:sample-subject");
     await rightClickLabel();
     await menu.getByRole("menuitem", { name: /^Delete/ }).click();
     await expect.poll(async () => (await roomRecords(engine, "default")).map((record) => record.id)).not.toContain(id);
-    expect((await roomRecords(engine, "default")).map((record) => record.id)).toContain("shape:starter-subject");
+    expect((await roomRecords(engine, "default")).map((record) => record.id)).toContain("shape:sample-subject");
   });
 }

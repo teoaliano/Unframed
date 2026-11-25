@@ -1,7 +1,8 @@
 import { recapRows, revertSkipLine, roomShapeId, shapeKind, type ChatActivity, type ChatTurn, type RecapRow, type RecapShape, generationRecapLine, generationSpendOf } from "@unframed/domain";
 import { Crosshair, ExternalLink, FileDiff, Undo2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import { useValue, type Editor, type TLShapeId } from "tldraw";
+import { useValue, type TLShapeId } from "tldraw";
+import type { CanvasReader } from "../../canvas/reader.ts";
 import { Button } from "~/components/ui/button";
 import { Tip } from "../../chrome/ui.tsx";
 import { KIND_ICONS } from "../composer/chips.tsx";
@@ -10,7 +11,7 @@ import { Chevron, Disclosure } from "./WorkLog.tsx";
 const text = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
 
 /** The turn's rows, re-read as the canvas changes, so a deleted shape strikes through at once. */
-const useRecapRows = (editor: Editor | null, activities: ReadonlyArray<ChatActivity>, files: ChatTurn["files"]): RecapRow[] => {
+const useRecapRows = (editor: CanvasReader | null, activities: ReadonlyArray<ChatActivity>, files: ChatTurn["files"]): RecapRow[] => {
   const ids = useMemo(() => recapRows(activities, files ?? [], []).map((row) => row.shapeId), [activities, files]);
   const key = useValue(
     "recap shapes",
@@ -42,7 +43,7 @@ const useRecapRows = (editor: Editor | null, activities: ReadonlyArray<ChatActiv
 };
 
 export interface RecapCardProps {
-  readonly editor: Editor | null;
+  readonly editor: CanvasReader | null;
   readonly turn: ChatTurn;
   readonly activities: ReadonlyArray<ChatActivity>;
   /** The chat is running a turn: nothing can be reverted until it ends. */
@@ -68,16 +69,16 @@ export const RecapCard = ({ editor, turn, activities, running, newest, labelOf, 
   const reverted = turn.reverted;
   const skipLine = reverted ? revertSkipLine(reverted.skipped.map((shape) => ({ label: labelOf(shape.id), by: shape.by })), reverted.restored.length) : undefined;
   return (
-    <section className="flex flex-col gap-1 rounded-xl border bg-card px-2 py-1.5 text-sm shadow-xs/5" data-testid="recap-card" aria-label={`Files of turn ${turn.turnCount}`}>
+    <section className="flex flex-col gap-1 rounded-xl border border-(--recap-card-border) bg-(--recap-card-surface) px-2 py-1.5 text-sm text-(--recap-card-foreground) shadow-xs/5" data-testid="recap-card" aria-label={`Files of turn ${turn.turnCount}`}>
       <header className="flex items-center gap-1.5">
         <Disclosure
           open={open}
           onToggle={() => setOpen(!open)}
           testId="recap-toggle"
-          className="flex min-h-7 min-w-0 flex-1 cursor-pointer select-none items-center gap-1.5 rounded-md px-0.5 text-left text-muted-foreground transition-colors hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+          className="flex min-h-7 min-w-0 flex-1 cursor-pointer select-none items-center gap-1.5 rounded-md px-0.5 text-left text-(--recap-card-muted) transition-colors hover:bg-(--recap-card-toggle-surface-hover)/(--recap-card-toggle-surface-hover-opacity) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-(--recap-card-ring-focus)/(--recap-card-ring-focus-opacity)"
         >
           <Chevron open={open} />
-          <span className="font-medium text-foreground">{`${rows.length} ${rows.length === 1 ? "file" : "files"}`}</span>
+          <span className="font-medium text-(--recap-card-foreground)">{`${rows.length} ${rows.length === 1 ? "file" : "files"}`}</span>
           <span className="ml-auto pe-1 text-xs">{open ? "Hide" : "Show"}</span>
         </Disclosure>
         {newest && changed && (
@@ -87,7 +88,7 @@ export const RecapCard = ({ editor, turn, activities, running, newest, labelOf, 
         )}
       </header>
       {spendLine !== undefined && (
-        <p className="m-0 ps-1 text-xs text-muted-foreground" data-testid="recap-spend">
+        <p className="m-0 ps-1 text-xs text-(--recap-card-muted)" data-testid="recap-spend">
           {spendLine}
         </p>
       )}
@@ -98,12 +99,12 @@ export const RecapCard = ({ editor, turn, activities, running, newest, labelOf, 
             const artifact = row.kind === "page" || row.kind === "motion";
             return (
               <li key={row.shapeId} className="group grid min-h-7 grid-cols-[1rem_1fr_auto] items-center gap-1.5 px-0.5" data-testid="recap-row" data-deleted={row.deleted ? "" : undefined}>
-                <span className="inline-flex w-4 text-muted-foreground">{Icon && <Icon aria-hidden className="size-3.5" />}</span>
-                <span className="min-w-0 truncate group-data-deleted:text-muted-foreground group-data-deleted:line-through" data-testid="recap-label">
+                <span className="inline-flex w-4 text-(--recap-card-muted)">{Icon && <Icon aria-hidden className="size-3.5" />}</span>
+                <span className="min-w-0 truncate group-data-deleted:text-(--recap-card-muted) group-data-deleted:line-through" data-testid="recap-label">
                   {row.label}
                 </span>
                 {row.deleted ? (
-                  <span className="text-xs text-muted-foreground">deleted</span>
+                  <span className="text-xs text-(--recap-card-muted)">deleted</span>
                 ) : (
                   <span className="inline-flex items-center gap-0.5">
                     {row.rewritten && (
@@ -133,9 +134,9 @@ export const RecapCard = ({ editor, turn, activities, running, newest, labelOf, 
         </ul>
       )}
       {changed && (reverted || !running) && (
-        <footer className="flex flex-col items-start gap-1 border-t pt-1.5">
+        <footer className="flex flex-col items-start gap-1 border-t border-(--recap-card-border) pt-1.5">
           {reverted ? (
-            <span className="px-0.5 text-xs text-muted-foreground" data-testid="recap-reverted">
+            <span className="px-0.5 text-xs text-(--recap-card-muted)" data-testid="recap-reverted">
               Reverted
             </span>
           ) : (
@@ -145,7 +146,7 @@ export const RecapCard = ({ editor, turn, activities, running, newest, labelOf, 
             </Button>
           )}
           {skipLine && (
-            <p className="m-0 px-0.5 text-xs text-muted-foreground" data-testid="recap-skipped">
+            <p className="m-0 px-0.5 text-xs text-(--recap-card-muted)" data-testid="recap-skipped">
               {skipLine}
             </p>
           )}

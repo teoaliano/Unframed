@@ -21,12 +21,12 @@ export const EditOverlay = ({ hovered, layerHover = null, selection, reports, bo
     {layerHover === null && hovered !== null && hovered.id !== null && !selection.includes(hovered.id) && (
       <div
         data-edit-outline="hover"
-        className="absolute border border-ring"
+        className="absolute border border-(--edit-overlay-border-hover)"
         style={place(boxes[hovered.id] ?? hovered.box)}
       />
     )}
     {layerHover !== null && !selection.includes(layerHover) && boxes[layerHover] !== undefined && (
-      <div data-edit-outline="hover" className="absolute border border-ring" style={place(boxes[layerHover]!)} />
+      <div data-edit-outline="hover" className="absolute border border-(--edit-overlay-border-hover)" style={place(boxes[layerHover]!)} />
     )}
     {selection.map((id) => {
       const box = boxes[id] ?? reports[id]?.box;
@@ -36,12 +36,12 @@ export const EditOverlay = ({ hovered, layerHover = null, selection, reports, bo
       return (
         <Fragment key={id}>
           {others.map((copy, index) => (
-            <div key={index} data-edit-outline="copy" className="absolute border border-primary opacity-50" style={place(copy)} />
+            <div key={index} data-edit-outline="copy" className="absolute border border-(--edit-overlay-border-copy) opacity-50" style={place(copy)} />
           ))}
-        <div data-edit-outline="selected" className="absolute border-2 border-primary shadow-[0_0_0_1px_#fff,0_0_0_2px_#000]" style={place(box)}>
+        <div data-edit-outline="selected" className="absolute border-2 border-(--edit-overlay-border-selected) shadow-[0_0_0_1px_var(--edit-overlay-halo-inner),0_0_0_2px_var(--edit-overlay-halo-outer)]" style={place(box)}>
           <span
-            className="absolute bottom-full left-0 mb-0.5 max-w-60 truncate rounded-sm px-1 text-xs leading-4 text-primary-foreground"
-            style={{ background: "var(--primary)" }}
+            className="absolute bottom-full left-0 mb-0.5 max-w-60 truncate rounded-sm px-1 text-xs leading-4 text-(--edit-overlay-tag-foreground)"
+            style={{ background: "var(--edit-overlay-tag-surface)" }}
           >
             {label}
             {reports[id] !== undefined && <span className="ms-1 opacity-75">{reports[id]!.tag}</span>}

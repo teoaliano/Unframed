@@ -58,7 +58,7 @@ const openOnAll = async (page: Page) => {
 
 test("choosing video shows the default video model and only the props it declares, Seconds always, no Runs", async ({ page, videoEngine: video }) => {
   await openCanvas(page, video.engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await expect(composer(page).getByRole("radio")).toHaveText(["image", "video", "text", "audio"]);
   await chooseVideo(page);
@@ -102,7 +102,7 @@ test("choosing video shows the default video model and only the props it declare
 
 test("an Escape the moment Audio's menu opens from + add prop closes only that menu", async ({ page, videoEngine: video }) => {
   await openCanvas(page, video.engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await chooseVideo(page);
   await tray(page).getByRole("button", { name: "+ add prop" }).click();
@@ -115,7 +115,7 @@ test("an Escape the moment Audio's menu opens from + add prop closes only that m
 
 test("changing the model resets the props in the tray", async ({ page, videoEngine: video }) => {
   await openCanvas(page, video.engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await chooseVideo(page);
   await setProp(page, "Input", "First and last frame");
@@ -228,7 +228,7 @@ test("the share block shows only for a local clip that will be sent, on by defau
 
 test("the estimate reads est. ~$x.xx and follows Seconds and Size", async ({ page, videoEngine: video }) => {
   await openCanvas(page, video.engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await chooseVideo(page);
   const estimate = composer(page).getByTestId("estimate");

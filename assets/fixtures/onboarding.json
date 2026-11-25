@@ -1,0 +1,18 @@
+{
+  "when": "^Build a landing page for Ember & Oak",
+  "turns": [
+    {
+      "title": "Ember & Oak",
+      "text": "Made the Ember & Oak landing page.",
+      "tools": [
+        {
+          "name": "page_write",
+          "input": {
+            "title": "Ember & Oak",
+            "html": "<html><head><style>body{font:16px system-ui;margin:24px}</style></head><body><h1>Ember &amp; Oak</h1><p>Coffee, slowly.</p></body></html>"
+          }
+        }
+      ]
+    }
+  ]
+}

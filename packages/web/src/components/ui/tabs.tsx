@@ -30,16 +30,16 @@ const tabsListVariants = cva("relative flex max-w-full items-center", {
       truncate: "overflow-hidden",
     },
     variant: {
-      underline: "gap-4 border-b",
-      pill: "w-fit gap-0.5 rounded-lg bg-input/40 p-0.5",
-      panel: "h-9 gap-1 border-b px-2",
+      underline: "gap-4 border-b border-(--tabs-list-border)",
+      pill: "w-fit gap-0.5 rounded-lg bg-(--tabs-list-pill-surface)/(--tabs-list-pill-surface-opacity) p-0.5",
+      panel: "h-9 gap-1 border-b border-(--tabs-list-border) px-2",
       sidebar: "w-full flex-col items-stretch gap-0.5",
     },
   },
 });
 
 const tabsTabVariants = cva(
-  "relative inline-flex cursor-pointer select-none items-center justify-center whitespace-nowrap font-medium text-muted-foreground outline-none transition-colors before:pointer-events-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-64 data-active:text-foreground [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "relative inline-flex cursor-pointer select-none items-center justify-center whitespace-nowrap font-medium text-(--tabs-tab-foreground) outline-none transition-colors before:pointer-events-none hover:text-(--tabs-tab-foreground-hover) focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-(--tabs-tab-ring-focus) disabled:pointer-events-none disabled:opacity-64 data-active:text-(--tabs-tab-foreground-active) [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     compoundVariants: [{ fill: true, className: "h-full flex-1" }],
     defaultVariants: {
@@ -66,10 +66,10 @@ const tabsTabVariants = cva(
         compact: "h-7 gap-1.5 rounded-md px-2 text-sm",
       },
       variant: {
-        underline: "rounded-none",
-        pill: "rounded-md data-active:bg-background data-active:shadow-xs/10 hover:bg-background/55 dark:data-active:bg-input/72",
-        panel: "rounded-md hover:bg-accent data-active:bg-accent",
-        sidebar: "h-8 justify-start gap-2 rounded-md px-2 text-sm hover:bg-accent data-active:bg-accent [&_svg:not([class*='size-'])]:size-4",
+        underline: "rounded-none bg-(--tabs-tab-underline-surface) hover:bg-(--tabs-tab-underline-surface-hover) data-active:bg-(--tabs-tab-underline-surface-active)",
+        pill: "rounded-md bg-(--tabs-tab-pill-surface) data-active:bg-(--tabs-tab-pill-surface-active)/(--tabs-tab-pill-surface-active-opacity) data-active:shadow-xs data-active:shadow-(color:--tabs-tab-pill-shadow-active) hover:bg-(--tabs-tab-pill-surface-hover)/(--tabs-tab-pill-surface-hover-opacity)",
+        panel: "rounded-md bg-(--tabs-tab-panel-surface) hover:bg-(--tabs-tab-panel-surface-hover) data-active:bg-(--tabs-tab-panel-surface-active)",
+        sidebar: "h-8 justify-start gap-2 rounded-md px-2 text-sm hover:bg-(--tabs-tab-sidebar-surface-hover) data-active:bg-(--tabs-tab-sidebar-surface-active) [&_svg:not([class*='size-'])]:size-4",
       },
     },
   },
@@ -139,7 +139,7 @@ function TabsList({
 function TabsIndicator({ className, ...props }: TabsPrimitive.Indicator.Props) {
   return (
     <TabsPrimitive.Indicator
-      className={cn("absolute bottom-0 left-(--active-tab-left) h-0.5 w-(--active-tab-width) rounded-full bg-primary transition-[left,width] duration-200 ease-out", className)}
+      className={cn("absolute bottom-0 left-(--active-tab-left) h-0.5 w-(--active-tab-width) rounded-full bg-(--tabs-tab-underline-indicator) transition-[left,width] duration-200 ease-out", className)}
       data-slot="tabs-indicator"
       {...props}
     />
@@ -150,10 +150,10 @@ const TabStatusIcon = ({ status }: { readonly status: TabsStatus | undefined }) 
   if (status === undefined) return null;
   return (
     <span role="img" aria-label={STATUS_LABELS[status]} data-slot="tabs-status" data-status={status} className="inline-flex shrink-0">
-      {status === "needs-you" && <MessageCircleQuestionMark aria-hidden className="text-highlight" />}
+      {status === "needs-you" && <MessageCircleQuestionMark aria-hidden className="text-(--tabs-status-dot)" />}
       {status === "running" && <Spinner size="xs" aria-hidden />}
-      {status === "finished" && <Check aria-hidden className="text-success" />}
-      {status === "failed" && <CircleAlert aria-hidden className="text-destructive" />}
+      {status === "finished" && <Check aria-hidden className="text-(--tabs-status-finished)" />}
+      {status === "failed" && <CircleAlert aria-hidden className="text-(--tabs-status-failed)" />}
     </span>
   );
 };
@@ -179,7 +179,7 @@ function TabsTab({ className, children, status, closable = false, onClose, close
         tabsTabVariants({ fill, overflow, size, variant }),
         "peer",
         closable && (size === "sm" ? "pe-6" : "pe-7"),
-        divider && "after:pointer-events-none after:absolute after:inset-y-0 after:end-0 after:w-px after:bg-border",
+        divider && "after:pointer-events-none after:absolute after:inset-y-0 after:end-0 after:w-px after:bg-(--tabs-divider)",
         className,
       )}
       data-slot="tabs-tab"
@@ -219,7 +219,7 @@ function TabsTab({ className, children, status, closable = false, onClose, close
 function TabsPanel({ className, ...props }: TabsPrimitive.Panel.Props) {
   return (
     <TabsPrimitive.Panel
-      className={cn("rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background", className)}
+      className={cn("rounded-md outline-none focus-visible:ring-2 focus-visible:ring-(--tabs-panel-ring-focus) focus-visible:ring-offset-1 focus-visible:ring-offset-(--tabs-panel-ring-offset)", className)}
       data-slot="tabs-panel"
       {...props}
     />

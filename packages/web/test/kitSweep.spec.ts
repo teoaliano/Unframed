@@ -67,7 +67,7 @@ test("the chrome, canvas menus and dialogs render every control through the kit"
   await expect(page.getByRole("alertdialog", { name: "Delete project?" })).toBeVisible();
   await sweep(page);
 
-  const subject = await centre(shapeOnScreen(page, "shape:starter-subject"));
+  const subject = await centre(shapeOnScreen(page, "shape:sample-subject"));
   await page.mouse.click(subject.x, subject.y);
   await expect(page.getByTestId("selection-toolbar")).toBeVisible();
   await sweep(page, false);
@@ -211,7 +211,7 @@ test("the artifact editor renders every control through the kit", async ({ page 
 
 generationTest("the Generate composer, its menus and its model dialog render every control through the kit", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await expect(page.getByTestId("selection-toolbar")).toBeVisible();
   await sweep(page, false);
   await openComposer(page);

@@ -14,6 +14,9 @@ import {
   CHAT_TITLE_SYSTEM_PROMPT,
   CLAUDE_CATALOGUE,
   CODEX_PLAN_MODE_INSTRUCTIONS,
+  COMMENT_MENTION_PROMPT,
+  COMMENT_WRITE_DESCRIPTION,
+  COMMENTS_READ_DESCRIPTION,
   DECLINED_MESSAGE,
   FAILURE_NO_SUBTYPE,
   FAILURE_OTHER_SUBTYPE,
@@ -36,7 +39,7 @@ const blocks = (file: string): string[] => {
 describe("the agent's model-facing text is the assets' text", () => {
   it("holds the system prompt and the canvas tool descriptions", () => {
     expect(AGENT_SYSTEM_PROMPT).toBe(blocks("agent-system.md")[0]);
-    expect([CANVAS_READ_DESCRIPTION, CANVAS_WRITE_DESCRIPTION, NODE_RUN_DESCRIPTION]).toEqual(blocks("tool-descriptions.md"));
+    expect([CANVAS_READ_DESCRIPTION, CANVAS_WRITE_DESCRIPTION, NODE_RUN_DESCRIPTION, COMMENTS_READ_DESCRIPTION, COMMENT_WRITE_DESCRIPTION]).toEqual(blocks("tool-descriptions.md"));
     expect(NODE_PAGE_SYSTEM).toBe(blocks("node-page.md")[0]);
     expect(AGENT_SYSTEM_PROMPT).toContain("reuse them instead of copying their markup, and when the person asks for something repeated, propose a component.");
   });
@@ -64,6 +67,10 @@ describe("the agent's model-facing text is the assets' text", () => {
     expect(PLAN_NO_WRITES_MESSAGE).toBe(blocks("plan-no-writes.md")[0]);
     expect(CODEX_PLAN_MODE_INSTRUCTIONS).toBe(blocks("plan-mode.md")[0]);
     expect([CHAT_TITLE_SYSTEM_PROMPT, CHAT_TITLE_PROMPT]).toEqual(blocks("chat-title.md"));
+  });
+
+  it("holds the message a comment mention starts a turn with", () => {
+    expect(COMMENT_MENTION_PROMPT).toBe(blocks("comment-mention.md")[0]);
   });
 
   it("holds the text Implement sends before the plan", () => {

@@ -67,17 +67,17 @@ export default function ChatTabsDemo() {
     <Demos>
       <Section title="In the rail, 380 px">
         <Row label="many tabs">
-          <div className="w-[380px] max-w-full overflow-hidden rounded-br-xl border-r border-b bg-background font-sans text-foreground">
+          <div className="w-(--agent-rail-width) max-w-full overflow-hidden rounded-br-xl border-r border-b border-(--agent-rail-docked-border) bg-(--agent-rail-docked-surface) font-sans text-(--agent-rail-foreground)">
             <TabStrip client={client} chats={chats} observed={chats} active={ui.chosen ?? null} selectedCount={0} onDelete={() => undefined} />
           </div>
         </Row>
         <Row label="one chat">
-          <div className="w-[380px] max-w-full overflow-hidden rounded-br-xl border-r border-b bg-background font-sans text-foreground">
+          <div className="w-(--agent-rail-width) max-w-full overflow-hidden rounded-br-xl border-r border-b border-(--agent-rail-docked-border) bg-(--agent-rail-docked-surface) font-sans text-(--agent-rail-foreground)">
             <TabStrip client={client} chats={chats.slice(0, 1)} observed={chats} active="c1" selectedCount={0} onDelete={() => undefined} />
           </div>
         </Row>
         <Row label="empty">
-          <div className="w-[380px] max-w-full overflow-hidden rounded-br-xl border-r border-b bg-background font-sans text-foreground">
+          <div className="w-(--agent-rail-width) max-w-full overflow-hidden rounded-br-xl border-r border-b border-(--agent-rail-docked-border) bg-(--agent-rail-docked-surface) font-sans text-(--agent-rail-foreground)">
             <TabStrip client={client} chats={[]} observed={[]} active={null} selectedCount={0} onDelete={() => undefined} />
           </div>
         </Row>

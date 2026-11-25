@@ -54,7 +54,7 @@ const ChipNode = Node.create({
     mergeAttributes(HTMLAttributes, {
       "data-agent-chip": node.attrs.kind,
       "data-ref": node.attrs.ref,
-      class: "mx-px inline-flex h-[1.41em] max-w-full items-center rounded-[0.5em] border border-border/70 bg-accent/40 px-[0.5em] align-middle font-medium text-[0.86em] leading-none whitespace-nowrap text-foreground",
+      class: "mx-px inline-flex h-[1.41em] max-w-full items-center rounded-[0.5em] border border-(--prompt-chip-border)/(--prompt-chip-border-opacity) bg-(--prompt-chip-surface)/(--prompt-chip-surface-opacity) px-[0.5em] align-middle font-medium text-[0.86em] leading-none whitespace-nowrap text-(--prompt-chip-foreground)",
       contenteditable: "false",
     }),
     node.attrs.kind === "skill" ? `$${node.attrs.ref}` : `${node.attrs.title}`,
@@ -241,7 +241,7 @@ export const PromptEditor = ({ placeholder, label, onChange, onFocus, onBlur, on
     autofocus: autofocus === true ? "end" : false,
     editorProps: {
       attributes: {
-        class: "block min-h-12 whitespace-pre-wrap break-words bg-transparent leading-relaxed text-foreground focus:outline-none",
+        class: "block min-h-12 whitespace-pre-wrap break-words bg-transparent leading-6 text-(--composer-foreground) focus:outline-none",
         "data-agent-prompt": "",
         "aria-label": label,
         role: "textbox",

@@ -345,7 +345,7 @@ test("the context window meter fills to the scripted usage, turns red above 90 %
     await expect(meter).toHaveAttribute("aria-label", "Context window 25% used");
     await expect(meter).not.toHaveAttribute("data-overloaded");
     await expect(meter).toHaveAttribute("data-slot", "popover-trigger");
-    await expectToken(meter.getByTestId("context-ring"), "stroke", "--highlight");
+    await expectToken(meter.getByTestId("context-ring"), "stroke", "--context-meter-fill");
     await meter.hover();
     const popup = page.getByRole("dialog", { name: "Context Window" });
     await expect(popup.getByText("Context Window", { exact: true })).toBeVisible();
@@ -359,7 +359,7 @@ test("the context window meter fills to the scripted usage, turns red above 90 %
     await say(panel, "and now?");
     await expect(meter).toHaveAttribute("aria-label", "Context window 93% used");
     await expect(meter).toHaveAttribute("data-overloaded", "");
-    await expectToken(meter.getByTestId("context-ring"), "stroke", "--error");
+    await expectToken(meter.getByTestId("context-ring"), "stroke", "--context-meter-overloaded-fill");
     await meter.hover();
     await popup.getByRole("button", { name: "Compact context" }).click();
     await expect(panel.locator("[data-role='user'] [data-testid='message-text']").last()).toHaveText("/compact");

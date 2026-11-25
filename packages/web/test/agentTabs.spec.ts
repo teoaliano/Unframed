@@ -76,28 +76,29 @@ test.describe("on a narrow window", () => {
 
 test("a tab's status: a spinner while its turn runs, a checkmark once it finished unseen, a warning when it failed, nothing when idle or once viewed", async ({ page, agent }) => {
   await openCanvas(page, agent);
-  await createChat(agent, { title: "Idle one", createdAt: at(1) });
-  const done = await createChat(agent, { title: "Done one", createdAt: at(2) });
-  const failed = await createChat(agent, { title: "Failed one", createdAt: at(3) });
+  // Short titles, so all four tabs fit the default rail beside More with their status icons.
+  await createChat(agent, { title: "Idle", createdAt: at(1) });
+  const done = await createChat(agent, { title: "Done", createdAt: at(2) });
+  const failed = await createChat(agent, { title: "Failed", createdAt: at(3) });
   // The newest chat is parked on an approval, so its turn keeps running, and it is the active tab.
-  const running = await createChat(agent, { title: "Running one", createdAt: at(4), runtimeMode: "approval-required" });
+  const running = await createChat(agent, { title: "Running", createdAt: at(4), runtimeMode: "approval-required" });
   await sendThrough(agent, running, "clean the build please");
 
   await openRail(page);
   const tab = (name: string) => tabs(page).filter({ hasText: name });
-  await expect(tab("Running one").getByTestId("chat-status")).toHaveAttribute("data-status", "running");
-  await expect(tab("Idle one").getByTestId("chat-status")).toHaveCount(0);
+  await expect(tab("Running").getByTestId("chat-status")).toHaveAttribute("data-status", "running");
+  await expect(tab("Idle").getByTestId("chat-status")).toHaveCount(0);
 
   // The active chat is viewed, so a turn that finishes in it leaves no checkmark; the others keep one until viewed.
   await sendThrough(agent, done, "show me the formatting");
-  await expect(tab("Done one").getByTestId("chat-status")).toHaveAttribute("data-status", "finished");
+  await expect(tab("Done").getByTestId("chat-status")).toHaveAttribute("data-status", "finished");
   await sendThrough(agent, failed, "break it");
-  await expect(tab("Failed one").getByTestId("chat-status")).toHaveAttribute("data-status", "failed");
+  await expect(tab("Failed").getByTestId("chat-status")).toHaveAttribute("data-status", "failed");
 
-  await tab("Done one").click();
-  await expect(tab("Done one")).toHaveAttribute("aria-selected", "true");
-  await expect(tab("Done one").getByTestId("chat-status")).toHaveCount(0);
-  await expect(tab("Failed one").getByTestId("chat-status")).toHaveAttribute("data-status", "failed");
+  await tab("Done").click();
+  await expect(tab("Done")).toHaveAttribute("aria-selected", "true");
+  await expect(tab("Done").getByTestId("chat-status")).toHaveCount(0);
+  await expect(tab("Failed").getByTestId("chat-status")).toHaveAttribute("data-status", "failed");
 });
 
 test("double-click renames a tab in place: Enter and blur commit, Escape abandons, an empty name falls back to the default", async ({ page, agent }) => {

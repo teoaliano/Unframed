@@ -1,6 +1,7 @@
 import { applyKitOps, type KitOp, type KitPreset } from "@unframed/domain";
 import { useEffect, useRef, useState } from "react";
-import { useEditor, useValue, type TLShapeId } from "tldraw";
+import { useValue } from "tldraw";
+import { useCanvasDoc } from "../canvas/doc.ts";
 import { EllipsisIcon } from "lucide-react";
 import { Alert, AlertAction, AlertDescription } from "~/components/ui/alert";
 import { Empty, EmptyContent, EmptyDescription } from "~/components/ui/empty";
@@ -30,10 +31,10 @@ const NO_USE = { tokens: {}, modes: {} } as KitUsageCounts;
 const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
 
 export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => void; readonly onFromLibrary: () => void }) => {
-  const editor = useEditor();
+  const doc = useCanvasDoc();
   const engine = useEngine();
   const project = useCanvasProject();
-  const kit = useValue("kit", () => kitOf(editor), [editor]);
+  const kit = useValue("kit", () => kitOf(doc), [doc]);
   const [problem, setProblem] = useState<string>();
   const [usage, setUsage] = useState<KitUsageCounts>(NO_USE);
   const [ask, setAsk] = useState<Ask>();
@@ -54,14 +55,14 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
   }, [engine, project, kit]);
 
   const apply = (ops: ReadonlyArray<KitOp>): string | undefined => {
-    const result = commitKit(editor, ops);
+    const result = commitKit(doc, ops);
     setProblem(result.ok ? undefined : result.refusal);
     return result.ok ? undefined : result.refusal;
   };
 
   const relink = (presetId: string, revision: number) => {
-    const current = kitOf(editor);
-    if (current !== null) linkKit(editor, linkFor(presetId, revision, current));
+    const current = kitOf(doc);
+    if (current !== null) linkKit(doc, linkFor(presetId, revision, current));
   };
 
   useEffect(() => {
@@ -90,16 +91,16 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
   const updateFromKit = async () => {
     if (kit?.from === undefined) return;
     const found = await libraryKitById(engine, kit.from.presetId);
-    if (found !== undefined) kitUi(editor).update((state) => ({ ...state, merging: found }));
+    if (found !== undefined) kitUi(doc).update((state) => ({ ...state, merging: found }));
   };
 
   const sourceLine = () => {
     if (kit === null || kit.from === undefined || linkedPreset === undefined) return null;
     if (linkedPreset === null)
-      return <p className="m-0 text-sm text-muted-foreground">{presetName === undefined ? "The library kit is gone. This project keeps its copy." : `The library kit “${presetName}” is gone. This project keeps its copy.`}</p>;
+      return <p className="m-0 text-sm text-(--kit-dialog-description)">{presetName === undefined ? "The library kit is gone. This project keeps its copy." : `The library kit “${presetName}” is gone. This project keeps its copy.`}</p>;
     const offer = linkedPreset.revision > kit.from.revision && hasDifferences(mergeWith(kit, linkedPreset), kit);
     return (
-      <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-2 text-sm text-(--kit-dialog-description)">
         <span>{`From “${linkedPreset.name}” in your library.`}</span>
         {offer && (
           <Button variant="ghost" size="sm" onClick={() => void updateFromKit()}>
@@ -117,13 +118,13 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
       .catch((error: unknown) => showError(error instanceof Error ? error.message : String(error)));
   };
 
-  const titleOf = (id: string) => (editor.getShape(id as TLShapeId) as { props?: { title?: string } } | undefined)?.props?.title ?? id;
+  const titleOf = (id: string) => (doc.shape(id)?.props as { title?: string } | undefined)?.title ?? id;
 
   const confirmDelete = () => {
     if (ask === undefined) return;
     if (ask.kind === "token") apply([{ op: "deleteToken", path: ask.path }]);
     else if (ask.kind === "mode") apply([{ op: "deleteMode", name: ask.mode }]);
-    else commitKit(editor, [{ op: "remove" }]);
+    else commitKit(doc, [{ op: "remove" }]);
     setAsk(undefined);
   };
 
@@ -134,7 +135,7 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
   return (
     <>
       <Dialog open onOpenChange={(open) => !open && onClose()}>
-        <DialogPopup data-testid="kit" className="max-w-[960px]">
+        <DialogPopup data-testid="kit" className="max-w-(--kit-dialog-width)">
           <DialogHeader>
             <DialogTitle>Kit</DialogTitle>
           </DialogHeader>
@@ -202,7 +203,7 @@ export const KitDialog = ({ onClose, onFromLibrary }: { readonly onClose: () => 
       )}
 
       <AlertDialog open={ask !== undefined} onOpenChange={(open) => !open && setAsk(undefined)}>
-        <AlertDialogPopup className="max-w-[400px]" finalFocus={() => document.querySelector<HTMLElement>('[data-testid="kit"] input[type="search"]') ?? true}>
+        <AlertDialogPopup className="max-w-(--kit-dialog-confirm-width)" finalFocus={() => document.querySelector<HTMLElement>('[data-testid="kit"] input[type="search"]') ?? true}>
           <AlertDialogHeader>
             {ask?.kind === "token" && (
               <>

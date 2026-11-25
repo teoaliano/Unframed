@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ReactElement, type RefObject } from "
 import { Button } from "~/components/ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "~/components/ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+import { cn } from "~/lib/utils";
 import { MessageAction } from "../../chrome/MessageAction.tsx";
 import type { ChatClient } from "../store.ts";
 import type { PromptEditorHandle } from "./PromptEditor.tsx";
@@ -33,9 +34,14 @@ const APPROVAL_HEADERS: Record<string, string> = {
  * t3code's composer banner (ComposerBanner): the glass strip above the composer that holds
  * what waits on the person. An approval takes its warning tint.
  */
-export const BANNER =
-  `${composerGlassClass} relative flex flex-col gap-1.5 rounded-2xl border px-3 py-2 text-xs/4 shadow-composer dark:shadow-composer-dark`;
-export const WARNING_BANNER = `${BANNER} border-warning/28 bg-linear-to-b from-warning/8 to-warning/8`;
+export const BANNER = cn(
+  composerGlassClass,
+  "relative flex flex-col gap-1.5 rounded-2xl border border-(--banner-border) bg-(--banner-surface)/(--banner-surface-opacity) px-3 py-2 text-xs/4 text-(--banner-foreground) shadow-(--shadow-app-floating)",
+);
+export const WARNING_BANNER = cn(
+  BANNER,
+  "border-(--banner-warning-border)/(--banner-warning-border-opacity) bg-linear-to-b from-(--banner-warning-tint)/(--banner-warning-tint-opacity) to-(--banner-warning-tint)/(--banner-warning-tint-opacity)",
+);
 
 /** The banner's first line: its icon, what it is, and anything beside it. */
 export const BANNER_ROW = "flex min-h-6 min-w-0 items-center gap-1.5";
@@ -103,30 +109,30 @@ export const ApprovalPanel = ({ client, chat, held }: { readonly client: ChatCli
   return (
     <section className={WARNING_BANNER} role="group" aria-label={header} data-testid="approval-panel">
       <header className={BANNER_ROW}>
-        <ShieldAlert aria-hidden className="size-4 shrink-0 text-warning" />
-        <span className="shrink-0 text-2xs font-medium text-warning" data-testid="panel-title">
+        <ShieldAlert aria-hidden className="size-4 shrink-0 text-(--banner-warning-icon)" />
+        <span className="shrink-0 text-2xs font-medium text-(--banner-warning-title)" data-testid="panel-title">
           {header}
         </span>
         {typeof args.toolName === "string" && (
-          <span className="min-w-0 truncate text-2xs text-muted-foreground" data-testid="panel-tool">
+          <span className="min-w-0 truncate text-2xs text-(--banner-secondary)" data-testid="panel-tool">
             {args.toolName}
           </span>
         )}
-        {pending.length > 1 && <span className="ml-auto shrink-0 text-2xs text-muted-foreground tabular-nums" data-testid="panel-count">{`1/${pending.length}`}</span>}
+        {pending.length > 1 && <span className="ml-auto shrink-0 text-2xs text-(--banner-secondary) tabular-nums" data-testid="panel-count">{`1/${pending.length}`}</span>}
       </header>
       {/* Whitespace kept, so padding that pushes a second command out of sight shows. */}
       <code
-        className="block max-h-20 w-full min-w-0 overflow-auto font-mono text-xs whitespace-pre-wrap wrap-anywhere text-foreground [scrollbar-width:thin] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+        className="block max-h-20 w-full min-w-0 overflow-auto font-mono text-xs whitespace-pre-wrap wrap-anywhere text-(--banner-foreground) [scrollbar-width:thin] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-(--banner-ring-focus)/(--banner-ring-focus-opacity)"
         tabIndex={0}
         data-testid="approval-target"
       >
         {shown}
       </code>
       {hidden > 0 && (
-        <p className="m-0 text-xs text-warning-foreground" data-testid="approval-warning">{`and ${hidden} more characters not shown. Decline unless you know what they are.`}</p>
+        <p className="m-0 text-xs text-(--banner-warning-text)" data-testid="approval-warning">{`and ${hidden} more characters not shown. Decline unless you know what they are.`}</p>
       )}
       {reason !== undefined && (
-        <p className="m-0 w-full min-w-0 text-2xs text-muted-foreground wrap-break-word" data-testid="approval-reason">
+        <p className="m-0 w-full min-w-0 text-2xs text-(--banner-description) wrap-break-word" data-testid="approval-reason">
           {reason}
         </p>
       )}
@@ -156,7 +162,7 @@ export const ApprovalPanel = ({ client, chat, held }: { readonly client: ChatCli
                 withWarning(
                   option,
                   <MenuItem key={option.decision} aria-description={option.warning} onClick={() => respond(option.decision)}>
-                    {option.warning ? <TriangleAlert aria-hidden className="size-3 text-warning" /> : null}
+                    {option.warning ? <TriangleAlert aria-hidden className="size-3 text-(--banner-warning-icon)" /> : null}
                     <span className="min-w-0 whitespace-normal wrap-break-word">{option.label}</span>
                   </MenuItem>,
                 ),
@@ -233,12 +239,12 @@ export const QuestionPanel = ({
   return (
     <section className={BANNER} role="group" aria-label={question.header} data-testid="question-panel">
       <header className={BANNER_ROW}>
-        <MessageCircleQuestion aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-        <span className="shrink-0 font-medium text-muted-foreground" data-testid="panel-title">
+        <MessageCircleQuestion aria-hidden className="size-3.5 shrink-0 text-(--banner-icon)" />
+        <span className="shrink-0 font-medium text-(--banner-title)" data-testid="panel-title">
           {question.header}
         </span>
-        {collapsed && <span className="min-w-0 flex-1 truncate text-secondary-label">{question.question}</span>}
-        <span className="ml-auto shrink-0 text-3xs font-medium text-muted-foreground tabular-nums" data-testid="panel-count">{`${state.index + 1}/${state.questions.length}`}</span>
+        {collapsed && <span className="min-w-0 flex-1 truncate text-(--banner-secondary)">{question.question}</span>}
+        <span className="ml-auto shrink-0 text-3xs font-medium text-(--banner-secondary) tabular-nums" data-testid="panel-count">{`${state.index + 1}/${state.questions.length}`}</span>
         <Button variant="ghost-muted" size="icon-xs" aria-label={collapsed ? "Show question" : "Hide question"} aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}>
           {collapsed ? <ChevronRight aria-hidden /> : <ChevronDown aria-hidden />}
         </Button>
@@ -250,11 +256,11 @@ export const QuestionPanel = ({
       </header>
       {!collapsed && (
         <div className="pe-1 pb-1 wrap-anywhere">
-          <div className="text-foreground/85" data-testid="panel-question">
+          <div className="text-(--banner-foreground)/(--banner-body-opacity)" data-testid="panel-question">
             <ChatMarkdown text={question.question} />
           </div>
           {question.multiSelect && (
-            <p className="m-0 mt-1 flex items-center gap-1 text-xs text-secondary-label">
+            <p className="m-0 mt-1 flex items-center gap-1 text-xs text-(--banner-secondary)">
               <ListChecks aria-hidden className="size-3" /> Select one or more options.
             </p>
           )}
@@ -272,12 +278,12 @@ export const QuestionPanel = ({
                   className="w-full justify-start"
                   onClick={() => onChoose(question, option.label)}
                 >
-                  <kbd className="flex size-5 shrink-0 items-center justify-center font-sans text-3xs font-medium text-muted-foreground tabular-nums">{index + 1}</kbd>
+                  <kbd className="flex size-5 shrink-0 items-center justify-center font-sans text-3xs font-medium text-(--banner-secondary) tabular-nums">{index + 1}</kbd>
                   <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-1 text-start">
                     <span className="text-sm font-medium">{option.label}</span>
-                    {option.description !== "" && <span className="text-2xs font-normal text-secondary-label">{option.description}</span>}
+                    {option.description !== "" && <span className="text-2xs font-normal text-(--banner-description)">{option.description}</span>}
                   </span>
-                  {selected && <Check aria-hidden className="size-3.5 shrink-0 text-highlight" />}
+                  {selected && <Check aria-hidden className="size-3.5 shrink-0 text-(--banner-option-icon-selected)" />}
                 </Button>
               );
             })}
@@ -297,9 +303,9 @@ export const PlanReady = ({ plan }: { readonly plan: ProposedPlan }) => {
   return (
     <section className={BANNER} data-testid="plan-ready">
       <div className={BANNER_ROW}>
-        <ListTodo aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-        <span className="shrink-0 font-medium text-muted-foreground">Plan ready</span>
-        {title !== undefined && <span className="min-w-0 flex-1 truncate text-foreground/85">{title}</span>}
+        <ListTodo aria-hidden className="size-3.5 shrink-0 text-(--banner-icon)" />
+        <span className="shrink-0 font-medium text-(--banner-title)">Plan ready</span>
+        {title !== undefined && <span className="min-w-0 flex-1 truncate text-(--banner-foreground)/(--banner-body-opacity)">{title}</span>}
       </div>
     </section>
   );

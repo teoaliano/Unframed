@@ -17,7 +17,7 @@ function AlertDialogBackdrop({ className, ...props }: AlertDialogPrimitive.Backd
   return (
     <AlertDialogPrimitive.Backdrop
       forceRender
-      className={cn(DIALOG_BACKDROP_CLASS, className)}
+      className={cn(DIALOG_BACKDROP_CLASS, "bg-(--confirm-dialog-backdrop)", className)}
       data-slot="alert-dialog-backdrop"
       {...props}
     />
@@ -55,7 +55,7 @@ function AlertDialogPopup({
         <AlertDialogPrimitive.Popup
           className={cn(
             DIALOG_POPUP_CLASS,
-            "row-start-2 max-h-full max-w-lg text-popover-foreground",
+            "row-start-2 max-h-full max-w-lg border-(--confirm-dialog-border) bg-(--confirm-dialog-surface) text-(--confirm-dialog-foreground)",
             bottomStickOnMobile && DIALOG_MOBILE_SHEET_CLASS,
             className,
           )}
@@ -87,8 +87,8 @@ function AlertDialogFooter({
   return (
     <div
       className={cn(
-        "flex flex-col-reverse gap-2 px-6 sm:flex-row sm:justify-end sm:rounded-b-[calc(var(--radius-2xl)-1px)]",
-        variant === "default" && "border-t bg-muted/72 py-4",
+        "flex flex-col-reverse gap-2 px-6 sm:flex-row sm:justify-end sm:rounded-b-2xl",
+        variant === "default" && "border-t border-(--confirm-dialog-footer-border) bg-(--confirm-dialog-footer-surface)/(--confirm-dialog-footer-surface-opacity) py-4",
         variant === "bare" && "pb-6",
         className,
       )}
@@ -101,7 +101,7 @@ function AlertDialogFooter({
 function AlertDialogTitle({ className, ...props }: AlertDialogPrimitive.Title.Props) {
   return (
     <AlertDialogPrimitive.Title
-      className={cn("wrap-anywhere font-semibold text-xl leading-none", className)}
+      className={cn("wrap-anywhere font-semibold text-(--confirm-dialog-title) text-xl leading-none", className)}
       data-slot="alert-dialog-title"
       {...props}
     />
@@ -111,7 +111,7 @@ function AlertDialogTitle({ className, ...props }: AlertDialogPrimitive.Title.Pr
 function AlertDialogDescription({ className, ...props }: AlertDialogPrimitive.Description.Props) {
   return (
     <AlertDialogPrimitive.Description
-      className={cn("text-muted-foreground text-sm", className)}
+      className={cn("text-(--confirm-dialog-description) text-sm", className)}
       data-slot="alert-dialog-description"
       {...props}
     />

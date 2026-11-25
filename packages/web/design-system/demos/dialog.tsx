@@ -32,7 +32,7 @@ const Example = ({
         </div>
         {long &&
           Array.from({ length: 12 }, (_, index) => (
-            <p key={index} className="m-0 text-muted-foreground text-sm">
+            <p key={index} className="m-0 text-(--catalogue-demo-description) text-sm">
               Generation {index + 1}: a wide shot of a glass greenhouse at dusk, warm light, soft fog, 16:9.
             </p>
           ))}
@@ -75,7 +75,7 @@ export default function DialogDemo() {
               Open preview
             </DialogTrigger>
             <DialogPopup variant="media" aria-label="Image preview">
-              <div className="flex aspect-video w-[min(80vw,48rem)] items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <div className="flex aspect-video w-[min(80vw,var(--container-3xl))] items-center justify-center rounded-lg bg-(--catalogue-demo-fill) text-(--catalogue-demo-description)">
                 <Image className="size-10" />
               </div>
             </DialogPopup>

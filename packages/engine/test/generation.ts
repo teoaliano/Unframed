@@ -1,6 +1,7 @@
 /** Engine-seam helpers for runs: an engine with a key and a scripted image endpoint, and a project to run in. */
 import type { ImageRunRequest, RunEvent } from "@unframed/contracts";
 import { pngBytes } from "../../web/test/images.ts";
+import { seedSamplePrompts } from "./canvasRecords.ts";
 import { startEngine, type EngineOptions, type StubHandler, type TestEngine } from "./harness.ts";
 import { imageGeneration, routes, type ImageAnswer, type ImageRequest } from "./openRouterStub.ts";
 import type { Subscription, TestRpcClient } from "./rpcClient.ts";
@@ -19,7 +20,7 @@ export interface Generating {
   readonly events: Subscription<RunEvent>;
 }
 
-/** An engine with a key, the test canvas methods on, a project named `board` and a live `run.subscribe`. */
+/** An engine with a key, the test canvas methods on, a project named `board` (the sample prompts on a new one) and a live `run.subscribe`. */
 export const startGenerating = async (options: EngineOptions & { extra?: StubHandler[] } = {}): Promise<Generating> => {
   let script: (request: ImageRequest) => ImageAnswer | Promise<ImageAnswer> = () => ({ kind: "image", bytes: pngBytes(64, 32) });
   const images = imageGeneration((request) => script(request));
@@ -30,7 +31,10 @@ export const startGenerating = async (options: EngineOptions & { extra?: StubHan
     stub: routes(images.handler, ...(options.extra ?? [])),
   });
   const rpc = await engine.rpc();
-  await rpc.call("projects.create", { name: "board" }).catch(() => undefined);
+  await rpc.call("projects.create", { name: "board" }).then(
+    () => seedSamplePrompts(rpc, "board"),
+    () => undefined,
+  );
   const events = rpc.subscribe("run.subscribe", { project: "board" });
   return {
     engine,

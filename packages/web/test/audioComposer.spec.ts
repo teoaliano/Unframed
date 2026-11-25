@@ -14,7 +14,7 @@ test("the audio medium: voice chip, model chip on the default, the chips the mod
   const { engine } = audio;
   await openCanvas(page, engine);
   await filledMedia(engine, { id: "shape:photo", type: "image", ref: "300", at: { x: -260, y: 60 }, bytes: pngBytes(20, 20), name: "photo.png", mime: "image/png", natural: { w: 20, h: 20 }, width: 140 });
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await chooseAudio(page);
 
@@ -62,7 +62,7 @@ test("the audio medium: voice chip, model chip on the default, the chips the mod
 test("the voice dialog lists, searches, marks the current voice, and Escape closes only it; a failed load says why", async ({ page, audio }) => {
   const { engine } = audio;
   await openCanvas(page, engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await chooseAudio(page);
   await pickVoice(page, "Marcus");
@@ -98,7 +98,7 @@ test("the voice dialog lists, searches, marks the current voice, and Escape clos
 test("delivery and Advanced popovers: values, Reset, Remove and re-add, the Advanced count, and the stub receives exactly what is set", async ({ page, audio }) => {
   const { engine } = audio;
   await openCanvas(page, engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await chooseAudio(page);
   await pickVoice(page, "Olivia");
@@ -118,7 +118,9 @@ test("delivery and Advanced popovers: values, Reset, Remove and re-add, the Adva
   await tray(page).getByRole("button", { name: "+ add prop" }).click();
   await page.getByRole("menuitem", { name: /^Stability/ }).click();
   await expect(chip(page, "stability")).toHaveText("Stability 0.50");
+  await expect(popup).toBeVisible();
   await page.keyboard.press("Escape");
+  await expect(popup).toHaveCount(0);
 
   await chip(page, "advanced").click();
   const advanced = page.getByRole("dialog", { name: "Advanced" });
@@ -146,7 +148,7 @@ test("delivery and Advanced popovers: values, Reset, Remove and re-add, the Adva
 test("a run lands as an audio result beside the selection with its line; its bar is Regenerate and Agent; Regenerate reopens the recipe and a second take lands", async ({ page, audio }) => {
   const { engine } = audio;
   await openCanvas(page, engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await chooseAudio(page);
   await pickVoice(page, "Olivia");
@@ -157,7 +159,7 @@ test("a run lands as an audio result beside the selection with its line; its bar
   await expect.poll(async () => (await landedAudio(engine, new Set())).length).toBe(1);
   const [result] = await landedAudio(engine, new Set());
   expect(audio.speech[0]!.body.text).toBe("lone red fox\n\n[whispers] slowly");
-  const subject = (await roomRecords(engine, "default")).find((record) => record.id === "shape:starter-subject")!;
+  const subject = (await roomRecords(engine, "default")).find((record) => record.id === "shape:sample-subject")!;
   expect(result!.x).toBeGreaterThan(subject.x!);
 
   const card = shapeOnScreen(page, result!.id);
@@ -165,7 +167,7 @@ test("a run lands as an audio result beside the selection with its line; its bar
   const title = (await card.getByTestId("audio-title").boundingBox())!;
   await page.mouse.click(title.x + title.width - 4, title.y + 4);
   await expect(toolbar(page).getByTestId("result-line")).toHaveText("eleven_v4 · 0:02 · 124 credits");
-  await expect(toolbar(page).getByRole("button")).toHaveText([/Regenerate/, /Agent/]);
+  await expect(toolbar(page).locator("button:not([data-testid='style-row'] *)")).toHaveText([/Regenerate/, /Agent/]);
   await expect(toolbar(page).getByRole("button", { name: "Generate", exact: true })).toHaveCount(0);
 
   await toolbar(page).getByRole("button", { name: "Regenerate" }).click();
@@ -183,7 +185,7 @@ test("a failed run reports in a toast and its placeholder goes", async ({ page, 
   const { engine } = audio;
   audio.script.speech = () => ({ kind: "status", status: 401, body: { detail: { message: "Invalid API key" } } });
   await openCanvas(page, engine);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await chooseAudio(page);
   await pickVoice(page, "Olivia");
@@ -196,7 +198,7 @@ test("the voice, model and props come back on the next open and after a restart"
   const first = await startAudio();
   try {
     await openCanvas(page, first.engine);
-    await clickShape(page, "shape:starter-subject");
+    await clickShape(page, "shape:sample-subject");
     await openComposer(page);
     await chooseAudio(page);
     await pickVoice(page, "Marcus");
@@ -206,7 +208,7 @@ test("the voice, model and props come back on the next open and after a restart"
     await expect(composer(page)).toHaveCount(0);
     await expect.poll(async () => (await audioShapes(first.engine)).filter((shape) => shape.props.file !== "").length).toBe(1);
     await page.mouse.click(10, 400);
-    await clickShape(page, "shape:starter-subject");
+    await clickShape(page, "shape:sample-subject");
     await openComposer(page);
     await chooseAudio(page);
     await expect(tray(page).getByTestId("voice-chip")).toHaveText("Marcus");
@@ -218,7 +220,7 @@ test("the voice, model and props come back on the next open and after a restart"
   const second = await startAudio({ dataDir: first.engine.dataDir });
   try {
     await openCanvas(page, second.engine);
-    await clickShape(page, "shape:starter-subject");
+    await clickShape(page, "shape:sample-subject");
     await openComposer(page);
     await chooseAudio(page);
     await expect(tray(page).getByTestId("voice-chip")).toHaveText("Marcus");

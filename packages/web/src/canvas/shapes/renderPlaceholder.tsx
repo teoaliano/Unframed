@@ -41,7 +41,7 @@ const Rendering = ({ shape, jobId, startedAt }: { readonly shape: TLVideoShape; 
   const handled = (event: SyntheticEvent) => editor.markEventAsHandled(event);
   return (
     <>
-      <p role="status" className="m-0 text-sm leading-snug text-muted-foreground">
+      <p role="status" className="m-0 text-sm leading-snug text-(--media-card-meta)">
         Rendering… ({minutes} min)
       </p>
       <Tip label={FORGET_TIP} side="bottom">
@@ -81,7 +81,7 @@ export const RenderPlaceholder = ({ shape }: { readonly shape: TLVideoShape }) =
         {marker ? (
           <Rendering shape={shape} jobId={marker.runId} startedAt={marker.startedAt} />
         ) : (
-          <p role="alert" className="m-0 text-sm leading-snug wrap-anywhere text-destructive-foreground">
+          <p role="alert" className="m-0 text-sm leading-snug wrap-anywhere text-(--media-card-error-foreground)">
             {typeof runError === "string" ? runError : ""}
           </p>
         )}

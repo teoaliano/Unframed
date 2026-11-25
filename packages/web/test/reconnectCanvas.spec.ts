@@ -30,13 +30,13 @@ test("the canvas reconnects by itself after an engine restart, with backoff, and
     });
     await openCanvas(page, first);
     const port = first.port;
-    const before = (await roomRecords(first, "default")).find((record) => record.id === "shape:starter-scene")!;
+    const before = (await roomRecords(first, "default")).find((record) => record.id === "shape:sample-scene")!;
     await first.stop();
     await expect.poll(() => droppedAt !== undefined).toBe(true);
     const downAt = droppedAt!;
 
-    await dragBy(page, "shape:starter-scene", 90, 0);
-    const movedOnScreen = await centre(shapeOnScreen(page, "shape:starter-scene"));
+    await dragBy(page, "shape:sample-scene", 90, 0);
+    const movedOnScreen = await centre(shapeOnScreen(page, "shape:sample-scene"));
     // The notice shows two seconds after the drop: check it has not yet, whatever the drag took.
     await page.waitForTimeout(Math.max(0, downAt + 1500 - Date.now()));
     await expect(toast(page, LOST)).toHaveCount(0);
@@ -47,11 +47,11 @@ test("the canvas reconnects by itself after an engine restart, with backoff, and
     const second = await startHostedEngine({ dataDir, env: { PORT: String(port) } });
     try {
       await expect
-        .poll(async () => (await roomRecords(second, "default")).find((record) => record.id === "shape:starter-scene")!.x, { timeout: 20_000 })
+        .poll(async () => (await roomRecords(second, "default")).find((record) => record.id === "shape:sample-scene")!.x, { timeout: 20_000 })
         .toBeGreaterThan(before.x! + 20);
       // The page's next retry can come as late as the longest backoff gap checked below (10.9 s).
       await expect(toast(page, LOST)).toHaveCount(0, { timeout: 12_000 });
-      expect(Math.round((await centre(shapeOnScreen(page, "shape:starter-scene"))).x)).toBe(Math.round(movedOnScreen.x));
+      expect(Math.round((await centre(shapeOnScreen(page, "shape:sample-scene"))).x)).toBe(Math.round(movedOnScreen.x));
 
       const retries = attempts.filter((at) => at > downAt);
       expect(retries.length).toBeGreaterThanOrEqual(3);

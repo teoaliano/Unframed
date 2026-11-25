@@ -122,6 +122,13 @@ interface ReadingState {
   readonly error?: string;
 }
 
+const writeText = (element: HTMLElement, text: string): void => {
+  const node = element.firstChild;
+  if (node instanceof Text && node === element.lastChild) {
+    if (node.data !== text) node.data = text;
+  } else element.textContent = text;
+};
+
 const snapTargets = (rows: readonly RowView[], exclude: number, playhead: number, range: { start: number | null; end: number | null }, length: number): SnapTarget[] => {
   const targets: SnapTarget[] = [{ priority: 0, time: playhead }];
   if (range.start !== null) targets.push({ priority: 1, time: range.start });
@@ -170,7 +177,7 @@ const LoopHandle = ({
     onPointerUp={onUp}
     onPointerCancel={onUp}
   >
-    <span className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-primary" />
+    <span className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-(--motion-timeline-handle)" />
   </div>
 );
 
@@ -246,12 +253,12 @@ const RowLine = ({
       data-row-key={row.element ?? row.key}
       data-selected={selected ? "true" : undefined}
       data-hidden={row.hidden ? "true" : undefined}
-      className={cn("flex flex-none", selected && "bg-accent/40", runtime && "text-muted-foreground", row.hidden && "opacity-50")}
+      className={cn("flex flex-none", selected && "bg-(--motion-timeline-row-surface-selected)/(--motion-timeline-row-surface-selected-opacity)", runtime && "text-(--motion-timeline-row-foreground-disabled)", row.hidden && "opacity-50")}
       style={{ height: row.height }}
     >
       {compact ? (
-        <div className="sticky left-0 z-10 flex flex-none items-center justify-center overflow-hidden border-b border-r bg-card text-xs" style={{ width: COMPACT_LABEL }}>
-          {row.locked && <Lock aria-hidden data-testid="timeline-lock" aria-label="Locked. Unlock it in Layers to edit it." className="absolute bottom-0 right-0 size-2.5 text-muted-foreground" />}
+        <div className="sticky left-0 z-10 flex flex-none items-center justify-center overflow-hidden border-b border-r border-(--motion-timeline-border) bg-(--motion-timeline-label-surface) text-xs" style={{ width: COMPACT_LABEL }}>
+          {row.locked && <Lock aria-hidden data-testid="timeline-lock" aria-label="Locked. Unlock it in Layers to edit it." className="absolute bottom-0 right-0 size-2.5 text-(--motion-timeline-icon)" />}
           <div className="flex items-center">
             {row.expandable && (
               <Tip label={tip}>
@@ -268,7 +275,7 @@ const RowLine = ({
               </Tip>
             ) : !row.expandable ? (
               <Tip label={tip}>
-                <span role="img" aria-label={name} className="inline-flex size-3 items-center justify-center text-muted-foreground">
+                <span role="img" aria-label={name} className="inline-flex size-3 items-center justify-center text-(--motion-timeline-icon)">
                   {row.kind === "clip" ? <Film aria-hidden className="size-2.5" /> : row.kind === "composition" ? <Layers aria-hidden className="size-2.5" /> : row.kind === "runtime" ? <Code aria-hidden className="size-2.5" /> : <Minus aria-hidden className="size-2.5" />}
                 </span>
               </Tip>
@@ -276,7 +283,7 @@ const RowLine = ({
           </div>
         </div>
       ) : (
-      <div className="sticky left-0 z-10 flex w-40 flex-none items-center gap-1 border-b border-r bg-card pr-1 text-xs" style={{ paddingLeft: 4 + row.depth * 12 }}>
+      <div className="sticky left-0 z-10 flex w-40 flex-none items-center gap-1 border-b border-r border-(--motion-timeline-border) bg-(--motion-timeline-label-surface) pr-1 text-xs" style={{ paddingLeft: 4 + row.depth * 12 }}>
         {row.expandable ? (
           <Button variant="ghost" size="icon-tiny" className="size-6" aria-label={`${row.expanded ? "Collapse" : "Expand"} ${name}`} onClick={onToggle}>
             {row.expanded ? <ChevronDown aria-hidden /> : <ChevronRight aria-hidden />}
@@ -295,7 +302,7 @@ const RowLine = ({
             <span className={cn("truncate", row.kind === "composition" && "font-medium", row.kind === "clip" && "font-medium")}>{name}</span>
           </Tip>
         )}
-        {row.locked && <Lock aria-hidden data-testid="timeline-lock" aria-label="Locked. Unlock it in Layers to edit it." className="ml-auto size-3 flex-none text-muted-foreground" />}
+        {row.locked && <Lock aria-hidden data-testid="timeline-lock" aria-label="Locked. Unlock it in Layers to edit it." className="ml-auto size-3 flex-none text-(--motion-timeline-icon)" />}
       </div>
       )}
       <div className="relative flex-none border-b" style={{ width: timeWidth, height: row.height }}>
@@ -312,7 +319,7 @@ const RowLine = ({
               onPointerMove={onClipMove}
               onPointerUp={onClipUp}
               onPointerCancel={onClipUp}
-              className={cn("absolute top-1/2 h-3 -translate-y-1/2 rounded-sm bg-muted-foreground/40", clipNote === undefined || clipNote === null ? "cursor-grab" : "cursor-not-allowed")}
+              className={cn("absolute top-1/2 h-3 -translate-y-1/2 rounded-sm bg-(--motion-timeline-clip-surface)/(--motion-timeline-clip-surface-opacity)", clipNote === undefined || clipNote === null ? "cursor-grab" : "cursor-not-allowed")}
               style={{ left: row.span.start * pxPerSecond, width: Math.max(row.span.duration * pxPerSecond, 2) }}
             />
           </Hint>
@@ -348,10 +355,10 @@ const RowLine = ({
                 className={cn(
                   "absolute -translate-y-1/2 rounded-sm",
                   cursorOf(bar),
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--motion-timeline-bar-ring-focus)",
                   thin ? "h-1.5" : "h-3",
-                  bar.copy ? "bg-primary/25" : bar.readOnly !== null ? "bg-muted-foreground/50" : "bg-primary/70",
-                  chosen && "ring-1 ring-foreground",
+                  bar.copy ? "bg-(--motion-timeline-bar-surface-copy)/(--motion-timeline-bar-surface-copy-opacity)" : bar.readOnly !== null ? "bg-(--motion-timeline-bar-surface-disabled)/(--motion-timeline-bar-surface-disabled-opacity)" : "bg-(--motion-timeline-bar-surface)/(--motion-timeline-bar-surface-opacity)",
+                  chosen && "ring-1 ring-(--motion-timeline-bar-ring-selected)",
                 )}
                 style={{ left: bar.start * pxPerSecond, width: Math.max(bar.duration * pxPerSecond, 2), top: `${centre * 100}%` }}
               />
@@ -373,7 +380,7 @@ const RowLine = ({
                     data-tween={bar.tween}
                     data-target={bar.target}
                     data-fraction={fraction}
-                    className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rotate-45 bg-foreground before:absolute before:-inset-y-[7px] before:-inset-x-[var(--hit-side)] before:-rotate-45 before:content-[''] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rotate-45 bg-(--motion-timeline-keyframe-fill) before:absolute before:-inset-y-1.5 before:-inset-x-[var(--hit-side)] before:-rotate-45 before:content-[''] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--motion-timeline-keyframe-ring-focus)"
                     style={{ left: at * pxPerSecond, "--hit-side": `${hitSide(at)}px` } as CSSProperties}
                     onPointerDown={(event) => {
                       event.stopPropagation();
@@ -560,8 +567,8 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
   useEffect(() => {
     transport.setPainter((time, total) => {
       const parts = readoutParts(time, total);
-      if (clock.current) clock.current.textContent = parts.clock;
-      if (frame.current) frame.current.textContent = parts.frame;
+      if (clock.current) writeText(clock.current, parts.clock);
+      if (frame.current) writeText(frame.current, parts.frame);
       if (playhead.current) playhead.current.style.transform = `translateX(${labelRef.current + time * pxRef.current}px)`;
     });
     return () => transport.setPainter(undefined);
@@ -1123,7 +1130,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
       data-testid="motion-timeline"
       data-open={open ? "true" : "false"}
       style={{ height }}
-      className={cn("relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border bg-card", className)}
+      className={cn("relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-(--motion-timeline-border) bg-(--motion-timeline-surface)", className)}
     >
       {open && (
         <div
@@ -1157,7 +1164,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
         </Tip>
         <div data-testid="timeline-readout" className="ml-2 flex items-baseline gap-2 whitespace-nowrap font-mono text-sm tabular-nums">
           <span ref={clock} />
-          <span ref={frame} className="text-muted-foreground" />
+          <span ref={frame} className="text-(--motion-timeline-meta)" />
         </div>
         <div className="ml-auto flex items-center gap-1">
           {open && (
@@ -1230,11 +1237,11 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
           <div ref={scroller} data-testid="timeline-scroll" className="relative min-h-0 flex-1 overflow-auto" onScroll={measureView}>
             <div data-testid="timeline-track" data-px-per-second={pxPerSecond} className="relative flex min-h-full flex-col" style={{ width: trackTotal }}>
               <div className="sticky top-0 z-10 flex h-6 flex-none">
-                <div className="sticky left-0 z-20 flex-none border-b border-r bg-card" style={{ width: labelWidth }} />
+                <div className="sticky left-0 z-20 flex-none border-b border-r border-(--motion-timeline-border) bg-(--motion-timeline-label-surface)" style={{ width: labelWidth }} />
                 <div
                   ref={rulerTime}
                   data-testid="timeline-ruler"
-                  className="relative h-6 flex-none touch-none border-b bg-card"
+                  className="relative h-6 flex-none touch-none border-b border-(--motion-timeline-border) bg-(--motion-timeline-ruler-surface)"
                   style={{ width: trackWidth }}
                   onPointerDown={onRulerDown}
                   onPointerMove={onRulerMove}
@@ -1247,7 +1254,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
                       data-in={range.start ?? undefined}
                       data-out={range.end ?? undefined}
                       aria-hidden
-                      className="pointer-events-none absolute inset-y-0 bg-primary/15"
+                      className="pointer-events-none absolute inset-y-0 bg-(--motion-timeline-ruler-range)/(--motion-timeline-ruler-range-opacity)"
                       style={{ left: rangeStart * pxPerSecond, width: Math.max(0, rangeEnd - rangeStart) * pxPerSecond }}
                     />
                   )}
@@ -1258,14 +1265,14 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
                   <LoopHandle label="Loop Out" testId="timeline-loop-out" at={range.end * pxPerSecond} onDown={(event) => onHandleDown("out", event)} onMove={onHandleMove} onUp={onHandleUp} />
                 )}
                 {ticks.map((at) => (
-                    <span key={at} data-testid="timeline-tick" data-time={at} aria-hidden className="pointer-events-none absolute inset-y-0 border-l pl-1 text-3xs leading-6 text-muted-foreground" style={{ left: at * pxPerSecond }}>
+                    <span key={at} data-testid="timeline-tick" data-time={at} aria-hidden className="pointer-events-none absolute inset-y-0 border-l pl-1 text-3xs leading-6 text-(--motion-timeline-ruler-tick)" style={{ left: at * pxPerSecond }}>
                       {tickLabel(at)}
                     </span>
                   ))}
                   {length > 0 && (
                     <span
                       data-testid="timeline-end"
-                      className={cn("pointer-events-none absolute inset-y-0 border-foreground text-3xs leading-6 font-medium", endFlip ? "border-r-2 pr-1 text-right" : "border-l-2 pl-1")}
+                      className={cn("pointer-events-none absolute inset-y-0 border-(--motion-timeline-ruler-end-border) text-3xs leading-6 font-medium", endFlip ? "border-r-2 pr-1 text-right" : "border-l-2 pl-1")}
                       style={{ left: length * pxPerSecond, transform: endFlip ? "translateX(-100%)" : undefined }}
                     >
                       {tickLabel(length)}
@@ -1288,9 +1295,9 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
                 </div>
               </div>
               <div ref={rowsRef} data-testid="timeline-rows" className="relative flex min-h-0 flex-1 flex-col" onClick={() => setSelectedTween(null)}>
-                {current?.value?.script === "none" && <p className="sticky left-0 p-2 text-xs text-muted-foreground">This motion has no GSAP timeline the editor can read.</p>}
-                {current?.value?.script === "unreadable" && <p className="sticky left-0 p-2 text-xs text-muted-foreground">The timeline script could not be read.</p>}
-                {current?.error !== undefined && <p className="sticky left-0 p-2 text-xs text-muted-foreground">{current.error}</p>}
+                {current?.value?.script === "none" && <p className="sticky left-0 p-2 text-xs text-(--motion-timeline-note)">This motion has no GSAP timeline the editor can read.</p>}
+                {current?.value?.script === "unreadable" && <p className="sticky left-0 p-2 text-xs text-(--motion-timeline-note)">The timeline script could not be read.</p>}
+                {current?.error !== undefined && <p className="sticky left-0 p-2 text-xs text-(--motion-timeline-note)">{current.error}</p>}
                 <div aria-hidden style={{ height: rowTops.tops[visible.first] ?? 0 }} />
                 {rows.slice(visible.first, visible.last).map((row) => (
                   <RowLine
@@ -1325,17 +1332,17 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
                 <div aria-hidden style={{ height: bottomSpace }} />
               </div>
               {length > 0 && length * pxPerSecond + END_INSET < trackWidth && (
-                <div data-testid="timeline-past-end" aria-hidden className="pointer-events-none absolute inset-y-0 bg-background/60" style={{ left: labelWidth + length * pxPerSecond, right: 0 }} />
+                <div data-testid="timeline-past-end" aria-hidden className="pointer-events-none absolute inset-y-0 bg-(--motion-timeline-past-end-surface)/(--motion-timeline-past-end-surface-opacity)" style={{ left: labelWidth + length * pxPerSecond, right: 0 }} />
               )}
               {guide !== null && (
-                <div data-testid="timeline-snap-guide" aria-hidden className="pointer-events-none absolute inset-y-0 w-0 border-l-2 border-dashed border-foreground/80" style={{ left: labelWidth + guide * pxPerSecond }} />
+                <div data-testid="timeline-snap-guide" aria-hidden className="pointer-events-none absolute inset-y-0 w-0 border-l-2 border-dashed border-(--motion-timeline-snap-guide-border)/(--motion-timeline-snap-guide-border-opacity)" style={{ left: labelWidth + guide * pxPerSecond }} />
               )}
-              <div ref={playhead} data-testid="timeline-playhead" aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-px bg-primary" />
+              <div ref={playhead} data-testid="timeline-playhead" aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-px bg-(--motion-timeline-playhead)" />
             </div>
           </div>
           {panel !== null && <ValuesPanel {...panel} onClose={() => setTiming(null)} />}
           {barDragging && (
-            <p data-testid="timeline-free-hint" className="pointer-events-none absolute bottom-1 right-3 text-xs text-muted-foreground">
+            <p data-testid="timeline-free-hint" className="pointer-events-none absolute bottom-1 right-3 text-xs text-(--motion-timeline-note)">
               {freeHint()}
             </p>
           )}

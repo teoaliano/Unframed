@@ -56,7 +56,7 @@ export const RoleBadges = () => {
       {badges.map((badge) => (
         <div
           key={badge.key}
-          className="pointer-events-none absolute top-0 left-0 flex h-[22px] items-center"
+          className="pointer-events-none absolute top-0 left-0 flex h-5.5 items-center"
           data-role-for={badge.key}
           style={{ transform: `translate(${badge.x}px, ${badge.y - 22}px)` }}
         >
@@ -117,7 +117,7 @@ export const Tether = () => {
     <svg className="pointer-events-none absolute inset-0 size-full overflow-visible" aria-hidden data-testid="tether">
       <defs>
         <marker id="unframed-tether-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-          <path d="M 1 1 L 8 5 L 1 9" fill="none" className="stroke-border" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M 1 1 L 8 5 L 1 9" fill="none" className="stroke-(--tether-stroke)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </marker>
       </defs>
       {lines.map((line) => (
@@ -128,7 +128,7 @@ export const Tether = () => {
           y1={line.from.y}
           x2={line.to.x}
           y2={line.to.y}
-          className="stroke-border"
+          className="stroke-(--tether-stroke)"
           strokeWidth={1.5}
           strokeDasharray="4 5"
           markerEnd="url(#unframed-tether-head)"

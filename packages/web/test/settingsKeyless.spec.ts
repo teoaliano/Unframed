@@ -17,7 +17,7 @@ test("a keyless first load opens nothing by itself; the gear opens Settings on G
     const button = settingsButton(page);
     await expect(button).toHaveAccessibleName("Settings");
     await expect(button).not.toHaveAttribute("data-keyless");
-    expect(await button.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
+    await expectToken(button, "background-color", "--button-ghost-surface");
     await button.hover();
     await expect(page.locator("[data-slot=tooltip-popup]")).toHaveText("Settings");
 
@@ -29,7 +29,7 @@ test("a keyless first load opens nothing by itself; the gear opens Settings on G
     await expect(dialog.getByRole("button", { name: "Connect OpenRouter" })).toBeVisible();
     await expectSlot(dialog, "dialog-popup");
     await expectSlot(dialog.getByRole("button", { name: "Connect OpenRouter" }), "button");
-    await expectToken(dialog.getByRole("button", { name: "Connect OpenRouter" }), "background-color", "--primary");
+    await expectToken(dialog.getByRole("button", { name: "Connect OpenRouter" }), "background-color", "--button-default-surface");
     await expectSlot(dialog.getByRole("button", { name: "or paste a key instead" }), "button");
     await expect(dialog.getByTestId("models-need-key")).toHaveText("Connect OpenRouter or paste a Vercel AI Gateway key to choose the models Generate starts on.");
     await expect(dialog.getByRole("combobox", { name: "Image", exact: true })).toHaveCount(0);

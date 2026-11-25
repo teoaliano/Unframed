@@ -101,8 +101,8 @@ export const DrawerGrip = ({
       tabIndex={0}
       data-drawer-grip={edge}
       className={cn(
-        "absolute inset-y-0 z-10 w-1.5 cursor-ew-resize touch-none outline-none after:absolute after:inset-y-0 after:left-[2px] after:w-px after:bg-transparent after:transition-colors after:duration-150 hover:after:bg-ring focus-visible:after:bg-ring data-[dragging]:after:bg-ring",
-        edge === "right" ? "right-[-3px]" : "left-[-3px]",
+        "absolute inset-y-0 z-10 w-1.5 cursor-ew-resize touch-none outline-none after:absolute after:inset-y-0 after:left-0.5 after:w-px after:bg-transparent after:transition-colors after:duration-150 hover:after:bg-(--drawer-grip-indicator-hover) focus-visible:after:bg-(--drawer-grip-indicator-focus) data-[dragging]:after:bg-(--drawer-grip-indicator-dragging)",
+        edge === "right" ? "-right-0.5" : "-left-0.5",
       )}
       onPointerDown={onPointerDown}
       onDoubleClick={(event) => {

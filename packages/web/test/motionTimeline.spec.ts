@@ -26,7 +26,7 @@ const openMotion = async (page: Page) => {
 
 const expectRestoredEditor = async (page: Page) => {
   await expect(region(page)).toBeVisible({ timeout: 20_000 });
-  await expect(page.locator("[data-slot=top-bar] [role=tab][data-active='true']")).toHaveAccessibleName("Intro, default");
+  await expect(page.locator("[data-slot=top-bar] [role=tab][data-active='true']")).toHaveAccessibleName("Intro");
 };
 
 const boxOf = async (locator: Locator) => {

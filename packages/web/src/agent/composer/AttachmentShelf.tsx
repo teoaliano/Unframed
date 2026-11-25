@@ -16,7 +16,7 @@ export const AttachmentShelf = ({ staged, onRemove, onRetry }: { readonly staged
       {images.length > 0 && (
         <div className="flex w-full flex-wrap gap-1.5">
           {images.map((item) => (
-            <div key={item.key} className="relative size-16 overflow-hidden rounded-lg border border-border/80 bg-background/70" data-status={item.status}>
+            <div key={item.key} className="relative size-16 overflow-hidden rounded-lg border border-(--attachment-thumb-border)/(--attachment-thumb-border-opacity) bg-(--attachment-thumb-surface)/(--attachment-thumb-surface-opacity)" data-status={item.status}>
               {item.preview !== undefined ? (
                 <a href={item.preview} target="_blank" rel="noopener noreferrer" aria-label={`Preview ${item.name}`} className="block size-full">
                   <img src={item.preview} alt="" className="block size-full object-cover" />
@@ -25,10 +25,10 @@ export const AttachmentShelf = ({ staged, onRemove, onRetry }: { readonly staged
                 <span aria-label={`Preview ${item.name}`} className="block size-full" />
               )}
               {item.status === "uploading" && (
-                <span className="absolute inset-0 flex items-center justify-center bg-background/60 text-xs text-foreground tabular-nums">{`${item.progress}%`}</span>
+                <span className="absolute inset-0 flex items-center justify-center bg-(--attachment-thumb-overlay)/(--attachment-thumb-overlay-opacity) text-xs text-(--attachment-thumb-foreground) tabular-nums">{`${item.progress}%`}</span>
               )}
               {item.status === "failed" && (
-                <span className="absolute inset-0 flex items-center justify-center bg-background/60">
+                <span className="absolute inset-0 flex items-center justify-center bg-(--attachment-thumb-overlay)/(--attachment-thumb-overlay-opacity)">
                   <Button variant="ghost" size="icon-xs" aria-label={`Retry upload for ${item.name}`} onClick={() => onRetry(item.key)}>
                     <RotateCw aria-hidden />
                   </Button>

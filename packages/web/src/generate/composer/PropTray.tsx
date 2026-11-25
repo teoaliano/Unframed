@@ -112,7 +112,7 @@ export const PropTray = ({ lead, model, catalogueReady, params, extra: declared 
       {addable.length + extraAddable.length > 0 && (
         <Menu open={addOpen} onOpenChange={setAddOpen}>
           <MenuTrigger render={<Button variant="ghost-muted" size="compact" />}>+ add prop</MenuTrigger>
-          <MenuPopup side="top" align="end" sideOffset={6} aria-label="Add prop" className="min-w-[186px]">
+          <MenuPopup side="top" align="end" sideOffset={6} aria-label="Add prop" className="min-w-(--generate-tray-prop-menu-width)">
             {addable.map((prop) => {
               const value = (addableValue ? addableValue(params, prop.key, props) : addablePropValue(params, prop.key, props)) ?? "";
               const shown = prop.optionLabels?.[String(value)] ?? String(value);
@@ -128,7 +128,7 @@ export const PropTray = ({ lead, model, catalogueReady, params, extra: declared 
                   }}
                 >
                   <span>{prop.label}</span>
-                  <span className="text-muted-foreground">{shown}</span>
+                  <span className="text-(--generate-tray-prop-menu-meta)">{shown}</span>
                 </MenuItem>
               );
             })}
@@ -145,7 +145,7 @@ export const PropTray = ({ lead, model, catalogueReady, params, extra: declared 
                   }}
                 >
                   <span>{prop.label}</span>
-                  <span className="text-muted-foreground">{value}</span>
+                  <span className="text-(--generate-tray-prop-menu-meta)">{value}</span>
                 </MenuItem>
               );
             })}

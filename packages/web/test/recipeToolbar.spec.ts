@@ -3,7 +3,7 @@ import { gate } from "../../engine/test/openRouterStub.ts";
 import { openCanvas, roomRecords, shapeOnScreen, type AnyRecord } from "./canvas.ts";
 import { clickShape, composer, openComposer, selectGroup, toolbar } from "./generation.ts";
 import { pngBytes } from "./images.ts";
-import { expectSlot, expectToken, styleOf } from "./kit.ts";
+import { expectSlot, expectToken, styleOf, tokenColor } from "./kit.ts";
 import { groupRecord, inGroup, promptRecord, putRecords } from "./media.ts";
 import { expect, imageResults, test, textResults, tray } from "./texting.ts";
 
@@ -14,7 +14,7 @@ const group = (recipe: unknown, text = "a knight in silver armour") => [
 
 const IMAGE_RECIPE = { medium: "image", model: "openai/gpt-image-2", params: { quality: "high", aspect_ratio: "2:3" }, runs: 3 };
 
-const barButtons = (page: Page) => toolbar(page).getByRole("button");
+const barButtons = (page: Page) => toolbar(page).locator("button:not([data-testid='style-row'] *)");
 
 test("a recipe group's bar: Generate N×, its @name with the estimate, Recipe, Agent", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
@@ -27,8 +27,8 @@ test("a recipe group's bar: Generate N×, its @name with the estimate, Recipe, A
   // Generate is the kit's primary Button, Recipe its ghost Button.
   await page.mouse.move(5, 500);
   await expectSlot(toolbar(page).getByRole("button", { name: "Recipe" }), "button");
-  await expectToken(toolbar(page).getByRole("button", { name: "Generate 3×" }), "background-color", "--primary");
-  expect(await styleOf(toolbar(page).getByRole("button", { name: "Recipe" }), "background-color")).toBe("rgba(0, 0, 0, 0)");
+  await expectToken(toolbar(page).getByRole("button", { name: "Generate 3×" }), "background-color", "--button-default-surface");
+  expect(await styleOf(toolbar(page).getByRole("button", { name: "Recipe" }), "background-color")).toBe(await tokenColor(page, "--button-ghost-surface"));
 
   await putRecords(generation.engine, group({ ...IMAGE_RECIPE, runs: 1 }));
   await expect(barButtons(page)).toHaveText(["Generate", "Recipe", "Agent"]);
@@ -129,7 +129,7 @@ test("a recipe run leaves the composer's last-used values as they were", async (
   const { values } = await (await engine.rpc()).call("preferences.get", { keys: ["lastUsed.image"] });
   expect(values).toEqual({});
   await page.mouse.click(10, 400);
-  await clickShape(page, "shape:starter-subject");
+  await clickShape(page, "shape:sample-subject");
   await openComposer(page);
   await expect(tray(page).getByTestId("model-chip")).toHaveText("gpt-image-2");
 });

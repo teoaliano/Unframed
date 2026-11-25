@@ -3,7 +3,7 @@ import { centre, openCanvas, roomShapes, shapeOnScreen } from "./canvas.ts";
 import { expect, test } from "./agent.ts";
 import { putRecords } from "./media.ts";
 import { artifactShape, filledArtifact } from "./artifacts.ts";
-import { editor, fileOf, frameOf, outline, parameters, preparedFile } from "./editorHarness.ts";
+import { editor, fileOf, frameOf, leaveEditor, outline, parameters, preparedFile } from "./editorHarness.ts";
 
 const tabs = (page: Page) => page.locator("[data-slot=top-bar] [role=tab]");
 const selected = (page: Page) => page.locator("[data-slot=top-bar] [role=tab][data-active='true']");
@@ -30,24 +30,26 @@ const newProject = async (page: Page, engine: Parameters<typeof openCanvas>[1], 
   await expect(page.locator(`[data-canvas-project="${name}"] .tl-canvas`)).toBeVisible();
 };
 
-test("an artifact opens in its own tab after its project's tab; Back returns to the project tab and the editor tab stays", async ({ page, agent }) => {
+test("an artifact opens in its own tab after its project's tab; the project's tab returns to the canvas and the editor tab stays", async ({ page, agent }) => {
   await onBoard(page, agent);
   await open(page, "shape:landing", "Landing");
   await expect(tabs(page)).toHaveCount(2);
   await expect(tabs(page).nth(0)).toHaveText("default");
-  await expect(tabs(page).nth(1)).toHaveAccessibleName("Landing, default");
-  await expect(selected(page)).toHaveAccessibleName("Landing, default");
+  await expect(tabs(page).nth(1)).toHaveAccessibleName("Landing");
+  await expect(selected(page)).toHaveAccessibleName("Landing");
   await expect(editorTab(page, "Landing")).toHaveAttribute("title", "Landing · Page in default");
 
-  await editor(page).getByRole("button", { name: "Back to canvas" }).click();
+  await page.getByRole("tab", { name: "default", exact: true }).click();
   await expect(editor(page)).toHaveCount(0);
   await expect(selected(page)).toHaveText("default");
   await expect(editorTab(page, "Landing")).toBeVisible();
 
   await editorTab(page, "Landing").click();
   await expect(page.getByRole("region", { name: "Editing Landing" })).toBeVisible();
-  await page.getByRole("tab", { name: "default", exact: true }).click();
+
+  await leaveEditor(page);
   await expect(editor(page)).toHaveCount(0);
+  await expect(editorTab(page, "Landing")).toHaveCount(0);
 });
 
 test("two artifacts get two tabs, opening one again focuses its tab, and only the selected one mounts an editor", async ({ page, agent }) => {
@@ -78,7 +80,7 @@ test("Cmd+W closes the editor tab onto its project's tab, and Cmd+Shift+T reopen
   await expect(shapeOnScreen(page, "shape:landing")).toBeVisible();
   await open(page, "shape:landing", "Landing");
   await expect(tabs(page).nth(1)).toContainText("Landing");
-  await page.getByRole("region", { name: "Editing Landing" }).getByRole("button", { name: "Back to canvas" }).focus();
+  await page.getByRole("region", { name: "Editing Landing" }).getByRole("button", { name: "Open in a new tab" }).focus();
   await page.keyboard.press("ControlOrMeta+w");
   await expect(editorTab(page, "Landing")).toHaveCount(0);
   await expect(selected(page)).toHaveText("default");
@@ -246,7 +248,7 @@ for (const way of ["the project's tab", "Cmd+W", "another project's tab"] as con
     await editHeading(page, "44");
     if (way === "the project's tab") await page.getByRole("tab", { name: "default", exact: true }).click();
     if (way === "Cmd+W") {
-      await page.getByRole("region", { name: "Editing Landing" }).getByRole("button", { name: "Back to canvas" }).focus();
+      await page.getByRole("region", { name: "Editing Landing" }).getByRole("button", { name: "Open in a new tab" }).focus();
       await page.keyboard.press("ControlOrMeta+w");
     }
     if (way === "another project's tab") await page.getByRole("tab", { name: "beta", exact: true }).click();
@@ -348,7 +350,7 @@ test("clicking another project and then back on the open editor tab while it sav
   await page.waitForTimeout(2500);
   await expect(page.locator("[data-canvas-project]")).toHaveAttribute("data-canvas-project", "default");
   await expect(page.getByRole("region", { name: "Editing Landing" })).toBeVisible();
-  await expect(selected(page)).toHaveAccessibleName("Landing, default");
+  await expect(selected(page)).toHaveAccessibleName("Landing");
 });
 
 test("renaming a project on a slow machine still saves the editor's edits under the new name: the canvas waits for tldraw to send them", async ({ page, agent }) => {

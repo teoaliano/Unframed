@@ -19,7 +19,10 @@ export interface ComposerNotice {
   readonly onDismiss?: () => void;
 }
 
-const ERROR_BANNER = cn(BANNER, "border-error/32 bg-linear-to-b from-error/8 to-error/8");
+const ERROR_BANNER = cn(
+  BANNER,
+  "border-(--banner-error-border)/(--banner-error-border-opacity) bg-linear-to-b from-(--banner-error-tint)/(--banner-error-tint-opacity) to-(--banner-error-tint)/(--banner-error-tint-opacity)",
+);
 
 /** The notices above the composer (t3code's ComposerBannerStack), each its own glass card, fading in as it arrives. */
 export const NoticeStack = ({ items }: { readonly items: ReadonlyArray<ComposerNotice> }) => {
@@ -46,7 +49,7 @@ const NoticeCard = ({ item }: { readonly item: ComposerNotice }) => (
     data-group={item.group ?? "attention"}
   >
     <div className={BANNER_ROW}>
-      <span aria-hidden className={`flex shrink-0 items-center [&>svg]:size-3.5 ${item.variant === "error" ? "text-error" : item.variant === "warning" ? "text-warning" : "text-muted-foreground"}`}>
+      <span aria-hidden className={`flex shrink-0 items-center [&>svg]:size-3.5 ${item.variant === "error" ? "text-(--banner-error-icon)" : item.variant === "warning" ? "text-(--banner-warning-icon)" : "text-(--banner-icon)"}`}>
         {item.icon}
       </span>
       <NoticeText detailsLabel={`Show full title: ${item.title}`}>{item.title}</NoticeText>
@@ -62,7 +65,7 @@ const NoticeCard = ({ item }: { readonly item: ComposerNotice }) => (
       )}
     </div>
     {item.description !== undefined && (
-      <p className="m-0 ps-5 text-2xs text-muted-foreground" data-testid="notice-description">
+      <p className="m-0 ps-5 text-2xs text-(--banner-description)" data-testid="notice-description">
         {item.description}
       </p>
     )}
@@ -89,7 +92,7 @@ const NoticeText = ({ children, detailsLabel }: { readonly children: string; rea
   }, [children]);
   return (
     <>
-      <span ref={text} className="min-w-0 flex-1 truncate font-medium text-foreground" data-testid="notice-title">
+      <span ref={text} className="min-w-0 flex-1 truncate font-medium text-(--banner-foreground)" data-testid="notice-title">
         {children}
       </span>
       {clipped && (

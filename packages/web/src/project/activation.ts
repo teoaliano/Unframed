@@ -7,6 +7,9 @@ import {
   type ArtifactKind,
   editorTabsOf,
   isEditorTab,
+  ONBOARDING_KEY,
+  readOnboarding,
+  startOnboarding,
   moveTab,
   openEditorTab,
   openTab,
@@ -327,12 +330,13 @@ export class ProjectActivation {
    * Waits for the engine, reads the saved tabs and the project list, and opens them: the saved
    * tabs that still exist, in their order, with the saved active one. With no saved tab, the
    * remembered project (`project.active`, from before tabs), else the first, else a new `default`.
+   * A first run (no project and no onboarding yet) opens nothing and starts the onboarding instead.
    * A list that fails is tried once more after a second; a second failure opens nothing.
    */
   async initialLoad(): Promise<void> {
     const started = this.generation;
     const prefs = await this.engine
-      .call("preferences.get", { keys: [TABS_KEY, ACTIVE_PROJECT_KEY] })
+      .call("preferences.get", { keys: [TABS_KEY, ACTIVE_PROJECT_KEY, ONBOARDING_KEY] })
       .then((answer) => answer.values)
       .catch(() => ({}) as Record<string, unknown>);
     const remembered = prefs[ACTIVE_PROJECT_KEY];
@@ -370,6 +374,12 @@ export class ProjectActivation {
     if (typeof remembered === "string" && projects.includes(remembered)) target = remembered;
     else if (projects[0] !== undefined) target = projects[0];
     else {
+      const onboarding = readOnboarding(prefs[ONBOARDING_KEY]);
+      if (onboarding === undefined || !onboarding.done) {
+        if (onboarding === undefined) await this.engine.call("preferences.set", { key: ONBOARDING_KEY, value: startOnboarding() }).catch(() => undefined);
+        if (this.generation === started) this.update({ loaded: true });
+        return;
+      }
       try {
         target = (await this.engine.call("projects.create", { name: DEFAULT_PROJECT })).name;
       } catch (error) {
