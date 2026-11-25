@@ -7,6 +7,7 @@ import { isDeviceClient, useIsDevice } from "../deviceMode.ts";
 import { closeComposer } from "../generate/state.ts";
 import { KitModePicker } from "./KitMode.tsx";
 import { ParametersButton } from "./ParametersButton.tsx";
+import { ReloadButton } from "./ReloadButton.tsx";
 import { RenderButton } from "./render.tsx";
 import { artifactsOf, installFrameHold, installTuningWatch } from "./state.ts";
 import { installImageDrop } from "./imageDrop.tsx";
@@ -38,7 +39,7 @@ export const ArtifactsHost = () => {
       ...(elementEditing ? [installImageDrop(editor, engine, project)] : []),
       registerSlot("openArtifact", open),
       registerSlot("renderButton", RenderButton),
-      ...(device ? [] : [registerSlot("parametersButton", ParametersButton)]),
+      ...(device ? [] : [registerSlot("parametersButton", ParametersButton), registerSlot("reloadButton", ReloadButton)]),
       registerSlot("scaleButton", ScaleMenu),
       registerSlot("kitModeButton", ({ shapeId }: { readonly shapeId: TLShapeId }) => <KitModePicker shapeId={shapeId} variant="toolbar" />),
       installTuningWatch(editor),

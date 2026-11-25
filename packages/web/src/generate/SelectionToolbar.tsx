@@ -309,7 +309,7 @@ const RecipeBar = ({ state, agent, style }: { state: Extract<ToolbarState, { kin
 
 const Bar = ({ state, onGenerate, agent, nodes, style }: { state: Exclude<ToolbarState, { kind: "none" }>; onGenerate: () => void; agent: ReactNode; nodes: number; style: ReactNode }) => {
   const editor = useEditor();
-  const { openArtifact, renderButton: Render, parametersButton: ParametersToggle, kitModeButton: KitModeToggle, scaleButton: Scale } = useSlots();
+  const { openArtifact, renderButton: Render, parametersButton: ParametersToggle, kitModeButton: KitModeToggle, scaleButton: Scale, reloadButton: Reload } = useSlots();
   switch (state.kind) {
     case "recipe":
       return <RecipeBar state={state} agent={agent} style={style} />;
@@ -333,6 +333,7 @@ const Bar = ({ state, onGenerate, agent, nodes, style }: { state: Exclude<Toolba
           {ParametersToggle && editor.getShape(state.shapeId as TLShapeId)?.type !== "component" && <ParametersToggle shapeId={state.shapeId as TLShapeId} />}
           {KitModeToggle && <KitModeToggle shapeId={state.shapeId as TLShapeId} />}
           {Scale && editor.getShape(state.shapeId as TLShapeId)?.type !== "component" && <Scale shapeId={state.shapeId as TLShapeId} />}
+          {Reload && <Reload shapeId={state.shapeId as TLShapeId} />}
           {agent}
         </div>
       );
