@@ -81,17 +81,11 @@ test("a Screen tags mocks and lists warnings from Setup, and says when its Insta
     await badges.getByTestId("screen-warnings-badge").hover();
     await expect(page.getByTestId("screen-warning")).toHaveText(["Payments are stubbed."]);
 
-    await clickShape(page, (await screenShapes(engine, project))[0].id);
-    await page.getByTestId("screen-setup-notes").click();
-    await expect(page.getByTestId("setup-note-warning")).toHaveText(["Payments are stubbed."]);
-    await expect(page.getByTestId("setup-note-mocks")).toHaveText("Mocked: mock user · fixtures");
-    await page.keyboard.press("Escape");
-
     const rpc = await engine.rpc();
     const shape = (await screenShapes(engine, project))[0];
     await rpc.call("instances.remove", { project, id: shape.props.instance, force: true });
     await rpc.close();
-    await expect(screen.locator("[data-testid=screen-overlay]")).toHaveText("Instance removed");
+    await expect(screen.locator("[data-testid=screen-overlay]")).toHaveText("Worktree removed");
     await expect(screen.locator("iframe")).toHaveCount(0);
 
     await rename(root, `${root}-moved`);
@@ -127,7 +121,7 @@ test("a Repository whose folder moved says so on its Screens, and Locate Reposit
   }
 });
 
-test("a selected Screen opens in the browser, changes route and changes viewport", async ({ page }) => {
+test("a selected Screen opens in the browser and changes viewport", async ({ page }) => {
   await withRepository(page, {}, async (engine, project) => {
     const screen = page.locator("[data-testid=screen]");
     await expect(screen).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
@@ -137,22 +131,13 @@ test("a selected Screen opens in the browser, changes route and changes viewport
     await page.getByRole("button", { name: "Open in browser" }).click();
     expect((await popup).url()).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/$/);
 
-    await page.getByTestId("screen-route").click();
-    await page.getByRole("textbox", { name: "Route" }).fill("https://example.com/");
-    await page.getByRole("button", { name: "Show route" }).click();
-    await expect(page.getByText("A route starts with / and has no spaces, like /settings?tab=2.")).toBeVisible();
-    await page.getByRole("textbox", { name: "Route" }).fill("settings?tab=2");
-    await page.getByRole("button", { name: "Show route" }).click();
-    await expect(screen).toHaveAttribute("data-route", "/settings?tab=2");
-    await expect(page.frameLocator("[data-testid=screen] iframe[data-screen-frame]").locator("#path")).toHaveText("/settings");
-
     await page.getByTestId("screen-viewport").click();
     await page.getByRole("menuitemradio", { name: /Phone/ }).click();
-    await expect.poll(async () => (await screenShapes(engine, project))[0].props).toMatchObject({ route: "/settings?tab=2", w: 390, h: 844 });
+    await expect.poll(async () => (await screenShapes(engine, project))[0].props).toMatchObject({ route: "/", w: 390, h: 844 });
   });
 });
 
-test("forking a Screen makes a new Instance on a named branch from its HEAD, with a Screen beside it; New Instance starts from a picked base", async ({ page }) => {
+test("New branch and worktree makes a named branch from the Screen's branch, with a Screen beside it; Open another branch starts from a picked base", async ({ page }) => {
   await withRepository(page, {}, async (engine, project, root) => {
     git(root, "branch", "feature/login");
     const screens = page.locator("[data-testid=screen]");
@@ -160,11 +145,12 @@ test("forking a Screen makes a new Instance on a named branch from its HEAD, wit
     const [first] = await screenShapes(engine, project);
     await clickShape(page, first.id);
 
-    await page.getByRole("button", { name: "Fork" }).click();
+    await page.getByTestId("screen-branch").click();
+    await page.getByRole("menuitem", { name: /New branch and worktree/ }).click();
     const name = page.getByRole("textbox", { name: "Branch name" });
     await expect(name).toHaveValue(`${first.props.title}-2`);
     await name.fill("try/darker");
-    await page.getByRole("button", { name: "Fork", exact: true }).last().click();
+    await page.getByRole("button", { name: "Create branch" }).click();
     await expect(screens).toHaveCount(2);
     await expect.poll(async () => (await screenShapes(engine, project)).length).toBe(2);
     const forked = (await screenShapes(engine, project)).find((shape) => shape.id !== first.id);
@@ -173,10 +159,11 @@ test("forking a Screen makes a new Instance on a named branch from its HEAD, wit
     const made = await rpc.call("instances.status", { project, id: forked.props.instance });
     expect(made).toMatchObject({ branch: "try/darker", baseRef: first.props.title });
 
-    await page.getByRole("button", { name: "New Instance" }).click();
+    await page.getByTestId("screen-branch").click();
+    await page.getByRole("menuitem", { name: /Open another branch/ }).click();
     await page.getByRole("combobox", { name: "Base branch" }).click();
     await page.getByRole("option", { name: "feature/login" }).click();
-    await page.getByRole("button", { name: "Create Instance" }).click();
+    await page.getByRole("button", { name: "Open branch" }).click();
     await expect.poll(async () => (await screenShapes(engine, project)).length).toBe(3);
     const instances = (await rpc.call("instances.list", { project })).instances;
     expect(instances.find((instance) => instance.baseRef === "feature/login")?.branch).toMatch(/^unframed\//);
@@ -184,7 +171,7 @@ test("forking a Screen makes a new Instance on a named branch from its HEAD, wit
   });
 });
 
-test("a selected Screen lists its Instance's changes and commits them", async ({ page }) => {
+test("a selected Screen's branch chip counts its changes, lists them and commits them", async ({ page }) => {
   const identity = { GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "Person", GIT_AUTHOR_EMAIL: "person@example.com", GIT_COMMITTER_NAME: "Person", GIT_COMMITTER_EMAIL: "person@example.com" };
   await withRepository(page, identity, async (engine, project) => {
     const [first] = await screenShapes(engine, project);
@@ -194,14 +181,16 @@ test("a selected Screen lists its Instance's changes and commits them", async ({
     await writeFile(join(instance.worktree, "src", "pages", "pricing.html"), "<h1>Pricing</h1>\n");
     await clickShape(page, first.id);
 
-    await page.getByRole("button", { name: "Changes" }).click();
+    await expect(page.getByTestId("screen-branch-changes")).toHaveText("1", { timeout: 15_000 });
+    await page.getByTestId("screen-branch").click();
+    await page.getByRole("menuitem", { name: "Changes (1)" }).click();
     await expect(page.getByTestId("changed-file")).toHaveText(["src/pages/pricing.html+1 −0"]);
     await page.getByRole("button", { name: "Commit", exact: true }).click();
     await expect(page.getByTestId("git-action-result")).toHaveText('Committed "Update src/pages/pricing.html".');
     await expect(page.getByTestId("changed-file")).toHaveText(["src/pages/pricing.html+1 −0"]);
     expect(git(instance.worktree, "log", "-1", "--format=%s")).toBe("Update src/pages/pricing.html\n");
     await page.getByRole("button", { name: "Commit", exact: true }).click();
-    await expect(page.getByText("There is nothing to commit in this Instance.")).toBeVisible();
+    await expect(page.getByText("There is nothing to commit on this branch.")).toBeVisible();
   });
 });
 

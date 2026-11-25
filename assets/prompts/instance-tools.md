@@ -15,7 +15,7 @@ Create a new Instance of this Repository: a new branch checked out in its own wo
 ## instance_remove
 
 ```text
-Remove an Instance: its worktree is deleted, and its branch too when deleteBranch is true. It is refused when the branch has commits that are not pushed or merged, unless force is true; never force unless the person asked for that. Screens of the Instance stay on the canvas as their last snapshot, marked "Instance removed".
+Remove an Instance: its worktree is deleted, and its branch too when deleteBranch is true. It is refused when the branch has commits that are not pushed or merged, unless force is true; never force unless the person asked for that. Screens of the Instance stay on the canvas as their last snapshot, marked "Worktree removed".
 ```
 
 - `id`: The Instance's id, as canvas_read reports it on its Screens.

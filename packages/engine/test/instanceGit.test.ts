@@ -71,7 +71,7 @@ describe("an Instance's diff", () => {
     expect(diff).toMatchObject({ files: [], patch: "", truncated: false });
 
     await rpc.call("instances.remove", { project, id: instance.id });
-    await expect(rpc.call("instances.diff", { project, id: instance.id })).rejects.toMatchObject({ message: "That Instance was removed." });
+    await expect(rpc.call("instances.diff", { project, id: instance.id })).rejects.toMatchObject({ message: "That branch's worktree was removed." });
   });
 });
 
@@ -166,7 +166,7 @@ describe("an Instance's git actions", () => {
   it("commits alone, refuses when there is nothing to commit, and refuses a push with no remote or a pull request off GitHub before committing", { timeout: 90_000 }, async () => {
     const { root, rpc, project, instance } = await addRepository({ ...GIT_IDENTITY, UNFRAMED_TEST_AGENT_SCRIPT: await writerScripts() });
     const action = (name: "commit" | "commit_push" | "commit_push_pr") => rpc.call("instances.gitAction", { project, id: instance.id, action: name });
-    await expect(action("commit")).rejects.toMatchObject({ message: "There is nothing to commit in this Instance." });
+    await expect(action("commit")).rejects.toMatchObject({ message: "There is nothing to commit on this branch." });
 
     await writeFile(join(instance.worktree, "src", "pages", "pricing.html"), "<h1>Pricing</h1>\n");
     await expect(action("commit_push")).rejects.toMatchObject({ message: "This repository has no remote to push to." });

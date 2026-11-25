@@ -79,7 +79,7 @@ export const githubRepository = (url: string): { readonly owner: string; readonl
   return match === null ? undefined : { owner: match[1]!, repo: match[2]! };
 };
 
-export const NOTHING_TO_COMMIT = "There is nothing to commit in this Instance.";
+export const NOTHING_TO_COMMIT = "There is nothing to commit on this branch.";
 export const NOTHING_TO_PUSH = "There is nothing to push: the branch has no commits beyond its base.";
 export const NO_REMOTE = "This repository has no remote to push to.";
 export const NO_GITHUB_TOKEN = "Unframed needs a GitHub token to open a pull request: run gh auth login in a terminal, or set GH_TOKEN, then try again.";

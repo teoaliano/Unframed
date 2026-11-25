@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkMocks, checkSteps, describeStep, matchMock, NO_TARGET, screenLabel, SCREEN_STEPS_MAX } from "../src/index.ts";
+import { branchChip, checkMocks, checkSteps, describeStep, matchMock, NO_TARGET, screenLabel, SCREEN_STEPS_MAX } from "../src/index.ts";
 
 describe("a Screen's steps", () => {
   it("take click, type, press, hover, wait and scroll, each aimed at a target", () => {
@@ -86,5 +86,13 @@ describe("a Screen's label", () => {
     expect(screenLabel({ branch: "feature/pricing", route: "/pricing", state: "  " })).toBe("feature/pricing · /pricing");
     expect(screenLabel({ branch: "trunk", route: "/" })).toBe("trunk · /");
     expect(screenLabel({ branch: "", route: "/settings" })).toBe("/settings");
+  });
+});
+
+describe("the branch chip", () => {
+  it("names the branch, and counts changed files only when there are some", () => {
+    expect(branchChip({ branch: "feature/pricing", changes: 0 })).toEqual({ name: "feature/pricing", count: undefined, label: "Branch feature/pricing", changes: "Changes" });
+    expect(branchChip({ branch: "feature/pricing", changes: 1 })).toEqual({ name: "feature/pricing", count: "1", label: "Branch feature/pricing, 1 changed file", changes: "Changes (1)" });
+    expect(branchChip({ branch: "trunk", changes: 12 })).toEqual({ name: "trunk", count: "12", label: "Branch trunk, 12 changed files", changes: "Changes (12)" });
   });
 });

@@ -71,7 +71,7 @@ export const screenOverlay = (input: {
   if (input.repository === "missing") return { kind: "missing", label: "Repository not found" };
   if (!input.loaded) return { kind: "none" };
   const { instance } = input;
-  if (instance === undefined || instance.state === "removed") return { kind: "removed", label: "Instance removed" };
+  if (instance === undefined || instance.state === "removed") return { kind: "removed", label: "Worktree removed" };
   if (awaitingSetup(instance, input.repository, input.setupChat)) {
     if (input.setupChat === "running") return { kind: "progress", label: SETUP_FINDING, detail: SETUP_FOLLOW };
     if (input.setupChat === "asking") return { kind: "waiting", label: SETUP_ASKING, detail: SETUP_ASKING_DETAIL };

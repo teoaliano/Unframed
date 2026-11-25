@@ -145,3 +145,8 @@ export const screenLabel = (input: { readonly branch: string; readonly route: st
   const where = input.state?.trim() || input.route;
   return input.branch === "" ? where : `${input.branch} · ${where}`;
 };
+
+export const branchChip = (input: { readonly branch: string; readonly changes: number }): { readonly name: string; readonly count: string | undefined; readonly label: string; readonly changes: string } =>
+  input.changes > 0
+    ? { name: input.branch, count: String(input.changes), label: `Branch ${input.branch}, ${input.changes} changed ${input.changes === 1 ? "file" : "files"}`, changes: `Changes (${input.changes})` }
+    : { name: input.branch, count: undefined, label: `Branch ${input.branch}`, changes: "Changes" };

@@ -140,7 +140,7 @@ describe("creating an Instance", () => {
     await expect(rpc.call("instances.create", { project, base: "nowhere" })).rejects.toMatchObject({ code: "bad_request", message: 'There is no branch or commit named "nowhere".' });
     await rpc.call("projects.create", { name: "board" });
     await expect(rpc.call("instances.create", { project: "board" })).rejects.toMatchObject({ code: "bad_request", message: "That project is not a Repository." });
-    await expect(rpc.call("instances.status", { project, id: "deadbeef" })).rejects.toMatchObject({ code: "not_found", message: "That Instance does not exist." });
+    await expect(rpc.call("instances.status", { project, id: "deadbeef" })).rejects.toMatchObject({ code: "not_found", message: "That worktree does not exist." });
     expect((await rpc.call("instances.list", { project })).instances).toHaveLength(1);
   });
 
@@ -171,7 +171,7 @@ describe("removing an Instance", () => {
     await rpc.call("instances.remove", { project, id: second.id, deleteBranch: true });
     expect(existsSync(second.worktree)).toBe(false);
     expect(git(root, "branch", "--list", second.branch).trim()).toBe("");
-    await expect(rpc.call("instances.start", { project, id: second.id })).rejects.toMatchObject({ code: "conflict", message: "That Instance was removed." });
+    await expect(rpc.call("instances.start", { project, id: second.id })).rejects.toMatchObject({ code: "conflict", message: "That branch's worktree was removed." });
   });
 
   it("refuses unpushed and unmerged commits, and uncommitted changes, unless forced", async () => {
@@ -179,7 +179,7 @@ describe("removing an Instance", () => {
     await writeFile(join(first.worktree, "draft.txt"), "draft\n");
     await expect(rpc.call("instances.remove", { project, id: first.id })).rejects.toMatchObject({
       code: "conflict",
-      message: `The Instance on "${first.branch}" has uncommitted changes. Remove it anyway to lose them.`,
+      message: `The worktree of "${first.branch}" has uncommitted changes. Remove it anyway to lose them.`,
     });
     git(first.worktree, "add", ".");
     git(first.worktree, "commit", "-q", "-m", "draft");
