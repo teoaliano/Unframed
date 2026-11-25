@@ -9,7 +9,7 @@ describe("serving the web", () => {
   let engine: TestEngine;
   let dist: string;
   beforeAll(async () => {
-    dist = await makeTempDir("unframed-client-");
+    dist = join(await makeTempDir("unframed-client-"), "dist");
     await mkdir(join(dist, "assets"), { recursive: true });
     await writeFile(join(dist, "index.html"), INDEX);
     await writeFile(join(dist, "assets", "index-a1b2c3.js"), "console.log('app')");

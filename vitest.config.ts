@@ -13,6 +13,7 @@ export default defineConfig({
         test: {
           name: "engine",
           include: ["packages/engine/test/**/*.test.ts"],
+          globalSetup: ["packages/engine/test/globalSetup.ts"],
           testTimeout: 30_000,
           hookTimeout: 180_000,
         },

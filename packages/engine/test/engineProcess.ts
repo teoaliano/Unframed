@@ -5,14 +5,16 @@
  * HTTP, IPC messages, stdout and the files it writes.
  */
 import { fork, spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync, rmSync } from "node:fs";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { EngineIpcMessage, ReadyMessage } from "@unframed/contracts";
 import WebSocket from "ws";
 import { repoRoot } from "../../../scripts/buildWeb.ts";
+import { isAlive } from "../src/lifeline.ts";
+import { sweepLeftovers } from "../src/instances/processes.ts";
 import { connectRpc, type TestRpcClient } from "./rpcClient.ts";
 
 export { repoRoot };
@@ -195,9 +197,26 @@ const killEngine = (child: ChildProcess, signal: NodeJS.Signals) => {
 
 /** Engines not disposed yet. A runner that exits without disposing one (a failed beforeAll, a killed test) kills it here. */
 const running = new Set<ChildProcess>();
+
+const tempDirs = new Set<string>();
+
 process.on("exit", () => {
   for (const child of running) killEngine(child, "SIGKILL");
+  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
 });
+
+const TEMP_OWNER = /^unframed-[a-z0-9-]*?p(\d+)-[A-Za-z0-9]{6}$/;
+
+export const sweepTempDirs = async (root = tmpdir()): Promise<string[]> => {
+  const removed: string[] = [];
+  for (const name of await readdir(root).catch(() => [] as string[])) {
+    const owner = TEMP_OWNER.exec(name)?.[1];
+    if (owner === undefined || isAlive(Number(owner))) continue;
+    await rm(join(root, name), { recursive: true, force: true }).catch(() => undefined);
+    removed.push(name);
+  }
+  return removed;
+};
 
 /**
  * How a test runner hears about cleanups: the Vitest harness registers each with the
@@ -207,9 +226,9 @@ export const setCleanupRegistrar = (registrar: (cleanup: () => Promise<void>) =>
   registerCleanup = registrar;
 };
 
-/** A fresh temporary folder, removed when the test finishes (when a runner registered cleanups). */
 export const makeTempDir = async (prefix = "unframed-test-"): Promise<string> => {
-  const dir = await mkdtemp(join(tmpdir(), prefix));
+  const dir = await mkdtemp(join(tmpdir(), `${prefix}p${process.pid}-`));
+  tempDirs.add(dir);
   registerCleanup(() => rm(dir, { recursive: true, force: true }));
   return dir;
 };
@@ -383,6 +402,7 @@ export const startEngine = async (options: EngineOptions = {}): Promise<TestEngi
         killEngine(child, "SIGKILL");
         await exited;
       }
+      sweepLeftovers(join(dataDir, "instance-pids"));
       await stub?.close();
       await elevenLabs?.close();
       await vercel?.close();
