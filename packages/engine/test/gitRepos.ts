@@ -24,7 +24,7 @@ if (process.env.FAKE_DEV_EXIT_CODE) {
   process.exit(Number(process.env.FAKE_DEV_EXIT_CODE));
 }
 if (process.env.FAKE_DEV_LINGER_MS && !process.env.FAKE_DEV_DETACHED) {
-  const child = require("node:child_process").spawn(process.execPath, [__filename, ...args], { detached: true, stdio: "inherit", env: { ...process.env, FAKE_DEV_DETACHED: "1" } });
+  const child = require("node:child_process").spawn(process.execPath, [__filename, ...args], { detached: true, stdio: "inherit", env: { ...process.env, FAKE_DEV_DETACHED: String(process.pid) } });
   process.on("SIGTERM", () => {
     child.kill("SIGTERM");
     process.exit(0);
@@ -106,7 +106,18 @@ server.on("upgrade", (req, socket) => {
   socket.on("error", () => {});
 });
 server.listen(port, host, () => console.log("  ➜  Local:   http://localhost:" + port + "/"));
-process.on("SIGTERM", () => (process.env.FAKE_DEV_DETACHED ? setTimeout(() => process.exit(0), Number(process.env.FAKE_DEV_LINGER_MS)) : process.exit(0)));
+const linger = () => setTimeout(() => process.exit(0), Number(process.env.FAKE_DEV_LINGER_MS));
+process.on("SIGTERM", () => (process.env.FAKE_DEV_DETACHED ? linger() : process.exit(0)));
+if (process.env.FAKE_DEV_DETACHED) {
+  const watch = setInterval(() => {
+    try {
+      process.kill(Number(process.env.FAKE_DEV_DETACHED), 0);
+    } catch {
+      clearInterval(watch);
+      linger();
+    }
+  }, 200);
+}
 `;
 
 export const makeRepo = async (name = "My App") => {
