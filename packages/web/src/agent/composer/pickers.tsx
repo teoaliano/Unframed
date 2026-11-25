@@ -46,6 +46,8 @@ export interface ModelPickerProps {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly onPick: (provider: AgentProvider, model: ProviderModel) => void;
+  /** The floating composer's one row: the provider's logo alone, the model named in the tooltip. */
+  readonly iconOnly?: boolean;
 }
 
 /** Cmd on a Mac, Ctrl elsewhere, and neither of the other: t3code's `mod`. */
@@ -60,8 +62,9 @@ const modHeld = (event: { readonly metaKey: boolean; readonly ctrlKey: boolean }
  * in an empty search (or Shift+Tab) goes to the tabs and ArrowRight comes back, and
  * Cmd+Shift+M closes it as it opened it.
  */
-export const ModelPicker = ({ statuses, selection, providerLocked, disabled, open, onOpenChange, onPick }: ModelPickerProps) => {
+export const ModelPicker = ({ statuses, selection, providerLocked, disabled, open, onOpenChange, onPick, iconOnly = false }: ModelPickerProps) => {
   const current = effectiveModel(statuses, selection.provider, selection.model);
+  const name = current?.name ?? (selection.model === "" ? providerName(selection.provider) : selection.model);
   const [tab, setTab] = useState<AgentProvider>(selection.provider);
   const [query, setQuery] = useState("");
   const [legacyOpen, setLegacyOpen] = useState(current?.legacy === true);
@@ -139,11 +142,19 @@ export const ModelPicker = ({ statuses, selection, providerLocked, disabled, ope
 
   return (
     <Popover open={open} onOpenChange={(next) => onOpenChange(next)}>
-      <PopoverTrigger render={<Button variant="ghost-muted" size="xs" className="min-w-0 shrink" />} aria-label="Model" data-testid="model-picker" disabled={disabled}>
-        <ProviderLogo provider={selection.provider} />
-        <span className="min-w-0 truncate">{current?.name ?? (selection.model === "" ? providerName(selection.provider) : selection.model)}</span>
-        <ChevronDown aria-hidden className="size-3 opacity-60" />
-      </PopoverTrigger>
+      {iconOnly ? (
+        <Tip label={`Model: ${name}`} side="top">
+          <PopoverTrigger render={<Button variant="ghost-muted" size="icon-sm" />} aria-label={`Model: ${name}`} data-testid="model-picker" disabled={disabled}>
+            <ProviderLogo provider={selection.provider} />
+          </PopoverTrigger>
+        </Tip>
+      ) : (
+        <PopoverTrigger render={<Button variant="ghost-muted" size="xs" className="min-w-0 shrink" />} aria-label="Model" data-testid="model-picker" disabled={disabled}>
+          <ProviderLogo provider={selection.provider} />
+          <span className="min-w-0 truncate">{name}</span>
+          <ChevronDown aria-hidden className="size-3 opacity-60" />
+        </PopoverTrigger>
+      )}
       <PopoverPopup side="top" align="start" sideOffset={6} padding="compact" className="w-(--picker-model-width)" aria-label="Models" onKeyDown={onPopupKey}>
         <div
           ref={tabList}

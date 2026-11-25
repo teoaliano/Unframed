@@ -434,7 +434,7 @@ export const AgentRail = ({
             newChatTags={selectedArtifacts}
             dropTarget={floatingComposer ? trayPart : root}
             notices={notices}
-            {...(floatingComposer ? { leadingControl: conversationToggle } : {})}
+            {...(floatingComposer ? { leadingControl: conversationToggle, inline: true } : {})}
           />
         ) : (
           <div className="flex flex-col gap-1.5">

@@ -41,7 +41,8 @@ const expectToolbarSpan = async (page: Page, locator: Locator) => {
 const placeholderFits = (scope: Locator) =>
   scope.locator("[data-agent-prompt] p.is-editor-empty").evaluate((line) => {
     const probe = document.createElement("span");
-    probe.style.font = getComputedStyle(line, "::before").font;
+    const before = getComputedStyle(line, "::before");
+    for (const property of ["font-family", "font-size", "font-weight", "font-style", "letter-spacing"]) probe.style.setProperty(property, before.getPropertyValue(property));
     probe.style.whiteSpace = "nowrap";
     probe.style.position = "absolute";
     probe.textContent = line.getAttribute("data-placeholder");
@@ -131,6 +132,15 @@ test("changing the layout moves the same chat between the side panel, the floati
     await expect(tabs(page).first()).toHaveAttribute("aria-selected", "true");
     await expect(box).toHaveText("keep this draft");
     expect(await same()).toBe(true);
+    // The side panel and the window keep the two-row tray, the model named on its picker; the floating composer shows its logo alone.
+    const picker = panel.getByTestId("model-picker");
+    if (shown === "composer") {
+      await expect(picker).toHaveText("");
+      await expect(picker).toHaveAccessibleName("Model: Scripted");
+    } else {
+      await expect(picker).toContainText("Scripted");
+      await expect(picker).toHaveAccessibleName("Model");
+    }
   }
 });
 
@@ -239,7 +249,7 @@ test("on a narrow window the floating composer stays, and its conversation fits 
   expect((await boxOf(conversation(page))).y + (await boxOf(conversation(page))).height).toBeLessThanOrEqual(capped.y);
 });
 
-test("at 1024 px the floating composer and its conversation are as wide as the bottom toolbar, on its centre, and the prompt's placeholder fits on one line", async ({ page, agent }) => {
+test("at 1024 px the floating composer is one row about the bottom toolbar's height and as wide, on its centre, with icon controls, a one-line placeholder, upward growth for more lines, and its conversation the same width", async ({ page, agent }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
   await setLayout(agent, "composer");
   await openCanvas(page, agent);
@@ -251,6 +261,62 @@ test("at 1024 px the floating composer and its conversation are as wide as the b
   expect(Math.abs(shell.x + shell.width / 2 - (toolbar.x + toolbar.width / 2))).toBeLessThanOrEqual(2);
   expect(shell.y + shell.height).toBeLessThanOrEqual(toolbar.y - 8);
   expect(await placeholderFits(composer)).toBe(true);
+
+  // Idle, it is one row: about the toolbar's height, with the controls and the prompt side by side.
+  const shellBox = composer.getByTestId("agent-composer");
+  const idle = await boxOf(shellBox);
+  expect(Math.abs(idle.height - toolbar.height)).toBeLessThanOrEqual(8);
+  const prompt = await boxOf(promptBox(composer));
+  const attach = composer.getByRole("button", { name: "Attach files" });
+  const picker = composer.getByTestId("model-picker");
+  const send = composer.getByRole("button", { name: "Send" });
+  const more = composer.locator("[data-composer-actions]").getByRole("button").first();
+  for (const control of [composer.getByRole("button", { name: "Show conversation" }), attach, picker, more, send]) {
+    const at = await boxOf(control);
+    expect(at.y).toBeGreaterThanOrEqual(idle.y);
+    expect(at.y + at.height).toBeLessThanOrEqual(idle.y + idle.height);
+  }
+  expect((await boxOf(picker)).x + (await boxOf(picker)).width).toBeLessThanOrEqual(prompt.x);
+  expect(prompt.x + prompt.width).toBeLessThanOrEqual((await boxOf(more)).x);
+  expect((await boxOf(more)).x).toBeLessThan((await boxOf(send)).x);
+
+  // Attach and the model are icon buttons; the model is named in its label and tooltip, and opens the same menu.
+  await expect(attach).toHaveText("");
+  expect(Math.round((await boxOf(attach)).width)).toBeLessThanOrEqual(32);
+  await expect(picker).toHaveText("");
+  await expect(picker).toHaveAccessibleName("Model: Scripted");
+  expect(Math.round((await boxOf(picker)).width)).toBeLessThanOrEqual(32);
+  await picker.hover();
+  await expect(page.getByText("Model: Scripted", { exact: true })).toBeVisible();
+  await picker.click();
+  const models = page.getByRole("dialog", { name: "Models" });
+  await expect(models).toBeVisible();
+  await expect(models.getByRole("tablist", { name: "Providers" })).toBeVisible();
+  await expect(models.getByTestId("model-name").first()).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(models).toBeHidden();
+
+  // More lines grow it upward from the same bottom, clear of the toolbar; cleared, it is one row again.
+  const box = promptBox(composer);
+  await box.click();
+  await box.pressSequentially("first line");
+  for (const line of ["second", "third", "fourth"]) {
+    await box.press("Shift+Enter");
+    await box.pressSequentially(line);
+  }
+  await expect.poll(async () => (await boxOf(shellBox)).height).toBeGreaterThan(idle.height + 48);
+  const grown = await boxOf(shellBox);
+  expect(Math.abs(grown.y + grown.height - (idle.y + idle.height))).toBeLessThanOrEqual(1);
+  expect(grown.y + grown.height).toBeLessThanOrEqual(toolbar.y - 8);
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.press("Backspace");
+  await expect(box).toHaveText("");
+  await expect.poll(async () => Math.round((await boxOf(shellBox)).height)).toBe(Math.round(idle.height));
+  // One long line stays one row too.
+  await box.pressSequentially("a single line that is long enough to run past the width of the composer and keep on going well beyond its edge");
+  await expect.poll(async () => Math.round((await boxOf(shellBox)).height)).toBe(Math.round(idle.height));
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.press("Backspace");
 
   await composer.getByRole("button", { name: "Show conversation" }).click();
   await expect(conversation(page)).toHaveAttribute("data-state", "open");
