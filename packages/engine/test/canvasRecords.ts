@@ -57,6 +57,13 @@ export const pageShape = (id: string, ref: string, props: Record<string, unknown
     meta: { ref },
   }) as unknown as TLRecord;
 
+export const screenShape = (id: string, props: Record<string, unknown> = {}, at: At = {}): TLRecord =>
+  ({
+    ...base(id, "screen", at),
+    props: { w: 1280, h: 800, instance: "i1", route: "/", title: "", ...props },
+    meta: {},
+  }) as unknown as TLRecord;
+
 export const componentShape = (id: string, tag: string, props: Record<string, unknown> = {}, at: At = {}): TLRecord =>
   ({
     ...base(id, "component", at),
@@ -94,13 +101,11 @@ export const refOf = (record: TLRecord | undefined): string | undefined =>
 export const SAMPLE_SUBJECT = "lone red fox";
 export const SAMPLE_SCENE = "A @100 on a windswept cliff at golden hour, cinematic, 35mm";
 
-/** Two prompts many tests start from: the scene (@101) references the subject (@100). New projects start empty. */
 export const samplePrompts = (): TLRecord[] => [
   promptShape("sample-scene", "101", SAMPLE_SCENE, { x: 40, y: 60, index: "a1" }),
   promptShape("sample-subject", "100", SAMPLE_SUBJECT, { x: 40, y: 320, index: "a2" }),
 ];
 
-/** Puts the sample prompts on `project`'s canvas. The engine must run with `UNFRAMED_TEST_CANVAS=1`. */
 export const seedSamplePrompts = async (rpc: { call: (method: "testCanvas.apply", payload: any) => Promise<unknown> }, project: string): Promise<void> => {
   await rpc.call("testCanvas.apply", { project, change: { put: samplePrompts(), remove: [] }, origin: { kind: "system", id: "test-seed" } });
 };

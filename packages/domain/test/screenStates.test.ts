@@ -132,7 +132,7 @@ describe("a state token in a Screen's route", () => {
         parent: undefined,
         location: { href: sent.href, pathname: sent.pathname, search: sent.search, hash: sent.hash },
         history: { state: null, replaceState: (_state: unknown, _title: string, to: string) => replaced.push(to), pushState: () => undefined },
-        document: { readyState: "loading", referrer: "", head: { appendChild: () => undefined }, createElement: () => ({ src: "" }) },
+        document: { readyState: "loading", referrer: "", head: { appendChild: () => undefined }, createElement: () => ({ src: "" }), addEventListener: () => undefined, querySelector: () => null },
         console: { error: () => undefined },
         URL,
         addEventListener: () => undefined,

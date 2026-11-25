@@ -4,6 +4,8 @@ import { ADD_PARAMETER_TEMPLATE, ADD_SCREEN_PARAMETER_TEMPLATE, APPLY_PARAMETERS
 
 export type ArtifactKind = "page" | "motion" | "component";
 
+export type EditorKind = ArtifactKind | "screen";
+
 export const isArtifactKind = (type: unknown): type is ArtifactKind => type === "page" || type === "motion" || type === "component";
 
 export const ARTIFACT_SIZE_LIMIT = 2_097_152;

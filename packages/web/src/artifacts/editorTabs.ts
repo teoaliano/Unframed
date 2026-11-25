@@ -1,15 +1,15 @@
-import type { ArtifactShapeProps } from "@unframed/contracts";
-import { artifactTitle, editorTabsOf, isArtifactKind, shapeOfTab, type ArtifactKind } from "@unframed/domain";
+import { editorTabFacts, editorTabsOf, shapeOfTab, type EditorKind } from "@unframed/domain";
 import { atom, react } from "tldraw";
 import type { CanvasDoc } from "../canvas/doc.ts";
 import { isDeviceClient } from "../deviceMode.ts";
+import { featureOn } from "../features.ts";
 import type { ProjectActivation } from "../project/activation.ts";
 import { showNotice } from "../toasts.tsx";
 
-export const aboutShape = (doc: CanvasDoc, shapeId: string): { readonly title: string; readonly kind: ArtifactKind } | undefined => {
+export const aboutShape = (doc: CanvasDoc, shapeId: string): { readonly title: string; readonly kind: EditorKind } | undefined => {
   const shape = doc.shape(shapeId);
-  if (!shape || !isArtifactKind(shape.type)) return undefined;
-  return { title: artifactTitle(shape.props as ArtifactShapeProps), kind: shape.type };
+  if (!shape) return undefined;
+  return editorTabFacts({ type: shape.type, props: shape.props as Readonly<Record<string, unknown>> }, { screens: featureOn("repositories") });
 };
 
 const EDITOR_ON_MAC = "Open this on your Mac to edit or play it.";

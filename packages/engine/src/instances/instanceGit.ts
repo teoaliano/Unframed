@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { copyFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { UnframedError, unframedError, type GitAction, type GitActionResult, type InstanceDiff } from "@unframed/contracts";
 import {
   COMMIT_SYSTEM_PROMPT,
@@ -103,9 +103,10 @@ export const instanceGitLayer = Layer.effect(
     const withTemporaryIndex = <A>(at: InstanceTarget, run: (env: Record<string, string>) => Effect.Effect<A, UnframedError>) =>
       Effect.gen(function* () {
         const real = gitOutput(yield* git(at.worktree, ["rev-parse", "--git-path", "index"]))?.trim();
-        const path = join(tmpdir(), `unframed-index-${randomBytes(6).toString("hex")}`);
-        if (real) yield* Effect.promise(() => copyFile(isAbsolute(real) ? real : join(at.worktree, real), path).catch(() => undefined));
-        return yield* run({ GIT_INDEX_FILE: path }).pipe(Effect.ensuring(Effect.promise(() => rm(path, { force: true }))));
+        const realIndex = real && (isAbsolute(real) ? real : join(at.worktree, real));
+        const path = join(realIndex ? dirname(realIndex) : tmpdir(), `unframed-index-${randomBytes(6).toString("hex")}`);
+        if (realIndex) yield* Effect.promise(() => copyFile(realIndex, path).catch(() => undefined));
+        return yield* run({ GIT_INDEX_FILE: path }).pipe(Effect.ensuring(Effect.promise(() => Promise.all([rm(path, { force: true }), rm(`${path}.lock`, { force: true })]))));
       });
 
     const diff = (project: string, id: string) =>

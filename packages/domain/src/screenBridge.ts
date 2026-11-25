@@ -1,4 +1,5 @@
 import { dialsBridgeSource } from "./artifacts/dials.ts";
+import { editBridgeSource } from "./artifacts/editBridge.ts";
 import { matchMock } from "./screenStates.ts";
 
 export const STATE_PARAM = "__unframed_state";
@@ -187,6 +188,7 @@ export function screenBridge(
     }
     if (parent !== undefined && !LOOPBACK.test(parent)) parent = undefined;
   }
+  if (parent !== undefined) win.unframedEditPeer = parent;
   const tell = (type: string, extra?: Record<string, unknown>) => {
     if (parent === undefined) return;
     try {
@@ -383,6 +385,7 @@ export const screenBridgeSource = (): string =>
   [
     ...dialsBridgeSource().split("\n").slice(1, -1),
     `(${screenBridge.toString()})(window, ${JSON.stringify({ param: STATE_PARAM, stepTimeout: STEP_TIMEOUT_MS } satisfies BridgeConfig)}, ${matchMock.toString()}, ${cutParam.toString()});`,
+    ...editBridgeSource({ stamp: true }).split("\n").slice(1, -1),
     "",
   ].join("\n");
 

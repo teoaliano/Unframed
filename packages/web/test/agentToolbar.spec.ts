@@ -1,12 +1,9 @@
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { emptyCanvasPoint, openCanvas, shapeOnScreen } from "./canvas.ts";
 import { clickShape, composer, toolbar } from "./generation.ts";
 import { emptyMedia, putRecords } from "./media.ts";
 import { artifactColumn, createChat, engineChat, engineChats, expect, promptBox, rail, startDetectingEngine, test, userTexts } from "./agent.ts";
-import type { TestEngine } from "../../engine/test/engineProcess.ts";
+import { makeTempDir, type TestEngine } from "../../engine/test/engineProcess.ts";
 import { expectSlot, expectToken, inBothSchemes } from "./kit.ts";
 import { artifactShape } from "./artifacts.ts";
 
@@ -170,7 +167,7 @@ test("the toolbar's tray says what went wrong itself, since the rail is closed",
 });
 
 test("with no provider ready, the toolbar's Agent tooltip is the provider's message", async ({ page }) => {
-  const engine = await startDetectingEngine(await mkdtemp(join(tmpdir(), "unframed-agent-toolbar-")));
+  const engine = await startDetectingEngine(await makeTempDir("unframed-agent-toolbar-"));
   try {
     await openCanvas(page, engine);
     await clickShape(page, "shape:sample-subject");

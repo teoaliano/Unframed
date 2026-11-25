@@ -1,5 +1,5 @@
 import type { SourceTreeElement } from "@unframed/contracts";
-import type { ArtifactKind, ChipElement } from "@unframed/domain";
+import type { ChipElement, EditorKind } from "@unframed/domain";
 import { Eye, EyeOff, Film, Frame, Image, Link, Lock, LockOpen, MessageSquarePlus, MousePointerClick, Pencil, Square, Type, ChevronDown, ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
@@ -79,14 +79,15 @@ const layerRows = (elements: readonly SourceTreeElement[], live: readonly LiveNo
 
 interface LayersTabProps {
   readonly session: EditSession;
-  readonly kind: ArtifactKind;
+  readonly kind: EditorKind;
   readonly shapeId: string;
   readonly locked: readonly string[];
-  readonly onLock: (id: string, on: boolean) => void;
+  readonly onLock?: ((id: string, on: boolean) => void) | undefined;
+  readonly renamable?: boolean;
   readonly onTell: (elements: ChipElement[]) => void;
 }
 
-export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: LayersTabProps) => {
+export const LayersTab = ({ session, kind, shapeId, locked, onLock, renamable = true, onTell }: LayersTabProps) => {
   const { tree, preparing, selection, pending, live, reports } = session;
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => collapsedBy.get(shapeId) ?? new Set());
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -156,6 +157,7 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
     });
 
   const startRename = (element: SourceTreeElement) => {
+    if (!renamable) return;
     cancelled.current = false;
     setDraft(element.name);
     setRenaming(element.id);
@@ -266,9 +268,11 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
                 >
                   {hidden ? <EyeOff aria-hidden /> : <Eye aria-hidden />}
                 </Button>
-                <Button variant="ghost" size="icon-sm" aria-label={`Locked ${label}`} aria-pressed={isLocked} onClick={() => onLock(id, !isLocked)}>
-                  {isLocked ? <Lock aria-hidden /> : row.inLocked ? <Lock aria-hidden className="opacity-40" /> : <LockOpen aria-hidden />}
-                </Button>
+                {onLock !== undefined && (
+                  <Button variant="ghost" size="icon-sm" aria-label={`Locked ${label}`} aria-pressed={isLocked} onClick={() => onLock(id, !isLocked)}>
+                    {isLocked ? <Lock aria-hidden /> : row.inLocked ? <Lock aria-hidden className="opacity-40" /> : <LockOpen aria-hidden />}
+                  </Button>
+                )}
               </span>
             </div>
           </li>
@@ -283,9 +287,9 @@ export const LayersTab = ({ session, kind, shapeId, locked, onLock, onTell }: La
             hidden={menuHidden}
             locked={locked.includes(menuFor.id)}
             onTell={() => onTell(chipsOfSelection())}
-            onRename={() => startRename(menuElement)}
+            onRename={renamable ? () => startRename(menuElement) : undefined}
             onHide={() => session.patch({ type: "hide", elementId: menuFor.id, hidden: !menuHidden })}
-            onLock={() => onLock(menuFor.id, !locked.includes(menuFor.id))}
+            onLock={onLock === undefined ? undefined : () => onLock(menuFor.id, !locked.includes(menuFor.id))}
           />
         )}
       </Menu>
@@ -308,26 +312,30 @@ const LayerMenu = ({
   readonly hidden: boolean;
   readonly locked: boolean;
   readonly onTell: () => void;
-  readonly onRename: () => void;
+  readonly onRename: (() => void) | undefined;
   readonly onHide: () => void;
-  readonly onLock: () => void;
+  readonly onLock: (() => void) | undefined;
 }) => (
   <MenuPopup anchor={anchor} side="right" align="start" sideOffset={4} className="max-w-65" finalFocus={() => false} aria-label={`${label} actions`}>
     <MenuItem onClick={onTell}>
       <MessageSquarePlus aria-hidden />
       Tell the agent
     </MenuItem>
-    <MenuItem onClick={onRename}>
-      <Pencil aria-hidden />
-      Rename
-    </MenuItem>
+    {onRename !== undefined && (
+      <MenuItem onClick={onRename}>
+        <Pencil aria-hidden />
+        Rename
+      </MenuItem>
+    )}
     <MenuItem onClick={onHide}>
       {hidden ? <Eye aria-hidden /> : <EyeOff aria-hidden />}
       {hidden ? "Show" : "Hide"}
     </MenuItem>
-    <MenuItem onClick={onLock}>
-      {locked ? <LockOpen aria-hidden /> : <Lock aria-hidden />}
-      {locked ? "Unlock" : "Lock"}
-    </MenuItem>
+    {onLock !== undefined && (
+      <MenuItem onClick={onLock}>
+        {locked ? <LockOpen aria-hidden /> : <Lock aria-hidden />}
+        {locked ? "Unlock" : "Lock"}
+      </MenuItem>
+    )}
   </MenuPopup>
 );

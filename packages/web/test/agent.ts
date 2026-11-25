@@ -3,15 +3,14 @@
  * the scripted agent over the fixture scripts, the rail and its composer on screen, and
  * the chats the engine holds.
  */
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import type { ChatSummary, ShellStreamItem, ThreadStreamItem } from "@unframed/contracts";
 import { projectChat, type Chat, type ChatEvent } from "@unframed/domain";
 import { FIXTURES } from "../../engine/test/agent.ts";
 import { fakeCodex, fakeShell, fakeSignedInClaude } from "../../engine/test/agentFakes.ts";
-import type { EngineOptions, TestEngine } from "../../engine/test/engineProcess.ts";
+import { makeTempDir, type EngineOptions, type TestEngine } from "../../engine/test/engineProcess.ts";
 import { expect, FIXTURE_KEY, startHostedEngine, test as base, type HostedEngineOptions } from "./fixtures.ts";
 
 export { FIXTURES };
@@ -255,7 +254,7 @@ export const answerApproval = async (engine: TestEngine, threadId: string, decis
 
 /** A folder holding one script, written for a test. */
 export const scriptFolder = async (scripts: Record<string, unknown>): Promise<string> => {
-  const dir = await mkdtemp(join(tmpdir(), "unframed-scripts-"));
+  const dir = await makeTempDir("unframed-scripts-");
   for (const [name, script] of Object.entries(scripts)) await writeFile(join(dir, `${name}.json`), JSON.stringify(script));
   return dir;
 };
