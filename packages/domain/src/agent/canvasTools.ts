@@ -864,6 +864,11 @@ const update = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
     if ("route" in patch) {
       const route = typeof patch.route === "string" ? normaliseRoute(patch.route) : undefined;
       if (route === undefined) refuse(`update: ${SCREEN_ROUTE_REFUSAL}`);
+      if (route !== props.route) {
+        delete props.steps;
+        delete props.mocks;
+        delete props.state;
+      }
       return applyPatch(batch, shape, props, { ...patch, route });
     }
     return applyPatch(batch, shape, props, patch);

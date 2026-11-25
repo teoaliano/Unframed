@@ -1,5 +1,5 @@
 import type { ScreenMock, ScreenStep } from "@unframed/contracts";
-import { checkMocks, checkSteps, describeStep, NO_STATE_BRIDGE, screenUrl, STEP_TIMEOUT_MS, stateRoute } from "@unframed/domain";
+import { checkMocks, checkSteps, NO_STATE_BRIDGE, screenUrl, STEP_TIMEOUT_MS, stateRoute, stepFailure } from "@unframed/domain";
 import type { HeadlessChrome } from "../artifacts/headlessChrome.ts";
 import type { ScreenStatePayload } from "../instances/stateTokens.ts";
 
@@ -55,7 +55,5 @@ export interface StateInput {
 export const proofUrl = (proxyPort: number, route: string, token: string | undefined): string => screenUrl(proxyPort, token === undefined ? route : stateRoute(route, token));
 
 export const proofFailure = (proof: Extract<Proof, { ok: false }>, steps: ReadonlyArray<ScreenStep>): string => {
-  if (proof.step === undefined) return proof.reason;
-  const step = steps[proof.step];
-  return `Step ${proof.step + 1}${step === undefined ? "" : `, ${describeStep(step)}`}, failed: ${proof.reason}`;
+  return proof.step === undefined ? proof.reason : stepFailure(steps, proof.step, proof.reason);
 };

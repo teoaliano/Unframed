@@ -1,5 +1,5 @@
 import type { ScreenMock, ScreenShapeProps, ScreenStep } from "@unframed/contracts";
-import { describeStep, fixStateInstruction, followNavigation, NO_STATE_BRIDGE, screenLabel, screenOverlay, screenUrl, setupTag, stateRoute, type DialsAnnouncement, type SetupChatState } from "@unframed/domain";
+import { describeStep, fixStateInstruction, stepFailure, followNavigation, NO_STATE_BRIDGE, screenLabel, screenOverlay, screenUrl, setupTag, stateRoute, type DialsAnnouncement, type SetupChatState } from "@unframed/domain";
 import { useEffect, useRef, useState } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
 import { TriangleAlert } from "lucide-react";
@@ -7,7 +7,7 @@ import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
 import { forgetFrame, hearFrame, isInteractive, reachFrame } from "../../artifacts/state.ts";
-import { useChatClient, useChats } from "../../agent/store.ts";
+import { messageOf, useChatClient, useChats } from "../../agent/store.ts";
 import { useCanvasProject, useEngine } from "../../context.ts";
 import { isDeviceClient } from "../../deviceMode.ts";
 import { Tip } from "../../chrome/ui.tsx";
@@ -275,8 +275,9 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
     onPainted: () => setPainted(load?.url),
     onBridge: (bridged) => noteBridge(project, shape.id, bridged),
     onReady: (route, applied) => {
-      if (holdsState && load?.token === true && !applied && Date.now() - load.at > RELOAD_GRACE_MS) setReloads((count) => count + 1);
-      else if (route !== undefined && !applied) follow(route);
+      if (applied || route === undefined) return;
+      if (route !== props.route) follow(route);
+      else if (holdsState && load?.token === true && Date.now() - load.at > RELOAD_GRACE_MS) setReloads((count) => count + 1);
     },
     onRoute: (route, replaying) => {
       if (!replaying) follow(route);
@@ -300,13 +301,12 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
     setAsking(undefined);
     ask(shape.id, instruction).then(
       () => setAsking("Sent to the agent."),
-      (error: unknown) => setAsking(error instanceof Error ? error.message : String(error)),
+      (error: unknown) => setAsking(messageOf(error)),
     );
   };
   const url = live ? load?.url : undefined;
   const [painted, setPainted] = useState<string | undefined>(undefined);
   const shownPainted = live && url !== undefined && painted === url;
-  const failedStep = failure === undefined ? undefined : props.steps?.[failure.step];
   return (
     <HTMLContainer
       id={shape.id}
@@ -336,14 +336,14 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
           data-testid="screen-state-failed"
         >
           <span className="font-medium text-(--artifact-card-title)">Couldn't reach this state</span>
-          <span data-testid="screen-state-failed-step">{`Step ${failure.step + 1}${failedStep === undefined ? "" : `, ${describeStep(failedStep)}`}, failed: ${failure.reason}`}</span>
+          <span data-testid="screen-state-failed-step">{stepFailure(props.steps ?? [], failure.step, failure.reason)}</span>
           <Button size="sm" className="pointer-events-auto" onPointerDown={(event) => event.stopPropagation()} onClick={fix}>
             Ask the agent to fix it
           </Button>
           {asking !== undefined && <span data-testid="screen-state-asked">{asking}</span>}
         </div>
       )}
-      <SetupBadges project={project} note={live && holdsState && bridge === false ? NO_STATE_BRIDGE : undefined} />
+      <SetupBadges project={project} note={live && bridge === false ? NO_STATE_BRIDGE : undefined} />
     </HTMLContainer>
   );
 };

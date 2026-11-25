@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useEditor, useValue, type Editor, type TLShape, type TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuRadioItemIndicator, MenuTrigger } from "~/components/ui/menu";
+import { messageOf } from "../agent/store.ts";
 import { Tip } from "../chrome/ui.tsx";
 import { useCanvasProject } from "../context.ts";
 import { showError } from "../toasts.tsx";
@@ -124,7 +125,7 @@ const MapFlow = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
     if (props === undefined || instance === undefined) return;
     setBusy(true);
     ask(shapeId, mapFlowInstruction({ shape: shapeId.replace(/^shape:/, ""), state: props.state?.trim() || props.route, route: props.route, branch: instance.branch, worktree: instance.worktree }))
-      .catch((error: unknown) => showError(error instanceof Error ? error.message : String(error)))
+      .catch((error: unknown) => showError(messageOf(error)))
       .finally(() => setBusy(false));
   };
   return (

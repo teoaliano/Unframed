@@ -88,7 +88,7 @@ const BranchPanel = ({ shapeId, instance, base, close }: { readonly shapeId: TLS
         if (from === "") return;
         run(async () => {
           const made = await engine.call("instances.create", { project, base: from, ...(name.trim() === "" ? {} : { branch: name.trim() }) });
-          placeScreenBeside(editor, shapeId, made, "screen on a new branch");
+          placeScreenBeside(editor, shapeId, made, "screen on a new branch", base === "fork" ? "state" : "view");
           close();
         });
       }}
@@ -207,7 +207,7 @@ const RemovePanel = ({ instance, close }: { readonly instance: Instance; readonl
       <span className="text-xs">
         Deletes the worktree at <span className="font-mono">{instance.worktree}</span> and the branch <span className="font-mono">{instance.branch}</span>.
       </span>
-      {instance.changes > 0 && <span className={hintClass}>{`${branchChip({ branch: instance.branch, changes: instance.changes }).changes} on this branch will be lost unless they are pushed.`}</span>}
+      {instance.changes > 0 && <span className={hintClass}>{`${instance.changes} changed ${instance.changes === 1 ? "file differs" : "files differ"} from ${instance.baseRef}; work that is not pushed is lost.`}</span>}
       {problem !== undefined && <span className={problemClass}>{problem}</span>}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" size="sm" disabled={busy} onClick={close}>

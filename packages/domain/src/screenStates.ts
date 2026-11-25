@@ -127,6 +127,11 @@ export const describeTarget = (target: ScreenTarget): string => {
   return target.selector ?? "";
 };
 
+export const stepFailure = (steps: ReadonlyArray<ScreenStep>, index: number, reason: string): string => {
+  const step = steps[index];
+  return `Step ${index + 1}${step === undefined ? "" : `, ${describeStep(step)}`}, failed: ${reason}`;
+};
+
 export const describeStep = (step: ScreenStep): string => {
   switch (step.action) {
     case "type":
