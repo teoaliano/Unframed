@@ -251,3 +251,40 @@ test("a pinch over a selected page zooms the canvas, not the app, even for a pag
   await expect.poll(async () => await zoom.textContent()).not.toBe(before);
   expect(await page.evaluate(() => window.visualViewport?.scale ?? 1)).toBe(appZoom);
 });
+
+test("under the hand tool a selected page gives the pointer to the canvas, so a drag over it pans and a pinch zooms, and no other tool reaches into it", async ({ page, engine }) => {
+  await openCanvas(page, engine);
+  await filledArtifact(engine, { id: "shape:flow", kind: "page", ref: "150", at: { x: 420, y: 60 }, title: "Flow", html: `<!doctype html><html><head>${BRIDGE_TAG}</head><body style="margin:0;height:100vh">Flow step</body></html>` });
+  const shape = shapeOnScreen(page, "shape:flow");
+  await expect(shape).toBeVisible();
+  const box = (await shape.boundingBox())!;
+  await page.mouse.click(box.x + 20, box.y - 8);
+  const frame = shape.locator("iframe[data-artifact-frame]");
+  await expect(frame).toHaveAttribute("data-interactive", "true");
+
+  const useTool = (tool: string) => page.getByTestId(`tools.${tool}`).click();
+  await useTool("hand");
+  await expect(frame).not.toHaveAttribute("data-interactive", "true");
+  await expect(frame).toHaveCSS("pointer-events", "none");
+
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 - 120, box.y + box.height / 2 - 60, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => (await shape.boundingBox())!.x).toBeLessThan(box.x - 100);
+  expect((await settledRecord(engine, "default", "shape:flow"))?.x).toBe(420);
+
+  const zoom = page.getByTestId("minimap.zoom-menu-button");
+  const zoomBefore = await zoom.textContent();
+  await page.keyboard.down("Control");
+  for (let step = 0; step < 6; step++) await page.mouse.wheel(0, -40);
+  await page.keyboard.up("Control");
+  await expect.poll(async () => await zoom.textContent()).not.toBe(zoomBefore);
+
+  await useTool("select");
+  await expect(frame).toHaveAttribute("data-interactive", "true");
+  for (const tool of ["draw", "comments"]) {
+    await useTool(tool);
+    await expect(shape.locator("iframe[data-interactive]")).toHaveCount(0);
+  }
+});
