@@ -46,18 +46,56 @@ const Side = ({ label, value, onCommit }: { readonly label: string; readonly val
   );
 };
 
-const labelOf = (size: EditorPreviewSize): string =>
-  size.choice === "custom" ? `${size.custom.width} × ${size.custom.height}` : (EDITOR_PREVIEW_SIZES.find((each) => each.choice === size.choice)?.label ?? "Fill");
+export interface PreviewPreset {
+  readonly name: string;
+  readonly w: number;
+  readonly h: number;
+}
 
-export const PreviewSizeControl = ({ size, onChange, scale }: { readonly size: EditorPreviewSize; readonly onChange: (next: EditorPreviewSize) => void; readonly scale: number }) => {
+const presetOf = (size: EditorPreviewSize, presets: ReadonlyArray<PreviewPreset> | undefined): PreviewPreset | undefined =>
+  presets?.find((preset) => size.choice === "custom" && preset.w === size.custom.width && preset.h === size.custom.height);
+
+const labelOf = (size: EditorPreviewSize, preset: PreviewPreset | undefined): string =>
+  preset !== undefined
+    ? `${preset.name} ${preset.w}`
+    : size.choice === "custom"
+      ? `${size.custom.width} × ${size.custom.height}`
+      : (EDITOR_PREVIEW_SIZES.find((each) => each.choice === size.choice)?.label ?? "Fill");
+
+export const PreviewSizeControl = ({ size, onChange, scale, presets }: { readonly size: EditorPreviewSize; readonly onChange: (next: EditorPreviewSize) => void; readonly scale: number; readonly presets?: ReadonlyArray<PreviewPreset> | undefined }) => {
   const [open, setOpen] = useState(false);
   const width = useRef<HTMLDivElement>(null);
-  const Icon = ICONS[size.choice];
+  const preset = presetOf(size, presets);
+  const Icon = preset !== undefined ? Monitor : ICONS[size.choice];
+  const rows: ReadonlyArray<{ readonly key: string; readonly label: string; readonly checked: boolean; readonly pick: () => void }> =
+    presets === undefined
+      ? EDITOR_PREVIEW_SIZES.map((each) => ({
+          key: each.choice,
+          label: each.label,
+          checked: size.choice === each.choice,
+          pick: () => {
+            onChange({ ...size, choice: each.choice });
+            if (each.choice === "custom") width.current?.querySelector("input")?.focus();
+            else setOpen(false);
+          },
+        }))
+      : [
+          ...presets.map((each) => ({
+            key: each.name,
+            label: `${each.name} ${each.w}`,
+            checked: preset === each,
+            pick: () => {
+              onChange({ choice: "custom", custom: { width: each.w, height: each.h } });
+              setOpen(false);
+            },
+          })),
+          { key: "custom", label: "Custom", checked: preset === undefined, pick: () => width.current?.querySelector("input")?.focus() },
+        ];
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger render={<Button variant="outline" size="sm" className="min-w-0 shrink-0" />} aria-label="Preview size" data-testid="preview-size">
         <Icon aria-hidden />
-        <span className="@max-[760px]/editor-header:sr-only">{labelOf(size)}</span>
+        <span className="@max-[760px]/editor-header:sr-only">{labelOf(size, preset)}</span>
         {scale < 1 && (
           <span data-testid="artifact-preview-scale" className="text-(--artifact-editor-meta) tabular-nums @max-[760px]/editor-header:sr-only">
             {`${Math.round(scale * 100)}%`}
@@ -67,17 +105,8 @@ export const PreviewSizeControl = ({ size, onChange, scale }: { readonly size: E
       </PopoverTrigger>
       <PopoverPopup side="bottom" align="end" sideOffset={6} padding="compact" className="w-(--artifact-editor-preview-size-width)" aria-label="Preview size" initialFocus={false}>
         <div role="radiogroup" aria-label="Preview size" className="flex flex-col gap-px">
-          {EDITOR_PREVIEW_SIZES.map((each) => (
-            <RadioRow
-              key={each.choice}
-              checked={size.choice === each.choice}
-              label={each.label}
-              onSelect={() => {
-                onChange({ ...size, choice: each.choice });
-                if (each.choice === "custom") width.current?.querySelector("input")?.focus();
-                else setOpen(false);
-              }}
-            />
+          {rows.map((row) => (
+            <RadioRow key={row.key} checked={row.checked} label={row.label} onSelect={row.pick} />
           ))}
         </div>
         <div ref={width} className="mt-1 flex items-center gap-1.5 border-t px-2 pt-2 pb-1">

@@ -1,5 +1,5 @@
 import type { OffTokenFound, SourceEdit } from "@unframed/contracts";
-import { cssName, dialAt, DESIGN_FIELDS, fieldOwner, kitCssNames, resolve, styleValueRefusal, TEXT_STYLE_SUFFIX, tokensForField, type ArtifactKind, type ChipElement, type ComponentDeclaration, type FieldOwner, type Kit, type TextStyleField, type Token } from "@unframed/domain";
+import { cssName, dialAt, DESIGN_FIELDS, fieldOwner, kitCssNames, resolve, styleValueRefusal, TEXT_STYLE_SUFFIX, tokensForField, type EditorKind, type ChipElement, type ComponentDeclaration, type FieldOwner, type Kit, type TextStyleField, type Token } from "@unframed/domain";
 import { Component, Diamond, Link, MessageSquarePlus, Unlink } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Badge } from "~/components/ui/badge";
@@ -398,7 +398,8 @@ const OffTokens = ({
 
 interface DesignTabProps {
   readonly session: EditSession;
-  readonly kind: ArtifactKind;
+  readonly kind: EditorKind;
+  readonly images?: boolean;
   readonly project: string;
   readonly dials: Readonly<Record<string, unknown>> | undefined;
   readonly locked: readonly string[];
@@ -429,7 +430,7 @@ const normaliserFor = (property: string) => (value: string) => {
   return probe.style.getPropertyValue(property);
 };
 
-export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, onOpenKit, onTell, onAsk, onShowOnTimeline, component, onAskComponent, componentTitle, componentOf, onGoToMain, onMake, onUpdateComponent }: DesignTabProps) => {
+export const DesignTab = ({ session, kind, images = true, project, dials, locked, kit, mode, onOpenKit, onTell, onAsk, onShowOnTimeline, component, onAskComponent, componentTitle, componentOf, onGoToMain, onMake, onUpdateComponent }: DesignTabProps) => {
   const [openChip, setOpenChip] = useState<{ readonly field: string; readonly named: { readonly token: Token; readonly suffix?: string } } | null>(null);
   const { selection, reports, tree, preparing, prepareError, pending, families, overridden } = session;
   if (preparing) return <p className="m-0 p-2.5 text-sm text-(--artifact-editor-note)">{`Getting this ${kind} ready for editing…`}</p>;
@@ -936,7 +937,7 @@ export const DesignTab = ({ session, kind, project, dials, locked, kit, mode, on
 
       {kit !== null && <OffTokens values={tree?.offTokens ?? []} labelOf={labelOfOff} onSelect={selectOff} onUse={useOff} />}
 
-      {picture !== null && (
+      {picture !== null && images && (
         <fieldset aria-label="Image" className="m-0 flex flex-col gap-2 border-0 p-0">
           <legend className="mb-1 text-xs font-medium text-(--artifact-editor-label)">Image</legend>
           <div className="flex items-center gap-2">
