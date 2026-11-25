@@ -1,38 +1,13 @@
 import { rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
-import type { Page } from "@playwright/test";
 import { git, makeRepo, repoEngineEnv } from "../../engine/test/gitRepos.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { openCanvas } from "./canvas.ts";
+import { firstScreenId, putShapes, saveSetup, screenShapes, withRepository } from "./screenHarness.ts";
 import { clickShape } from "./generation.ts";
 import { expect, startHostedEngine, test } from "./fixtures.ts";
 import { engineChat, engineChats, FIXTURES, openRail, scriptFolder, tabs } from "./agent.ts";
 import { applyScreenParametersInstruction, flowInstruction, NO_BRIDGE, setupRejection, slugName } from "@unframed/domain";
-
-const withRepository = async (page: Page, env: Record<string, string>, use: (engine: TestEngine, project: string, root: string) => Promise<void>, prepare?: (root: string) => Promise<void>) => {
-  const root = await makeRepo("My App");
-  await prepare?.(root);
-  const engine = await startHostedEngine({ env: await repoEngineEnv({ UNFRAMED_TEST_PICK_FOLDER: root, ...env }) });
-  try {
-    await openCanvas(page, engine, "default");
-    await page.getByRole("button", { name: "All projects" }).click();
-    await page.getByRole("menuitem", { name: "Add Repository…" }).click();
-    await expect(page.locator("[data-canvas-project='my-app'] .tl-canvas")).toBeVisible();
-    await use(engine, "my-app", root);
-  } finally {
-    await engine.dispose();
-  }
-};
-
-const screenShapes = async (engine: TestEngine, project: string) => {
-  const rpc = await engine.rpc();
-  try {
-    return ((await rpc.call("testCanvas.read", { project })).records as any[]).filter((record) => record.typeName === "shape" && record.type === "screen");
-  } finally {
-    await rpc.close();
-  }
-};
 
 test("a new Repository's first Screen goes live through the proxy at /, keeps its snapshot until first paint, and drops to the snapshot off screen", async ({ page }) => {
   await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
@@ -63,18 +38,6 @@ test("a new Repository's first Screen goes live through the proxy at /, keeps it
     expect((await screenShapes(engine, project))[0].props).toMatchObject({ route: "/", w: 1280, h: 800 });
   });
 });
-
-const saveSetup = (engine: TestEngine, project: string, setup: Record<string, unknown>) => {
-  const db = new DatabaseSync(join(engine.dataDir, "output", project, "unframed.sqlite"));
-  try {
-    const full = { setupCommand: "", runCommand: "npm run dev", packageManager: "npm", portMode: { mode: "free" }, files: [], mocks: [], warnings: [], ...setup };
-    db.prepare("UPDATE repository SET setup = ? WHERE id = 1").run(JSON.stringify(full));
-  } finally {
-    db.close();
-  }
-};
-
-const firstScreenId = async (engine: TestEngine, project: string) => (await screenShapes(engine, project))[0].id as string;
 
 test("a Screen shows Setup's progress while its Instance installs, then the app", async ({ page }) => {
   const slowInstall = async (root: string) => {
@@ -241,15 +204,6 @@ test("a selected Screen lists its Instance's changes and commits them", async ({
     await expect(page.getByText("There is nothing to commit in this Instance.")).toBeVisible();
   });
 });
-
-const putShapes = async (engine: TestEngine, project: string, put: any[]) => {
-  const rpc = await engine.rpc();
-  try {
-    await rpc.call("testCanvas.apply", { project, change: { put, remove: [] }, origin: { kind: "server", id: "test" } });
-  } finally {
-    await rpc.close();
-  }
-};
 
 test("Screens of one Instance keep their own Parameters through the bridge, and Apply asks the agent to write them in that Instance's worktree", async ({ page }) => {
   await withRepository(page, { UNFRAMED_TEST_AGENT_SCRIPT: FIXTURES }, async (engine, project) => {

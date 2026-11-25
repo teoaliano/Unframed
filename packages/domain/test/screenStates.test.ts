@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkMocks, checkSteps, describeStep, matchMock, NO_TARGET, SCREEN_STEPS_MAX } from "../src/index.ts";
+import { checkMocks, checkSteps, describeStep, matchMock, NO_TARGET, screenLabel, SCREEN_STEPS_MAX } from "../src/index.ts";
 
 describe("a Screen's steps", () => {
   it("take click, type, press, hover, wait and scroll, each aimed at a target", () => {
@@ -77,5 +77,14 @@ describe("a Screen's mocks", () => {
     expect(matchMock(mocks, { method: "GET", url: "http://127.0.0.1:4100/api/itemsx" })).toBeUndefined();
     expect(matchMock([{ url: "/search?q=*" }], { method: "GET", url: "http://127.0.0.1:4100/search?q=fox" })).toBeDefined();
     expect(matchMock([{ url: "/search?q=*" }], { method: "GET", url: "http://127.0.0.1:4100/search" })).toBeUndefined();
+  });
+});
+
+describe("a Screen's label", () => {
+  it("reads as its branch and its state, or its route when it holds no state", () => {
+    expect(screenLabel({ branch: "feature/pricing", route: "/pricing", state: "the plan picker open" })).toBe("feature/pricing · the plan picker open");
+    expect(screenLabel({ branch: "feature/pricing", route: "/pricing", state: "  " })).toBe("feature/pricing · /pricing");
+    expect(screenLabel({ branch: "trunk", route: "/" })).toBe("trunk · /");
+    expect(screenLabel({ branch: "", route: "/settings" })).toBe("/settings");
   });
 });

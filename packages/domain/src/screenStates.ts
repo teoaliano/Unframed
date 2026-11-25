@@ -140,3 +140,8 @@ export const describeStep = (step: ScreenStep): string => {
       return `${step.action} ${describeTarget(step.target)}`;
   }
 };
+
+export const screenLabel = (input: { readonly branch: string; readonly route: string; readonly state?: string | undefined }): string => {
+  const where = input.state?.trim() || input.route;
+  return input.branch === "" ? where : `${input.branch} · ${where}`;
+};

@@ -1,5 +1,5 @@
-import type { ScreenShapeProps } from "@unframed/contracts";
-import { screenOverlay, screenUrl, setupTag, type DialsAnnouncement, type SetupChatState } from "@unframed/domain";
+import type { ScreenMock, ScreenShapeProps, ScreenStep } from "@unframed/contracts";
+import { screenLabel, screenOverlay, screenUrl, setupTag, type DialsAnnouncement, type SetupChatState } from "@unframed/domain";
 import { useEffect, useRef, useState } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
 import { TriangleAlert } from "lucide-react";
@@ -30,6 +30,9 @@ const screenProps: RecordProps<ScreenShape> = {
   title: T.string,
   dials: T.dict(T.string, T.jsonValue).optional(),
   mode: T.string.optional(),
+  steps: T.arrayOf(T.jsonValue).optional() as T.Validatable<ScreenStep[] | undefined>,
+  mocks: T.arrayOf(T.jsonValue).optional() as T.Validatable<ScreenMock[] | undefined>,
+  state: T.string.optional(),
 };
 
 export const SCREEN_SANDBOX = "allow-scripts allow-same-origin allow-forms allow-modals";
@@ -195,6 +198,8 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
     },
     [state, props.instance],
   );
+  const branch = useValue("screen branch", () => state.instances.get().get(props.instance)?.branch ?? props.title, [state, props.instance, props.title]);
+  const label = screenLabel({ branch, route: props.route, state: props.state });
   const onScreen = useValue("screen on screen", () => screenOnScreen(editor, shape.id), [editor, shape.id]);
   const interactive = useValue("screen interactive", () => isInteractive(editor, shape.id), [editor, shape.id]);
   const live = repositories && !isDeviceClient() && onScreen && proxyPort !== null;
@@ -207,19 +212,20 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
       className={`${artifactCardClass} overflow-hidden`}
       data-testid="screen"
       data-route={props.route}
+      data-state={props.state?.trim() ? props.state : undefined}
       data-live={live ? "true" : undefined}
       data-painted={shownPainted ? "true" : undefined}
       style={{ width: props.w, height: props.h }}
     >
-      <ShapeLabel shapeId={shape.id} kind="screen" width={props.w} text={`${props.title} ${props.route}`.trim()} />
+      <ShapeLabel shapeId={shape.id} kind="screen" width={props.w} text={label} />
       {live && url !== undefined && <LiveScreen key={url} shapeId={shape.id} url={url} dials={props.dials} interactive={interactive} onPainted={() => setPainted(url)} onBridge={(bridge) => noteBridge(project, shape.id, bridge)} />}
       {!shownPainted &&
         (snapshot !== undefined ? (
           <img className="pointer-events-none absolute inset-0 block size-full object-cover select-none" data-testid="screen-snapshot" src={screenSnapshotUrl(project, snapshot)} alt="" draggable={false} />
         ) : (
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 bg-(--artifact-card-surface) p-3 text-center font-sans text-sm text-(--artifact-card-foreground)">
-            <span className="font-medium text-(--artifact-card-title)">{props.title}</span>
-            <span>{props.route}</span>
+            <span className="font-medium text-(--artifact-card-title)">{branch}</span>
+            <span>{props.state?.trim() || props.route}</span>
           </div>
         ))}
       <Overlay project={project} instance={props.instance} />
