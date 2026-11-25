@@ -21,7 +21,7 @@ export interface ScreenJob {
   readonly w: number;
   readonly h: number;
   readonly dials: Readonly<Record<string, unknown>> | undefined;
-  readonly steps?: number;
+  readonly steps?: number | undefined;
 }
 
 export type ScreenRenderer = (job: ScreenJob) => Promise<Buffer | undefined>;
@@ -83,7 +83,7 @@ interface ScreenSnapshotDeps {
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;
   readonly instance: (project: string, id: string) => Promise<Instance | undefined>;
   readonly publish: (project: string, snapshot: ScreenSnapshot) => void;
-  readonly stateToken?: (project: string, id: string, payload: ScreenStatePayload) => Promise<string>;
+  readonly stateToken: (project: string, id: string, payload: ScreenStatePayload) => Promise<string>;
 }
 
 interface ProjectScreens {
@@ -183,13 +183,13 @@ export class ScreenSnapshots {
     const stored = await readFile(join(dir, `${bare}.json`), "utf8").catch(() => undefined);
     if (stored === text && state.rendered.get(shapeId) === session) return;
     state.rendered.set(shapeId, session);
-    const token = signature.state === undefined || this.deps.stateToken === undefined ? undefined : await this.deps.stateToken(project, instance.id, signature.state);
+    const token = signature.state === undefined ? undefined : await this.deps.stateToken(project, instance.id, signature.state);
     const picture = await renderer({
       url: screenUrl(instance.proxyPort, token === undefined ? signature.route : stateRoute(signature.route, token)),
       w: signature.w,
       h: signature.h,
       dials: shape.props.dials,
-      ...(token === undefined ? {} : { steps: signature.state!.steps.length }),
+      steps: signature.state?.steps.length,
     });
     if (picture === undefined || this.projects.get(project) !== state) return;
     await mkdir(dir, { recursive: true });
