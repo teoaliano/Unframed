@@ -59,7 +59,7 @@ import { LoginShell } from "../loginShell.ts";
 import { ProjectDatabase } from "../projectDatabase.ts";
 import { Projects } from "../projects.ts";
 import { makeGit, gitOutput, gitStdout } from "../repositories/git.ts";
-import { readKind, readRepository, writeRepository, type StoredRepository } from "../repositories/tables.ts";
+import { readRepository, readRepositoryProject, writeRepository, type StoredRepository } from "../repositories/tables.ts";
 import { Config } from "../services.ts";
 import { Shutdown } from "../shutdown.ts";
 import { answers, freePort, spawnTracked, stopTracked, sweepLeftovers, type Tracked } from "./processes.ts";
@@ -220,8 +220,7 @@ export const instancesLayer = Layer.effect(
     const repositoryOf = (project: string) =>
       Effect.gen(function* () {
         const slug = projectSlug(project);
-        const repository =
-          slug === "" ? undefined : yield* database.peek(slug, (db) => (readKind(db) === "repository" ? readRepository(db) : undefined));
+        const repository = slug === "" ? undefined : yield* database.peek(slug, readRepositoryProject);
         if (repository === undefined) return yield* unframedError("bad_request", NOT_A_REPOSITORY_PROJECT);
         const { db } = yield* database.open(slug);
         if (!loaded.has(slug)) {

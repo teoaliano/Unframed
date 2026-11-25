@@ -71,6 +71,8 @@ export const readRepository = (db: DatabaseSync): StoredRepository | undefined =
   };
 };
 
+export const readRepositoryProject = (db: DatabaseSync): StoredRepository | undefined => (readKind(db) === "repository" ? readRepository(db) : undefined);
+
 export const writeRepository = (db: DatabaseSync, repository: StoredRepository): void => {
   db.exec("BEGIN IMMEDIATE");
   try {
