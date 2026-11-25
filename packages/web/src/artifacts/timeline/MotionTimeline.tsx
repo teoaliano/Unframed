@@ -1,4 +1,5 @@
 import { ChevronDown, ChevronLeft, ChevronRight, Code, Film, Layers, Lock, Maximize2, Minus, PanelBottom, Pause, Play, Repeat, Square, Volume2, VolumeX, ZoomIn, ZoomOut } from "lucide-react";
+import { createPortal } from "react-dom";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent, type KeyboardEvent as ReactKeyboardEvent, type CSSProperties, type ReactElement } from "react";
 import { clampDialValue, dialAt, fitZoom, rulerStep, snapMove, snapTime, zoomAt, zoomButton, type DialSchema, type Kit, type Owner, type SnapTarget, type Tween, type TweenRef } from "@unframed/domain";
 import type { SourceEdit } from "@unframed/contracts";
@@ -1130,7 +1131,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
       data-testid="motion-timeline"
       data-open={open ? "true" : "false"}
       style={{ height }}
-      className={cn("relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-(--motion-timeline-border) bg-(--motion-timeline-surface)", className)}
+      className={cn("relative flex min-h-0 min-w-0 flex-col overflow-hidden border-t border-(--motion-timeline-border) bg-(--motion-timeline-surface)", className)}
     >
       {open && (
         <div
@@ -1146,6 +1147,7 @@ export const MotionTimeline = ({ title, closePanel, engine, project, file, sessi
           onPointerCancel={onResizeUp}
         />
       )}
+      {dragging !== undefined && createPortal(<div aria-hidden data-testid="timeline-resize-shield" className="fixed inset-0 z-[1000] cursor-row-resize" />, document.body)}
       <header data-testid="timeline-transport" className="flex min-h-10 flex-none flex-wrap items-center gap-x-1 gap-y-1 border-b px-2 py-1">
         <Tip label={playing ? "Pause (Space)" : "Play (Space)"}>
           <Button variant="ghost" size="icon-sm" aria-label={playing ? "Pause (Space)" : "Play (Space)"} onClick={() => transport.togglePlay()}>
