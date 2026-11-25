@@ -137,6 +137,28 @@ test("a Screen holding a state replays its steps with its own mocks on every loa
   });
 });
 
+test("a selected Screen whose steps moved it to another page replays its state when the page reloads, and keeps its route", async ({ page }) => {
+  await withRepository(page, {}, async (engine, project) => {
+    const [first] = await screenShapes(engine, project);
+    const elsewhere = { ...MENU_EMPTY, state: "the menu open on about", steps: [{ action: "click", target: { role: "link", name: "About" } }, ...MENU_EMPTY.steps] };
+    await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/app", w: 640, h: 480, ...elsewhere } }]);
+    const frame = frameOf(page, first.id);
+    await expect(frame.getByRole("menuitem", { name: "Settings" })).toBeVisible({ timeout: 30_000 });
+    await expect(frame.locator("#where")).toHaveText("/app/about");
+    await selectScreen(page, first.id);
+
+    await frame.locator("body").evaluate((body) => {
+      body.dataset.beforeReload = "true";
+      setTimeout(() => location.reload(), 0);
+    });
+    await expect(frame.locator("body[data-before-reload]")).toHaveCount(0);
+    await expect(frame.getByRole("menuitem", { name: "Settings" })).toBeVisible({ timeout: 30_000 });
+    await expect(frame.locator("#list-state")).toHaveText("No items yet");
+    await expect(frame.locator("#where")).toHaveText("/app/about");
+    expect((await screenShapes(engine, project)).find((shape) => shape.id === first.id).props).toMatchObject({ route: "/app", ...elsewhere });
+  });
+});
+
 test("a Screen whose steps no longer work says Couldn't reach this state with the failed step, and its button asks the agent to fix them", async ({ page }) => {
   await withRepository(page, { UNFRAMED_TEST_AGENT_SCRIPT: FIXTURES }, async (engine, project) => {
     const [first] = await screenShapes(engine, project);

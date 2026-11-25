@@ -39,7 +39,6 @@ const screenProps: RecordProps<ScreenShape> = {
 export const SCREEN_SANDBOX = "allow-scripts allow-same-origin allow-forms allow-modals";
 
 const NO_STATE_KEY = "[[],[]]";
-const RELOAD_GRACE_MS = 2000;
 
 const nonEmpty = (dials: Readonly<Record<string, unknown>> | undefined) => dials !== undefined && Object.keys(dials).length > 0;
 
@@ -206,7 +205,8 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
   const holdsState = stateKey !== NO_STATE_KEY;
   const shown = useRef<{ readonly route: string; readonly stateKey: string; readonly port: number; readonly reloads: number } | undefined>(undefined);
   const loads = useRef(0);
-  const [load, setLoad] = useState<{ readonly url: string; readonly n: number; readonly token: boolean; readonly at: number } | undefined>(undefined);
+  const [load, setLoad] = useState<{ readonly url: string; readonly n: number; readonly token: boolean } | undefined>(undefined);
+  const frameState = useRef<{ applied: boolean; route: string | undefined }>({ applied: false, route: undefined });
   const [reloads, setReloads] = useState(0);
   const [failure, setFailure] = useState<{ readonly step: number; readonly reason: string } | undefined>(undefined);
   const [asking, setAsking] = useState<string | undefined>(undefined);
@@ -224,7 +224,8 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
     const begin = (token: string | null) => {
       if (seq !== loads.current) return;
       setFailure(undefined);
-      setLoad({ url: screenUrl(proxyPort, token === null ? props.route : stateRoute(props.route, token)), n: seq, token: token !== null, at: Date.now() });
+      frameState.current = { applied: false, route: undefined };
+      setLoad({ url: screenUrl(proxyPort, token === null ? props.route : stateRoute(props.route, token)), n: seq, token: token !== null });
     };
     if (!holdsState) begin(null);
     else engine.call("screens.stateToken", { project, instance: props.instance, steps: props.steps ?? [], mocks: props.mocks ?? [] }).then(({ token }) => begin(token), () => begin(null));
@@ -244,11 +245,17 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
     onPainted: () => setPainted(load?.url),
     onBridge: (bridged) => noteBridge(project, shape.id, bridged),
     onReady: (route, applied) => {
-      if (applied || route === undefined) return;
-      if (route !== props.route) follow(route);
-      else if (holdsState && load?.token === true && Date.now() - load.at > RELOAD_GRACE_MS) setReloads((count) => count + 1);
+      const frame = frameState.current;
+      if (applied) {
+        frameState.current = { applied: true, route };
+        return;
+      }
+      if (route === undefined) return;
+      if (holdsState && load?.token === true && frame.applied && route === frame.route) setReloads((count) => count + 1);
+      else if (route !== props.route) follow(route);
     },
     onRoute: (route, replaying) => {
+      frameState.current = { ...frameState.current, route };
       if (!replaying) follow(route);
     },
     onSteps: (result) => setFailure(result.ok ? undefined : { step: result.step ?? 0, reason: result.reason ?? "" }),
