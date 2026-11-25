@@ -13,10 +13,12 @@ import { NodeChrome } from "../nodes/NodeChrome.tsx";
 import { CommentsHost } from "../comments/CommentsHost.tsx";
 import { useFeature } from "../features.ts";
 import { OnboardingProbe } from "../onboarding/OnboardingProbe.tsx";
+import { ScreensStarting } from "../repositories/ScreensStarting.tsx";
 
 export const InFront = () => {
   useEffect(() => registerSlot("toolbarEnd", ToolbarEnd), []);
   const nodes = useFeature("nodes");
+  const repositories = useFeature("repositories");
   return (
   <>
     <Tether />
@@ -30,6 +32,7 @@ export const InFront = () => {
     <AgentHost />
     <ArtifactsHost />
     <OnboardingProbe />
+    {repositories && <ScreensStarting />}
   </>
   );
 };

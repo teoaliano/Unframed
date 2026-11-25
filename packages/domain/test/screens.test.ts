@@ -1,6 +1,6 @@
 import type { Instance } from "@unframed/contracts";
 import { describe, expect, it } from "vitest";
-import { NO_RUN_COMMAND, addScreenParameterInstruction, applyScreenParametersInstruction, forkBranchName, logTail, normaliseRoute, screenOverlay, screenSnapshotName, screenUrl, SCREEN_VIEWPORTS, setupTag } from "../src/index.ts";
+import { NO_RUN_COMMAND, addScreenParameterInstruction, applyScreenParametersInstruction, forkBranchName, logTail, normaliseRoute, screenOverlay, screenSnapshotName, screenUrl, SCREEN_VIEWPORTS, setupTag, startupCover } from "../src/index.ts";
 
 const instance = (state: Instance["state"], extra: Partial<Instance> = {}): Instance => ({
   id: "abc123",
@@ -40,6 +40,25 @@ describe("Screens", () => {
   it("offer viewports from phone to desktop, desktop first", () => {
     expect(SCREEN_VIEWPORTS[0]).toEqual({ name: "Desktop", w: 1280, h: 800 });
     expect(SCREEN_VIEWPORTS.map((viewport) => viewport.name)).toEqual(["Desktop", "Laptop", "Tablet", "Phone"]);
+  });
+
+  it("cover the opening canvas while the Screens in view wait for their dev servers, and uncover it once each is live, failed or not starting", () => {
+    const other = (state: Instance["state"]) => instance(state, { id: "def456" });
+    const cover = (instances: ReadonlyArray<Instance | undefined>, extra: Partial<Parameters<typeof startupCover>[0]> = {}) =>
+      startupCover({ repository: "ready", loaded: true, instances, graceOver: false, ...extra });
+    expect(cover([instance("live")], { repository: undefined, loaded: false })).toBe("Starting the dev servers…");
+    expect(cover([instance("live")], { loaded: false })).toBe("Starting the dev servers…");
+    expect(cover([instance("starting"), instance("starting")])).toBe("Starting the dev server…");
+    expect(cover([instance("installing")], { repository: "setting-up" })).toBe("Installing dependencies…");
+    expect(cover([instance("installing"), other("creating")])).toBe("Starting 2 dev servers…");
+    expect(cover([instance("stopped")])).toBe("Starting the dev server…");
+    expect(cover([instance("stopped")], { graceOver: true })).toBeUndefined();
+    expect(cover([instance("starting"), other("stopped")], { graceOver: true })).toBe("Starting the dev server…");
+    expect(cover([instance("live"), other("failed")])).toBeUndefined();
+    expect(cover([undefined, instance("removed")])).toBeUndefined();
+    expect(cover([])).toBeUndefined();
+    expect(cover([instance("starting")], { repository: null })).toBeUndefined();
+    expect(cover([instance("starting")], { repository: "missing" })).toBeUndefined();
   });
 
   it("show Setup's progress, a failure with its log tail, a removed Instance or a missing Repository over the picture", () => {

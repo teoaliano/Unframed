@@ -1342,6 +1342,7 @@
   --render-progress-fill: var(--action-highlight);
   --render-progress-foreground: var(--text-muted);
   --render-progress-track: var(--border-strong);
+  --screens-starting-surface: var(--surface-background);
   --scroll-area-fade-size: 24px;
   --scroll-area-ring: var(--border-focus);
   --scroll-area-ring-offset: var(--surface-background);
