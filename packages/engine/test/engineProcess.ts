@@ -4,8 +4,8 @@
  * recorded instead of run. Tests drive the engine only through what this exposes: RPC,
  * HTTP, IPC messages, stdout and the files it writes.
  */
-import { execFileSync, fork, spawn, type ChildProcess } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { fork, spawn, type ChildProcess } from "node:child_process";
+import { existsSync, rmSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
@@ -13,6 +13,7 @@ import { join } from "node:path";
 import type { EngineIpcMessage, ReadyMessage } from "@unframed/contracts";
 import WebSocket from "ws";
 import { repoRoot } from "../../../scripts/buildWeb.ts";
+import { sweepLeftovers } from "../src/instances/processes.ts";
 import { connectRpc, type TestRpcClient } from "./rpcClient.ts";
 
 export { repoRoot };
@@ -226,40 +227,6 @@ export const sweepTempDirs = async (root = tmpdir()): Promise<string[]> => {
   return removed;
 };
 
-const startTimeOf = (pid: number): string | undefined => {
-  try {
-    return execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || undefined;
-  } catch {
-    return undefined;
-  }
-};
-
-const killInstanceServers = (dataDir: string) => {
-  if (!groups) return;
-  const pidDir = join(dataDir, "instance-pids");
-  let names: string[];
-  try {
-    names = readdirSync(pidDir);
-  } catch {
-    return;
-  }
-  for (const name of names) {
-    try {
-      const { pid, started } = JSON.parse(readFileSync(join(pidDir, name), "utf8")) as { pid: number; started: string };
-      if (!Number.isInteger(pid) || pid <= 1 || startTimeOf(pid) !== started) continue;
-      for (const target of [-pid, pid]) {
-        try {
-          process.kill(target, "SIGKILL");
-        } catch {
-          continue;
-        }
-      }
-    } catch {
-      continue;
-    }
-  }
-};
-
 /**
  * How a test runner hears about cleanups: the Vitest harness registers each with the
  * running test. Without one (Playwright, scripts) the caller disposes.
@@ -448,7 +415,7 @@ export const startEngine = async (options: EngineOptions = {}): Promise<TestEngi
         killEngine(child, "SIGKILL");
         await exited;
       }
-      killInstanceServers(dataDir);
+      sweepLeftovers(join(dataDir, "instance-pids"));
       await stub?.close();
       await elevenLabs?.close();
       await vercel?.close();
