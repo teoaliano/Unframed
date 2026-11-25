@@ -57,6 +57,10 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "text/html" });
     return res.end("<!doctype html><html><head><title>Dials</title></head><body><h1 id=\\"title\\">Tuned</h1><script>window.unframed?.dials(\\"Look\\", { accent: \\"#ff0000\\" }, function (v) { document.getElementById(\\"title\\").dataset.accent = v.accent; }, { accent: \\"The heading colour\\" });</script></body></html>");
   }
+  if (url.pathname === "/corrupt") {
+    res.writeHead(200, { "content-type": "text/html", "content-encoding": "gzip" });
+    return res.end("this is not gzip");
+  }
   if (url.pathname === "/headless") {
     res.writeHead(200, { "content-type": "text/html" });
     return res.end("<body>no head here</body>");

@@ -1,7 +1,7 @@
 import http from "node:http";
 import net from "node:net";
 import { StringDecoder } from "node:string_decoder";
-import { Transform, type Readable } from "node:stream";
+import { pipeline, Transform, type Readable } from "node:stream";
 import zlib from "node:zlib";
 import { BRIDGE_PATH, bridgeTag, htmlInjector, loopbackGuard, proxiedResponseHeaders, rewritesOrigin, screenBridgeSource, upstreamRequestHeaders } from "@unframed/domain";
 import { listenLoopback } from "../listen.ts";
@@ -44,7 +44,7 @@ const injecting = (tag: string): Transform => {
 const decoded = (body: Readable, encoding: string): Readable | undefined => {
   if (encoding === "" || encoding === "identity") return body;
   const decoder = encoding === "gzip" || encoding === "x-gzip" ? zlib.createGunzip() : encoding === "br" ? zlib.createBrotliDecompress() : encoding === "deflate" ? zlib.createInflate() : undefined;
-  return decoder === undefined ? undefined : body.pipe(decoder);
+  return decoder === undefined ? undefined : pipeline(body, decoder, () => undefined);
 };
 
 const rawHead = (req: http.IncomingMessage, headers: Record<string, unknown>): string => {
@@ -108,7 +108,7 @@ export const startInstanceProxy = async (input: { readonly upstreamPort: number;
         delete out["content-length"];
         delete out["content-encoding"];
         res.writeHead(status, out);
-        body.pipe(injecting(bridgeTag(rewritten.nonce))).pipe(res);
+        pipeline(body, injecting(bridgeTag(rewritten.nonce)), res, () => undefined);
       });
       upstream.on("error", (error: NodeJS.ErrnoException) => {
         forget(error);

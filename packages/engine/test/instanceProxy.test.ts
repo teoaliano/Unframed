@@ -100,6 +100,12 @@ describe("serving a live Instance through its proxy", () => {
     expect((await rawRequest(proxy, "/headless", { headers: { ...at(proxy), accept: "text/html" } })).text).toBe("<body>no head here</body>");
   });
 
+  it("ends a page whose compressed body is corrupt and keeps serving", async () => {
+    const { proxy } = await liveInstance();
+    await rawRequest(proxy, "/corrupt", { headers: { ...at(proxy), accept: "text/html" } }).catch(() => undefined);
+    expect((await rawRequest(proxy, "/", { headers: { ...at(proxy), accept: "text/html" } })).text).toContain("<title>Fake app</title>");
+  });
+
   it("strips frame refusals, keeps the rest of the CSP and puts its nonce on the bridge tag", async () => {
     const { proxy } = await liveInstance();
     const page = await rawRequest(proxy, "/deny", { headers: { ...at(proxy), accept: "text/html" } });
