@@ -49,13 +49,30 @@ const EXIT_GUARANTEE_MS = 600;
 /**
  * Keeps the rail mounted through its exit and unmounts it on its own `transitionend`
  * (transform or opacity). A CSS transition, so reopening mid-exit reverses from where it is.
+ * A chat closed by moving it to a container it was never shown in leaves at once, with no exit.
  */
-const RailMotion = ({ open, children }: { readonly open: boolean; readonly children: (ref: (element: HTMLElement | null) => void, state: "open" | "closed") => ReactNode }) => {
+const RailMotion = ({
+  open,
+  place,
+  children,
+}: {
+  readonly open: boolean;
+  readonly place: string;
+  readonly children: (ref: (element: HTMLElement | null) => void, state: "open" | "closed") => ReactNode;
+}) => {
   const [mounted, setMounted] = useState(open);
   const element = useRef<HTMLElement | null>(null);
+  const shownIn = useRef(place);
+  const leftBehind = !open && place !== shownIn.current;
   useEffect(() => {
-    if (open) setMounted(true);
-  }, [open]);
+    if (open) {
+      shownIn.current = place;
+      setMounted(true);
+    }
+  }, [open, place]);
+  useEffect(() => {
+    if (leftBehind) setMounted(false);
+  }, [leftBehind]);
   useEffect(() => {
     if (open || !mounted) return;
     const rail = element.current;
@@ -70,7 +87,7 @@ const RailMotion = ({ open, children }: { readonly open: boolean; readonly child
       clearTimeout(timer);
     };
   }, [open, mounted]);
-  if (!open && !mounted) return null;
+  if ((!open && !mounted) || leftBehind) return null;
   return <>{children((node) => (element.current = node), open ? "open" : "closed")}</>;
 };
 
@@ -313,7 +330,7 @@ const CanvasRail = ({ client, openArtifact }: { readonly client: ChatClient; rea
   // Beside tldraw's container, not in it: its own panels (the style panel) would sit on top of the chat.
   const host = editor.getContainer().parentElement;
   // The floating composer stays on the canvas while its conversation is closed.
-  const chat = <RailMotion open={ui.open || container === "composer"}>{(ref, state) => <CanvasChat client={client} container={container} motion={{ ref, state }} chatProps={props} />}</RailMotion>;
+  const chat = <RailMotion open={ui.open || container === "composer"} place={container}>{(ref, state) => <CanvasChat client={client} container={container} motion={{ ref, state }} chatProps={props} />}</RailMotion>;
   return host ? createPortal(chat, host) : chat;
 };
 
