@@ -148,8 +148,14 @@ describe("serving a live Instance through its proxy", () => {
     const { proxy, engine } = await liveInstance();
     for (const origin of ["https://evil.example", `http://127.0.0.1:${engine.port}`]) {
       expect((await rawRequest(proxy, "/_next/__fake/info", { headers: { ...at(proxy), origin } })).status).toBe(403);
-      expect((await rawRequest(proxy, "/__fake/info", { headers: { ...at(proxy), origin } })).status).toBe(403);
       await expect(firstMessage(proxy, "/_next/webpack-hmr", { origin, ...at(proxy) })).rejects.toThrow(/403/);
     }
+  });
+
+  it("leaves the app's own requests to the app: a POST with Origin null reaches it with that Origin", async () => {
+    const { proxy } = await liveInstance();
+    const answer = await rawRequest(proxy, "/__fake/info", { method: "POST", body: "user=me", headers: { ...at(proxy), origin: "null", "content-type": "application/x-www-form-urlencoded" } });
+    expect(answer.status).toBe(200);
+    expect(answer.json().origin).toBe("null");
   });
 });

@@ -70,6 +70,7 @@ const LOG_TAIL_CHARS = 16_000;
 const LOG_PUBLISH_MS = 500;
 const START_TIMEOUT_MS = 120_000;
 const PROBE_EVERY_MS = 150;
+const PORT_RELEASE_MS = 3_000;
 const STOP_GRACE_MS = 3_000;
 const SHUTDOWN_GRACE_MS = 1_500;
 const SETUP_FILES_FOLDER = "setup-files";
@@ -312,6 +313,15 @@ export const instancesLayer = Layer.effect(
       }
     };
 
+    const heldAfterRelease = async (port: number): Promise<boolean> => {
+      const deadline = Date.now() + PORT_RELEASE_MS;
+      while (await answers(port)) {
+        if (Date.now() > deadline) return true;
+        await new Promise((resolve) => setTimeout(resolve, PROBE_EVERY_MS));
+      }
+      return false;
+    };
+
     const watchWorktree = (live: Live): FSWatcher | undefined => {
       try {
         const watcher = watch(live.stored.worktree, { recursive: true }, (_event, file) => {
@@ -344,7 +354,7 @@ export const instancesLayer = Layer.effect(
         }
         const single = setup.portMode.mode === "single";
         const port = setup.portMode.mode === "single" ? setup.portMode.port : yield* Effect.promise(() => freePort(reservedPorts()));
-        if (single && (yield* Effect.promise(() => answers(port)))) {
+        if (single && (yield* Effect.promise(() => heldAfterRelease(port)))) {
           setState(live, "failed", { upstreamPort: null, error: portInUse(port) });
           return undefined;
         }

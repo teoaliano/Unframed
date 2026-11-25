@@ -3,7 +3,7 @@ import net from "node:net";
 import { StringDecoder } from "node:string_decoder";
 import { Transform, type Readable } from "node:stream";
 import zlib from "node:zlib";
-import { BRIDGE_PATH, bridgeTag, htmlInjector, loopbackGuard, proxiedResponseHeaders, screenBridgeSource, upstreamRequestHeaders } from "@unframed/domain";
+import { BRIDGE_PATH, bridgeTag, htmlInjector, loopbackGuard, proxiedResponseHeaders, rewritesOrigin, screenBridgeSource, upstreamRequestHeaders } from "@unframed/domain";
 import { listenLoopback } from "../listen.ts";
 
 const UPSTREAM_HOSTS = ["127.0.0.1", "::1"] as const;
@@ -79,7 +79,7 @@ export const startInstanceProxy = async (input: { readonly upstreamPort: number;
 
   const sockets = new Set<net.Socket>();
   const server = http.createServer((req, res) => {
-    const decision = loopbackGuard({ origin: req.headers.origin, host: req.headers.host });
+    const decision = loopbackGuard({ origin: rewritesOrigin(req.url ?? "/", false) ? req.headers.origin : undefined, host: req.headers.host });
     if (!decision.allowed) {
       res.writeHead(decision.status, { "content-type": "text/plain; charset=utf-8" });
       res.end(decision.error);

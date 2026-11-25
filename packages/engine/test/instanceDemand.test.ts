@@ -160,6 +160,14 @@ describe("driving Instances from canvas demand", () => {
     expect((await stateOf(rpc, project, b)).state).toBe("stopped");
   });
 
+  it("switches a single-port Repository to another Instance while the old server is still letting go of the port", async () => {
+    const fixed = await freePort();
+    const { rpc, project, a, b } = await twoInstances({ FAKE_DEV_LINGER_MS: "1000" }, async (engine, slug) => setSinglePort(engine, slug, fixed));
+    expect(await rpc.call("instances.start", { project, id: a })).toMatchObject({ state: "live", upstreamPort: fixed });
+    expect(await rpc.call("instances.start", { project, id: b })).toMatchObject({ state: "live", upstreamPort: fixed, error: null });
+    expect((await stateOf(rpc, project, a)).state).toBe("stopped");
+  });
+
   it("fails a single-port Instance whose fixed port something else already answers on", async () => {
     const fixed = await freePort();
     const { rpc, project, a } = await twoInstances({}, async (engine, slug) => setSinglePort(engine, slug, fixed));
