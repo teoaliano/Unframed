@@ -43,14 +43,14 @@ const detail = (instance: Instance) => ({ ...summary(instance), log: logTail(ins
 const text = (name: string): { readonly description: string; readonly arguments: Readonly<Record<string, string>> } =>
   name === "flow_create" ? FLOW_CREATE_TEXT : name === "screen_state" ? SCREEN_STATE_TEXT : INSTANCE_TOOL_TEXT[name]!;
 
-export interface CheckedState {
+interface CheckedState {
   readonly route: string;
   readonly steps: ReadonlyArray<ScreenStep>;
   readonly mocks: ReadonlyArray<ScreenMock>;
   readonly state: string;
 }
 
-export const checkState = (args: Record<string, unknown>, fallbackRoute: string, where = ""): CheckedState => {
+const checkState = (args: Record<string, unknown>, fallbackRoute: string, where = ""): CheckedState => {
   const route = normaliseRoute(typeof args.route === "string" ? args.route : fallbackRoute);
   if (route === undefined) throw new Refused(`${where}the route is a path in the app, such as /settings`);
   const steps = checkSteps(args.steps);

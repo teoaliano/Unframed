@@ -1,4 +1,4 @@
-import type { ScreenMock, ScreenStep } from "@unframed/contracts";
+import type { ScreenStep } from "@unframed/contracts";
 import { checkMocks, checkSteps, NO_STATE_BRIDGE, screenUrl, STEP_TIMEOUT_MS, stateRoute, stepFailure } from "@unframed/domain";
 import type { HeadlessChrome } from "../artifacts/headlessChrome.ts";
 import type { ScreenStatePayload } from "../instances/stateTokens.ts";
@@ -45,12 +45,6 @@ export const chromeStateProver =
         await page.close().catch(() => undefined);
       }
     });
-
-export interface StateInput {
-  readonly route: string;
-  readonly steps: ReadonlyArray<ScreenStep>;
-  readonly mocks: ReadonlyArray<ScreenMock>;
-}
 
 export const proofUrl = (proxyPort: number, route: string, token: string | undefined): string => screenUrl(proxyPort, token === undefined ? route : stateRoute(route, token));
 

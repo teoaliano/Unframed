@@ -150,7 +150,6 @@ export interface ScreenTarget {
 }
 
 export const SCREEN_STEP_ACTIONS = ["click", "type", "press", "hover", "wait", "scroll"] as const;
-export type ScreenStepAction = (typeof SCREEN_STEP_ACTIONS)[number];
 
 export type ScreenStep =
   | { readonly action: "click" | "hover" | "wait" | "scroll"; readonly target: ScreenTarget }
