@@ -1,22 +1,46 @@
 /**
  * The agent on the canvas (spec 08): the Agent button in the top-right chrome, the
- * composer's Agent tray, and the chat rail docked to the left edge.
+ * composer's Agent tray, and the chat: docked to the left edge, floating as a composer
+ * with the conversation above it, or floating as a window, as the chat layout setting says.
  */
+import { CHAT_WINDOW_LIMITS, chatContainer, PANEL_MARGIN, readChatWindow, type ChatContainer, type PanelEdge } from "@unframed/domain";
 import { Sparkles } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { TldrawUiButtonIcon, TldrawUiToolbarButton, useEditor, type TLShapeId } from "tldraw";
 import { registerSlot, type AgentTrayProps } from "../chrome/slots.ts";
 import { useSlots } from "../chrome/slots.ts";
 import { Button } from "~/components/ui/button";
 import { Sheet, SheetPopup } from "~/components/ui/sheet";
+import { TOP_BAR_HEIGHT } from "~/components/ui/top-bar";
+import { cn } from "~/lib/utils";
+import { useFloatingPlacement } from "../artifacts/panelPlacement.ts";
+import { panelPrefsHook } from "../artifacts/panelPrefs.ts";
 import { useCanvasProject, useEngine } from "../context.ts";
 import { AgentRail } from "./rail/AgentRail.tsx";
 import { useNarrowWindow } from "../chrome/narrowWindow.ts";
 import { ToolbarAgentTray } from "./composer/AgentTray.tsx";
 import { providerMessage } from "./providers.ts";
 import { QueueSender } from "./queue.tsx";
-import { EMPTY_DRAFT, NEW_CHAT, useChatClient, useProviders, useRailUi, type ChatClient } from "./store.ts";
+import { EMPTY_DRAFT, NEW_CHAT, useChatClient, useChatLayout, useProviders, useRailUi, type ChatClient } from "./store.ts";
+
+export const CHAT_WINDOW_KEY = "agent.chatWindow";
+
+const useChatWindowPrefs = panelPrefsHook(CHAT_WINDOW_KEY, readChatWindow);
+
+/** The floating composer keeps this far above the bottom toolbar, and the conversation this far below the top bar. */
+const COMPOSER_GAP = 12;
+
+const EDGES: ReadonlyArray<readonly [PanelEdge, string]> = [
+  ["n", "inset-x-3 top-0 h-1.5 cursor-ns-resize"],
+  ["s", "inset-x-3 bottom-0 h-1.5 cursor-ns-resize"],
+  ["w", "inset-y-3 start-0 w-1.5 cursor-ew-resize"],
+  ["e", "inset-y-3 end-0 w-1.5 cursor-ew-resize"],
+  ["nw", "top-0 start-0 size-3 cursor-nwse-resize"],
+  ["se", "bottom-0 end-0 size-3 cursor-nwse-resize"],
+  ["ne", "top-0 end-0 size-3 cursor-nesw-resize"],
+  ["sw", "bottom-0 start-0 size-3 cursor-nesw-resize"],
+];
 
 
 /** How long the rail waits for its own transitionend before it unmounts anyway: a hidden tab fires none. */
@@ -133,11 +157,122 @@ export const AgentHost = () => {
   );
 };
 
+/** How far the floating composer's column ends above the host's bottom: clear of the bottom toolbar, with a gap. */
+const useToolbarClearance = (on: boolean): number | undefined => {
+  const editor = useEditor();
+  const [clearance, setClearance] = useState<number>();
+  useLayoutEffect(() => {
+    if (!on) return;
+    const container = editor.getContainer();
+    const host = container.parentElement ?? container;
+    const measure = () => {
+      const bar = container.querySelector<HTMLElement>("[data-unframed-toolbar]")?.getBoundingClientRect();
+      const bottom = host.getBoundingClientRect().bottom;
+      setClearance(Math.max(0, Math.round(bottom - (bar && bar.height > 0 ? bar.top : bottom))) + COMPOSER_GAP);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(host);
+    const bar = container.querySelector<HTMLElement>("[data-unframed-toolbar]");
+    if (bar) observer.observe(bar);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [editor, on]);
+  return clearance;
+};
+
+interface ChatProps {
+  readonly onClose: () => void;
+  readonly onLocate: (id: string) => void;
+  readonly onOpenEditor?: (id: string) => void;
+}
+
+/**
+ * The chat on a wide enough canvas, in whichever container the layout setting picks. One
+ * element whatever the container, so changing it keeps the transcript, the tabs and the draft.
+ */
+const CanvasChat = ({
+  client,
+  container,
+  motion,
+  chatProps,
+}: {
+  readonly client: ChatClient;
+  readonly container: Exclude<ChatContainer, "sheet">;
+  readonly motion: { readonly ref: (element: HTMLElement | null) => void; readonly state: "open" | "closed" };
+  readonly chatProps: ChatProps;
+}) => {
+  const editor = useEditor();
+  const engine = useEngine();
+  const ui = useRailUi(client);
+  const [prefs, savePrefs] = useChatWindowPrefs(engine);
+  const [element, setElement] = useState<HTMLElement | null>(null);
+  const motionRef = useRef(motion.ref);
+  motionRef.current = motion.ref;
+  const ref = useCallback((node: HTMLElement | null) => {
+    motionRef.current(node);
+    setElement(node);
+  }, []);
+  const floating = container === "window" && prefs !== undefined;
+  const placement = useFloatingPlacement({
+    editor,
+    element,
+    firstPlace: () => ({ left: PANEL_MARGIN, top: TOP_BAR_HEIGHT + PANEL_MARGIN }),
+    floating,
+    prefs,
+    save: savePrefs,
+    limits: CHAT_WINDOW_LIMITS,
+  });
+  const clearance = useToolbarClearance(container === "composer");
+  const style: CSSProperties | undefined = container === "composer" ? { top: TOP_BAR_HEIGHT + COMPOSER_GAP, bottom: clearance ?? 0, visibility: clearance === undefined ? "hidden" : undefined } : undefined;
+  const onConversation = useCallback(
+    (open: boolean) => {
+      if (open) void client.loadProviders();
+      client.setUi({ open });
+    },
+    [client],
+  );
+  return (
+    <AgentRail
+      project={client.project}
+      motion={{ ref, state: motion.state }}
+      container={container}
+      conversationOpen={ui.open}
+      onConversation={onConversation}
+      onHeaderPointerDown={(event) => {
+        if (floating && (event.target as Element).closest("button") === null) placement.startMove(event);
+      }}
+      onMoveKey={(key, resize) => floating && placement.nudge(key, resize ? "resize" : "move")}
+      {...(style ? { style } : {})}
+      {...chatProps}
+    >
+      {floating &&
+        EDGES.map(([edge, place]) => (
+          <div
+            key={edge}
+            aria-hidden
+            data-panel-edge={edge}
+            className={cn("absolute z-10 touch-none", place)}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+              placement.startResize(event, edge);
+            }}
+          />
+        ))}
+    </AgentRail>
+  );
+};
+
 const CanvasRail = ({ client, openArtifact }: { readonly client: ChatClient; readonly openArtifact: ((id: string) => void) | undefined }) => {
   const editor = useEditor();
   const ui = useRailUi(client);
+  const layout = useChatLayout(client);
   const narrow = useNarrowWindow();
-  useEffect(() => (ui.open && !narrow ? registerSlot("leftCardDocked", true) : undefined), [ui.open, narrow]);
+  const container = chatContainer(layout, narrow);
+  useEffect(() => (ui.open && container === "rail" ? registerSlot("leftCardDocked", true) : undefined), [ui.open, container]);
   const close = useCallback(() => client.setUi({ open: false }), [client]);
   const locate = useCallback(
     (id: string) => {
@@ -166,7 +301,7 @@ const CanvasRail = ({ client, openArtifact }: { readonly client: ChatClient; rea
     }),
     [close, locate, openArtifact],
   );
-  if (narrow) {
+  if (container === "sheet") {
     return (
       <Sheet open={ui.open} onOpenChange={(open) => !open && close()}>
         <SheetPopup side="left" showCloseButton={false} className="w-[min(88vw,24rem)]">
@@ -175,14 +310,11 @@ const CanvasRail = ({ client, openArtifact }: { readonly client: ChatClient; rea
       </Sheet>
     );
   }
-  // Beside tldraw's container, not in it: its own panels (the style panel) would sit on top of the rail.
+  // Beside tldraw's container, not in it: its own panels (the style panel) would sit on top of the chat.
   const host = editor.getContainer().parentElement;
-  const rail = (
-    <RailMotion open={ui.open}>
-      {(ref, state) => <AgentRail project={client.project} motion={{ ref, state }} {...props} />}
-    </RailMotion>
-  );
-  return host ? createPortal(rail, host) : rail;
+  // The floating composer stays on the canvas while its conversation is closed.
+  const chat = <RailMotion open={ui.open || container === "composer"}>{(ref, state) => <CanvasChat client={client} container={container} motion={{ ref, state }} chatProps={props} />}</RailMotion>;
+  return host ? createPortal(chat, host) : chat;
 };
 
 export type { AgentTrayProps };

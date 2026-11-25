@@ -1,6 +1,6 @@
 import { clearAllChats, clearedNotice, railShown, resetMoment, usageLimitHit } from "@unframed/domain";
-import { BrushCleaning, CircleAlert, Gauge, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { BrushCleaning, ChevronDown, CircleAlert, Gauge, GripVertical, MessagesSquare, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useMaybeEditor, useValue } from "tldraw";
 import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";
@@ -39,6 +39,18 @@ export interface AgentRailProps {
   readonly onClose?: () => void;
   /** The canvas rail's slide: its element and whether it is arriving or leaving. */
   readonly motion?: { readonly ref: (element: HTMLElement | null) => void; readonly state: "open" | "closed" };
+  /** On the canvas, what holds the chat: the docked rail, a floating window, or a floating composer with the conversation above it. */
+  readonly container?: "rail" | "window" | "composer";
+  /** In the floating composer: whether the conversation above it is showing. */
+  readonly conversationOpen?: boolean;
+  readonly onConversation?: (open: boolean) => void;
+  /** In the floating window: what a press on the header starts, and what an arrow key on its Move handle does. */
+  readonly onHeaderPointerDown?: (event: ReactPointerEvent<HTMLElement>) => void;
+  readonly onMoveKey?: (key: string, resize: boolean) => boolean;
+  /** Where the floating composer's column starts and ends. */
+  readonly style?: CSSProperties;
+  /** Drawn last inside the chat, over it: the floating window's resize edges. */
+  readonly children?: ReactNode;
 }
 
 const ARTIFACT_TYPES = new Set(["page", "motion"]);
@@ -58,6 +70,22 @@ const keyIsTaken = (target: EventTarget | null): boolean => {
 const RAIL_CLASS =
   "pointer-events-auto absolute top-9 left-0 bottom-0 z-[600] box-border flex w-(--agent-rail-width) flex-col border-r border-(--agent-rail-docked-border) bg-(--agent-rail-docked-surface) font-sans text-(--agent-rail-foreground) [transform:none] opacity-100 [transition:transform_260ms_var(--ease-drawer),opacity_200ms_ease-out] starting:data-[state=open]:[transform:translateX(-100%)] starting:data-[state=open]:opacity-0 data-[state=closed]:pointer-events-none data-[state=closed]:[transform:translateX(-100%)] data-[state=closed]:opacity-0 data-[state=closed]:[transition:transform_200ms_var(--ease-drawer),opacity_160ms_ease-out] motion-reduce:[transition:opacity_160ms_ease-out] motion-reduce:data-[state=closed]:[transform:none] motion-reduce:data-[state=closed]:[transition:opacity_160ms_ease-out]";
 
+const WINDOW_CLASS =
+  "pointer-events-auto invisible absolute top-0 left-0 z-[600] box-border flex flex-col rounded-xl border border-(--agent-rail-docked-border) bg-(--agent-rail-docked-surface) bg-clip-padding font-sans text-(--agent-rail-foreground) shadow-lg/5 opacity-100 [scale:1] [transition:opacity_150ms_ease-out,scale_150ms_ease-out] starting:opacity-0 starting:[scale:0.97] data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:[scale:0.97] motion-reduce:[transition:opacity_150ms_ease-out] motion-reduce:starting:[scale:1] motion-reduce:data-[state=closed]:[scale:1]";
+
+const COMPOSER_CLASS = "pointer-events-none absolute inset-x-0 z-[600] box-border flex flex-col items-center justify-end gap-2 px-2 font-sans text-(--agent-rail-foreground)";
+
+const CONVERSATION_CLASS =
+  "pointer-events-auto relative box-border flex min-h-0 w-(--agent-rail-width) max-w-full flex-1 flex-col rounded-xl border border-(--agent-rail-docked-border) bg-(--agent-rail-docked-surface) bg-clip-padding shadow-lg/5 opacity-100 [translate:0] [transition:opacity_150ms_ease-out,translate_150ms_ease-out,visibility_150ms] data-[state=closed]:invisible data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:[translate:0_8px] motion-reduce:[transition:opacity_150ms_ease-out,visibility_150ms] motion-reduce:data-[state=closed]:[translate:0]";
+
+const TRAY_CLASS = "flex min-h-0 flex-col px-2.5 pb-2.5";
+
+const FLOATING_TRAY_CLASS = "pointer-events-auto flex min-h-0 w-(--agent-rail-width) max-w-full shrink-0 flex-col";
+
+/** A key on a menu, dialog or list inside the chat is theirs: Escape there closes them, not the chat. */
+const keyInPopup = (target: EventTarget | null): boolean =>
+  target instanceof Element && target.closest("[role='menu'], [role='dialog'], [role='alertdialog'], [role='listbox']") !== null;
+
 /** The editor's left column, or the Sheet: the same rail in place, with no surface or motion of its own. */
 const EMBEDDED_CLASS = "relative box-border flex size-full min-h-0 flex-col font-sans text-(--agent-rail-foreground)";
 
@@ -66,17 +94,38 @@ const EMBEDDED_CLASS = "relative box-border flex size-full min-h-0 flex-col font
  * artifacts, the active chat's transcript, its pending panels and the composer's Agent
  * tray, behind one component that the canvas and the artifact editor both mount.
  */
-export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOpenEditor, onClose, motion }: AgentRailProps) => {
+export const AgentRail = ({
+  project,
+  embedded,
+  inSheet,
+  filterTo,
+  onLocate,
+  onOpenEditor,
+  onClose,
+  motion,
+  container = "rail",
+  conversationOpen = true,
+  onConversation,
+  onHeaderPointerDown,
+  onMoveKey,
+  style,
+  children,
+}: AgentRailProps) => {
   const engine = useEngine();
   const client = useChatClient(engine, project);
   const editor = useMaybeEditor();
   const ui = useRailUi(client);
-  const docked = !embedded && !inSheet;
+  const onCanvas = !embedded && !inSheet;
+  const docked = onCanvas && container === "rail";
+  const floatingComposer = onCanvas && container === "composer";
+  const floatingWindow = onCanvas && container === "window";
+  const trayPart = useRef<HTMLDivElement | null>(null);
   const [railWidth, saveRailWidth] = useRailWidth(engine);
   useDrawerWidth(RAIL_WIDTH_VAR, railWidth);
   const chats = useChats(client);
   const { statuses } = useProviders(client);
   const root = useRef<HTMLElement | null>(null);
+  const conversation = useRef<HTMLDivElement | null>(null);
   /** The chat the delete confirmation is about: the active one from the header, any from its tab menu. */
   const [deleting, setDeleting] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
@@ -170,6 +219,21 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
   }, [editor]);
 
   const newChat = () => client.setUi({ chosen: NEW_CHAT, pinned: null });
+  const conversationToggle = (
+    <Tip label={conversationOpen ? "Hide conversation" : "Show conversation"} side="top">
+      <Button
+        variant="ghost-muted"
+        size="icon-sm"
+        aria-label={conversationOpen ? "Hide conversation" : "Show conversation"}
+        aria-pressed={conversationOpen}
+        // A click leaves the keyboard where it was, so typing in the composer carries on.
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => onConversation?.(!conversationOpen)}
+      >
+        {conversationOpen ? <ChevronDown aria-hidden /> : <MessagesSquare aria-hidden />}
+      </Button>
+    </Tip>
+  );
 
   return (
     <aside
@@ -178,11 +242,13 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
         motion?.ref(element);
       }}
       aria-label="Agent"
-      data-slot={embedded || inSheet ? undefined : "docked-rail"}
+      data-slot={docked ? "docked-rail" : undefined}
+      data-layout={onCanvas ? container : undefined}
       // A click outside a field focuses the rail, not the page, so a key typed next stays here and goes to the composer.
       tabIndex={-1}
-      className={`${embedded || inSheet ? EMBEDDED_CLASS : RAIL_CLASS} outline-none`}
+      className={`${!onCanvas ? EMBEDDED_CLASS : floatingWindow ? WINDOW_CLASS : floatingComposer ? COMPOSER_CLASS : RAIL_CLASS} outline-none`}
       data-state={motion?.state}
+      style={style}
       data-embedded={embedded ? "" : undefined}
       onPointerDown={(event) => event.stopPropagation()}
       // tldraw copies and cuts the canvas selection from a listener on the document: stopped here, the chat's own text is what the clipboard gets.
@@ -193,6 +259,19 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
         event.stopPropagation();
         // So the Sheet never hears Escape: the rail closes it, unless a menu of its own took the key.
         if (inSheet && event.key === "Escape" && !event.defaultPrevented && root.current?.contains(event.target as Node)) onClose?.();
+        const handle = event.target instanceof Element && event.target.closest("[data-panel-handle='move']") !== null;
+        if (floatingWindow && handle && !event.defaultPrevented && onMoveKey?.(event.key, event.shiftKey)) event.preventDefault();
+        // The floating chat closes on Escape from anywhere inside it, unless a menu or dialog of its own took the key.
+        // ProseMirror marks every Escape in the prompt as handled; the prompt's own menus stop theirs before they get here.
+        const escape = event.key === "Escape" && (!event.defaultPrevented || (event.target instanceof Element && event.target.closest("[data-agent-prompt]") !== null));
+        if ((floatingWindow || (floatingComposer && conversationOpen)) && escape && root.current?.contains(event.target as Node) && !keyInPopup(event.target)) {
+          event.preventDefault();
+          if (floatingComposer) {
+            // The conversation goes inert as it closes: the keyboard moves to the composer below it.
+            if (!trayPart.current?.contains(event.target as Node)) trayPart.current?.querySelector<HTMLElement>("[data-agent-prompt]")?.focus();
+            onConversation?.(false);
+          } else onClose?.();
+        }
         // The editor's own Escape listener never hears keys the rail stops, so the rail closes the editor itself.
         if (embedded && event.key === "Escape" && !event.defaultPrevented && !keyIsTaken(event.target)) {
           event.preventDefault();
@@ -212,7 +291,31 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
         if (!target.closest("input, textarea, [contenteditable='true']")) event.preventDefault();
       }}
     >
-      <header className="flex h-12 shrink-0 items-center gap-1 pr-2 pl-3.5">
+      <div
+        ref={conversation}
+        className={floatingComposer ? CONVERSATION_CLASS : "contents"}
+        data-testid={floatingComposer ? "agent-conversation" : undefined}
+        data-state={floatingComposer ? (conversationOpen ? "open" : "closed") : undefined}
+        inert={floatingComposer && !conversationOpen}
+      >
+      <header
+        className={`flex h-12 shrink-0 items-center gap-1 pr-2 pl-3.5 ${floatingWindow ? "cursor-grab touch-none select-none active:cursor-grabbing" : ""}`}
+        onPointerDown={floatingWindow ? onHeaderPointerDown : undefined}
+      >
+        {floatingWindow && (
+          <Tip label="Move (drag, or arrow keys; Shift resizes)">
+            <span
+              role="button"
+              tabIndex={0}
+              aria-label="Move agent"
+              aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Shift+ArrowUp Shift+ArrowDown Shift+ArrowLeft Shift+ArrowRight"
+              data-panel-handle="move"
+              className="-ml-2 flex h-6 w-4 shrink-0 items-center justify-center rounded-sm text-(--agent-rail-title-icon) outline-none focus-visible:ring-2 focus-visible:ring-(--agent-rail-docked-border)"
+            >
+              <GripVertical aria-hidden className="size-3.5" />
+            </span>
+          </Tip>
+        )}
         <Sparkles aria-hidden className="size-4 shrink-0 text-(--agent-rail-title-icon)" />
         <h2 className="m-0 ml-1 flex-1 text-sm font-medium">Agent</h2>
         <Tip label="Search chats">
@@ -251,8 +354,8 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
         {/* Close stands apart, so reaching for it never lands on Clear all chats. */}
         {!embedded && <Separator orientation="vertical" className="mx-1 h-4" />}
         {!embedded && (
-          <Tip label="Close">
-            <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={onClose}>
+          <Tip label={floatingWindow || floatingComposer ? "Close (Esc)" : "Close"}>
+            <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={floatingComposer ? () => onConversation?.(false) : onClose}>
               <X aria-hidden />
             </Button>
           </Tip>
@@ -321,9 +424,18 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
           <DiffPanel key={activeChat.id} client={client} chat={activeChat} diff={ui.diff} />
         </Suspense>
       )}
-      <div className="flex min-h-0 flex-col px-2.5 pb-2.5">
+      </div>
+      <div ref={trayPart} className={floatingComposer ? FLOATING_TRAY_CLASS : TRAY_CLASS} data-testid={floatingComposer ? "agent-floating-composer" : undefined}>
         {activeChat?.outside === undefined ? (
-          <AgentTray client={client} variant="rail" chatId={active} newChatTags={selectedArtifacts} dropTarget={root} notices={notices} />
+          <AgentTray
+            client={client}
+            variant="rail"
+            chatId={active}
+            newChatTags={selectedArtifacts}
+            dropTarget={floatingComposer ? trayPart : root}
+            notices={notices}
+            {...(floatingComposer ? { leadingControl: conversationToggle } : {})}
+          />
         ) : (
           <div className="flex flex-col gap-1.5">
             <NoticeStack items={notices} />
@@ -337,6 +449,7 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
         )}
       </div>
       {docked && <DrawerGrip edge="right" label="Resize agent rail" cssVar={RAIL_WIDTH_VAR} onCommit={saveRailWidth} />}
+      {children}
     </aside>
   );
 };

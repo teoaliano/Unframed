@@ -116,6 +116,8 @@ export interface AgentTrayProps {
   readonly onMenuOpen?: (key: string, open: boolean) => void;
   readonly dropTarget?: RefObject<HTMLElement | null>;
   readonly notices?: ReadonlyArray<ComposerNotice>;
+  /** First in the controls row: the floating composer's conversation toggle. */
+  readonly leadingControl?: ReactNode;
 }
 
 const useModifiersHeld = (): { readonly command: boolean; readonly shift: boolean } => {
@@ -149,7 +151,7 @@ const markAt = (at: CaretMark | undefined) => (at === undefined ? {} : { at });
 
 const withElements = (elements: ReadonlyArray<ElementChip>) => (elements.length > 0 ? { elements } : {});
 
-export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, onSent, underChips, note, onMenuOpen, dropTarget, notices = [] }: AgentTrayProps) => {
+export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, onSent, underChips, note, onMenuOpen, dropTarget, notices = [], leadingControl }: AgentTrayProps) => {
   const ui = useRailUi(client);
   const { statuses } = useProviders(client);
   const chat = useWatchedThread(client, chatId);
@@ -1065,6 +1067,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
             data-resting-controls={resting.resting ? "" : undefined}
             data-testid={resting.resting ? "resting-controls" : undefined}
           >
+            {leadingControl}
             <Tip label="Attach files" side="top">
               <Button variant="ghost-muted" size="icon-sm" aria-label="Attach files" disabled={answering && choiceOnly(question)} onClick={() => files.current?.click()}>
                 <Paperclip aria-hidden />

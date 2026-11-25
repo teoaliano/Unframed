@@ -266,7 +266,7 @@ test("Send shortcut sits next to Follow-up behavior: Enter by default, t3code's 
     const chord = mac ? "⌘Enter" : "Ctrl+Enter";
     const agents = dialog.getByRole("region", { name: "Local agents" });
     // Send shortcut, then Follow-up behavior, as t3code orders them.
-    await expect(agents.getByRole("combobox")).toHaveText(["Enter", "Queue"]);
+    await expect(agents.getByRole("combobox")).toHaveText(["Enter", "Queue", "Side panel"]);
     const select = dialog.getByRole("combobox", { name: "Send shortcut" });
     await expect(select).toHaveText("Enter");
     await select.click();
