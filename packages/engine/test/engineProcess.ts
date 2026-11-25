@@ -13,6 +13,7 @@ import { join } from "node:path";
 import type { EngineIpcMessage, ReadyMessage } from "@unframed/contracts";
 import WebSocket from "ws";
 import { repoRoot } from "../../../scripts/buildWeb.ts";
+import { isAlive } from "../src/lifeline.ts";
 import { sweepLeftovers } from "../src/instances/processes.ts";
 import { connectRpc, type TestRpcClient } from "./rpcClient.ts";
 
@@ -206,21 +207,12 @@ process.on("exit", () => {
 
 const TEMP_OWNER = /^unframed-[a-z0-9-]*?p(\d+)-[A-Za-z0-9]{6}$/;
 
-const ownerAlive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
-};
-
 /** Removes the temporary folders `makeTempDir` named after a test process that is gone. */
 export const sweepTempDirs = async (root = tmpdir()): Promise<string[]> => {
   const removed: string[] = [];
   for (const name of await readdir(root).catch(() => [] as string[])) {
     const owner = TEMP_OWNER.exec(name)?.[1];
-    if (owner === undefined || ownerAlive(Number(owner))) continue;
+    if (owner === undefined || isAlive(Number(owner))) continue;
     await rm(join(root, name), { recursive: true, force: true }).catch(() => undefined);
     removed.push(name);
   }
