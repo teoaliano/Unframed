@@ -142,12 +142,6 @@ export const RepositoriesSetupVerdict = Rpc.make("repositories.setupVerdict", {
   error: UnframedError,
 });
 
-export const ScreensExplode = Rpc.make("screens.explode", {
-  payload: Schema.Struct({ project: Schema.String, shapeId: Schema.String, routes: Schema.Array(Schema.String) }),
-  success: Schema.Struct({ group: Schema.String, screens: Schema.Array(Schema.String) }),
-  error: UnframedError,
-});
-
 export const ScreensStateToken = Rpc.make("screens.stateToken", {
   payload: Schema.Struct({ project: Schema.String, instance: Schema.String, steps: Schema.Array(Schema.Unknown), mocks: Schema.Array(Schema.Unknown) }),
   success: Schema.Struct({ token: Schema.NullOr(Schema.String) }),

@@ -1,34 +1,12 @@
-import { existsSync, readdirSync } from "node:fs";
-import { homedir } from "node:os";
-import { chromeCandidates } from "@unframed/domain";
 import { describe, expect, it } from "vitest";
 import { toolResults } from "./agentCanvas.ts";
-import { startRepositoryAgent, type RepositoryAgent } from "./repositoryAgent.ts";
+import { chromeOnMachine as chrome } from "./chrome.ts";
+import { liveAgent, stateTurn, type RepositoryAgent } from "./repositoryAgent.ts";
 
-const chrome = chromeCandidates({
-  platform: process.platform,
-  env: process.env,
-  home: homedir(),
-  versionsIn: (dir) => {
-    try {
-      return readdirSync(dir);
-    } catch {
-      return [];
-    }
-  },
-}).find((path) => existsSync(path));
 if (chrome === undefined) console.log("  screen state tests skipped: no Chrome, Chromium, Edge or Brave on this machine");
-
-const CHROME_TURN_MS = 90_000;
 
 const EMPTY = { url: "/api/items", body: [] };
 const FAILED = { url: "/api/items", fail: true };
-
-const liveAgent = async (): Promise<{ agent: RepositoryAgent; proxy: number }> => {
-  const agent = await startRepositoryAgent();
-  const live = await agent.rpc.call("instances.start", { project: agent.project, id: agent.instance.id });
-  return { agent, proxy: live.proxyPort! };
-};
 
 const put = (agent: RepositoryAgent, records: any[]) => agent.rpc.call("testCanvas.apply", { project: agent.project, change: { put: records, remove: [] }, origin: { kind: "server", id: "test" } });
 
@@ -73,13 +51,6 @@ describe("a Screen's mocks reach its page through a per-load token", () => {
 });
 
 const MENU = { action: "click", target: { role: "button", name: "Menu" } };
-
-const stateTurn = async (agent: RepositoryAgent, tools: Array<{ name: string; input: Record<string, unknown> }>) => {
-  await agent.script("states", { when: "^make states", turns: [{ text: "Made them.", tools }] });
-  const chatId = await agent.createChat();
-  await agent.send(chatId, "make states", { selection: [agent.screen.id] });
-  return agent.settled(chatId, 1, agent.project, CHROME_TURN_MS);
-};
 
 describe.skipIf(chrome === undefined)("the screen_state tool", () => {
   it("proves states headlessly against the Instance and saves them: a click that opens a menu, a typed search, an empty list and a failed list", { timeout: 150_000 }, async () => {

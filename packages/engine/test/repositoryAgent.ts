@@ -92,3 +92,18 @@ export const startRepositoryAgent = async (env: Record<string, string> = {}, ini
     session: async (chatId) => JSON.parse(await readFile(join(engine.dataDir, "scripted-agent", `${chatId}.json`), "utf8")),
   };
 };
+
+export const CHROME_TURN_MS = 90_000;
+
+export const liveAgent = async (): Promise<{ agent: RepositoryAgent; proxy: number }> => {
+  const agent = await startRepositoryAgent();
+  const live = await agent.rpc.call("instances.start", { project: agent.project, id: agent.instance.id });
+  return { agent, proxy: live.proxyPort! };
+};
+
+export const stateTurn = async (agent: RepositoryAgent, tools: Array<{ name: string; input: Record<string, unknown> }>, selection: string[] = [agent.screen.id]) => {
+  await agent.script("states", { when: "^make states", turns: [{ text: "Made them.", tools }] });
+  const chatId = await agent.createChat();
+  await agent.send(chatId, "make states", { selection });
+  return agent.settled(chatId, 1, agent.project, CHROME_TURN_MS);
+};

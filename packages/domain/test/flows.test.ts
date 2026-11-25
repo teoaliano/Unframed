@@ -1,20 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { FLOW_NO_ROUTES, flowBadRoute, flowCapacity, flowLayout, flowRoutes, GROUP_MAX } from "../src/index.ts";
+import { arrowLabel, FLOW_ARROW_LABEL_MAX, flowCapacity, flowLayout, GROUP_MAX } from "../src/index.ts";
 
-describe("a Flow's routes", () => {
-  it("reads typed routes one per line or by commas, as paths, without repeats", () => {
-    expect(flowRoutes("/\nsettings\n\n /pricing , /settings\nhttp://localhost:3000/about")).toEqual({ routes: ["/", "/settings", "/pricing", "/about"] });
-    expect(flowRoutes(["/", "/team?tab=1"])).toEqual({ routes: ["/", "/team?tab=1"] });
-  });
-
-  it("refuses no routes and anything that is not a path in the app", () => {
-    expect(flowRoutes(" \n ")).toEqual({ error: FLOW_NO_ROUTES });
-    expect(flowRoutes("/ok\nhttps://example.com/")).toEqual({ error: flowBadRoute("https://example.com/") });
+describe("a Flow's arrows", () => {
+  it("read as the action that leads to the next state, or the last step that reaches it, or going to its route", () => {
+    expect(arrowLabel({ action: "  click Generate ", route: "/", steps: [] })).toBe("click Generate");
+    expect(arrowLabel({ route: "/", steps: [{ action: "press", key: "Enter" }, { action: "click", target: { role: "button", name: "Generate" } }] })).toBe("click button Generate");
+    expect(arrowLabel({ action: "", route: "/pricing", steps: [] })).toBe("go to /pricing");
+    expect(arrowLabel({ action: "x".repeat(200), route: "/", steps: [] })).toHaveLength(FLOW_ARROW_LABEL_MAX);
   });
 });
 
 describe("a Flow's layout", () => {
-  it("lays Screens out in route order, in rows that keep the group within its largest size", () => {
+  it("lays Screens out in order, in rows that keep the group within its largest size", () => {
     const layout = flowLayout({ x: 100, y: 2000, w: 1280, h: 800, count: 3 });
     expect(layout.screens).toEqual([
       { x: 28, y: 56 },

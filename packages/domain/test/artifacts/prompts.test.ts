@@ -34,9 +34,9 @@ import {
   SETUP_SYSTEM_PROMPT,
   SETUP_TOOL_TEXT,
   setupRejection,
-  SCREEN_EXPLODE_TEXT,
-  FLOW_INSTRUCTION_TEMPLATE,
-  flowInstruction,
+  FLOW_CREATE_TEXT,
+  MAP_FLOW_TEMPLATE,
+  mapFlowInstruction,
   SCREEN_STATE_TEXT,
   FIX_STATE_TEMPLATE,
   fixStateInstruction,
@@ -135,13 +135,13 @@ describe("Setup's model-facing text is the asset's text", () => {
 });
 
 describe("the Flow's model-facing text is the asset's text", () => {
-  it("holds screen_explode and the instruction that asks the agent for routes", () => {
+  it("holds flow_create and the instruction that asks the agent to map a Flow", () => {
     const all = Object.fromEntries(sections("flow.md").map((section) => [section.name, section]));
-    expect(SCREEN_EXPLODE_TEXT).toEqual({ description: all.screen_explode!.text, arguments: all.screen_explode!.args });
-    expect(FLOW_INSTRUCTION_TEMPLATE).toBe(all["Propose routes"]!.text);
-    const text = flowInstruction({ shape: "a1b2", route: "/", branch: "feature/x", worktree: "/data/worktrees/app/x" });
-    expect(text).not.toMatch(/<shape>|<route>|<branch>|<worktree>/);
-    expect(text).toContain('Explode the Screen a1b2 into a Flow: read the router in the Instance\'s worktree at /data/worktrees/app/x (the branch "feature/x")');
+    expect(FLOW_CREATE_TEXT).toEqual({ description: all.flow_create!.text, arguments: all.flow_create!.args });
+    expect(MAP_FLOW_TEMPLATE).toBe(all["Map a Flow"]!.text);
+    const text = mapFlowInstruction({ shape: "a1b2", state: "the menu open", route: "/app", branch: "feature/x", worktree: "/data/worktrees/app/x" });
+    expect(text).not.toMatch(/<shape>|<state>|<route>|<branch>|<worktree>/);
+    expect(text).toContain('Map a Flow from the Screen a1b2, which shows the menu open on the branch "feature/x" (its worktree is /data/worktrees/app/x). Explore the app from /app');
   });
 });
 

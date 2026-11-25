@@ -95,7 +95,7 @@ describe("UNFRAMED_FEATURES", () => {
     await expect(rpc.call("repositories.read", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("repositories.locate", { project: "app", path: engine.dataDir })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("repositories.setup", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
-    await expect(rpc.call("screens.explode", { project: "app", shapeId: "shape:s", routes: ["/"] })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("screens.stateToken", { project: "app", instance: instance.id, steps: [], mocks: [{ url: "/api" }] })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("repositories.confirmLogin", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("repositories.setupVerdict", { project: "app", accepted: true })).rejects.toMatchObject(REPOSITORIES_OFF);
     const states = rpc.subscribe("instances.subscribe", { project: "app" });

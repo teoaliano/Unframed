@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { fixStateInstruction } from "@unframed/domain";
+import { fixStateInstruction, mapFlowInstruction } from "@unframed/domain";
 import { git } from "../../engine/test/gitRepos.ts";
 import { engineChat, engineChats, FIXTURES } from "./agent.ts";
 import { expect, test } from "./fixtures.ts";
@@ -168,5 +168,26 @@ test("Keep this view leaves a copy of the Screen at its current page, size and P
     expect(kept.props.steps).toBeUndefined();
     expect(kept.props.mocks).toBeUndefined();
     expect(kept.props.state).toBeUndefined();
+  });
+});
+
+test("Map a Flow on a selected Screen asks the agent to map the flow from its state, with no route box anywhere", async ({ page }) => {
+  await withRepository(page, { UNFRAMED_TEST_AGENT_SCRIPT: FIXTURES }, async (engine, project) => {
+    const [first] = await screenShapes(engine, project);
+    await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/app", ...MENU_EMPTY } }]);
+    await expect(page.locator("[data-testid=screen]")).toHaveAttribute("data-route", "/app");
+    await clickShape(page, first.id);
+    const toolbar = page.getByTestId("selection-toolbar");
+    await expect(toolbar.getByRole("textbox")).toHaveCount(0);
+    await expect(toolbar.getByRole("button", { name: "Explode into a Flow" })).toHaveCount(0);
+    await toolbar.getByRole("button", { name: "Map a Flow" }).click();
+    await expect.poll(async () => (await engineChats(engine, project)).filter((chat) => chat.title !== "Setup").length).toBe(1);
+    const [asked] = (await engineChats(engine, project)).filter((chat) => chat.title !== "Setup");
+    const rpc = await engine.rpc();
+    const instance = await rpc.call("instances.status", { project, id: first.props.instance });
+    await rpc.close();
+    expect((await engineChat(engine, asked!.id, project)).messages.find((message) => message.role === "user")?.text).toBe(
+      mapFlowInstruction({ shape: first.id.replace(/^shape:/, ""), state: MENU_EMPTY.state, route: "/app", branch: instance.branch, worktree: instance.worktree }),
+    );
   });
 });

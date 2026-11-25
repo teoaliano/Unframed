@@ -1,11 +1,11 @@
 import type { Instance, ScreenMock, ScreenStep } from "@unframed/contracts";
-import { agentShapeId, checkMocks, checkSteps, INSTANCE_TOOL_TEXT, logTail, NO_CHROME_PREVIEW_MESSAGE, normaliseRoute, roomShapeId, SCREEN_EXPLODE_TEXT, SCREEN_STATE_TEXT } from "@unframed/domain";
+import { agentShapeId, checkMocks, checkSteps, flowCapacity, FLOW_CREATE_TEXT, FLOW_NO_STATES, flowTooMany, INSTANCE_TOOL_TEXT, logTail, NO_CHROME_PREVIEW_MESSAGE, normaliseRoute, roomShapeId, SCREEN_STATE_TEXT } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import { refusal, type McpBinding, type McpTool, type ToolAnswer } from "../agent/mcp.ts";
 import type { Applied, CanvasChange, ChangeOrigin } from "../canvas/rooms.ts";
 import { errorText } from "../log.ts";
 import { isScreenShape, screenBeside } from "../screens/firstScreen.ts";
-import { explodeScreen, ExplodeRefused } from "../screens/flows.ts";
+import { flowRecords } from "../screens/flows.ts";
 import { proofFailure, proofUrl, type Proof, type StateProver } from "../screens/screenState.ts";
 import { NotLive, untilLive } from "./liveInstance.ts";
 import type { ScreenStatePayload } from "./stateTokens.ts";
@@ -41,7 +41,7 @@ const summary = (instance: Instance) => ({
 const detail = (instance: Instance) => ({ ...summary(instance), log: logTail(instance.log, LOG_LINES) });
 
 const text = (name: string): { readonly description: string; readonly arguments: Readonly<Record<string, string>> } =>
-  name === "screen_explode" ? SCREEN_EXPLODE_TEXT : name === "screen_state" ? SCREEN_STATE_TEXT : INSTANCE_TOOL_TEXT[name]!;
+  name === "flow_create" ? FLOW_CREATE_TEXT : name === "screen_state" ? SCREEN_STATE_TEXT : INSTANCE_TOOL_TEXT[name]!;
 
 export interface CheckedState {
   readonly route: string;
@@ -130,6 +130,36 @@ export class InstanceTools {
     return { value: { screen: agentShapeId(put.id), route: state.route, state: state.state }, images };
   }
 
+  private async flowCreate(binding: McpBinding, args: Record<string, unknown>): Promise<ToolAnswer> {
+    const shapeId = optionalString(args.shapeId);
+    if (shapeId === undefined) throw new Refused("name a Screen with shapeId");
+    const source = (await this.deps.read(binding.project)).find((record) => record.id === roomShapeId(shapeId));
+    if (!isScreenShape(source)) throw new Refused(`there is no Screen ${shapeId}`);
+    const asked = Array.isArray(args.states) ? args.states : [];
+    if (asked.length === 0) throw new Refused(FLOW_NO_STATES);
+    const states = asked.map((raw, at) => {
+      const entry = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
+      return { ...checkState(entry, source.props.route, `State ${at + 1}: `), action: typeof entry.action === "string" ? entry.action : undefined };
+    });
+    const size = { w: Math.round(source.props.w), h: Math.round(source.props.h) };
+    if (states.length > flowCapacity(size.w, size.h)) throw new Refused(flowTooMany(flowCapacity(size.w, size.h)));
+    const instance = await this.live(binding.project, source.props.instance);
+    for (const [at, state] of states.entries()) {
+      const proof = await this.proveState(binding.project, instance, state, size);
+      if (!proof.ok) {
+        const images = proof.png === undefined ? [] : [{ data: proof.png.toString("base64"), mimeType: "image/png" }];
+        return { value: { error: `State ${at + 1}, ${state.state}: ${proofFailure(proof, state.steps)}. Nothing was built.`, state: at + 1 }, isError: true, images };
+      }
+    }
+    const records = await this.deps.read(binding.project);
+    const current = records.find((record) => record.id === source.id);
+    if (!isScreenShape(current)) throw new Refused(`there is no Screen ${shapeId}`);
+    const built = flowRecords(records, current, instance, states);
+    if ("error" in built) throw new Refused(built.error);
+    await this.deps.apply(binding.project, { put: [...built.put], remove: [] }, { kind: "server", id: `chat:${binding.chatId}` });
+    return { value: { group: agentShapeId(built.group), screens: built.screens.map(agentShapeId) } };
+  }
+
   private async run(binding: McpBinding, name: string, args: Record<string, unknown>): Promise<ToolAnswer> {
     switch (name) {
       case "instance_create":
@@ -146,13 +176,8 @@ export class InstanceTools {
         return { value: summary(await this.deps.stop(binding.project, idOf(args))) };
       case "screen_state":
         return this.screenState(binding, args);
-      case "screen_explode": {
-        const shapeId = optionalString(args.shapeId);
-        if (shapeId === undefined) throw new Refused("name a Screen with shapeId");
-        const routes = Array.isArray(args.routes) ? args.routes.filter((route): route is string => typeof route === "string") : [];
-        const exploded = await explodeScreen(this.deps, binding.project, shapeId, routes, { kind: "server", id: `chat:${binding.chatId}` });
-        return { value: { group: agentShapeId(exploded.group), screens: exploded.screens.map(agentShapeId) } };
-      }
+      case "flow_create":
+        return this.flowCreate(binding, args);
       default:
         return refusal(`no such Instance tool ${name}`);
     }
@@ -162,7 +187,7 @@ export class InstanceTools {
     try {
       return await this.run(binding, name, args);
     } catch (error) {
-      return refusal(error instanceof Refused || error instanceof ExplodeRefused ? error.message : errorText(error));
+      return refusal(error instanceof Refused ? error.message : errorText(error));
     }
   }
 
@@ -196,11 +221,14 @@ export class InstanceTools {
         },
       ],
       [
-        "screen_explode",
+        "flow_create",
         {
           type: "object",
-          properties: { shapeId: { type: "string", description: text("screen_explode").arguments.shapeId }, routes: { type: "array", items: { type: "string" }, description: text("screen_explode").arguments.routes } },
-          required: ["shapeId", "routes"],
+          properties: {
+            shapeId: { type: "string", description: text("flow_create").arguments.shapeId },
+            states: { type: "array", items: { type: "object" }, description: text("flow_create").arguments.states },
+          },
+          required: ["shapeId", "states"],
           additionalProperties: false,
         },
       ],

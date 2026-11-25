@@ -1,21 +1,17 @@
 import { GROUP_MAX, GROUP_SIDE_MARGIN, GROUP_TOP_MARGIN } from "./grouping.ts";
-import { normaliseRoute, SCREEN_GAP } from "./screens.ts";
+import type { ScreenStep } from "@unframed/contracts";
+import { SCREEN_GAP } from "./screens.ts";
+import { describeStep } from "./screenStates.ts";
 
 export const FLOW_MAX_ROUTES = 12;
-export const FLOW_NO_ROUTES = "Name at least one route, such as /settings.";
-export const flowBadRoute = (route: string): string => `${route} is not a route in the app; a route is a path such as /settings.`;
-export const flowTooMany = (most: number): string => `A Flow of Screens this size holds at most ${most}; name fewer routes.`;
+export const flowTooMany = (most: number): string => `A Flow of Screens this size holds at most ${most} states; name fewer.`;
+export const FLOW_NO_STATES = "Name at least one state.";
+export const FLOW_ARROW_LABEL_MAX = 80;
 
-export const flowRoutes = (input: string | ReadonlyArray<string>): { readonly routes: ReadonlyArray<string> } | { readonly error: string } => {
-  const typed = typeof input === "string" ? input.split(/[\n,]/) : input;
-  const routes: string[] = [];
-  for (const raw of typed) {
-    if (raw.trim() === "") continue;
-    const route = normaliseRoute(raw);
-    if (route === undefined) return { error: flowBadRoute(raw.trim()) };
-    if (!routes.includes(route)) routes.push(route);
-  }
-  return routes.length === 0 ? { error: FLOW_NO_ROUTES } : { routes };
+export const arrowLabel = (input: { readonly action?: string | undefined; readonly route: string; readonly steps: ReadonlyArray<ScreenStep> }): string => {
+  const last = input.steps.at(-1);
+  const label = input.action?.trim() || (last === undefined ? `go to ${input.route}` : describeStep(last));
+  return label.length > FLOW_ARROW_LABEL_MAX ? label.slice(0, FLOW_ARROW_LABEL_MAX) : label;
 };
 
 export interface FlowLayout {
