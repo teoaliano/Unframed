@@ -4,7 +4,7 @@ import {
   editorTabKey,
   renameTabKey,
   stepTab,
-  type ArtifactKind,
+  type EditorKind,
   editorTabsOf,
   isEditorTab,
   ONBOARDING_KEY,
@@ -45,7 +45,7 @@ export interface DeviceHooks {
 /** The tab state the strip and the canvas read. A new object on every change, so a subscriber can compare by identity. */
 export interface EditorTab {
   readonly title: string;
-  readonly kind: ArtifactKind;
+  readonly kind: EditorKind;
 }
 
 export interface ClosedTab {
@@ -399,7 +399,7 @@ const savedEditors = (value: unknown): ReadonlyMap<string, EditorTab> => {
   for (const entry of value) {
     if (typeof entry !== "object" || entry === null) continue;
     const { key, title, kind } = entry as { key?: unknown; title?: unknown; kind?: unknown };
-    if (typeof key === "string" && isEditorTab(key)) editors.set(key, { title: typeof title === "string" ? title : "", kind: kind === "motion" || kind === "component" ? kind : "page" });
+    if (typeof key === "string" && isEditorTab(key)) editors.set(key, { title: typeof title === "string" ? title : "", kind: kind === "motion" || kind === "component" || kind === "screen" ? kind : "page" });
   }
   return editors;
 };

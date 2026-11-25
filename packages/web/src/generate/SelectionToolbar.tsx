@@ -342,6 +342,11 @@ const Bar = ({ state, onGenerate, agent, nodes, style }: { state: Exclude<Toolba
       return (
         <div className={barClass}>
           <DragHandle />
+          {repositoriesOn && (
+            <Button size="sm" onClick={() => openArtifact?.(editor, state.shapeId as TLShapeId)}>
+              Editor
+            </Button>
+          )}
           {repositoriesOn && <ScreenActions shapeId={state.shapeId as TLShapeId} />}
           {repositoriesOn && ParametersToggle && <ParametersToggle shapeId={state.shapeId as TLShapeId} />}
           {agent}
