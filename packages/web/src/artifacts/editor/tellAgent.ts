@@ -31,15 +31,17 @@ export const makeEditableInstruction = (field: string): string => makeEditableAs
 
 const sameChip = (a: ElementChip, b: ElementChip): boolean => a.shapeId === b.shapeId && a.selector === b.selector;
 
+const unlisted = (chips: ReadonlyArray<ElementChip>, listed: ReadonlyArray<ElementChip>): ElementChip[] => chips.filter((chip) => !listed.some((existing) => sameChip(existing, chip)));
+
+const draftKey = (client: ChatClient, shapeId: string): string => continuableChat(client.chats(), [shapeId])?.id ?? NEW_CHAT;
+
 export const tellAgent = (client: ChatClient, shapeId: string, elements: ReadonlyArray<ChipElement>, instruction?: string): void => {
   const chips = elements.map((element) => elementChip(element, { shapeId }));
-  const target = continuableChat(client.chats(), [shapeId]);
-  const key = target?.id ?? NEW_CHAT;
+  const key = draftKey(client, shapeId);
   const stored = client.draft(key);
   const current = stored.elements ?? [];
-  const merged = [...current, ...chips.filter((chip) => !current.some((existing) => sameChip(existing, chip)))];
   const text = instruction !== undefined && stored.text.trim() === "" ? instruction : stored.text;
-  client.setDraft(key, { ...stored, text, elements: merged });
+  client.setDraft(key, { ...stored, text, elements: [...current, ...unlisted(chips, current)] });
   client.setUi({ chosen: key, pinned: null });
 };
 
@@ -52,13 +54,12 @@ export const NO_SCREEN_DRAFT: ScreenDraft = { text: "", chips: [] };
 
 export const draftScreenEdits = (client: ChatClient, shapeId: string, elements: ReadonlyArray<ChipElement>, instruction: string, written: ScreenDraft): ScreenDraft => {
   const chips = elements.map((element) => elementChip(element, { shapeId }));
-  const target = continuableChat(client.chats(), [shapeId]);
-  const key = target?.id ?? NEW_CHAT;
+  const key = draftKey(client, shapeId);
   const stored = client.draft(key);
   const kept = (stored.elements ?? []).filter((existing) => !written.chips.some((chip) => sameChip(chip, existing)));
-  const merged = [...kept, ...chips.filter((chip) => !kept.some((existing) => sameChip(existing, chip)))];
+  const fresh = unlisted(chips, kept);
   const ours = stored.text.trim() === "" || stored.text === written.text;
-  client.setDraft(key, { ...stored, text: ours ? instruction : stored.text, elements: merged });
+  client.setDraft(key, { ...stored, text: ours ? instruction : stored.text, elements: [...kept, ...fresh] });
   client.setUi({ chosen: key, pinned: null });
-  return { text: ours ? instruction : written.text, chips: chips.filter((chip) => !kept.some((existing) => sameChip(existing, chip))) };
+  return { text: ours ? instruction : written.text, chips: fresh };
 };
