@@ -9,6 +9,9 @@ import type { StoreOwner } from "../canvas/doc.ts";
 import { forgetFrame, hearFrame, reachFrame } from "../artifacts/state.ts";
 import { messageOf, useChatClient, useChats } from "../agent/store.ts";
 import { useEngine } from "../context.ts";
+import { isDeviceClient } from "../deviceMode.ts";
+import { useFeature } from "../features.ts";
+import { screenPropsOf } from "./BranchChip.tsx";
 import { useAskAgent } from "./askAgent.ts";
 import { noteBridge, repositoryState, screenSnapshotUrl } from "./store.ts";
 
@@ -171,19 +174,27 @@ export interface ScreenViewInput {
   readonly project: string;
   readonly shapeId: string;
   readonly props: ScreenShapeProps;
-  readonly live: boolean;
-  readonly proxyPort: number | null;
+  readonly onScreen: boolean;
   readonly interactive: boolean;
-  readonly branch: string;
-  readonly read: () => ScreenShapeProps | undefined;
   readonly write: (next: ScreenShapeProps) => boolean;
   readonly edit?: ScreenEditHooks | undefined;
 }
 
-export const useScreenView = ({ owner, project, shapeId, props, live, proxyPort, interactive, branch, read, write, edit }: ScreenViewInput): { readonly content: ReactNode; readonly painted: boolean } => {
+export const useScreenView = ({ owner, project, shapeId, props, onScreen, interactive, write, edit }: ScreenViewInput): { readonly content: ReactNode; readonly painted: boolean; readonly live: boolean; readonly branch: string } => {
   const engine = useEngine();
   const ask = useAskAgent();
+  const repositories = useFeature("repositories");
   const state = repositoryState(project);
+  const proxyPort = useValue(
+    "screen proxy",
+    () => {
+      const instance = state.instances.get().get(props.instance);
+      return instance?.state === "live" ? instance.proxyPort : null;
+    },
+    [state, props.instance],
+  );
+  const branch = useValue("screen branch", () => state.instances.get().get(props.instance)?.branch ?? props.title, [state, props.instance, props.title]);
+  const live = repositories && !isDeviceClient() && onScreen && proxyPort !== null;
   const snapshot = useValue("screen snapshot", () => state.snapshots.get().get(shapeId), [state, shapeId]);
   const bridge = useValue("screen bridge", () => state.bridges.get().get(shapeId), [state, shapeId]);
   const stateKey = JSON.stringify([props.steps ?? [], props.mocks ?? []]);
@@ -216,7 +227,7 @@ export const useScreenView = ({ owner, project, shapeId, props, live, proxyPort,
     else engine.call("screens.stateToken", { project, instance: props.instance, steps: props.steps ?? [], mocks: props.mocks ?? [] }).then(({ token }) => begin(token), () => begin(null));
   }, [live, proxyPort, props.route, stateKey, reloads]);
   const follow = (route: string) => {
-    const current = read();
+    const current = screenPropsOf(owner, shapeId);
     if (current === undefined) return;
     const next = followNavigation(current, route);
     if (next === undefined || shown.current === undefined) return;
@@ -298,5 +309,5 @@ export const useScreenView = ({ owner, project, shapeId, props, live, proxyPort,
       <StateNote note={live && bridge === false ? NO_STATE_BRIDGE : undefined} />
     </>
   );
-  return { content, painted: shownPainted };
+  return { content, painted: shownPainted, live, branch };
 };

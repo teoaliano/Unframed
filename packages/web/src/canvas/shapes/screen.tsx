@@ -4,11 +4,9 @@ import { useEffect, useState } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
 import { isInteractive } from "../../artifacts/state.ts";
 import { useCanvasProject } from "../../context.ts";
-import { isDeviceClient } from "../../deviceMode.ts";
-import { useFeature } from "../../features.ts";
 import { noteRender } from "../../fps/renders.ts";
 import { screenOnScreen } from "../../repositories/demand.ts";
-import { repositoryState, useRepositorySetup } from "../../repositories/store.ts";
+import { useRepositorySetup } from "../../repositories/store.ts";
 import { useScreenView } from "../../repositories/ScreenView.tsx";
 import { artifactCardClass } from "./looks.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
@@ -35,20 +33,8 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
   noteRender(shape.id);
   const editor = useEditor();
   const project = useCanvasProject();
-  const repositories = useFeature("repositories");
   const props = shape.props as ScreenShapeProps;
-  const state = repositoryState(project);
-  const proxyPort = useValue(
-    "screen proxy",
-    () => {
-      const instance = state.instances.get().get(props.instance);
-      return instance?.state === "live" ? instance.proxyPort : null;
-    },
-    [state, props.instance],
-  );
-  const branch = useValue("screen branch", () => state.instances.get().get(props.instance)?.branch ?? props.title, [state, props.instance, props.title]);
   const setupWarnings = useRepositorySetup(project)?.warnings.length ?? 0;
-  const label = screenLabel({ branch, route: props.route, state: props.state, warnings: setupWarnings });
   const onScreen = useValue("screen on screen", () => screenOnScreen(editor, shape.id), [editor, shape.id]);
   const selected = useValue("screen interactive", () => isInteractive(editor, shape.id), [editor, shape.id]);
   const [settled, setSettled] = useState(false);
@@ -59,11 +45,6 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
     return () => clearTimeout(timer);
   }, [selected, editor]);
   const interactive = selected && settled;
-  const live = repositories && !isDeviceClient() && onScreen && proxyPort !== null;
-  const read = () => {
-    const current = editor.getShape(shape.id);
-    return current?.type === "screen" ? (current.props as ScreenShapeProps) : undefined;
-  };
   const write = (next: ScreenShapeProps) => {
     const current = editor.getShape(shape.id);
     if (current?.type !== "screen" || !editor.getSelectedShapeIds().includes(shape.id)) return false;
@@ -71,7 +52,8 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
     editor.store.put([{ ...current, props: next } as TLShape]);
     return true;
   };
-  const view = useScreenView({ owner: editor, project, shapeId: shape.id, props, live, proxyPort, interactive, branch, read, write });
+  const view = useScreenView({ owner: editor, project, shapeId: shape.id, props, onScreen, interactive, write });
+  const label = screenLabel({ branch: view.branch, route: props.route, state: props.state, warnings: setupWarnings });
   return (
     <HTMLContainer
       id={shape.id}
@@ -79,7 +61,7 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
       data-testid="screen"
       data-route={props.route}
       data-state={props.state?.trim() ? props.state : undefined}
-      data-live={live ? "true" : undefined}
+      data-live={view.live ? "true" : undefined}
       data-painted={view.painted ? "true" : undefined}
       style={{ width: props.w, height: props.h }}
     >
