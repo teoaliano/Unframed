@@ -67,14 +67,14 @@ test("double-click opens the editor: rail, live frame and parameters, with Back 
   expect(await shapeOnScreen(page, "shape:landing").boundingBox()).toEqual(moved);
 });
 
-test("the three columns start the margin below the top bar and run to the window's bottom edge at the same margin, with nothing of tldraw's on the page", async ({ page, agent }) => {
+test("the three columns start at the top bar's bottom edge and run edge to edge to the window's sides and bottom, with nothing of tldraw's on the page", async ({ page, agent }) => {
   await onBoard(page, agent);
   const at = await centre(shapeOnScreen(page, "shape:landing"));
   await page.mouse.dblclick(at.x, at.y);
   await expect(page.getByRole("region", { name: "Editing Landing" })).toBeVisible();
 
   const { width, height } = page.viewportSize()!;
-  const margin = 12;
+  const margin = 0;
   const bar = (await page.locator("[data-slot='top-bar']").boundingBox())!;
   expect(bar.y).toBe(0);
   for (const name of ["rail", "centre", "parameters"] as const) {
@@ -166,8 +166,8 @@ test("the right column's tabs fill its width and sit flush on the header's one b
   const tabs = await list.getByRole("tab").all();
   expect(tabs).toHaveLength(3);
   const boxes = await Promise.all(tabs.map(async (tab) => (await tab.boundingBox())!));
-  expect(boxes[0]!.x).toBeCloseTo(col.x + 1, 0);
-  expect(boxes[2]!.x + boxes[2]!.width).toBeCloseTo(col.x + col.width - 1, 0);
+  expect(boxes[0]!.x).toBeCloseTo(col.x, 0);
+  expect(boxes[2]!.x + boxes[2]!.width).toBeCloseTo(col.x + col.width, 0);
   for (const [index, box] of boxes.entries()) {
     if (index > 0) expect(box.x).toBeCloseTo(boxes[index - 1]!.x + boxes[index - 1]!.width, 0);
     expect(box.y).toBeCloseTo(head.y, 0);
@@ -190,6 +190,26 @@ test("the agent column's header ends on a divider level with the page column's h
   expect(await styleOf(agentHeader, "border-bottom-color")).toBe(await styleOf(pageHeader, "border-bottom-color"));
   const [left, middle] = [(await agentHeader.boundingBox())!, (await pageHeader.boundingBox())!];
   expect(left.y + left.height).toBeCloseTo(middle.y + middle.height, 0);
+});
+
+test("the agent column's composer runs square to the column's edges, under one divider in the composer's border colour", async ({ page, agent }) => {
+  await onBoard(page, agent);
+  const at = await centre(shapeOnScreen(page, "shape:landing"));
+  await page.mouse.dblclick(at.x, at.y);
+  await expect(page.getByRole("region", { name: "Editing Landing" })).toBeVisible();
+  const shell = column(page, "rail").getByTestId("agent-composer");
+  const [rail, box] = [(await column(page, "rail").boundingBox())!, (await shell.boundingBox())!];
+  expect(box.x).toBeCloseTo(rail.x, 0);
+  expect(box.x + box.width).toBeCloseTo(rail.x + rail.width - 1, 0);
+  expect(box.y + box.height).toBeCloseTo(rail.y + rail.height, 0);
+  expect(await styleOf(shell, "border-top-left-radius")).toBe("0px");
+  const edge = (side: string) => shell.evaluate((element, side) => getComputedStyle(element, "::after").getPropertyValue(`border-${side}-width`), side);
+  expect(await edge("top")).toBe("1px");
+  for (const side of ["right", "bottom", "left"]) expect(await edge(side), side).toBe("0px");
+  await inBothSchemes(page, async () => {
+    const colour = await shell.evaluate((element) => getComputedStyle(element, "::after").borderTopColor);
+    expect(colour).toBe(await tokenColor(page, "--composer-border"));
+  });
 });
 
 test("Escape closes the editor from a button in its chat column, though not from the composer", async ({ page, agent }) => {
@@ -338,8 +358,8 @@ test("the editor's columns, header actions and parameter box are the kit's, in b
   expect((await column(page, "rail").boundingBox())!.width).toBe(360);
   expect((await column(page, "parameters").boundingBox())!.width).toBe(320);
   const [rail, centreColumn] = [(await column(page, "rail").boundingBox())!, (await column(page, "centre").boundingBox())!];
-  expect(centreColumn.x - (rail.x + rail.width)).toBe(12);
-  expect(rail.x).toBe(12);
+  expect(centreColumn.x - (rail.x + rail.width)).toBe(0);
+  expect(rail.x).toBe(0);
   const frame = (await region.locator("iframe[data-artifact-frame]").boundingBox())!;
   expect(frame.width).toBeGreaterThan(centreColumn.width - 4);
   expect(frame.y + frame.height).toBeGreaterThan(centreColumn.y + centreColumn.height - 4);
@@ -357,8 +377,14 @@ test("the editor's columns, header actions and parameter box are the kit's, in b
   await inBothSchemes(page, async () => {
     for (const name of ["rail", "centre", "parameters"] as const) {
       await expectToken(column(page, name), "background-color", "--artifact-editor-column-surface");
-      await expectToken(column(page, name), "border-top-color", "--artifact-editor-column-border");
     }
+    for (const name of ["rail", "centre"] as const) {
+      expect(await styleOf(column(page, name), "border-right-width"), `${name} divider`).toBe("1px");
+      await expectToken(column(page, name), "border-right-color", "--artifact-editor-column-border");
+      for (const side of ["top", "bottom", "left"]) expect(await styleOf(column(page, name), `border-${side}-width`), `${name} ${side}`).toBe("0px");
+      expect(await styleOf(column(page, name), "border-top-left-radius")).toBe("0px");
+    }
+    for (const side of ["top", "right", "bottom", "left"]) expect(await styleOf(column(page, "parameters"), `border-${side}-width`), `parameters ${side}`).toBe("0px");
     expect(await styleOf(newTab, "background-color")).toBe(await tokenColor(page, "--button-ghost-surface"));
     await expectToken(region.getByTestId("artifact-editor-title"), "color", "--artifact-editor-foreground");
     await expectToken(region.getByTestId("artifact-editor-kind"), "color", "--artifact-editor-meta");

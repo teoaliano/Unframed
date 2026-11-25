@@ -321,9 +321,9 @@ export const AgentRail = ({ project, embedded, inSheet, filterTo, onLocate, onOp
           <DiffPanel key={activeChat.id} client={client} chat={activeChat} diff={ui.diff} />
         </Suspense>
       )}
-      <div className="flex min-h-0 flex-col px-2.5 pb-2.5">
+      <div className={embedded ? "flex min-h-0 flex-col" : "flex min-h-0 flex-col px-2.5 pb-2.5"}>
         {activeChat?.outside === undefined ? (
-          <AgentTray client={client} variant="rail" chatId={active} newChatTags={selectedArtifacts} dropTarget={root} notices={notices} />
+          <AgentTray client={client} variant="rail" chatId={active} newChatTags={selectedArtifacts} dropTarget={root} notices={notices} flush={embedded === true} />
         ) : (
           <div className="flex flex-col gap-1.5">
             <NoticeStack items={notices} />

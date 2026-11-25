@@ -95,7 +95,7 @@ test("the timeline resizes by its top border between 120 px and 60 % of the colu
   await expect.poll(async () => (await boxOf(timeline(page))).height).toBeCloseTo(120, 0);
 
   await dragBy(page, timeline(page).getByRole("separator", { name: "Resize the timeline" }), -2000);
-  const fullColumn = async () => (await boxOf(column(page, "centre"))).height + (await boxOf(timeline(page))).height + 12;
+  const fullColumn = async () => (await boxOf(column(page, "centre"))).height + (await boxOf(timeline(page))).height;
   const cap = Math.floor((await fullColumn()) * 0.6);
   await expect.poll(async () => (await boxOf(timeline(page))).height).toBeCloseTo(cap, 0);
 
