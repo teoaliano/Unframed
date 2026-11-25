@@ -46,11 +46,11 @@ const KeepView = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   const editor = useEditor();
   const instance = useScreenInstance(shapeId);
   return (
-    <Tip label="Keep this view">
+    <Tip label="Duplicate">
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label="Keep this view"
+        aria-label="Duplicate"
         disabled={instance === undefined || instance.state === "removed"}
         onClick={() => instance !== undefined && placeScreenBeside(editor, shapeId, instance, "keep this view", "view")}
       >
