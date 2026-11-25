@@ -43,7 +43,7 @@ const rawHead = (req: http.IncomingMessage, headers: Record<string, unknown>): s
   return `${head}\r\n`;
 };
 
-export const startInstanceProxy = async (input: { readonly upstreamPort: number; readonly preferredPort?: number | null; readonly states?: StateTokens }): Promise<InstanceProxy> => {
+export const startInstanceProxy = async (input: { readonly upstreamPort: number; readonly preferredPort?: number | null; readonly states: StateTokens }): Promise<InstanceProxy> => {
   const upstreamPort = input.upstreamPort;
   const bridge = screenBridgeSource();
   let upstreamHost: string | undefined;
@@ -71,13 +71,13 @@ export const startInstanceProxy = async (input: { readonly upstreamPort: number;
     const asked = req.url ?? "/";
     if (asked === BRIDGE_PATH || asked.startsWith(`${BRIDGE_PATH}?`)) {
       const key = new URLSearchParams(asked.slice(BRIDGE_PATH.length + 1)).get("state");
-      const state = key === null ? undefined : input.states?.takeBridge(key);
+      const state = key === null ? undefined : input.states.takeBridge(key);
       res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" });
       res.end(state === undefined ? bridge : `window.__unframedScreenState = ${JSON.stringify(state)};\n${bridge}`);
       return;
     }
     const { path, token } = takeStateParam(asked);
-    const stateKey = token === undefined ? undefined : input.states?.takePage(token);
+    const stateKey = token === undefined ? undefined : input.states.takePage(token);
     const proxyOrigin = `http://${req.headers.host}`;
     void hostFor().then((host) => {
       const headers = upstreamRequestHeaders(req.headers, { upstreamPort, path, upgrade: false });
