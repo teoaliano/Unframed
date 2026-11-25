@@ -112,6 +112,7 @@ export const isLive = (editor: Editor, id: TLShapeId): boolean => {
 };
 
 export const isInteractive = (editor: Editor, id: TLShapeId): boolean =>
+  editor.isIn("select") &&
   editor.getSelectedShapeIds().includes(id) &&
   !artifactsOf(editor).hold.get() &&
   !editor.isInAny("select.translating", "select.resizing", "select.rotating", "select.dragging_handle", "select.pointing_shape", "select.pointing_selection", "select.pointing_resize_handle");
