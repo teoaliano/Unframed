@@ -17,13 +17,26 @@ import { repositoryState } from "./store.ts";
 
 type Panel = "fork" | "pick" | "changes" | "remove";
 
-const screenProps = (editor: Editor, shapeId: TLShapeId): ScreenShapeProps | undefined => {
+export const screenPropsOf = (editor: Editor, shapeId: TLShapeId): ScreenShapeProps | undefined => {
   const shape = editor.getShape(shapeId);
   return shape?.type === "screen" ? (shape.props as ScreenShapeProps) : undefined;
 };
 
+export const useScreenInstance = (shapeId: TLShapeId): Instance | undefined => {
+  const editor = useEditor();
+  const project = useCanvasProject();
+  return useValue(
+    "screen instance",
+    () => {
+      const props = screenPropsOf(editor, shapeId);
+      return props === undefined ? undefined : repositoryState(project).instances.get().get(props.instance);
+    },
+    [editor, shapeId, project],
+  );
+};
+
 export const placeScreenBeside = (editor: Editor, shapeId: TLShapeId, instance: Instance, mark: string, carry: "state" | "view" = "state"): TLShapeId | undefined => {
-  const props = screenProps(editor, shapeId);
+  const props = screenPropsOf(editor, shapeId);
   const bounds = editor.getShapePageBounds(shapeId);
   if (props === undefined || bounds === undefined) return undefined;
   const id = createShapeId();
@@ -223,18 +236,10 @@ const RemovePanel = ({ instance, close }: { readonly instance: Instance; readonl
 
 export const BranchChip = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   const editor = useEditor();
-  const project = useCanvasProject();
   const chip = useRef<HTMLButtonElement>(null);
   const [panel, setPanel] = useState<Panel | undefined>(undefined);
-  const instance = useValue(
-    "screen branch instance",
-    () => {
-      const props = screenProps(editor, shapeId);
-      return props === undefined ? undefined : repositoryState(project).instances.get().get(props.instance);
-    },
-    [editor, shapeId, project],
-  );
-  const title = useValue("screen title", () => screenProps(editor, shapeId)?.title ?? "", [editor, shapeId]);
+  const instance = useScreenInstance(shapeId);
+  const title = useValue("screen title", () => screenPropsOf(editor, shapeId)?.title ?? "", [editor, shapeId]);
   const text = branchChip({ branch: instance?.branch ?? title, changes: instance?.changes ?? 0 });
   const gone = instance === undefined || instance.state === "removed";
   const close = () => setPanel(undefined);

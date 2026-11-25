@@ -11,13 +11,8 @@ import { Tip } from "../chrome/ui.tsx";
 import { useCanvasProject } from "../context.ts";
 import { showError } from "../toasts.tsx";
 import { useAskAgent } from "./askAgent.ts";
-import { BranchChip, placeScreenBeside } from "./BranchChip.tsx";
+import { BranchChip, placeScreenBeside, screenPropsOf, useScreenInstance } from "./BranchChip.tsx";
 import { repositoryState, useRepositorySetup } from "./store.ts";
-
-export const screenPropsOf = (editor: Editor, shapeId: TLShapeId): ScreenShapeProps | undefined => {
-  const shape = editor.getShape(shapeId);
-  return shape?.type === "screen" ? (shape.props as ScreenShapeProps) : undefined;
-};
 
 const updateScreen = (editor: Editor, shapeId: TLShapeId, patch: Partial<ScreenShapeProps>, mark: string) => {
   const shape = editor.getShape(shapeId);
@@ -49,15 +44,7 @@ const OpenInBrowser = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
 
 const KeepView = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   const editor = useEditor();
-  const project = useCanvasProject();
-  const instance = useValue(
-    "screen instance",
-    () => {
-      const props = screenPropsOf(editor, shapeId);
-      return props === undefined ? undefined : repositoryState(project).instances.get().get(props.instance);
-    },
-    [editor, shapeId, project],
-  );
+  const instance = useScreenInstance(shapeId);
   return (
     <Tip label="Keep this view">
       <Button
