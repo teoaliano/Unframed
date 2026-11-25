@@ -97,7 +97,7 @@ test("with repositories off, the project menu offers Add project alone and still
   }
 });
 
-test("with repositories off, a Repository opens read-only on its Screens' last snapshots, states included, with no Screen actions and no Setup", async ({ page }) => {
+test("with repositories off, a Repository opens read-only on its Screens' last snapshots, states included, with no Screen actions, no editor and no Setup", async ({ page }) => {
   const root = await makeRepo("shop");
   const dataDir = await makeTempDir();
   const on = await startHostedEngine({ dataDir, env: await repoEngineEnv({ UNFRAMED_TEST_RENDERER: "ok" }) });
@@ -131,6 +131,12 @@ test("with repositories off, a Repository opens read-only on its Screens' last s
     await expect(page.getByRole("button", { name: "Keep this view" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Map a Flow" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Parameters" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Editor", exact: true })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    const at = await centre(screen);
+    await page.mouse.dblclick(at.x, at.y);
+    await expect(page.getByTestId("artifact-editor")).toHaveCount(0);
+    await expect(page.locator("[data-slot=top-bar] [role=tab][data-variant='secondary']")).toHaveCount(0);
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "All projects" }).click();
     await expect(page.getByRole("menuitem", { name: "Run Setup again" })).toHaveCount(0);

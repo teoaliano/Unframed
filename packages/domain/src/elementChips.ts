@@ -1,5 +1,5 @@
 import type { ElementChip } from "@unframed/contracts";
-import type { ArtifactKind } from "./artifacts/artifactRules.ts";
+import type { EditorKind } from "./artifacts/artifactRules.ts";
 
 export interface ChipElement {
   readonly elementId: string | null;
@@ -30,19 +30,20 @@ export const ELEMENT_CONTEXT_INTRO =
   "These are the elements the person pointed at in this message. Each line names one of them by its selector, which finds it in that artifact's current file, and gives an excerpt of its HTML.";
 export const ELEMENT_CONTEXT_ARTIFACT = '{Kind} "{label}" (shape {id}):';
 export const ELEMENT_CONTEXT_CHIP = "- {selector}: {excerpt}";
+export const ELEMENT_CONTEXT_SCREEN = 'Screen "{label}" (shape {id}), the running app; each selector finds the element in the page as it renders, not in a source file:';
 
 const fill = (template: string, values: Readonly<Record<string, string>>): string =>
   template.replace(/\{(\w+)\}/g, (whole, key: string) => values[key] ?? whole);
 
 export const elementContext = (
   chips: readonly ElementChip[],
-  shapes: readonly { readonly shapeId: string; readonly kind: ArtifactKind; readonly label: string }[],
+  shapes: readonly { readonly shapeId: string; readonly kind: EditorKind; readonly label: string }[],
 ): string => {
   const blocks = shapes.flatMap((shape) => {
     const mine = chips.filter((chip) => chip.shapeId === shape.shapeId);
     if (mine.length === 0) return [];
     const kind = shape.kind.charAt(0).toUpperCase() + shape.kind.slice(1);
-    const header = fill(ELEMENT_CONTEXT_ARTIFACT, { Kind: kind, label: shape.label, id: shape.shapeId });
+    const header = fill(shape.kind === "screen" ? ELEMENT_CONTEXT_SCREEN : ELEMENT_CONTEXT_ARTIFACT, { Kind: kind, label: shape.label, id: shape.shapeId });
     const lines = mine.map((chip) => fill(ELEMENT_CONTEXT_CHIP, { selector: chip.selector, excerpt: chip.excerpt }));
     return [[header, ...lines].join("\n")];
   });

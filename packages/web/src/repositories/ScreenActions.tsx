@@ -11,7 +11,8 @@ import { Tip } from "../chrome/ui.tsx";
 import { useCanvasProject } from "../context.ts";
 import { showError } from "../toasts.tsx";
 import { useAskAgent } from "./askAgent.ts";
-import { BranchChip, placeScreenBeside, screenPropsOf, useScreenInstance } from "./BranchChip.tsx";
+import { BranchChip, placeScreenBeside, screenPropsOf, useScreenInstance, type PlaceScreen } from "./BranchChip.tsx";
+import type { StoreOwner } from "../canvas/doc.ts";
 import { repositoryState, useRepositorySetup } from "./store.ts";
 
 const updateScreen = (editor: Editor, shapeId: TLShapeId, patch: Partial<ScreenShapeProps>, mark: string) => {
@@ -21,21 +22,20 @@ const updateScreen = (editor: Editor, shapeId: TLShapeId, patch: Partial<ScreenS
   editor.store.put([{ ...shape, props: { ...shape.props, ...patch } } as TLShape]);
 };
 
-const OpenInBrowser = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
-  const editor = useEditor();
+export const OpenInBrowser = ({ owner, shapeId, size = "icon-sm" }: { readonly owner: StoreOwner; readonly shapeId: string; readonly size?: "icon-sm" | "icon" }) => {
   const project = useCanvasProject();
   const url = useValue(
     "screen url",
     () => {
-      const props = screenPropsOf(editor, shapeId);
+      const props = screenPropsOf(owner, shapeId);
       const instance = props === undefined ? undefined : repositoryState(project).instances.get().get(props.instance);
       return props === undefined || instance?.state !== "live" || instance.proxyPort === null ? undefined : screenUrl(instance.proxyPort, props.route);
     },
-    [editor, shapeId, project],
+    [owner, shapeId, project],
   );
   return (
     <Tip label="Open in browser">
-      <Button variant="ghost" size="icon-sm" aria-label="Open in browser" disabled={url === undefined} onClick={() => url !== undefined && window.open(url, "_blank", "noopener,noreferrer")}>
+      <Button variant="ghost" size={size} className="shrink-0" aria-label="Open in browser" disabled={url === undefined} onClick={() => url !== undefined && window.open(url, "_blank", "noopener,noreferrer")}>
         <ExternalLink aria-hidden />
       </Button>
     </Tip>
@@ -44,7 +44,7 @@ const OpenInBrowser = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
 
 const KeepView = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   const editor = useEditor();
-  const instance = useScreenInstance(shapeId);
+  const instance = useScreenInstance(editor, shapeId);
   return (
     <Tip label="Keep this view">
       <Button
@@ -166,13 +166,17 @@ const SetupNotes = () => {
   );
 };
 
-export const ScreenActions = ({ shapeId }: { readonly shapeId: TLShapeId }) => (
-  <>
-    <BranchChip shapeId={shapeId} />
-    <ViewportMenu shapeId={shapeId} />
-    <OpenInBrowser shapeId={shapeId} />
-    <SetupNotes />
-    <KeepView shapeId={shapeId} />
-    <MapFlow shapeId={shapeId} />
-  </>
-);
+export const ScreenActions = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
+  const editor = useEditor();
+  const place: PlaceScreen = (instance, mark, carry) => void placeScreenBeside(editor, shapeId, instance, mark, carry);
+  return (
+    <>
+      <BranchChip owner={editor} shapeId={shapeId} place={place} />
+      <ViewportMenu shapeId={shapeId} />
+      <OpenInBrowser owner={editor} shapeId={shapeId} />
+      <SetupNotes />
+      <KeepView shapeId={shapeId} />
+      <MapFlow shapeId={shapeId} />
+    </>
+  );
+};

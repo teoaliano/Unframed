@@ -8,15 +8,20 @@ import {
   fieldOwner,
   framePatchesOf,
   releaseDials as releaseHeldDials,
+  addScreenOverride,
+  screenOverrideOf,
+  screenSourceTree,
+  undoScreenOverride,
   withoutEdit,
-  type ArtifactKind,
+  type EditorKind,
+  type ScreenOverride,
   type Burst,
   type ComponentDeclaration,
   type EditBox,
   type FieldOwner,
   type Kit,
 } from "@unframed/domain";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CanvasDoc } from "../../canvas/doc.ts";
 import type { EngineConnection } from "../../rpc/engine.ts";
 import { messageOf } from "../../agent/store.ts";
@@ -49,6 +54,8 @@ export interface EditReport {
   };
   readonly sheetRules?: ReadonlyArray<SheetRuleReport>;
   readonly sheetOverrides?: ReadonlyArray<SheetRuleReport>;
+  readonly path?: string;
+  readonly name?: string;
 }
 
 interface TweenPatch {
@@ -73,6 +80,8 @@ export interface LiveNode {
   readonly id: string | null;
   readonly selector: string;
   readonly tag: string;
+  readonly name?: string;
+  readonly path?: string;
   readonly children: readonly LiveNode[];
 }
 
@@ -88,11 +97,14 @@ interface EditSessionInput {
   readonly engine: EngineConnection;
   readonly project: string;
   readonly shapeId: string;
-  readonly kind: ArtifactKind;
+  readonly kind: EditorKind;
   readonly file: string;
   readonly locked: readonly string[];
   readonly kit: Kit | null;
   readonly editing: boolean;
+  readonly target?: "file" | "screen";
+  readonly onOverrides?: (overrides: readonly ScreenOverride[]) => void;
+  readonly onNewDocument?: () => void;
 }
 
 export interface EditSession {
@@ -126,6 +138,7 @@ export interface EditSession {
   readonly patchDial: (path: string, value: unknown) => void;
   readonly releaseDials: (values: Readonly<Record<string, unknown>>) => void;
   readonly overridden: Readonly<Record<string, boolean>>;
+  readonly overrides: readonly ScreenOverride[];
   readonly patch: (edit: SourceEdit) => void;
   readonly patchTween: (edit: SourceEdit, frame: TweenPatch) => void;
   readonly previewTween: (frame: TweenPatch) => void;
@@ -137,12 +150,22 @@ export interface EditSession {
   readonly onFrameReady: (post: (message: unknown) => void) => void;
 }
 
+const liveNodeOf = (nodes: readonly LiveNode[], id: string): LiveNode | undefined => {
+  for (const node of nodes) {
+    if (node.id === id) return node;
+    const inside = liveNodeOf(node.children, id);
+    if (inside !== undefined) return inside;
+  }
+  return undefined;
+};
+
 const sameIds = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((id, index) => id === b[index]);
 
-const conflictSentence = (kind: ArtifactKind, reason: unknown): string =>
+const conflictSentence = (kind: EditorKind, reason: unknown): string =>
   reason === "agent" ? "The agent rewrote this. Your last change wasn't saved." : `This ${kind} changed somewhere else. Your last change wasn't saved.`;
 
-export const useEditSession = ({ doc, engine, project, shapeId, kind, file, locked, kit, editing }: EditSessionInput): EditSession => {
+export const useEditSession = ({ doc, engine, project, shapeId, kind, file, locked, kit, editing, target = "file", onOverrides, onNewDocument }: EditSessionInput): EditSession => {
+  const screen = target === "screen";
   const [mode, setModeState] = useState<EditMode>(editing ? "edit" : "interact");
   const [selection, setSelectionState] = useState<readonly string[]>([]);
   const [tween, setTweenState] = useState<number | null>(null);
@@ -152,8 +175,10 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
   const [families, setFamilies] = useState<readonly string[]>([]);
   const [boxes, setBoxes] = useState<Readonly<Record<string, EditBox>>>({});
   const [copies, setCopies] = useState<Readonly<Record<string, readonly EditBox[]>>>({});
-  const [tree, setTree] = useState<SourceTree | undefined>(undefined);
+  const [sourceTree, setTree] = useState<SourceTree | undefined>(undefined);
   const [live, setLive] = useState<readonly LiveNode[]>([]);
+  const liveRef = useRef<readonly LiveNode[]>([]);
+  liveRef.current = live;
   const [liveTweens, setLiveTweens] = useState<readonly LiveTween[]>([]);
   const [declaration, setDeclaration] = useState<ComponentDeclaration | null>(null);
   const [layerHover, setLayerHover] = useState<string | null>(null);
@@ -163,6 +188,14 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
   const [settled, setSettled] = useState<{ base: string; result?: string; edits: readonly SourceEdit[] } | undefined>(undefined);
   const [held, setHeld] = useState<Readonly<Record<string, unknown>>>({});
   const [overridden, setOverridden] = useState<Readonly<Record<string, boolean>>>({});
+  const [overrides, setOverridesState] = useState<readonly ScreenOverride[]>([]);
+  const overridesRef = useRef<readonly ScreenOverride[]>([]);
+  const overridesTo = useRef(onOverrides);
+  overridesTo.current = onOverrides;
+  const newDocumentTo = useRef(onNewDocument);
+  newDocumentTo.current = onNewDocument;
+  const screenTree = useMemo<SourceTree | undefined>(() => (screen ? { ready: true, elements: screenSourceTree(live, reports), offTokens: [] } : undefined), [screen, live, reports]);
+  const tree = screen ? screenTree : sourceTree;
   const inFlight = useRef<Readonly<Record<string, unknown>>>({});
   const lastEdit = useRef<Record<string, SourceEdit>>({});
 
@@ -191,6 +224,19 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
   const lastSet = useRef<string | undefined>(undefined);
 
   const post = useCallback((message: unknown) => postRef.current?.(message), []);
+
+  const setOverrides = (next: readonly ScreenOverride[], tell = true) => {
+    if (next === overridesRef.current || (next.length === 0 && overridesRef.current.length === 0)) return;
+    overridesRef.current = next;
+    setOverridesState(next);
+    setPending(next.map((override) => override.edit));
+    if (tell) overridesTo.current?.(next);
+  };
+  const repaint = (list: readonly ScreenOverride[]) => {
+    post({ type: "unframed:edit:reset" });
+    const patches = list.flatMap((override) => framePatchesOf(override.edit, null));
+    if (patches.length > 0) post({ type: "unframed:edit:patch", patches });
+  };
 
   const heldNow = (): Readonly<Record<string, unknown>> => ({ ...inFlight.current, ...Object.fromEntries(burstRef.current.dials) });
   const shownDials = useRef<Readonly<Record<string, unknown>>>({});
@@ -258,7 +304,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
     try {
       const answer = await send(base, edits);
       if (doc.isDisposed) {
-        keepLateSave({ project, shapeId, kind, from: base, to: answer.file, held: dials.length > 0 ? { ...inFlight.current } : undefined });
+        if (kind !== "screen") keepLateSave({ project, shapeId, kind, from: base, to: answer.file, held: dials.length > 0 ? { ...inFlight.current } : undefined });
         return;
       }
       if (fileRef.current !== base) {
@@ -319,6 +365,11 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
     (quiet = false) => {
       window.clearTimeout(timerRef.current);
       timerRef.current = undefined;
+      if (screen && overridesRef.current.length > 0) {
+        setOverrides([]);
+        if (!quiet) post({ type: "unframed:edit:reset" });
+        return;
+      }
       if (baseRef.current === undefined && burstRef.current.edits.size === 0 && burstRef.current.dials.size === 0) return;
       burstRef.current = emptyBurst();
       baseRef.current = undefined;
@@ -332,6 +383,17 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
 
   const collect = useCallback(
     (edit: SourceEdit, showInFrame: boolean) => {
+      if (screen) {
+        const id = "elementId" in edit ? edit.elementId : undefined;
+        const known = id === undefined ? undefined : reportsRef.current[id] ?? liveNodeOf(liveRef.current, id);
+        const override = known === undefined ? undefined : screenOverrideOf(edit, { name: known.name ?? known.tag, path: known.path ?? known.selector });
+        if (override === undefined) return;
+        lastEdit.current[override.edit.elementId] = edit;
+        setOverrides(addScreenOverride(overridesRef.current, override));
+        const patches = framePatchesOf(edit, null);
+        if (showInFrame && patches.length > 0) post({ type: "unframed:edit:patch", patches });
+        return;
+      }
       burstRef.current = addToBurst(burstRef.current, edit);
       if ("elementId" in edit && edit.elementId !== undefined) lastEdit.current[edit.elementId] = edit;
       if (baseRef.current === undefined) baseRef.current = fileRef.current;
@@ -341,7 +403,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
       window.clearTimeout(timerRef.current);
       timerRef.current = window.setTimeout(() => void commit(), COMMIT_DELAY_MS);
     },
-    [commit, post],
+    [commit, post, screen],
   );
 
   const patchDial = useCallback(
@@ -440,8 +502,9 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
       setModeState(next);
       if (next === "interact") setHovered(null);
       post({ type: "unframed:edit:mode", mode: next, locked: lockedRef.current });
+      if (screen && next === "edit") post({ type: "unframed:edit:tree" });
     },
-    [commit, post, editing],
+    [commit, post, editing, screen],
   );
 
   const selectMatching = useCallback((selector: string) => post({ type: "unframed:edit:selectMatching", selector }), [post]);
@@ -472,6 +535,13 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
   const shownFile = (): string | undefined => (doc.shape(shapeId)?.props as { file?: string } | undefined)?.file;
 
   const undo = () => {
+    if (screen) {
+      if (overridesRef.current.length === 0) return;
+      const next = undoScreenOverride(overridesRef.current);
+      setOverrides(next);
+      repaint(next);
+      return;
+    }
     if (baseRef.current !== undefined) {
       discard();
       return;
@@ -484,7 +554,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
   };
 
   const redo = () => {
-    if (redoable.current === 0) return;
+    if (screen || redoable.current === 0) return;
     redoable.current -= 1;
     undoable.current += 1;
     doc.redo();
@@ -529,6 +599,15 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
       case "unframed:edit:ready": {
         window.clearInterval(helloTimer.current);
         helloTimer.current = undefined;
+        if (screen) {
+          reportsRef.current = {};
+          setReports({});
+          setHovered(null);
+          setOverrides([], false);
+          newDocumentTo.current?.();
+          selectionRef.current = [];
+          setSelectionState([]);
+        }
         post({ type: "unframed:edit:mode", mode: modeRef.current, locked: lockedRef.current });
         if (selectionRef.current.length > 0) post({ type: "unframed:edit:select", ids: selectionRef.current });
         post({ type: "unframed:edit:tree" });
@@ -541,7 +620,9 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
         return;
       }
       case "unframed:edit:tree": {
-        setLive(Array.isArray(message.nodes) ? (message.nodes as LiveNode[]) : []);
+        const nodes = Array.isArray(message.nodes) ? (message.nodes as LiveNode[]) : [];
+        liveRef.current = nodes;
+        setLive(nodes);
         setDeclaration(typeof message.declaration === "object" && message.declaration !== null ? (message.declaration as ComponentDeclaration) : null);
         return;
       }
@@ -569,9 +650,10 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
         for (const element of judged) {
           const edit = element.overridden === true ? lastEdit.current[element.id!] : undefined;
           if (edit !== undefined) burstRef.current = withoutEdit(burstRef.current, edit);
+          if (edit !== undefined && screen) setOverrides(overridesRef.current.filter((override) => override.edit !== edit));
         }
         settle();
-        setPending(burstEdits(burstRef.current));
+        setPending(screen ? overridesRef.current.map((override) => override.edit) : burstEdits(burstRef.current));
         setHeld(heldNow());
         return;
       }
@@ -743,6 +825,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
     patchDial,
     releaseDials,
     overridden,
+    overrides,
     patch,
     patchTween,
     previewTween,

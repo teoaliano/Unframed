@@ -138,6 +138,7 @@ export * from "./instanceProxy.ts";
 export * from "./instanceBudget.ts";
 export * from "./screens.ts";
 export * from "./screenStates.ts";
+export * from "./screenEdits.ts";
 export * from "./screenBridge.ts";
 export * from "./flows.ts";
 export * from "./instanceGit.ts";

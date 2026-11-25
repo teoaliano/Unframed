@@ -4,7 +4,7 @@ import {
   editorTabKey,
   renameTabKey,
   stepTab,
-  type ArtifactKind,
+  type EditorKind,
   editorTabsOf,
   isEditorTab,
   ONBOARDING_KEY,
@@ -25,7 +25,6 @@ import { isConnectionFailure, type EngineConnection } from "../rpc/engine.ts";
 import { showError } from "../toasts.tsx";
 
 export const ACTIVE_PROJECT_KEY = "project.active";
-/** The saved tabs (spec 17): the order and the active tab. It replaces `project.active` as the place a restart reads from. */
 export const TABS_KEY = "project.tabs";
 const LIST_RETRY_MS = 1000;
 export const SETTLE_BEFORE_SWITCH_MS = 2000;
@@ -34,7 +33,6 @@ export const DEFAULT_PROJECT = "default";
 const messageOf = (error: unknown): string =>
   error instanceof UnframedError || error instanceof Error ? error.message : String(error);
 
-/** Something that must settle before the active project changes (the open canvas's pending edits). */
 export type BeforeSwitch = () => Promise<void>;
 
 export interface DeviceHooks {
@@ -42,10 +40,9 @@ export interface DeviceHooks {
   readonly reload: () => Promise<void>;
 }
 
-/** The tab state the strip and the canvas read. A new object on every change, so a subscriber can compare by identity. */
 export interface EditorTab {
   readonly title: string;
-  readonly kind: ArtifactKind;
+  readonly kind: EditorKind;
 }
 
 export interface ClosedTab {
@@ -58,30 +55,20 @@ const sameClosed = (a: ClosedTab, b: ClosedTab) => a.key === b.key;
 export type BeforeLeave = () => Promise<void>;
 
 export interface TabState {
-  /** The project whose canvas is mounted, or undefined when no tab is open (the start state). */
   readonly active: string | undefined;
   readonly editing: string | undefined;
   readonly editors: ReadonlyMap<string, EditorTab>;
-  /** Every open tab, in the order the strip shows them. */
   readonly order: ReadonlyArray<string>;
   readonly pinned: ReadonlyArray<string>;
-  /** Projects closed from the strip, newest first, for Cmd+Shift+T. In memory only. */
   readonly closed: ReadonlyArray<ClosedTab>;
-  /** False until the first load has settled, so the start state is not shown while the app is still opening. */
   readonly loaded: boolean;
 }
 
-/**
- * The active project and the open tabs. They live in this state, and the preferences store
- * keeps copies (`project.active` for the engine's outside-agent view, `project.tabs` for a
- * restart). `activate` is the only function that changes the active project.
- */
 export class ProjectActivation {
   private state: TabState = { active: undefined, editing: undefined, editors: new Map(), order: [], pinned: [], closed: [], loaded: false };
   private readonly listeners = new Set<() => void>();
   private beforeSwitch: BeforeSwitch | undefined;
   private beforeLeave: BeforeLeave | undefined;
-  /** Counts activations, so an initial load that finishes after a switch does not override it. */
   private generation = 0;
   private readonly engine: EngineConnection;
   private deviceHooks: DeviceHooks | undefined;
@@ -120,7 +107,6 @@ export class ProjectActivation {
     this.update({ order: [...order], active, loaded: true });
   }
 
-  /** The open canvas registers what must settle before it is closed. */
   setBeforeSwitch(hook: BeforeSwitch | undefined): void {
     this.beforeSwitch = hook;
   }
@@ -207,10 +193,6 @@ export class ProjectActivation {
     if (this.state.order.includes(key)) this.persistTabs();
   }
 
-  /**
-   * Closes a tab (spec 17). Closing the active one settles its canvas first, then activates
-   * the neighbour; a background tab only leaves the strip. Closing deletes nothing.
-   */
   async closeTab(name: string, options: { readonly remember?: boolean } = {}): Promise<void> {
     if (this.onDevice || !this.state.order.includes(name)) return;
     const planned = closeTabRule(this.state.order, this.selectedTab(), name);
@@ -251,7 +233,6 @@ export class ProjectActivation {
     await this.engine.call("preferences.set", { key: ACTIVE_PROJECT_KEY, value: null }).catch(() => undefined);
   }
 
-  /** Moves a tab to position `to` in the strip. Saved so the order survives a restart. */
   moveTab(name: string, to: number): void {
     if (this.onDevice) return;
     this.update(moveTab(this.state, name, to));
@@ -307,16 +288,11 @@ export class ProjectActivation {
     this.persistTabs();
   }
 
-  /** Lets the open canvas's pending edits reach the engine, before a change that closes its room. */
   async settle(): Promise<void> {
     await this.commitEditor();
     await this.beforeSwitch?.();
   }
 
-  /**
-   * After an output folder change (spec 10): the canvas unmounts first, because the same name
-   * is another project in the new folder. The saved tabs are read again against the new folder.
-   */
   async reopen(): Promise<void> {
     this.update({ active: undefined, editing: undefined, editors: new Map(), order: [], pinned: [], closed: [], loaded: false });
     if (this.deviceHooks !== undefined) {
@@ -326,13 +302,6 @@ export class ProjectActivation {
     await this.initialLoad();
   }
 
-  /**
-   * Waits for the engine, reads the saved tabs and the project list, and opens them: the saved
-   * tabs that still exist, in their order, with the saved active one. With no saved tab, the
-   * remembered project (`project.active`, from before tabs), else the first, else a new `default`.
-   * A first run (no project and no onboarding yet) opens nothing and starts the onboarding instead.
-   * A list that fails is tried once more after a second; a second failure opens nothing.
-   */
   async initialLoad(): Promise<void> {
     const started = this.generation;
     const prefs = await this.engine
@@ -347,7 +316,6 @@ export class ProjectActivation {
       try {
         projects = (await this.engine.call("projects.list")).projects;
       } catch (error) {
-        // A drop is not a failed list: the call waits for the socket and runs again.
         if (isConnectionFailure(error)) continue;
         failure = error;
         if (++attempt >= 2) break;
@@ -399,7 +367,7 @@ const savedEditors = (value: unknown): ReadonlyMap<string, EditorTab> => {
   for (const entry of value) {
     if (typeof entry !== "object" || entry === null) continue;
     const { key, title, kind } = entry as { key?: unknown; title?: unknown; kind?: unknown };
-    if (typeof key === "string" && isEditorTab(key)) editors.set(key, { title: typeof title === "string" ? title : "", kind: kind === "motion" || kind === "component" ? kind : "page" });
+    if (typeof key === "string" && isEditorTab(key)) editors.set(key, { title: typeof title === "string" ? title : "", kind: kind === "motion" || kind === "component" || kind === "screen" ? kind : "page" });
   }
   return editors;
 };
@@ -407,5 +375,4 @@ const savedEditors = (value: unknown): ReadonlyMap<string, EditorTab> => {
 export const useActiveProject = (activation: ProjectActivation): string | undefined =>
   useSyncExternalStore(activation.subscribe, activation.activeProject);
 
-/** The whole tab state, for the strip (spec 17). */
 export const useTabState = (activation: ProjectActivation): TabState => useSyncExternalStore(activation.subscribe, activation.tabState);

@@ -1,6 +1,12 @@
-import type { ArtifactShapeProps, ComponentUpdate } from "@unframed/contracts";
+import type { ArtifactShapeProps, ComponentUpdate, ScreenShapeProps } from "@unframed/contracts";
 import {
   artifactTitle,
+  NO_BRIDGE,
+  SCREEN_EDIT_NOTE,
+  SCREEN_VIEWPORTS,
+  screenChip,
+  screenEditInstruction,
+  screenLabel,
   dialsWith,
   editorPreviewViewport,
   FEATURE_OFF_MESSAGES,
@@ -11,6 +17,8 @@ import {
   type ArtifactKind,
   type ChipElement,
   type DialsAnnouncement,
+  type EditorKind,
+  type ScreenOverride,
 } from "@unframed/domain";
 import {
   Component,
@@ -62,7 +70,14 @@ import { LayersTab } from "./LayersTab.tsx";
 import { COLUMN, ColumnHeader, ParametersContent } from "./Parameters.tsx";
 import { PreviewSizeControl, usePreviewSize } from "./PreviewSize.tsx";
 import { useEditSession, type EditMode } from "./editSession.ts";
-import { makeEditableInstruction, tellAgent } from "./tellAgent.ts";
+import { chipDataFor } from "./chipData.ts";
+import { draftScreenEdits, makeEditableInstruction, NO_SCREEN_DRAFT, tellAgent, type ScreenDraft } from "./tellAgent.ts";
+import { screenInstructions } from "../ParametersPanel.tsx";
+import { BranchChip } from "../../repositories/BranchChip.tsx";
+import { installEditorDemand } from "../../repositories/demand.ts";
+import { OpenInBrowser } from "../../repositories/ScreenActions.tsx";
+import { ScreenPreview } from "../../repositories/ScreenPreview.tsx";
+import { repositoryState } from "../../repositories/store.ts";
 import { MotionTimeline } from "../timeline/MotionTimeline.tsx";
 import { MotionTransport, type TransportZone } from "../timeline/transport.ts";
 import { kitOf } from "../../kits/kitRoom.ts";
@@ -128,17 +143,23 @@ export const ArtifactEditor = ({
   const doc = useCanvasDoc();
   const project = useCanvasProject();
   const engine = useEngine();
-  const kit = useValue("project kit", () => kitOf(doc), [doc]);
+  const projectKit = useValue("project kit", () => kitOf(doc), [doc]);
   const chatClient = useChatClient(engine, project);
   const { statuses } = useProviders(chatClient);
+  const repositories = useFeature("repositories");
   const facts = useValue(
     "edited artifact",
     () => {
       const shape = doc.shape(shapeId);
+      if (shape?.type === "screen") {
+        if (!repositories) return undefined;
+        const props = shape.props as ScreenShapeProps;
+        return { kind: "screen" as EditorKind, file: "", title: props.title, fileName: undefined, dials: props.dials, mode: props.mode, locked: [] as string[], tag: "", screen: props };
+      }
       if (!shape || !isArtifactKind(shape.type)) return undefined;
       const props = shape.props as ArtifactShapeProps;
       return {
-        kind: shape.type as ArtifactKind,
+        kind: shape.type as EditorKind,
         file: props.file,
         title: props.title,
         fileName: props.fileName,
@@ -146,10 +167,19 @@ export const ArtifactEditor = ({
         mode: props.mode,
         locked: props.lockedElements ?? [],
         tag: (props as { tag?: string }).tag ?? "",
+        screen: undefined,
       };
     },
-    [doc, shapeId],
+    [doc, shapeId, repositories],
   );
+  const screen = facts?.screen;
+  const isScreen = screen !== undefined;
+  const kit = isScreen ? null : projectKit;
+  const instance = useValue("screen instance", () => (screen === undefined ? undefined : repositoryState(project).instances.get().get(screen.instance)), [project, screen?.instance]);
+  const screenBridge = useValue("screen bridge", () => repositoryState(project).bridges.get().get(shapeId), [project, shapeId]);
+  const heard = useValue("screen announcement", () => artifactsOf(doc).heard.get().get(shapeId), [doc, shapeId]);
+  useEffect(() => (isScreen ? installEditorDemand(engine, project, () => (doc.shape(shapeId)?.props as { instance?: string } | undefined)?.instance) : undefined), [isScreen, engine, project, doc, shapeId]);
+  const screenDraft = useRef<ScreenDraft>(NO_SCREEN_DRAFT);
   const uses = useValue(
     "component uses",
     () => {
@@ -166,6 +196,26 @@ export const ArtifactEditor = ({
   const gone = facts === undefined;
   const editing = useFeature("element-editing");
 
+  const onOverrides = (overrides: readonly ScreenOverride[]) => {
+    if (screen === undefined) return;
+    const reports = sessionRef.current.reports;
+    const elements = [...new Set(overrides.map((override) => override.edit.elementId))].map((id) => {
+      const source = sessionRef.current.tree?.elements.find((element) => element.id === id);
+      const override = overrides.find((each) => each.edit.elementId === id)!;
+      return screenChip(chipDataFor(id, source, reports[id], false), { path: override.path, name: override.name });
+    });
+    const instruction =
+      overrides.length === 0
+        ? ""
+        : screenEditInstruction({
+            shape: shapeId.replace(/^shape:/, ""),
+            branch: instance?.branch ?? screen.title,
+            state: screen.state?.trim() || screen.route,
+            worktree: instance?.worktree ?? "",
+            overrides,
+          });
+    screenDraft.current = draftScreenEdits(chatClient, shapeId, elements, instruction, screenDraft.current);
+  };
   const session = useEditSession({
     doc,
     engine,
@@ -176,6 +226,11 @@ export const ArtifactEditor = ({
     locked: facts?.locked ?? [],
     kit,
     editing,
+    target: isScreen ? "screen" : "file",
+    onOverrides,
+    onNewDocument: () => {
+      screenDraft.current = NO_SCREEN_DRAFT;
+    },
   });
   const sessionRef = useRef(session);
   sessionRef.current = session;
@@ -431,7 +486,12 @@ export const ArtifactEditor = ({
     setPanelState(next);
   };
 
-  const [size, setSize] = usePreviewSize(project, shapeId);
+  const [pageSize, setPageSize] = usePreviewSize(project, shapeId);
+  const size = screen === undefined ? pageSize : { choice: "custom" as const, custom: { width: Math.round(screen.w), height: Math.round(screen.h) } };
+  const setSize = screen === undefined ? setPageSize : (next: typeof pageSize) => {
+    const chosen = editorPreviewViewport(next);
+    if (chosen !== undefined) doc.update(shapeId, { w: chosen.width, h: chosen.height }, "screen viewport");
+  };
   const body = useRef<HTMLDivElement>(null);
   const [area, setArea] = useState({ w: 0, h: 0 });
   useLayoutEffect(() => {
@@ -472,9 +532,12 @@ export const ArtifactEditor = ({
 
   if (!facts) return null;
   const hasFile = facts.file !== "";
-  const tell = (elements: ChipElement[]) => tellAgent(chatClient, shapeId, elements);
-  const ask = (field: string, elements: ChipElement[]) => tellAgent(chatClient, shapeId, elements, makeEditableInstruction(field));
-  const displayTitle = artifactTitle(facts);
+  const previewable = hasFile || isScreen;
+  const forAgent = (elements: ChipElement[]) =>
+    isScreen ? elements.map((element) => screenChip(element, session.reports[element.elementId ?? ""] ?? {})) : elements;
+  const tell = (elements: ChipElement[]) => tellAgent(chatClient, shapeId, forAgent(elements));
+  const ask = (field: string, elements: ChipElement[]) => tellAgent(chatClient, shapeId, forAgent(elements), makeEditableInstruction(field));
+  const displayTitle = screen === undefined ? artifactTitle(facts) : screenLabel({ branch: screen.title, route: screen.route, state: screen.state });
   const title =
     displayTitle === "" ? shapeId.replace(/^shape:/, "") : displayTitle;
   const component = facts.kind === "component";
@@ -519,10 +582,11 @@ export const ArtifactEditor = ({
   const goToMain = (id: string) => {
     void sessionRef.current.commit().then(() => onOpen(id));
   };
+  const shownAnnouncement = isScreen ? heard : announcement;
   const normalised =
-    announcement === undefined
+    shownAnnouncement === undefined
       ? undefined
-      : normaliseDials(announcement.config);
+      : normaliseDials(shownAnnouncement.config);
   const current = normalised?.ok
     ? mergeDialValues(normalised.schema, dials ?? null)
     : dials;
@@ -560,10 +624,16 @@ export const ArtifactEditor = ({
           <h2 className="m-0 ml-1 flex-1 text-sm font-medium">Parameters</h2>
         </ColumnHeader>
       )}
+      {isScreen && (shownPanel === "design" || shownPanel === "layers") && (
+        <p className="m-0 px-2.5 pt-2.5 text-xs text-(--artifact-editor-note)" data-testid="screen-edit-note">
+          {SCREEN_EDIT_NOTE}
+        </p>
+      )}
       {shownPanel === "design" && (
         <DesignTab
           session={session}
           kind={facts.kind}
+          images={!isScreen}
           project={project}
           dials={current ?? {}}
           locked={facts.locked}
@@ -581,12 +651,12 @@ export const ArtifactEditor = ({
           componentOf={componentOf}
           onUpdateComponent={(tag) => void acceptUpdates([tag])}
           onGoToMain={goToMain}
-          onMake={(element) =>
+          onMake={isScreen ? undefined : (element) =>
             void makeComponent({
               client: chatClient,
               statuses,
               shapeId: String(shapeId),
-              kind: facts.kind,
+              kind: facts.kind as ArtifactKind,
               title: displayTitle,
               element,
             })
@@ -599,7 +669,8 @@ export const ArtifactEditor = ({
           kind={facts.kind}
           shapeId={shapeId}
           locked={facts.locked}
-          onLock={setLocked}
+          onLock={isScreen ? undefined : setLocked}
+          renamable={!isScreen}
           onTell={tell}
         />
       )}
@@ -610,19 +681,34 @@ export const ArtifactEditor = ({
       )}
       {shownPanel === "parameters" && (
         <div className="min-h-0 flex-1 overflow-auto">
-          <ParametersContent
-            shapeId={shapeId}
-            kind={facts.kind}
-            title={title}
-            announcement={announcement}
-            saved={dials}
-            onWrite={(values) =>
-              session.releaseDials(values as Record<string, unknown>)
-            }
-            post={(values) => post.current?.(values)}
-            place="editor"
-            railVisible={!railFolded || sheet === "agent"}
-          />
+          {screen === undefined ? (
+            <ParametersContent
+              shapeId={shapeId}
+              kind={facts.kind as ArtifactKind}
+              title={title}
+              announcement={announcement}
+              saved={dials}
+              onWrite={(values) =>
+                session.releaseDials(values as Record<string, unknown>)
+              }
+              post={(values) => post.current?.(values)}
+              place="editor"
+              railVisible={!railFolded || sheet === "agent"}
+            />
+          ) : (
+            <ParametersContent
+              shapeId={shapeId}
+              kind="page"
+              title={title}
+              announcement={heard}
+              saved={screen.dials}
+              post={(values) => artifactsOf(doc).posts.get(shapeId)?.(values)}
+              place="editor"
+              railVisible={!railFolded || sheet === "agent"}
+              notice={screenBridge === false ? NO_BRIDGE : undefined}
+              instructions={screenInstructions(instance === undefined ? undefined : { route: screen.route, branch: instance.branch, worktree: instance.worktree })}
+            />
+          )}
         </div>
       )}
     </>
@@ -632,7 +718,7 @@ export const ArtifactEditor = ({
       ref={grid}
       data-testid="artifact-editor"
       className={cn(
-        "pointer-events-auto absolute inset-x-0 bottom-0 z-[700] box-border grid gap-3 bg-(--artifact-editor-surface) p-3 font-sans text-(--artifact-editor-foreground)",
+        "pointer-events-auto absolute inset-x-0 bottom-0 z-[700] box-border grid bg-(--artifact-editor-surface) font-sans text-(--artifact-editor-foreground)",
         timeline
           ? "grid-rows-[minmax(0,1fr)_auto]"
           : "grid-rows-[minmax(0,1fr)]",
@@ -643,7 +729,7 @@ export const ArtifactEditor = ({
       {!railFolded && (
         <section
           data-editor-column="rail"
-          className={cn(COLUMN, "col-start-1 row-span-full [&_header:has(>h2)]:border-b")}
+          className={cn(COLUMN, "col-start-1 row-span-full border-r [&_header:has(>h2)]:border-b")}
         >
           <AgentRail
             project={project}
@@ -660,6 +746,7 @@ export const ArtifactEditor = ({
           COLUMN,
           railFolded ? "col-start-1" : "col-start-2",
           "row-start-1",
+          !parametersFolded && "border-r",
         )}
         aria-label={`Editing ${title}`}
       >
@@ -707,7 +794,8 @@ export const ArtifactEditor = ({
               </span>
             )}
           </span>
-          {hasFile && editing && (
+          {isScreen && <BranchChip owner={doc} shapeId={shapeId} />}
+          {previewable && editing && (
             <ToggleGroup
               aria-label="Mode"
               variant="default"
@@ -834,9 +922,10 @@ export const ArtifactEditor = ({
               </PopoverPopup>
             </Popover>
           )}
-          {hasFile && (
-            <PreviewSizeControl size={size} onChange={setSize} scale={scale} />
+          {previewable && (
+            <PreviewSizeControl size={size} onChange={setSize} scale={scale} presets={isScreen ? SCREEN_VIEWPORTS : undefined} />
           )}
+          {isScreen && <OpenInBrowser owner={doc} shapeId={shapeId} size="icon" />}
           {facts.kind === "motion" && hasFile && (
             <RenderButton shapeId={shapeId} />
           )}
@@ -852,7 +941,7 @@ export const ArtifactEditor = ({
                     outsideUrlOf(
                       project,
                       shapeId,
-                      facts.kind,
+                      facts.kind as ArtifactKind,
                       facts.file,
                       port,
                     ),
@@ -893,9 +982,9 @@ export const ArtifactEditor = ({
               "items-center justify-center overflow-hidden",
           )}
         >
-          {facts.file === "" ? (
+          {facts.file === "" && !isScreen ? (
             <p className="m-auto p-6 text-center text-sm text-(--artifact-editor-note)">{`This ${facts.kind} has no file yet. Ask the agent to write one.`}</p>
-          ) : port === undefined ? null : (
+          ) : port === undefined && !isScreen ? null : (
             <div
               data-testid="artifact-preview"
               className={cn(
@@ -928,9 +1017,12 @@ export const ArtifactEditor = ({
                       }
                 }
               >
+                {screen !== undefined ? (
+                  <ScreenPreview shapeId={shapeId} props={screen} edit={{ onEdit, onEditReady }} />
+                ) : port !== undefined && (
                 <ArtifactFrame
                   project={project}
-                  kind={facts.kind}
+                  kind={facts.kind as ArtifactKind}
                   file={facts.file}
                   previewPort={port}
                   dials={dials}
@@ -947,6 +1039,7 @@ export const ArtifactEditor = ({
                   onPlayer={transport.onPlayerMessage}
                   onPlayerReady={onPlayerReady}
                 />
+                )}
                 {session.mode === "edit" && (
                   <EditOverlay
                     hovered={session.hovered}
@@ -998,7 +1091,7 @@ export const ArtifactEditor = ({
               ? parametersFolded
                 ? "col-start-1 row-start-2"
                 : "col-start-1 col-span-2 row-start-2"
-              : "col-start-2 row-start-2 max-[1279px]:col-span-2"
+              : "col-start-2 row-start-2 border-r max-[1279px]:col-span-2 max-[1279px]:border-r-0"
           }
         />
       )}

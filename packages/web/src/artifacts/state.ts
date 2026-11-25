@@ -158,15 +158,15 @@ export const forgetEdit = (editor: Editor, id: string): void => {
   if (state.dropHit.get()?.shapeId === id) state.dropHit.set(undefined);
 };
 
-export const hearFrame = (editor: Editor, id: string, announcement: DialsAnnouncement): void => {
+export const hearFrame = (editor: StoreOwner, id: string, announcement: DialsAnnouncement): void => {
   artifactsOf(editor).heard.update((current) => new Map(current).set(id, announcement));
 };
 
-export const reachFrame = (editor: Editor, id: string, post: (values: unknown) => void): void => {
+export const reachFrame = (editor: StoreOwner, id: string, post: (values: unknown) => void): void => {
   artifactsOf(editor).posts.set(id, post);
 };
 
-export const forgetFrame = (editor: Editor, id: string): void => {
+export const forgetFrame = (editor: StoreOwner, id: string): void => {
   const state = artifactsOf(editor);
   state.posts.delete(id);
   if (!state.heard.get().has(id)) return;

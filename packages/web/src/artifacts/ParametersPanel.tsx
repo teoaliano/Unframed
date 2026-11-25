@@ -30,7 +30,7 @@ import { artifactsOf } from "./state.ts";
 
 const stop = (event: { stopPropagation(): void }) => event.stopPropagation();
 
-const screenInstructions = (screen: ScreenParametersContext | undefined): ParameterInstructions | undefined =>
+export const screenInstructions = (screen: ScreenParametersContext | undefined): ParameterInstructions | undefined =>
   screen === undefined
     ? undefined
     : {

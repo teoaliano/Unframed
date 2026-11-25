@@ -2,7 +2,7 @@ import type { GitAction, GitActionResult, Instance, InstanceDiff, ScreenShapePro
 import { branchChip, forkBranchName, SCREEN_GAP } from "@unframed/domain";
 import { ChevronDown, GitBranch } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { createShapeId, useEditor, useValue, type Editor, type TLShapeId } from "tldraw";
+import { createShapeId, useValue, type Editor, type TLShapeId } from "tldraw";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -12,28 +12,30 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/c
 import { messageOf } from "../agent/store.ts";
 import { Tip } from "../chrome/ui.tsx";
 import { useCanvasProject, useEngine } from "../context.ts";
+import type { StoreOwner } from "../canvas/doc.ts";
 import { usePendingWork } from "./pendingWork.ts";
 import { repositoryState } from "./store.ts";
 
 type Panel = "fork" | "pick" | "changes" | "remove";
 
-export const screenPropsOf = (editor: Editor, shapeId: TLShapeId): ScreenShapeProps | undefined => {
-  const shape = editor.getShape(shapeId);
-  return shape?.type === "screen" ? (shape.props as ScreenShapeProps) : undefined;
+export const screenPropsOf = (owner: StoreOwner, shapeId: string): ScreenShapeProps | undefined => {
+  const shape = owner.store.get(shapeId as TLShapeId);
+  return shape?.typeName === "shape" && shape.type === "screen" ? (shape.props as ScreenShapeProps) : undefined;
 };
 
-export const useScreenInstance = (shapeId: TLShapeId): Instance | undefined => {
-  const editor = useEditor();
+export const useScreenInstance = (owner: StoreOwner, shapeId: string): Instance | undefined => {
   const project = useCanvasProject();
   return useValue(
     "screen instance",
     () => {
-      const props = screenPropsOf(editor, shapeId);
+      const props = screenPropsOf(owner, shapeId);
       return props === undefined ? undefined : repositoryState(project).instances.get().get(props.instance);
     },
-    [editor, shapeId, project],
+    [owner, shapeId, project],
   );
 };
+
+export type PlaceScreen = (instance: Instance, mark: string, carry: "state" | "view") => void;
 
 export const placeScreenBeside = (editor: Editor, shapeId: TLShapeId, instance: Instance, mark: string, carry: "state" | "view" = "state"): TLShapeId | undefined => {
   const props = screenPropsOf(editor, shapeId);
@@ -67,8 +69,7 @@ export const placeScreenBeside = (editor: Editor, shapeId: TLShapeId, instance: 
 const hintClass = "text-xs text-(--selection-toolbar-hint)";
 const problemClass = "text-xs text-(--artifact-editor-error-foreground)";
 
-const BranchPanel = ({ shapeId, instance, base, close }: { readonly shapeId: TLShapeId; readonly instance: Instance | undefined; readonly base: "fork" | "pick"; readonly close: () => void }) => {
-  const editor = useEditor();
+const BranchPanel = ({ instance, base, close, place }: { readonly instance: Instance | undefined; readonly base: "fork" | "pick"; readonly close: () => void; readonly place: PlaceScreen }) => {
   const engine = useEngine();
   const project = useCanvasProject();
   const [branches, setBranches] = useState<ReadonlyArray<string>>([]);
@@ -101,7 +102,7 @@ const BranchPanel = ({ shapeId, instance, base, close }: { readonly shapeId: TLS
         if (from === "") return;
         run(async () => {
           const made = await engine.call("instances.create", { project, base: from, ...(name.trim() === "" ? {} : { branch: name.trim() }) });
-          placeScreenBeside(editor, shapeId, made, "screen on a new branch", base === "fork" ? "state" : "view");
+          place(made, "screen on a new branch", base === "fork" ? "state" : "view");
           close();
         });
       }}
@@ -234,17 +235,16 @@ const RemovePanel = ({ instance, close }: { readonly instance: Instance; readonl
   );
 };
 
-export const BranchChip = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
-  const editor = useEditor();
+export const BranchChip = ({ owner, shapeId, place }: { readonly owner: StoreOwner; readonly shapeId: string; readonly place?: PlaceScreen | undefined }) => {
   const chip = useRef<HTMLButtonElement>(null);
   const [panel, setPanel] = useState<Panel | undefined>(undefined);
-  const instance = useScreenInstance(shapeId);
-  const title = useValue("screen title", () => screenPropsOf(editor, shapeId)?.title ?? "", [editor, shapeId]);
+  const instance = useScreenInstance(owner, shapeId);
+  const title = useValue("screen title", () => screenPropsOf(owner, shapeId)?.title ?? "", [owner, shapeId]);
   const text = branchChip({ branch: instance?.branch ?? title, changes: instance?.changes ?? 0 });
   const gone = instance === undefined || instance.state === "removed";
   const close = () => setPanel(undefined);
   const anotherView = () => {
-    if (instance !== undefined) placeScreenBeside(editor, shapeId, instance, "another view of a branch");
+    if (instance !== undefined) place?.(instance, "another view of a branch", "state");
   };
   return (
     <>
@@ -262,18 +262,22 @@ export const BranchChip = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
           </MenuTrigger>
         </Tip>
         <MenuPopup align="start" className="min-w-64">
-          <MenuItem disabled={gone} onClick={anotherView}>
-            Another view of this branch
-          </MenuItem>
-          <MenuItem disabled={gone} onClick={() => setPanel("fork")}>
-            New branch and worktree…
-            <MenuShortcut>New worktree</MenuShortcut>
-          </MenuItem>
-          <MenuItem onClick={() => setPanel("pick")}>
-            Open another branch…
-            <MenuShortcut>New worktree</MenuShortcut>
-          </MenuItem>
-          <MenuSeparator />
+          {place !== undefined && (
+            <>
+              <MenuItem disabled={gone} onClick={anotherView}>
+                Another view of this branch
+              </MenuItem>
+              <MenuItem disabled={gone} onClick={() => setPanel("fork")}>
+                New branch and worktree…
+                <MenuShortcut>New worktree</MenuShortcut>
+              </MenuItem>
+              <MenuItem onClick={() => setPanel("pick")}>
+                Open another branch…
+                <MenuShortcut>New worktree</MenuShortcut>
+              </MenuItem>
+              <MenuSeparator />
+            </>
+          )}
           <MenuItem disabled={gone} onClick={() => setPanel("changes")}>
             {text.changes}
           </MenuItem>
@@ -285,7 +289,7 @@ export const BranchChip = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
       </Menu>
       <Popover open={panel !== undefined} onOpenChange={(open) => !open && close()}>
         <PopoverPopup anchor={chip} side="bottom" align="start" sideOffset={6} padding="compact" className="w-80" data-testid="screen-branch-panel">
-          {(panel === "fork" || panel === "pick") && <BranchPanel key={panel} shapeId={shapeId} instance={instance} base={panel} close={close} />}
+          {(panel === "fork" || panel === "pick") && place !== undefined && <BranchPanel key={panel} instance={instance} base={panel} close={close} place={place} />}
           {panel === "changes" && instance !== undefined && <ChangesPanel instance={instance} />}
           {panel === "remove" && instance !== undefined && <RemovePanel instance={instance} close={close} />}
         </PopoverPopup>

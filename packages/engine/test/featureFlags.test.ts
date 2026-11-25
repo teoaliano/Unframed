@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { startAgentEngine, UNFRAMED_TOOLS } from "./agent.ts";
-import { scriptedSession } from "./agentCanvas.ts";
+import { scriptFolder, startAgentEngine, UNFRAMED_TOOLS } from "./agent.ts";
+import { scriptedSession, seed } from "./agentCanvas.ts";
 import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { makeRepo, repoEngineEnv } from "./gitRepos.ts";
 import { makeTempDir, startEngine } from "./harness.ts";
+import { screenShape } from "./canvasRecords.ts";
 
 const listTools = (token: string) => ({
   method: "POST",
@@ -74,6 +75,17 @@ describe("UNFRAMED_FEATURES", () => {
     expect(await rpc.call("node.renders", { project, files: [] })).toEqual({ renders: {} });
     await expect(rpc.call("artifact.prepareEdit", { project, shapeId: "shape:p" })).rejects.toMatchObject(EDITING_OFF);
     await expect(rpc.call("artifact.edit", { project, shapeId: "shape:p", baseFile: "1-page.html", edits: [] })).rejects.toMatchObject(EDITING_OFF);
+  });
+
+  it("with repositories off, leaves a Screen's element chips out of the preamble", async () => {
+    const chip = { shapeId: "shape:sc1", elementId: null, selector: "body > button", tag: "button", label: "save", excerpt: "<button>Save</button>" };
+    const script = JSON.stringify({ when: "^screen", turns: [{ text: "Nothing pointed at.", expectPreamble: "^(?![\\s\\S]*the running app)" }] });
+    const agent = await startAgentEngine({ script: await scriptFolder({ screen: script }), env: { UNFRAMED_FEATURES: undefined } });
+    await seed(agent, [screenShape("sc1", { title: "trunk", route: "/app" })]);
+    const chatId = await agent.createChat();
+    await agent.send(chatId, "screen: make it red", { selection: ["shape:sc1"], elements: [chip] });
+    const chat = await agent.settled(chatId, 1);
+    expect(chat.messages.some((message) => message.text === "Nothing pointed at.")).toBe(true);
   });
 
   it("with repositories off, refuses every Repository RPC and never opens the picker", async () => {
