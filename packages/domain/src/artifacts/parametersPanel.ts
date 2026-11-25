@@ -4,6 +4,15 @@ export const PANEL_MAX_WIDTH = 640;
 export const PANEL_MIN_HEIGHT = 160;
 export const PANEL_MARGIN = 8;
 
+export interface PanelLimits {
+  readonly w: number;
+  readonly minW: number;
+  readonly maxW: number;
+  readonly minH: number;
+}
+
+export const PARAMETERS_PANEL_LIMITS: PanelLimits = { w: PANEL_WIDTH, minW: PANEL_MIN_WIDTH, maxW: PANEL_MAX_WIDTH, minH: PANEL_MIN_HEIGHT };
+
 export type PanelMode = "float" | "dock";
 
 export interface PanelPrefs {
@@ -49,10 +58,14 @@ export const keepPanelOnScreen = (
   y: Math.round(between(at.y, room.y + PANEL_MARGIN, room.y + room.h - PANEL_MARGIN - size.h)),
 });
 
-export const panelSize = (want: { readonly w?: number | undefined; readonly h?: number | undefined }, room: PanelRoom): { readonly w: number; readonly h?: number } => {
-  const w = Math.round(between(want.w ?? PANEL_WIDTH, PANEL_MIN_WIDTH, Math.min(PANEL_MAX_WIDTH, room.w - 2 * PANEL_MARGIN)));
+export const panelSize = (
+  want: { readonly w?: number | undefined; readonly h?: number | undefined },
+  room: PanelRoom,
+  limits: PanelLimits = PARAMETERS_PANEL_LIMITS,
+): { readonly w: number; readonly h?: number } => {
+  const w = Math.round(between(want.w ?? limits.w, limits.minW, Math.min(limits.maxW, room.w - 2 * PANEL_MARGIN)));
   if (want.h === undefined) return { w };
-  return { w, h: Math.round(between(want.h, PANEL_MIN_HEIGHT, room.h - 2 * PANEL_MARGIN)) };
+  return { w, h: Math.round(between(want.h, limits.minH, room.h - 2 * PANEL_MARGIN)) };
 };
 
 export type PanelEdge = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
@@ -64,19 +77,19 @@ export interface PanelBox {
   readonly h: number;
 }
 
-export const resizePanel = (start: PanelBox, edge: PanelEdge, dx: number, dy: number, room: PanelRoom): PanelBox => {
-  const maxW = Math.min(PANEL_MAX_WIDTH, room.w - 2 * PANEL_MARGIN);
+export const resizePanel = (start: PanelBox, edge: PanelEdge, dx: number, dy: number, room: PanelRoom, limits: PanelLimits = PARAMETERS_PANEL_LIMITS): PanelBox => {
+  const maxW = Math.min(limits.maxW, room.w - 2 * PANEL_MARGIN);
   const right = start.x + start.w;
   const bottom = start.y + start.h;
   let { x, y, w, h } = start;
-  if (edge.includes("e")) w = between(start.w + dx, PANEL_MIN_WIDTH, Math.min(maxW, room.x + room.w - PANEL_MARGIN - start.x));
+  if (edge.includes("e")) w = between(start.w + dx, limits.minW, Math.min(maxW, room.x + room.w - PANEL_MARGIN - start.x));
   if (edge.includes("w")) {
-    x = between(start.x + dx, Math.max(room.x + PANEL_MARGIN, right - maxW), right - PANEL_MIN_WIDTH);
+    x = between(start.x + dx, Math.max(room.x + PANEL_MARGIN, right - maxW), right - limits.minW);
     w = right - x;
   }
-  if (edge.includes("s")) h = between(start.h + dy, PANEL_MIN_HEIGHT, room.y + room.h - PANEL_MARGIN - start.y);
+  if (edge.includes("s")) h = between(start.h + dy, limits.minH, room.y + room.h - PANEL_MARGIN - start.y);
   if (edge.includes("n")) {
-    y = between(start.y + dy, room.y + PANEL_MARGIN, bottom - PANEL_MIN_HEIGHT);
+    y = between(start.y + dy, room.y + PANEL_MARGIN, bottom - limits.minH);
     h = bottom - y;
   }
   return { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
