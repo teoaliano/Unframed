@@ -276,6 +276,14 @@ test("at 1024 px the floating composer is one row about the bottom toolbar's hei
     expect(at.y).toBeGreaterThanOrEqual(idle.y);
     expect(at.y + at.height).toBeLessThanOrEqual(idle.y + idle.height);
   }
+  // The leading icon buttons share one box and one centre line with the prompt and the trailing more and send.
+  const leading = await Promise.all([composer.getByRole("button", { name: "Show conversation" }), attach, picker].map(boxOf));
+  for (const at of leading) {
+    expect(at.width).toBeCloseTo(leading[0]!.width, 0);
+    expect(at.height).toBeCloseTo(leading[0]!.height, 0);
+  }
+  const centre = leading[0]!.y + leading[0]!.height / 2;
+  for (const at of [...leading, await boxOf(more), await boxOf(send), prompt]) expect(Math.abs(at.y + at.height / 2 - centre)).toBeLessThanOrEqual(1);
   expect((await boxOf(picker)).x + (await boxOf(picker)).width).toBeLessThanOrEqual(prompt.x);
   expect(prompt.x + prompt.width).toBeLessThanOrEqual((await boxOf(more)).x);
   expect((await boxOf(more)).x).toBeLessThan((await boxOf(send)).x);

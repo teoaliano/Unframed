@@ -1017,7 +1017,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         </div>
       )}
       <div
-        className={`${COMPOSER_SHELL} ${resting.resting ? "grid! grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1.5 gap-y-1 pt-1.5! pb-1!" : inline ? "flex-row! flex-wrap items-end gap-x-1.5 gap-y-1 px-2! py-1.5!" : ""}`}
+        className={`${COMPOSER_SHELL} ${resting.resting ? "grid! grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1.5 gap-y-1 pt-1.5! pb-1!" : inline ? "flex-row! flex-wrap items-center gap-x-1.5 gap-y-1 px-2! py-1.5!" : ""}`}
         ref={boxElement}
         data-testid="agent-composer"
         data-dragging={dragging ? "" : undefined}
