@@ -17,7 +17,7 @@ export interface ProofJob {
   readonly steps: number;
 }
 
-export type Proof = { readonly ok: true; readonly png: Buffer } | { readonly ok: false; readonly step: number | undefined; readonly reason: string; readonly png: Buffer | undefined };
+export type Proof = { readonly ok: true; readonly png: Buffer } | { readonly ok: false; readonly step: number | undefined; readonly reason: string; readonly png: Buffer };
 
 export type StateProver = (job: ProofJob) => Promise<Proof | undefined>;
 

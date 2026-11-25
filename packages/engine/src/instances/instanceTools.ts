@@ -78,7 +78,7 @@ const screenNamed = (records: ReadonlyArray<TLRecord>, args: Record<string, unkn
   return found;
 };
 
-const imagesOf = (proof: Proof) => (proof.png === undefined ? [] : [{ data: proof.png.toString("base64"), mimeType: "image/png" }]);
+const imagesOf = (proof: Proof) => [{ data: proof.png.toString("base64"), mimeType: "image/png" }];
 
 export class InstanceTools {
   private readonly deps: InstanceToolDeps;
@@ -115,7 +115,7 @@ export class InstanceTools {
     const token = await this.deps.stateToken(project, instance.id, { steps: state.steps, mocks: state.mocks });
     const proof = await this.deps.prove({ url: proofUrl(instance.proxyPort, state.route, token), w: size.w, h: size.h, steps: state.steps.length });
     if (proof === undefined) throw new Refused(NO_CHROME_PREVIEW_MESSAGE);
-    return held || proof.ok ? proof : { ok: true, png: proof.png! };
+    return held || proof.ok ? proof : { ok: true, png: proof.png };
   }
 
   private async screenState(binding: McpBinding, args: Record<string, unknown>): Promise<ToolAnswer> {
