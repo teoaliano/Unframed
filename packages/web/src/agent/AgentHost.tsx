@@ -174,18 +174,33 @@ export const AgentHost = () => {
   );
 };
 
-/** How far the floating composer's column ends above the host's bottom: clear of the bottom toolbar, with a gap. */
-const useToolbarClearance = (on: boolean): number | undefined => {
+interface ComposerColumn {
+  readonly bottom: number;
+  readonly left: number;
+  readonly right: number;
+}
+
+/**
+ * The floating composer's column: it ends a gap above the bottom toolbar and spans the
+ * toolbar's width, kept inside the host's sides.
+ */
+const useComposerColumn = (on: boolean): ComposerColumn | undefined => {
   const editor = useEditor();
-  const [clearance, setClearance] = useState<number>();
+  const [column, setColumn] = useState<ComposerColumn>();
   useLayoutEffect(() => {
     if (!on) return;
     const container = editor.getContainer();
     const host = container.parentElement ?? container;
     const measure = () => {
-      const bar = container.querySelector<HTMLElement>("[data-unframed-toolbar]")?.getBoundingClientRect();
-      const bottom = host.getBoundingClientRect().bottom;
-      setClearance(Math.max(0, Math.round(bottom - (bar && bar.height > 0 ? bar.top : bottom))) + COMPOSER_GAP);
+      const found = container.querySelector<HTMLElement>("[data-unframed-toolbar]")?.getBoundingClientRect();
+      const bar = found && found.width > 0 && found.height > 0 ? found : undefined;
+      const room = host.getBoundingClientRect();
+      const next = {
+        bottom: Math.max(0, Math.round(room.bottom - (bar?.top ?? room.bottom))) + COMPOSER_GAP,
+        left: Math.max(PANEL_MARGIN, Math.round((bar?.left ?? room.left) - room.left)),
+        right: Math.max(PANEL_MARGIN, Math.round(room.right - (bar?.right ?? room.right))),
+      };
+      setColumn((current) => (current?.bottom === next.bottom && current.left === next.left && current.right === next.right ? current : next));
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -198,7 +213,7 @@ const useToolbarClearance = (on: boolean): number | undefined => {
       window.removeEventListener("resize", measure);
     };
   }, [editor, on]);
-  return clearance;
+  return column;
 };
 
 interface ChatProps {
@@ -243,8 +258,11 @@ const CanvasChat = ({
     save: savePrefs,
     limits: CHAT_WINDOW_LIMITS,
   });
-  const clearance = useToolbarClearance(container === "composer");
-  const style: CSSProperties | undefined = container === "composer" ? { top: TOP_BAR_HEIGHT + COMPOSER_GAP, bottom: clearance ?? 0, visibility: clearance === undefined ? "hidden" : undefined } : undefined;
+  const column = useComposerColumn(container === "composer");
+  const style: CSSProperties | undefined =
+    container === "composer"
+      ? { top: TOP_BAR_HEIGHT + COMPOSER_GAP, bottom: column?.bottom ?? 0, left: column?.left ?? 0, right: column?.right ?? 0, visibility: column === undefined ? "hidden" : undefined }
+      : undefined;
   const onConversation = useCallback(
     (open: boolean) => {
       if (open) void client.loadProviders();

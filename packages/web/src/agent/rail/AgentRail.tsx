@@ -73,14 +73,14 @@ const RAIL_CLASS =
 const WINDOW_CLASS =
   "pointer-events-auto invisible absolute top-0 left-0 z-[600] box-border flex flex-col rounded-xl border border-(--agent-rail-docked-border) bg-(--agent-rail-docked-surface) bg-clip-padding font-sans text-(--agent-rail-foreground) shadow-lg/5 opacity-100 [scale:1] [transition:opacity_150ms_ease-out,scale_150ms_ease-out] starting:opacity-0 starting:[scale:0.97] data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:[scale:0.97] motion-reduce:[transition:opacity_150ms_ease-out] motion-reduce:starting:[scale:1] motion-reduce:data-[state=closed]:[scale:1]";
 
-const COMPOSER_CLASS = "pointer-events-none absolute inset-x-0 z-[600] box-border flex flex-col items-center justify-end gap-2 px-2 font-sans text-(--agent-rail-foreground)";
+const COMPOSER_CLASS = "pointer-events-none absolute inset-x-0 z-[600] box-border flex flex-col items-center justify-end gap-2 font-sans text-(--agent-rail-foreground)";
 
 const CONVERSATION_CLASS =
-  "pointer-events-auto relative box-border flex min-h-0 w-(--agent-rail-width) max-w-full flex-1 flex-col rounded-xl border border-(--agent-rail-docked-border) bg-(--agent-rail-docked-surface) bg-clip-padding shadow-lg/5 opacity-100 [translate:0] [transition:opacity_150ms_ease-out,translate_150ms_ease-out,visibility_150ms] data-[state=closed]:invisible data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:[translate:0_8px] motion-reduce:[transition:opacity_150ms_ease-out,visibility_150ms] motion-reduce:data-[state=closed]:[translate:0]";
+  "pointer-events-auto relative box-border flex min-h-0 w-full flex-1 flex-col rounded-xl border border-(--agent-rail-docked-border) bg-(--agent-rail-docked-surface) bg-clip-padding shadow-lg/5 opacity-100 [translate:0] [transition:opacity_150ms_ease-out,translate_150ms_ease-out,visibility_150ms] data-[state=closed]:invisible data-[state=closed]:pointer-events-none data-[state=closed]:opacity-0 data-[state=closed]:[translate:0_8px] motion-reduce:[transition:opacity_150ms_ease-out,visibility_150ms] motion-reduce:data-[state=closed]:[translate:0]";
 
 const TRAY_CLASS = "flex min-h-0 flex-col px-2.5 pb-2.5";
 
-const FLOATING_TRAY_CLASS = "pointer-events-auto flex min-h-0 w-(--agent-rail-width) max-w-full shrink-0 flex-col";
+const FLOATING_TRAY_CLASS = "pointer-events-auto flex min-h-0 w-full shrink-0 flex-col";
 
 /** A key on a menu, dialog or list inside the chat is theirs: Escape there closes them, not the chat. */
 const keyInPopup = (target: EventTarget | null): boolean =>

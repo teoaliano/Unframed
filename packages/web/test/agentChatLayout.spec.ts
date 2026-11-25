@@ -26,6 +26,31 @@ const hitAt = (page: Page, x: number, y: number) =>
     { x, y },
   );
 
+/** The floating composer's column spans the bottom toolbar, kept 8 px inside the window's sides. */
+const expectToolbarSpan = async (page: Page, locator: Locator) => {
+  const toolbar = await boxOf(page.getByTestId("bottom-toolbar"));
+  const width = page.viewportSize()!.width;
+  const left = Math.max(8, toolbar.x);
+  const right = Math.min(width - 8, toolbar.x + toolbar.width);
+  const box = await boxOf(locator);
+  expect(Math.abs(box.x - left)).toBeLessThanOrEqual(2);
+  expect(Math.abs(box.x + box.width - right)).toBeLessThanOrEqual(2);
+};
+
+/** Whether the empty prompt's placeholder fits on one line of the prompt. */
+const placeholderFits = (scope: Locator) =>
+  scope.locator("[data-agent-prompt] p.is-editor-empty").evaluate((line) => {
+    const probe = document.createElement("span");
+    probe.style.font = getComputedStyle(line, "::before").font;
+    probe.style.whiteSpace = "nowrap";
+    probe.style.position = "absolute";
+    probe.textContent = line.getAttribute("data-placeholder");
+    document.body.append(probe);
+    const needed = probe.getBoundingClientRect().width;
+    probe.remove();
+    return needed <= line.clientWidth;
+  });
+
 const drag = async (page: Page, from: { x: number; y: number }, dx: number, dy: number) => {
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
@@ -121,7 +146,7 @@ test("the floating composer sits above the bottom toolbar, its conversation open
   const toolbar = await boxOf(page.getByTestId("bottom-toolbar"));
   const shell = await boxOf(composer);
   expect(shell.y + shell.height).toBeLessThanOrEqual(toolbar.y - 8);
-  expect(Math.abs(shell.x + shell.width / 2 - (toolbar.x + toolbar.width / 2))).toBeLessThan(40);
+  await expectToolbarSpan(page, composer);
   // The canvas stays where it was: nothing docked, the toolbar and the zoom controls in place.
   expect((await page.locator(".tlui-navigation-panel").boundingBox())!.x).toBe(0);
 
@@ -140,6 +165,7 @@ test("the floating composer sits above the bottom toolbar, its conversation open
   await expect(agentChromeButton(page)).toHaveAttribute("data-isactive", "true");
   await page.keyboard.type(" more");
   await expect(box).toHaveText("draft more");
+  await expectToolbarSpan(page, conversation(page));
   const open = await boxOf(conversation(page));
   expect(open.y).toBeGreaterThanOrEqual(36);
   expect(open.y + open.height).toBeLessThanOrEqual((await boxOf(composer)).y);
@@ -200,6 +226,37 @@ test("on a narrow window the floating composer stays, and its conversation fits 
   expect(open.y).toBeGreaterThanOrEqual(36);
   expect(open.y + open.height).toBeLessThanOrEqual(shell.y);
   expect(shell.y + shell.height).toBeLessThanOrEqual(toolbar.y - 8);
+  await expectToolbarSpan(page, composer);
+  await expectToolbarSpan(page, conversation(page));
+
+  // Narrower than the toolbar's room, the column keeps 8 px inside the window.
+  await page.setViewportSize({ width: 420, height: 640 });
+  await expect.poll(async () => Math.round((await boxOf(composer)).x)).toBeGreaterThanOrEqual(8);
+  await expectToolbarSpan(page, composer);
+  await expectToolbarSpan(page, conversation(page));
+  const capped = await boxOf(composer);
+  expect(capped.x + capped.width).toBeLessThanOrEqual(420 - 8);
+  expect((await boxOf(conversation(page))).y + (await boxOf(conversation(page))).height).toBeLessThanOrEqual(capped.y);
+});
+
+test("at 1024 px the floating composer and its conversation are as wide as the bottom toolbar, on its centre, and the prompt's placeholder fits on one line", async ({ page, agent }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await setLayout(agent, "composer");
+  await openCanvas(page, agent);
+  const composer = floatingComposer(page);
+  await expect(composer).toBeVisible();
+  await expectToolbarSpan(page, composer);
+  const toolbar = await boxOf(page.getByTestId("bottom-toolbar"));
+  const shell = await boxOf(composer);
+  expect(Math.abs(shell.x + shell.width / 2 - (toolbar.x + toolbar.width / 2))).toBeLessThanOrEqual(2);
+  expect(shell.y + shell.height).toBeLessThanOrEqual(toolbar.y - 8);
+  expect(await placeholderFits(composer)).toBe(true);
+
+  await composer.getByRole("button", { name: "Show conversation" }).click();
+  await expect(conversation(page)).toHaveAttribute("data-state", "open");
+  await conversation(page).evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+  await expectToolbarSpan(page, conversation(page));
+  expect((await boxOf(conversation(page))).y + (await boxOf(conversation(page))).height).toBeLessThanOrEqual((await boxOf(composer)).y);
 });
 
 test("on a narrow window the floating window is the left Sheet, as the side panel is", async ({ page, agent }) => {
