@@ -304,27 +304,84 @@ test("at 1024 px the floating composer is one row about the bottom toolbar's hei
   await page.keyboard.press("Escape");
   await expect(models).toBeHidden();
 
-  // More lines grow it upward from the same bottom, clear of the toolbar; cleared, it is one row again.
+  // Past one line it takes two rows: the prompt full width on top, growing upward from the same bottom, the controls under it.
   const box = promptBox(composer);
+  const toggle = composer.getByRole("button", { name: "Show conversation" });
+  const bottom = idle.y + idle.height;
   await box.click();
+  await page.evaluate(() => {
+    (window as unknown as Record<string, unknown>).floatingPrompt = document.querySelector("[data-testid='agent-floating-composer'] .ProseMirror");
+  });
+  const samePrompt = () =>
+    page.evaluate(() => (window as unknown as Record<string, unknown>).floatingPrompt === document.querySelector("[data-testid='agent-floating-composer'] .ProseMirror"));
+  const expectOneRow = async () => {
+    await expect(shellBox).toHaveAttribute("data-inline", "one-row");
+    await expect.poll(async () => Math.round((await boxOf(shellBox)).height)).toBe(Math.round(idle.height));
+    expect(Math.abs((await boxOf(shellBox)).y + (await boxOf(shellBox)).height - bottom)).toBeLessThanOrEqual(1);
+    const row = await Promise.all([toggle, attach, picker, more, send].map(boxOf));
+    const line = await boxOf(box);
+    for (const at of row) expect(Math.abs(at.y + at.height / 2 - (line.y + line.height / 2))).toBeLessThanOrEqual(1);
+    expect(row[2]!.x + row[2]!.width).toBeLessThanOrEqual(line.x);
+    expect(line.x + line.width).toBeLessThanOrEqual(row[3]!.x);
+  };
+  const expectTwoRows = async () => {
+    await expect(shellBox).toHaveAttribute("data-inline", "two-rows");
+    const shell = await boxOf(shellBox);
+    const text = await boxOf(box);
+    const controls = await Promise.all([toggle, attach, picker, more, send].map(boxOf));
+    expect(text.width).toBeGreaterThanOrEqual(shell.width - 32);
+    for (const at of controls) expect(at.y).toBeGreaterThanOrEqual(text.y + text.height);
+    const rowCentre = controls[0]!.y + controls[0]!.height / 2;
+    for (const at of controls) expect(Math.abs(at.y + at.height / 2 - rowCentre)).toBeLessThanOrEqual(1);
+    expect(controls[0]!.x).toBeLessThan(controls[1]!.x);
+    expect(controls[1]!.x).toBeLessThan(controls[2]!.x);
+    expect(controls[2]!.x + controls[2]!.width).toBeLessThan(shell.x + shell.width / 2);
+    expect(controls[3]!.x).toBeGreaterThan(shell.x + shell.width / 2);
+    expect(controls[3]!.x).toBeLessThan(controls[4]!.x);
+    expect(Math.abs(shell.y + shell.height - bottom)).toBeLessThanOrEqual(1);
+    expect(shell.y + shell.height).toBeLessThanOrEqual(toolbar.y - 8);
+    await expectToolbarSpan(page, composer);
+  };
+  await expectOneRow();
+
   await box.pressSequentially("first line");
+  await expectOneRow();
   for (const line of ["second", "third", "fourth"]) {
     await box.press("Shift+Enter");
     await box.pressSequentially(line);
   }
+  await expectTwoRows();
   await expect.poll(async () => (await boxOf(shellBox)).height).toBeGreaterThan(idle.height + 48);
-  const grown = await boxOf(shellBox);
-  expect(Math.abs(grown.y + grown.height - (idle.y + idle.height))).toBeLessThanOrEqual(1);
-  expect(grown.y + grown.height).toBeLessThanOrEqual(toolbar.y - 8);
+  await expect(box).toBeFocused();
+  expect(await samePrompt()).toBe(true);
+
+  // Back to one line by Backspace: one row again, the keyboard still in the prompt and typing on at the end.
+  const lineBreaks = () => box.evaluate((element) => element.querySelectorAll("br:not(.ProseMirror-trailingBreak)").length);
+  for (let press = 0; press < "second\nthird\nfourth".length; press++) await page.keyboard.press("Backspace");
+  for (let extra = 0; extra < 3 && (await lineBreaks()) > 0; extra++) await page.keyboard.press("Backspace");
+  expect(await lineBreaks()).toBe(0);
+  await expect(box).toHaveText("first line");
+  await expectOneRow();
+  await expect(box).toBeFocused();
+  await page.keyboard.type(" again");
+  await expect(box).toHaveText("first line again");
+  expect(await samePrompt()).toBe(true);
+
+  // A line too long for the row wraps into two rows too, and typing carries on at its end.
+  await box.pressSequentially(" and on, long enough to run past the width of the one-row prompt and keep on going");
+  await expectTwoRows();
+  await expect(box).toBeFocused();
+  await page.keyboard.type(" END");
+  await expect(box).toHaveText(/ END$/);
+  expect(await samePrompt()).toBe(true);
+
+  // Cleared, it is one row again.
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.press("Backspace");
   await expect(box).toHaveText("");
-  await expect.poll(async () => Math.round((await boxOf(shellBox)).height)).toBe(Math.round(idle.height));
-  // One long line stays one row too.
-  await box.pressSequentially("a single line that is long enough to run past the width of the composer and keep on going well beyond its edge");
-  await expect.poll(async () => Math.round((await boxOf(shellBox)).height)).toBe(Math.round(idle.height));
-  await page.keyboard.press("ControlOrMeta+a");
-  await page.keyboard.press("Backspace");
+  await expectOneRow();
+  await expect(box).toBeFocused();
+  expect(await samePrompt()).toBe(true);
 
   await composer.getByRole("button", { name: "Show conversation" }).click();
   await expect(conversation(page)).toHaveAttribute("data-state", "open");

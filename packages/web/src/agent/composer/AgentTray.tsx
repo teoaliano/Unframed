@@ -38,7 +38,7 @@ import {
 } from "@unframed/domain";
 import { ArrowLeft, Check, CircleAlert, CornerUpRight, ListPlus, Minimize2, Paperclip, Play } from "lucide-react";
 import { createPortal } from "react-dom";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { AgentTrayProps as SlotProps } from "../../chrome/slots.ts";
 import { useEngine } from "../../context.ts";
 import { effectiveModel, noProviderReady, providerName, readyProviders } from "../providers.ts";
@@ -875,6 +875,28 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       ? [...notices, { id: "error", variant: "error", icon: <CircleAlert />, title: ui.error, dismissLabel: "Dismiss error", onDismiss: () => client.setUi({ error: undefined }) }]
       : notices;
 
+  // The floating composer takes two rows, the prompt over its controls, once the draft is more than one line:
+  // a line break, or one line wider than the one-row prompt. It goes back to one row when the text fits there again.
+  const [twoRows, setTwoRows] = useState(false);
+  const oneRowWidth = useRef(0);
+  useLayoutEffect(() => {
+    const prompt = inline ? box.current?.element() : null;
+    // The one paragraph's inline contents: the text's own lines and width, not the block's.
+    const line = prompt?.firstElementChild;
+    if (!prompt || !line) return;
+    const range = document.createRange();
+    range.selectNodeContents(line);
+    const lineBreak = text.includes("\n");
+    if (!twoRows) {
+      oneRowWidth.current = prompt.clientWidth;
+      const boxes = range.getClientRects();
+      const wraps = boxes.length > 1 && boxes[boxes.length - 1]!.top > boxes[0]!.top + 1;
+      if (lineBreak || wraps) setTwoRows(true);
+      return;
+    }
+    if (!lineBreak && range.getBoundingClientRect().width < oneRowWidth.current) setTwoRows(false);
+  }, [inline, text, twoRows]);
+
   const resting = useRestingComposer({
     enabled: variant === "rail" && chatId !== null && !inline,
     chatId,
@@ -1017,12 +1039,12 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         </div>
       )}
       <div
-        className={`${COMPOSER_SHELL} ${resting.resting ? "grid! grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1.5 gap-y-1 pt-1.5! pb-1!" : inline ? "flex-row! flex-wrap items-center gap-x-1.5 gap-y-1 px-2! py-1.5!" : ""}`}
+        className={`${COMPOSER_SHELL} ${resting.resting ? "grid! grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1.5 gap-y-1 pt-1.5! pb-1!" : inline ? `flex-row! flex-wrap items-center gap-x-1.5 px-2! py-1.5! ${twoRows ? "gap-y-1.5 pt-2.5!" : "gap-y-1"}` : ""}`}
         ref={boxElement}
         data-testid="agent-composer"
         data-dragging={dragging ? "" : undefined}
         data-resting={resting.resting ? "true" : undefined}
-        data-inline={inline ? "" : undefined}
+        data-inline={inline ? (twoRows ? "two-rows" : "one-row") : undefined}
         {...resting.shellProps}
       >
         <div className={resting.resting ? "col-span-2 row-start-1 flex flex-col gap-1.5 empty:hidden" : inline ? "order-first flex basis-full flex-col gap-1.5 px-1 pt-1 empty:hidden" : "contents"}>
@@ -1050,11 +1072,11 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           />
           {underChips}
         </div>
-        <div className={resting.resting ? "col-start-1 row-start-2 flex min-w-0 items-center gap-1" : inline ? "order-2 min-w-0 flex-1" : "min-w-0"} data-composer-prompt>
+        <div className={resting.resting ? "col-start-1 row-start-2 flex min-w-0 items-center gap-1" : inline ? (twoRows ? "order-1 min-w-0 basis-full px-1" : "order-2 min-w-0 flex-1") : "min-w-0"} data-composer-prompt>
           <PromptEditor
             resting={resting.resting}
             inline={inline}
-            oneLine={!text.includes("\n")}
+            oneLine={!twoRows}
             placeholder={placeholder}
             label={PROMPT_LABEL}
             onChange={onDraftChange}
@@ -1095,7 +1117,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
               resting.resting
                 ? "col-span-2 row-start-3 -mx-1 flex min-w-0 items-center gap-0.5 text-(--composer-resting-controls-foreground) [&_button]:text-xs!"
                 : inline
-                  ? "order-1 flex shrink-0 items-center gap-0.5"
+                  ? `flex shrink-0 items-center gap-0.5 ${twoRows ? "order-2" : "order-1"}`
                   : "flex min-w-0 flex-1 items-center gap-0.5"
             }
             data-composer-controls
@@ -1137,7 +1159,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
             />
             {!inline && extras}
           </div>
-          <div className={`ml-auto flex shrink-0 items-center gap-1.5 ${resting.resting ? "col-start-2 row-start-2" : inline ? "order-3 ml-0" : ""}`} data-composer-actions>
+          <div className={`ml-auto flex shrink-0 items-center gap-1.5 ${resting.resting ? "col-start-2 row-start-2" : inline ? (twoRows ? "order-3" : "order-3 ml-0") : ""}`} data-composer-actions>
             {inline && <div className="flex items-center gap-0.5">{extras}</div>}
             {note?.(providerName(selection.provider))}
             {running && (
