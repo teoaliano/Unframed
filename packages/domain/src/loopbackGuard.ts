@@ -9,13 +9,6 @@ export type GuardDecision =
   | { readonly allowed: true }
   | { readonly allowed: false; readonly status: 403; readonly error: string };
 
-/**
- * Whether a request may reach any handler, static file or socket upgrade. The Origin
- * check stops a page on another origin, including a loopback page on another port such
- * as a dev server an Instance runs; the Host check stops a DNS-rebound page, which is
- * same-origin and sends no Origin but names a host that is not loopback. The anchors and
- * the digits-only port are what refuse `localhost.evil.example`.
- */
 export const loopbackGuard = (headers: {
   readonly origin?: string | undefined;
   readonly host?: string | undefined;

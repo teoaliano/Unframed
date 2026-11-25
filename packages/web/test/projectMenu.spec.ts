@@ -95,7 +95,6 @@ test("the project menu, the name dialog and the delete confirm are the kit's men
     await expect(popup).toBeVisible();
     expect(await styleOf(popup, "background-color")).toBe(await tokenColor(page, "--menu-surface"));
     const rows = page.locator("[role=menuitem], [role=menuitemradio]");
-    // Project rows are the kit's radio items, the current one checked and tinted; New Whiteboard is a plain item.
     for (const row of await rows.all()) {
       expect(["menu-item", "menu-radio-item"]).toContain(await row.getAttribute("data-slot"));
       expect((await row.boundingBox())!.height).toBe(28);
