@@ -1,8 +1,8 @@
-import { keepPanelOnScreen, PANEL_MARGIN, panelSize, resizePanel, type PanelEdge, type PanelPrefs, type PanelRoom } from "@unframed/domain";
+import { keepPanelOnScreen, PANEL_MARGIN, PARAMETERS_PANEL_LIMITS, panelSize, resizePanel, type PanelEdge, type PanelLimits, type PanelPrefs, type PanelRoom } from "@unframed/domain";
 import { useLayoutEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
-import type { Editor, TLShapeId } from "tldraw";
+import type { Editor } from "tldraw";
 import { TOP_BAR_HEIGHT } from "~/components/ui/top-bar";
-import { canvasRoom, placeBeside } from "../generate/floating.ts";
+import { canvasRoom } from "../generate/floating.ts";
 
 const KEY_STEP = 16;
 const MIN_SHOWN_HEIGHT = 120;
@@ -29,23 +29,27 @@ const roomOf = (editor: Editor): PanelRoom => {
 export const useFloatingPlacement = ({
   editor,
   element,
-  shapeId,
+  firstPlace,
   floating: on,
   prefs,
   save,
+  limits = PARAMETERS_PANEL_LIMITS,
 }: {
   readonly editor: Editor;
   readonly element: HTMLElement | null;
-  readonly shapeId: TLShapeId;
+  readonly firstPlace: (size: { readonly w: number; readonly h: number }) => { readonly left: number; readonly top: number };
   readonly floating: boolean;
   readonly prefs: PanelPrefs | undefined;
   readonly save: (next: PanelPrefs) => void;
+  readonly limits?: PanelLimits;
 }) => {
   const box = useRef<Floating | undefined>(undefined);
   const prefsNow = useRef(prefs);
   prefsNow.current = prefs;
   const saveNow = useRef(save);
   saveNow.current = save;
+  const placeNow = useRef(firstPlace);
+  placeNow.current = firstPlace;
 
   const paint = () => {
     const current = box.current;
@@ -60,7 +64,7 @@ export const useFloatingPlacement = ({
 
   const settle = (next: Floating): Floating => {
     const room = roomOf(editor);
-    const size = panelSize({ w: next.w, h: next.h }, room);
+    const size = panelSize({ w: next.w, h: next.h }, room, limits);
     const shown = { w: size.w, h: size.h ?? Math.min(element?.offsetHeight ?? 0, room.h - 2 * PANEL_MARGIN) };
     return { ...keepPanelOnScreen(next, shown, room), w: size.w, h: size.h };
   };
@@ -75,14 +79,11 @@ export const useFloatingPlacement = ({
     const saved = prefsNow.current;
     if (!on || !element || !saved) return;
     const room = roomOf(editor);
-    const size = panelSize({ w: saved.w, h: saved.h }, room);
+    const size = panelSize({ w: saved.w, h: saved.h }, room, limits);
     element.style.width = `${size.w}px`;
     element.style.height = size.h === undefined ? "" : `${size.h}px`;
     if (saved.x === undefined || saved.y === undefined) {
-      const bounds = editor.getShapePageBounds(shapeId);
-      const topLeft = bounds ? editor.pageToViewport({ x: bounds.minX, y: bounds.minY }) : { x: 0, y: 0 };
-      const bottomRight = bounds ? editor.pageToViewport({ x: bounds.maxX, y: bounds.maxY }) : { x: 0, y: 0 };
-      const beside = placeBeside({ x: topLeft.x, y: topLeft.y, w: bottomRight.x - topLeft.x, h: bottomRight.y - topLeft.y }, { w: size.w, h: element.offsetHeight }, canvasRoom(editor));
+      const beside = placeNow.current({ w: size.w, h: element.offsetHeight });
       box.current = settle({ x: beside.left, y: beside.top, w: size.w, h: size.h });
       remember(box.current);
     } else {
@@ -96,8 +97,12 @@ export const useFloatingPlacement = ({
       paint();
     });
     observer.observe(editor.getContainer());
-    return () => observer.disconnect();
-  }, [editor, element, shapeId, on]);
+    return () => {
+      observer.disconnect();
+      box.current = undefined;
+      for (const property of ["transform", "width", "height", "max-height", "visibility"]) element.style.removeProperty(property);
+    };
+  }, [editor, element, on]);
 
   const track = (event: ReactPointerEvent<HTMLElement>, move: (start: Floating, dx: number, dy: number) => Floating) => {
     const current = box.current;
@@ -130,7 +135,7 @@ export const useFloatingPlacement = ({
   };
 
   const startResize = (event: ReactPointerEvent<HTMLElement>, edge: PanelEdge) =>
-    track(event, (start, dx, dy) => resizePanel({ ...start, h: start.h ?? 0 }, edge, dx, dy, roomOf(editor)));
+    track(event, (start, dx, dy) => resizePanel({ ...start, h: start.h ?? 0 }, edge, dx, dy, roomOf(editor), limits));
 
   const nudge = (key: string, kind: "move" | "resize"): boolean => {
     const step = ARROWS[key];
@@ -138,7 +143,7 @@ export const useFloatingPlacement = ({
     if (step === undefined || !current || !element) return false;
     const [dx, dy] = step;
     box.current = settle(
-      kind === "move" ? { ...current, x: current.x + dx, y: current.y + dy } : resizePanel({ ...current, h: current.h ?? element.offsetHeight }, "se", dx, dy, roomOf(editor)),
+      kind === "move" ? { ...current, x: current.x + dx, y: current.y + dy } : resizePanel({ ...current, h: current.h ?? element.offsetHeight }, "se", dx, dy, roomOf(editor), limits),
     );
     paint();
     remember(box.current);
