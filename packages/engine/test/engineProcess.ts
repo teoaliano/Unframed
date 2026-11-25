@@ -231,10 +231,7 @@ export const setCleanupRegistrar = (registrar: (cleanup: () => Promise<void>) =>
 export const makeTempDir = async (prefix = "unframed-test-"): Promise<string> => {
   const dir = await mkdtemp(join(tmpdir(), `${prefix}p${process.pid}-`));
   tempDirs.add(dir);
-  registerCleanup(async () => {
-    await rm(dir, { recursive: true, force: true });
-    tempDirs.delete(dir);
-  });
+  registerCleanup(() => rm(dir, { recursive: true, force: true }));
   return dir;
 };
 
@@ -411,10 +408,7 @@ export const startEngine = async (options: EngineOptions = {}): Promise<TestEngi
       await stub?.close();
       await elevenLabs?.close();
       await vercel?.close();
-      if (ownsDataDir) {
-        await rm(dataDir, { recursive: true, force: true });
-        tempDirs.delete(dataDir);
-      }
+      if (ownsDataDir) await rm(dataDir, { recursive: true, force: true });
     },
   };
   registerCleanup(() => engine.dispose());
