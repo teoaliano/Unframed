@@ -143,4 +143,13 @@ describe("serving a live Instance through its proxy", () => {
     const { proxy } = await liveInstance();
     expect((await rawRequest(proxy, "/", { headers: { host: "evil.example" } })).status).toBe(403);
   });
+
+  it("refuses a page on another origin, over HTTP and WebSocket, before its Origin is rewritten", async () => {
+    const { proxy, engine } = await liveInstance();
+    for (const origin of ["https://evil.example", `http://127.0.0.1:${engine.port}`]) {
+      expect((await rawRequest(proxy, "/_next/__fake/info", { headers: { ...at(proxy), origin } })).status).toBe(403);
+      expect((await rawRequest(proxy, "/__fake/info", { headers: { ...at(proxy), origin } })).status).toBe(403);
+      await expect(firstMessage(proxy, "/_next/webpack-hmr", { origin, ...at(proxy) })).rejects.toThrow(/403/);
+    }
+  });
 });

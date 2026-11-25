@@ -79,7 +79,7 @@ export const startInstanceProxy = async (input: { readonly upstreamPort: number;
 
   const sockets = new Set<net.Socket>();
   const server = http.createServer((req, res) => {
-    const decision = loopbackGuard({ host: req.headers.host });
+    const decision = loopbackGuard({ origin: req.headers.origin, host: req.headers.host });
     if (!decision.allowed) {
       res.writeHead(decision.status, { "content-type": "text/plain; charset=utf-8" });
       res.end(decision.error);
@@ -121,7 +121,7 @@ export const startInstanceProxy = async (input: { readonly upstreamPort: number;
 
   server.on("upgrade", (req: http.IncomingMessage, socket: net.Socket, head: Buffer) => {
     socket.on("error", () => socket.destroy());
-    const decision = loopbackGuard({ host: req.headers.host });
+    const decision = loopbackGuard({ origin: req.headers.origin, host: req.headers.host });
     if (!decision.allowed) {
       socket.end(`HTTP/1.1 ${decision.status} Forbidden\r\nConnection: close\r\n\r\n`);
       return;
