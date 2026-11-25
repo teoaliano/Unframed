@@ -150,7 +150,7 @@ describe("the Screen bridge", () => {
     const win: any = {
       parent,
       location: { origin: "http://127.0.0.1:4101", href: "http://127.0.0.1:4101/dashboard", pathname: "/dashboard", search: "", hash: "", ancestorOrigins: ancestor === undefined ? [] : [ancestor] },
-      document: { readyState: "loading", referrer: "", head: { appendChild: () => undefined }, createElement: () => ({ src: "" }) },
+      document: { readyState: "loading", referrer: "", head: { appendChild: () => undefined }, createElement: () => ({ src: "" }), addEventListener: () => undefined, querySelector: () => null },
       console: { error: () => undefined },
       addEventListener: (type: string, listener: (event: any) => void) => (listeners[type] ??= []).push(listener),
       requestAnimationFrame: (callback: () => void) => frames.push(callback),
@@ -162,10 +162,17 @@ describe("the Screen bridge", () => {
   it("offers window.unframed.dials and reports readiness and first paint to a loopback parent", () => {
     const { win, posted, listeners, frames } = load("http://127.0.0.1:8787");
     expect(typeof win.unframed.dials).toBe("function");
-    expect(posted).toEqual([{ message: { type: "unframed:screen:ready", href: "http://127.0.0.1:4101/dashboard", route: "/dashboard", state: false }, to: "http://127.0.0.1:8787" }]);
+    expect(posted.filter((entry) => entry.message.type.startsWith("unframed:screen:"))).toEqual([{ message: { type: "unframed:screen:ready", href: "http://127.0.0.1:4101/dashboard", route: "/dashboard", state: false }, to: "http://127.0.0.1:8787" }]);
     for (const listener of listeners.DOMContentLoaded ?? []) listener({});
     while (frames.length > 0) frames.shift()!();
     expect(posted.at(-1)).toEqual({ message: { type: "unframed:screen:paint", href: "http://127.0.0.1:4101/dashboard" }, to: "http://127.0.0.1:8787" });
+  });
+
+  it("carries the edit bridge, which says ready to the loopback parent and answers its hello", () => {
+    const { posted, listeners, win } = load("http://127.0.0.1:8787");
+    expect(posted.filter((entry) => entry.message.type === "unframed:edit:ready")).toEqual([{ message: { type: "unframed:edit:ready" }, to: "http://127.0.0.1:8787" }]);
+    for (const listener of listeners.message ?? []) listener({ source: win.parent, origin: "http://127.0.0.1:8787", data: { type: "unframed:edit:hello" } });
+    expect(posted.filter((entry) => entry.message.type === "unframed:edit:ready")).toHaveLength(2);
   });
 
   it("tells nothing to a parent that is not on this machine", () => {

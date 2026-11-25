@@ -83,6 +83,8 @@ describe("serving a live Instance through its proxy", () => {
     expect(bridge.headers["content-type"]).toMatch(/javascript/);
     expect(bridge.text).toContain("unframed:screen:ready");
     expect(bridge.text).toContain("unframed:dials");
+    expect(bridge.text).toContain("installEditBridge");
+    expect(bridge.text).toContain("unframed:edit:pick");
 
     const stopped = await rpc.call("instances.stop", { project, id });
     expect(stopped).toMatchObject({ state: "stopped", proxyPort: null });

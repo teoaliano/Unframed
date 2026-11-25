@@ -88,6 +88,8 @@ class FakeDocument {
     return root.children.flatMap((child) => [child, ...this.all(child)]);
   }
   querySelector(selector: string): FakeElement | null {
+    const byId = /^#([A-Za-z][\w-]*)$/.exec(selector);
+    if (byId !== null) return this.all().find((el) => el.getAttribute("id") === byId[1]) ?? null;
     const match = /^\[data-hf-id="(.+)"\]$/.exec(selector);
     if (match === null) return null;
     return this.all().find((el) => el.getAttribute("data-hf-id") === match[1]) ?? null;
@@ -118,7 +120,7 @@ class FakeDocument {
 
 const ORIGIN = "http://localhost:18787";
 
-const stubEditWindow = (options: { peer?: string; timelines?: unknown; loading?: boolean } = {}) => {
+const stubEditWindow = (options: { peer?: string; timelines?: unknown; loading?: boolean; stamp?: boolean } = {}) => {
   const posted: Array<{ message: any; targetOrigin: string }> = [];
   const errors: unknown[][] = [];
   const listeners: Listener[] = [];
@@ -158,7 +160,7 @@ const stubEditWindow = (options: { peer?: string; timelines?: unknown; loading?:
     ...(options.peer === undefined ? {} : { unframedEditPeer: options.peer }),
     ...(options.timelines === undefined ? {} : { __timelines: options.timelines }),
   };
-  new Function("window", editBridgeSource())(win);
+  new Function("window", editBridgeSource(options.stamp === true ? { stamp: true } : {}))(win);
   const send = (data: unknown, from: { source?: unknown; origin?: string } = {}) => {
     for (const listener of listeners) listener({ source: from.source ?? parent, origin: from.origin ?? "http://127.0.0.1:5001", data });
   };
@@ -478,6 +480,55 @@ describe("the built edit bridge", () => {
     const before = messages("unframed:edit:report").length;
     send({ type: "unframed:dials:set", values: { accent: "#000" } });
     expect(messages("unframed:edit:report").length).toBe(before + 1);
+  });
+});
+
+describe("the edit bridge in a Screen, which stamps the app's elements on demand", () => {
+  const app = () => {
+    const stub = stubEditWindow({ stamp: true });
+    const main = stub.document.body.add(new FakeElement("main", { attrs: { class: "page wide" } }));
+    const first = main.add(new FakeElement("button", { text: "Save", attrs: { class: "btn primary" } }));
+    const second = main.add(new FakeElement("button", { text: "Cancel", attrs: { "aria-label": "Cancel changes" } }));
+    const titled = stub.document.body.add(new FakeElement("h1", { text: "Shop", attrs: { id: "title" } }));
+    return { ...stub, main, first, second, titled };
+  };
+
+  it("stamps nothing until the editor asks, and does not say ready to a parent it was not told of", () => {
+    const { document, posted } = app();
+    expect(document.all().filter((el) => el.getAttribute("data-hf-id") !== null)).toEqual([]);
+    expect(posted).toEqual([]);
+  });
+
+  it("says ready to the parent the Screen bridge names", () => {
+    const { posted } = stubEditWindow({ stamp: true, peer: "http://127.0.0.1:5001" });
+    expect(posted).toEqual([{ message: { type: "unframed:edit:ready" }, targetOrigin: "http://127.0.0.1:5001" }]);
+  });
+
+  it("stamps an element the first time it is picked, and reports a path and a name that do not use the stamp", () => {
+    const { document, first, second, titled, mode, messages } = app();
+    mode("edit");
+    document.fire("click", first);
+    const picked = messages("unframed:edit:pick")[0].element;
+    expect(picked.id).toMatch(/^uf\d+$/);
+    expect(first.getAttribute("data-hf-id")).toBe(picked.id);
+    expect(picked).toMatchObject({ path: "body > main.page.wide > button.btn.primary:nth-of-type(1)", name: "btn" });
+    document.fire("click", first);
+    expect(messages("unframed:edit:pick")[1].element.id).toBe(picked.id);
+    document.fire("click", second);
+    expect(messages("unframed:edit:pick")[2].element).toMatchObject({ path: "body > main.page.wide > button:nth-of-type(2)", name: "Cancel changes" });
+    document.fire("click", titled);
+    expect(messages("unframed:edit:pick")[3].element).toMatchObject({ path: "#title", name: "title" });
+  });
+
+  it("answers the tree with every element stamped, named and pathed", () => {
+    const { send, messages } = app();
+    send({ type: "unframed:edit:tree" });
+    const [main, title] = messages("unframed:edit:tree")[0].nodes;
+    expect(main).toMatchObject({ tag: "main", name: "page", path: "body > main.page.wide" });
+    expect(main.id).toMatch(/^uf\d+$/);
+    expect(main.children.map((node: { name: string }) => node.name)).toEqual(["btn", "Cancel changes"]);
+    expect(main.children.every((node: { id: string | null }) => typeof node.id === "string")).toBe(true);
+    expect(title).toMatchObject({ tag: "h1", name: "title", path: "#title" });
   });
 });
 
