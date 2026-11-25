@@ -231,6 +231,8 @@ test("Parameters on a selected page opens its dials beside it on the canvas: the
   const panel = canvasPanel(page, "Tuned");
   await expect(panel).toBeVisible();
   await expect(parametersToggle(page)).toHaveAttribute("aria-pressed", "true");
+  await expect(parametersToggle(page)).toHaveAttribute("data-pressed", "");
+  await expect(parametersToggle(page)).toHaveClass(/button-outline/);
   await expect(editor(page)).toHaveCount(0);
   expect(await dialKitLoaded(page)).toBe(true);
   await expect(panel.locator("header")).toHaveText("Parameters");
@@ -256,6 +258,7 @@ test("Parameters on a selected page opens its dials beside it on the canvas: the
   await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0);
   await expect(parametersToggle(page)).toHaveAttribute("aria-pressed", "false");
+  await expect(parametersToggle(page)).not.toHaveAttribute("data-pressed");
   await page.keyboard.press("ControlOrMeta+z");
   await expect.poll(async () => (await settledRecord(agent, "default", "shape:tuned"))?.props.dials).toBeUndefined();
   await expect.poll(() => shown(insideFrame(page, "shape:tuned"))).toEqual({ size: 10 });
