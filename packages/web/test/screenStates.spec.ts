@@ -193,7 +193,7 @@ test("Duplicate leaves a copy of the Screen at its current page, size and Parame
   });
 });
 
-test("Map a Flow on a selected Screen asks the agent to map the flow from its state, with no route box anywhere", async ({ page }) => {
+test("Map a Flow on a selected Screen asks for the flow to map: a described flow maps that flow, an empty one maps the whole app, from the Screen's state", async ({ page }) => {
   await withRepository(page, { UNFRAMED_TEST_AGENT_SCRIPT: FIXTURES }, async (engine, project) => {
     const [first] = await screenShapes(engine, project);
     await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/app", ...MENU_EMPTY } }]);
@@ -202,14 +202,30 @@ test("Map a Flow on a selected Screen asks the agent to map the flow from its st
     const toolbar = page.getByTestId("selection-toolbar");
     await expect(toolbar.getByRole("textbox")).toHaveCount(0);
     await expect(toolbar.getByRole("button", { name: "Explode into a Flow" })).toHaveCount(0);
-    await toolbar.getByRole("button", { name: "Map a Flow" }).click();
-    await expect.poll(async () => (await engineChats(engine, project)).filter((chat) => chat.title !== "Setup").length).toBe(1);
-    const [asked] = (await engineChats(engine, project)).filter((chat) => chat.title !== "Setup");
     const rpc = await engine.rpc();
     const instance = await rpc.call("instances.status", { project, id: first.props.instance });
     await rpc.close();
-    expect((await engineChat(engine, asked!.id, project)).messages.find((message) => message.role === "user")?.text).toBe(
-      mapFlowInstruction({ shape: first.id.replace(/^shape:/, ""), state: MENU_EMPTY.state, route: "/app", branch: instance.branch, worktree: instance.worktree }),
-    );
+    const input = { shape: first.id.replace(/^shape:/, ""), state: MENU_EMPTY.state, route: "/app", branch: instance.branch, worktree: instance.worktree };
+    const asked = async () => {
+      const chats = (await engineChats(engine, project)).filter((chat) => chat.title !== "Setup");
+      return Promise.all(chats.map(async (chat) => (await engineChat(engine, chat.id, project)).messages.find((message) => message.role === "user")?.text));
+    };
+
+    await toolbar.getByRole("button", { name: "Map a Flow" }).click();
+    const panel = page.getByRole("dialog", { name: "Map a Flow" });
+    const flow = panel.getByRole("textbox", { name: "Flow" });
+    await expect(flow).toBeFocused();
+    await expect(panel.getByRole("button", { name: "Map the app" })).toBeVisible();
+    await flow.fill("opening the menu and picking Settings");
+    await expect(panel.getByRole("button", { name: "Map this flow" })).toBeVisible();
+    await flow.press("Enter");
+    await expect(panel).toHaveCount(0);
+    await expect.poll(asked).toEqual([mapFlowInstruction({ ...input, flow: "opening the menu and picking Settings" })]);
+
+    await clickShape(page, first.id);
+    await toolbar.getByRole("button", { name: "Map a Flow" }).click();
+    await expect(flow).toHaveValue("");
+    await panel.getByRole("button", { name: "Map the app" }).click();
+    await expect.poll(async () => (await asked()).sort()).toEqual([mapFlowInstruction(input), mapFlowInstruction({ ...input, flow: "opening the menu and picking Settings" })].sort());
   });
 });
