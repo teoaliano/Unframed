@@ -104,6 +104,7 @@ interface EditSessionInput {
   readonly editing: boolean;
   readonly target?: "file" | "screen";
   readonly onOverrides?: (overrides: readonly ScreenOverride[]) => void;
+  readonly onNewDocument?: () => void;
 }
 
 export interface EditSession {
@@ -163,7 +164,7 @@ const sameIds = (a: readonly string[], b: readonly string[]): boolean => a.lengt
 const conflictSentence = (kind: EditorKind, reason: unknown): string =>
   reason === "agent" ? "The agent rewrote this. Your last change wasn't saved." : `This ${kind} changed somewhere else. Your last change wasn't saved.`;
 
-export const useEditSession = ({ doc, engine, project, shapeId, kind, file, locked, kit, editing, target = "file", onOverrides }: EditSessionInput): EditSession => {
+export const useEditSession = ({ doc, engine, project, shapeId, kind, file, locked, kit, editing, target = "file", onOverrides, onNewDocument }: EditSessionInput): EditSession => {
   const screen = target === "screen";
   const [mode, setModeState] = useState<EditMode>(editing ? "edit" : "interact");
   const [selection, setSelectionState] = useState<readonly string[]>([]);
@@ -191,6 +192,8 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
   const overridesRef = useRef<readonly ScreenOverride[]>([]);
   const overridesTo = useRef(onOverrides);
   overridesTo.current = onOverrides;
+  const newDocumentTo = useRef(onNewDocument);
+  newDocumentTo.current = onNewDocument;
   const screenTree = useMemo<SourceTree | undefined>(() => (screen ? { ready: true, elements: screenSourceTree(live, reports), offTokens: [] } : undefined), [screen, live, reports]);
   const tree = screen ? screenTree : sourceTree;
   const inFlight = useRef<Readonly<Record<string, unknown>>>({});
@@ -603,6 +606,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
           setReports({});
           setHovered(null);
           setOverrides([], false);
+          newDocumentTo.current?.();
           selectionRef.current = [];
           setSelectionState([]);
         }

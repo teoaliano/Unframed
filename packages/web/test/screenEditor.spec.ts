@@ -133,6 +133,39 @@ test("Edit mode selects an element in the live app; a Design change previews at 
   });
 });
 
+test("a reload of the Screen drops its overrides but keeps the draft, and the next change does not take the earlier one out", async ({ page }) => {
+  await withRepository(page, {}, async (engine, project) => {
+    const first = await onRoute(engine, project, "/app");
+    await openFromToolbar(page, first.id);
+    const heading = app(page).getByRole("heading", { name: "Fake app" });
+    await expect(heading).toBeVisible({ timeout: 30_000 });
+    const resize = async (value: string) => {
+      await expect(async () => {
+        await heading.dispatchEvent("click");
+        await expect(page.locator('[data-edit-outline="selected"]')).toHaveCount(1, { timeout: 1000 });
+      }).toPass({ timeout: 20_000 });
+      const size = panels(page).getByRole("spinbutton", { name: "Size", exact: true });
+      await expect(size).toBeEnabled();
+      await size.fill(value);
+      await size.press("Enter");
+      await expect(heading).toHaveCSS("font-size", `${value}px`);
+    };
+
+    await resize("48");
+    await expect(promptBox(rail(page))).toContainText("- Fake app (body > h1): font-size: 48px");
+
+    await preview(page).locator("iframe[data-screen-frame]").evaluate((frame: HTMLIFrameElement) => {
+      frame.src = frame.src;
+    });
+    await expect(heading).not.toHaveCSS("font-size", "48px", { timeout: 30_000 });
+    await expect(promptBox(rail(page))).toContainText("- Fake app (body > h1): font-size: 48px");
+
+    await resize("30");
+    await expect(promptBox(rail(page))).toContainText("- Fake app (body > h1): font-size: 48px");
+    await expect(rail(page).getByText("h1 · Fake app", { exact: true })).toBeVisible();
+  });
+});
+
 test("Layers lists the live page's elements, with no lock or rename, and hiding one previews and says so in the draft", async ({ page }) => {
   await withRepository(page, {}, async (engine, project) => {
     const first = await onRoute(engine, project, "/app");

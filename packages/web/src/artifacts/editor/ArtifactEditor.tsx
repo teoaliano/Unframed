@@ -234,6 +234,9 @@ export const ArtifactEditor = ({
     editing,
     target: isScreen ? "screen" : "file",
     onOverrides,
+    onNewDocument: () => {
+      screenDraft.current = NO_SCREEN_DRAFT;
+    },
   });
   const sessionRef = useRef(session);
   sessionRef.current = session;
