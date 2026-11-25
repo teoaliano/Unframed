@@ -86,6 +86,8 @@ describe("a Screen's label", () => {
     expect(screenLabel({ branch: "feature/pricing", route: "/pricing", state: "  " })).toBe("feature/pricing · /pricing");
     expect(screenLabel({ branch: "trunk", route: "/" })).toBe("trunk · /");
     expect(screenLabel({ branch: "", route: "/settings" })).toBe("/settings");
+    expect(screenLabel({ branch: "trunk", route: "/", warnings: 2 })).toBe("trunk · / · ⚠ 2");
+    expect(screenLabel({ branch: "trunk", route: "/", warnings: 0 })).toBe("trunk · /");
   });
 });
 

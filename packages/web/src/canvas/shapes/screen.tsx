@@ -169,46 +169,14 @@ const Overlay = ({ project, instance }: { readonly project: string; readonly ins
   );
 };
 
-const SetupBadges = ({ project, note }: { readonly project: string; readonly note: string | undefined }) => {
-  const setup = useRepositorySetup(project);
-  const tag = setupTag(setup);
-  const warnings = setup?.warnings ?? [];
-  if (tag === undefined && warnings.length === 0 && note === undefined) return null;
-  return (
-    <div className="pointer-events-none absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1" data-testid="screen-setup-badges">
-      {note !== undefined && (
-        <Badge size="sm" variant="warning" className="min-w-0 shrink" data-testid="screen-state-note">
-          <span className="truncate">{note}</span>
-        </Badge>
-      )}
-      {tag !== undefined && (
-        <Tip label={`Mocked by Setup: ${tag}`}>
-          <Badge size="sm" variant="secondary" className="pointer-events-auto min-w-0 shrink" data-testid="screen-mock-tag">
-            <span className="truncate">{tag}</span>
-          </Badge>
-        </Tip>
-      )}
-      {warnings.length > 0 && (
-        <Tip
-          label={
-            <ul className="m-0 flex list-none flex-col gap-1 p-0" data-testid="screen-warnings">
-              {warnings.map((warning) => (
-                <li key={warning} data-testid="screen-warning">
-                  {warning}
-                </li>
-              ))}
-            </ul>
-          }
-        >
-          <Button variant="warning-outline" size="micro" className="pointer-events-auto" data-testid="screen-warnings-badge" aria-label={warnings.length === 1 ? "1 Setup warning" : `${warnings.length} Setup warnings`}>
-            <TriangleAlert aria-hidden />
-            {warnings.length}
-          </Button>
-        </Tip>
-      )}
+const StateNote = ({ note }: { readonly note: string | undefined }) =>
+  note === undefined ? null : (
+    <div className="pointer-events-none absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1">
+      <Badge size="sm" variant="warning" className="min-w-0 shrink" data-testid="screen-state-note">
+        <span className="truncate">{note}</span>
+      </Badge>
     </div>
   );
-};
 
 const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
   noteRender(shape.id);
@@ -227,7 +195,8 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
     [state, props.instance],
   );
   const branch = useValue("screen branch", () => state.instances.get().get(props.instance)?.branch ?? props.title, [state, props.instance, props.title]);
-  const label = screenLabel({ branch, route: props.route, state: props.state });
+  const setupWarnings = useRepositorySetup(project)?.warnings.length ?? 0;
+  const label = screenLabel({ branch, route: props.route, state: props.state, warnings: setupWarnings });
   const onScreen = useValue("screen on screen", () => screenOnScreen(editor, shape.id), [editor, shape.id]);
   const interactive = useValue("screen interactive", () => isInteractive(editor, shape.id), [editor, shape.id]);
   const live = repositories && !isDeviceClient() && onScreen && proxyPort !== null;
@@ -343,7 +312,7 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
           {asking !== undefined && <span data-testid="screen-state-asked">{asking}</span>}
         </div>
       )}
-      <SetupBadges project={project} note={live && bridge === false ? NO_STATE_BRIDGE : undefined} />
+      <StateNote note={live && bridge === false ? NO_STATE_BRIDGE : undefined} />
     </HTMLContainer>
   );
 };

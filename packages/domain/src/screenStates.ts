@@ -147,9 +147,11 @@ export const describeStep = (step: ScreenStep): string => {
   }
 };
 
-export const screenLabel = (input: { readonly branch: string; readonly route: string; readonly state?: string | undefined }): string => {
+export const screenLabel = (input: { readonly branch: string; readonly route: string; readonly state?: string | undefined; readonly warnings?: number }): string => {
   const where = input.state?.trim() || input.route;
-  return input.branch === "" ? where : `${input.branch} · ${where}`;
+  const label = input.branch === "" ? where : `${input.branch} · ${where}`;
+  const warnings = input.warnings ?? 0;
+  return warnings === 0 ? label : `${label} · ⚠ ${warnings}`;
 };
 
 export const branchChip = (input: { readonly branch: string; readonly changes: number }): { readonly name: string; readonly count: string | undefined; readonly label: string; readonly changes: string } =>

@@ -71,15 +71,15 @@ test("a Screen tags mocks and lists warnings from Setup, and says when its Insta
     const screen = page.locator("[data-testid=screen]");
     saveSetup(engine, project, { mocks: ["mock user", "fixtures"], warnings: ["Payments are stubbed."] });
     await page.reload();
-    const badges = screen.getByTestId("screen-setup-badges");
-    await expect(badges.getByTestId("screen-mock-tag")).toHaveText("mock user · fixtures");
-    await expect(badges.getByTestId("screen-warnings-badge")).toHaveText("1");
-    await expect(badges.getByTestId("screen-warnings-badge")).toHaveAttribute("aria-label", "1 Setup warning");
-    const frame = (await screen.boundingBox())!;
-    const chips = (await badges.boundingBox())!;
-    expect(chips.y).toBeGreaterThan(frame.y + frame.height / 2);
-    await badges.getByTestId("screen-warnings-badge").hover();
-    await expect(page.getByTestId("screen-warning")).toHaveText(["Payments are stubbed."]);
+    await expect(page.locator("[data-label-kind=screen] [data-label-text]")).toContainText("⚠ 1");
+    await expect(screen.getByTestId("screen-warnings-badge")).toHaveCount(0);
+    await clickShape(page, (await screenShapes(engine, project))[0].id);
+    const notes = page.getByTestId("screen-setup-notes");
+    await expect(notes).toHaveAttribute("aria-label", "1 Setup warning");
+    await notes.click();
+    await expect(page.getByTestId("setup-note-warning")).toHaveText(["Payments are stubbed."]);
+    await expect(page.getByTestId("setup-note-mocks")).toHaveText("Mocked: mock user · fixtures");
+    await page.keyboard.press("Escape");
 
     const rpc = await engine.rpc();
     const shape = (await screenShapes(engine, project))[0];
