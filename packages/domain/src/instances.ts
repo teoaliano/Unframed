@@ -1,7 +1,7 @@
 import type { PackageManager, RepositorySetup } from "@unframed/contracts";
 
-export const INSTANCE_NOT_FOUND = "That Instance does not exist.";
-export const INSTANCE_REMOVED = "That Instance was removed.";
+export const INSTANCE_NOT_FOUND = "That worktree does not exist.";
+export const INSTANCE_REMOVED = "That branch's worktree was removed.";
 export const NOT_A_REPOSITORY_PROJECT = "That project is not a Repository.";
 export const REPOSITORY_NOT_FOUND = "Repository not found.";
 export const NO_RUN_COMMAND = "Unframed does not know how to run this repository yet. Setup finds the run command.";
@@ -11,7 +11,7 @@ export const unknownBase = (base: string): string => `There is no branch or comm
 export const unsavedWork = (branch: string): string =>
   `The branch "${branch}" has work that is not pushed or merged. Remove it anyway to lose that work.`;
 export const uncommittedWork = (branch: string): string =>
-  `The Instance on "${branch}" has uncommitted changes. Remove it anyway to lose them.`;
+  `The worktree of "${branch}" has uncommitted changes. Remove it anyway to lose them.`;
 export const exitedBeforeListening = (code: number | null, port: number): string =>
   `The dev server exited${code === null ? "" : ` with code ${code}`} before it listened on port ${port}.`;
 export const movedPort = (expected: number, actual: number): string =>
@@ -19,12 +19,12 @@ export const movedPort = (expected: number, actual: number): string =>
 export const serverExited = (code: number | null): string => `The dev server exited${code === null ? "" : ` with code ${code}`}.`;
 export const neverListened = (port: number, seconds: number): string => `The dev server did not listen on port ${port} within ${seconds} seconds.`;
 export const portInUse = (port: number): string =>
-  `Something else is already listening on port ${port}, the fixed port this Repository runs on. Stop it, then start the Instance again.`;
+  `Something else is already listening on port ${port}, the fixed port this Repository runs on. Stop it, then start the dev server again.`;
 export const singlePortMoved = (expected: number, actual: number): string =>
   `The dev server listened on port ${actual} instead of ${expected}. Unframed now runs this Repository on port ${actual}.`;
-export const stoppedForBudget = "Unframed stopped this Instance to stay within the memory budget.";
-export const stoppedWhenIdle = "Unframed stopped this Instance after it sat unused with no file changes.";
-export const proxyFailed = (reason: string): string => `Unframed could not open the proxy for this Instance: ${reason}`;
+export const stoppedForBudget = "Unframed stopped this branch's dev server to stay within the memory budget.";
+export const stoppedWhenIdle = "Unframed stopped this branch's dev server after it sat unused with no file changes.";
+export const proxyFailed = (reason: string): string => `Unframed could not open the proxy for this worktree: ${reason}`;
 export const setupFailed = (code: number | null): string => `The setup command failed${code === null ? "" : ` with code ${code}`}.`;
 
 const PACKAGE_MANAGERS: ReadonlyArray<PackageManager> = ["npm", "pnpm", "yarn", "bun"];

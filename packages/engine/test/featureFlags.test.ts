@@ -55,10 +55,10 @@ describe("UNFRAMED_FEATURES", () => {
     expect(description("canvas_read")).not.toMatch(/screen/i);
     expect(description("canvas_write")).not.toMatch(/screen/i);
     expect(description("preview_open")).not.toMatch(/Screen/);
-    expect(tools.map((tool) => tool.name).filter((name) => name.startsWith("instance_"))).toEqual([]);
+    expect(tools.map((tool) => tool.name).filter((name) => name.startsWith("instance_") || name === "screen_state" || name === "flow_create")).toEqual([]);
 
     const { tools: allTools } = await toolsOf("all");
-    expect(allTools.find((tool) => tool.name === "canvas_read")!.description).toContain("a screen shows one route of one Instance");
+    expect(allTools.find((tool) => tool.name === "canvas_read")!.description).toContain("a screen shows one state of one Instance");
     expect(allTools.find((tool) => tool.name === "preview_open")!.description).toContain("shapeId may also name a Screen");
   });
 
@@ -95,7 +95,7 @@ describe("UNFRAMED_FEATURES", () => {
     await expect(rpc.call("repositories.read", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("repositories.locate", { project: "app", path: engine.dataDir })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("repositories.setup", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
-    await expect(rpc.call("screens.explode", { project: "app", shapeId: "shape:s", routes: ["/"] })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("screens.stateToken", { project: "app", instance: instance.id, steps: [], mocks: [{ url: "/api" }] })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("repositories.confirmLogin", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("repositories.setupVerdict", { project: "app", accepted: true })).rejects.toMatchObject(REPOSITORIES_OFF);
     const states = rpc.subscribe("instances.subscribe", { project: "app" });
@@ -110,6 +110,9 @@ describe("UNFRAMED_FEATURES", () => {
     const on = await startEngine({ dataDir, env: await repoEngineEnv({ UNFRAMED_TEST_CANVAS: "1", UNFRAMED_TEST_RENDERER: "ok" }) });
     const onRpc = await on.rpc();
     const added = await onRpc.call("repositories.add", { path: root });
+    const placed = ((await onRpc.call("testCanvas.read", { project: "shop" })).records as any[]).find((record) => record.type === "screen");
+    const held = { route: "/app", state: "the menu open", steps: [{ action: "click", target: { role: "button", name: "Menu" } }], mocks: [{ url: "/api/items", fail: true }] };
+    await onRpc.call("testCanvas.apply", { project: "shop", change: { put: [{ ...placed, props: { ...placed.props, ...held } }], remove: [] }, origin: { kind: "server", id: "test" } });
     const snapshots = onRpc.subscribe("screens.snapshots", { project: "shop" });
     for (let tries = 0; (await onRpc.call("instances.status", { project: "shop", id: added.instance.id })).state !== "stopped"; tries++) {
       if (tries > 200) throw new Error("the Instance never settled");
@@ -125,6 +128,7 @@ describe("UNFRAMED_FEATURES", () => {
     const records = (await rpc.call("testCanvas.read", { project: "shop" })).records as Array<{ type?: string; id: string; props?: { instance?: string } }>;
     const screen = records.find((record) => record.type === "screen")!;
     expect(screen.props?.instance).toBe(added.instance.id);
+    expect(screen.props).toMatchObject(held);
     const stored = await rpc.subscribe("screens.snapshots", { project: "shop" }).next();
     expect(stored).toEqual({ ...first, at: expect.any(Number) });
     const served = await off.request(`/api/file/shop/${screen.id.replace(/^shape:/, "")}.png?screen=1`);

@@ -1,29 +1,18 @@
 import type { ScreenShapeProps } from "@unframed/contracts";
-import type { GitAction, GitActionResult, Instance, InstanceDiff } from "@unframed/contracts";
-import { DEFAULT_RUNTIME_MODE, flowInstruction, flowRoutes, forkBranchName, normaliseRoute, SCREEN_GAP, SCREEN_VIEWPORTS, screenUrl, setupTag } from "@unframed/domain";
-import { ChevronDown, ExternalLink, FileDiff, GitBranchPlus, GitFork, Info, MonitorSmartphone, Route, TriangleAlert, Workflow } from "lucide-react";
-import { useState, type ReactNode } from "react";
-import { createShapeId, useEditor, useValue, type Editor, type TLShape, type TLShapeId } from "tldraw";
+import { mapFlowInstruction, SCREEN_VIEWPORTS, screenUrl, setupTag } from "@unframed/domain";
+import { ChevronDown, CopyPlus, ExternalLink, Info, MonitorSmartphone, TriangleAlert, Workflow } from "lucide-react";
+import { useState } from "react";
+import { useEditor, useValue, type Editor, type TLShape, type TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuRadioItemIndicator, MenuTrigger } from "~/components/ui/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
-import { Textarea } from "~/components/ui/textarea";
-import { readyProviders } from "../agent/providers.ts";
-import { createChat, sendMessage } from "../agent/send.ts";
-import { messageOf, useChatClient } from "../agent/store.ts";
+import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuRadioItemIndicator, MenuTrigger } from "~/components/ui/menu";
+import { messageOf } from "../agent/store.ts";
 import { Tip } from "../chrome/ui.tsx";
-import { useCanvasProject, useEngine } from "../context.ts";
-import { usePendingWork } from "./pendingWork.ts";
+import { useCanvasProject } from "../context.ts";
+import { showError } from "../toasts.tsx";
+import { useAskAgent } from "./askAgent.ts";
+import { BranchChip, placeScreenBeside, screenPropsOf, useScreenInstance } from "./BranchChip.tsx";
 import { repositoryState, useRepositorySetup } from "./store.ts";
-
-export const BAD_ROUTE = "A route starts with / and has no spaces, like /settings?tab=2.";
-
-export const screenPropsOf = (editor: Editor, shapeId: TLShapeId): ScreenShapeProps | undefined => {
-  const shape = editor.getShape(shapeId);
-  return shape?.type === "screen" ? (shape.props as ScreenShapeProps) : undefined;
-};
 
 const updateScreen = (editor: Editor, shapeId: TLShapeId, patch: Partial<ScreenShapeProps>, mark: string) => {
   const shape = editor.getShape(shapeId);
@@ -53,48 +42,21 @@ const OpenInBrowser = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   );
 };
 
-const RouteField = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
+const KeepView = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   const editor = useEditor();
-  const route = useValue("screen route", () => screenPropsOf(editor, shapeId)?.route ?? "/", [editor, shapeId]);
-  const [open, setOpen] = useState(false);
-  const [text, setText] = useState(route);
-  const [problem, setProblem] = useState<string | undefined>(undefined);
+  const instance = useScreenInstance(shapeId);
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (next) {
-          setText(route);
-          setProblem(undefined);
-        }
-      }}
-    >
-      <Tip label="Change route">
-        <PopoverTrigger render={<Button variant="outline" size="sm" aria-label={`Route ${route}`} data-testid="screen-route" />}>
-          <Route aria-hidden />
-          <span className="max-w-40 truncate">{route}</span>
-        </PopoverTrigger>
-      </Tip>
-      <PopoverPopup side="bottom" align="start" sideOffset={6} padding="compact" className="w-72" aria-label="Change route">
-        <form
-          className="flex flex-col gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const next = normaliseRoute(text);
-            if (next === undefined) return setProblem(BAD_ROUTE);
-            if (next !== route) updateScreen(editor, shapeId, { route: next }, "screen route");
-            setOpen(false);
-          }}
-        >
-          <Input aria-label="Route" value={text} autoFocus onChange={(event) => setText(event.target.value)} />
-          {problem !== undefined && <span className="text-xs text-(--artifact-editor-error-foreground)">{problem}</span>}
-          <Button type="submit" size="sm" className="self-end">
-            Show route
-          </Button>
-        </form>
-      </PopoverPopup>
-    </Popover>
+    <Tip label="Keep this view">
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Keep this view"
+        disabled={instance === undefined || instance.state === "removed"}
+        onClick={() => instance !== undefined && placeScreenBeside(editor, shapeId, instance, "keep this view", "view")}
+      >
+        <CopyPlus aria-hidden />
+      </Button>
+    </Tip>
   );
 };
 
@@ -140,267 +102,26 @@ const ViewportMenu = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   );
 };
 
-export const placeScreenBeside = (editor: Editor, shapeId: TLShapeId, instance: Instance): void => {
-  const shape = editor.getShape(shapeId);
-  const props = screenPropsOf(editor, shapeId);
-  if (!shape || props === undefined) return;
-  const bounds = editor.getShapePageBounds(shapeId)!;
-  const id = createShapeId();
-  editor.markHistoryStoppingPoint("screen for a new instance");
-  editor.createShape({ id, type: "screen", x: bounds.maxX + SCREEN_GAP, y: bounds.minY, props: { w: props.w, h: props.h, instance: instance.id, route: props.route, title: instance.branch } });
-  editor.select(id);
-};
-
-const BranchForm = ({ shapeId, label, icon, title, submit, base }: {
-  readonly shapeId: TLShapeId;
-  readonly label: string;
-  readonly icon: ReactNode;
-  readonly title: string;
-  readonly submit: string;
-  readonly base: "fork" | "pick";
-}) => {
+const MapFlow = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   const editor = useEditor();
-  const engine = useEngine();
   const project = useCanvasProject();
-  const [open, setOpen] = useState(false);
-  const [branches, setBranches] = useState<ReadonlyArray<string>>([]);
-  const [from, setFrom] = useState("");
-  const [name, setName] = useState("");
-  const { busy, problem, setProblem, run } = usePendingWork();
-  const forkedFrom = () => {
+  const ask = useAskAgent();
+  const [busy, setBusy] = useState(false);
+  const map = () => {
     const props = screenPropsOf(editor, shapeId);
-    return props === undefined ? undefined : repositoryState(project).instances.get().get(props.instance);
-  };
-  const prepare = async () => {
-    setProblem(undefined);
-    setName("");
-    try {
-      const answer = await engine.call("instances.branches", { project });
-      setBranches(answer.branches);
-      const source = forkedFrom();
-      if (base === "fork") {
-        setFrom(source?.branch ?? answer.current);
-        if (source !== undefined) setName(forkBranchName(source.branch, answer.branches));
-      } else setFrom(answer.current);
-    } catch (error) {
-      setProblem(messageOf(error));
-    }
+    const instance = props === undefined ? undefined : repositoryState(project).instances.get().get(props.instance);
+    if (props === undefined || instance === undefined) return;
+    setBusy(true);
+    ask(shapeId, mapFlowInstruction({ shape: shapeId.replace(/^shape:/, ""), state: props.state?.trim() || props.route, route: props.route, branch: instance.branch, worktree: instance.worktree }))
+      .catch((error: unknown) => showError(messageOf(error)))
+      .finally(() => setBusy(false));
   };
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (next) void prepare();
-      }}
-    >
-      <Tip label={title}>
-        <PopoverTrigger render={<Button variant="ghost" size="icon-sm" aria-label={label} />}>{icon}</PopoverTrigger>
-      </Tip>
-      <PopoverPopup side="bottom" align="start" sideOffset={6} padding="compact" className="w-80" aria-label={title}>
-        <form
-          className="flex flex-col gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (from === "") return;
-            run(async () => {
-              const instance = await engine.call("instances.create", { project, base: from, ...(name.trim() === "" ? {} : { branch: name.trim() }) });
-              placeScreenBeside(editor, shapeId, instance);
-              setOpen(false);
-            });
-          }}
-        >
-          {base === "pick" ? (
-            <Select value={from} onValueChange={(value) => value && setFrom(value)}>
-              <SelectTrigger aria-label="Base branch">
-                <SelectValue>{from}</SelectValue>
-              </SelectTrigger>
-              <SelectPopup alignItemWithTrigger={false}>
-                {branches.map((branch) => (
-                  <SelectItem key={branch} value={branch}>
-                    {branch}
-                  </SelectItem>
-                ))}
-              </SelectPopup>
-            </Select>
-          ) : (
-            <span className="text-xs text-(--selection-toolbar-hint)">{from === "" ? "" : `From ${from}`}</span>
-          )}
-          <Input aria-label="Branch name" placeholder={base === "pick" ? "A new branch, named for you" : undefined} value={name} autoFocus onChange={(event) => setName(event.target.value)} />
-          {problem !== undefined && <span className="text-xs text-(--artifact-editor-error-foreground)">{problem}</span>}
-          <Button type="submit" size="sm" className="self-end" disabled={busy || from === ""}>
-            {submit}
-          </Button>
-        </form>
-      </PopoverPopup>
-    </Popover>
-  );
-};
-
-const NO_PROVIDER = "Connect Claude or Codex first.";
-
-const ExplodeForm = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
-  const editor = useEditor();
-  const engine = useEngine();
-  const project = useCanvasProject();
-  const client = useChatClient(engine, project);
-  const [open, setOpen] = useState(false);
-  const [text, setText] = useState("");
-  const { busy, problem, setProblem, run } = usePendingWork();
-  const explode = () =>
-    run(async () => {
-      const routes = flowRoutes(text);
-      if ("error" in routes) throw new Error(routes.error);
-      const { group } = await engine.call("screens.explode", { project, shapeId, routes: [...routes.routes] });
-      editor.select(group as TLShapeId);
-      setOpen(false);
-    });
-  const ask = () =>
-    run(async () => {
-      const props = screenPropsOf(editor, shapeId);
-      const instance = props === undefined ? undefined : repositoryState(project).instances.get().get(props.instance);
-      if (props === undefined || instance === undefined) throw new Error("That Screen's Instance is not available.");
-      if (client.providers === undefined) await client.loadProviders();
-      const ready = readyProviders(client.providers);
-      if (ready.length === 0) throw new Error(NO_PROVIDER);
-      const instruction = flowInstruction({ shape: shapeId.replace(/^shape:/, ""), route: props.route, branch: instance.branch, worktree: instance.worktree });
-      const chatId = await createChat(client, { modelSelection: { provider: ready[0]!, model: "", traits: {} }, runtimeMode: DEFAULT_RUNTIME_MODE, interactionMode: "default", tags: [shapeId] }, instruction);
-      client.setUi({ open: true, chosen: chatId, pinned: null });
-      await sendMessage(client, chatId, { text: instruction, selection: [shapeId], attachments: [] });
-      setOpen(false);
-    });
-  return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (next) {
-          setText(screenPropsOf(editor, shapeId)?.route ?? "/");
-          setProblem(undefined);
-        }
-      }}
-    >
-      <Tip label="Explode into a Flow">
-        <PopoverTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Explode into a Flow" />}>
-          <Workflow aria-hidden />
-        </PopoverTrigger>
-      </Tip>
-      <PopoverPopup side="bottom" align="start" sideOffset={6} padding="compact" className="w-80" aria-label="Explode into a Flow">
-        <form
-          className="flex flex-col gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            explode();
-          }}
-        >
-          <Textarea aria-label="Routes, one per line" value={text} autoFocus onChange={(event) => setText(event.currentTarget.value)} />
-          {problem !== undefined && <span className="text-xs text-(--artifact-editor-error-foreground)">{problem}</span>}
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={ask}>
-              Ask the agent
-            </Button>
-            <Button type="submit" size="sm" disabled={busy}>
-              Explode
-            </Button>
-          </div>
-        </form>
-      </PopoverPopup>
-    </Popover>
-  );
-};
-
-const GIT_ACTION_LABELS: ReadonlyArray<readonly [GitAction, string]> = [
-  ["commit", "Commit"],
-  ["commit_push", "Commit and push"],
-  ["commit_push_pr", "Commit, push and open PR"],
-];
-
-const gitActionSummary = (result: GitActionResult): string =>
-  [
-    result.commit === null ? undefined : `Committed "${result.commit.subject}".`,
-    result.push === null ? undefined : `Pushed to ${result.push.remote}/${result.push.branch}.`,
-    result.pr === null ? undefined : `${result.pr.existing ? "Pull request" : "Opened pull request"} #${result.pr.number} is open.`,
-  ]
-    .filter((line) => line !== undefined)
-    .join(" ");
-
-const ChangesForm = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
-  const editor = useEditor();
-  const engine = useEngine();
-  const project = useCanvasProject();
-  const [open, setOpen] = useState(false);
-  const [diff, setDiff] = useState<InstanceDiff | undefined>(undefined);
-  const [result, setResult] = useState<GitActionResult | undefined>(undefined);
-  const { busy, problem, setProblem, run } = usePendingWork();
-  const instanceId = () => screenPropsOf(editor, shapeId)?.instance;
-  const load = async () => {
-    const id = instanceId();
-    if (id === undefined) return;
-    setDiff(await engine.call("instances.diff", { project, id }));
-  };
-  const act = (action: GitAction) => {
-    const id = instanceId();
-    if (id === undefined) return;
-    run(async () => {
-      setResult(await engine.call("instances.gitAction", { project, id, action }));
-      await load();
-    });
-  };
-  return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (next) {
-          setDiff(undefined);
-          setResult(undefined);
-          setProblem(undefined);
-          load().catch((error: unknown) => setProblem(messageOf(error)));
-        }
-      }}
-    >
-      <Tip label="Changes">
-        <PopoverTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Changes" />}>
-          <FileDiff aria-hidden />
-        </PopoverTrigger>
-      </Tip>
-      <PopoverPopup side="bottom" align="start" sideOffset={6} padding="compact" className="w-80" aria-label="Changes">
-        <div className="flex flex-col gap-2">
-          {diff === undefined ? (
-            problem === undefined && <span className="text-xs text-(--selection-toolbar-hint)">Reading changes…</span>
-          ) : diff.files.length === 0 ? (
-            <span className="text-xs text-(--selection-toolbar-hint)">No changes against {diff.baseRef}.</span>
-          ) : (
-            <ul className="flex max-h-60 flex-col gap-1 overflow-auto font-mono text-xs" aria-label="Changed files">
-              {diff.files.map((file) => (
-                <li key={file.path} className="flex justify-between gap-2" data-testid="changed-file">
-                  <span className="truncate">{file.path}</span>
-                  <span className="shrink-0 text-(--selection-toolbar-hint)">{file.binary ? "binary" : `+${file.additions} −${file.deletions}`}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {result !== undefined && (
-            <span className="text-xs" data-testid="git-action-result">
-              {gitActionSummary(result)}{" "}
-              {result.pr !== null && (
-                <a className="underline" href={result.pr.url} target="_blank" rel="noopener noreferrer">
-                  Open it
-                </a>
-              )}
-            </span>
-          )}
-          {problem !== undefined && <span className="text-xs text-(--artifact-editor-error-foreground)">{problem}</span>}
-          <div className="flex flex-wrap justify-end gap-2">
-            {GIT_ACTION_LABELS.map(([action, label]) => (
-              <Button key={action} type="button" variant={action === "commit" ? "default" : "outline"} size="sm" disabled={busy || diff === undefined} onClick={() => act(action)}>
-                {label}
-              </Button>
-            ))}
-          </div>
-        </div>
-      </PopoverPopup>
-    </Popover>
+    <Tip label="Map a Flow">
+      <Button variant="ghost" size="icon-sm" aria-label="Map a Flow" disabled={busy} onClick={map}>
+        <Workflow aria-hidden />
+      </Button>
+    </Tip>
   );
 };
 
@@ -447,13 +168,11 @@ const SetupNotes = () => {
 
 export const ScreenActions = ({ shapeId }: { readonly shapeId: TLShapeId }) => (
   <>
-    <RouteField shapeId={shapeId} />
+    <BranchChip shapeId={shapeId} />
     <ViewportMenu shapeId={shapeId} />
     <OpenInBrowser shapeId={shapeId} />
     <SetupNotes />
-    <BranchForm shapeId={shapeId} base="fork" label="Fork" title="Fork into a new Instance" submit="Fork" icon={<GitFork aria-hidden />} />
-    <BranchForm shapeId={shapeId} base="pick" label="New Instance" title="New Instance from a branch" submit="Create Instance" icon={<GitBranchPlus aria-hidden />} />
-    <ExplodeForm shapeId={shapeId} />
-    <ChangesForm shapeId={shapeId} />
+    <KeepView shapeId={shapeId} />
+    <MapFlow shapeId={shapeId} />
   </>
 );

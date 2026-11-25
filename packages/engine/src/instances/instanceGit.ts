@@ -29,6 +29,7 @@ import {
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 import { Agents } from "../agent/layer.ts";
 import { errorText } from "../log.ts";
 import { LoginShell, runCommand } from "../loginShell.ts";
@@ -262,6 +263,23 @@ export const instanceGitLayer = Layer.effect(
         return { action, commit: commit === null ? null : { sha: commit.sha, subject: commit.subject }, push, pr: opened } satisfies GitActionResult;
       });
 
-    return InstanceGit.of({ diff, act });
+    const counting = new Map<string, boolean>();
+    const recount = (project: string, id: string): void => {
+      const key = `${project}/${id}`;
+      if (counting.has(key)) {
+        counting.set(key, true);
+        return;
+      }
+      counting.set(key, false);
+      void Effect.runPromise(Effect.result(diff(project, id))).then((counted) => {
+        if (counted._tag === "Success") instances.noteChanges(project, id, counted.success.files.length);
+        const again = counting.get(key) === true;
+        counting.delete(key);
+        if (again) recount(project, id);
+      });
+    };
+    Effect.runFork(Stream.runForEach(instances.touched, ({ project, id }) => Effect.sync(() => recount(project, id))));
+
+    return InstanceGit.of({ diff, act: (project, id, action) => Effect.tap(act(project, id, action), () => Effect.sync(() => recount(projectSlug(project), id))) });
   }),
 );

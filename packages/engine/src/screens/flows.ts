@@ -1,17 +1,17 @@
 import { randomBytes } from "node:crypto";
-import type { Instance } from "@unframed/contracts";
-import { agentShapeId, flowCapacity, flowLayout, flowRoutes, flowTooMany, INSTANCE_REMOVED, nextRef, readRef, roomShapeId, SCREEN_GAP, slugName, uniqueName } from "@unframed/domain";
+import type { Instance, ScreenMock, ScreenStep } from "@unframed/contracts";
+import { arrowLabel, flowCapacity, flowLayout, flowTooMany, nextRef, readRef, SCREEN_GAP, slugName, uniqueName } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import { getIndexAbove, type IndexKey } from "@tldraw/utils";
 import { shapeBoxes } from "../runs/shapeBounds.ts";
 import type { CanvasChange, ChangeOrigin } from "../canvas/rooms.ts";
-import { isScreenShape, screenRecord, type ScreenShape } from "./firstScreen.ts";
+import { screenRecord, type ScreenShape } from "./firstScreen.ts";
 
 const hex = () => randomBytes(8).toString("hex");
 
-const EMPTY_TEXT = { type: "doc", content: [{ type: "paragraph" }] };
+const labelText = (text: string) => ({ type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text }] }] });
 
-const arrowProps = (dx: number, dy: number) => ({
+const arrowProps = (dx: number, dy: number, label: string) => ({
   kind: "arc",
   labelColor: "black",
   color: "black",
@@ -24,7 +24,7 @@ const arrowProps = (dx: number, dy: number) => ({
   start: { x: 0, y: 0 },
   end: { x: dx, y: dy },
   bend: 0,
-  richText: EMPTY_TEXT,
+  richText: labelText(label),
   labelPosition: 0.5,
   scale: 1,
   elbowMidPoint: 0.5,
@@ -41,13 +41,21 @@ const binding = (arrow: string, to: string, terminal: "start" | "end") =>
     meta: {},
   }) as unknown as TLRecord;
 
-export type Exploded = { readonly put: ReadonlyArray<TLRecord>; readonly group: string; readonly screens: ReadonlyArray<string> } | { readonly error: string };
+export interface FlowState {
+  readonly route: string;
+  readonly steps: ReadonlyArray<ScreenStep>;
+  readonly mocks: ReadonlyArray<ScreenMock>;
+  readonly state: string;
+  readonly action?: string | undefined;
+}
 
-export const explodeRecords = (records: ReadonlyArray<TLRecord>, source: ScreenShape, instance: Instance, routes: ReadonlyArray<string>): Exploded => {
+export type FlowBuilt = { readonly put: ReadonlyArray<TLRecord>; readonly group: string; readonly screens: ReadonlyArray<string> } | { readonly error: string };
+
+export const flowRecords = (records: ReadonlyArray<TLRecord>, source: ScreenShape, instance: Instance, states: ReadonlyArray<FlowState>): FlowBuilt => {
   const w = Math.round(source.props.w);
   const h = Math.round(source.props.h);
   const most = flowCapacity(w, h);
-  if (routes.length > most) return { error: flowTooMany(most) };
+  if (states.length > most) return { error: flowTooMany(most) };
   const pageId = (records.find((record) => record.typeName === "page")?.id as string | undefined) ?? "page:page";
   const boxes = shapeBoxes(records);
   const topLevel = records.filter((record) => record.typeName === "shape" && (record as { parentId?: string }).parentId === pageId);
@@ -56,7 +64,7 @@ export const explodeRecords = (records: ReadonlyArray<TLRecord>, source: ScreenS
     return box === undefined ? lowest : Math.max(lowest, box.y + box.h);
   }, Number.NEGATIVE_INFINITY);
   const left = boxes.get(source.id as string)?.page.x ?? source.x;
-  const layout = flowLayout({ x: left, y: Number.isFinite(bottom) ? bottom + 2 * SCREEN_GAP : 0, w, h, count: routes.length });
+  const layout = flowLayout({ x: left, y: Number.isFinite(bottom) ? bottom + 2 * SCREEN_GAP : 0, w, h, count: states.length });
   const topIndex = topLevel.reduce<string | undefined>((highest, record) => {
     const index = (record as { index?: string }).index;
     return index !== undefined && (highest === undefined || index > highest) ? index : highest;
@@ -82,9 +90,10 @@ export const explodeRecords = (records: ReadonlyArray<TLRecord>, source: ScreenS
   } as unknown as TLRecord;
   const minted: TLRecord[] = [...records, group];
   let index: IndexKey | null = null;
-  const screens = routes.map((route, at) => {
+  const screens = states.map((state, at) => {
     index = getIndexAbove(index);
-    const screen = { ...screenRecord(minted, instance, { ...layout.screens[at]!, route, w, h, parentId: groupId }), index } as TLRecord;
+    const made = screenRecord(minted, instance, { ...layout.screens[at]!, route: state.route, w, h, parentId: groupId }) as TLRecord & { props: Record<string, unknown> };
+    const screen = { ...made, index, props: { ...made.props, steps: [...state.steps], mocks: [...state.mocks], state: state.state } } as TLRecord;
     minted.push(screen);
     return screen;
   });
@@ -107,7 +116,7 @@ export const explodeRecords = (records: ReadonlyArray<TLRecord>, source: ScreenS
         parentId: groupId,
         isLocked: false,
         opacity: 1,
-        props: arrowProps(to.x - start.x, to.y + h / 2 - start.y),
+        props: arrowProps(to.x - start.x, to.y + h / 2 - start.y, arrowLabel(states[at + 1]!)),
         meta: {},
       } as unknown as TLRecord,
       binding(arrowId, screens[at]!.id as string, "start"),
@@ -115,26 +124,4 @@ export const explodeRecords = (records: ReadonlyArray<TLRecord>, source: ScreenS
     );
   }
   return { put: [group, ...screens, ...links], group: groupId, screens: screens.map((screen) => screen.id as string) };
-};
-
-export class ExplodeRefused extends Error {}
-
-export interface ExplodeDeps {
-  readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;
-  readonly apply: (project: string, change: CanvasChange, origin: ChangeOrigin) => Promise<unknown>;
-  readonly status: (project: string, id: string) => Promise<Instance>;
-}
-
-export const explodeScreen = async (deps: ExplodeDeps, project: string, shapeId: string, typed: string | ReadonlyArray<string>, origin: ChangeOrigin): Promise<{ readonly group: string; readonly screens: ReadonlyArray<string> }> => {
-  const records = await deps.read(project);
-  const source = records.find((record) => record.id === roomShapeId(shapeId));
-  if (!isScreenShape(source)) throw new ExplodeRefused(`there is no Screen ${agentShapeId(shapeId)}`);
-  const asked = flowRoutes(typed);
-  if ("error" in asked) throw new ExplodeRefused(asked.error);
-  const instance = await deps.status(project, source.props.instance);
-  if (instance.state === "removed") throw new ExplodeRefused(INSTANCE_REMOVED);
-  const exploded = explodeRecords(records, source, instance, asked.routes);
-  if ("error" in exploded) throw new ExplodeRefused(exploded.error);
-  await deps.apply(project, { put: [...exploded.put], remove: [] }, origin);
-  return { group: exploded.group, screens: exploded.screens };
 };

@@ -13,6 +13,7 @@ const instance = (state: Instance["state"], extra: Partial<Instance> = {}): Inst
   upstreamPort: null,
   error: null,
   log: "",
+  changes: 0,
   ...extra,
 });
 
@@ -50,8 +51,8 @@ describe("Screens", () => {
       message: "The setup command failed with code 1.",
       log: "a\nb\nc",
     });
-    expect(screenOverlay({ instance: instance("removed"), loaded: true, repository: "ready" })).toEqual({ kind: "removed", label: "Instance removed" });
-    expect(screenOverlay({ instance: undefined, loaded: true, repository: "ready" })).toEqual({ kind: "removed", label: "Instance removed" });
+    expect(screenOverlay({ instance: instance("removed"), loaded: true, repository: "ready" })).toEqual({ kind: "removed", label: "Worktree removed" });
+    expect(screenOverlay({ instance: undefined, loaded: true, repository: "ready" })).toEqual({ kind: "removed", label: "Worktree removed" });
     expect(screenOverlay({ instance: undefined, loaded: false, repository: undefined })).toEqual({ kind: "none" });
     expect(screenOverlay({ instance: instance("live"), loaded: true, repository: "missing" })).toEqual({ kind: "missing", label: "Repository not found" });
     expect(screenOverlay({ instance: instance("live"), loaded: true, repository: "ready" })).toEqual({ kind: "none" });

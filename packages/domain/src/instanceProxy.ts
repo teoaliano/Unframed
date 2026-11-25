@@ -1,5 +1,3 @@
-import { dialsBridgeSource } from "./artifacts/dials.ts";
-
 export const BRIDGE_PATH = "/__unframed/bridge.js";
 
 export type ProxyHeaderValue = string | ReadonlyArray<string> | undefined;
@@ -62,8 +60,10 @@ export const proxiedResponseHeaders = (
 
 const attribute = (value: string): string => value.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 
-export const bridgeTag = (nonce: string | undefined): string =>
-  nonce === undefined ? `<script src="${BRIDGE_PATH}"></script>` : `<script src="${BRIDGE_PATH}" nonce="${attribute(nonce)}"></script>`;
+export const bridgeTag = (nonce: string | undefined, state?: string): string => {
+  const src = state === undefined ? BRIDGE_PATH : `${BRIDGE_PATH}?state=${encodeURIComponent(state)}`;
+  return nonce === undefined ? `<script src="${src}"></script>` : `<script src="${src}" nonce="${attribute(nonce)}"></script>`;
+};
 
 const HEAD_OPEN = /<head(?:\s[^>]*)?>/i;
 const BODY_OPEN = /<body[\s>]/i;
@@ -108,40 +108,3 @@ export const htmlInjector = (tag: string): HtmlInjector => {
   };
   return { push, end, injected: () => injected };
 };
-
-interface ScreenWindow {
-  parent: { postMessage(message: unknown, targetOrigin: string): void };
-  location: { readonly href: string; readonly ancestorOrigins?: { readonly length: number; readonly [index: number]: string } };
-  document: { readonly readyState: string; readonly referrer: string };
-  addEventListener(type: "DOMContentLoaded", listener: () => void): void;
-  requestAnimationFrame(callback: () => void): void;
-}
-
-function reportScreen(win: ScreenWindow): void {
-  const LOOPBACK = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
-  if ((win.parent as unknown) === win) return;
-  const ancestors = win.location.ancestorOrigins;
-  let parent = ancestors !== undefined && ancestors.length > 0 ? ancestors[0] : undefined;
-  if (parent === undefined && win.document.referrer !== "") {
-    try {
-      parent = new URL(win.document.referrer).origin;
-    } catch {
-      parent = undefined;
-    }
-  }
-  if (parent === undefined || !LOOPBACK.test(parent)) return;
-  const to = parent;
-  const tell = (type: string) => {
-    try {
-      win.parent.postMessage({ type, href: win.location.href }, to);
-    } catch {
-      return;
-    }
-  };
-  tell("unframed:screen:ready");
-  const painted = () => win.requestAnimationFrame(() => win.requestAnimationFrame(() => tell("unframed:screen:paint")));
-  if (win.document.readyState === "loading") win.addEventListener("DOMContentLoaded", painted);
-  else painted();
-}
-
-export const screenBridgeSource = (): string => [...dialsBridgeSource().split("\n").slice(1, -1), `(${reportScreen.toString()})(window);`, ""].join("\n");

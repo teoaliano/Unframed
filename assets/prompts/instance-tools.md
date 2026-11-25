@@ -15,7 +15,7 @@ Create a new Instance of this Repository: a new branch checked out in its own wo
 ## instance_remove
 
 ```text
-Remove an Instance: its worktree is deleted, and its branch too when deleteBranch is true. It is refused when the branch has commits that are not pushed or merged, unless force is true; never force unless the person asked for that. Screens of the Instance stay on the canvas as their last snapshot, marked "Instance removed".
+Remove an Instance: its worktree is deleted, and its branch too when deleteBranch is true. It is refused when the branch has commits that are not pushed or merged, unless force is true; never force unless the person asked for that. Screens of the Instance stay on the canvas as their last snapshot, marked "Worktree removed".
 ```
 
 - `id`: The Instance's id, as canvas_read reports it on its Screens.
@@ -49,7 +49,7 @@ Stop an Instance's dev server. Its Screens show their last snapshot until it run
 ## canvas_read
 
 ```text
-In a Repository, a screen shows one route of one Instance at one viewport: it reports its instance (the Instance's id), route, title, w and h (the viewport), and dials when the person has set Parameters on it.
+In a Repository, a screen shows one state of one Instance at one viewport: it reports its instance (the Instance's id), route, title, w and h (the viewport), dials when the person has set Parameters on it, and state, steps and mocks when it holds a state that screen_state saved.
 ```
 
 ## canvas_write

@@ -30,7 +30,7 @@ import { Projects } from "../projects.ts";
 import { Instances } from "../instances/layer.ts";
 import { RpcSockets } from "./sockets.ts";
 import { screenRecord } from "../screens/firstScreen.ts";
-import { explodeScreen, ExplodeRefused } from "../screens/flows.ts";
+import { screenStatePayload } from "../screens/screenState.ts";
 import { Repositories } from "../repositories/layer.ts";
 import { InstanceGit } from "../instances/instanceGit.ts";
 import { filePath, revealFiles } from "../reveal.ts";
@@ -163,20 +163,11 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
             return { ...added, repository: (yield* repositories.read(added.name)) ?? added.repository };
           }),
         ),
-      "screens.explode": ({ project, shapeId, routes }) =>
-        featureOn("repositories", () =>
-          Effect.tryPromise({
-            try: () =>
-              explodeScreen(
-                { read: (name) => Effect.runPromise(rooms.read(name)), apply: (name, change, origin) => Effect.runPromise(rooms.apply(name, change, origin)), status: (name, id) => Effect.runPromise(instances.status(name, id)) },
-                project,
-                shapeId,
-                routes,
-                { kind: "server", id: "screens.explode" },
-              ),
-            catch: (error) => (error instanceof ExplodeRefused ? unframedError("bad_request", error.message) : asUnframed(error)),
-          }),
-        ),
+      "screens.stateToken": ({ project, instance, steps, mocks }) =>
+        featureOn("repositories", () => {
+          const state = screenStatePayload({ steps, mocks });
+          return state === undefined ? Effect.succeed({ token: null as string | null }) : Effect.map(instances.stateToken(project, instance, state), (token): { token: string | null } => ({ token }));
+        }),
       "repositories.setup": ({ project }) => featureOn("repositories", () => Effect.map(agents.openSetup(project), (chatId) => ({ chatId }))),
       "repositories.confirmLogin": ({ project }) => featureOn("repositories", () => Effect.map(agents.confirmLogin(project), (waiting) => ({ waiting }))),
       "repositories.setupVerdict": ({ project, accepted, note }) => featureOn("repositories", () => Effect.map(agents.setupVerdict(project, accepted, note), (repository) => ({ repository }))),

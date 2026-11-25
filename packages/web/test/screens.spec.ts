@@ -1,38 +1,13 @@
 import { rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
-import type { Page } from "@playwright/test";
 import { git, makeRepo, repoEngineEnv } from "../../engine/test/gitRepos.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { openCanvas } from "./canvas.ts";
+import { firstScreenId, putShapes, saveSetup, screenShapes, withRepository } from "./screenHarness.ts";
 import { clickShape } from "./generation.ts";
 import { expect, startHostedEngine, test } from "./fixtures.ts";
 import { engineChat, engineChats, FIXTURES, openRail, scriptFolder, tabs } from "./agent.ts";
-import { applyScreenParametersInstruction, flowInstruction, NO_BRIDGE, setupRejection, slugName } from "@unframed/domain";
-
-const withRepository = async (page: Page, env: Record<string, string>, use: (engine: TestEngine, project: string, root: string) => Promise<void>, prepare?: (root: string) => Promise<void>) => {
-  const root = await makeRepo("My App");
-  await prepare?.(root);
-  const engine = await startHostedEngine({ env: await repoEngineEnv({ UNFRAMED_TEST_PICK_FOLDER: root, ...env }) });
-  try {
-    await openCanvas(page, engine, "default");
-    await page.getByRole("button", { name: "All projects" }).click();
-    await page.getByRole("menuitem", { name: "Add Repository…" }).click();
-    await expect(page.locator("[data-canvas-project='my-app'] .tl-canvas")).toBeVisible();
-    await use(engine, "my-app", root);
-  } finally {
-    await engine.dispose();
-  }
-};
-
-const screenShapes = async (engine: TestEngine, project: string) => {
-  const rpc = await engine.rpc();
-  try {
-    return ((await rpc.call("testCanvas.read", { project })).records as any[]).filter((record) => record.typeName === "shape" && record.type === "screen");
-  } finally {
-    await rpc.close();
-  }
-};
+import { applyScreenParametersInstruction, NO_BRIDGE, setupRejection } from "@unframed/domain";
 
 test("a new Repository's first Screen goes live through the proxy at /, keeps its snapshot until first paint, and drops to the snapshot off screen", async ({ page }) => {
   await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
@@ -63,18 +38,6 @@ test("a new Repository's first Screen goes live through the proxy at /, keeps it
     expect((await screenShapes(engine, project))[0].props).toMatchObject({ route: "/", w: 1280, h: 800 });
   });
 });
-
-const saveSetup = (engine: TestEngine, project: string, setup: Record<string, unknown>) => {
-  const db = new DatabaseSync(join(engine.dataDir, "output", project, "unframed.sqlite"));
-  try {
-    const full = { setupCommand: "", runCommand: "npm run dev", packageManager: "npm", portMode: { mode: "free" }, files: [], mocks: [], warnings: [], ...setup };
-    db.prepare("UPDATE repository SET setup = ? WHERE id = 1").run(JSON.stringify(full));
-  } finally {
-    db.close();
-  }
-};
-
-const firstScreenId = async (engine: TestEngine, project: string) => (await screenShapes(engine, project))[0].id as string;
 
 test("a Screen shows Setup's progress while its Instance installs, then the app", async ({ page }) => {
   const slowInstall = async (root: string) => {
@@ -108,18 +71,12 @@ test("a Screen tags mocks and lists warnings from Setup, and says when its Insta
     const screen = page.locator("[data-testid=screen]");
     saveSetup(engine, project, { mocks: ["mock user", "fixtures"], warnings: ["Payments are stubbed."] });
     await page.reload();
-    const badges = screen.getByTestId("screen-setup-badges");
-    await expect(badges.getByTestId("screen-mock-tag")).toHaveText("mock user · fixtures");
-    await expect(badges.getByTestId("screen-warnings-badge")).toHaveText("1");
-    await expect(badges.getByTestId("screen-warnings-badge")).toHaveAttribute("aria-label", "1 Setup warning");
-    const frame = (await screen.boundingBox())!;
-    const chips = (await badges.boundingBox())!;
-    expect(chips.y).toBeGreaterThan(frame.y + frame.height / 2);
-    await badges.getByTestId("screen-warnings-badge").hover();
-    await expect(page.getByTestId("screen-warning")).toHaveText(["Payments are stubbed."]);
-
+    await expect(page.locator("[data-label-kind=screen] [data-label-text]")).toContainText("⚠ 1");
+    await expect(screen.getByTestId("screen-warnings-badge")).toHaveCount(0);
     await clickShape(page, (await screenShapes(engine, project))[0].id);
-    await page.getByTestId("screen-setup-notes").click();
+    const notes = page.getByTestId("screen-setup-notes");
+    await expect(notes).toHaveAttribute("aria-label", "1 Setup warning");
+    await notes.click();
     await expect(page.getByTestId("setup-note-warning")).toHaveText(["Payments are stubbed."]);
     await expect(page.getByTestId("setup-note-mocks")).toHaveText("Mocked: mock user · fixtures");
     await page.keyboard.press("Escape");
@@ -128,7 +85,7 @@ test("a Screen tags mocks and lists warnings from Setup, and says when its Insta
     const shape = (await screenShapes(engine, project))[0];
     await rpc.call("instances.remove", { project, id: shape.props.instance, force: true });
     await rpc.close();
-    await expect(screen.locator("[data-testid=screen-overlay]")).toHaveText("Instance removed");
+    await expect(screen.locator("[data-testid=screen-overlay]")).toHaveText("Worktree removed");
     await expect(screen.locator("iframe")).toHaveCount(0);
 
     await rename(root, `${root}-moved`);
@@ -164,7 +121,7 @@ test("a Repository whose folder moved says so on its Screens, and Locate Reposit
   }
 });
 
-test("a selected Screen opens in the browser, changes route and changes viewport", async ({ page }) => {
+test("a selected Screen opens in the browser and changes viewport", async ({ page }) => {
   await withRepository(page, {}, async (engine, project) => {
     const screen = page.locator("[data-testid=screen]");
     await expect(screen).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
@@ -174,22 +131,13 @@ test("a selected Screen opens in the browser, changes route and changes viewport
     await page.getByRole("button", { name: "Open in browser" }).click();
     expect((await popup).url()).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/$/);
 
-    await page.getByTestId("screen-route").click();
-    await page.getByRole("textbox", { name: "Route" }).fill("https://example.com/");
-    await page.getByRole("button", { name: "Show route" }).click();
-    await expect(page.getByText("A route starts with / and has no spaces, like /settings?tab=2.")).toBeVisible();
-    await page.getByRole("textbox", { name: "Route" }).fill("settings?tab=2");
-    await page.getByRole("button", { name: "Show route" }).click();
-    await expect(screen).toHaveAttribute("data-route", "/settings?tab=2");
-    await expect(page.frameLocator("[data-testid=screen] iframe[data-screen-frame]").locator("#path")).toHaveText("/settings");
-
     await page.getByTestId("screen-viewport").click();
     await page.getByRole("menuitemradio", { name: /Phone/ }).click();
-    await expect.poll(async () => (await screenShapes(engine, project))[0].props).toMatchObject({ route: "/settings?tab=2", w: 390, h: 844 });
+    await expect.poll(async () => (await screenShapes(engine, project))[0].props).toMatchObject({ route: "/", w: 390, h: 844 });
   });
 });
 
-test("forking a Screen makes a new Instance on a named branch from its HEAD, with a Screen beside it; New Instance starts from a picked base", async ({ page }) => {
+test("New branch and worktree makes a named branch from the Screen's branch, with a Screen beside it; Open another branch starts from a picked base", async ({ page }) => {
   await withRepository(page, {}, async (engine, project, root) => {
     git(root, "branch", "feature/login");
     const screens = page.locator("[data-testid=screen]");
@@ -197,11 +145,12 @@ test("forking a Screen makes a new Instance on a named branch from its HEAD, wit
     const [first] = await screenShapes(engine, project);
     await clickShape(page, first.id);
 
-    await page.getByRole("button", { name: "Fork" }).click();
+    await page.getByTestId("screen-branch").click();
+    await page.getByRole("menuitem", { name: /New branch and worktree/ }).click();
     const name = page.getByRole("textbox", { name: "Branch name" });
     await expect(name).toHaveValue(`${first.props.title}-2`);
     await name.fill("try/darker");
-    await page.getByRole("button", { name: "Fork", exact: true }).last().click();
+    await page.getByRole("button", { name: "Create branch" }).click();
     await expect(screens).toHaveCount(2);
     await expect.poll(async () => (await screenShapes(engine, project)).length).toBe(2);
     const forked = (await screenShapes(engine, project)).find((shape) => shape.id !== first.id);
@@ -210,10 +159,11 @@ test("forking a Screen makes a new Instance on a named branch from its HEAD, wit
     const made = await rpc.call("instances.status", { project, id: forked.props.instance });
     expect(made).toMatchObject({ branch: "try/darker", baseRef: first.props.title });
 
-    await page.getByRole("button", { name: "New Instance" }).click();
+    await page.getByTestId("screen-branch").click();
+    await page.getByRole("menuitem", { name: /Open another branch/ }).click();
     await page.getByRole("combobox", { name: "Base branch" }).click();
     await page.getByRole("option", { name: "feature/login" }).click();
-    await page.getByRole("button", { name: "Create Instance" }).click();
+    await page.getByRole("button", { name: "Open branch" }).click();
     await expect.poll(async () => (await screenShapes(engine, project)).length).toBe(3);
     const instances = (await rpc.call("instances.list", { project })).instances;
     expect(instances.find((instance) => instance.baseRef === "feature/login")?.branch).toMatch(/^unframed\//);
@@ -221,7 +171,7 @@ test("forking a Screen makes a new Instance on a named branch from its HEAD, wit
   });
 });
 
-test("a selected Screen lists its Instance's changes and commits them", async ({ page }) => {
+test("a selected Screen's branch chip counts its changes, lists them and commits them", async ({ page }) => {
   const identity = { GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "Person", GIT_AUTHOR_EMAIL: "person@example.com", GIT_COMMITTER_NAME: "Person", GIT_COMMITTER_EMAIL: "person@example.com" };
   await withRepository(page, identity, async (engine, project) => {
     const [first] = await screenShapes(engine, project);
@@ -231,25 +181,18 @@ test("a selected Screen lists its Instance's changes and commits them", async ({
     await writeFile(join(instance.worktree, "src", "pages", "pricing.html"), "<h1>Pricing</h1>\n");
     await clickShape(page, first.id);
 
-    await page.getByRole("button", { name: "Changes" }).click();
+    await expect(page.getByTestId("screen-branch-changes")).toHaveText("1", { timeout: 15_000 });
+    await page.getByTestId("screen-branch").click();
+    await page.getByRole("menuitem", { name: "Changes (1)" }).click();
     await expect(page.getByTestId("changed-file")).toHaveText(["src/pages/pricing.html+1 −0"]);
     await page.getByRole("button", { name: "Commit", exact: true }).click();
     await expect(page.getByTestId("git-action-result")).toHaveText('Committed "Update src/pages/pricing.html".');
     await expect(page.getByTestId("changed-file")).toHaveText(["src/pages/pricing.html+1 −0"]);
     expect(git(instance.worktree, "log", "-1", "--format=%s")).toBe("Update src/pages/pricing.html\n");
     await page.getByRole("button", { name: "Commit", exact: true }).click();
-    await expect(page.getByText("There is nothing to commit in this Instance.")).toBeVisible();
+    await expect(page.getByText("There is nothing to commit on this branch.")).toBeVisible();
   });
 });
-
-const putShapes = async (engine: TestEngine, project: string, put: any[]) => {
-  const rpc = await engine.rpc();
-  try {
-    await rpc.call("testCanvas.apply", { project, change: { put, remove: [] }, origin: { kind: "server", id: "test" } });
-  } finally {
-    await rpc.close();
-  }
-};
 
 test("Screens of one Instance keep their own Parameters through the bridge, and Apply asks the agent to write them in that Instance's worktree", async ({ page }) => {
   await withRepository(page, { UNFRAMED_TEST_AGENT_SCRIPT: FIXTURES }, async (engine, project) => {
@@ -376,44 +319,4 @@ test("a Screen with no run command yet shows Setup waiting for an answer, then t
     },
     noRunScript,
   );
-});
-
-test("a selected Screen explodes into a Flow of typed routes, or asks the agent for its routes", async ({ page }) => {
-  await withRepository(page, { UNFRAMED_TEST_AGENT_SCRIPT: FIXTURES }, async (engine, project) => {
-    const [first] = await screenShapes(engine, project);
-    await clickShape(page, first.id);
-    await page.getByRole("button", { name: "Explode into a Flow" }).click();
-    const routes = page.getByRole("textbox", { name: "Routes, one per line" });
-    await expect(routes).toHaveValue("/");
-    await routes.fill("/\n/pricing\nnot a route");
-    await page.getByRole("button", { name: "Explode", exact: true }).click();
-    await expect(page.getByText("not a route is not a route in the app")).toBeVisible();
-    await routes.fill("/\n/pricing\n/about");
-    await page.getByRole("button", { name: "Explode", exact: true }).click();
-    await expect.poll(async () => (await screenShapes(engine, project)).length).toBe(4);
-    const rpc = await engine.rpc();
-    const records = (await rpc.call("testCanvas.read", { project })).records as any[];
-    await rpc.close();
-    const frame = records.find((record) => record.type === "frame");
-    expect(frame.props.name).toBe(slugName(first.props.title));
-    expect(records.filter((record) => record.parentId === frame.id && record.type === "screen").map((record) => record.props.route)).toEqual(["/", "/pricing", "/about"]);
-    expect(records.filter((record) => record.parentId === frame.id && record.type === "arrow")).toHaveLength(2);
-
-    await clickShape(page, first.id);
-    await page.getByRole("button", { name: "Explode into a Flow" }).click();
-    await page.getByRole("button", { name: "Ask the agent" }).click();
-    await expect.poll(async () => (await engineChats(engine, project)).filter((chat) => chat.title !== "Setup").length).toBe(1);
-    const [asked] = (await engineChats(engine, project)).filter((chat) => chat.title !== "Setup");
-    const instance = await (async () => {
-      const client = await engine.rpc();
-      try {
-        return await client.call("instances.status", { project, id: first.props.instance });
-      } finally {
-        await client.close();
-      }
-    })();
-    expect((await engineChat(engine, asked!.id, project)).messages.find((message) => message.role === "user")?.text).toBe(
-      flowInstruction({ shape: first.id.replace(/^shape:/, ""), route: "/", branch: instance.branch, worktree: instance.worktree }),
-    );
-  });
 });

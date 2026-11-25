@@ -142,6 +142,30 @@ const componentTag = T.string.check((tag) => {
   }
 });
 
+export interface ScreenTarget {
+  readonly role?: string;
+  readonly name?: string;
+  readonly text?: string;
+  readonly selector?: string;
+}
+
+export const SCREEN_STEP_ACTIONS = ["click", "type", "press", "hover", "wait", "scroll"] as const;
+
+export type ScreenStep =
+  | { readonly action: "click" | "hover" | "wait" | "scroll"; readonly target: ScreenTarget }
+  | { readonly action: "type"; readonly target: ScreenTarget; readonly text: string }
+  | { readonly action: "press"; readonly key: string; readonly target?: ScreenTarget };
+
+export interface ScreenMock {
+  readonly method?: string;
+  readonly url: string;
+  readonly status?: number;
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly body?: string;
+  readonly delay?: number;
+  readonly fail?: boolean;
+}
+
 export interface ScreenShapeProps {
   w: number;
   h: number;
@@ -150,6 +174,9 @@ export interface ScreenShapeProps {
   title: string;
   dials?: Record<string, unknown>;
   mode?: string;
+  steps?: ScreenStep[];
+  mocks?: ScreenMock[];
+  state?: string;
 }
 
 export const SCREEN_ROUTE_MAX = 2048;
@@ -168,6 +195,9 @@ const screenProps = {
   title: T.string,
   dials: T.dict(T.string, T.jsonValue).optional(),
   mode: T.string.optional(),
+  steps: T.arrayOf(T.jsonValue).optional() as T.Validatable<ScreenStep[] | undefined>,
+  mocks: T.arrayOf(T.jsonValue).optional() as T.Validatable<ScreenMock[] | undefined>,
+  state: T.string.optional(),
 };
 
 export interface AudioShapeProps {

@@ -20,6 +20,8 @@ export const SCREEN_GAP = 80;
 
 export const NO_BRIDGE = "Parameters need Unframed's script in the page, and this page did not load it (a strict CSP, or a response that is not HTML).";
 
+export const NO_STATE_BRIDGE = "This page did not load Unframed's script, so it cannot show its state or follow navigation.";
+
 export const screenUrl = (proxyPort: number, route: string): string => `http://127.0.0.1:${proxyPort}${route}`;
 
 const LOOPBACK_URL = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(?=[/?#]|$)/i;
@@ -71,7 +73,7 @@ export const screenOverlay = (input: {
   if (input.repository === "missing") return { kind: "missing", label: "Repository not found" };
   if (!input.loaded) return { kind: "none" };
   const { instance } = input;
-  if (instance === undefined || instance.state === "removed") return { kind: "removed", label: "Instance removed" };
+  if (instance === undefined || instance.state === "removed") return { kind: "removed", label: "Worktree removed" };
   if (awaitingSetup(instance, input.repository, input.setupChat)) {
     if (input.setupChat === "running") return { kind: "progress", label: SETUP_FINDING, detail: SETUP_FOLLOW };
     if (input.setupChat === "asking") return { kind: "waiting", label: SETUP_ASKING, detail: SETUP_ASKING_DETAIL };

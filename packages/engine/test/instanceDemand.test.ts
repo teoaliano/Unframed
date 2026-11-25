@@ -102,7 +102,7 @@ describe("driving Instances from canvas demand", () => {
     await rpc.call("instances.demand", { project, client: "window-1", ids: [a, b] });
     await becomes(rpc, project, b, "live");
     const evicted = await becomes(rpc, project, a, "stopped");
-    expect(evicted.log).toContain("Unframed stopped this Instance to stay within the memory budget.");
+    expect(evicted.log).toContain("Unframed stopped this branch's dev server to stay within the memory budget.");
     await pause(800);
     expect((await stateOf(rpc, project, a)).state).toBe("stopped");
     expect((await stateOf(rpc, project, b)).state).toBe("live");
@@ -130,7 +130,7 @@ describe("driving Instances from canvas demand", () => {
     }
     expect((await stateOf(rpc, project, a)).state).toBe("live");
     const stopped = await becomes(rpc, project, a, "stopped");
-    expect(stopped.log).toContain("Unframed stopped this Instance after it sat unused with no file changes.");
+    expect(stopped.log).toContain("Unframed stopped this branch's dev server after it sat unused with no file changes.");
   });
 
   it("drops a window's demand when its connection closes, so its Instances go idle", async () => {
@@ -143,7 +143,7 @@ describe("driving Instances from canvas demand", () => {
 
     await window.close();
     const stopped = await becomes(rpc, project, a, "stopped");
-    expect(stopped.log).toContain("Unframed stopped this Instance after it sat unused with no file changes.");
+    expect(stopped.log).toContain("Unframed stopped this branch's dev server after it sat unused with no file changes.");
   });
 
   it("keeps one Instance live on the fixed port of a single-port Repository", async () => {
@@ -177,7 +177,7 @@ describe("driving Instances from canvas demand", () => {
       expect(await rpc.call("instances.start", { project, id: a })).toMatchObject({
         state: "failed",
         proxyPort: null,
-        error: `Something else is already listening on port ${fixed}, the fixed port this Repository runs on. Stop it, then start the Instance again.`,
+        error: `Something else is already listening on port ${fixed}, the fixed port this Repository runs on. Stop it, then start the dev server again.`,
       });
     } finally {
       await new Promise((resolve) => other.close(resolve));

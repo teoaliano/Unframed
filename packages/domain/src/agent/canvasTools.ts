@@ -285,6 +285,9 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
         entry.route = typeof props.route === "string" ? props.route : "/";
         entry.title = typeof props.title === "string" ? props.title : "";
         if (props.dials !== undefined && Object.keys(obj(props.dials)).length > 0) entry.dials = props.dials;
+        if (typeof props.state === "string" && props.state.trim() !== "") entry.state = props.state;
+        if (Array.isArray(props.steps) && props.steps.length > 0) entry.steps = props.steps;
+        if (Array.isArray(props.mocks) && props.mocks.length > 0) entry.mocks = props.mocks;
         break;
       }
       case "component": {
@@ -861,6 +864,11 @@ const update = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
     if ("route" in patch) {
       const route = typeof patch.route === "string" ? normaliseRoute(patch.route) : undefined;
       if (route === undefined) refuse(`update: ${SCREEN_ROUTE_REFUSAL}`);
+      if (route !== props.route) {
+        delete props.steps;
+        delete props.mocks;
+        delete props.state;
+      }
       return applyPatch(batch, shape, props, { ...patch, route });
     }
     return applyPatch(batch, shape, props, patch);

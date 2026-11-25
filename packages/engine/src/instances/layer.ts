@@ -63,11 +63,13 @@ import { readRepository, readRepositoryProject, writeRepository, type StoredRepo
 import { Config } from "../services.ts";
 import { Shutdown } from "../shutdown.ts";
 import { answers, freePort, spawnTracked, stopTracked, sweepLeftovers, type Tracked } from "./processes.ts";
+import { StateTokens, type ScreenStatePayload } from "./stateTokens.ts";
 import { startInstanceProxy, type InstanceProxy } from "./proxy.ts";
 import { insertInstance, markInstalled, markRemoved, readInstances, type StoredInstance } from "./tables.ts";
 
 const LOG_TAIL_CHARS = 16_000;
 const LOG_PUBLISH_MS = 500;
+const TOUCH_DEBOUNCE_MS = 300;
 const START_TIMEOUT_MS = 120_000;
 const PROBE_EVERY_MS = 150;
 const PORT_RELEASE_MS = 3_000;
@@ -101,6 +103,9 @@ export class Instances extends Context.Service<
     readonly saveSetup: (project: string, setup: RepositorySetup, from: string) => Effect.Effect<{ readonly copiedInto: ReadonlyArray<string> }, UnframedError>;
     readonly everyChange: Stream.Stream<Instance>;
     readonly changes: (project: string) => Stream.Stream<Instance, UnframedError>;
+    readonly touched: Stream.Stream<{ readonly project: string; readonly id: string }>;
+    readonly stateToken: (project: string, id: string, payload: ScreenStatePayload) => Effect.Effect<string, UnframedError>;
+    readonly noteChanges: (project: string, id: string, count: number) => void;
   }
 >()("unframed/engine/Instances") {}
 
@@ -116,6 +121,9 @@ interface Live {
   proxy: InstanceProxy | undefined;
   lastProxyPort: number | null;
   watcher: FSWatcher | undefined;
+  touchTimer: NodeJS.Timeout | undefined;
+  changes: number;
+  readonly tokens: StateTokens;
   demandOrder: number;
   lastDemandedAt: number;
   lastChangeAt: number;
@@ -147,6 +155,7 @@ export const instancesLayer = Layer.effect(
     const shutdown = yield* Shutdown;
     const git = makeGit(loginShell);
     const events = yield* PubSub.unbounded<Instance>();
+    const touches = yield* PubSub.unbounded<{ readonly project: string; readonly id: string }>();
     const pidDir = join(config.dataDir, "instance-pids");
     sweepLeftovers(pidDir);
 
@@ -165,6 +174,7 @@ export const instancesLayer = Layer.effect(
       upstreamPort: live.upstreamPort,
       error: live.error,
       log: live.log,
+      changes: live.changes,
     });
 
     const publish = (live: Live) => {
@@ -206,6 +216,9 @@ export const instancesLayer = Layer.effect(
       proxy: undefined,
       lastProxyPort: null,
       watcher: undefined,
+      touchTimer: undefined,
+      changes: 0,
+      tokens: new StateTokens(),
       demandOrder: 0,
       lastDemandedAt: 0,
       lastChangeAt: 0,
@@ -321,10 +334,30 @@ export const instancesLayer = Layer.effect(
       return false;
     };
 
+    const touch = (live: Live) => {
+      clearTimeout(live.touchTimer);
+      live.touchTimer = setTimeout(() => {
+        live.touchTimer = undefined;
+        Effect.runSync(PubSub.publish(touches, { project: live.project, id: live.stored.id }));
+      }, TOUCH_DEBOUNCE_MS);
+      live.touchTimer.unref();
+    };
+
+    const noteChanges = (project: string, id: string, count: number) => {
+      const live = lives.get(keyOf(project, id));
+      if (live === undefined || isRemoved(live) || live.changes === count) return;
+      live.changes = count;
+      publish(live);
+    };
+
     const watchWorktree = (live: Live): FSWatcher | undefined => {
+      touch(live);
       try {
         const watcher = watch(live.stored.worktree, { recursive: true }, (_event, file) => {
-          if (file === null || countsAsChange(String(file))) live.lastChangeAt = Date.now();
+          if (file === null || countsAsChange(String(file))) {
+            live.lastChangeAt = Date.now();
+            touch(live);
+          }
         });
         watcher.on("error", () => watcher.close());
         watcher.unref();
@@ -374,7 +407,7 @@ export const instancesLayer = Layer.effect(
           }
           const proxied = yield* Effect.result(
             Effect.tryPromise({
-              try: () => startInstanceProxy({ upstreamPort: upstream, preferredPort: live.lastProxyPort }),
+              try: () => startInstanceProxy({ upstreamPort: upstream, preferredPort: live.lastProxyPort, states: live.tokens }),
               catch: (error) => proxyFailed(errorText(error)),
             }),
           );
@@ -807,6 +840,10 @@ export const instancesLayer = Layer.effect(
 
     const everyChange = Stream.unwrap(Effect.map(PubSub.subscribe(events), (subscription) => Stream.fromSubscription(subscription)));
 
-    return Instances.of({ create, remove, list, status, start, stop, demand, release, branches, saveSetup, everyChange, changes });
+    const touched = Stream.unwrap(Effect.map(PubSub.subscribe(touches), (subscription) => Stream.fromSubscription(subscription)));
+
+    const stateToken = (project: string, id: string, payload: ScreenStatePayload) => Effect.map(find(project, id), ({ live }) => live.tokens.issue(payload));
+
+    return Instances.of({ create, remove, list, status, start, stop, demand, release, branches, saveSetup, everyChange, changes, touched, noteChanges, stateToken });
   }),
 );

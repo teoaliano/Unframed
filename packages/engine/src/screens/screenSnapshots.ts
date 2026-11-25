@@ -1,12 +1,14 @@
 import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Instance, ScreenSnapshot } from "@unframed/contracts";
-import { screenSnapshotName, screenUrl } from "@unframed/domain";
+import { screenSnapshotName, screenUrl, STEP_TIMEOUT_MS, stateRoute } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import type { HeadlessChrome } from "../artifacts/headlessChrome.ts";
 import { stubSnapshotPng } from "../artifacts/snapshots.ts";
 import { errorText, logError } from "../log.ts";
+import type { ScreenStatePayload } from "../instances/stateTokens.ts";
 import { isScreenShape, type ScreenShape } from "./firstScreen.ts";
+import { screenStatePayload } from "./screenState.ts";
 
 export const SCREEN_SNAPSHOT_FOLDER = join(".cache", "screens");
 
@@ -19,6 +21,7 @@ export interface ScreenJob {
   readonly w: number;
   readonly h: number;
   readonly dials: Readonly<Record<string, unknown>> | undefined;
+  readonly steps?: number | undefined;
 }
 
 export type ScreenRenderer = (job: ScreenJob) => Promise<Buffer | undefined>;
@@ -38,6 +41,11 @@ export const chromeScreenRenderer =
       try {
         await page.setViewport({ width: Math.max(1, Math.round(job.w)), height: Math.max(1, Math.round(job.h)), deviceScaleFactor: 2 });
         await page.goto(job.url, { waitUntil: "load", timeout: LOAD_TIMEOUT_MS });
+        if (job.steps !== undefined) {
+          await page
+            .waitForFunction("window.__unframedStateResult !== undefined || window.__unframedScreenBridge !== true", { timeout: job.steps * (STEP_TIMEOUT_MS + 1000) + LOAD_TIMEOUT_MS })
+            .catch(() => undefined);
+        }
         if (job.dials !== undefined && Object.keys(job.dials).length > 0) {
           await page.evaluate(`window.postMessage({ type: "unframed:dials:set", values: ${JSON.stringify(job.dials)} }, window.location.origin)`);
         }
@@ -54,15 +62,20 @@ interface Signature {
   readonly w: number;
   readonly h: number;
   readonly dials: Readonly<Record<string, unknown>> | null;
+  readonly state?: ScreenStatePayload;
 }
 
-const signatureOf = (shape: ScreenShape): Signature => ({
-  instance: shape.props.instance,
-  route: shape.props.route,
-  w: Math.round(shape.props.w),
-  h: Math.round(shape.props.h),
-  dials: shape.props.dials ?? null,
-});
+const signatureOf = (shape: ScreenShape): Signature => {
+  const state = screenStatePayload(shape.props);
+  return {
+    instance: shape.props.instance,
+    route: shape.props.route,
+    w: Math.round(shape.props.w),
+    h: Math.round(shape.props.h),
+    dials: shape.props.dials ?? null,
+    ...(state === undefined ? {} : { state }),
+  };
+};
 
 interface ScreenSnapshotDeps {
   readonly renderer: ScreenRenderer | undefined;
@@ -70,6 +83,7 @@ interface ScreenSnapshotDeps {
   readonly read: (project: string) => Promise<ReadonlyArray<TLRecord>>;
   readonly instance: (project: string, id: string) => Promise<Instance | undefined>;
   readonly publish: (project: string, snapshot: ScreenSnapshot) => void;
+  readonly stateToken: (project: string, id: string, payload: ScreenStatePayload) => Promise<string>;
 }
 
 interface ProjectScreens {
@@ -169,7 +183,14 @@ export class ScreenSnapshots {
     const stored = await readFile(join(dir, `${bare}.json`), "utf8").catch(() => undefined);
     if (stored === text && state.rendered.get(shapeId) === session) return;
     state.rendered.set(shapeId, session);
-    const picture = await renderer({ url: screenUrl(instance.proxyPort, signature.route), w: signature.w, h: signature.h, dials: shape.props.dials });
+    const token = signature.state === undefined ? undefined : await this.deps.stateToken(project, instance.id, signature.state);
+    const picture = await renderer({
+      url: screenUrl(instance.proxyPort, token === undefined ? signature.route : stateRoute(signature.route, token)),
+      w: signature.w,
+      h: signature.h,
+      dials: shape.props.dials,
+      steps: signature.state?.steps.length,
+    });
     if (picture === undefined || this.projects.get(project) !== state) return;
     await mkdir(dir, { recursive: true });
     const temp = join(dir, `.${name}.${process.pid}.tmp`);

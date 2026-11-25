@@ -103,9 +103,11 @@ describe("the agent in a Repository", () => {
     expect(existsSync(forked!.result.instance.worktree)).toBe(false);
   });
 
-  it("reads Screens with their ref, creates one and changes its route with canvas_write", { timeout: 60_000 }, async () => {
+  it("reads Screens with their ref, creates one and changes its route with canvas_write, which drops a state the route no longer reaches", { timeout: 60_000 }, async () => {
     const agent = await startRepositoryAgent();
     expect(agent.screen.meta.ref).toMatch(/^\d+$/);
+    const held = { state: "the menu open", steps: [{ action: "click", target: { role: "button", name: "Menu" } }], mocks: [{ url: "/api/items", fail: true }] };
+    await agent.rpc.call("testCanvas.apply", { project: agent.project, change: { put: [{ ...agent.screen, props: { ...agent.screen.props, ...held } }], remove: [] }, origin: { kind: "server", id: "test" } });
     await agent.script("screens", {
       when: "^screens",
       turns: [
@@ -124,13 +126,15 @@ describe("the agent in a Repository", () => {
     await agent.send(chatId, "screens please");
     const [read, created, moved, refused] = results(await agent.settled(chatId, 1));
     expect(read!.result.shapes).toEqual([
-      expect.objectContaining({ id: agent.screen.id.replace(/^shape:/, ""), kind: "screen", ref: agent.screen.meta.ref, instance: agent.instance.id, route: "/", w: 1280, h: 800, title: agent.instance.branch }),
+      expect.objectContaining({ id: agent.screen.id.replace(/^shape:/, ""), kind: "screen", ref: agent.screen.meta.ref, instance: agent.instance.id, route: "/", w: 1280, h: 800, title: agent.instance.branch, ...held }),
     ]);
     expect(created).toMatchObject({ status: "completed", result: { ok: true } });
     expect(moved).toMatchObject({ status: "completed" });
     expect(refused).toMatchObject({ status: "failed", result: { error: expect.stringMatching(/props.route is a path/) } });
     const screens = (await agent.records()).filter((record) => record.type === "screen");
-    expect(screens.find((record) => record.id === agent.screen.id).props.route).toBe("/about");
+    const movedProps = screens.find((record) => record.id === agent.screen.id).props;
+    expect(movedProps.route).toBe("/about");
+    expect([movedProps.steps, movedProps.mocks, movedProps.state]).toEqual([undefined, undefined, undefined]);
     expect(screens.find((record) => record.id !== agent.screen.id)).toMatchObject({ props: { instance: agent.instance.id, route: "/settings", w: 390, h: 844 }, meta: { ref: expect.any(String) } });
   });
 
@@ -198,6 +202,8 @@ describe("the system prompt in a Repository", () => {
     const prompt = (await agent.session(chatId)).systemPrompt!;
     expect(prompt.startsWith(agentSystemPrompt(ALL_FEATURES))).toBe(true);
     expect(prompt).toContain(repositorySection({ root: agent.root, worktrees: dirname(agent.instance.worktree), setupFiles: [] }));
+    expect(prompt).toContain("call screen_state once per state");
+    expect(prompt).toContain("with mocks rather than by changing code");
 
     await agent.rpc.call("projects.create", { name: "board" });
     const boardChat = await agent.createChat("board");

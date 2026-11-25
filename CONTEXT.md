@@ -16,7 +16,7 @@ A project whose material is a git repository the person already has, shown on th
 _Avoid_: Repo project, code project, app project
 
 **Instance**:
-One branch of a Repository, checked out in its own worktree and running its frontend. Several versions of the app are several Instances.
+One branch of a Repository, checked out in its own worktree and running its frontend. Several versions of the app are several Instances. The word belongs to code, specs and the agent's prompts; the interface says branch and worktree.
 _Avoid_: Version, variant, preview
 
 **Setup**:
@@ -24,9 +24,17 @@ The agent thread that makes a Repository run on the canvas: it works out what th
 _Avoid_: Onboarding, configuration, install
 
 **Screen**:
-One tile on a Repository's canvas: one route of one Instance at one viewport size. An Instance can show many Screens.
+One tile on a Repository's canvas: one state of one Instance at one viewport size, where a state is a route, plus the Steps that reach it and the Mocks that make it happen. A Screen with no Steps and no Mocks is a plain route. An Instance can show many Screens.
 _Avoid_: Page, frame, tile
 
+**Steps**:
+The actions replayed in a Screen after its route loads: click, type, press a key, hover, wait for or scroll to a target.
+_Avoid_: Script, recording, macro
+
+**Mocks**:
+The responses a Screen's page receives in place of real ones: a status, headers, a body and a delay, or a failed request. They apply to that Screen alone and never change the repository.
+_Avoid_: Fixture, stub
+
 **Flow**:
-A group of Screens from the same Instance, laid out in order and joined by arrows, labelled with the Instance's branch.
+A group of Screens from the same Instance, laid out in order and joined by arrows labelled with the action that leads from one Screen to the next, and labelled with the Instance's branch.
 _Avoid_: Journey, sequence

@@ -71,7 +71,7 @@ describe("an Instance's diff", () => {
     expect(diff).toMatchObject({ files: [], patch: "", truncated: false });
 
     await rpc.call("instances.remove", { project, id: instance.id });
-    await expect(rpc.call("instances.diff", { project, id: instance.id })).rejects.toMatchObject({ message: "That Instance was removed." });
+    await expect(rpc.call("instances.diff", { project, id: instance.id })).rejects.toMatchObject({ message: "That branch's worktree was removed." });
   });
 });
 
@@ -166,7 +166,7 @@ describe("an Instance's git actions", () => {
   it("commits alone, refuses when there is nothing to commit, and refuses a push with no remote or a pull request off GitHub before committing", { timeout: 90_000 }, async () => {
     const { root, rpc, project, instance } = await addRepository({ ...GIT_IDENTITY, UNFRAMED_TEST_AGENT_SCRIPT: await writerScripts() });
     const action = (name: "commit" | "commit_push" | "commit_push_pr") => rpc.call("instances.gitAction", { project, id: instance.id, action: name });
-    await expect(action("commit")).rejects.toMatchObject({ message: "There is nothing to commit in this Instance." });
+    await expect(action("commit")).rejects.toMatchObject({ message: "There is nothing to commit on this branch." });
 
     await writeFile(join(instance.worktree, "src", "pages", "pricing.html"), "<h1>Pricing</h1>\n");
     await expect(action("commit_push")).rejects.toMatchObject({ message: "This repository has no remote to push to." });
@@ -177,5 +177,31 @@ describe("an Instance's git actions", () => {
     const committed = await action("commit");
     expect(committed).toMatchObject({ action: "commit", commit: { subject: "Add the pricing page" }, push: null, pr: null });
     expect(git(instance.worktree, "status", "--porcelain")).toBe("");
+  });
+});
+
+describe("an Instance's changes count", () => {
+  it("follows edits in its worktree, counting files as the diff does and leaving Setup's files out, and reaches subscribers", { timeout: 60_000 }, async () => {
+    const { root, rpc, project, instance } = await addRepository();
+    expect(instance.changes).toBe(0);
+    expect(await rpc.call("instances.start", { project, id: instance.id })).toMatchObject({ state: "live", changes: 0 });
+    await appendFile(join(root, ".git", "info", "exclude"), "/.unframed/mock-user.js\n");
+    const until = async (count: number) => {
+      const started = Date.now();
+      for (;;) {
+        const now = await rpc.call("instances.status", { project, id: instance.id });
+        if (now.changes === count) return now;
+        if (Date.now() - started > 15_000) throw new Error(`changes stayed ${now.changes}, wanted ${count}`);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    };
+    const states = rpc.subscribe("instances.subscribe", { project });
+    await changeWorktree(instance.worktree);
+    await until(3);
+    await expect.poll(() => states.values.filter((item) => item.id === instance.id).map((item) => item.changes)).toContain(3);
+    await writeFile(join(instance.worktree, "src", "pages", "pricing.html"), "");
+    git(instance.worktree, "clean", "-fdq", "src");
+    git(instance.worktree, "checkout", "-q", "--", "src/pages/index.html");
+    await until(1);
   });
 });
