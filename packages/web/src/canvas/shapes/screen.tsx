@@ -1,5 +1,6 @@
 import type { ScreenMock, ScreenShapeProps, ScreenStep } from "@unframed/contracts";
 import { screenLabel } from "@unframed/domain";
+import { useEffect, useState } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
 import { isInteractive } from "../../artifacts/state.ts";
 import { useCanvasProject } from "../../context.ts";
@@ -49,7 +50,15 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
   const setupWarnings = useRepositorySetup(project)?.warnings.length ?? 0;
   const label = screenLabel({ branch, route: props.route, state: props.state, warnings: setupWarnings });
   const onScreen = useValue("screen on screen", () => screenOnScreen(editor, shape.id), [editor, shape.id]);
-  const interactive = useValue("screen interactive", () => isInteractive(editor, shape.id), [editor, shape.id]);
+  const selected = useValue("screen interactive", () => isInteractive(editor, shape.id), [editor, shape.id]);
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    setSettled(false);
+    if (!selected) return;
+    const timer = setTimeout(() => setSettled(true), editor.options.doubleClickDurationMs);
+    return () => clearTimeout(timer);
+  }, [selected, editor]);
+  const interactive = selected && settled;
   const live = repositories && !isDeviceClient() && onScreen && proxyPort !== null;
   const read = () => {
     const current = editor.getShape(shape.id);
