@@ -4,7 +4,7 @@ import type { TLRecord } from "@tldraw/tlschema";
 import { refusal, type McpBinding, type McpTool, type ToolAnswer } from "../agent/mcp.ts";
 import type { Applied, CanvasChange, ChangeOrigin } from "../canvas/rooms.ts";
 import { errorText } from "../log.ts";
-import { isScreenShape, screenBeside } from "../screens/firstScreen.ts";
+import { isScreenShape, screenBeside, type ScreenShape } from "../screens/firstScreen.ts";
 import { flowRecords } from "../screens/flows.ts";
 import { proofFailure, proofUrl, type Proof, type StateProver } from "../screens/screenState.ts";
 import { NotLive, untilLive } from "./liveInstance.ts";
@@ -70,6 +70,16 @@ const idOf = (args: Record<string, unknown>): string => {
 
 const optionalString = (value: unknown): string | undefined => (typeof value === "string" && value.trim() !== "" ? value.trim() : undefined);
 
+const screenNamed = (records: ReadonlyArray<TLRecord>, args: Record<string, unknown>): ScreenShape => {
+  const shapeId = optionalString(args.shapeId);
+  if (shapeId === undefined) throw new Refused("name a Screen with shapeId");
+  const found = records.find((record) => record.id === roomShapeId(shapeId));
+  if (!isScreenShape(found)) throw new Refused(`there is no Screen ${shapeId}`);
+  return found;
+};
+
+const imagesOf = (proof: Proof) => (proof.png === undefined ? [] : [{ data: proof.png.toString("base64"), mimeType: "image/png" }]);
+
 export class InstanceTools {
   private readonly deps: InstanceToolDeps;
 
@@ -109,21 +119,16 @@ export class InstanceTools {
   }
 
   private async screenState(binding: McpBinding, args: Record<string, unknown>): Promise<ToolAnswer> {
-    const shapeId = optionalString(args.shapeId);
-    if (shapeId === undefined) throw new Refused("name a Screen with shapeId");
-    const records = await this.deps.read(binding.project);
-    const source = records.find((record) => record.id === roomShapeId(shapeId));
-    if (!isScreenShape(source)) throw new Refused(`there is no Screen ${shapeId}`);
+    const source = screenNamed(await this.deps.read(binding.project), args);
     const state = checkState(args, source.props.route);
     const instance = await this.live(binding.project, source.props.instance);
     const size = { w: Math.round(source.props.w), h: Math.round(source.props.h) };
     const proof = await this.proveState(binding.project, instance, state, size);
-    const images = proof.png === undefined ? [] : [{ data: proof.png.toString("base64"), mimeType: "image/png" }];
+    const images = imagesOf(proof);
     if (!proof.ok) return { value: { error: proofFailure(proof, state.steps), ...(proof.step === undefined ? {} : { step: proof.step + 1 }) }, isError: true, images };
     const saved = { route: state.route, steps: [...state.steps], mocks: [...state.mocks], state: state.state };
     const now = await this.deps.read(binding.project);
-    const current = now.find((record) => record.id === source.id);
-    if (!isScreenShape(current)) throw new Refused(`there is no Screen ${shapeId}`);
+    const current = screenNamed(now, args);
     const record = args.newScreen === true ? screenBeside(now, instance, current) : current;
     const put = { ...record, props: { ...(record as typeof current).props, ...saved } } as TLRecord;
     await this.deps.apply(binding.project, { put: [put], remove: [] }, { kind: "server", id: `chat:${binding.chatId}` });
@@ -131,10 +136,7 @@ export class InstanceTools {
   }
 
   private async flowCreate(binding: McpBinding, args: Record<string, unknown>): Promise<ToolAnswer> {
-    const shapeId = optionalString(args.shapeId);
-    if (shapeId === undefined) throw new Refused("name a Screen with shapeId");
-    const source = (await this.deps.read(binding.project)).find((record) => record.id === roomShapeId(shapeId));
-    if (!isScreenShape(source)) throw new Refused(`there is no Screen ${shapeId}`);
+    const source = screenNamed(await this.deps.read(binding.project), args);
     const asked = Array.isArray(args.states) ? args.states : [];
     if (asked.length === 0) throw new Refused(FLOW_NO_STATES);
     const states = asked.map((raw, at) => {
@@ -142,19 +144,15 @@ export class InstanceTools {
       return { ...checkState(entry, source.props.route, `State ${at + 1}: `), action: typeof entry.action === "string" ? entry.action : undefined };
     });
     const size = { w: Math.round(source.props.w), h: Math.round(source.props.h) };
-    if (states.length > flowCapacity(size.w, size.h)) throw new Refused(flowTooMany(flowCapacity(size.w, size.h)));
+    const most = flowCapacity(size.w, size.h);
+    if (states.length > most) throw new Refused(flowTooMany(most));
     const instance = await this.live(binding.project, source.props.instance);
     for (const [at, state] of states.entries()) {
       const proof = await this.proveState(binding.project, instance, state, size);
-      if (!proof.ok) {
-        const images = proof.png === undefined ? [] : [{ data: proof.png.toString("base64"), mimeType: "image/png" }];
-        return { value: { error: `State ${at + 1}, ${state.state}: ${proofFailure(proof, state.steps)}. Nothing was built.`, state: at + 1 }, isError: true, images };
-      }
+      if (!proof.ok) return { value: { error: `State ${at + 1}, ${state.state}: ${proofFailure(proof, state.steps)}. Nothing was built.`, state: at + 1 }, isError: true, images: imagesOf(proof) };
     }
     const records = await this.deps.read(binding.project);
-    const current = records.find((record) => record.id === source.id);
-    if (!isScreenShape(current)) throw new Refused(`there is no Screen ${shapeId}`);
-    const built = flowRecords(records, current, instance, states);
+    const built = flowRecords(records, screenNamed(records, args), instance, states);
     if ("error" in built) throw new Refused(built.error);
     await this.deps.apply(binding.project, { put: [...built.put], remove: [] }, { kind: "server", id: `chat:${binding.chatId}` });
     return { value: { group: agentShapeId(built.group), screens: built.screens.map(agentShapeId) } };
