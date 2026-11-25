@@ -1,6 +1,6 @@
 import type { ScreenShapeProps } from "@unframed/contracts";
 import { DEFAULT_RUNTIME_MODE, flowInstruction, flowRoutes, SCREEN_VIEWPORTS, screenUrl } from "@unframed/domain";
-import { ChevronDown, ExternalLink, MonitorSmartphone, Workflow } from "lucide-react";
+import { ChevronDown, CopyPlus, ExternalLink, MonitorSmartphone, Workflow } from "lucide-react";
 import { useState } from "react";
 import { useEditor, useValue, type Editor, type TLShape, type TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
@@ -12,7 +12,7 @@ import { createChat, sendMessage } from "../agent/send.ts";
 import { useChatClient } from "../agent/store.ts";
 import { Tip } from "../chrome/ui.tsx";
 import { useCanvasProject, useEngine } from "../context.ts";
-import { BranchChip } from "./BranchChip.tsx";
+import { BranchChip, placeScreenBeside } from "./BranchChip.tsx";
 import { usePendingWork } from "./pendingWork.ts";
 import { repositoryState } from "./store.ts";
 
@@ -44,6 +44,32 @@ const OpenInBrowser = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
     <Tip label="Open in browser">
       <Button variant="ghost" size="icon-sm" aria-label="Open in browser" disabled={url === undefined} onClick={() => url !== undefined && window.open(url, "_blank", "noopener,noreferrer")}>
         <ExternalLink aria-hidden />
+      </Button>
+    </Tip>
+  );
+};
+
+const KeepView = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
+  const editor = useEditor();
+  const project = useCanvasProject();
+  const instance = useValue(
+    "screen instance",
+    () => {
+      const props = screenPropsOf(editor, shapeId);
+      return props === undefined ? undefined : repositoryState(project).instances.get().get(props.instance);
+    },
+    [editor, shapeId, project],
+  );
+  return (
+    <Tip label="Keep this view">
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Keep this view"
+        disabled={instance === undefined || instance.state === "removed"}
+        onClick={() => instance !== undefined && placeScreenBeside(editor, shapeId, instance, "keep this view", "view")}
+      >
+        <CopyPlus aria-hidden />
       </Button>
     </Tip>
   );
@@ -168,6 +194,7 @@ export const ScreenActions = ({ shapeId }: { readonly shapeId: TLShapeId }) => (
     <BranchChip shapeId={shapeId} />
     <ViewportMenu shapeId={shapeId} />
     <OpenInBrowser shapeId={shapeId} />
+    <KeepView shapeId={shapeId} />
     <ExplodeForm shapeId={shapeId} />
   </>
 );

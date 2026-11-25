@@ -22,12 +22,13 @@ const screenProps = (editor: Editor, shapeId: TLShapeId): ScreenShapeProps | und
   return shape?.type === "screen" ? (shape.props as ScreenShapeProps) : undefined;
 };
 
-export const placeScreenBeside = (editor: Editor, shapeId: TLShapeId, instance: Instance, mark: string): TLShapeId | undefined => {
+export const placeScreenBeside = (editor: Editor, shapeId: TLShapeId, instance: Instance, mark: string, carry: "state" | "view" = "state"): TLShapeId | undefined => {
   const props = screenProps(editor, shapeId);
   const bounds = editor.getShapePageBounds(shapeId);
   if (props === undefined || bounds === undefined) return undefined;
   const id = createShapeId();
-  const { steps, mocks, state, dials } = props;
+  const { dials } = props;
+  const { steps, mocks, state } = carry === "state" ? props : {};
   editor.markHistoryStoppingPoint(mark);
   editor.createShape({
     id,

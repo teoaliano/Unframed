@@ -154,3 +154,19 @@ test("a Screen whose steps no longer work says Couldn't reach this state with th
     );
   });
 });
+
+test("Keep this view leaves a copy of the Screen at its current page, size and Parameters beside it, without its state", async ({ page }) => {
+  await withRepository(page, {}, async (engine, project) => {
+    const [first] = await screenShapes(engine, project);
+    await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/app", w: 390, h: 844, dials: { accent: "#00ff00" }, ...MENU_EMPTY } }]);
+    await expect(page.locator("[data-testid=screen]")).toHaveAttribute("data-route", "/app");
+    await selectScreen(page, first.id);
+    await page.getByTestId("selection-toolbar").getByRole("button", { name: "Keep this view" }).click();
+    await expect.poll(async () => (await screenShapes(engine, project)).length).toBe(2);
+    const kept = (await screenShapes(engine, project)).find((shape) => shape.id !== first.id);
+    expect(kept).toMatchObject({ x: first.x + 390 + 80, y: first.y, props: { instance: first.props.instance, route: "/app", w: 390, h: 844, dials: { accent: "#00ff00" } } });
+    expect(kept.props.steps).toBeUndefined();
+    expect(kept.props.mocks).toBeUndefined();
+    expect(kept.props.state).toBeUndefined();
+  });
+});
