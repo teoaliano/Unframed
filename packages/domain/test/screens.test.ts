@@ -13,6 +13,7 @@ const instance = (state: Instance["state"], extra: Partial<Instance> = {}): Inst
   upstreamPort: null,
   error: null,
   log: "",
+  changes: 0,
   ...extra,
 });
 

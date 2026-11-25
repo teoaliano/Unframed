@@ -58,6 +58,7 @@ export const Instance = Schema.Struct({
   upstreamPort: Schema.NullOr(Schema.Number),
   error: Schema.NullOr(Schema.String),
   log: Schema.String,
+  changes: Schema.Number,
 });
 export type Instance = typeof Instance.Type;
 

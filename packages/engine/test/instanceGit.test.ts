@@ -179,3 +179,29 @@ describe("an Instance's git actions", () => {
     expect(git(instance.worktree, "status", "--porcelain")).toBe("");
   });
 });
+
+describe("an Instance's changes count", () => {
+  it("follows edits in its worktree, counting files as the diff does and leaving Setup's files out, and reaches subscribers", { timeout: 60_000 }, async () => {
+    const { root, rpc, project, instance } = await addRepository();
+    expect(instance.changes).toBe(0);
+    expect(await rpc.call("instances.start", { project, id: instance.id })).toMatchObject({ state: "live", changes: 0 });
+    await appendFile(join(root, ".git", "info", "exclude"), "/.unframed/mock-user.js\n");
+    const until = async (count: number) => {
+      const started = Date.now();
+      for (;;) {
+        const now = await rpc.call("instances.status", { project, id: instance.id });
+        if (now.changes === count) return now;
+        if (Date.now() - started > 15_000) throw new Error(`changes stayed ${now.changes}, wanted ${count}`);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    };
+    const states = rpc.subscribe("instances.subscribe", { project });
+    await changeWorktree(instance.worktree);
+    await until(3);
+    await expect.poll(() => states.values.filter((item) => item.id === instance.id).map((item) => item.changes)).toContain(3);
+    await writeFile(join(instance.worktree, "src", "pages", "pricing.html"), "");
+    git(instance.worktree, "clean", "-fdq", "src");
+    git(instance.worktree, "checkout", "-q", "--", "src/pages/index.html");
+    await until(1);
+  });
+});
