@@ -8,6 +8,7 @@ const unix = process.platform !== "win32";
 const REAPER_GRACE_MS = 2_000;
 const EXIT_FLUSH_MS = 200;
 const PROBE_TIMEOUT_MS = 300;
+const LOOPBACK_HOSTS = ["127.0.0.1", "::1"] as const;
 
 export interface Tracked {
   readonly child: ChildProcess;
@@ -149,4 +150,9 @@ const connects = (host: string, port: number): Promise<boolean> =>
     socket.once("timeout", () => done(false));
   });
 
-export const answers = async (port: number): Promise<boolean> => (await connects("127.0.0.1", port)) || (await connects("::1", port));
+export const listeningHost = async (port: number): Promise<string | undefined> => {
+  for (const host of LOOPBACK_HOSTS) if (await connects(host, port)) return host;
+  return undefined;
+};
+
+export const answers = async (port: number): Promise<boolean> => (await listeningHost(port)) !== undefined;

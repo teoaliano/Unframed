@@ -5,27 +5,12 @@ import { pipeline, Transform, type Readable } from "node:stream";
 import zlib from "node:zlib";
 import { BRIDGE_PATH, bridgeTag, htmlInjector, loopbackGuard, proxiedResponseHeaders, rewritesOrigin, screenBridgeSource, upstreamRequestHeaders } from "@unframed/domain";
 import { listenLoopback } from "../listen.ts";
-
-const UPSTREAM_HOSTS = ["127.0.0.1", "::1"] as const;
-const PROBE_TIMEOUT_MS = 300;
+import { listeningHost } from "./processes.ts";
 
 export interface InstanceProxy {
   readonly port: number;
   readonly close: () => Promise<void>;
 }
-
-const connects = (host: string, port: number): Promise<boolean> =>
-  new Promise((resolve) => {
-    const socket = net.connect({ host, port });
-    const done = (value: boolean) => {
-      socket.destroy();
-      resolve(value);
-    };
-    socket.setTimeout(PROBE_TIMEOUT_MS);
-    socket.once("connect", () => done(true));
-    socket.once("error", () => done(false));
-    socket.once("timeout", () => done(false));
-  });
 
 const injecting = (tag: string): Transform => {
   const decoder = new StringDecoder("utf8");
@@ -64,13 +49,10 @@ export const startInstanceProxy = async (input: { readonly upstreamPort: number;
 
   const hostFor = async (): Promise<string> => {
     if (upstreamHost !== undefined) return upstreamHost;
-    for (const host of UPSTREAM_HOSTS) {
-      if (await connects(host, upstreamPort)) {
-        upstreamHost = host;
-        return host;
-      }
-    }
-    return UPSTREAM_HOSTS[0];
+    const host = await listeningHost(upstreamPort);
+    if (host === undefined) return "127.0.0.1";
+    upstreamHost = host;
+    return host;
   };
 
   const forget = (error: NodeJS.ErrnoException) => {
