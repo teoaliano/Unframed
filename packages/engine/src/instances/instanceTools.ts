@@ -187,7 +187,7 @@ export class InstanceTools {
     try {
       return await this.run(binding, name, args);
     } catch (error) {
-      return refusal(error instanceof Refused ? error.message : errorText(error));
+      return refusal(errorText(error));
     }
   }
 
