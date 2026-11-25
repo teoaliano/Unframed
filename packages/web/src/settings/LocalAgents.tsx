@@ -1,6 +1,6 @@
-/** The settings dialog's Local agents section (spec 10): provider statuses, command paths, the send shortcut and the follow-up choice. */
+/** The settings dialog's Local agents section (spec 10): provider statuses, command paths, the send shortcut, the follow-up choice and the chat layout. */
 import type { ProviderStatus, ProviderStatuses } from "@unframed/contracts";
-import type { SendShortcut } from "@unframed/domain";
+import type { ChatLayout, SendShortcut } from "@unframed/domain";
 import { useId } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -15,11 +15,18 @@ export const FOLLOW_UP_KEY = "agent.followUp";
 export const SEND_SHORTCUT_KEY = "agent.sendShortcut";
 /** Off unless set, as t3code ships it: plan mode, its toggle, `/plan`, `/default` and Shift+Tab (spec 08). */
 export const PLAN_MODE_KEY = "agent.planMode";
+export const CHAT_LAYOUT_KEY = "agent.chatLayout";
 export type FollowUp = "queue" | "steer";
 
 const FOLLOW_UPS: ReadonlyArray<{ readonly value: FollowUp; readonly label: string; readonly hint: string }> = [
   { value: "queue", label: "Queue", hint: "Wait for the running turn, then send" },
   { value: "steer", label: "Steer", hint: "Send into the running turn" },
+];
+
+const CHAT_LAYOUT_OPTIONS: ReadonlyArray<{ readonly value: ChatLayout; readonly label: string; readonly hint: string }> = [
+  { value: "panel", label: "Side panel", hint: "Left panel, as today" },
+  { value: "composer", label: "Floating composer", hint: "Composer at the bottom center, conversation opens above it" },
+  { value: "window", label: "Floating window", hint: "A movable, resizable window, like Parameters" },
 ];
 
 const sendShortcuts = (): ReadonlyArray<{ readonly value: SendShortcut; readonly label: string }> => {
@@ -86,6 +93,8 @@ export interface LocalAgentsProps {
   readonly onSendShortcut: (value: SendShortcut) => void;
   readonly followUp: FollowUp;
   readonly onFollowUp: (value: FollowUp) => void;
+  readonly chatLayout: ChatLayout;
+  readonly onChatLayout: (value: ChatLayout) => void;
   readonly planMode: boolean;
   readonly onPlanMode: (value: boolean) => void;
 }
@@ -95,6 +104,7 @@ export const LocalAgents = (props: LocalAgentsProps) => {
   const sendShortcutId = useId();
   const followUpId = useId();
   const planModeId = useId();
+  const chatLayoutId = useId();
   return (
     <section className="flex flex-col gap-3" aria-label="Local agents">
       <SectionHeading
@@ -165,6 +175,26 @@ export const LocalAgents = (props: LocalAgentsProps) => {
           </SelectTrigger>
           <SelectPopup alignItemWithTrigger={false}>
             {FOLLOW_UPS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                <span className="flex flex-col">
+                  <span>{option.label}</span>
+                  <span className="text-xs text-(--settings-dialog-description)">{option.hint}</span>
+                </span>
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label id={chatLayoutId} render={<span />}>
+          Agent chat layout
+        </Label>
+        <Select value={props.chatLayout} onValueChange={(value) => value && props.onChatLayout(value as ChatLayout)}>
+          <SelectTrigger aria-labelledby={chatLayoutId}>
+            <SelectValue>{CHAT_LAYOUT_OPTIONS.find((option) => option.value === props.chatLayout)?.label}</SelectValue>
+          </SelectTrigger>
+          <SelectPopup alignItemWithTrigger={false}>
+            {CHAT_LAYOUT_OPTIONS.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 <span className="flex flex-col">
                   <span>{option.label}</span>

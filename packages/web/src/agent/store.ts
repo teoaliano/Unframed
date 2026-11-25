@@ -1,7 +1,7 @@
 import type { ElementChip } from "@unframed/contracts";
 import { rememberDrafts, takeDrafts } from "../project/tabMemory.ts";
 import { UnframedError, type ChatAttachment, type ChatSummary, type ClientChatCommand, type ProviderStatuses, type ShellStreamItem, type ThreadStreamItem } from "@unframed/contracts";
-import { projectChat, readStoredDrafts, sendShortcutOf, storedDraftsValue, type Chat, type ChatEvent, type ChatMessage, type SendShortcut } from "@unframed/domain";
+import { chatLayoutOf, projectChat, readStoredDrafts, sendShortcutOf, storedDraftsValue, type Chat, type ChatEvent, type ChatLayout, type ChatMessage, type SendShortcut } from "@unframed/domain";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import type { EngineConnection } from "../rpc/engine.ts";
 
@@ -107,6 +107,8 @@ export class ChatClient {
   private planModeWatch: (() => void) | undefined;
   private sendShortcutValue: SendShortcut = "enter";
   private sendShortcutWatch: (() => void) | undefined;
+  private chatLayoutValue: ChatLayout = "panel";
+  private chatLayoutWatch: (() => void) | undefined;
   private readonly stopShell: () => void;
 
   constructor(engine: EngineConnection, project: string) {
@@ -139,6 +141,7 @@ export class ChatClient {
     this.followUpWatch?.();
     this.planModeWatch?.();
     this.sendShortcutWatch?.();
+    this.chatLayoutWatch?.();
     for (const entry of this.threads.values()) entry.stop();
     this.threads.clear();
   }
@@ -451,6 +454,17 @@ export class ChatClient {
     return this.planModeValue;
   }
 
+  get chatLayout(): ChatLayout {
+    if (!this.chatLayoutWatch) {
+      this.chatLayoutWatch = this.engine.subscribe("preferences.subscribe", { keys: ["agent.chatLayout"] }, (change) => {
+        if (change.key !== "agent.chatLayout") return;
+        this.chatLayoutValue = chatLayoutOf(change.value);
+        this.changed("ui");
+      });
+    }
+    return this.chatLayoutValue;
+  }
+
   get ui(): RailUi {
     return this.uiState;
   }
@@ -559,6 +573,11 @@ export const usePlanMode = (client: ChatClient): boolean => {
 export const useSendShortcut = (client: ChatClient): SendShortcut => {
   useKey(client, "ui");
   return client.sendShortcut;
+};
+
+export const useChatLayout = (client: ChatClient): ChatLayout => {
+  useKey(client, "ui");
+  return client.chatLayout;
 };
 
 export const useFollowUp = (client: ChatClient): "queue" | "steer" => {
