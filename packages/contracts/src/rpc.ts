@@ -54,6 +54,7 @@ import {
   RepositoriesSetupVerdict,
   ScreensExplode,
   ScreensSnapshots,
+  ScreensStateToken,
 } from "./repositories.ts";
 
 const Empty = Schema.Struct({});
@@ -377,6 +378,7 @@ export const UnframedRpcs = RpcGroup.make(
   RepositoriesSetupVerdict,
   ScreensExplode,
   ScreensSnapshots,
+  ScreensStateToken,
   SettingsRemoveKey,
   OAuthStart,
   OAuthPending,

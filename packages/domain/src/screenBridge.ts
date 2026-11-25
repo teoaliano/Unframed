@@ -1,0 +1,380 @@
+import { dialsBridgeSource } from "./artifacts/dials.ts";
+import { matchMock } from "./screenStates.ts";
+
+export const STATE_PARAM = "__unframed_state";
+export const STEP_TIMEOUT_MS = 5000;
+
+export interface BridgeConfig {
+  readonly param: string;
+  readonly stepTimeout: number;
+}
+
+export function screenBridge(win: any, config: BridgeConfig, match: (mocks: ReadonlyArray<any>, request: { method: string; url: string }) => any): void {
+  const LOOPBACK = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+  const state = win.__unframedScreenState;
+  const steps: any[] = state && Array.isArray(state.steps) ? state.steps : [];
+  const mocks: any[] = state && Array.isArray(state.mocks) ? state.mocks : [];
+  win.__unframedScreenBridge = true;
+  const sleep = (ms: number) => new Promise((resolve) => win.setTimeout(resolve, ms));
+
+  const routeOf = () => {
+    const location = win.location;
+    if (typeof location.pathname !== "string") return undefined;
+    return location.pathname + (location.search || "") + (location.hash || "");
+  };
+
+  const url = win.history && typeof win.URL === "function" ? new win.URL(win.location.href) : undefined;
+  if (url !== undefined && url.searchParams.has(config.param)) {
+    url.searchParams.delete(config.param);
+    win.history.replaceState(win.history.state, "", url.pathname + url.search + url.hash);
+  }
+
+  if (mocks.length > 0) {
+    const find = (method: string, url: string) => {
+      try {
+        return match(mocks, { method: method || "GET", url: new win.URL(url, win.location.href).href });
+      } catch {
+        return undefined;
+      }
+    };
+    const headersOf = (mock: any): Record<string, string> => mock.headers || {};
+    const bodyOf = (mock: any): string => (typeof mock.body === "string" ? mock.body : "");
+    const realFetch = win.fetch;
+    if (typeof realFetch === "function") {
+      win.fetch = function (input: any, init?: any) {
+        const request = typeof win.Request === "function" && input instanceof win.Request ? input : undefined;
+        const url = request ? request.url : String(input && input.href !== undefined ? input.href : input);
+        const method = (init && init.method) || (request && request.method) || "GET";
+        const mock = find(method, url);
+        if (!mock) return realFetch.apply(this, arguments as any);
+        return sleep(mock.delay || 0).then(() => {
+          if (mock.fail) throw new TypeError("Failed to fetch");
+          const status = mock.status || 200;
+          const empty = status === 204 || status === 205 || status === 304;
+          return new win.Response(empty ? null : bodyOf(mock), { status, headers: headersOf(mock) });
+        });
+      };
+    }
+    const RealXhr = win.XMLHttpRequest;
+    if (typeof RealXhr === "function") {
+      const open = RealXhr.prototype.open;
+      const send = RealXhr.prototype.send;
+      RealXhr.prototype.open = function (method: string, url: string) {
+        this.__unframedRequest = { method: String(method), url: String(url) };
+        return open.apply(this, arguments as any);
+      };
+      RealXhr.prototype.send = function () {
+        const request = this.__unframedRequest;
+        const mock = request ? find(request.method, request.url) : undefined;
+        if (!mock) return send.apply(this, arguments as any);
+        const xhr = this;
+        const define = (name: string, value: unknown) => Object.defineProperty(xhr, name, { configurable: true, get: () => value });
+        const fire = (type: string) => xhr.dispatchEvent(new win.ProgressEvent(type));
+        win.setTimeout(() => {
+          if (mock.fail) {
+            define("readyState", 4);
+            define("status", 0);
+            fire("readystatechange");
+            fire("error");
+            fire("loadend");
+            return;
+          }
+          const headers = headersOf(mock);
+          const text = bodyOf(mock);
+          let response: unknown = text;
+          if (xhr.responseType === "json") {
+            try {
+              response = JSON.parse(text);
+            } catch {
+              response = null;
+            }
+          }
+          define("status", mock.status || 200);
+          define("statusText", "");
+          define("responseText", text);
+          define("response", response);
+          define("responseURL", new win.URL(request.url, win.location.href).href);
+          xhr.getAllResponseHeaders = () =>
+            Object.keys(headers)
+              .map((name) => `${name}: ${headers[name]}`)
+              .join("\r\n");
+          xhr.getResponseHeader = (name: string) => headers[String(name).toLowerCase()] ?? null;
+          define("readyState", 4);
+          fire("readystatechange");
+          fire("load");
+          fire("loadend");
+        }, mock.delay || 0);
+      };
+    }
+    const RealEventSource = win.EventSource;
+    if (typeof RealEventSource === "function") {
+      const Fake = function (this: any, url: string, options?: any) {
+        const mock = find("GET", String(url));
+        if (!mock) return new RealEventSource(url, options);
+        const target = new win.EventTarget();
+        const source: any = target;
+        source.url = new win.URL(String(url), win.location.href).href;
+        source.withCredentials = false;
+        source.readyState = 0;
+        source.close = () => {
+          source.readyState = 2;
+        };
+        const emit = (event: any) => {
+          if (source.readyState === 2) return;
+          const handler = source[`on${event.type}`];
+          if (typeof handler === "function") handler.call(source, event);
+          target.dispatchEvent(event);
+        };
+        win.setTimeout(() => {
+          if (mock.fail) {
+            source.readyState = 2;
+            emit(new win.Event("error"));
+            return;
+          }
+          source.readyState = 1;
+          emit(new win.Event("open"));
+          for (const block of bodyOf(mock).split(/\r?\n\r?\n/)) {
+            const data: string[] = [];
+            let type = "message";
+            for (const line of block.split(/\r?\n/)) {
+              if (line.indexOf("data:") === 0) data.push(line.slice(5).replace(/^ /, ""));
+              else if (line.indexOf("event:") === 0) type = line.slice(6).trim();
+            }
+            if (data.length > 0) emit(new win.MessageEvent(type, { data: data.join("\n") }));
+          }
+        }, mock.delay || 0);
+        return source;
+      };
+      win.EventSource = Fake;
+    }
+  }
+
+  let parent: string | undefined;
+  if ((win.parent as unknown) !== win) {
+    const ancestors = win.location.ancestorOrigins;
+    parent = ancestors !== undefined && ancestors.length > 0 ? ancestors[0] : undefined;
+    if (parent === undefined && win.document.referrer !== "") {
+      try {
+        parent = new URL(win.document.referrer).origin;
+      } catch {
+        parent = undefined;
+      }
+    }
+    if (parent !== undefined && !LOOPBACK.test(parent)) parent = undefined;
+  }
+  const tell = (type: string, extra?: Record<string, unknown>) => {
+    if (parent === undefined) return;
+    try {
+      win.parent.postMessage({ type, href: win.location.href, ...extra }, parent);
+    } catch {
+      return;
+    }
+  };
+
+  let replaying = false;
+  let reported = routeOf();
+  const report = () => {
+    const route = routeOf();
+    if (route === undefined || route === reported) return;
+    reported = route;
+    tell("unframed:screen:route", { route, replaying });
+  };
+  if (win.history) {
+    for (const name of ["pushState", "replaceState"]) {
+      const original = win.history[name];
+      if (typeof original !== "function") continue;
+      win.history[name] = function () {
+        const result = original.apply(this, arguments as any);
+        report();
+        return result;
+      };
+    }
+    win.addEventListener("popstate", report);
+    win.addEventListener("hashchange", report);
+  }
+
+  const normal = (value: unknown) =>
+    String(value ?? "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+  const visible = (element: any) => {
+    if (typeof element.getClientRects !== "function" || element.getClientRects().length === 0) return false;
+    const style = win.getComputedStyle(element);
+    return style.visibility !== "hidden" && style.display !== "none";
+  };
+  const ROLES: Record<string, string> = {
+    button: "button,[role=button],input[type=button],input[type=submit],input[type=reset],summary",
+    link: "a[href],[role=link]",
+    textbox:
+      "input:not([type]),input[type=text],input[type=email],input[type=search],input[type=url],input[type=tel],input[type=password],input[type=number],textarea,[role=textbox],[role=searchbox],[contenteditable=''],[contenteditable=true]",
+    searchbox: "input[type=search],[role=searchbox]",
+    checkbox: "input[type=checkbox],[role=checkbox]",
+    radio: "input[type=radio],[role=radio]",
+    combobox: "select,[role=combobox]",
+    heading: "h1,h2,h3,h4,h5,h6,[role=heading]",
+    menuitem: "[role=menuitem],[role=menuitemcheckbox],[role=menuitemradio]",
+    option: "option,[role=option]",
+    dialog: "dialog,[role=dialog],[role=alertdialog]",
+    listitem: "li,[role=listitem]",
+    list: "ul,ol,[role=list]",
+    img: "img,[role=img]",
+    navigation: "nav,[role=navigation]",
+    slider: "input[type=range],[role=slider]",
+    row: "tr,[role=row]",
+    cell: "td,[role=cell],[role=gridcell]",
+    table: "table,[role=table]",
+  };
+  const textOf = (element: any) => normal(element.innerText !== undefined ? element.innerText : element.textContent);
+  const nameOf = (element: any) => {
+    const label = element.getAttribute("aria-label");
+    if (label) return normal(label);
+    const labelledBy = element.getAttribute("aria-labelledby");
+    if (labelledBy) {
+      return normal(
+        labelledBy
+          .split(/\s+/)
+          .map((id: string) => win.document.getElementById(id)?.textContent ?? "")
+          .join(" "),
+      );
+    }
+    if (element.labels && element.labels.length > 0) return normal(Array.from(element.labels as ArrayLike<any>, (item: any) => item.textContent).join(" "));
+    if (element.tagName === "IMG") return normal(element.getAttribute("alt"));
+    if (element.tagName === "INPUT" && /^(button|submit|reset)$/i.test(element.type)) return normal(element.value);
+    const text = textOf(element);
+    if (text !== "") return text;
+    return normal(element.getAttribute("title") || element.getAttribute("placeholder"));
+  };
+  const candidates = (target: any): any[] => {
+    const all = (selector: string) => Array.from(win.document.querySelectorAll(selector) as ArrayLike<any>).filter(visible);
+    if (target.role) {
+      const role = String(target.role).toLowerCase();
+      const found = all(ROLES[role] ? `${ROLES[role]},[role=${role}]` : `[role=${role}]`);
+      if (!target.name) return found;
+      const wanted = normal(target.name);
+      const exact = found.filter((element) => nameOf(element) === wanted);
+      return exact.length > 0 ? exact : found.filter((element) => nameOf(element).indexOf(wanted) !== -1);
+    }
+    if (target.text) {
+      const wanted = normal(target.text);
+      const deepest = (keep: (element: any) => boolean) => {
+        const found = all("body *").filter(keep);
+        return found.filter((element) => !found.some((other) => other !== element && element.contains(other)));
+      };
+      const exact = deepest((element) => textOf(element) === wanted);
+      return exact.length > 0 ? exact : deepest((element) => textOf(element).indexOf(wanted) !== -1);
+    }
+    return all(target.selector);
+  };
+  const describe = (target: any) => (target.role ? (target.name ? `${target.role} ${target.name}` : target.role) : target.text ? `"${target.text}"` : target.selector);
+  const locate = async (target: any) => {
+    const deadline = Date.now() + config.stepTimeout;
+    for (;;) {
+      let found: any[];
+      try {
+        found = candidates(target);
+      } catch {
+        throw new Error(`${describe(target)} is not a valid target`);
+      }
+      if (found.length > 0) return found[0];
+      if (Date.now() > deadline) throw new Error(`nothing matched ${describe(target)} within ${Math.round(config.stepTimeout / 1000)} seconds`);
+      await sleep(50);
+    }
+  };
+  const mouse = (element: any, types: string[]) => {
+    const box = element.getBoundingClientRect();
+    const at = { bubbles: true, cancelable: true, composed: true, view: win, clientX: box.left + box.width / 2, clientY: box.top + box.height / 2, button: 0, pointerId: 1, pointerType: "mouse", isPrimary: true };
+    for (const type of types) element.dispatchEvent(type.indexOf("pointer") === 0 && typeof win.PointerEvent === "function" ? new win.PointerEvent(type, at) : new win.MouseEvent(type, at));
+  };
+  const keys = (element: any, key: string) => {
+    const init = { key, code: key.length === 1 ? `Key${key.toUpperCase()}` : key, bubbles: true, cancelable: true, composed: true };
+    const down = element.dispatchEvent(new win.KeyboardEvent("keydown", init));
+    if (key.length === 1 || key === "Enter") element.dispatchEvent(new win.KeyboardEvent("keypress", init));
+    element.dispatchEvent(new win.KeyboardEvent("keyup", init));
+    if (down && key === "Enter" && element.form && typeof element.form.requestSubmit === "function" && element.tagName === "INPUT") element.form.requestSubmit();
+  };
+  const fill = (element: any, text: string) => {
+    if (typeof element.focus === "function") element.focus();
+    if (element.isContentEditable) element.textContent = text;
+    else {
+      const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), "value")?.set;
+      if (setter) setter.call(element, text);
+      else element.value = text;
+    }
+    element.dispatchEvent(new win.Event("input", { bubbles: true }));
+    element.dispatchEvent(new win.Event("change", { bubbles: true }));
+  };
+  const perform = async (step: any) => {
+    if (step.action === "press") {
+      const element = step.target ? await locate(step.target) : win.document.activeElement || win.document.body;
+      keys(element, String(step.key));
+      return;
+    }
+    const element = await locate(step.target);
+    if (typeof element.scrollIntoView === "function") element.scrollIntoView({ block: "center", inline: "center" });
+    if (step.action === "click") {
+      mouse(element, ["pointerover", "pointerenter", "mouseover", "pointerdown", "mousedown"]);
+      if (typeof element.focus === "function") element.focus();
+      mouse(element, ["pointerup", "mouseup"]);
+      element.click();
+    } else if (step.action === "hover") mouse(element, ["pointerover", "pointerenter", "mouseover", "mouseenter", "pointermove", "mousemove"]);
+    else if (step.action === "type") fill(element, String(step.text ?? ""));
+  };
+  const replay = async () => {
+    replaying = true;
+    try {
+      for (let index = 0; index < steps.length; index++) {
+        try {
+          await perform(steps[index]);
+        } catch (error) {
+          return { ok: false, step: index, reason: error instanceof Error ? error.message : String(error) };
+        }
+        await sleep(120);
+      }
+      return { ok: true };
+    } finally {
+      replaying = false;
+      reported = routeOf();
+    }
+  };
+
+  tell("unframed:screen:ready", { route: routeOf(), state: state !== undefined });
+  const painted = () =>
+    win.requestAnimationFrame(() =>
+      win.requestAnimationFrame(() => {
+        tell("unframed:screen:paint");
+        if (state === undefined) return;
+        void (steps.length === 0 ? Promise.resolve({ ok: true }) : replay()).then((result) => {
+          win.__unframedStateResult = result;
+          tell("unframed:screen:steps", result);
+        });
+      }),
+    );
+  if (win.document.readyState === "loading") win.addEventListener("DOMContentLoaded", painted);
+  else painted();
+}
+
+export const screenBridgeSource = (): string =>
+  [
+    ...dialsBridgeSource().split("\n").slice(1, -1),
+    `(${screenBridge.toString()})(window, ${JSON.stringify({ param: STATE_PARAM, stepTimeout: STEP_TIMEOUT_MS } satisfies BridgeConfig)}, ${matchMock.toString()});`,
+    "",
+  ].join("\n");
+
+export const stateRoute = (route: string, token: string): string => {
+  const hash = route.indexOf("#");
+  const path = hash === -1 ? route : route.slice(0, hash);
+  const rest = hash === -1 ? "" : route.slice(hash);
+  return `${path}${path.includes("?") ? "&" : "?"}${STATE_PARAM}=${encodeURIComponent(token)}${rest}`;
+};
+
+export const takeStateParam = (path: string): { readonly path: string; readonly token: string | undefined } => {
+  const query = path.indexOf("?");
+  if (query === -1) return { path, token: undefined };
+  const params = new URLSearchParams(path.slice(query + 1));
+  const token = params.get(STATE_PARAM) ?? undefined;
+  if (token === undefined) return { path, token };
+  params.delete(STATE_PARAM);
+  const rest = params.toString();
+  return { path: rest === "" ? path.slice(0, query) : `${path.slice(0, query)}?${rest}`, token };
+};

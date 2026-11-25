@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { branchChip, checkMocks, checkSteps, describeStep, matchMock, NO_TARGET, screenLabel, SCREEN_STEPS_MAX } from "../src/index.ts";
+import { branchChip, followNavigation, checkMocks, checkSteps, describeStep, matchMock, NO_TARGET, screenLabel, SCREEN_STEPS_MAX } from "../src/index.ts";
 
 describe("a Screen's steps", () => {
   it("take click, type, press, hover, wait and scroll, each aimed at a target", () => {
@@ -57,7 +57,7 @@ describe("a Screen's mocks", () => {
 
   it("refuse a mock with no URL pattern, a bad status, a bad delay or a bad method", () => {
     expect(checkMocks([{ body: "x" }])).toEqual({ error: "Mock 1: name the request's URL pattern, such as /api/items or https://api.example.com/*." });
-    expect(checkMocks([{ url: "/a", status: 42 }])).toEqual({ error: "Mock 1: the status is a number from 100 to 599." });
+    expect(checkMocks([{ url: "/a", status: 42 }])).toEqual({ error: "Mock 1: the status is a number from 200 to 599." });
     expect(checkMocks([{ url: "/a", delay: -1 }])).toEqual({ error: "Mock 1: the delay is a number of milliseconds from 0 to 60000." });
     expect(checkMocks([{ url: "/a", method: "FETCH THIS" }])).toEqual({ error: "Mock 1: the method is an HTTP method such as GET or POST." });
   });
@@ -94,5 +94,18 @@ describe("the branch chip", () => {
     expect(branchChip({ branch: "feature/pricing", changes: 0 })).toEqual({ name: "feature/pricing", count: undefined, label: "Branch feature/pricing", changes: "Changes" });
     expect(branchChip({ branch: "feature/pricing", changes: 1 })).toEqual({ name: "feature/pricing", count: "1", label: "Branch feature/pricing, 1 changed file", changes: "Changes (1)" });
     expect(branchChip({ branch: "trunk", changes: 12 })).toEqual({ name: "trunk", count: "12", label: "Branch trunk, 12 changed files", changes: "Changes (12)" });
+  });
+});
+
+describe("a person navigating inside a Screen", () => {
+  const props = { w: 1280, h: 800, instance: "abc", route: "/app", title: "trunk", dials: { accent: "#f00" }, state: "the menu open", steps: [{ action: "press", key: "Escape" }], mocks: [{ url: "/api/items" }] };
+
+  it("moves the Screen to the new route as a plain page, keeping its size and Parameters", () => {
+    expect(followNavigation(props, "/app/about")).toEqual({ w: 1280, h: 800, instance: "abc", route: "/app/about", title: "trunk", dials: { accent: "#f00" } });
+  });
+
+  it("changes nothing when the route is the one the Screen shows, or is not a route", () => {
+    expect(followNavigation(props, "/app")).toBeUndefined();
+    expect(followNavigation(props, "https://example.com/")).toBeUndefined();
   });
 });

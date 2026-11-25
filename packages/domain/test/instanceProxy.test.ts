@@ -149,7 +149,7 @@ describe("the Screen bridge", () => {
     const parent = { postMessage: (message: unknown, to: string) => posted.push({ message, to }) };
     const win: any = {
       parent,
-      location: { origin: "http://127.0.0.1:4101", href: "http://127.0.0.1:4101/dashboard", ancestorOrigins: ancestor === undefined ? [] : [ancestor] },
+      location: { origin: "http://127.0.0.1:4101", href: "http://127.0.0.1:4101/dashboard", pathname: "/dashboard", search: "", hash: "", ancestorOrigins: ancestor === undefined ? [] : [ancestor] },
       document: { readyState: "loading", referrer: "", head: { appendChild: () => undefined }, createElement: () => ({ src: "" }) },
       console: { error: () => undefined },
       addEventListener: (type: string, listener: (event: any) => void) => (listeners[type] ??= []).push(listener),
@@ -162,7 +162,7 @@ describe("the Screen bridge", () => {
   it("offers window.unframed.dials and reports readiness and first paint to a loopback parent", () => {
     const { win, posted, listeners, frames } = load("http://127.0.0.1:8787");
     expect(typeof win.unframed.dials).toBe("function");
-    expect(posted).toEqual([{ message: { type: "unframed:screen:ready", href: "http://127.0.0.1:4101/dashboard" }, to: "http://127.0.0.1:8787" }]);
+    expect(posted).toEqual([{ message: { type: "unframed:screen:ready", href: "http://127.0.0.1:4101/dashboard", route: "/dashboard", state: false }, to: "http://127.0.0.1:8787" }]);
     for (const listener of listeners.DOMContentLoaded ?? []) listener({});
     while (frames.length > 0) frames.shift()!();
     expect(posted.at(-1)).toEqual({ message: { type: "unframed:screen:paint", href: "http://127.0.0.1:4101/dashboard" }, to: "http://127.0.0.1:8787" });

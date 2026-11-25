@@ -1,3 +1,4 @@
+import { normaliseRoute } from "./screens.ts";
 import { SCREEN_STEP_ACTIONS, type ScreenMock, type ScreenStep, type ScreenTarget } from "@unframed/contracts";
 
 export const SCREEN_STEPS_MAX = 50;
@@ -70,7 +71,7 @@ const checkMock = (value: unknown): ScreenMock | string => {
   const head = { ...(method === undefined ? {} : { method }), url };
   if (raw.fail === true) return { ...head, fail: true };
   const status = raw.status ?? 200;
-  if (typeof status !== "number" || !Number.isInteger(status) || status < 100 || status > 599) return "the status is a number from 100 to 599.";
+  if (typeof status !== "number" || !Number.isInteger(status) || status < 200 || status > 599) return "the status is a number from 200 to 599.";
   const delay = raw.delay ?? 0;
   if (typeof delay !== "number" || !Number.isFinite(delay) || delay < 0 || delay > MOCK_DELAY_MAX) return `the delay is a number of milliseconds from 0 to ${MOCK_DELAY_MAX}.`;
   const headers: Record<string, string> = {};
@@ -150,3 +151,10 @@ export const branchChip = (input: { readonly branch: string; readonly changes: n
   input.changes > 0
     ? { name: input.branch, count: String(input.changes), label: `Branch ${input.branch}, ${input.changes} changed ${input.changes === 1 ? "file" : "files"}`, changes: `Changes (${input.changes})` }
     : { name: input.branch, count: undefined, label: `Branch ${input.branch}`, changes: "Changes" };
+
+export const followNavigation = <P extends { readonly route: string; readonly steps?: unknown; readonly mocks?: unknown; readonly state?: unknown }>(props: P, reported: string): Omit<P, "steps" | "mocks" | "state"> | undefined => {
+  const route = normaliseRoute(reported);
+  if (route === undefined || route === props.route) return undefined;
+  const { steps: _steps, mocks: _mocks, state: _state, ...rest } = props;
+  return { ...rest, route };
+};

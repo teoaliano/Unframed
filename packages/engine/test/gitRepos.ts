@@ -34,6 +34,23 @@ if (process.env.FAKE_DEV_LINGER_MS && !process.env.FAKE_DEV_DETACHED) {
 const flag = args.indexOf("--port");
 const port = Number(process.env.FAKE_DEV_LISTEN_PORT || (flag >= 0 ? args[flag + 1] : process.env.PORT) || 3000);
 const host = process.env.FAKE_DEV_HOST || "127.0.0.1";
+const APP_PAGE = [
+  "<!doctype html><html><head><title>Fake app</title></head><body>",
+  "<h1>Fake app</h1>",
+  "<button id=\\"menu-button\\" aria-haspopup=\\"menu\\" onclick=\\"document.getElementById('menu').hidden = false\\">Menu</button>",
+  "<div id=\\"menu\\" role=\\"menu\\" hidden><div role=\\"menuitem\\" tabindex=\\"-1\\">Settings</div></div>",
+  "<label>Search <input id=\\"search-box\\" oninput=\\"document.getElementById('echo').textContent = this.value\\"></label><p id=\\"echo\\"></p>",
+  "<a id=\\"about\\" href=\\"/app/about\\" onclick=\\"event.preventDefault(); history.pushState({}, '', '/app/about'); document.getElementById('where').textContent = location.pathname\\">About</a>",
+  "<p id=\\"where\\"></p>",
+  "<p id=\\"list-state\\">Loading items</p><ul id=\\"items\\"></ul>",
+  "<script>",
+  "document.getElementById('where').textContent = location.pathname;",
+  "fetch('/api/items').then(function (r) { return r.json(); }).then(function (items) {",
+  "  document.getElementById('list-state').textContent = items.length === 0 ? 'No items yet' : items.length + ' items';",
+  "  items.forEach(function (item) { var li = document.createElement('li'); li.textContent = item; document.getElementById('items').appendChild(li); });",
+  "}).catch(function () { document.getElementById('list-state').textContent = 'Could not load items'; });",
+  "</script></body></html>",
+].join("");
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
   if (url.pathname === "/login") {
@@ -65,7 +82,15 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "text/html" });
     return res.end("<body>no head here</body>");
   }
-  const html = "<!doctype html><html><head><title>Fake app</title></head><body><h1>Fake app</h1><p id=\\"path\\">" + url.pathname + "</p></body></html>";
+  if (url.pathname === "/api/items") {
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify(["Apples", "Pears"]));
+  }
+  if (url.pathname.startsWith("/app")) {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end(APP_PAGE);
+  }
+  const html = "<!doctype html><html><head><title>Fake app</title></head><body><h1>Fake app</h1><p id=\\"path\\">" + url.pathname + "</p><p id=\\"search\\">" + url.search + "</p></body></html>";
   if (/gzip/.test(req.headers["accept-encoding"] || "")) {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8", "content-encoding": "gzip" });
     return res.end(require("node:zlib").gzipSync(html));

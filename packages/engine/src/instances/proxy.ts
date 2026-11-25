@@ -3,9 +3,10 @@ import net from "node:net";
 import { StringDecoder } from "node:string_decoder";
 import { pipeline, Transform, type Readable } from "node:stream";
 import zlib from "node:zlib";
-import { BRIDGE_PATH, bridgeTag, htmlInjector, loopbackGuard, proxiedResponseHeaders, rewritesOrigin, screenBridgeSource, upstreamRequestHeaders } from "@unframed/domain";
+import { BRIDGE_PATH, bridgeTag, htmlInjector, loopbackGuard, proxiedResponseHeaders, rewritesOrigin, screenBridgeSource, takeStateParam, upstreamRequestHeaders } from "@unframed/domain";
 import { listenLoopback } from "../listen.ts";
 import { listeningHost } from "./processes.ts";
+import type { StateTokens } from "./stateTokens.ts";
 
 export interface InstanceProxy {
   readonly port: number;
@@ -42,7 +43,7 @@ const rawHead = (req: http.IncomingMessage, headers: Record<string, unknown>): s
   return `${head}\r\n`;
 };
 
-export const startInstanceProxy = async (input: { readonly upstreamPort: number; readonly preferredPort?: number | null }): Promise<InstanceProxy> => {
+export const startInstanceProxy = async (input: { readonly upstreamPort: number; readonly preferredPort?: number | null; readonly states?: StateTokens }): Promise<InstanceProxy> => {
   const upstreamPort = input.upstreamPort;
   const bridge = screenBridgeSource();
   let upstreamHost: string | undefined;
@@ -67,12 +68,16 @@ export const startInstanceProxy = async (input: { readonly upstreamPort: number;
       res.end(decision.error);
       return;
     }
-    const path = req.url ?? "/";
-    if (path === BRIDGE_PATH || path.startsWith(`${BRIDGE_PATH}?`)) {
+    const asked = req.url ?? "/";
+    if (asked === BRIDGE_PATH || asked.startsWith(`${BRIDGE_PATH}?`)) {
+      const key = new URLSearchParams(asked.slice(BRIDGE_PATH.length + 1)).get("state");
+      const state = key === null ? undefined : input.states?.takeBridge(key);
       res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" });
-      res.end(bridge);
+      res.end(state === undefined ? bridge : `window.__unframedScreenState = ${JSON.stringify(state)};\n${bridge}`);
       return;
     }
+    const { path, token } = takeStateParam(asked);
+    const stateKey = token === undefined ? undefined : input.states?.takePage(token);
     const proxyOrigin = `http://${req.headers.host}`;
     void hostFor().then((host) => {
       const headers = upstreamRequestHeaders(req.headers, { upstreamPort, path, upgrade: false });
@@ -90,7 +95,7 @@ export const startInstanceProxy = async (input: { readonly upstreamPort: number;
         delete out["content-length"];
         delete out["content-encoding"];
         res.writeHead(status, out);
-        pipeline(body, injecting(bridgeTag(rewritten.nonce)), res, () => undefined);
+        pipeline(body, injecting(bridgeTag(rewritten.nonce, stateKey)), res, () => undefined);
       });
       upstream.on("error", (error: NodeJS.ErrnoException) => {
         forget(error);

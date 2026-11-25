@@ -3,7 +3,7 @@ import { UnframedError, UnframedRpcs, unframedError, type ResultRecipe } from "@
 import { connectionSetup } from "@unframed/domain";
 import { AgentConnections } from "../agentConnections/layer.ts";
 import { SelectionHub } from "../selection/liveSelection.ts";
-import { projectSlug } from "@unframed/domain";
+import { agentShapeId, projectSlug, roomShapeId } from "@unframed/domain";
 import type { SelectionApply } from "@unframed/contracts";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
@@ -29,7 +29,8 @@ import { PreferencesStore } from "../preferencesStore.ts";
 import { Projects } from "../projects.ts";
 import { Instances } from "../instances/layer.ts";
 import { RpcSockets } from "./sockets.ts";
-import { screenRecord } from "../screens/firstScreen.ts";
+import { isScreenShape, screenRecord } from "../screens/firstScreen.ts";
+import { screenStatePayload } from "../screens/screenState.ts";
 import { explodeScreen, ExplodeRefused } from "../screens/flows.ts";
 import { Repositories } from "../repositories/layer.ts";
 import { InstanceGit } from "../instances/instanceGit.ts";
@@ -175,6 +176,16 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
                 { kind: "server", id: "screens.explode" },
               ),
             catch: (error) => (error instanceof ExplodeRefused ? unframedError("bad_request", error.message) : asUnframed(error)),
+          }),
+        ),
+      "screens.stateToken": ({ project, shapeId }) =>
+        featureOn("repositories", () =>
+          Effect.gen(function* () {
+            const shape = (yield* rooms.read(project)).find((record) => record.id === roomShapeId(shapeId));
+            if (!isScreenShape(shape)) return yield* unframedError("bad_request", `There is no Screen ${agentShapeId(shapeId)}.`);
+            const state = screenStatePayload(shape.props);
+            if (state === undefined) return { token: null };
+            return { token: yield* instances.stateToken(project, shape.props.instance, state) };
           }),
         ),
       "repositories.setup": ({ project }) => featureOn("repositories", () => Effect.map(agents.openSetup(project), (chatId) => ({ chatId }))),

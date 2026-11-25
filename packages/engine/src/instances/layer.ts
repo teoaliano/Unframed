@@ -63,6 +63,7 @@ import { readRepository, readRepositoryProject, writeRepository, type StoredRepo
 import { Config } from "../services.ts";
 import { Shutdown } from "../shutdown.ts";
 import { answers, freePort, spawnTracked, stopTracked, sweepLeftovers, type Tracked } from "./processes.ts";
+import { StateTokens, type ScreenStatePayload } from "./stateTokens.ts";
 import { startInstanceProxy, type InstanceProxy } from "./proxy.ts";
 import { insertInstance, markInstalled, markRemoved, readInstances, type StoredInstance } from "./tables.ts";
 
@@ -103,6 +104,7 @@ export class Instances extends Context.Service<
     readonly everyChange: Stream.Stream<Instance>;
     readonly changes: (project: string) => Stream.Stream<Instance, UnframedError>;
     readonly touched: Stream.Stream<{ readonly project: string; readonly id: string }>;
+    readonly stateToken: (project: string, id: string, payload: ScreenStatePayload) => Effect.Effect<string, UnframedError>;
     readonly noteChanges: (project: string, id: string, count: number) => void;
   }
 >()("unframed/engine/Instances") {}
@@ -121,6 +123,7 @@ interface Live {
   watcher: FSWatcher | undefined;
   touchTimer: NodeJS.Timeout | undefined;
   changes: number;
+  readonly tokens: StateTokens;
   demandOrder: number;
   lastDemandedAt: number;
   lastChangeAt: number;
@@ -215,6 +218,7 @@ export const instancesLayer = Layer.effect(
       watcher: undefined,
       touchTimer: undefined,
       changes: 0,
+      tokens: new StateTokens(),
       demandOrder: 0,
       lastDemandedAt: 0,
       lastChangeAt: 0,
@@ -403,7 +407,7 @@ export const instancesLayer = Layer.effect(
           }
           const proxied = yield* Effect.result(
             Effect.tryPromise({
-              try: () => startInstanceProxy({ upstreamPort: upstream, preferredPort: live.lastProxyPort }),
+              try: () => startInstanceProxy({ upstreamPort: upstream, preferredPort: live.lastProxyPort, states: live.tokens }),
               catch: (error) => proxyFailed(errorText(error)),
             }),
           );
@@ -838,6 +842,8 @@ export const instancesLayer = Layer.effect(
 
     const touched = Stream.unwrap(Effect.map(PubSub.subscribe(touches), (subscription) => Stream.fromSubscription(subscription)));
 
-    return Instances.of({ create, remove, list, status, start, stop, demand, release, branches, saveSetup, everyChange, changes, touched, noteChanges });
+    const stateToken = (project: string, id: string, payload: ScreenStatePayload) => Effect.map(find(project, id), ({ live }) => live.tokens.issue(payload));
+
+    return Instances.of({ create, remove, list, status, start, stop, demand, release, branches, saveSetup, everyChange, changes, touched, noteChanges, stateToken });
   }),
 );

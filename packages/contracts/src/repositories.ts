@@ -148,6 +148,12 @@ export const ScreensExplode = Rpc.make("screens.explode", {
   error: UnframedError,
 });
 
+export const ScreensStateToken = Rpc.make("screens.stateToken", {
+  payload: Schema.Struct({ project: Schema.String, shapeId: Schema.String }),
+  success: Schema.Struct({ token: Schema.NullOr(Schema.String) }),
+  error: UnframedError,
+});
+
 export const DiffFile = Schema.Struct({ path: Schema.String, additions: Schema.Number, deletions: Schema.Number, binary: Schema.Boolean });
 export type DiffFile = typeof DiffFile.Type;
 
