@@ -10,11 +10,18 @@ export const useWheelToCanvasOn = (editor: Editor, element: HTMLElement | null) 
   useEffect(() => wheelToCanvas(editor, element), [editor, element]);
 };
 
+const scrollsItself = (node: HTMLElement): boolean => {
+  if (node.scrollHeight <= node.clientHeight) return false;
+  if (node.dataset.scrolls === "true") return true;
+  const overflow = getComputedStyle(node).overflowY;
+  return overflow === "auto" || overflow === "scroll";
+};
+
 const wheelToCanvas = (editor: Editor, element: HTMLElement | null): (() => void) | undefined => {
   if (!element) return;
   const onWheel = (event: WheelEvent) => {
     for (let node = event.target as HTMLElement | null; node && node !== element; node = node.parentElement) {
-      if (node.dataset.scrolls === "true" && node.scrollHeight > node.clientHeight) return;
+      if (scrollsItself(node)) return;
     }
     event.preventDefault();
     event.stopPropagation();
