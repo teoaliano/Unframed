@@ -81112,7 +81112,7 @@ var offTokenValues = (html, kit) => {
 };
 
 // packages/engine/src/agent/version.ts
-var ENGINE_VERSION = "0.8.6";
+var ENGINE_VERSION = "0.8.7";
 
 // packages/engine/src/log.ts
 var errorText = (error3) => error3 instanceof Error ? error3.message : String(error3);

@@ -96178,13 +96178,6 @@ var LoggedStorage = class {
   }
 };
 
-// packages/engine/src/canvas/starter.ts
-var STARTER_SUBJECT = "lone red fox";
-var STARTER_SCENE = "A @<subject id> on a windswept cliff at golden hour, cinematic, 35mm";
-var SUBJECT_PLACEHOLDER = "@<subject id>";
-var STARTER_SCENE_AT = { x: 40, y: 60 };
-var STARTER_SUBJECT_AT = { x: 40, y: 320 };
-
 // packages/engine/src/canvas/room.ts
 var InvalidChange = class extends Error {
 };
@@ -96267,7 +96260,6 @@ var CanvasRoom = class {
       schema: roomSchemaOf(),
       log: { error: (...args2) => logError2(`canvas ${project}: ${args2.map((arg) => errorText(arg)).join(" ")}`) }
     });
-    if (fresh) this.seedStarter();
     this.scheduleIdle();
   }
   get isClosed() {
@@ -96400,46 +96392,6 @@ var CanvasRoom = class {
     this.sockets.clear();
     this.sessionSockets.clear();
     this.tl.close();
-  }
-  seedStarter() {
-    const records = this.read();
-    const page = records.find((record5) => record5.typeName === "page");
-    if (!page) return;
-    const subjectRef = nextRef(records);
-    const sceneRef = nextRef([...records, { typeName: "shape", type: "text", meta: { ref: subjectRef } }]);
-    const prompt = (id, at2, index, ref2, text) => ({
-      id,
-      typeName: "shape",
-      type: "text",
-      x: at2.x,
-      y: at2.y,
-      rotation: 0,
-      index,
-      parentId: page.id,
-      isLocked: false,
-      opacity: 1,
-      props: {
-        color: "black",
-        size: "s",
-        w: 320,
-        font: "sans",
-        textAlign: "start",
-        autoSize: false,
-        scale: 1,
-        richText: toRichText(text)
-      },
-      meta: { ref: ref2 }
-    });
-    this.apply(
-      {
-        put: [
-          prompt("shape:starter-scene", STARTER_SCENE_AT, "a1", sceneRef, STARTER_SCENE.replace(SUBJECT_PLACEHOLDER, `@${subjectRef}`)),
-          prompt("shape:starter-subject", STARTER_SUBJECT_AT, "a2", subjectRef, STARTER_SUBJECT)
-        ],
-        remove: []
-      },
-      { kind: "system", id: "starter" }
-    );
   }
   refCollisions(change) {
     if (change.refChanged.length === 0) return [];
@@ -97650,7 +97602,7 @@ import { closeSync, fsyncSync, openSync, renameSync, writeSync } from "node:fs";
 import { readFile as readFile4, rm as rm4 } from "node:fs/promises";
 
 // packages/engine/src/agent/version.ts
-var ENGINE_VERSION = "0.8.6";
+var ENGINE_VERSION = "0.8.7";
 
 // packages/engine/src/agentConnections/discovery.ts
 var writeDiscovery = (path, port, startedAt) => {
