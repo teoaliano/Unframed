@@ -194,7 +194,9 @@ export class InstanceTools {
   tools(): McpTool[] {
     const schema = (name: string, properties: Record<string, string>, required: string[] = []) => ({
       type: "object",
-      properties: Object.fromEntries(Object.entries(properties).map(([key, type]) => [key, { type, description: text(name).arguments[key] ?? "" }])),
+      properties: Object.fromEntries(
+        Object.entries(properties).map(([key, type]) => [key, { type, ...(type === "array" ? { items: { type: "object" } } : {}), description: text(name).arguments[key] ?? "" }]),
+      ),
       ...(required.length === 0 ? {} : { required }),
       additionalProperties: false,
     });
@@ -204,34 +206,8 @@ export class InstanceTools {
       ["instance_status", schema("instance_status", { id: "string" })],
       ["instance_start", schema("instance_start", { id: "string" }, ["id"])],
       ["instance_stop", schema("instance_stop", { id: "string" }, ["id"])],
-      [
-        "screen_state",
-        {
-          type: "object",
-          properties: {
-            shapeId: { type: "string", description: text("screen_state").arguments.shapeId },
-            route: { type: "string", description: text("screen_state").arguments.route },
-            steps: { type: "array", items: { type: "object" }, description: text("screen_state").arguments.steps },
-            mocks: { type: "array", items: { type: "object" }, description: text("screen_state").arguments.mocks },
-            state: { type: "string", description: text("screen_state").arguments.state },
-            newScreen: { type: "boolean", description: text("screen_state").arguments.newScreen },
-          },
-          required: ["shapeId", "route", "state"],
-          additionalProperties: false,
-        },
-      ],
-      [
-        "flow_create",
-        {
-          type: "object",
-          properties: {
-            shapeId: { type: "string", description: text("flow_create").arguments.shapeId },
-            states: { type: "array", items: { type: "object" }, description: text("flow_create").arguments.states },
-          },
-          required: ["shapeId", "states"],
-          additionalProperties: false,
-        },
-      ],
+      ["screen_state", schema("screen_state", { shapeId: "string", route: "string", steps: "array", mocks: "array", state: "string", newScreen: "boolean" }, ["shapeId", "route", "state"])],
+      ["flow_create", schema("flow_create", { shapeId: "string", states: "array" }, ["shapeId", "states"])],
     ];
     return definitions.map(([name, inputSchema]) => ({
       name,
