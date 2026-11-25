@@ -12,7 +12,6 @@ import {
   screenOverrideOf,
   SCREEN_EDITS_TEMPLATE,
   screenSourceTree,
-  screenViewportName,
   undoScreenOverride,
   type ScreenOverride,
 } from "../src/index.ts";
@@ -105,13 +104,5 @@ describe("a Screen in the element context", () => {
       [ELEMENT_CONTEXT_INTRO, `${ELEMENT_CONTEXT_SCREEN.replace("{label}", "trunk · /app").replace("{id}", "s1")}\n- body > button: <button>Save</button>`].join("\n\n"),
     );
     expect(asset("element-context.md")).toContain(ELEMENT_CONTEXT_SCREEN);
-  });
-});
-
-describe("a Screen's preview size", () => {
-  it("names the canvas viewport a size matches, and nothing for any other size", () => {
-    expect(screenViewportName({ w: 390, h: 844 })).toBe("Phone");
-    expect(screenViewportName({ w: 1280, h: 800 })).toBe("Desktop");
-    expect(screenViewportName({ w: 1000, h: 800 })).toBeUndefined();
   });
 });

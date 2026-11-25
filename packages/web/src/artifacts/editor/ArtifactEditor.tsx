@@ -540,7 +540,7 @@ export const ArtifactEditor = ({
     isScreen ? elements.map((element) => screenChip(element, session.reports[element.elementId ?? ""] ?? {})) : elements;
   const tell = (elements: ChipElement[]) => tellAgent(chatClient, shapeId, forAgent(elements));
   const ask = (field: string, elements: ChipElement[]) => tellAgent(chatClient, shapeId, forAgent(elements), makeEditableInstruction(field));
-  const displayTitle = screen === undefined ? artifactTitle(facts) : screenLabel({ branch: instance?.branch ?? screen.title, route: screen.route, state: screen.state });
+  const displayTitle = screen === undefined ? artifactTitle(facts) : screenLabel({ branch: screen.title, route: screen.route, state: screen.state });
   const title =
     displayTitle === "" ? shapeId.replace(/^shape:/, "") : displayTitle;
   const component = facts.kind === "component";

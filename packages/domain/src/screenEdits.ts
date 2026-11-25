@@ -1,7 +1,6 @@
 import type { SourceEdit, SourceTreeElement } from "@unframed/contracts";
 import { artifactTitle, isArtifactKind, type EditorKind } from "./artifacts/artifactRules.ts";
 import type { ChipElement } from "./elementChips.ts";
-import { SCREEN_VIEWPORTS } from "./screens.ts";
 import { screenLabel } from "./screenStates.ts";
 
 export const SCREEN_EDITS_TEMPLATE =
@@ -134,6 +133,3 @@ export const screenChip = (chip: ChipElement, element: { readonly path?: string 
   label: element.name ?? chip.label,
   startTag: chip.startTag.replace(/ data-hf-id="[^"]*"/g, ""),
 });
-
-export const screenViewportName = (size: { readonly w: number; readonly h: number }): string | undefined =>
-  SCREEN_VIEWPORTS.find((viewport) => viewport.w === Math.round(size.w) && viewport.h === Math.round(size.h))?.name;

@@ -222,12 +222,12 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
 
   const post = useCallback((message: unknown) => postRef.current?.(message), []);
 
-  const setOverrides = (next: readonly ScreenOverride[]) => {
-    if (next === overridesRef.current) return;
+  const setOverrides = (next: readonly ScreenOverride[], tell = true) => {
+    if (next === overridesRef.current || (next.length === 0 && overridesRef.current.length === 0)) return;
     overridesRef.current = next;
     setOverridesState(next);
     setPending(next.map((override) => override.edit));
-    overridesTo.current?.(next);
+    if (tell) overridesTo.current?.(next);
   };
   const repaint = (list: readonly ScreenOverride[]) => {
     post({ type: "unframed:edit:reset" });
@@ -602,7 +602,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
           reportsRef.current = {};
           setReports({});
           setHovered(null);
-          setOverrides([]);
+          setOverrides([], false);
           selectionRef.current = [];
           setSelectionState([]);
         }
