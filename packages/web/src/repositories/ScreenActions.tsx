@@ -15,7 +15,7 @@ import { createChat, sendMessage } from "../agent/send.ts";
 import { useChatClient } from "../agent/store.ts";
 import { Tip } from "../chrome/ui.tsx";
 import { useCanvasProject, useEngine } from "../context.ts";
-import { repositoryState } from "./store.ts";
+import { repositoryState, useRepositorySetup } from "./store.ts";
 
 export const BAD_ROUTE = "A route starts with / and has no spaces, like /settings?tab=2.";
 
@@ -428,7 +428,7 @@ const ChangesForm = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
 
 const SetupNotes = () => {
   const project = useCanvasProject();
-  const setup = useValue("repository setup", () => repositoryState(project).repository.get()?.setup ?? null, [project]);
+  const setup = useRepositorySetup(project);
   const tag = setupTag(setup);
   const warnings = setup?.warnings ?? [];
   if (tag === undefined && warnings.length === 0) return null;

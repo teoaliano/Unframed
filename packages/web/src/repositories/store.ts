@@ -1,5 +1,5 @@
 import type { Instance, Repository, ScreenSnapshot } from "@unframed/contracts";
-import { atom, type Atom } from "tldraw";
+import { atom, type Atom, useValue } from "tldraw";
 import type { EngineConnection } from "../rpc/engine.ts";
 
 export interface RepositoryState {
@@ -26,6 +26,8 @@ export const repositoryState = (project: string): RepositoryState => {
   }
   return found;
 };
+
+export const useRepositorySetup = (project: string) => useValue("repository setup", () => repositoryState(project).repository.get()?.setup ?? null, [project]);
 
 const putInstance = (state: RepositoryState, instance: Instance) => state.instances.set(new Map(state.instances.get()).set(instance.id, instance));
 
