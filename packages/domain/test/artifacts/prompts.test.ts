@@ -37,6 +37,9 @@ import {
   SCREEN_EXPLODE_TEXT,
   FLOW_INSTRUCTION_TEMPLATE,
   flowInstruction,
+  SCREEN_STATE_TEXT,
+  FIX_STATE_TEMPLATE,
+  fixStateInstruction,
 } from "../../src/index.ts";
 
 const prompts = join(import.meta.dirname, "../../../../assets/prompts");
@@ -139,5 +142,16 @@ describe("the Flow's model-facing text is the asset's text", () => {
     const text = flowInstruction({ shape: "a1b2", route: "/", branch: "feature/x", worktree: "/data/worktrees/app/x" });
     expect(text).not.toMatch(/<shape>|<route>|<branch>|<worktree>/);
     expect(text).toContain('Explode the Screen a1b2 into a Flow: read the router in the Instance\'s worktree at /data/worktrees/app/x (the branch "feature/x")');
+  });
+});
+
+describe("the Screen states' model-facing text is the asset's text", () => {
+  it("holds screen_state and the instruction that asks the agent to fix a state", () => {
+    const all = Object.fromEntries(sections("screen-states.md").map((section) => [section.name, section]));
+    expect(SCREEN_STATE_TEXT).toEqual({ description: all.screen_state!.text, arguments: all.screen_state!.args });
+    expect(FIX_STATE_TEMPLATE).toBe(all["Fix a state"]!.text);
+    const text = fixStateInstruction({ shape: "a1b2", branch: "trunk", state: "the menu open", route: "/app", steps: [{ action: "press", key: "Escape" }], mocks: [], number: 1, step: "press Escape", reason: "nothing matched" });
+    expect(text).not.toMatch(/<shape>|<branch>|<state>|<number>|<step>|<reason>|<route>|<steps>|<mocks>/);
+    expect(text).toContain('The Screen a1b2 on the branch "trunk" no longer reaches its state "the menu open": step 1, press Escape, failed: nothing matched. It starts from /app, with the steps [{"action":"press","key":"Escape"}] and the mocks [].');
   });
 });

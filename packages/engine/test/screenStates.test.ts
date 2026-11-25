@@ -25,7 +25,11 @@ describe("a Screen's mocks reach its page through a per-load token", () => {
       { ...agent.screen, id: "shape:failing", props: { ...agent.screen.props, route: "/app", mocks: [FAILED], state: "a failed list" } },
       { ...agent.screen, id: "shape:plain", props: { ...agent.screen.props } },
     ]);
-    const token = async (shapeId: string) => (await agent.rpc.call("screens.stateToken", { project: agent.project, shapeId })).token;
+    const records = await agent.records();
+    const token = async (shapeId: string) => {
+      const props = records.find((record) => record.id === shapeId).props;
+      return (await agent.rpc.call("screens.stateToken", { project: agent.project, instance: props.instance, steps: props.steps ?? [], mocks: props.mocks ?? [] })).token;
+    };
     const first = await token(agent.screen.id);
     const failing = await token("shape:failing");
     expect(first).toEqual(expect.any(String));

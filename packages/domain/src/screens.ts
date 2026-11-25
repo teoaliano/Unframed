@@ -20,6 +20,8 @@ export const SCREEN_GAP = 80;
 
 export const NO_BRIDGE = "Parameters need Unframed's script in the page, and this page did not load it (a strict CSP, or a response that is not HTML).";
 
+export const NO_STATE_BRIDGE = "This page did not load Unframed's script, so it cannot show its state or follow navigation.";
+
 export const screenUrl = (proxyPort: number, route: string): string => `http://127.0.0.1:${proxyPort}${route}`;
 
 const LOOPBACK_URL = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(?=[/?#]|$)/i;

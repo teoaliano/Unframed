@@ -149,7 +149,7 @@ export const ScreensExplode = Rpc.make("screens.explode", {
 });
 
 export const ScreensStateToken = Rpc.make("screens.stateToken", {
-  payload: Schema.Struct({ project: Schema.String, shapeId: Schema.String }),
+  payload: Schema.Struct({ project: Schema.String, instance: Schema.String, steps: Schema.Array(Schema.Unknown), mocks: Schema.Array(Schema.Unknown) }),
   success: Schema.Struct({ token: Schema.NullOr(Schema.String) }),
   error: UnframedError,
 });

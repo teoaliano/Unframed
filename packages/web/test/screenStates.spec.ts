@@ -1,6 +1,9 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { Page } from "@playwright/test";
+import { fixStateInstruction } from "@unframed/domain";
 import { git } from "../../engine/test/gitRepos.ts";
+import { engineChat, engineChats, FIXTURES } from "./agent.ts";
 import { expect, test } from "./fixtures.ts";
 import { clickShape } from "./generation.ts";
 import { putShapes, screenShapes, withRepository } from "./screenHarness.ts";
@@ -63,5 +66,91 @@ test("Remove branch and worktree removes the Screen's worktree and branch, warni
     await expect(panel).toHaveCount(0);
     await expect(page.locator("[data-testid=screen] [data-testid=screen-overlay]")).toHaveText("Worktree removed");
     expect(git(root, "branch", "--list", "try/remove").trim()).toBe("");
+  });
+});
+
+const frameOf = (page: Page, shapeId?: string) => page.frameLocator(`${shapeId === undefined ? "[data-testid=screen]" : `[data-shape-id="${shapeId}"]`} iframe[data-screen-frame]`);
+
+const selectScreen = async (page: Page, shapeId: string) => {
+  await clickShape(page, shapeId);
+  await expect(page.locator(`[data-shape-id="${shapeId}"] iframe[data-screen-frame]`)).toHaveAttribute("data-interactive", "true");
+};
+
+const blurFrame = (page: Page) => page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+
+test("a live Screen follows the person's navigation inside it, back included, and undo brings it back", async ({ page }) => {
+  await withRepository(page, {}, async (engine, project) => {
+    const [first] = await screenShapes(engine, project);
+    await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/app" } }]);
+    const screen = page.locator("[data-testid=screen]");
+    await expect(screen).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
+    await selectScreen(page, first.id);
+    await frameOf(page).getByRole("link", { name: "About" }).dispatchEvent("click");
+    await expect(screen).toHaveAttribute("data-route", "/app/about");
+    await expect(screen.locator("[data-shape-label] [data-label-text]")).toHaveText(`${first.props.title} · /app/about`);
+    await expect.poll(async () => (await screenShapes(engine, project))[0].props.route).toBe("/app/about");
+    await expect(frameOf(page).locator("#where")).toHaveText("/app/about");
+
+    await frameOf(page).locator("body").evaluate(() => history.back());
+    await expect(screen).toHaveAttribute("data-route", "/app");
+    await frameOf(page).getByRole("link", { name: "About" }).dispatchEvent("click");
+    await expect(screen).toHaveAttribute("data-route", "/app/about");
+
+    await blurFrame(page);
+    await page.keyboard.press("Control+z");
+    await expect(screen).toHaveAttribute("data-route", "/app");
+    await expect(frameOf(page).locator("#where")).toHaveText("/app");
+  });
+});
+
+const MENU_EMPTY = { state: "the menu open with no items", steps: [{ action: "click", target: { role: "button", name: "Menu" } }], mocks: [{ url: "/api/items", status: 200, headers: { "content-type": "application/json" }, body: "[]", delay: 0 }] };
+
+test("a Screen holding a state replays its steps with its own mocks on every load, and navigating moves it to a plain page, undoably", async ({ page }) => {
+  await withRepository(page, {}, async (engine, project) => {
+    const [first] = await screenShapes(engine, project);
+    await putShapes(engine, project, [
+      { ...first, props: { ...first.props, route: "/app", w: 640, h: 480, ...MENU_EMPTY } },
+      { ...first, id: "shape:plain", y: first.y + 600, props: { ...first.props, route: "/app", w: 640, h: 480 } },
+    ]);
+    const stateful = frameOf(page, first.id);
+    await expect(stateful.getByRole("menuitem", { name: "Settings" })).toBeVisible({ timeout: 30_000 });
+    await expect(stateful.locator("#list-state")).toHaveText("No items yet");
+    await expect(frameOf(page, "shape:plain").locator("#list-state")).toHaveText("2 items");
+    await expect(frameOf(page, "shape:plain").getByRole("menuitem", { name: "Settings" })).toBeHidden();
+
+    await page.reload();
+    await expect(frameOf(page, first.id).getByRole("menuitem", { name: "Settings" })).toBeVisible({ timeout: 30_000 });
+    await expect(frameOf(page, first.id).locator("#list-state")).toHaveText("No items yet");
+
+    await selectScreen(page, first.id);
+    await frameOf(page, first.id).getByRole("link", { name: "About" }).dispatchEvent("click");
+    await expect.poll(async () => (await screenShapes(engine, project)).find((shape) => shape.id === first.id).props).toMatchObject({ route: "/app/about" });
+    const moved = (await screenShapes(engine, project)).find((shape) => shape.id === first.id);
+    expect(moved.props.steps).toBeUndefined();
+    expect(moved.props.mocks).toBeUndefined();
+    expect(moved.props.state).toBeUndefined();
+
+    await blurFrame(page);
+    await page.keyboard.press("Control+z");
+    await expect.poll(async () => (await screenShapes(engine, project)).find((shape) => shape.id === first.id).props).toMatchObject({ route: "/app", ...MENU_EMPTY });
+    await expect(frameOf(page, first.id).getByRole("menuitem", { name: "Settings" })).toBeVisible({ timeout: 30_000 });
+  });
+});
+
+test("a Screen whose steps no longer work says Couldn't reach this state with the failed step, and its button asks the agent to fix them", async ({ page }) => {
+  await withRepository(page, { UNFRAMED_TEST_AGENT_SCRIPT: FIXTURES }, async (engine, project) => {
+    const [first] = await screenShapes(engine, project);
+    const broken = { state: "the menu open", steps: [{ action: "click", target: { role: "button", name: "Menu" } }, { action: "click", target: { role: "button", name: "Missing" } }] };
+    await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/app", ...broken } }]);
+    const failed = page.locator("[data-testid=screen] [data-testid=screen-state-failed]");
+    await expect(failed).toContainText("Couldn't reach this state", { timeout: 30_000 });
+    await expect(failed.getByTestId("screen-state-failed-step")).toHaveText("Step 2, click button Missing, failed: nothing matched button Missing within 5 seconds");
+    await failed.getByRole("button", { name: "Ask the agent to fix it" }).click();
+    await expect(failed.getByTestId("screen-state-asked")).toHaveText("Sent to the agent.");
+    const chats = (await engineChats(engine, project)).filter((chat) => chat.title !== "Setup");
+    expect(chats).toHaveLength(1);
+    expect((await engineChat(engine, chats[0]!.id, project)).messages.find((message) => message.role === "user")?.text).toBe(
+      fixStateInstruction({ shape: first.id.replace(/^shape:/, ""), branch: first.props.title, state: "the menu open", route: "/app", steps: broken.steps, mocks: undefined, number: 2, step: "click button Missing", reason: "nothing matched button Missing within 5 seconds" }),
+    );
   });
 });
