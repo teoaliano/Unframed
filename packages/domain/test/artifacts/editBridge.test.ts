@@ -490,6 +490,7 @@ describe("the edit bridge in a Screen, which stamps the app's elements on demand
     const first = main.add(new FakeElement("button", { text: "Save", attrs: { class: "btn primary" } }));
     const second = main.add(new FakeElement("button", { text: "Cancel", attrs: { "aria-label": "Cancel changes" } }));
     const titled = stub.document.body.add(new FakeElement("h1", { text: "Shop", attrs: { id: "title" } }));
+    stub.document.body.add(new FakeElement("p", { text: "  Free   delivery " }));
     return { ...stub, main, first, second, titled };
   };
 
@@ -523,7 +524,8 @@ describe("the edit bridge in a Screen, which stamps the app's elements on demand
   it("answers the tree with every element stamped, named and pathed", () => {
     const { send, messages } = app();
     send({ type: "unframed:edit:tree" });
-    const [main, title] = messages("unframed:edit:tree")[0].nodes;
+    const [main, title, note] = messages("unframed:edit:tree")[0].nodes;
+    expect(note).toMatchObject({ tag: "p", name: "Free delivery", path: "body > p" });
     expect(main).toMatchObject({ tag: "main", name: "page", path: "body > main.page.wide" });
     expect(main.id).toMatch(/^uf\d+$/);
     expect(main.children.map((node: { name: string }) => node.name)).toEqual(["btn", "Cancel changes"]);

@@ -244,7 +244,8 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
   const nameOf = (el: EditElement): string => {
     const label = (el.getAttribute("aria-label") ?? "").trim();
     if (label !== "") return label.slice(0, 60);
-    return el.getAttribute("id") ?? classesOf(el)[0] ?? el.tagName.toLowerCase();
+    const text = textOnly(el) ? (el.textContent ?? "").replace(/\s+/g, " ").trim() : "";
+    return el.getAttribute("id") ?? classesOf(el)[0] ?? (text === "" ? el.tagName.toLowerCase() : text.slice(0, 40));
   };
   const screenFields = (el: EditElement): { path?: string; name?: string } => (stamp ? { path: pathOf(el), name: nameOf(el) } : {});
 
