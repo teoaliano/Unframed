@@ -102,10 +102,12 @@ export const instanceGitLayer = Layer.effect(
 
     const withTemporaryIndex = <A>(at: InstanceTarget, run: (env: Record<string, string>) => Effect.Effect<A, UnframedError>) =>
       Effect.gen(function* () {
+        const name = `unframed-index-${randomBytes(6).toString("hex")}`;
         const real = gitOutput(yield* git(at.worktree, ["rev-parse", "--git-path", "index"]))?.trim();
-        const path = join(tmpdir(), `unframed-index-${randomBytes(6).toString("hex")}`);
+        const inGitDir = gitOutput(yield* git(at.worktree, ["rev-parse", "--git-path", name]))?.trim();
+        const path = inGitDir ? (isAbsolute(inGitDir) ? inGitDir : join(at.worktree, inGitDir)) : join(tmpdir(), name);
         if (real) yield* Effect.promise(() => copyFile(isAbsolute(real) ? real : join(at.worktree, real), path).catch(() => undefined));
-        return yield* run({ GIT_INDEX_FILE: path }).pipe(Effect.ensuring(Effect.promise(() => rm(path, { force: true }))));
+        return yield* run({ GIT_INDEX_FILE: path }).pipe(Effect.ensuring(Effect.promise(() => Promise.all([rm(path, { force: true }), rm(`${path}.lock`, { force: true })]))));
       });
 
     const diff = (project: string, id: string) =>

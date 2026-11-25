@@ -1,7 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { copyFile, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { copyFile, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runMarkerOf, type RenderStatus } from "@unframed/contracts";
 import { ARTIFACT_TITLE_MAX, compositionSize, nextRef, NO_CHROME_RENDER_MESSAGE, placeResults } from "@unframed/domain";
@@ -11,6 +10,7 @@ import { errorText, logError, logInfo } from "../log.ts";
 import { clearChange, fillFor, indexOnTop, isShape, PLACEHOLDER_WIDTH, videoPlaceholder, type LandedClip, type RunOutcome } from "../runs/placeholders.ts";
 import { shapePageBoxes } from "../runs/shapeBounds.ts";
 import { ensureLibrary, ensurePinnedComponents, placeRenderOutput } from "./artifactStore.ts";
+import { makeChromeProfile } from "./chromeProfiles.ts";
 import { kitStamp } from "@unframed/domain";
 import { ensureTokens, kitOf } from "../kits/tokensFile.ts";
 
@@ -210,7 +210,7 @@ export class Renderer {
     run: { settle: (outcome: RunOutcome<LandedClip>) => void };
   }): Promise<void> {
     let outcome: RunOutcome<LandedClip>;
-    const temp = await mkdtemp(join(tmpdir(), "unframed-render-"));
+    const temp = await makeChromeProfile(undefined, "render-");
     try {
       this.update(job.id, { status: "rendering" });
       const chromePath = await this.deps.backend.findChrome();

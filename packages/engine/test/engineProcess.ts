@@ -4,9 +4,9 @@
  * recorded instead of run. Tests drive the engine only through what this exposes: RPC,
  * HTTP, IPC messages, stdout and the files it writes.
  */
-import { fork, spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { execFileSync, fork, spawn, type ChildProcess } from "node:child_process";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -195,9 +195,70 @@ const killEngine = (child: ChildProcess, signal: NodeJS.Signals) => {
 
 /** Engines not disposed yet. A runner that exits without disposing one (a failed beforeAll, a killed test) kills it here. */
 const running = new Set<ChildProcess>();
+
+const tempDirs = new Set<string>();
+
 process.on("exit", () => {
   for (const child of running) killEngine(child, "SIGKILL");
+  for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
 });
+
+const TEMP_OWNER = /^unframed-[a-z0-9-]*?p(\d+)-[A-Za-z0-9]{6}$/;
+
+const ownerAlive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+};
+
+/** Removes the temporary folders `makeTempDir` named after a test process that is gone. */
+export const sweepTempDirs = async (root = tmpdir()): Promise<string[]> => {
+  const removed: string[] = [];
+  for (const name of await readdir(root).catch(() => [] as string[])) {
+    const owner = TEMP_OWNER.exec(name)?.[1];
+    if (owner === undefined || ownerAlive(Number(owner))) continue;
+    await rm(join(root, name), { recursive: true, force: true }).catch(() => undefined);
+    removed.push(name);
+  }
+  return removed;
+};
+
+const startTimeOf = (pid: number): string | undefined => {
+  try {
+    return execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const killInstanceServers = (dataDir: string) => {
+  if (!groups) return;
+  const pidDir = join(dataDir, "instance-pids");
+  let names: string[];
+  try {
+    names = readdirSync(pidDir);
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    try {
+      const { pid, started } = JSON.parse(readFileSync(join(pidDir, name), "utf8")) as { pid: number; started: string };
+      if (!Number.isInteger(pid) || pid <= 1 || startTimeOf(pid) !== started) continue;
+      for (const target of [-pid, pid]) {
+        try {
+          process.kill(target, "SIGKILL");
+        } catch {
+          continue;
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+};
 
 /**
  * How a test runner hears about cleanups: the Vitest harness registers each with the
@@ -207,10 +268,14 @@ export const setCleanupRegistrar = (registrar: (cleanup: () => Promise<void>) =>
   registerCleanup = registrar;
 };
 
-/** A fresh temporary folder, removed when the test finishes (when a runner registered cleanups). */
+/** A fresh temporary folder, removed when the test finishes (when a runner registered cleanups) or else when this process exits. */
 export const makeTempDir = async (prefix = "unframed-test-"): Promise<string> => {
-  const dir = await mkdtemp(join(tmpdir(), prefix));
-  registerCleanup(() => rm(dir, { recursive: true, force: true }));
+  const dir = await mkdtemp(join(tmpdir(), `${prefix}p${process.pid}-`));
+  tempDirs.add(dir);
+  registerCleanup(async () => {
+    await rm(dir, { recursive: true, force: true });
+    tempDirs.delete(dir);
+  });
   return dir;
 };
 
@@ -383,10 +448,14 @@ export const startEngine = async (options: EngineOptions = {}): Promise<TestEngi
         killEngine(child, "SIGKILL");
         await exited;
       }
+      killInstanceServers(dataDir);
       await stub?.close();
       await elevenLabs?.close();
       await vercel?.close();
-      if (ownsDataDir) await rm(dataDir, { recursive: true, force: true });
+      if (ownsDataDir) {
+        await rm(dataDir, { recursive: true, force: true });
+        tempDirs.delete(dataDir);
+      }
     },
   };
   registerCleanup(() => engine.dispose());
