@@ -100,6 +100,7 @@ describe("creating an Instance", () => {
       upstreamPort: null,
       error: null,
       log: expect.any(String),
+      changes: 0,
     });
 
     const ready = await settled(rpc, "my-app", id);

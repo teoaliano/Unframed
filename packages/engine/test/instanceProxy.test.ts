@@ -72,7 +72,7 @@ describe("serving a live Instance through its proxy", () => {
 
     const page = await rawRequest(proxy, "/dashboard", { headers: { ...at(proxy), accept: "text/html" } });
     expect(page.status).toBe(200);
-    expect(page.text).toBe(`<!doctype html><html><head>${TAG}<title>Fake app</title></head><body><h1>Fake app</h1><p id="path">/dashboard</p></body></html>`);
+    expect(page.text).toBe(`<!doctype html><html><head>${TAG}<title>Fake app</title></head><body><h1>Fake app</h1><p id="path">/dashboard</p><p id="search"></p></body></html>`);
 
     const info = (await rawRequest(proxy, "/__fake/info", { headers: { ...at(proxy), accept: "text/html", "accept-encoding": "gzip" } })).json();
     expect(info.host).toBe(`127.0.0.1:${proxy}`);
