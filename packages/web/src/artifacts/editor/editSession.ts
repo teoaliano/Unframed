@@ -385,9 +385,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
     (edit: SourceEdit, showInFrame: boolean) => {
       if (screen) {
         const id = "elementId" in edit ? edit.elementId : undefined;
-        const report = id === undefined ? undefined : reportsRef.current[id];
-        const node = id === undefined || report !== undefined ? undefined : liveNodeOf(liveRef.current, id);
-        const known = report ?? node;
+        const known = id === undefined ? undefined : reportsRef.current[id] ?? liveNodeOf(liveRef.current, id);
         const override = known === undefined ? undefined : screenOverrideOf(edit, { name: known.name ?? known.tag, path: known.path ?? known.selector });
         if (override === undefined) return;
         lastEdit.current[override.edit.elementId] = edit;
