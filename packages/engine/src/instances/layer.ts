@@ -31,6 +31,7 @@ import {
   proxyFailed,
   packageScripts,
   parseProcessTable,
+  portInUse,
   processTreeRss,
   projectSlug,
   serverExited,
@@ -57,7 +58,7 @@ import { errorText } from "../log.ts";
 import { LoginShell } from "../loginShell.ts";
 import { ProjectDatabase } from "../projectDatabase.ts";
 import { Projects } from "../projects.ts";
-import { makeGit, gitOutput } from "../repositories/git.ts";
+import { makeGit, gitOutput, gitStdout } from "../repositories/git.ts";
 import { readKind, readRepository, writeRepository, type StoredRepository } from "../repositories/tables.ts";
 import { Config } from "../services.ts";
 import { Shutdown } from "../shutdown.ts";
@@ -343,6 +344,10 @@ export const instancesLayer = Layer.effect(
         }
         const single = setup.portMode.mode === "single";
         const port = setup.portMode.mode === "single" ? setup.portMode.port : yield* Effect.promise(() => freePort(reservedPorts()));
+        if (single && (yield* Effect.promise(() => answers(port)))) {
+          setState(live, "failed", { upstreamPort: null, error: portInUse(port) });
+          return undefined;
+        }
         const packageJson = yield* Effect.promise(() => readFile(join(live.stored.worktree, "package.json"), "utf8").catch(() => undefined));
         const shaped = shapeRunCommand({ command: setup.runCommand, port, scripts: packageScripts(packageJson) });
         live.reservedPort = port;
@@ -555,8 +560,8 @@ export const instancesLayer = Layer.effect(
             const upstream = gitOutput(yield* git(root, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", `refs/heads/${branch}@{upstream}`]))?.trim();
             const baseResolves = gitOutput(yield* git(root, ["rev-parse", "--verify", "--quiet", `${baseRef}^{commit}`])) !== undefined;
             const not = [baseCommit, ...(baseResolves ? [baseRef] : []), ...(upstream ? [upstream] : [])];
-            const ahead = gitOutput(yield* git(root, ["rev-list", "--count", `refs/heads/${branch}`, "--not", ...not]));
-            if (ahead === undefined || Number(ahead.trim()) > 0) return yield* unframedError("conflict", unsavedWork(branch));
+            const ahead = gitStdout(yield* git(root, ["rev-list", "--count", `refs/heads/${branch}`, "--not", ...not]))?.trim();
+            if (ahead !== "0") return yield* unframedError("conflict", unsavedWork(branch));
           }
         }
         yield* halt(live);

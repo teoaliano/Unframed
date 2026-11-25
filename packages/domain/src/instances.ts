@@ -18,6 +18,8 @@ export const movedPort = (expected: number, actual: number): string =>
   `The dev server listened on port ${actual} instead of ${expected}, so its port cannot be chosen.`;
 export const serverExited = (code: number | null): string => `The dev server exited${code === null ? "" : ` with code ${code}`}.`;
 export const neverListened = (port: number, seconds: number): string => `The dev server did not listen on port ${port} within ${seconds} seconds.`;
+export const portInUse = (port: number): string =>
+  `Something else is already listening on port ${port}, the fixed port this Repository runs on. Stop it, then start the Instance again.`;
 export const singlePortMoved = (expected: number, actual: number): string =>
   `The dev server listened on port ${actual} instead of ${expected}. Unframed now runs this Repository on port ${actual}.`;
 export const stoppedForBudget = "Unframed stopped this Instance to stay within the memory budget.";
