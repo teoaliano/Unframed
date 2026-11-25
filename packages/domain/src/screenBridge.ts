@@ -9,7 +9,32 @@ export interface BridgeConfig {
   readonly stepTimeout: number;
 }
 
-export function screenBridge(win: any, config: BridgeConfig, match: (mocks: ReadonlyArray<any>, request: { method: string; url: string }) => any): void {
+export function cutParam(query: string, param: string): { readonly query: string; readonly value: string | undefined } {
+  let value: string | undefined;
+  const kept: string[] = [];
+  for (const part of query.split("&")) {
+    const eq = part.indexOf("=");
+    if ((eq === -1 ? part : part.slice(0, eq)) !== param) {
+      kept.push(part);
+      continue;
+    }
+    if (value !== undefined) continue;
+    const raw = eq === -1 ? "" : part.slice(eq + 1);
+    try {
+      value = decodeURIComponent(raw);
+    } catch {
+      value = raw;
+    }
+  }
+  return { query: kept.join("&"), value };
+}
+
+export function screenBridge(
+  win: any,
+  config: BridgeConfig,
+  match: (mocks: ReadonlyArray<any>, request: { method: string; url: string }) => any,
+  cut: (query: string, param: string) => { readonly query: string; readonly value: string | undefined },
+): void {
   const LOOPBACK = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
   const state = win.__unframedScreenState;
   const steps: any[] = state && Array.isArray(state.steps) ? state.steps : [];
@@ -23,10 +48,10 @@ export function screenBridge(win: any, config: BridgeConfig, match: (mocks: Read
     return location.pathname + (location.search || "") + (location.hash || "");
   };
 
-  const url = win.history && typeof win.URL === "function" ? new win.URL(win.location.href) : undefined;
-  if (url !== undefined && url.searchParams.has(config.param)) {
-    url.searchParams.delete(config.param);
-    win.history.replaceState(win.history.state, "", url.pathname + url.search + url.hash);
+  const search = typeof win.location.search === "string" ? win.location.search : "";
+  if (win.history && search.length > 1) {
+    const stripped = cut(search.slice(1), config.param);
+    if (stripped.value !== undefined) win.history.replaceState(win.history.state, "", win.location.pathname + (stripped.query === "" ? "" : `?${stripped.query}`) + (win.location.hash || ""));
   }
 
   if (mocks.length > 0) {
@@ -357,7 +382,7 @@ export function screenBridge(win: any, config: BridgeConfig, match: (mocks: Read
 export const screenBridgeSource = (): string =>
   [
     ...dialsBridgeSource().split("\n").slice(1, -1),
-    `(${screenBridge.toString()})(window, ${JSON.stringify({ param: STATE_PARAM, stepTimeout: STEP_TIMEOUT_MS } satisfies BridgeConfig)}, ${matchMock.toString()});`,
+    `(${screenBridge.toString()})(window, ${JSON.stringify({ param: STATE_PARAM, stepTimeout: STEP_TIMEOUT_MS } satisfies BridgeConfig)}, ${matchMock.toString()}, ${cutParam.toString()});`,
     "",
   ].join("\n");
 
@@ -371,10 +396,7 @@ export const stateRoute = (route: string, token: string): string => {
 export const takeStateParam = (path: string): { readonly path: string; readonly token: string | undefined } => {
   const query = path.indexOf("?");
   if (query === -1) return { path, token: undefined };
-  const params = new URLSearchParams(path.slice(query + 1));
-  const token = params.get(STATE_PARAM) ?? undefined;
+  const { query: rest, value: token } = cutParam(path.slice(query + 1), STATE_PARAM);
   if (token === undefined) return { path, token };
-  params.delete(STATE_PARAM);
-  const rest = params.toString();
   return { path: rest === "" ? path.slice(0, query) : `${path.slice(0, query)}?${rest}`, token };
 };

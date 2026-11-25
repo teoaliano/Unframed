@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { branchChip, followNavigation, checkMocks, checkSteps, describeStep, matchMock, NO_TARGET, screenLabel, SCREEN_STEPS_MAX } from "../src/index.ts";
+import { branchChip, followNavigation, checkMocks, checkSteps, describeStep, matchMock, NO_TARGET, screenBridgeSource, screenLabel, SCREEN_STEPS_MAX, stateRoute, takeStateParam } from "../src/index.ts";
 
 describe("a Screen's steps", () => {
   it("take click, type, press, hover, wait and scroll, each aimed at a target", () => {
@@ -109,5 +109,38 @@ describe("a person navigating inside a Screen", () => {
   it("changes nothing when the route is the one the Screen shows, or is not a route", () => {
     expect(followNavigation(props, "/app")).toBeUndefined();
     expect(followNavigation(props, "https://example.com/")).toBeUndefined();
+  });
+});
+
+describe("a state token in a Screen's route", () => {
+  const ROUTES = ["/search?q=a%20b", "/?preview", "/p?x=a~b&y=%2F&z=1+2", "/settings", "/app#tab"];
+
+  it("leaves the rest of the route byte for byte when the proxy takes it out", () => {
+    for (const route of ROUTES) {
+      const hash = route.indexOf("#");
+      const sent = stateRoute(route, "abc");
+      expect(takeStateParam(hash === -1 ? sent : sent.slice(0, sent.indexOf("#")))).toEqual({ path: hash === -1 ? route : route.slice(0, hash), token: "abc" });
+    }
+    expect(takeStateParam("/search?q=a%20b")).toEqual({ path: "/search?q=a%20b", token: undefined });
+  });
+
+  it("leaves the rest of the page's address byte for byte when the bridge takes it out", () => {
+    for (const route of ROUTES) {
+      const sent = new URL(stateRoute(route, "abc"), "http://127.0.0.1:4101");
+      const replaced: string[] = [];
+      const win: any = {
+        parent: undefined,
+        location: { href: sent.href, pathname: sent.pathname, search: sent.search, hash: sent.hash },
+        history: { state: null, replaceState: (_state: unknown, _title: string, to: string) => replaced.push(to), pushState: () => undefined },
+        document: { readyState: "loading", referrer: "", head: { appendChild: () => undefined }, createElement: () => ({ src: "" }) },
+        console: { error: () => undefined },
+        URL,
+        addEventListener: () => undefined,
+        requestAnimationFrame: () => undefined,
+      };
+      win.parent = win;
+      new Function("window", screenBridgeSource())(win);
+      expect(replaced).toEqual([route]);
+    }
   });
 });
