@@ -1,5 +1,5 @@
 import type { ScreenShapeProps } from "@unframed/contracts";
-import { UnframedError, type GitAction, type GitActionResult, type Instance, type InstanceDiff } from "@unframed/contracts";
+import type { GitAction, GitActionResult, Instance, InstanceDiff } from "@unframed/contracts";
 import { DEFAULT_RUNTIME_MODE, flowInstruction, flowRoutes, forkBranchName, normaliseRoute, SCREEN_GAP, SCREEN_VIEWPORTS, screenUrl, setupTag } from "@unframed/domain";
 import { ChevronDown, ExternalLink, FileDiff, GitBranchPlus, GitFork, Info, MonitorSmartphone, Route, TriangleAlert, Workflow } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -12,7 +12,7 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/c
 import { Textarea } from "~/components/ui/textarea";
 import { readyProviders } from "../agent/providers.ts";
 import { createChat, sendMessage } from "../agent/send.ts";
-import { useChatClient } from "../agent/store.ts";
+import { messageOf, useChatClient } from "../agent/store.ts";
 import { Tip } from "../chrome/ui.tsx";
 import { useCanvasProject, useEngine } from "../context.ts";
 import { repositoryState, useRepositorySetup } from "./store.ts";
@@ -138,8 +138,6 @@ const ViewportMenu = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
     </Menu>
   );
 };
-
-const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
 export const placeScreenBeside = (editor: Editor, shapeId: TLShapeId, instance: Instance): void => {
   const shape = editor.getShape(shapeId);
