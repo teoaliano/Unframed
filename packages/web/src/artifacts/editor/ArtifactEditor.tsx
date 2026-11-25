@@ -180,8 +180,6 @@ export const ArtifactEditor = ({
   const heard = useValue("screen announcement", () => artifactsOf(doc).heard.get().get(shapeId), [doc, shapeId]);
   useEffect(() => (isScreen ? installEditorDemand(engine, project, () => (doc.shape(shapeId)?.props as { instance?: string } | undefined)?.instance) : undefined), [isScreen, engine, project, doc, shapeId]);
   const screenDraft = useRef<ScreenDraft>(NO_SCREEN_DRAFT);
-  const screenFacts = useRef({ instance, screen });
-  screenFacts.current = { instance, screen };
   const uses = useValue(
     "component uses",
     () => {
@@ -198,30 +196,26 @@ export const ArtifactEditor = ({
   const gone = facts === undefined;
   const editing = useFeature("element-editing");
 
-  const onOverrides = useCallback(
-    (overrides: readonly ScreenOverride[]) => {
-      const { instance: shown, screen: props } = screenFacts.current;
-      if (props === undefined) return;
-      const reports = sessionRef.current.reports;
-      const elements = [...new Set(overrides.map((override) => override.edit.elementId))].map((id) => {
-        const source = sessionRef.current.tree?.elements.find((element) => element.id === id);
-        const override = overrides.find((each) => each.edit.elementId === id)!;
-        return screenChip(chipDataFor(id, source, reports[id], false), { path: override.path, name: override.name });
-      });
-      const instruction =
-        overrides.length === 0
-          ? ""
-          : screenEditInstruction({
-              shape: shapeId.replace(/^shape:/, ""),
-              branch: shown?.branch ?? props.title,
-              state: props.state?.trim() || props.route,
-              worktree: shown?.worktree ?? "",
-              overrides,
-            });
-      screenDraft.current = draftScreenEdits(chatClient, shapeId, elements, instruction, screenDraft.current);
-    },
-    [chatClient, shapeId],
-  );
+  const onOverrides = (overrides: readonly ScreenOverride[]) => {
+    if (screen === undefined) return;
+    const reports = sessionRef.current.reports;
+    const elements = [...new Set(overrides.map((override) => override.edit.elementId))].map((id) => {
+      const source = sessionRef.current.tree?.elements.find((element) => element.id === id);
+      const override = overrides.find((each) => each.edit.elementId === id)!;
+      return screenChip(chipDataFor(id, source, reports[id], false), { path: override.path, name: override.name });
+    });
+    const instruction =
+      overrides.length === 0
+        ? ""
+        : screenEditInstruction({
+            shape: shapeId.replace(/^shape:/, ""),
+            branch: instance?.branch ?? screen.title,
+            state: screen.state?.trim() || screen.route,
+            worktree: instance?.worktree ?? "",
+            overrides,
+          });
+    screenDraft.current = draftScreenEdits(chatClient, shapeId, elements, instruction, screenDraft.current);
+  };
   const session = useEditSession({
     doc,
     engine,
