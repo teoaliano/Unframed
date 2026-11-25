@@ -210,7 +210,7 @@ export class Renderer {
     run: { settle: (outcome: RunOutcome<LandedClip>) => void };
   }): Promise<void> {
     let outcome: RunOutcome<LandedClip>;
-    const temp = await makeChromeProfile(undefined, "render-");
+    const temp = await makeChromeProfile("render-");
     try {
       this.update(job.id, { status: "rendering" });
       const chromePath = await this.deps.backend.findChrome();

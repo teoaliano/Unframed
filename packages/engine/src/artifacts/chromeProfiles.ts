@@ -13,7 +13,8 @@ import { isAlive, killGroup } from "../lifeline.ts";
 
 export const chromeProfileRoot = (): string => join(tmpdir(), "unframed-headless-chrome");
 
-export const makeChromeProfile = async (root = chromeProfileRoot(), purpose = ""): Promise<string> => {
+export const makeChromeProfile = async (purpose = ""): Promise<string> => {
+  const root = chromeProfileRoot();
   await mkdir(root, { recursive: true });
   return mkdtemp(join(root, `engine-${process.pid}-${purpose}`));
 };
