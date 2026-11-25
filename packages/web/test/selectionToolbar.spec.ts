@@ -38,7 +38,6 @@ test("the bar is a glass pill with the kit border; Generate is the kit's primary
   await inBothSchemes(page, async () => {
     await page.mouse.move(5, 500);
     expect(await styleOf(bar, "background-color")).toBe(await tokenColor(page, "--selection-toolbar-surface"));
-    // A pill: the radius reaches half the bar's height (the browser reports a fully rounded corner as a huge value).
     expect(parseFloat(await styleOf(bar, "border-top-left-radius"))).toBeGreaterThanOrEqual((await bar.boundingBox())!.height / 2);
     await expectToken(bar, "border-top-color", "--selection-toolbar-border");
     await expectToken(generate, "background-color", "--button-default-surface");
