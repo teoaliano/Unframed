@@ -1,7 +1,9 @@
 import type { Locator, Page } from "@playwright/test";
-import { openCanvas } from "./canvas.ts";
+import { openCanvas, shapeOnScreen } from "./canvas.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { agentChromeButton, expect, promptBox, rail, rpcOf, say, tabs, test } from "./agent.ts";
+import { dialsPage, filledArtifact, writeBridge } from "./artifacts.ts";
+import { clickShape } from "./generation.ts";
 import { openSettings, showSection } from "./settings.ts";
 
 const setLayout = async (engine: TestEngine, value: "panel" | "composer" | "window") => {
@@ -283,4 +285,41 @@ test("the floating window opens from the Agent button below the top bar, moves b
   await expect(rail(page)).toHaveAttribute("data-state", "open");
   await rail(page).evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
   expect(await boxOf(rail(page))).toEqual(kept);
+});
+
+test("the floating window and a floating Parameters panel sit on the canvas together, each moving on its own", async ({ page, agent }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await setLayout(agent, "window");
+  await (await rpcOf(agent)).call("preferences.set", { key: "agent.chatWindow", value: { mode: "float", x: 980, y: 60, w: 400, h: 500 } });
+  await openCanvas(page, agent);
+  await writeBridge(agent);
+  await filledArtifact(agent, { id: "shape:tuned", kind: "page", ref: "150", at: { x: -520, y: -40 }, size: { w: 300, h: 200 }, title: "Tuned", html: dialsPage({ size: [10, 0, 100, 1], accent: "#a78bfa" }) });
+  await expect(shapeOnScreen(page, "shape:tuned")).toBeVisible();
+
+  await agentChromeButton(page).click();
+  const chat = rail(page);
+  await expect(chat).toHaveAttribute("data-state", "open");
+  await clickShape(page, "shape:tuned");
+  await page.getByTestId("selection-toolbar").getByRole("button", { name: "Parameters" }).click();
+  const parameters = page.getByRole("region", { name: "Parameters for Tuned" });
+  await expect(parameters).toBeVisible();
+  await expect(parameters).toHaveAttribute("data-shown", "float");
+  await expect(chat).toBeVisible();
+  await chat.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+  await parameters.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+  const parametersAt = await boxOf(parameters);
+  const chatAt = await boxOf(chat);
+  expect(Math.round(chatAt.x)).toBe(980);
+
+  const header = await boxOf(chat.locator("header").first());
+  await drag(page, { x: header.x + 120, y: header.y + header.height / 2 }, -100, 40);
+  await expect.poll(async () => Math.round((await boxOf(chat)).x)).toBe(880);
+  expect(await boxOf(parameters)).toEqual(parametersAt);
+  await expect(parameters).toBeVisible();
+
+  const parametersHeader = await boxOf(parameters.locator("header"));
+  await drag(page, { x: parametersHeader.x + 150, y: parametersHeader.y + parametersHeader.height / 2 }, 0, 120);
+  await expect.poll(async () => Math.round((await boxOf(parameters)).y)).toBe(Math.round(parametersAt.y) + 120);
+  expect(Math.round((await boxOf(chat)).x)).toBe(880);
+  await expect(chat).toBeVisible();
 });
