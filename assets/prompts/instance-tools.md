@@ -49,7 +49,7 @@ Stop an Instance's dev server. Its Screens show their last snapshot until it run
 ## canvas_read
 
 ```text
-In a Repository, a screen shows one route of one Instance at one viewport: it reports its instance (the Instance's id), route, title, w and h (the viewport), and dials when the person has set Parameters on it.
+In a Repository, a screen shows one state of one Instance at one viewport: it reports its instance (the Instance's id), route, title, w and h (the viewport), dials when the person has set Parameters on it, and state, steps and mocks when it holds a state that screen_state saved.
 ```
 
 ## canvas_write

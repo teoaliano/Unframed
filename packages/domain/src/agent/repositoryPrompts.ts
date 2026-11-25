@@ -6,7 +6,7 @@ export const INSTANCE_TOOL_TEXT: Readonly<Record<string, { readonly description:
   instance_stop: { description: "Stop an Instance's dev server. Its Screens show their last snapshot until it runs again.", arguments: {"id": "The Instance's id."} },
 };
 
-export const CANVAS_READ_SCREENS = "In a Repository, a screen shows one route of one Instance at one viewport: it reports its instance (the Instance's id), route, title, w and h (the viewport), and dials when the person has set Parameters on it.";
+export const CANVAS_READ_SCREENS = "In a Repository, a screen shows one state of one Instance at one viewport: it reports its instance (the Instance's id), route, title, w and h (the viewport), dials when the person has set Parameters on it, and state, steps and mocks when it holds a state that screen_state saved.";
 export const CANVAS_WRITE_SCREENS = "In a Repository you can also create a screen (props.instance is an Instance's id, props.route a path such as /settings, w and h the viewport) and update a screen's route, title, dials, w or h.";
 export const PREVIEW_OPEN_SCREENS = "In a Repository, shapeId may also name a Screen: the tab opens that Screen's route of its Instance through the Instance's proxy, at the Screen's viewport, and starts the Instance first when it is stopped.";
 

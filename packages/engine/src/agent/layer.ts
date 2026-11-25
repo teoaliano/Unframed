@@ -42,6 +42,7 @@ import { PreviewTools } from "../artifacts/previewTools.ts";
 import { openShell, openThread } from "./subscriptions.ts";
 import { Instances } from "../instances/layer.ts";
 import { InstanceTools } from "../instances/instanceTools.ts";
+import { chromeStateProver } from "../screens/screenState.ts";
 import { Repositories } from "../repositories/layer.ts";
 import { isScreenShape } from "../screens/firstScreen.ts";
 
@@ -118,6 +119,8 @@ export const agentsLayer = Layer.effect(
       stop: (project, id) => run(instances.stop(project, id)),
       read: (project) => run(rooms.read(project)),
       apply: (project, change, origin) => run(rooms.apply(project, change, origin)),
+      stateToken: (project, id, payload) => run(instances.stateToken(project, id, payload)),
+      prove: chromeStateProver(artifacts.chrome),
     });
 
     const preview = new PreviewTools({

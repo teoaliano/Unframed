@@ -285,6 +285,9 @@ export const canvasView = (input: CanvasViewInput): CanvasView => {
         entry.route = typeof props.route === "string" ? props.route : "/";
         entry.title = typeof props.title === "string" ? props.title : "";
         if (props.dials !== undefined && Object.keys(obj(props.dials)).length > 0) entry.dials = props.dials;
+        if (typeof props.state === "string" && props.state.trim() !== "") entry.state = props.state;
+        if (Array.isArray(props.steps) && props.steps.length > 0) entry.steps = props.steps;
+        if (Array.isArray(props.mocks) && props.mocks.length > 0) entry.mocks = props.mocks;
         break;
       }
       case "component": {

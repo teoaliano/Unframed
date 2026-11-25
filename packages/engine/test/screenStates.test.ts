@@ -1,5 +1,25 @@
+import { existsSync, readdirSync } from "node:fs";
+import { homedir } from "node:os";
+import { chromeCandidates } from "@unframed/domain";
 import { describe, expect, it } from "vitest";
+import { toolResults } from "./agentCanvas.ts";
 import { startRepositoryAgent, type RepositoryAgent } from "./repositoryAgent.ts";
+
+const chrome = chromeCandidates({
+  platform: process.platform,
+  env: process.env,
+  home: homedir(),
+  versionsIn: (dir) => {
+    try {
+      return readdirSync(dir);
+    } catch {
+      return [];
+    }
+  },
+}).find((path) => existsSync(path));
+if (chrome === undefined) console.log("  screen state tests skipped: no Chrome, Chromium, Edge or Brave on this machine");
+
+const CHROME_TURN_MS = 90_000;
 
 const EMPTY = { url: "/api/items", body: [] };
 const FAILED = { url: "/api/items", fail: true };
@@ -49,5 +69,43 @@ describe("a Screen's mocks reach its page through a per-load token", () => {
 
     const other = await page(proxy, bridgeOf(await page(proxy, `/app?__unframed_state=${failing}`))!);
     expect(other).toContain(`window.__unframedScreenState = ${JSON.stringify({ steps: [], mocks: [{ url: "/api/items", fail: true }] })};`);
+  });
+});
+
+const MENU = { action: "click", target: { role: "button", name: "Menu" } };
+
+const stateTurn = async (agent: RepositoryAgent, tools: Array<{ name: string; input: Record<string, unknown> }>) => {
+  await agent.script("states", { when: "^make states", turns: [{ text: "Made them.", tools }] });
+  const chatId = await agent.createChat();
+  await agent.send(chatId, "make states", { selection: [agent.screen.id] });
+  return agent.settled(chatId, 1, agent.project, CHROME_TURN_MS);
+};
+
+describe.skipIf(chrome === undefined)("the screen_state tool", () => {
+  it("proves states headlessly against the Instance and saves them: a click that opens a menu, a typed search, an empty list and a failed list", { timeout: 150_000 }, async () => {
+    const { agent } = await liveAgent();
+    const screen = agent.screen.id.replace(/^shape:/, "");
+    const chat = await stateTurn(agent, [
+      { name: "screen_state", input: { shapeId: screen, route: "/app", steps: [MENU, { action: "type", target: { role: "textbox", name: "Search" }, text: "pears" }], state: "the menu open while searching" } },
+      { name: "screen_state", input: { shapeId: screen, route: "/app", steps: [{ action: "wait", target: { text: "No items yet" } }], mocks: [EMPTY], state: "an empty list", newScreen: true } },
+      { name: "screen_state", input: { shapeId: screen, route: "/app", steps: [{ action: "wait", target: { text: "Could not load items" } }], mocks: [FAILED], state: "a failed list", newScreen: true } },
+      { name: "screen_state", input: { shapeId: screen, route: "/app", steps: [{ action: "wait", target: { text: "No items yet" } }], state: "an empty list without a mock" } },
+      { name: "canvas_read", input: {} },
+    ]);
+    const [read] = toolResults(chat, "canvas_read");
+    expect(read!.result.shapes.find((shape: any) => shape.id === screen)).toMatchObject({ kind: "screen", route: "/app", state: "the menu open while searching", steps: [MENU, expect.any(Object)] });
+    const [menu, empty, failed, unmocked] = toolResults(chat, "screen_state");
+    expect(menu).toMatchObject({ status: "completed", result: { screen, route: "/app", state: "the menu open while searching" } });
+    expect(empty).toMatchObject({ status: "completed", result: { route: "/app", state: "an empty list" } });
+    expect(failed).toMatchObject({ status: "completed", result: { route: "/app", state: "a failed list" } });
+    expect(unmocked).toMatchObject({ status: "failed", result: { error: 'Step 1, wait for "No items yet", failed: nothing matched "No items yet" within 5 seconds', step: 1 } });
+
+    const records = await agent.records();
+    const shown = records.find((record) => record.id === agent.screen.id);
+    expect(shown.props).toMatchObject({ route: "/app", state: "the menu open while searching", steps: [MENU, { action: "type", target: { role: "textbox", name: "Search" }, text: "pears" }], mocks: [] });
+    const added = records.filter((record) => record.type === "screen" && record.id !== agent.screen.id);
+    expect(added.map((record) => record.props.state).sort()).toEqual(["a failed list", "an empty list"]);
+    for (const record of added) expect(record.props).toMatchObject({ instance: agent.instance.id, w: agent.screen.props.w, h: agent.screen.props.h });
+    expect(added.find((record) => record.props.state === "a failed list").props.mocks).toEqual([{ url: "/api/items", fail: true }]);
   });
 });
