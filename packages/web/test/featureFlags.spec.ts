@@ -97,12 +97,15 @@ test("with repositories off, the project menu offers Add project alone and still
   }
 });
 
-test("with repositories off, a Repository opens read-only on its Screens' last snapshots, with no Screen actions and no Setup", async ({ page }) => {
+test("with repositories off, a Repository opens read-only on its Screens' last snapshots, states included, with no Screen actions and no Setup", async ({ page }) => {
   const root = await makeRepo("shop");
   const dataDir = await makeTempDir();
   const on = await startHostedEngine({ dataDir, env: await repoEngineEnv({ UNFRAMED_TEST_RENDERER: "ok" }) });
   const onRpc = await on.rpc();
   const added = await onRpc.call("repositories.add", { path: root });
+  const placed = ((await onRpc.call("testCanvas.read", { project: "shop" })).records as any[]).find((record) => record.type === "screen");
+  const held = { route: "/app", state: "the menu open", steps: [{ action: "click", target: { role: "button", name: "Menu" } }], mocks: [{ url: "/api/items", status: 200, headers: {}, body: "[]", delay: 0 }] };
+  await onRpc.call("testCanvas.apply", { project: "shop", change: { put: [{ ...placed, props: { ...placed.props, ...held } }], remove: [] }, origin: { kind: "server", id: "test" } });
   const snapshots = onRpc.subscribe("screens.snapshots", { project: "shop" });
   await expect.poll(async () => (await onRpc.call("instances.status", { project: "shop", id: added.instance.id })).state, { timeout: 30_000 }).toBe("stopped");
   await onRpc.call("instances.demand", { project: "shop", client: "window-1", ids: [added.instance.id] });
@@ -117,12 +120,16 @@ test("with repositories off, a Repository opens read-only on its Screens' last s
     await expect(screen.locator("[data-testid=screen-snapshot]")).toBeVisible();
     await expect(screen.locator("iframe")).toHaveCount(0);
     await expect(screen.locator("[data-testid=screen-overlay]")).toHaveCount(0);
+    await expect(screen.locator("[data-testid=screen-state-failed]")).toHaveCount(0);
+    await expect(screen.locator("[data-shape-label] [data-label-text]")).toHaveText(`${added.instance.branch} · the menu open`);
     const records = await roomRecords(off, "shop");
+    expect(records.find((record) => record.type === "screen")!.props).toMatchObject(held);
     await clickShape(page, records.find((record) => record.type === "screen")!.id);
     await expect(toolbar(page)).toBeVisible();
     await expect(page.getByTestId("screen-route")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Fork" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Changes" })).toHaveCount(0);
+    await expect(page.getByTestId("screen-branch")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Keep this view" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Map a Flow" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Parameters" })).toHaveCount(0);
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "All projects" }).click();

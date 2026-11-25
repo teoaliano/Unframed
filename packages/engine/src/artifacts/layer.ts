@@ -117,6 +117,7 @@ export const artifactsLayer = Layer.effect(
       read: (project) => run(rooms.read(project)),
       instance: (project, id) => run(Effect.orElseSucceed(instances.status(project, id), () => undefined)),
       publish: (project, snapshot) => void run(PubSub.publish(screensWritten, { project, snapshot })),
+      stateToken: (project, id, payload) => run(instances.stateToken(project, id, payload)),
     });
     Effect.runForkWith(context)(Stream.runForEach(instances.everyChange, (instance) => Effect.sync(() => screens.instanceChanged(instance))));
     yield* rooms.afterOpen((project, room) => {
