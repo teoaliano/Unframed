@@ -59,7 +59,7 @@ test("a selection with nothing to generate from shows Agent only; a filled page 
   // A filled page's frame takes the pointer, so its bar leads with the drag handle, an icon button.
   await clickShape(page, "shape:page");
   const buttons = toolbar(page).getByRole("button");
-  await expect(buttons).toHaveText(["", "Editor", "Parameters", "100%", "Agent"]);
+  await expect(buttons).toHaveText(["", "Editor", "Parameters", "100%", "", "Agent"]);
   await expect(buttons.first()).toHaveAccessibleName("Drag to move");
   for (const corner of ["top-left", "top-right", "bottom-right", "bottom-left"]) {
     expect(parseFloat(await styleOf(toolbar(page), `border-${corner}-radius`))).toBeGreaterThanOrEqual((await toolbar(page).boundingBox())!.height / 2);

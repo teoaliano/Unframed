@@ -18,6 +18,7 @@ import {
   Hand,
   MousePointer2,
   PanelLeft,
+  RotateCw,
   SlidersHorizontal,
 } from "lucide-react";
 import {
@@ -199,6 +200,7 @@ export const ArtifactEditor = ({
     [],
   );
   const [updatesShown, setUpdatesShown] = useState(false);
+  const [reloads, setReloads] = useState(0);
   const [updateNote, setUpdateNote] = useState("");
   const updateFocus = useRef<string | undefined>(undefined);
   useEffect(() => {
@@ -842,6 +844,20 @@ export const ArtifactEditor = ({
             <RenderButton shapeId={shapeId} />
           )}
           {hasFile && port !== undefined && (
+            <Tip label="Reload">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="shrink-0"
+                aria-label="Reload"
+                data-testid="artifact-editor-reload"
+                onClick={() => setReloads((count) => count + 1)}
+              >
+                <RotateCw aria-hidden />
+              </Button>
+            </Tip>
+          )}
+          {hasFile && port !== undefined && (
             <Tip label="Open in a new tab">
               <Button
                 variant="ghost"
@@ -930,6 +946,7 @@ export const ArtifactEditor = ({
                 }
               >
                 <ArtifactFrame
+                  key={reloads}
                   project={project}
                   kind={facts.kind}
                   file={facts.file}

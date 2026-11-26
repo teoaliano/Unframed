@@ -121,8 +121,10 @@ const CanvasFrame = ({ shapeId, ...props }: Omit<ArtifactFrameProps, "onAnnounce
 };
 
 const LiveFrame = ({ stamp, holder, ...props }: Parameters<typeof CanvasFrame>[0] & { readonly stamp: number | undefined; readonly holder: RefObject<HTMLElement | null> }) => {
+  const editor = useEditor();
   const version = useLiveVersion(stamp, holder);
-  return <CanvasFrame key={version} {...props} />;
+  const reloads = useValue("frame reloads", () => artifactsOf(editor).reloads.get().get(props.shapeId) ?? 0, [editor, props.shapeId]);
+  return <CanvasFrame key={`${version}:${reloads}`} {...props} />;
 };
 
 const UpdatesBadge = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
