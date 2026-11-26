@@ -61,6 +61,8 @@ const withoutRealParam = (path: string): { readonly path: string; readonly real:
   return { path: kept.length === 0 ? path.slice(0, at) : `${path.slice(0, at)}?${kept.join("&")}`, real: true };
 };
 
+const ownPath = (path: string): boolean => path.startsWith("/__unframed/");
+
 export interface InstanceProxy {
   readonly port: number;
   readonly close: () => Promise<void>;
@@ -123,7 +125,7 @@ export const startInstanceProxy = async (input: {
   const sockets = new Set<net.Socket>();
   const crossSite = new Set<string>();
   const onRequest = (req: http.IncomingMessage, res: http.ServerResponse) => {
-    const decision = loopbackGuard({ origin: rewritesOrigin(req.url ?? "/", false) ? req.headers.origin : undefined, host: req.headers.host });
+    const decision = loopbackGuard({ origin: rewritesOrigin(req.url ?? "/", false) || ownPath(req.url ?? "/") ? req.headers.origin : undefined, host: req.headers.host });
     if (!decision.allowed) {
       res.writeHead(decision.status, { "content-type": "text/plain; charset=utf-8" });
       res.end(decision.error);

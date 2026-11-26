@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { toolResults } from "./agentCanvas.ts";
 import { chromeOnMachine as chrome } from "./chrome.ts";
 import { git } from "./gitRepos.ts";
-import { makeTempDir } from "./harness.ts";
+import { makeTempDir, rawRequest } from "./harness.ts";
 import { liveAgent, stateTurn, type RepositoryAgent } from "./repositoryAgent.ts";
 
 if (chrome === undefined) console.log("  mock file tests in a browser skipped: no Chrome, Chromium, Edge or Brave on this machine");
@@ -56,6 +56,17 @@ describe("mock files", () => {
 
     const written = await agent.rpc.call("instances.patch", { project: agent.project, id: agent.instance.id });
     expect(written.patch).toBe("");
+  });
+
+  it("take request log entries from the page's own origin and refuse another site's", { timeout: 60_000 }, async () => {
+    const { agent, proxy } = await liveAgent();
+    const post = (origin: string, url: string) =>
+      rawRequest(proxy, "/__unframed/mocks/log", { method: "POST", body: JSON.stringify([{ method: "GET", url }]), headers: { host: `127.0.0.1:${proxy}`, origin, "content-type": "text/plain" } });
+    expect((await post("https://evil.example", "/from-another-site")).status).toBe(403);
+    expect((await post(`http://127.0.0.1:${proxy}`, "/from-the-page")).status).toBe(204);
+    const chat = await stateTurn(agent, [{ name: "mocks_read", input: {} }]);
+    const requests = toolResults(chat, "mocks_read")[0]!.result.requests as ReadonlyArray<{ readonly url: string }>;
+    expect(requests.map((request) => request.url)).toEqual(["/from-the-page"]);
   });
 });
 
