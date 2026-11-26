@@ -9,8 +9,6 @@ import type { StoreOwner } from "../canvas/doc.ts";
 import { forgetFrame, hearFrame, reachFrame } from "../artifacts/state.ts";
 import { messageOf, useChatClient, useChats } from "../agent/store.ts";
 import { useEngine } from "../context.ts";
-import { isDeviceClient } from "../deviceMode.ts";
-import { useFeature } from "../features.ts";
 import { countScreens, type ScreenCounts } from "../fps/screens.ts";
 import { screenPropsOf } from "./BranchChip.tsx";
 import { useAskAgent } from "./askAgent.ts";
@@ -75,9 +73,9 @@ const LiveScreen = ({ owner, shapeId, url, dials, interactive, events, edit }: {
   };
   useEffect(() => {
     reachFrame(owner, shapeId, (values) => post({ type: "unframed:dials:set", values }));
-    editing.current?.onEditReady(post);
+    if (ready.current) post({ type: "unframed:dials:hello" });
     const onMessage = (event: MessageEvent) => {
-      if (event.source !== frame.current?.contentWindow) return;
+      if (event.source !== frame.current?.contentWindow || event.origin !== target) return;
       const data = event.data as { type?: unknown; route?: unknown; state?: unknown; replaying?: unknown; ok?: unknown; step?: unknown; reason?: unknown } | null;
       if (typeof data !== "object" || data === null) return;
       if (typeof data.type === "string" && data.type.startsWith("unframed:edit:")) {
@@ -104,6 +102,16 @@ const LiveScreen = ({ owner, shapeId, url, dials, interactive, events, edit }: {
       forgetFrame(owner, shapeId);
     };
   }, [owner, shapeId, target]);
+  const editReady = edit?.onEditReady;
+  useEffect(() => {
+    if (editReady === undefined) return;
+    editReady(post);
+    post({ type: "unframed:edit:hello" });
+    return () => {
+      post({ type: "unframed:edit:mode", mode: "interact", locked: [] });
+      post({ type: "unframed:edit:reset" });
+    };
+  }, [editReady]);
   const serialised = JSON.stringify(dials ?? null);
   useEffect(() => {
     if (nonEmpty(dials)) post({ type: "unframed:dials:set", values: dials });
@@ -168,31 +176,53 @@ const Overlay = ({ project, instance }: { readonly project: string; readonly ins
   );
 };
 
-const StateNote = ({ note }: { readonly note: string | undefined }) =>
-  note === undefined ? null : (
-    <div className="pointer-events-none absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1">
-      <Badge size="sm" variant="warning" className="min-w-0 shrink" data-testid="screen-state-note">
-        <span className="truncate">{note}</span>
-      </Badge>
-    </div>
-  );
+export interface FrameStatus {
+  readonly live: boolean;
+  readonly queued: boolean;
+  readonly painted: boolean;
+}
 
-export interface ScreenViewInput {
+interface ScreenFrameInput {
   readonly owner: StoreOwner;
   readonly project: string;
   readonly shapeId: string;
   readonly props: ScreenShapeProps;
-  readonly onScreen: boolean;
   readonly interactive: boolean;
   readonly write: (next: ScreenShapeProps) => boolean;
   readonly edit?: ScreenEditHooks | undefined;
-  readonly turn?: { readonly queue: ScreenLoadQueue; readonly rank: () => ScreenLoadRank } | undefined;
+  readonly queue: ScreenLoadQueue;
+  readonly rank: () => ScreenLoadRank;
 }
 
-export const useScreenView = ({ owner, project, shapeId, props, onScreen, interactive, write, edit, turn }: ScreenViewInput): { readonly content: ReactNode; readonly painted: boolean; readonly live: boolean; readonly queued: boolean; readonly branch: string } => {
-  const engine = useEngine();
+export const useScreenBranch = (project: string, props: ScreenShapeProps): string => {
+  const state = repositoryState(project);
+  return useValue("screen branch", () => state.instances.get().get(props.instance)?.branch ?? props.title, [state, props.instance, props.title]);
+};
+
+const FixButton = ({ shapeId, instruction }: { readonly shapeId: string; readonly instruction: () => string | undefined }) => {
   const ask = useAskAgent();
-  const repositories = useFeature("repositories");
+  const [asking, setAsking] = useState<string | undefined>(undefined);
+  const fix = () => {
+    const text = instruction();
+    if (text === undefined) return;
+    setAsking(undefined);
+    ask(shapeId as Parameters<typeof ask>[0], text).then(
+      () => setAsking("Sent to the agent."),
+      (error: unknown) => setAsking(messageOf(error)),
+    );
+  };
+  return (
+    <>
+      <Button size="sm" className="pointer-events-auto" onPointerDown={(event) => event.stopPropagation()} onClick={fix}>
+        Ask the agent to fix it
+      </Button>
+      {asking !== undefined && <span data-testid="screen-state-asked">{asking}</span>}
+    </>
+  );
+};
+
+export const useScreenFrame = ({ owner, project, shapeId, props, interactive, write, edit, queue, rank }: ScreenFrameInput): { readonly content: ReactNode; readonly failure: ReactNode; readonly status: FrameStatus } => {
+  const engine = useEngine();
   const state = repositoryState(project);
   const proxyPort = useValue(
     "screen proxy",
@@ -202,19 +232,19 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
     },
     [state, props.instance],
   );
-  const branch = useValue("screen branch", () => state.instances.get().get(props.instance)?.branch ?? props.title, [state, props.instance, props.title]);
-  const eligible = repositories && !isDeviceClient() && onScreen && proxyPort !== null;
+  const branch = useScreenBranch(project, props);
+  const eligible = proxyPort !== null;
+  const ranking = useRef(rank);
+  ranking.current = rank;
   const [admitted, setAdmitted] = useState(false);
   useEffect(() => {
     setAdmitted(false);
-    if (!eligible || turn === undefined) return;
-    return turn.queue.enter(shapeId, turn.rank, () => setAdmitted(true));
-  }, [eligible, turn, shapeId]);
-  const queued = eligible && turn !== undefined && !admitted;
-  const live = eligible && !queued;
+    if (!eligible) return;
+    return queue.enter(shapeId, () => ranking.current(), () => setAdmitted(true));
+  }, [eligible, queue, shapeId]);
+  const queued = eligible && !admitted;
+  const live = eligible && admitted;
   const [settled, setSettled] = useState<number | undefined>(undefined);
-  const snapshot = useValue("screen snapshot", () => state.snapshots.get().get(shapeId), [state, shapeId]);
-  const bridge = useValue("screen bridge", () => state.bridges.get().get(shapeId), [state, shapeId]);
   const stateKey = JSON.stringify([props.steps ?? [], props.mocks ?? []]);
   const holdsState = stateKey !== NO_STATE_KEY;
   const shown = useRef<{ readonly route: string; readonly stateKey: string; readonly port: number; readonly reloads: number } | undefined>(undefined);
@@ -227,7 +257,6 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
     retried.current = false;
   }, [props.route, stateKey]);
   const [failure, setFailure] = useState<{ readonly step: number; readonly reason: string } | undefined>(undefined);
-  const [asking, setAsking] = useState<string | undefined>(undefined);
   const [painted, setPainted] = useState<string | undefined>(undefined);
   useEffect(() => {
     if (!live || proxyPort === null) {
@@ -266,7 +295,7 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
   };
   const loaded = () => {
     setSettled(load?.n);
-    turn?.queue.done(shapeId);
+    queue.done(shapeId);
   };
   const events: FrameEvents = {
     onPainted: () => {
@@ -306,10 +335,10 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
       }
     },
   };
-  const fix = () => {
+  const instruction = () => {
     const step = failure === undefined ? undefined : props.steps?.[failure.step];
-    if (failure === undefined || step === undefined) return;
-    const instruction = fixStateInstruction({
+    if (failure === undefined || step === undefined) return undefined;
+    return fixStateInstruction({
       shape: shapeId.replace(/^shape:/, ""),
       branch,
       state: props.state?.trim() || props.route,
@@ -320,21 +349,45 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
       step: describeStep(step),
       reason: failure.reason,
     });
-    setAsking(undefined);
-    ask(shapeId as Parameters<typeof ask>[0], instruction).then(
-      () => setAsking("Sent to the agent."),
-      (error: unknown) => setAsking(messageOf(error)),
-    );
   };
   const url = live ? load?.url : undefined;
   const shownPainted = live && url !== undefined && painted === url;
   useCounted("live", live && url !== undefined);
   useCounted("loading", live && (load === undefined || settled !== load.n));
   useCounted("queued", queued);
-  const content = (
+  const content = live && url !== undefined && <LiveScreen key={load?.n} owner={owner} shapeId={shapeId} url={url} dials={props.dials} interactive={interactive} events={events} edit={edit} />;
+  const failed = live && failure !== undefined && (
+    <div
+      className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-(--artifact-card-surface) p-6 text-center font-sans text-sm text-(--artifact-card-foreground)"
+      data-testid="screen-state-failed"
+    >
+      <span className="font-medium text-(--artifact-card-title)">Couldn't reach this state</span>
+      <span data-testid="screen-state-failed-step">{stepFailure(props.steps ?? [], failure.step, failure.reason)}</span>
+      <FixButton shapeId={shapeId} instruction={instruction} />
+    </div>
+  );
+  return { content, failure: failed, status: { live, queued, painted: shownPainted && failure === undefined } };
+};
+
+export const ScreenStateNote = ({ project, shapeId, live }: { readonly project: string; readonly shapeId: string; readonly live: boolean }) => {
+  const bridge = useValue("screen bridge", () => repositoryState(project).bridges.get().get(shapeId), [project, shapeId]);
+  if (!live || bridge !== false) return null;
+  return (
+    <div className="pointer-events-none absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1">
+      <Badge size="sm" variant="warning" className="min-w-0 shrink" data-testid="screen-state-note">
+        <span className="truncate">{NO_STATE_BRIDGE}</span>
+      </Badge>
+    </div>
+  );
+};
+
+export const ScreenPlaceholder = ({ project, shapeId, props, painted }: { readonly project: string; readonly shapeId: string; readonly props: ScreenShapeProps; readonly painted: boolean }) => {
+  const state = repositoryState(project);
+  const snapshot = useValue("screen snapshot", () => state.snapshots.get().get(shapeId), [state, shapeId]);
+  const branch = useScreenBranch(project, props);
+  return (
     <>
-      {live && url !== undefined && <LiveScreen key={load?.n} owner={owner} shapeId={shapeId} url={url} dials={props.dials} interactive={interactive} events={events} edit={edit} />}
-      {!shownPainted &&
+      {!painted &&
         (snapshot !== undefined ? (
           <img className="pointer-events-none absolute inset-0 block size-full object-cover select-none" data-testid="screen-snapshot" src={screenSnapshotUrl(project, snapshot)} alt="" draggable={false} />
         ) : (
@@ -344,21 +397,7 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
           </div>
         ))}
       <Overlay project={project} instance={props.instance} />
-      {live && failure !== undefined && (
-        <div
-          className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-(--artifact-card-surface) p-6 text-center font-sans text-sm text-(--artifact-card-foreground)"
-          data-testid="screen-state-failed"
-        >
-          <span className="font-medium text-(--artifact-card-title)">Couldn't reach this state</span>
-          <span data-testid="screen-state-failed-step">{stepFailure(props.steps ?? [], failure.step, failure.reason)}</span>
-          <Button size="sm" className="pointer-events-auto" onPointerDown={(event) => event.stopPropagation()} onClick={fix}>
-            Ask the agent to fix it
-          </Button>
-          {asking !== undefined && <span data-testid="screen-state-asked">{asking}</span>}
-        </div>
-      )}
-      <StateNote note={live && bridge === false ? NO_STATE_BRIDGE : undefined} />
     </>
   );
-  return { content, painted: shownPainted, live, queued, branch };
 };
+

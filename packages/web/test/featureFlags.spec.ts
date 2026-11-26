@@ -128,7 +128,8 @@ test("with repositories off, a Repository opens read-only on its Screens' last s
     await expect(toolbar(page)).toBeVisible();
     await expect(page.getByTestId("screen-route")).toHaveCount(0);
     await expect(page.getByTestId("screen-branch")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Keep this view" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Duplicate", exact: true })).toHaveCount(0);
+    await expect(page.getByTestId("screens-starting")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Map a Flow" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Show states" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Parameters" })).toHaveCount(0);

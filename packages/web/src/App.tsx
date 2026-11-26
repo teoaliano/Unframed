@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { CanvasHost } from "./canvas/CanvasHost.tsx";
+import { ScreenFrames } from "./repositories/framePool.tsx";
 import { TopCorners } from "./chrome/Corners.tsx";
 import { connectionMonitor } from "./connection/monitor.ts";
 import { ActivationContext, EngineContext, useActivation, useEngine, useSettings } from "./context.ts";
@@ -38,7 +39,7 @@ const Frame = () => {
   // Holds the app's settings.subscribe open from the start, through every reconnect.
   useSettings();
   const activation = useActivation();
-  const { active: project, loaded } = useTabState(activation);
+  const { active: project, loaded, order } = useTabState(activation);
   const onboarding = useOnboarding(useEngine());
   const onboardingOpen = onboarding !== undefined && !onboarding.done;
   // isolate: the canvas and its chrome stack below every kit popup, which portals to <body> at t3code's z-50 to 140.
@@ -49,6 +50,7 @@ const Frame = () => {
           <CanvasHost project={project} activation={activation} />
         </ImportGate>
       )}
+      <ScreenFrames projects={order} />
       {project === undefined && loaded && !onboardingOpen && (
         <div className="absolute inset-0 grid place-items-center">
           <div className="grid justify-items-center gap-3 rounded-2xl border border-(--no-project-border) bg-(--no-project-surface) p-8 text-center text-(--no-project-foreground) shadow-lg/5">

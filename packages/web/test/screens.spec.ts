@@ -9,16 +9,16 @@ import { expect, startHostedEngine, test } from "./fixtures.ts";
 import { engineChat, engineChats, FIXTURES, openRail, scriptFolder, tabs } from "./agent.ts";
 import { applyScreenParametersInstruction, NO_BRIDGE, setupRejection } from "@unframed/domain";
 
-test("a new Repository's first Screen goes live through the proxy at /, keeps its snapshot until first paint, and drops to the snapshot off screen", async ({ page }) => {
+test("a new Repository's first Screen goes live through the proxy at /, keeps its snapshot until first paint, and keeps its frame, hidden, off screen", async ({ page }) => {
   await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
     const screen = page.locator("[data-testid=screen]");
     await expect(screen).toHaveCount(1);
     await expect(screen).toHaveAttribute("data-route", "/");
-    const frame = screen.locator("iframe[data-screen-frame]");
+    const frame = page.locator("[data-screen-of] iframe[data-screen-frame]");
     await expect(frame).toHaveAttribute("src", /^http:\/\/127\.0\.0\.1:\d+\/$/, { timeout: 30_000 });
     await expect(frame).toHaveAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-modals");
     await expect(frame).toHaveAttribute("allow", "");
-    await expect(page.frameLocator("[data-testid=screen] iframe[data-screen-frame]").getByRole("heading", { name: "Fake app" })).toBeVisible();
+    await expect(page.frameLocator("[data-screen-of] iframe[data-screen-frame]").getByRole("heading", { name: "Fake app" })).toBeVisible();
     await expect(screen).toHaveAttribute("data-painted", "true");
     await expect(frame).toHaveCSS("pointer-events", "none");
 
@@ -33,13 +33,14 @@ test("a new Repository's first Screen goes live through the proxy at /, keeps it
       await page.mouse.wheel(width / 10, 0);
       await page.waitForTimeout(16);
     }
-    await expect(screen.locator("iframe")).toHaveCount(0);
-    await expect(screen.locator("[data-testid=screen-snapshot]")).toHaveCount(1);
+    await expect(frame).toHaveCount(1);
+    await expect(page.locator("[data-screen-of]")).toHaveCSS("visibility", "hidden");
+    await expect(screen).toHaveAttribute("data-painted", "true");
     expect((await screenShapes(engine, project))[0].props).toMatchObject({ route: "/", w: 1280, h: 800 });
   });
 });
 
-test("a Screen shows Setup's progress while its Instance installs, then the app", async ({ page }) => {
+test("the canvas waits behind one loading state while its Screens' dev servers start, then shows them, each with its own progress underneath", async ({ page }) => {
   const slowInstall = async (root: string) => {
     await writeFile(join(root, "install.js"), 'setTimeout(() => require("node:fs").writeFileSync("installed.txt", "yes\\n"), 4000);\n');
     git(root, "commit", "-qam", "slow install");
@@ -49,11 +50,18 @@ test("a Screen shows Setup's progress while its Instance installs, then the app"
     {},
     async () => {
       const screen = page.locator("[data-testid=screen]");
+      const cover = page.getByTestId("screens-starting");
+      await expect(cover.getByRole("status")).toHaveText("Installing dependencies…");
+      const watermark = page.getByTestId("tl-watermark-unlicensed");
+      const box = (await watermark.boundingBox())!;
+      expect(await page.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest("[data-testid=tl-watermark-unlicensed]"), { x: box.x + box.width / 2, y: box.y + box.height / 2 })).toBe(true);
       await expect(screen.locator("[data-testid=screen-overlay]")).toHaveText("Installing dependencies…");
       await expect(screen.locator("[data-testid=screen-overlay]")).toHaveCount(0, { timeout: 30_000 });
+      await expect(cover).toHaveCount(0);
       await expect(screen).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
     },
     slowInstall,
+    { whileStarting: true },
   );
 });
 
@@ -63,6 +71,8 @@ test("a Screen whose server fails shows the failure with the log's last lines", 
     await expect(overlay).toHaveAttribute("data-overlay", "failed", { timeout: 30_000 });
     await expect(overlay).toContainText("The dev server exited with code 1");
     await expect(overlay.locator("[data-testid=screen-log]")).toContainText("fake dev server: giving up");
+    await expect(page.getByTestId("screens-starting")).toHaveCount(0);
+    await expect(overlay).toBeVisible();
   });
 });
 
@@ -113,7 +123,7 @@ test("a Repository whose folder moved says so on its Screens, and Locate Reposit
     await page.getByRole("menuitem", { name: "Locate Repository…" }).click();
     await expect(page.getByText(`Found the Repository at ${moved}.`)).toBeVisible();
     await expect(screen.locator("[data-testid=screen-overlay]")).toHaveCount(0);
-    await expect(page.frameLocator("[data-testid=screen] iframe[data-screen-frame]").getByRole("heading", { name: "Fake app" })).toBeVisible({ timeout: 30_000 });
+    await expect(page.frameLocator("[data-screen-of] iframe[data-screen-frame]").getByRole("heading", { name: "Fake app" })).toBeVisible({ timeout: 30_000 });
     await page.getByRole("button", { name: "All projects" }).click();
     await expect(page.getByRole("menuitem", { name: "Locate Repository…" })).toHaveCount(0);
   } finally {
@@ -201,10 +211,10 @@ test("Screens of one Instance keep their own Parameters through the bridge, and 
       { ...first, props: { ...first.props, route: "/dials", dials: { accent: "#00ff00" } } },
       { ...first, id: "shape:second", x: first.x, y: first.y + 900, props: { ...first.props, route: "/dials", dials: { accent: "#0000ff" } } },
     ]);
-    const frames = page.locator("[data-testid=screen] iframe[data-screen-frame]");
+    const frames = page.locator("[data-screen-of] iframe[data-screen-frame]");
     await expect(frames).toHaveCount(2, { timeout: 30_000 });
-    await expect(page.frameLocator(`[data-shape-id="${first.id}"] iframe[data-screen-frame]`).locator("#title")).toHaveAttribute("data-accent", "#00ff00");
-    await expect(page.frameLocator('[data-shape-id="shape:second"] iframe[data-screen-frame]').locator("#title")).toHaveAttribute("data-accent", "#0000ff");
+    await expect(page.frameLocator(`[data-screen-of="${first.id}"] iframe[data-screen-frame]`).locator("#title")).toHaveAttribute("data-accent", "#00ff00");
+    await expect(page.frameLocator('[data-screen-of="shape:second"] iframe[data-screen-frame]').locator("#title")).toHaveAttribute("data-accent", "#0000ff");
 
     await clickShape(page, first.id);
     await page.getByTestId("selection-toolbar").getByRole("button", { name: "Parameters" }).click();

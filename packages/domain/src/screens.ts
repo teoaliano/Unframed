@@ -85,6 +85,28 @@ export const screenOverlay = (input: {
   return { kind: "none" };
 };
 
+export const STARTUP_GRACE_MS = 3000;
+
+const STARTING_STATES: ReadonlySet<Instance["state"]> = new Set(["creating", "installing", "starting"]);
+
+export const startupCover = (input: {
+  readonly repository: RepositoryStatus | null | undefined;
+  readonly loaded: boolean;
+  readonly instances: ReadonlyArray<Instance | undefined>;
+  readonly graceOver: boolean;
+}): string | undefined => {
+  if (input.instances.length === 0 || input.repository === null || input.repository === "missing") return undefined;
+  if (input.repository === undefined || !input.loaded) return "Starting the dev servers…";
+  const pending = new Map<string, Instance>();
+  for (const instance of input.instances) {
+    if (instance === undefined) continue;
+    if (STARTING_STATES.has(instance.state) || (instance.state === "stopped" && !input.graceOver)) pending.set(instance.id, instance);
+  }
+  if (pending.size > 1) return `Starting ${pending.size} dev servers…`;
+  const [only] = pending.values();
+  return only === undefined ? undefined : (PROGRESS[only.state] ?? PROGRESS.starting);
+};
+
 export const logTail = (log: string, lines: number): string =>
   log
     .split(/\r?\n/)
