@@ -64,7 +64,7 @@ const server = http.createServer((req, res) => {
       return res.end();
     }
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    return res.end("<!doctype html><html><head><title>Who</title></head><body><p id=\\"who\\">" + (req.headers.cookie ?? "nobody") + "</p></body></html>");
+    return res.end("<!doctype html><html><head><title>Who</title></head><body><p id=\\"who\\">" + (req.headers.cookie ?? "nobody") + "</p><script>if (!document.cookie.includes('theme=')) { document.cookie = 'theme=dark; Path=/; SameSite=Lax'; location.reload(); }</script></body></html>");
   }
   if (url.pathname.endsWith("/__fake/info")) {
     res.writeHead(200, { "content-type": "application/json" });

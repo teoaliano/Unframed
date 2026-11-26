@@ -1,4 +1,5 @@
 import { writeFile } from "node:fs/promises";
+import http from "node:http";
 import net from "node:net";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -150,6 +151,17 @@ describe("serving a live Instance through its proxy", () => {
     expect(page.status).toBe(200);
     expect(page.text).toContain(TAG);
     expect(await firstMessage(proxy, "/ws", at(proxy))).toBe(`hello /ws from nowhere at 127.0.0.1:${proxy}`);
+  });
+
+  it("answers on [::1] at the same port, so a Screen on localhost reaches it whichever address the browser tries first", async () => {
+    const { proxy } = await liveInstance();
+    const status = await new Promise<number>((resolve, reject) => {
+      http.get({ host: "::1", port: proxy, path: "/", headers: { host: `localhost:${proxy}`, accept: "text/html" } }, (res) => {
+        res.resume();
+        resolve(res.statusCode ?? 0);
+      }).on("error", reject);
+    });
+    expect(status).toBe(200);
   });
 
   it("refuses a request addressed to a host that is not this machine", async () => {

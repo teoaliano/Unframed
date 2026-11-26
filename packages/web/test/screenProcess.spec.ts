@@ -11,12 +11,12 @@ const pan = async (page: Page, widths: number) => {
   }
 };
 
-test("a Screen loads from the other loopback host, so it runs outside the canvas's process, and a login in it still holds", async ({ page }) => {
+test("a Screen loads from the other loopback host, so it runs outside the canvas's process, and cookies set by its server and by its script still hold", async ({ page }) => {
   await withRepository(page, {}, async (engine, project) => {
     const [first] = await screenShapes(engine, project);
     await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/whoami?login", w: 640, h: 480 } }]);
     const frame = page.frameLocator(`[data-shape-id="${first.id}"] iframe[data-screen-frame]`);
-    await expect(frame.locator("#who")).toHaveText("session=signed-in", { timeout: 30_000 });
+    await expect(frame.locator("#who")).toHaveText("session=signed-in; theme=dark", { timeout: 30_000 });
     const src = await page.locator(`[data-shape-id="${first.id}"] iframe[data-screen-frame]`).getAttribute("src");
     expect(new URL(src!).hostname).not.toBe(new URL(page.url()).hostname);
   });

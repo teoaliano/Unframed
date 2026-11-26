@@ -10,17 +10,22 @@ After Screens learned to load one at a time (`docs/specs/screen-load.md`), panni
 ## Solution
 
 - **Another site, another process.** The canvas loads a Screen from the other loopback name, the rule pages already use: `localhost` when the canvas is on `127.0.0.1`, and the reverse. Chromium's site isolation (on in Electron 44, checked by experiment) then puts every Screen in a renderer process of its own, apart from the canvas. The engine's headless Chrome keeps `127.0.0.1`.
-- **Cookies cross the site line.** In a cross-site frame Chromium drops `SameSite=Lax` and `Strict` cookies, so a login inside a Screen would not hold. The proxy rewrites every `Set-Cookie` it passes on: it removes `SameSite` and `Secure` and appends `SameSite=None; Secure`. Chromium accepts `Secure` cookies on `http://localhost` and `http://127.0.0.1`.
-- **Loaded until far away.** A Screen loads when it comes within one viewport width of the view, as before, and once loaded stays loaded until it is three viewport widths away. Panning back and forth and opening panels no longer reload it.
+- **Cookies cross the site line.** In a cross-site frame Chromium drops `SameSite=Lax` and `Strict` cookies, so a login inside a Screen would not hold. The proxy rewrites every `Set-Cookie` it passes on: it removes `SameSite` and `Secure` and appends `SameSite=None; Secure`. The bridge script does the same to every cookie the page writes through `document.cookie`. Chromium accepts `Secure` cookies on `http://localhost` and `http://127.0.0.1`.
+- **Lax, kept by the proxy.** With every cookie `SameSite=None`, a page on any site could post to the dev app with its session, for example after "Open in browser". The proxy drops the `Cookie` header from an unsafe request (not GET, HEAD or OPTIONS) whose `Sec-Fetch-Site` is `cross-site` and whose Origin is not a loopback origin, which is what `SameSite=Lax` did.
+- **Both loopback addresses.** The proxy listens on `::1` as well as `127.0.0.1`, at the same port, like the preview origin, so `localhost` reaches it whichever address the browser tries first.
+- **Loaded until far away.** A Screen loads when it comes within one viewport width of the view, as before. Once its frame is live it stays live, and its Instance stays demanded, until it is three viewport widths away. Panning back and forth and opening panels no longer reload it. A Screen that only passed near, and never went live, gets no extra reach.
+- "Open in browser" uses the same host as the Screen.
 
 ## Costs
 
 - Storage moves with the origin. An app's `localStorage` and cookies from before this change stay on the old origin, so each app asks for its login and settings once more.
-- `SameSite=Strict` cookies lose their protection inside the proxy. The proxy only answers same-machine requests, so this stays local.
+- `SameSite=Strict` cookies become Lax-like: the proxy drops them only from unsafe cross-site requests. Cross-site GET requests and frames from other sites carry the session, which `Lax` would have stopped. The proxy already strips `X-Frame-Options`.
+- Cookies written with the Cookie Store API (`cookieStore.set`) are not rewritten.
 - A frame in its own process costs memory per process. Chromium may group same-site frames into one process.
 
 ## Tests
 
 - Browser: a Screen loads from the other loopback host, and a login made inside it (a Lax cookie set on a redirect) holds.
 - Browser: a loaded Screen keeps its page (no reload) when the canvas narrows and when it is panned two viewport widths away and back, and unloads past three.
-- Domain: cookies are rewritten; `screenUrl` takes a host; `farOffscreen` takes a reach.
+- Domain: cookies are rewritten, in headers and through `document.cookie`; an unsafe cross-site request loses its cookies; `screenUrl` takes a host; `farOffscreen` takes a reach.
+- Engine: the proxy answers on `[::1]` at its port.

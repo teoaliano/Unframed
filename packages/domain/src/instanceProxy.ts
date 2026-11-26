@@ -23,8 +23,14 @@ const proxyPortOf = (headers: ProxyHeaders): string | undefined => {
   return origin !== null && host !== null && Number(origin[1]) === Number(host[1]) ? host[1] : undefined;
 };
 
-export const upstreamRequestHeaders = (headers: ProxyHeaders, input: { readonly path: string; readonly upgrade: boolean }): Record<string, ProxyHeaderValue> => {
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+const unsafeFromAnotherSite = (headers: ProxyHeaders, method: string): boolean =>
+  !SAFE_METHODS.has(method.toUpperCase()) && first(headers["sec-fetch-site"]) === "cross-site" && !LOOPBACK_ORIGIN.test(first(headers.origin) ?? "");
+
+export const upstreamRequestHeaders = (headers: ProxyHeaders, input: { readonly path: string; readonly upgrade: boolean; readonly method?: string | undefined }): Record<string, ProxyHeaderValue> => {
   const next: Record<string, ProxyHeaderValue> = { ...headers };
+  if (unsafeFromAnotherSite(headers, input.method ?? "GET")) delete next.cookie;
   const proxyPort = rewritesOrigin(input.path, input.upgrade) ? proxyPortOf(headers) : undefined;
   if (proxyPort !== undefined) {
     next.origin = `http://localhost:${proxyPort}`;
@@ -49,9 +55,7 @@ const nonceOf = (policy: string): string | undefined => {
   return undefined;
 };
 
-const SITE_ATTRIBUTES = /;\s*(?:samesite(?:=[^;]*)?|secure)\s*(?=;|$)/gi;
-
-const crossSiteCookie = (cookie: string): string => `${cookie.replace(SITE_ATTRIBUTES, "")}; SameSite=None; Secure`;
+export const crossSiteCookie = (cookie: string): string => `${cookie.replace(/;\s*(?:samesite(?:=[^;]*)?|secure)\s*(?=;|$)/gi, "")}; SameSite=None; Secure`;
 
 export const proxiedResponseHeaders = (
   headers: ProxyHeaders,

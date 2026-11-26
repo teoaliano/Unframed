@@ -7,6 +7,7 @@ import { COMPONENT_HELPER_FILE, LIVE_CHECK_FILE, LIVE_VIEWER_FILE, loopbackGuard
 import { BRIDGE_FILE, EDIT_BRIDGE_FILE, ensureBridge, ensureComponentHelper, ensureCompiledComponent, ensureLiveViewer } from "../artifacts/artifactStore.ts";
 import { NOT_FOUND } from "./respond.ts";
 import { guardUpgrade, refuseUpgrade } from "./guard.ts";
+import { listenBothLoopbacks } from "../listen.ts";
 
 const PREVIEW_CSP =
   "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-ancestors http://localhost:* http://127.0.0.1:*";
@@ -133,25 +134,6 @@ const handler =
     await pipeline(createReadStream(path), res).catch(() => res.destroy());
   };
 
-const listenOn = (server: http.Server, host: string, port: number): Promise<number> =>
-  new Promise((resolve, reject) => {
-    const onError = (error: Error) => {
-      server.off("listening", onListening);
-      reject(error);
-    };
-    const onListening = () => {
-      server.off("error", onError);
-      const address = server.address();
-      if (address === null || typeof address === "string") reject(new Error("The listener has no port."));
-      else resolve(address.port);
-    };
-    server.once("error", onError);
-    server.once("listening", onListening);
-    server.listen({ port, host, exclusive: true });
-  });
-
-const NO_IPV6 = new Set(["EADDRNOTAVAIL", "EAFNOSUPPORT", "EINVAL"]);
-
 interface PreviewOrigin {
   readonly port: number;
   readonly taken: number | undefined;
@@ -172,44 +154,18 @@ export const startPreviewOrigin = async (outputDir: () => Promise<string>, wante
     });
     return server;
   };
-  let fixed = wanted !== 0;
-  for (let attempt = 0; ; attempt++) {
-    const v4 = make();
-    const port = await listenOn(v4, "127.0.0.1", fixed ? wanted : 0).catch((error: unknown) => {
-      if (fixed) return undefined;
-      throw error;
-    });
-    if (port === undefined) {
-      fixed = false;
-      continue;
-    }
-    const v6 = make();
-    const both = await listenOn(v6, "::1", port).then(
-      () => true,
-      (error: NodeJS.ErrnoException) => {
-        if (NO_IPV6.has(error.code ?? "")) return false;
-        if (fixed || attempt < 5) return undefined;
-        return false;
-      },
-    );
-    if (both === undefined) {
-      v4.close();
-      fixed = false;
-      continue;
-    }
-    const servers = both ? [v4, v6] : [v4];
-    return {
-      port,
-      taken: wanted !== 0 && port !== wanted ? wanted : undefined,
-      stopListening: () => {
-        for (const server of servers) {
-          server.close();
-          server.closeIdleConnections();
-        }
-      },
-      closeAllConnections: () => {
-        for (const server of servers) server.closeAllConnections();
-      },
-    };
-  }
+  const { port, servers } = await listenBothLoopbacks(make, wanted);
+  return {
+    port,
+    taken: wanted !== 0 && port !== wanted ? wanted : undefined,
+    stopListening: () => {
+      for (const server of servers) {
+        server.close();
+        server.closeIdleConnections();
+      }
+    },
+    closeAllConnections: () => {
+      for (const server of servers) server.closeAllConnections();
+    },
+  };
 };

@@ -1,6 +1,6 @@
 import { farOffscreen } from "@unframed/domain";
 import type { ScreenShapeProps } from "@unframed/contracts";
-import { computed, react, type Editor, type TLShapeId } from "tldraw";
+import { atom, computed, react, type Atom, type Editor, type TLShapeId } from "tldraw";
 import type { EngineConnection } from "../rpc/engine.ts";
 import { repositoryState } from "./store.ts";
 
@@ -16,10 +16,28 @@ export const screenOnScreen = (editor: Editor, id: TLShapeId, reach = 1): boolea
   return !!bounds && !farOffscreen({ x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h }, { x: viewport.x, y: viewport.y, w: viewport.w, h: viewport.h }, reach);
 };
 
-export const screenPresence = (editor: Editor, id: TLShapeId): (() => boolean) => {
-  let present = false;
-  return () => (present = screenOnScreen(editor, id) || (present && screenOnScreen(editor, id, SCREEN_KEEP_REACH)));
+const loaded = new WeakMap<Editor, Atom<ReadonlySet<TLShapeId>>>();
+
+const loadedOf = (editor: Editor): Atom<ReadonlySet<TLShapeId>> => {
+  let found = loaded.get(editor);
+  if (found === undefined) {
+    found = atom("loaded screens", new Set<TLShapeId>());
+    loaded.set(editor, found);
+  }
+  return found;
 };
+
+export const holdScreenLoaded = (editor: Editor, id: TLShapeId): (() => void) => {
+  loadedOf(editor).update((ids) => new Set(ids).add(id));
+  return () =>
+    loadedOf(editor).update((ids) => {
+      const next = new Set(ids);
+      next.delete(id);
+      return next;
+    });
+};
+
+export const screenWanted = (editor: Editor, id: TLShapeId): boolean => screenOnScreen(editor, id) || (loadedOf(editor).get().has(id) && screenOnScreen(editor, id, SCREEN_KEEP_REACH));
 
 const installDemand = (engine: EngineConnection, project: string, client: string, wanted: () => string): (() => void) => {
   const state = repositoryState(project);
@@ -58,7 +76,7 @@ export const installScreenDemand = (editor: Editor, engine: EngineConnection, pr
     const ids = new Set<string>();
     for (const shape of editor.getCurrentPageShapes()) {
       if (shape.type !== "screen") continue;
-      if (selected.has(shape.id) || screenOnScreen(editor, shape.id)) ids.add((shape.props as ScreenShapeProps).instance);
+      if (selected.has(shape.id) || screenWanted(editor, shape.id)) ids.add((shape.props as ScreenShapeProps).instance);
     }
     return [...ids].sort().join(" ");
   });
