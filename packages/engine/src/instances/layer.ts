@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, watch, type FSWatcher } from "node:fs";
-import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
 import { totalmem } from "node:os";
 import type { DatabaseSync } from "node:sqlite";
 import { dirname, join } from "node:path";
@@ -26,7 +26,6 @@ import {
   exitedBeforeListening,
   inferredSetup,
   listenedPorts,
-  mergeExclude,
   movedPort,
   neverListened,
   proxyFailed,
@@ -59,7 +58,7 @@ import { errorText } from "../log.ts";
 import { LoginShell } from "../loginShell.ts";
 import { ProjectDatabase } from "../projectDatabase.ts";
 import { Projects } from "../projects.ts";
-import { makeGit, gitOutput, gitStdout } from "../repositories/git.ts";
+import { excludeFromGit, makeGit, gitOutput, gitStdout } from "../repositories/git.ts";
 import { readRepository, readRepositoryProject, writeRepository, type StoredRepository } from "../repositories/tables.ts";
 import { Config } from "../services.ts";
 import { Shutdown } from "../shutdown.ts";
@@ -489,15 +488,6 @@ export const instancesLayer = Layer.effect(
       }
     };
 
-    const mergeIntoExclude = async (gitCommonDir: string, files: ReadonlyArray<string>) => {
-      const exclude = join(gitCommonDir, "info", "exclude");
-      const existing = await readFile(exclude, "utf8").catch(() => "");
-      const merged = mergeExclude(existing, files.map((file) => `/${file}`));
-      if (merged === existing) return;
-      await mkdir(dirname(exclude), { recursive: true });
-      await writeFile(exclude, merged);
-    };
-
     const prepareWorktree = (context: RepositoryContext, live: Live) =>
       Effect.gen(function* () {
         const { root, gitCommonDir } = context.repository;
@@ -509,7 +499,7 @@ export const instancesLayer = Layer.effect(
           try: async () => {
             await copyInto(root, live.stored.worktree, envFiles);
             if (folder !== undefined) await copyInto(join(folder, SETUP_FILES_FOLDER), live.stored.worktree, setupFiles);
-            await mergeIntoExclude(gitCommonDir, [...envFiles, ...setupFiles]);
+            await excludeFromGit(gitCommonDir, [...envFiles, ...setupFiles]);
           },
           catch: (error) => unframedError("internal", `Could not prepare the worktree: ${errorText(error)}`),
         });
@@ -541,7 +531,7 @@ export const instancesLayer = Layer.effect(
           try: async () => {
             await copyOver(live.stored.worktree, join(folder, SETUP_FILES_FOLDER), files);
             for (const other of others) await copyOver(join(folder, SETUP_FILES_FOLDER), other.stored.worktree, files);
-            await mergeIntoExclude(context.repository.gitCommonDir, files);
+            await excludeFromGit(context.repository.gitCommonDir, files);
           },
           catch: (error) => unframedError("internal", `Could not copy Setup's files: ${errorText(error)}`),
         });
@@ -568,7 +558,7 @@ export const instancesLayer = Layer.effect(
           try: async () => {
             await copyOver(live.stored.worktree, join(folder, SETUP_FILES_FOLDER), files);
             for (const other of others) await copyOver(join(folder, SETUP_FILES_FOLDER), other.stored.worktree, files);
-            await mergeIntoExclude(context.repository.gitCommonDir, files);
+            await excludeFromGit(context.repository.gitCommonDir, files);
           },
           catch: (error) => unframedError("internal", `Could not copy Setup's files: ${errorText(error)}`),
         });

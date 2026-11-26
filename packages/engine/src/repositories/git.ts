@@ -1,4 +1,7 @@
 import { unframedError } from "@unframed/contracts";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { mergeExclude } from "@unframed/domain";
 import * as Effect from "effect/Effect";
 import { runCommand, type Spawned, type SpawnSetup } from "../loginShell.ts";
 
@@ -16,5 +19,14 @@ export const makeGit =
 export const gitOutput = (ran: Spawned): string | undefined => (ran.kind === "exited" && ran.code === 0 ? ran.output : undefined);
 
 export const gitStdout = (ran: Spawned): string | undefined => (ran.kind === "exited" && ran.code === 0 ? (ran.stdout ?? ran.output) : undefined);
+
+export const excludeFromGit = async (gitCommonDir: string, files: ReadonlyArray<string>) => {
+  const exclude = join(gitCommonDir, "info", "exclude");
+  const existing = await readFile(exclude, "utf8").catch(() => "");
+  const merged = mergeExclude(existing, files.map((file) => `/${file}`));
+  if (merged === existing) return;
+  await mkdir(dirname(exclude), { recursive: true });
+  await writeFile(exclude, merged);
+};
 
 export const gitFailure = (what: string, ran: { readonly kind: string; readonly output?: string }) => unframedError("internal", `${what}: ${ran.output?.trim() || ran.kind}`);

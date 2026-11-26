@@ -6,7 +6,6 @@ import {
   ANALYSIS_MAX_FILES,
   analysedPath,
   analyseRepository,
-  mergeExclude,
   routeFor,
   type CodeMap,
   type DesignSystemIndex,
@@ -15,7 +14,7 @@ import {
   type StatesIndex,
 } from "@unframed/domain";
 import * as Effect from "effect/Effect";
-import { gitOutput, type Git } from "./git.ts";
+import { excludeFromGit, gitOutput, type Git } from "./git.ts";
 
 const readJson = async <A>(path: string): Promise<A | undefined> => {
   const text = await readFile(path, "utf8").catch(() => undefined);
@@ -39,15 +38,6 @@ export const readAnalysis = async (worktree: string): Promise<Partial<RepoAnalys
 const writeJson = async (path: string, value: unknown) => {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
-};
-
-export const excludeAnalysis = async (gitCommonDir: string, files: ReadonlyArray<string>) => {
-  const exclude = join(gitCommonDir, "info", "exclude");
-  const existing = await readFile(exclude, "utf8").catch(() => "");
-  const merged = mergeExclude(existing, files.map((file) => `/${file}`));
-  if (merged === existing) return;
-  await mkdir(dirname(exclude), { recursive: true });
-  await writeFile(exclude, merged);
 };
 
 const sourceFiles = async (worktree: string, listed: ReadonlyArray<string>): Promise<Map<string, string>> => {
@@ -74,7 +64,7 @@ export const analyseWorktree = (git: Git, input: { readonly worktree: string; re
       await writeJson(join(input.worktree, ANALYSIS_FILES.codeMap), analysis.codeMap);
       await writeJson(join(input.worktree, ANALYSIS_FILES.designSystem), analysis.designSystem);
       await writeJson(join(input.worktree, ANALYSIS_FILES.states), analysis.states);
-      await excludeAnalysis(input.gitCommonDir, Object.values(ANALYSIS_FILES));
+      await excludeFromGit(input.gitCommonDir, Object.values(ANALYSIS_FILES));
       return { analysis, files: files.size };
     });
   });
