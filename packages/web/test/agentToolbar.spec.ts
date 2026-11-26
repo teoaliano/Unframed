@@ -30,6 +30,10 @@ const twoPages = async (page: Page, engine: TestEngine): Promise<{ alpha: string
 };
 
 const target = (page: Page) => composer(page).getByTestId("agent-target");
+const switchTo = async (page: Page, choice: string) => {
+  await target(page).getByTestId("agent-target-line").click();
+  await page.getByRole("menuitemradio", { name: choice }).click();
+};
 const chips = (page: Page) => composer(page).getByRole("list", { name: "Context" }).getByRole("listitem");
 
 test("an empty page's bar is Agent alone; its tray has one frame", async ({ page, agent }) => {
@@ -72,16 +76,15 @@ test("Agent on the toolbar is an outline button, and opens the Agent tray saying
   await button.click();
 
   await expect(composer(page)).toHaveAttribute("data-tray", "agent");
-  await expect(target(page).getByTestId("agent-target-line")).toHaveText("continues About both");
-  await expect(target(page).locator("em")).toHaveText("About both");
-  await expect(composer(page).getByText("Claude · not metered", { exact: true })).toBeVisible();
-  await target(page).getByRole("button", { name: "New chat instead" }).click();
-  await expect(target(page).getByTestId("agent-target-line")).toHaveText("new chat");
-  await target(page).getByRole("button", { name: "Continue the earlier chat" }).click();
-  await expect(target(page).getByTestId("agent-target-line")).toHaveText("continues About both");
+  await expect(target(page)).toContainText("Agent");
+  await expect(target(page).getByTestId("agent-target-line")).toHaveText("Continue “About both”");
+  await switchTo(page, "New chat");
+  await expect(target(page).getByTestId("agent-target-line")).toHaveText("New chat");
+  await switchTo(page, "Continue “About both”");
+  await expect(target(page).getByTestId("agent-target-line")).toHaveText("Continue “About both”");
 
-  // Back to tools (Esc) closes it; so does Escape.
-  await target(page).getByRole("button", { name: "Back to tools (Esc)" }).click();
+  // Close (Esc) closes it; so does Escape.
+  await target(page).getByRole("button", { name: "Close (Esc)" }).click();
   await expect(composer(page)).toHaveCount(0);
   await toolbar(page).getByRole("button", { name: "Agent" }).click();
   // The box takes the keyboard as the tray opens; Escape from there closes it.
@@ -93,8 +96,10 @@ test("Agent on the toolbar is an outline button, and opens the Agent tray saying
   // Nothing the chats know selected: a new chat, and nothing to switch to.
   await clickShape(page, "shape:sample-subject");
   await toolbar(page).getByRole("button", { name: "Agent" }).click();
-  await expect(target(page).getByTestId("agent-target-line")).toHaveText("new chat");
-  await expect(target(page).getByRole("button", { name: "Continue the earlier chat" })).toHaveCount(0);
+  await expect(target(page).getByTestId("agent-target-line")).toHaveText("New chat");
+  await target(page).getByTestId("agent-target-line").click();
+  await expect(page.getByRole("menuitemradio", { name: "No earlier chat on this selection" })).toBeDisabled();
+  await page.keyboard.press("Escape");
 });
 
 test("while the tray is open a clicked shape joins the context and stays selected; clicking empty canvas closes the tray", async ({ page, agent }) => {
@@ -102,7 +107,7 @@ test("while the tray is open a clicked shape joins the context and stays selecte
   await clickShape(page, "shape:p1");
   await toolbar(page).getByRole("button", { name: "Agent" }).click();
   await expect(chips(page)).toHaveText(["Alpha"]);
-  await expect(target(page).getByTestId("agent-target-line")).toHaveText("continues About both");
+  await expect(target(page).getByTestId("agent-target-line")).toHaveText("Continue “About both”");
 
   await clickShape(page, "shape:p2");
   await expect(chips(page)).toHaveText(["Alpha", "Beta"]);
@@ -139,7 +144,7 @@ test("Send opens the rail on the chat it continues, then the message goes there;
   await clickShape(page, "shape:p2");
   await toolbar(page).getByRole("button", { name: "Agent" }).click();
   await expect(chips(page)).toHaveText(["Beta"]);
-  await target(page).getByRole("button", { name: "New chat instead" }).click();
+  await switchTo(page, "New chat");
   await promptBox(composer(page)).pressSequentially("start over on beta");
   await promptBox(composer(page)).press("Enter");
   await expect(rail(page).locator("[data-role='user']").last()).toContainText("start over on beta");
@@ -153,11 +158,11 @@ test("the toolbar's tray says what went wrong itself, since the rail is closed",
   await clickShape(page, "shape:p1");
   await toolbar(page).getByRole("button", { name: "Agent" }).click();
   await expect(target(page)).toBeVisible();
-  // Under the chips: the line saying which chat this joins.
+  // Above the chips: the header saying which chat this joins.
   expect(await composer(page).evaluate((element) => {
     const chipRow = element.querySelector("[aria-label='Context']")!;
     const line = element.querySelector("[data-testid='agent-target']")!;
-    return chipRow.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING;
+    return chipRow.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_PRECEDING;
   })).toBeTruthy();
   await page.evaluate(() => {
     const transfer = new DataTransfer();
