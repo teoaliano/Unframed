@@ -104,6 +104,8 @@ test("a Screen shows what the Repository's mock files answer, and changes when a
     const mock = (items: string[]) => `unframed.mock(({ http, data }) => {\n  const items = data("items", ${JSON.stringify(items)});\n  http.get("/api/items", () => items.all());\n});\n`;
     await writeInto(instance.worktree, { ".unframed/mocks/items.mock.js": mock(["Mocked"]) });
     await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/app" } }]);
+    await expect(page.locator(`[data-shape-id="${first.id}"] [data-testid=screen]`)).toHaveAttribute("data-route", "/app");
+    await clickShape(page, first.id);
     const frame = page.frameLocator(`[data-screen-of="${first.id}"] iframe[data-screen-frame]`);
     await expect(frame.locator("#list-state")).toHaveText("1 items", { timeout: 60_000 });
     await expect(frame.locator("#items li")).toHaveText(["Mocked"]);
