@@ -144,7 +144,7 @@ const place = (layer: HTMLElement, hosts: ReadonlyMap<string, HTMLDivElement>, e
   for (const [shapeId, host] of hosts) {
     const slot = activeSlot(entries.get(shapeId)?.slots.get() ?? []);
     const element = slot?.element.current;
-    if (slot === undefined || element === null || element === undefined || element.offsetWidth === 0 || slot.upright?.() === false) {
+    if (slot === undefined || !element || element.offsetWidth === 0 || slot.upright?.() === false) {
       if (host.style.visibility !== "hidden")
         writes.push(() => {
           host.style.visibility = "hidden";
