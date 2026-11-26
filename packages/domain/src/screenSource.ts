@@ -340,7 +340,8 @@ export function installSourceModule(win: any, tools: SourceTools): void {
     if (found === undefined) {
       found = fetchText(bare)
         .then((text) => {
-          const matches = text.match(/\/\/[#@] sourceMappingURL=([^\s'"]+)\s*$/m) || text.match(/\/\/[#@] sourceMappingURL=([^\s'"]+)/);
+          const MAP_COMMENT = "//[#@] source[M]appingURL=([^\\s'\"]+)";
+          const matches = text.match(new RegExp(MAP_COMMENT + "\\s*$", "m")) || text.match(new RegExp(MAP_COMMENT));
           if (!matches) return null;
           const ref = matches[1]!;
           if (ref.indexOf("data:") === 0) {

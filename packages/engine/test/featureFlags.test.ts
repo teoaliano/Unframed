@@ -109,6 +109,9 @@ describe("UNFRAMED_FEATURES", () => {
     await expect(rpc.call("repositories.setup", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("screens.stateToken", { project: "app", instance: instance.id, steps: [], mocks: [{ url: "/api" }] })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("repositories.confirmLogin", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("screens.inspect", { project: "app", instance: instance.id, file: "src/App.tsx", line: 1, col: 1 })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("screens.apply", { project: "app", instance: instance.id, changes: [] })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("screens.revert", { project: "app", apply: "a" })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("repositories.setupVerdict", { project: "app", accepted: true })).rejects.toMatchObject(REPOSITORIES_OFF);
     const states = rpc.subscribe("instances.subscribe", { project: "app" });
     await expect(states.next()).rejects.toMatchObject(REPOSITORIES_OFF);
