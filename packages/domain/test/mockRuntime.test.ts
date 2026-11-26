@@ -13,6 +13,7 @@ import {
   restorePrefix,
   restoreRoute,
   switchesOf,
+  SWITCH_PARAM,
   takeUnframedParams,
   withoutRestore,
 } from "../src/index.ts";
@@ -57,8 +58,8 @@ describe("a request's call site", () => {
 
 describe("switches on a Screen's route", () => {
   it("read every name:option pair from the switch parameter", () => {
-    expect(switchesOf("?tab=1&__unframed_switch=items:empty,user:admin&__unframed_switch=theme%3Adark")).toEqual({ items: "empty", user: "admin", theme: "dark" });
-    expect(switchesOf("")).toEqual({});
+    expect(switchesOf("?tab=1&__unframed_switch=items:empty,user:admin&__unframed_switch=theme%3Adark", SWITCH_PARAM)).toEqual({ items: "empty", user: "admin", theme: "dark" });
+    expect(switchesOf("", SWITCH_PARAM)).toEqual({});
   });
 });
 
@@ -123,9 +124,15 @@ describe("mock file names and the request log", () => {
     expect(kept[0]!.at).toBe(5);
   });
 
-  it("serialise the runtime with each file wrapped in its own loader call", () => {
+  it("serialise the runtime with each file wrapped in its own loader call, using nothing from outside the page", () => {
     const source = mockRuntimeSource([{ name: "items.mock.js", source: "unframed.mock(() => {});" }]);
-    expect(source).toContain('window.__unframedMockFiles.load("items.mock.js", function (unframed) {\nunframed.mock(() => {});\n});');
+    expect(source).toContain('window.__unframedMockFiles && window.__unframedMockFiles.load("items.mock.js", function (unframed) {\nunframed.mock(() => {});\n});');
     expect(() => new Function(source)).not.toThrow();
+    const errors: unknown[] = [];
+    const location = { origin: "http://localhost:4100", href: "http://localhost:4100/a?__unframed_switch=items:empty", search: "?__unframed_switch=items:empty", pathname: "/a", hash: "", host: "localhost:4100", protocol: "http:" };
+    const win: Record<string, unknown> = { location, document: { currentScript: null, readyState: "complete" }, setTimeout, URL, console: { error: (...args: unknown[]) => errors.push(args) } };
+    new Function("window", "console", source)(win, win.console);
+    expect(errors).toEqual([]);
+    expect((win.__unframedMockFiles as { picked: () => unknown }).picked()).toEqual({ items: "empty" });
   });
 });

@@ -6,6 +6,7 @@ import { totalmem } from "node:os";
 import type { DatabaseSync } from "node:sqlite";
 import { dirname, join } from "node:path";
 import { UnframedError, unframedError, type Instance, type InstanceState, type RepositorySetup } from "@unframed/contracts";
+import type { MockLogEntry } from "@unframed/domain";
 import {
   INSTANCE_IDLE_MS,
   INSTANCE_NOT_FOUND,
@@ -64,6 +65,8 @@ import { Config } from "../services.ts";
 import { Shutdown } from "../shutdown.ts";
 import { answers, freePort, spawnTracked, stopTracked, sweepLeftovers, type Tracked } from "./processes.ts";
 import { StateTokens, type ScreenStatePayload } from "./stateTokens.ts";
+import { mockFilesOf, type MockFiles } from "./mockFiles.ts";
+import { readFrozen } from "../screens/frozenStates.ts";
 import { startInstanceProxy, type InstanceProxy } from "./proxy.ts";
 import { insertInstance, markInstalled, markRemoved, readInstances, type StoredInstance } from "./tables.ts";
 
@@ -106,6 +109,8 @@ export class Instances extends Context.Service<
     readonly touched: Stream.Stream<{ readonly project: string; readonly id: string }>;
     readonly stateToken: (project: string, id: string, payload: ScreenStatePayload) => Effect.Effect<string, UnframedError>;
     readonly noteChanges: (project: string, id: string, count: number) => void;
+    readonly mockLog: (project: string, id: string) => Effect.Effect<ReadonlyArray<MockLogEntry>, UnframedError>;
+    readonly shareSetupFiles: (project: string, from: string, files: ReadonlyArray<string>) => Effect.Effect<{ readonly copiedInto: ReadonlyArray<string> }, UnframedError>;
   }
 >()("unframed/engine/Instances") {}
 
@@ -124,6 +129,7 @@ interface Live {
   touchTimer: NodeJS.Timeout | undefined;
   changes: number;
   readonly tokens: StateTokens;
+  readonly mocks: MockFiles;
   demandOrder: number;
   lastDemandedAt: number;
   lastChangeAt: number;
@@ -219,6 +225,7 @@ export const instancesLayer = Layer.effect(
       touchTimer: undefined,
       changes: 0,
       tokens: new StateTokens(),
+      mocks: mockFilesOf(stored.worktree),
       demandOrder: 0,
       lastDemandedAt: 0,
       lastChangeAt: 0,
@@ -354,6 +361,7 @@ export const instancesLayer = Layer.effect(
       touch(live);
       try {
         const watcher = watch(live.stored.worktree, { recursive: true }, (_event, file) => {
+          if (file !== null) live.mocks.touched(String(file));
           if (file === null || countsAsChange(String(file))) {
             live.lastChangeAt = Date.now();
             touch(live);
@@ -407,7 +415,14 @@ export const instancesLayer = Layer.effect(
           }
           const proxied = yield* Effect.result(
             Effect.tryPromise({
-              try: () => startInstanceProxy({ upstreamPort: upstream, preferredPort: live.lastProxyPort, states: live.tokens }),
+              try: async () =>
+                startInstanceProxy({
+                  upstreamPort: upstream,
+                  preferredPort: live.lastProxyPort,
+                  states: live.tokens,
+                  mocks: live.mocks,
+                  frozen: async (id) => readFrozen(await Effect.runPromise(projects.folder(context.slug)).catch(() => undefined), id),
+                }),
               catch: (error) => proxyFailed(errorText(error)),
             }),
           );
@@ -533,6 +548,39 @@ export const instancesLayer = Layer.effect(
         yield* writeDb(context.slug, (db) => writeRepository(db, { ...(readRepository(db) ?? context.repository), setup: { ...setup, files } }));
         return { copiedInto: others.map((other) => other.stored.id) };
       });
+
+    const shareSetupFiles = (project: string, from: string, asked: ReadonlyArray<string>) =>
+      Effect.gen(function* () {
+        const { context, live } = yield* find(project, from);
+        if (isRemoved(live)) return yield* unframedError("bad_request", INSTANCE_REMOVED);
+        const files: string[] = [];
+        for (const file of asked) {
+          const path = setupFilePath(file);
+          if (path === undefined) return yield* unframedError("bad_request", setupFileOutside(file));
+          if (gitOutput(yield* git(live.stored.worktree, ["ls-files", "--error-unmatch", "--", path])) !== undefined) return yield* unframedError("bad_request", setupFileTracked(path));
+          if (!(yield* Effect.promise(() => fileExists(join(live.stored.worktree, path))))) return yield* unframedError("bad_request", setupFileMissing(path));
+          if (!files.includes(path)) files.push(path);
+        }
+        const folder = yield* projects.folder(context.slug);
+        if (folder === undefined) return yield* unframedError("not_found", REPOSITORY_NOT_FOUND);
+        const others = [...lives.values()].filter((other) => other.project === context.slug && other !== live && !isRemoved(other));
+        yield* Effect.tryPromise({
+          try: async () => {
+            await copyOver(live.stored.worktree, join(folder, SETUP_FILES_FOLDER), files);
+            for (const other of others) await copyOver(join(folder, SETUP_FILES_FOLDER), other.stored.worktree, files);
+            await mergeIntoExclude(context.repository.gitCommonDir, files);
+          },
+          catch: (error) => unframedError("internal", `Could not copy Setup's files: ${errorText(error)}`),
+        });
+        yield* writeDb(context.slug, (db) => {
+          const current = readRepository(db) ?? context.repository;
+          if (current.setup === null) return;
+          writeRepository(db, { ...current, setup: { ...current.setup, files: [...new Set([...current.setup.files, ...files])] } });
+        });
+        return { copiedInto: others.map((other) => other.stored.id) };
+      });
+
+    const mockLog = (project: string, id: string) => Effect.map(find(project, id), ({ live }) => live.mocks.log());
 
     const create = (project: string, options: CreateOptions) =>
       Effect.gen(function* () {
@@ -844,6 +892,6 @@ export const instancesLayer = Layer.effect(
 
     const stateToken = (project: string, id: string, payload: ScreenStatePayload) => Effect.map(find(project, id), ({ live }) => live.tokens.issue(payload));
 
-    return Instances.of({ create, remove, list, status, start, stop, demand, release, branches, saveSetup, everyChange, changes, touched, noteChanges, stateToken });
+    return Instances.of({ create, remove, list, status, start, stop, demand, release, branches, saveSetup, everyChange, changes, touched, noteChanges, stateToken, mockLog, shareSetupFiles });
   }),
 );

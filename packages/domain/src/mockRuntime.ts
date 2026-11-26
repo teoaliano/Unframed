@@ -85,12 +85,12 @@ export function callSiteOf(stack: string): string | null {
   return null;
 }
 
-export const switchesOf = (search: string): Readonly<Record<string, string>> => {
+export const switchesOf = (search: string, param: string): Readonly<Record<string, string>> => {
   const picked: Record<string, string> = {};
   const query = search.charAt(0) === "?" ? search.slice(1) : search;
   for (const part of query.split("&")) {
     const eq = part.indexOf("=");
-    if (eq === -1 || part.slice(0, eq) !== SWITCH_PARAM) continue;
+    if (eq === -1 || part.slice(0, eq) !== param) continue;
     let value = part.slice(eq + 1);
     try {
       value = decodeURIComponent(value.replace(/\+/g, " "));
@@ -182,7 +182,7 @@ export const mockLogEntries = (value: unknown): ReadonlyArray<MockLogEntry> => {
 
 export function mockRuntime(
   win: any,
-  config: { readonly logPath: string; readonly eventsPath: string; readonly sourcePath: string; readonly restoreParam: string; readonly logKeep: number },
+  config: { readonly logPath: string; readonly eventsPath: string; readonly sourcePath: string; readonly restoreParam: string; readonly switchParam: string; readonly logKeep: number },
   match: typeof matchPattern,
   site: typeof callSiteOf,
   switchesFrom: typeof switchesOf,
@@ -211,7 +211,7 @@ export function mockRuntime(
       undefined;
     }
   }
-  const picked = switchesFrom(win.location.search || "");
+  const picked = switchesFrom(win.location.search || "", config.switchParam);
   let handlers: any[] = [];
   let sockets: any[] = [];
   let switches: Record<string, ReadonlyArray<string>> = {};
@@ -676,13 +676,13 @@ export function mockRuntime(
   };
 }
 
-const fileCall = (file: MockSourceFile): string => `window.__unframedMockFiles.load(${JSON.stringify(file.name)}, function (unframed) {\n${file.source}\n});`;
+const fileCall = (file: MockSourceFile): string => `window.__unframedMockFiles && window.__unframedMockFiles.load(${JSON.stringify(file.name)}, function (unframed) {\n${file.source}\n});`;
 
 export const mockFilesSource = (files: ReadonlyArray<MockSourceFile>): string => files.map(fileCall).join("\n");
 
 export const mockRuntimeSource = (files: ReadonlyArray<MockSourceFile>): string =>
   [
-    `(${mockRuntime.toString()})(window, ${JSON.stringify({ logPath: MOCKS_LOG_PATH, eventsPath: MOCKS_EVENTS_PATH, sourcePath: MOCKS_SOURCE_PATH, restoreParam: RESTORE_PARAM, logKeep: MOCK_LOG_KEEP })}, ${matchPattern.toString()}, ${callSiteOf.toString()}, ${switchesOf.toString()});`,
+    `try { (${mockRuntime.toString()})(window, ${JSON.stringify({ logPath: MOCKS_LOG_PATH, eventsPath: MOCKS_EVENTS_PATH, sourcePath: MOCKS_SOURCE_PATH, restoreParam: RESTORE_PARAM, switchParam: SWITCH_PARAM, logKeep: MOCK_LOG_KEEP })}, ${matchPattern.toString()}, ${callSiteOf.toString()}, ${switchesOf.toString()}); } catch (error) { console.error("Unframed mock runtime failed:", error); }`,
     mockFilesSource(files),
     "",
   ].join("\n");

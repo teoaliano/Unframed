@@ -1,7 +1,3 @@
-import { randomBytes } from "node:crypto";
-import { copyFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join } from "node:path";
 import { UnframedError, unframedError, type GitAction, type GitActionResult, type InstanceDiff } from "@unframed/contracts";
 import {
   COMMIT_SYSTEM_PROMPT,
@@ -38,6 +34,7 @@ import { ProjectDatabase } from "../projectDatabase.ts";
 import { gitOutput, gitStdout, makeGit } from "../repositories/git.ts";
 import { Repositories } from "../repositories/layer.ts";
 import { Instances } from "./layer.ts";
+import { instancePatch, mergeBaseOf as mergeBaseOf_, withTemporaryIndex as withTemporaryIndex_, type InstancePatch } from "./instancePatch.ts";
 import { readInstances } from "./tables.ts";
 
 export class InstanceGit extends Context.Service<
@@ -45,6 +42,7 @@ export class InstanceGit extends Context.Service<
   {
     readonly diff: (project: string, id: string) => Effect.Effect<InstanceDiff, UnframedError>;
     readonly act: (project: string, id: string, action: GitAction) => Effect.Effect<GitActionResult, UnframedError>;
+    readonly patch: (project: string, id: string) => Effect.Effect<InstancePatch, UnframedError>;
   }
 >()("unframed/engine/InstanceGit") {}
 
@@ -91,23 +89,9 @@ export const instanceGitLayer = Layer.effect(
     const failed = (what: string, ran: { readonly kind: string; readonly output?: string }) =>
       unframedError("internal", `${what}: ${ran.output?.trim() || ran.kind}`);
 
-    const mergeBaseOf = (at: InstanceTarget) =>
-      Effect.gen(function* () {
-        for (const ref of [at.baseRef, at.baseCommit]) {
-          const found = gitOutput(yield* git(at.worktree, ["merge-base", "HEAD", ref]))?.trim();
-          if (found) return found;
-        }
-        return at.baseCommit;
-      });
+    const mergeBaseOf = (at: InstanceTarget) => mergeBaseOf_(git, at);
 
-    const withTemporaryIndex = <A>(at: InstanceTarget, run: (env: Record<string, string>) => Effect.Effect<A, UnframedError>) =>
-      Effect.gen(function* () {
-        const real = gitOutput(yield* git(at.worktree, ["rev-parse", "--git-path", "index"]))?.trim();
-        const realIndex = real && (isAbsolute(real) ? real : join(at.worktree, real));
-        const path = join(realIndex ? dirname(realIndex) : tmpdir(), `unframed-index-${randomBytes(6).toString("hex")}`);
-        if (realIndex) yield* Effect.promise(() => copyFile(realIndex, path).catch(() => undefined));
-        return yield* run({ GIT_INDEX_FILE: path }).pipe(Effect.ensuring(Effect.promise(() => Promise.all([rm(path, { force: true }), rm(`${path}.lock`, { force: true })]))));
-      });
+    const withTemporaryIndex = <A>(at: InstanceTarget, run: (env: Record<string, string>) => Effect.Effect<A, UnframedError>) => withTemporaryIndex_(git, at.worktree, run);
 
     const diff = (project: string, id: string) =>
       Effect.gen(function* () {
@@ -126,6 +110,13 @@ export const instanceGitLayer = Layer.effect(
             return { base, baseRef: at.baseRef, files: parseNumstat(numstatText), ...limitPatch(patchText) } satisfies InstanceDiff;
           }),
         );
+      });
+
+    const patch = (project: string, id: string) =>
+      Effect.gen(function* () {
+        const at = yield* target(project, id);
+        const repository = yield* repositories.read(at.slug);
+        return yield* instancePatch(git, { worktree: at.worktree, baseRef: at.baseRef, baseCommit: at.baseCommit, setupFiles: repository?.setup?.files ?? [] });
       });
 
     const refused = (message: string) => unframedError("bad_request", message);
@@ -281,6 +272,6 @@ export const instanceGitLayer = Layer.effect(
     };
     Effect.runFork(Stream.runForEach(instances.touched, ({ project, id }) => Effect.sync(() => recount(project, id))));
 
-    return InstanceGit.of({ diff, act: (project, id, action) => Effect.tap(act(project, id, action), () => Effect.sync(() => recount(projectSlug(project), id))) });
+    return InstanceGit.of({ diff, patch, act: (project, id, action) => Effect.tap(act(project, id, action), () => Effect.sync(() => recount(projectSlug(project), id))) });
   }),
 );

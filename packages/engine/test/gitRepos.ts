@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, realpath, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fakeShell } from "./agentFakes.ts";
 import { makeTempDir } from "./engineProcess.ts";
 
@@ -50,6 +50,22 @@ const APP_PAGE = [
   "  items.forEach(function (item) { var li = document.createElement('li'); li.textContent = item; document.getElementById('items').appendChild(li); });",
   "}).catch(function () { document.getElementById('list-state').textContent = 'Could not load items'; });",
   "</script></body></html>",
+].join("");
+const TODOS_PAGE = [
+  "<!doctype html><html><head><title>Todos</title></head><body>",
+  "<h1>Todos</h1><p id=\\"greeting\\"></p><p id=\\"count\\">Loading todos</p><ul id=\\"todos\\"></ul>",
+  "<label>Name <input id=\\"todo-name\\"></label><button id=\\"add\\">Add</button>",
+  "<script>",
+  "function load() { return fetch('/api/todos').then(function (r) { if (!r.ok) throw new Error('no backend'); return r.json(); }).then(function (todos) {",
+  "  document.getElementById('count').textContent = todos.length + ' todos';",
+  "  var list = document.getElementById('todos'); list.innerHTML = '';",
+  "  todos.forEach(function (todo) { var li = document.createElement('li'); li.textContent = todo.title; list.appendChild(li); });",
+  "}).catch(function () { document.getElementById('count').textContent = 'No backend'; }); }",
+  "document.getElementById('add').onclick = function () { fetch('/api/todos', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: document.getElementById('todo-name').value }) }).then(load); };",
+  "load();",
+  "</script>",
+  "<script type=\\"module\\">import { greeting } from '/src/greeting.ts'; document.getElementById('greeting').textContent = greeting;</script>",
+  "</body></html>",
 ].join("");
 const hits = {};
 const server = http.createServer((req, res) => {
@@ -122,6 +138,18 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "text/html" });
     return res.end("<body>no head here</body>");
   }
+  if (url.pathname === "/todos") {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end(TODOS_PAGE);
+  }
+  if (url.pathname === "/api/todos") {
+    res.writeHead(404, { "content-type": "application/json" });
+    return res.end(JSON.stringify({ error: "no backend" }));
+  }
+  if (url.pathname === "/src/greeting.ts") {
+    res.writeHead(200, { "content-type": "text/javascript" });
+    return res.end('export const greeting = "Real greeting";\\n');
+  }
   if (url.pathname === "/api/items") {
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify(["Apples", "Pears"]));
@@ -164,7 +192,7 @@ if (process.env.FAKE_DEV_DETACHED) {
 }
 `;
 
-export const makeRepo = async (name = "My App") => {
+export const makeRepo = async (name = "My App", files: Readonly<Record<string, string>> = {}) => {
   const root = join(await makeTempDir("unframed-repo-"), name);
   await mkdir(join(root, "src", "pages"), { recursive: true });
   await writeFile(join(root, "package.json"), '{ "name": "fake-app", "private": true, "scripts": { "dev": "node server.js", "postinstall": "node install.js" } }\n');
@@ -172,6 +200,10 @@ export const makeRepo = async (name = "My App") => {
   await writeFile(join(root, "install.js"), 'require("node:fs").writeFileSync("installed.txt", "yes\\n");\n');
   await writeFile(join(root, ".gitignore"), ".env*\n!.env.example\nnode_modules/\npackage-lock.json\ninstalled.txt\n");
   await writeFile(join(root, "src", "pages", "index.html"), "<h1>Hello</h1>\n");
+  for (const [path, content] of Object.entries(files)) {
+    await mkdir(dirname(join(root, path)), { recursive: true });
+    await writeFile(join(root, path), content);
+  }
   git(root, "init", "-q", "-b", "trunk");
   git(root, "add", ".");
   git(root, "commit", "-q", "-m", "first");
