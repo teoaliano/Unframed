@@ -285,8 +285,6 @@ export const classFor = (property: string, value: string): TailwindToken | undef
   return undefined;
 };
 
-export const snapToScale = (property: string, value: string): string => classFor(property, value)?.value ?? value;
-
 export function parseColour(value: string): [number, number, number, number] | undefined {
   const text = value.trim().toLowerCase();
   const hex = /^#([0-9a-f]{3,8})$/.exec(text);
