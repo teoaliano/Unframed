@@ -182,7 +182,7 @@ export interface FrameStatus {
   readonly painted: boolean;
 }
 
-export interface ScreenFrameInput {
+interface ScreenFrameInput {
   readonly owner: StoreOwner;
   readonly project: string;
   readonly shapeId: string;

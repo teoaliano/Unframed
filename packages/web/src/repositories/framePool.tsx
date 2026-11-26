@@ -10,7 +10,7 @@ import { installFramesDemand } from "./demand.ts";
 import { loadQueueOf } from "./loadQueue.ts";
 import { ScreenStateNote, useScreenFrame, type FrameStatus, type ScreenEditHooks } from "./ScreenView.tsx";
 
-export interface ScreenSlot {
+interface ScreenSlot {
   readonly element: RefObject<HTMLElement | null>;
   readonly clip: () => Element | null;
   readonly upright?: () => boolean;
