@@ -1,5 +1,5 @@
 import type { ScreenShapeProps } from "@unframed/contracts";
-import { describeStep, fixStateInstruction, followNavigation, NO_STATE_BRIDGE, screenOverlay, screenUrl, stateRoute, stepFailure, type DialsAnnouncement, type SetupChatState } from "@unframed/domain";
+import { describeStep, fixStateInstruction, type ScreenLoadQueue, type ScreenLoadRank, followNavigation, NO_STATE_BRIDGE, screenOverlay, screenUrl, stateRoute, stepFailure, type DialsAnnouncement, type SetupChatState } from "@unframed/domain";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useValue } from "tldraw";
 import { Badge } from "~/components/ui/badge";
@@ -178,9 +178,10 @@ export interface ScreenViewInput {
   readonly interactive: boolean;
   readonly write: (next: ScreenShapeProps) => boolean;
   readonly edit?: ScreenEditHooks | undefined;
+  readonly queue?: { readonly queue: ScreenLoadQueue; readonly rank: () => ScreenLoadRank } | undefined;
 }
 
-export const useScreenView = ({ owner, project, shapeId, props, onScreen, interactive, write, edit }: ScreenViewInput): { readonly content: ReactNode; readonly painted: boolean; readonly live: boolean; readonly branch: string } => {
+export const useScreenView = ({ owner, project, shapeId, props, onScreen, interactive, write, edit, queue }: ScreenViewInput): { readonly content: ReactNode; readonly painted: boolean; readonly live: boolean; readonly queued: boolean; readonly branch: string } => {
   const engine = useEngine();
   const ask = useAskAgent();
   const repositories = useFeature("repositories");
@@ -194,7 +195,19 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
     [state, props.instance],
   );
   const branch = useValue("screen branch", () => state.instances.get().get(props.instance)?.branch ?? props.title, [state, props.instance, props.title]);
-  const live = repositories && !isDeviceClient() && onScreen && proxyPort !== null;
+  const eligible = repositories && !isDeviceClient() && onScreen && proxyPort !== null;
+  const [admitted, setAdmitted] = useState(false);
+  const ranking = useRef(queue?.rank);
+  ranking.current = queue?.rank;
+  const loadQueue = queue?.queue;
+  useEffect(() => {
+    setAdmitted(false);
+    if (!eligible || loadQueue === undefined) return;
+    return loadQueue.enter(shapeId, () => ranking.current?.() ?? { selected: false, distance: 0 }, () => setAdmitted(true));
+  }, [eligible, loadQueue, shapeId]);
+  const queued = eligible && loadQueue !== undefined && !admitted;
+  const live = eligible && !queued;
+  const loaded = () => loadQueue?.done(shapeId);
   const snapshot = useValue("screen snapshot", () => state.snapshots.get().get(shapeId), [state, shapeId]);
   const bridge = useValue("screen bridge", () => state.bridges.get().get(shapeId), [state, shapeId]);
   const stateKey = JSON.stringify([props.steps ?? [], props.mocks ?? []]);
@@ -210,6 +223,7 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
   useEffect(() => {
     if (!live || proxyPort === null) {
       shown.current = undefined;
+      setPainted(undefined);
       return;
     }
     const want = { route: props.route, stateKey, port: proxyPort, reloads };
@@ -240,8 +254,14 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
     setFailure(undefined);
   };
   const events: FrameEvents = {
-    onPainted: () => setPainted(load?.url),
-    onBridge: (bridged) => noteBridge(project, shapeId, bridged),
+    onPainted: () => {
+      setPainted(load?.url);
+      if (load?.token !== true) loaded();
+    },
+    onBridge: (bridged) => {
+      noteBridge(project, shapeId, bridged);
+      if (!bridged) loaded();
+    },
     onReady: (route, applied) => {
       const frame = frameState.current;
       if (applied) {
@@ -256,7 +276,10 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
       frameState.current = { ...frameState.current, route };
       if (!replaying) follow(route);
     },
-    onSteps: (result) => setFailure(result.ok ? undefined : { step: result.step ?? 0, reason: result.reason ?? "" }),
+    onSteps: (result) => {
+      loaded();
+      setFailure(result.ok ? undefined : { step: result.step ?? 0, reason: result.reason ?? "" });
+    },
   };
   const fix = () => {
     const step = failure === undefined ? undefined : props.steps?.[failure.step];
@@ -309,5 +332,5 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
       <StateNote note={live && bridge === false ? NO_STATE_BRIDGE : undefined} />
     </>
   );
-  return { content, painted: shownPainted, live, branch };
+  return { content, painted: shownPainted, live, queued, branch };
 };

@@ -70,6 +70,12 @@ const server = http.createServer((req, res) => {
     res.write("<!doctype html><html><he");
     return setTimeout(() => res.end("ad><title>Split</title></head><body>split</body></html>"), 50);
   }
+  if (url.pathname === "/slow") {
+    return setTimeout(() => {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end("<!doctype html><html><head><title>Slow</title></head><body><h1>Slow " + url.search + "</h1></body></html>");
+    }, Number(url.searchParams.get("ms") || 1000));
+  }
   if (url.pathname === "/dials") {
     res.writeHead(200, { "content-type": "text/html" });
     return res.end("<!doctype html><html><head><title>Dials</title></head><body><h1 id=\\"title\\">Tuned</h1><script>window.unframed?.dials(\\"Look\\", { accent: \\"#ff0000\\" }, function (v) { document.getElementById(\\"title\\").dataset.accent = v.accent; }, { accent: \\"The heading colour\\" });</script></body></html>");
