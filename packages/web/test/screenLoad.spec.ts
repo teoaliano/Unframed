@@ -58,8 +58,10 @@ test("with ?fps=1 the meter counts Screens by tier, and replays, retries and fai
     await page.goto(`${engine.origin}/?fps=1`);
     const screen = page.locator(`[data-canvas-project="${project}"] [data-testid=screen]`);
     await expect(screen).toHaveAttribute("data-picture", /^[a-f0-9]{40}$/, { timeout: 30_000 });
+    await expect(screen).toHaveAttribute("data-level", "page");
+    await expect(screen.locator("[data-testid=screen-page-copy]")).toHaveAttribute("data-built", "true", { timeout: 10_000 });
     const line = page.locator("[data-fps-screens]");
-    await expect(line).toHaveText("screens: live 0 · warming 0 · parked 0 · snapshot 0 · picture 1 · replays 0 · retries 0 · failed 0");
+    await expect(line).toHaveText("screens: live 0 · warming 0 · parked 0 · snapshot 1 · picture 0 · replays 0 · retries 0 · failed 0");
     const [first] = await screenShapes(engine, project);
     await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/flaky?key=meter&fails=99", w: 640, h: 480, ...OPEN_MENU } }]);
     await clickShape(page, first.id);
