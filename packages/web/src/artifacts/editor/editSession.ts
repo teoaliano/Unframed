@@ -25,6 +25,7 @@ import {
   type ResolvedElement,
   type Burst,
   type ComponentDeclaration,
+  type Measured,
   type EditBox,
   type FieldOwner,
   type Kit,
@@ -79,13 +80,6 @@ export interface MeasureTarget {
   readonly selector?: string;
   readonly properties?: readonly string[];
   readonly attributes?: readonly string[];
-}
-
-export interface MeasureResult {
-  readonly found: boolean;
-  readonly computed: Readonly<Record<string, string>>;
-  readonly text: string | null;
-  readonly attributes?: Readonly<Record<string, string | null>>;
 }
 
 interface TweenPatch {
@@ -171,7 +165,7 @@ export interface EditSession {
   readonly drafts: readonly DraftChange[];
   readonly resolved: Readonly<Record<string, ResolvedSource | null>>;
   readonly resolve: (stamp: string, fresh?: boolean) => Promise<ResolvedSource | null>;
-  readonly measure: (targets: readonly MeasureTarget[]) => Promise<readonly MeasureResult[]>;
+  readonly measure: (targets: readonly MeasureTarget[]) => Promise<readonly Measured[]>;
   readonly nextUpdate: (timeout: number) => Promise<boolean>;
   readonly discardDraft: (id: string) => void;
   readonly scopeDraft: (id: string, scope: DraftScope) => void;
@@ -326,7 +320,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
     resolving.current.set(stamp, asked);
     return asked;
   };
-  const measure = (targets: readonly MeasureTarget[]): Promise<readonly MeasureResult[]> => ask<readonly MeasureResult[]>({ type: "unframed:source:measure", targets }, 3_000, []);
+  const measure = (targets: readonly MeasureTarget[]): Promise<readonly Measured[]> => ask<readonly Measured[]>({ type: "unframed:source:measure", targets }, 3_000, []);
   const nextUpdate = (timeout: number): Promise<boolean> =>
     new Promise<boolean>((done) => {
       const timer = window.setTimeout(() => {
