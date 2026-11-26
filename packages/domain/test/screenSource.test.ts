@@ -1,6 +1,6 @@
 import { transformSync } from "esbuild";
 import { describe, expect, it } from "vitest";
-import { callsiteFrame, decodeMappings, installSourceModule, originalPosition, sourceKey, sourceModuleSource, stackFrames } from "../src/index.ts";
+import { callsiteFrame, decodeMappings, installSourceModule, originalPosition, sourceKey, sourceModuleSource, stackFrames } from "../src/screenSource.ts";
 
 const tools = { frames: stackFrames, callsite: callsiteFrame, decode: decodeMappings, original: originalPosition, key: sourceKey };
 
