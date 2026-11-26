@@ -10,13 +10,13 @@ const RESEND_EVERY_MS = 10_000;
 
 const SCREEN_KEEP_REACH = 3;
 
-const loaded = new WeakMap<Editor, Atom<ReadonlySet<TLShapeId>>>();
+const loadedAtoms = new WeakMap<Editor, Atom<ReadonlySet<TLShapeId>>>();
 
 const loadedOf = (editor: Editor): Atom<ReadonlySet<TLShapeId>> => {
-  let found = loaded.get(editor);
+  let found = loadedAtoms.get(editor);
   if (found === undefined) {
     found = atom("loaded screens", new Set<TLShapeId>());
-    loaded.set(editor, found);
+    loadedAtoms.set(editor, found);
   }
   return found;
 };
