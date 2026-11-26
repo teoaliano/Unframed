@@ -27,7 +27,7 @@ export interface InstanceToolDeps {
   readonly apply: (project: string, change: CanvasChange, origin: ChangeOrigin) => Promise<Applied>;
   readonly stateToken: (project: string, id: string, payload: ScreenStatePayload) => Promise<string>;
   readonly prove: StateProver | undefined;
-  readonly locate?: ElementLocator | undefined;
+  readonly locate: ElementLocator;
 }
 
 class Refused extends Error {}
@@ -144,7 +144,6 @@ export class InstanceTools {
     const screen = screenNamed(await this.deps.read(binding.project), args);
     const selector = optionalString(args.selector);
     if (selector === undefined) throw new Refused("pass a CSS selector for the element");
-    if (this.deps.locate === undefined) throw new Refused(NO_CHROME_PREVIEW_MESSAGE);
     const instance = await this.live(binding.project, screen.props.instance);
     const state = screenStatePayload(screen.props);
     const token = state === undefined ? undefined : await this.deps.stateToken(binding.project, instance.id, state);
