@@ -1,7 +1,7 @@
 import type { ScreenMock, ScreenShapeProps, ScreenStep } from "@unframed/contracts";
 import { screenLabel } from "@unframed/domain";
 import { useEffect, useRef, useState } from "react";
-import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
+import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type Editor, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
 import { isInteractive } from "../../artifacts/state.ts";
 import { useCanvasProject } from "../../context.ts";
 import { noteRender } from "../../fps/renders.ts";
@@ -57,6 +57,7 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
   const status = useScreenSlot(project, shape.id, {
     element,
     clip: () => (canvas.current ??= editor.getContainer().querySelector(".tl-canvas")),
+    upright: () => editor.getShapePageTransform(shape.id).rotation() === 0,
     owner: editor,
     props,
     interactive: ready && settled,
@@ -92,6 +93,9 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
     </HTMLContainer>
   );
 };
+
+export const keepScreensUpright = (editor: Editor): (() => void) =>
+  editor.sideEffects.registerBeforeChangeHandler("shape", (_, next) => (next.type === "screen" && next.rotation !== 0 ? { ...next, rotation: 0 } : next));
 
 export class ScreenShapeUtil extends BaseBoxShapeUtil<ScreenShape> {
   static override type = "screen" as const;

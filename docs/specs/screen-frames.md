@@ -27,7 +27,7 @@ A browser frame reloads whenever it leaves the page or moves to another place in
 - A shape placed on top of a Screen on the canvas shows under the Screen's frame.
 - Every Screen of every open project keeps its app running. Closing a project tab closes its frames.
 - A Screen loads the first time a view shows it: a project tab restored but never opened in this session, or a Screen on another page, loads when first shown.
-- Screens cannot be rotated, since the frame is laid over the slot's upright box. A Screen in a group that clips its children is clipped to the canvas only.
+- Screens stay upright: the canvas undoes any rotation of a Screen, and a Screen inside a rotated group shows its placeholder instead of its frame, since the frame is laid over the slot's upright box. A Screen in a group that clips its children is clipped to the canvas only.
 - tldraw's own overlays inside the canvas (resize handles, the brush, snap lines) paint under a Screen's frame.
 - With every Screen demanded, the engine's memory budget is the only thing that stops a dev server, and an Instance it stops stays stopped until the project's tab is reopened (issue to follow).
 

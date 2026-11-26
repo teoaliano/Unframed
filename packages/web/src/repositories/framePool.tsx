@@ -7,12 +7,13 @@ import { CanvasProjectContext, useEngine } from "../context.ts";
 import { isDeviceClient } from "../deviceMode.ts";
 import { useFeature } from "../features.ts";
 import { installFramesDemand } from "./demand.ts";
-import { forgetLoadQueue, loadQueueOf } from "./loadQueue.ts";
+import { loadQueueOf } from "./loadQueue.ts";
 import { ScreenStateNote, useScreenFrame, type FrameStatus, type ScreenEditHooks } from "./ScreenView.tsx";
 
 export interface ScreenSlot {
   readonly element: RefObject<HTMLElement | null>;
   readonly clip: () => Element | null;
+  readonly upright?: () => boolean;
   readonly owner: StoreOwner;
   readonly props: ScreenShapeProps;
   readonly interactive: boolean;
@@ -63,8 +64,8 @@ export const forgetScreenFrame = (project: string, shapeId: string): void => {
 };
 
 export const pruneScreenFrames = (project: string, shapeIds: ReadonlySet<string>): void => {
-  const pool = poolOf(project);
-  if ([...pool.get().keys()].every((shapeId) => shapeIds.has(shapeId))) return;
+  const pool = pools.get(project);
+  if (pool === undefined || [...pool.get().keys()].every((shapeId) => shapeIds.has(shapeId))) return;
   pool.update((entries) => new Map([...entries].filter(([shapeId]) => shapeIds.has(shapeId))));
 };
 
@@ -143,7 +144,7 @@ const place = (layer: HTMLElement, hosts: ReadonlyMap<string, HTMLDivElement>, e
   for (const [shapeId, host] of hosts) {
     const slot = activeSlot(entries.get(shapeId)?.slots.get() ?? []);
     const element = slot?.element.current;
-    if (slot === undefined || element === null || element === undefined || element.offsetWidth === 0) {
+    if (slot === undefined || element === null || element === undefined || element.offsetWidth === 0 || slot.upright?.() === false) {
       if (host.style.visibility !== "hidden")
         writes.push(() => {
           host.style.visibility = "hidden";
@@ -195,13 +196,12 @@ const ProjectFrames = ({ project }: { readonly project: string }) => {
     return () => cancelAnimationFrame(frame);
   }, [pool]);
   useEffect(() => installFramesDemand(engine, project, () => [...pool.get().values()].map((entry) => (activeSlot(entry.slots.get()) ?? entry.last.current).props.instance)), [engine, project, pool]);
-  useEffect(
-    () => () => {
-      pools.delete(project);
-      forgetLoadQueue(project);
-    },
-    [project],
-  );
+  useEffect(() => {
+    pools.set(project, pool);
+    return () => {
+      if (pools.get(project) === pool) pools.delete(project);
+    };
+  }, [project, pool]);
   return (
     <CanvasProjectContext.Provider value={project}>
       <div ref={layer} className={`pointer-events-none absolute inset-0 overflow-hidden ${editing ? "z-[701]" : ""}`} data-screen-frames={project}>

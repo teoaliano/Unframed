@@ -79,3 +79,14 @@ test("a Screen's frame lies over its card on the canvas, and the selection toolb
     expect(top).toBe(true);
   });
 });
+
+test("a Screen stays upright: the rotate shortcut leaves it at no rotation", async ({ page }) => {
+  await withRepository(page, {}, async (engine, project) => {
+    const [first] = await screenShapes(engine, project);
+    await expect(page.locator(`[data-shape-id="${first.id}"] [data-testid=screen]`)).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
+    await clickShape(page, first.id);
+    await page.keyboard.press("Shift+.");
+    await page.waitForTimeout(500);
+    expect((await screenShapes(engine, project))[0].rotation).toBe(0);
+  });
+});
