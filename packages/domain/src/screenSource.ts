@@ -414,7 +414,7 @@ export function installSourceModule(win: any, tools: SourceTools): void {
     for (const property of Array.isArray(target.properties) ? target.properties : []) computed[property] = style.getPropertyValue(property);
     const attributes: Record<string, string | null> = {};
     for (const name of Array.isArray(target.attributes) ? target.attributes : []) attributes[name] = el.getAttribute(name);
-    return { found: true, computed, text: el.textContent, className: el.getAttribute("class"), attributes };
+    return { found: true, computed, text: el.textContent, attributes };
   };
 
   win.__unframedSource = { levels, describe, resolve, owner: ownerOf, find };

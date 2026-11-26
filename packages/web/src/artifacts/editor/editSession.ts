@@ -85,7 +85,6 @@ export interface MeasureResult {
   readonly found: boolean;
   readonly computed: Readonly<Record<string, string>>;
   readonly text: string | null;
-  readonly className?: string | null;
   readonly attributes?: Readonly<Record<string, string | null>>;
 }
 
