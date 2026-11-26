@@ -63,8 +63,6 @@ export const screenLoadQueue = (timers: ScreenLoadTimers): ScreenLoadQueue => {
   };
 
   const enter = (id: string, rank: () => ScreenLoadRank, start: () => void) => {
-    for (const other of waiting.filter((item) => item.id === id)) leave(other);
-    if (active?.entry.id === id) leave(active.entry);
     const entry: Entry = { id, rank, start };
     waiting.push(entry);
     schedule();
