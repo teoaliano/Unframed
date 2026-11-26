@@ -57,6 +57,7 @@ describe("UNFRAMED_FEATURES", () => {
     expect(description("canvas_write")).not.toMatch(/screen/i);
     expect(description("preview_open")).not.toMatch(/Screen/);
     expect(tools.map((tool) => tool.name).filter((name) => name.startsWith("instance_") || name === "screen_state" || name === "flow_create")).toEqual([]);
+    expect(tools.map((tool) => tool.name).filter((name) => ["repo_analyse", "code_map_read", "design_search", "route_states", "mocks_read", "mock_write", "screens_place", "states_place", "state_freeze"].includes(name))).toEqual([]);
 
     const { tools: allTools } = await toolsOf("all");
     expect(allTools.find((tool) => tool.name === "canvas_read")!.description).toContain("a screen shows one state of one Instance");
@@ -103,6 +104,8 @@ describe("UNFRAMED_FEATURES", () => {
     await expect(rpc.call("instances.demand", { project: "app", client: "window-1", ids: [instance.id] })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("instances.branches", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("instances.diff", instance)).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("instances.patch", instance)).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("screens.showStates", { project: "app", shape: "shape:s" })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("instances.gitAction", { ...instance, action: "commit" })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("repositories.read", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("repositories.locate", { project: "app", path: engine.dataDir })).rejects.toMatchObject(REPOSITORIES_OFF);

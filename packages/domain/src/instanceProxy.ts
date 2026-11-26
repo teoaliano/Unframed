@@ -101,8 +101,9 @@ export const proxiedResponseHeaders = (
 
 const attribute = (value: string): string => value.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 
-export const bridgeTag = (nonce: string | undefined, state?: string): string => {
-  const src = state === undefined ? BRIDGE_PATH : `${BRIDGE_PATH}?state=${encodeURIComponent(state)}`;
+export const bridgeTag = (nonce: string | undefined, state?: string, restore?: string): string => {
+  const query = [...(state === undefined ? [] : [`state=${encodeURIComponent(state)}`]), ...(restore === undefined ? [] : [`restore=${encodeURIComponent(restore)}`])];
+  const src = query.length === 0 ? BRIDGE_PATH : `${BRIDGE_PATH}?${query.join("&amp;")}`;
   return nonce === undefined ? `<script src="${src}"></script>` : `<script src="${src}" nonce="${attribute(nonce)}"></script>`;
 };
 

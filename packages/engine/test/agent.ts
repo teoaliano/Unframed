@@ -42,6 +42,17 @@ export const UNFRAMED_TOOLS = [
   "node_run",
 ];
 
+export const OUTSIDE_TOOLS = [
+  "projects_list",
+  ...UNFRAMED_TOOLS.flatMap((name) =>
+    name === "preview_wait_for" ? [name, "repo_analyse", "code_map_read", "design_search", "route_states", "mocks_read", "mock_write", "screens_place", "instance_patch"] : [name],
+  ),
+  "canvas_select",
+  "canvas_snapshot",
+  "chat_note",
+  "file_add",
+];
+
 type Distributive<T> = T extends unknown ? Omit<T, "commandId" | "projectId"> : never;
 export type CommandInput = Distributive<ClientChatCommand>;
 

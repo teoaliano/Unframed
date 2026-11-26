@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { PROJECT, scriptFolder, startAgentEngine, UNFRAMED_TOOLS, type AgentEngine } from "./agent.ts";
+import { PROJECT, scriptFolder, startAgentEngine, UNFRAMED_TOOLS, OUTSIDE_TOOLS, type AgentEngine } from "./agent.ts";
 import { roomRecords, seed, toolResults } from "./agentCanvas.ts";
 import { componentShape, pageShape } from "./canvasRecords.ts";
 import { outsideLink } from "./outsideCalls.ts";
@@ -99,7 +99,7 @@ describe("components on the outside list", () => {
     const link = await outsideLink(agent);
     const session = await link.open();
     const tools = await link.list(session);
-    expect(tools.map((tool) => tool.name)).toEqual(["projects_list", ...UNFRAMED_TOOLS, "canvas_select", "canvas_snapshot", "chat_note", "file_add"]);
+    expect(tools.map((tool) => tool.name)).toEqual(OUTSIDE_TOOLS);
     for (const name of ["component_write", "component_read"]) {
       expect(tools.find((tool) => tool.name === name)!.inputSchema.required).toContain("project");
     }

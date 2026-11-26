@@ -1,6 +1,6 @@
 import type { ScreenShapeProps } from "@unframed/contracts";
-import { mapFlowInstruction, previewHostFor, SCREEN_VIEWPORTS, screenUrl, setupTag } from "@unframed/domain";
-import { ChevronDown, CopyPlus, ExternalLink, Info, MonitorSmartphone, TriangleAlert, Workflow } from "lucide-react";
+import { mapFlowInstruction, previewHostFor, SCREEN_VIEWPORTS, screenUrl, setupTag, showStatesInstruction } from "@unframed/domain";
+import { ChevronDown, CopyPlus, ExternalLink, Info, LayoutGrid, MonitorSmartphone, TriangleAlert, Workflow } from "lucide-react";
 import { useState } from "react";
 import { useEditor, useValue, type Editor, type TLShape, type TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
@@ -9,7 +9,7 @@ import { Textarea } from "~/components/ui/textarea";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuRadioItemIndicator, MenuTrigger } from "~/components/ui/menu";
 import { messageOf } from "../agent/store.ts";
 import { Tip } from "../chrome/ui.tsx";
-import { useCanvasProject } from "../context.ts";
+import { useCanvasProject, useEngine } from "../context.ts";
 import { showError } from "../toasts.tsx";
 import { useAskAgent } from "./askAgent.ts";
 import { BranchChip, placeScreenBeside, screenPropsOf, useScreenInstance, type PlaceScreen } from "./BranchChip.tsx";
@@ -161,6 +161,34 @@ const MapFlow = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   );
 };
 
+const ShowStates = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
+  const editor = useEditor();
+  const project = useCanvasProject();
+  const engine = useEngine();
+  const ask = useAskAgent();
+  const [busy, setBusy] = useState(false);
+  const show = () => {
+    const props = screenPropsOf(editor, shapeId);
+    const instance = props === undefined ? undefined : repositoryState(project).instances.get().get(props.instance);
+    if (props === undefined || instance === undefined) return;
+    setBusy(true);
+    engine
+      .call("screens.showStates", { project, shape: shapeId })
+      .then(({ placed, cases, route }) =>
+        placed > 0 ? undefined : ask(shapeId, showStatesInstruction({ shape: shapeId.replace(/^shape:/, ""), route, branch: instance.branch, worktree: instance.worktree, cases })),
+      )
+      .catch((error: unknown) => showError(messageOf(error)))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <Tip label="Show states">
+      <Button variant="ghost" size="icon-sm" aria-label="Show states" disabled={busy} onClick={show}>
+        <LayoutGrid aria-hidden />
+      </Button>
+    </Tip>
+  );
+};
+
 const SetupNotes = () => {
   const project = useCanvasProject();
   const setup = useRepositorySetup(project);
@@ -213,6 +241,7 @@ export const ScreenActions = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
       <SetupNotes />
       <KeepView shapeId={shapeId} />
       <MapFlow shapeId={shapeId} />
+      <ShowStates shapeId={shapeId} />
     </>
   );
 };

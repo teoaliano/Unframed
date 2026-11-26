@@ -162,6 +162,17 @@ export type InstanceDiff = typeof InstanceDiff.Type;
 
 export const InstancesDiff = Rpc.make("instances.diff", { payload: InstanceRef, success: InstanceDiff, error: UnframedError });
 
+export const InstancePatch = Schema.Struct({ base: Schema.String, files: Schema.Array(DiffFile), patch: Schema.String });
+export type InstancePatch = typeof InstancePatch.Type;
+
+export const InstancesPatch = Rpc.make("instances.patch", { payload: InstanceRef, success: InstancePatch, error: UnframedError });
+
+export const ScreensShowStates = Rpc.make("screens.showStates", {
+  payload: Schema.Struct({ project: Schema.String, shape: Schema.String }),
+  success: Schema.Struct({ placed: Schema.Number, cases: Schema.Number, route: Schema.String }),
+  error: UnframedError,
+});
+
 export const GIT_ACTIONS = ["commit", "commit_push", "commit_push_pr"] as const;
 export const GitAction = Schema.Literals(GIT_ACTIONS);
 export type GitAction = typeof GitAction.Type;

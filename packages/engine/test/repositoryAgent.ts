@@ -26,8 +26,8 @@ export interface RepositoryAgent {
   session(chatId: string): Promise<{ url: string; token: string; cwd?: string; systemPrompt?: string; granted?: string[] }>;
 }
 
-export const startRepositoryAgent = async (env: Record<string, string> = {}, initial: Record<string, unknown> = {}): Promise<RepositoryAgent> => {
-  const root = await makeRepo();
+export const startRepositoryAgent = async (env: Record<string, string> = {}, initial: Record<string, unknown> = {}, files: Readonly<Record<string, string>> = {}): Promise<RepositoryAgent> => {
+  const root = await makeRepo("My App", files);
   const scripts = await makeTempDir("unframed-scripts-");
   const seeded = { setup: { when: "^Set up this Repository", turns: [{ text: "Looking." }] }, ...initial };
   for (const [name, script] of Object.entries(seeded)) await writeFile(join(scripts, `${name}.json`), JSON.stringify(script));

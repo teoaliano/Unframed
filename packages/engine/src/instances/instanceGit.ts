@@ -1,7 +1,3 @@
-import { randomBytes } from "node:crypto";
-import { copyFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join } from "node:path";
 import { UnframedError, unframedError, type GitAction, type GitActionResult, type InstanceDiff } from "@unframed/contracts";
 import {
   COMMIT_SYSTEM_PROMPT,
@@ -35,9 +31,10 @@ import { errorText } from "../log.ts";
 import { LoginShell, runCommand } from "../loginShell.ts";
 import { Config } from "../services.ts";
 import { ProjectDatabase } from "../projectDatabase.ts";
-import { gitOutput, gitStdout, makeGit } from "../repositories/git.ts";
+import { gitFailure, gitOutput, gitStdout, makeGit } from "../repositories/git.ts";
 import { Repositories } from "../repositories/layer.ts";
 import { Instances } from "./layer.ts";
+import { instancePatch, mergeBaseOf, withTemporaryIndex, type InstancePatch } from "./instancePatch.ts";
 import { readInstances } from "./tables.ts";
 
 export class InstanceGit extends Context.Service<
@@ -45,6 +42,7 @@ export class InstanceGit extends Context.Service<
   {
     readonly diff: (project: string, id: string) => Effect.Effect<InstanceDiff, UnframedError>;
     readonly act: (project: string, id: string, action: GitAction) => Effect.Effect<GitActionResult, UnframedError>;
+    readonly patch: (project: string, id: string) => Effect.Effect<InstancePatch, UnframedError>;
   }
 >()("unframed/engine/InstanceGit") {}
 
@@ -88,44 +86,30 @@ export const instanceGitLayer = Layer.effect(
         } satisfies InstanceTarget;
       });
 
-    const failed = (what: string, ran: { readonly kind: string; readonly output?: string }) =>
-      unframedError("internal", `${what}: ${ran.output?.trim() || ran.kind}`);
-
-    const mergeBaseOf = (at: InstanceTarget) =>
-      Effect.gen(function* () {
-        for (const ref of [at.baseRef, at.baseCommit]) {
-          const found = gitOutput(yield* git(at.worktree, ["merge-base", "HEAD", ref]))?.trim();
-          if (found) return found;
-        }
-        return at.baseCommit;
-      });
-
-    const withTemporaryIndex = <A>(at: InstanceTarget, run: (env: Record<string, string>) => Effect.Effect<A, UnframedError>) =>
-      Effect.gen(function* () {
-        const real = gitOutput(yield* git(at.worktree, ["rev-parse", "--git-path", "index"]))?.trim();
-        const realIndex = real && (isAbsolute(real) ? real : join(at.worktree, real));
-        const path = join(realIndex ? dirname(realIndex) : tmpdir(), `unframed-index-${randomBytes(6).toString("hex")}`);
-        if (realIndex) yield* Effect.promise(() => copyFile(realIndex, path).catch(() => undefined));
-        return yield* run({ GIT_INDEX_FILE: path }).pipe(Effect.ensuring(Effect.promise(() => Promise.all([rm(path, { force: true }), rm(`${path}.lock`, { force: true })]))));
-      });
-
     const diff = (project: string, id: string) =>
       Effect.gen(function* () {
         const at = yield* target(project, id);
-        const base = yield* mergeBaseOf(at);
-        return yield* withTemporaryIndex(at, (env) =>
+        const base = yield* mergeBaseOf(git, at);
+        return yield* withTemporaryIndex(git, at.worktree, (env) =>
           Effect.gen(function* () {
             const added = yield* git(at.worktree, ["add", "-A", ...at.pathspec], env);
-            if (gitOutput(added) === undefined) return yield* failed("Could not read the Instance's changes", added);
+            if (gitOutput(added) === undefined) return yield* gitFailure("Could not read the Instance's changes", added);
             const numstat = yield* git(at.worktree, ["diff", "--cached", "--no-renames", "--numstat", "-z", base, ...at.pathspec], env);
             const patch = yield* git(at.worktree, ["diff", "--cached", "--no-renames", "--no-color", "--no-ext-diff", base, ...at.pathspec], env);
             const numstatText = gitStdout(numstat);
             const patchText = gitStdout(patch);
-            if (numstatText === undefined) return yield* failed("Could not diff the Instance", numstat);
-            if (patchText === undefined) return yield* failed("Could not diff the Instance", patch);
+            if (numstatText === undefined) return yield* gitFailure("Could not diff the Instance", numstat);
+            if (patchText === undefined) return yield* gitFailure("Could not diff the Instance", patch);
             return { base, baseRef: at.baseRef, files: parseNumstat(numstatText), ...limitPatch(patchText) } satisfies InstanceDiff;
           }),
         );
+      });
+
+    const patch = (project: string, id: string) =>
+      Effect.gen(function* () {
+        const at = yield* target(project, id);
+        const repository = yield* repositories.read(at.slug);
+        return yield* instancePatch(git, { worktree: at.worktree, baseRef: at.baseRef, baseCommit: at.baseCommit, setupFiles: repository?.setup?.files ?? [] });
       });
 
     const refused = (message: string) => unframedError("bad_request", message);
@@ -186,7 +170,7 @@ export const instanceGitLayer = Layer.effect(
     const commitAll = (at: InstanceTarget) =>
       Effect.gen(function* () {
         const added = yield* git(at.worktree, ["add", "-A", ...at.pathspec]);
-        if (gitOutput(added) === undefined) return yield* failed("Could not stage the Instance's changes", added);
+        if (gitOutput(added) === undefined) return yield* gitFailure("Could not stage the Instance's changes", added);
         const staged = yield* git(at.worktree, ["diff", "--cached", "--quiet", ...at.pathspec]);
         if (staged.kind === "exited" && staged.code === 0) return null;
         const files = (gitStdout(yield* git(at.worktree, ["diff", "--cached", "--name-only", ...at.pathspec])) ?? "").split("\n").filter((line) => line !== "");
@@ -220,7 +204,7 @@ export const instanceGitLayer = Layer.effect(
         if (existing !== undefined && typeof existing.number === "number") {
           return { number: existing.number, url: String(existing.html_url ?? ""), title: String(existing.title ?? ""), existing: true };
         }
-        const mergeBase = yield* mergeBaseOf(at);
+        const mergeBase = yield* mergeBaseOf(git, at);
         const commits = gitStdout(yield* git(at.worktree, ["log", "--format=%s%n%b", `${mergeBase}..HEAD`])) ?? "";
         const stat = gitStdout(yield* git(at.worktree, ["diff", "--stat", `${mergeBase}..HEAD`, ...at.pathspec])) ?? "";
         const patch = gitStdout(yield* git(at.worktree, ["diff", "--no-color", "--no-ext-diff", `${mergeBase}..HEAD`, ...at.pathspec])) ?? "";
@@ -250,7 +234,7 @@ export const instanceGitLayer = Layer.effect(
         let push: GitActionResult["push"] = null;
         if (remote !== undefined) {
           if (commit === null) {
-            const ahead = gitOutput(yield* git(at.worktree, ["rev-list", "--count", `${yield* mergeBaseOf(at)}..HEAD`]))?.trim();
+            const ahead = gitOutput(yield* git(at.worktree, ["rev-list", "--count", `${yield* mergeBaseOf(git, at)}..HEAD`]))?.trim();
             if (ahead === "0") return yield* refused(NOTHING_TO_PUSH);
           }
           const pushed = yield* git(at.worktree, ["push", "--quiet", "--set-upstream", remote, `refs/heads/${at.branch}:refs/heads/${at.branch}`]);
@@ -281,6 +265,6 @@ export const instanceGitLayer = Layer.effect(
     };
     Effect.runFork(Stream.runForEach(instances.touched, ({ project, id }) => Effect.sync(() => recount(project, id))));
 
-    return InstanceGit.of({ diff, act: (project, id, action) => Effect.tap(act(project, id, action), () => Effect.sync(() => recount(projectSlug(project), id))) });
+    return InstanceGit.of({ diff, patch, act: (project, id, action) => Effect.tap(act(project, id, action), () => Effect.sync(() => recount(projectSlug(project), id))) });
   }),
 );

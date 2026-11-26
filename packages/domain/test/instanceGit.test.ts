@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   COMMIT_PROMPT_TEMPLATE,
+  patchFileName,
   COMMIT_SYSTEM_PROMPT,
   PR_PROMPT_TEMPLATE,
   PR_SYSTEM_PROMPT,
@@ -67,5 +68,13 @@ describe("reading what the provider wrote", () => {
     }
     expect(githubRepository("https://gitlab.com/acme/app.git")).toBeUndefined();
     expect(githubRepository("/tmp/remote.git")).toBeUndefined();
+  });
+});
+
+describe("the take-home patch's file name", () => {
+  it("is the branch with characters a file name cannot hold replaced", () => {
+    expect(patchFileName("feature/new header")).toBe("feature-new-header.patch");
+    expect(patchFileName("unframed/a1b2")).toBe("unframed-a1b2.patch");
+    expect(patchFileName("///")).toBe("changes.patch");
   });
 });
