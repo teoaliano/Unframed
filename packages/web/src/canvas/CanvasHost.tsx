@@ -179,7 +179,7 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     const stopLongPress = installLongPressMenu(editor);
     const detach = doc?.attach(editor);
     artifactsOf(editor).canvas.set(editor);
-    pruneScreenFrames(project, new Set(editor.store.allRecords().filter((record) => record.typeName === "shape" && record.type === "screen").map((record) => record.id)));
+    pruneScreenFrames(project, new Set(editor.store.query.records("shape", () => ({ type: { eq: "screen" } })).get().map((shape) => shape.id)));
     content.current = { project, engine, minter };
     installExternalContent(editor, content.current);
     const camera = recalledCamera(project);
