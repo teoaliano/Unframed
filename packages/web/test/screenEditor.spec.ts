@@ -39,6 +39,8 @@ test("a Screen opens in the editor from its toolbar and by double-click, live th
     await expect(centreColumn(page).getByTestId("artifact-editor-kind")).toHaveText("screen");
     await expect(app(page).getByRole("heading", { name: "Fake app" })).toBeVisible({ timeout: 30_000 });
     await expect(preview(page)).toHaveAttribute("data-painted", "true");
+    const box = (await preview(page).boundingBox())!;
+    expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.tagName, { x: box.x + box.width / 2, y: box.y + box.height / 2 })).toBe("IFRAME");
     await expect(editorTab(page)).toHaveText(title);
     await expect(rail(page).getByRole("heading", { name: "Agent" })).toBeVisible();
 

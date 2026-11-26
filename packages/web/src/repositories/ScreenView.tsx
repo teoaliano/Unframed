@@ -73,8 +73,9 @@ const LiveScreen = ({ owner, shapeId, url, dials, interactive, events, edit }: {
   };
   useEffect(() => {
     reachFrame(owner, shapeId, (values) => post({ type: "unframed:dials:set", values }));
+    if (ready.current) post({ type: "unframed:dials:hello" });
     const onMessage = (event: MessageEvent) => {
-      if (event.source !== frame.current?.contentWindow) return;
+      if (event.source !== frame.current?.contentWindow || event.origin !== target) return;
       const data = event.data as { type?: unknown; route?: unknown; state?: unknown; replaying?: unknown; ok?: unknown; step?: unknown; reason?: unknown } | null;
       if (typeof data !== "object" || data === null) return;
       if (typeof data.type === "string" && data.type.startsWith("unframed:edit:")) {
@@ -106,6 +107,10 @@ const LiveScreen = ({ owner, shapeId, url, dials, interactive, events, edit }: {
     if (editReady === undefined) return;
     editReady(post);
     post({ type: "unframed:edit:hello" });
+    return () => {
+      post({ type: "unframed:edit:mode", mode: "interact", locked: [] });
+      post({ type: "unframed:edit:reset" });
+    };
   }, [editReady]);
   const serialised = JSON.stringify(dials ?? null);
   useEffect(() => {
@@ -373,10 +378,14 @@ export const useScreenFrame = ({ owner, project, shapeId, props, interactive, wr
   return { content, failure: failed, status: { live, queued, painted: shownPainted && failure === undefined } };
 };
 
+export const ScreenStateNote = ({ project, shapeId, live }: { readonly project: string; readonly shapeId: string; readonly live: boolean }) => {
+  const bridge = useValue("screen bridge", () => repositoryState(project).bridges.get().get(shapeId), [project, shapeId]);
+  return <StateNote note={live && bridge === false ? NO_STATE_BRIDGE : undefined} />;
+};
+
 export const ScreenPlaceholder = ({ project, shapeId, props, status }: { readonly project: string; readonly shapeId: string; readonly props: ScreenShapeProps; readonly status: FrameStatus }) => {
   const state = repositoryState(project);
   const snapshot = useValue("screen snapshot", () => state.snapshots.get().get(shapeId), [state, shapeId]);
-  const bridge = useValue("screen bridge", () => state.bridges.get().get(shapeId), [state, shapeId]);
   const branch = useScreenBranch(project, props);
   return (
     <>
@@ -390,7 +399,6 @@ export const ScreenPlaceholder = ({ project, shapeId, props, status }: { readonl
           </div>
         ))}
       <Overlay project={project} instance={props.instance} />
-      <StateNote note={status.live && bridge === false ? NO_STATE_BRIDGE : undefined} />
     </>
   );
 };

@@ -37,7 +37,7 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
   const props = shape.props as ScreenShapeProps;
   const setupWarnings = useRepositorySetup(project)?.warnings.length ?? 0;
   const selected = useValue("screen selected", () => editor.getSelectedShapeIds().includes(shape.id), [editor, shape.id]);
-  const ready = useValue("screen interactive", () => isInteractive(editor, shape.id), [editor, shape.id]);
+  const ready = useValue("screen interactive", () => isInteractive(editor, shape.id) && editor.getCameraState() === "idle", [editor, shape.id]);
   const [settled, setSettled] = useState(false);
   useEffect(() => {
     setSettled(false);
@@ -46,6 +46,7 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
     return () => clearTimeout(timer);
   }, [ready, editor]);
   const element = useRef<HTMLDivElement>(null);
+  const canvas = useRef<Element | null>(null);
   const write = (next: ScreenShapeProps) => {
     const current = editor.getShape(shape.id);
     if (current?.type !== "screen" || !editor.getSelectedShapeIds().includes(shape.id)) return false;
@@ -55,7 +56,7 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
   };
   const status = useScreenSlot(project, shape.id, {
     element,
-    clip: () => editor.getContainer().querySelector(".tl-canvas"),
+    clip: () => (canvas.current ??= editor.getContainer().querySelector(".tl-canvas")),
     owner: editor,
     props,
     interactive: ready && settled,
@@ -102,6 +103,10 @@ export class ScreenShapeUtil extends BaseBoxShapeUtil<ScreenShape> {
 
   override canEdit() {
     return false;
+  }
+
+  override hideRotateHandle() {
+    return true;
   }
 
   override component(shape: ScreenShape) {

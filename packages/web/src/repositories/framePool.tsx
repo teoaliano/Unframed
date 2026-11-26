@@ -1,14 +1,14 @@
 import type { ScreenShapeProps } from "@unframed/contracts";
 import type { ScreenLoadRank } from "@unframed/domain";
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { atom, useValue, type Atom } from "tldraw";
 import type { StoreOwner } from "../canvas/doc.ts";
 import { CanvasProjectContext, useEngine } from "../context.ts";
 import { isDeviceClient } from "../deviceMode.ts";
 import { useFeature } from "../features.ts";
 import { installFramesDemand } from "./demand.ts";
-import { loadQueueOf } from "./loadQueue.ts";
-import { useScreenFrame, type FrameStatus, type ScreenEditHooks } from "./ScreenView.tsx";
+import { forgetLoadQueue, loadQueueOf } from "./loadQueue.ts";
+import { ScreenStateNote, useScreenFrame, type FrameStatus, type ScreenEditHooks } from "./ScreenView.tsx";
 
 export interface ScreenSlot {
   readonly element: RefObject<HTMLElement | null>;
@@ -21,6 +21,7 @@ export interface ScreenSlot {
   readonly write: (next: ScreenShapeProps) => boolean;
   readonly rank: () => ScreenLoadRank;
   readonly edit?: ScreenEditHooks | undefined;
+  readonly overlay?: ReactNode;
 }
 
 interface PoolEntry {
@@ -30,6 +31,7 @@ interface PoolEntry {
 }
 
 const NOT_LOADED: FrameStatus = { live: false, queued: false, painted: false };
+const NOWHERE: ScreenLoadRank = { selected: false, distance: Number.POSITIVE_INFINITY };
 
 const pools = new Map<string, Atom<ReadonlyMap<string, PoolEntry>>>();
 
@@ -60,11 +62,17 @@ export const forgetScreenFrame = (project: string, shapeId: string): void => {
   });
 };
 
+export const pruneScreenFrames = (project: string, shapeIds: ReadonlySet<string>): void => {
+  const pool = poolOf(project);
+  if ([...pool.get().keys()].every((shapeId) => shapeIds.has(shapeId))) return;
+  pool.update((entries) => new Map([...entries].filter(([shapeId]) => shapeIds.has(shapeId))));
+};
+
 const activeSlot = (slots: ReadonlyArray<{ readonly slot: ScreenSlot }>): ScreenSlot | undefined => (slots.find((each) => each.slot.editor) ?? slots[0])?.slot;
 
 export const useScreenSlot = (project: string, shapeId: string, slot: ScreenSlot): FrameStatus => {
   const [token] = useState(() => ({}));
-  const [entry] = useState(() => entryOf(project, shapeId, slot));
+  const entry = useMemo(() => entryOf(project, shapeId, slot), [project, shapeId]);
   useLayoutEffect(() => {
     keep(project, shapeId, entry);
     entry.slots.update((slots) => {
@@ -88,17 +96,17 @@ const PooledScreen = ({ project, shapeId, entry, host }: { readonly project: str
   const slot = useValue("screen slot", () => activeSlot(entry.slots.get()), [entry]);
   if (slot !== undefined) entry.last.current = slot;
   const shown = slot ?? entry.last.current;
-  const queue = loadQueueOf(project);
+  const interactive = slot?.interactive === true;
   const frame = useScreenFrame({
     owner: shown.owner,
     project,
     shapeId,
     props: shown.props,
-    interactive: slot?.interactive === true,
+    interactive,
     write: slot?.write ?? (() => false),
     edit: slot?.edit,
-    queue,
-    rank: () => activeSlot(entry.slots.get())?.rank() ?? { selected: false, distance: Number.POSITIVE_INFINITY },
+    queue: loadQueueOf(project),
+    rank: () => activeSlot(entry.slots.get())?.rank() ?? NOWHERE,
   });
   useLayoutEffect(() => {
     const current = entry.status.get();
@@ -116,29 +124,33 @@ const PooledScreen = ({ project, shapeId, entry, host }: { readonly project: str
       className="absolute top-0 left-0 overflow-hidden"
       data-screen-of={shapeId}
       data-painted={frame.status.painted ? "true" : undefined}
-      style={{ visibility: "hidden", transformOrigin: "0 0", pointerEvents: slot?.interactive === true ? "auto" : "none" }}
+      style={{ visibility: "hidden", transformOrigin: "0 0", pointerEvents: interactive ? "auto" : "none" }}
     >
-      <div className="absolute inset-0" style={{ opacity: frame.status.painted ? 1 : 0 }}>
+      <div className="absolute inset-0" inert={!interactive} style={{ opacity: frame.status.painted ? 1 : 0 }}>
         {frame.content}
       </div>
       {frame.failure}
-      {slot?.selected === true && <div className="pointer-events-none absolute inset-0 border border-(--selection-stroke)" data-screen-ring="" />}
+      <ScreenStateNote project={project} shapeId={shapeId} live={frame.status.live} />
+      {slot?.overlay}
+      {slot?.selected === true && <div className="pointer-events-none absolute inset-0 border-(length:--screen-ring) border-(--selection-stroke)" data-screen-ring="" />}
     </div>
   );
 };
 
 const place = (layer: HTMLElement, hosts: ReadonlyMap<string, HTMLDivElement>, entries: ReadonlyMap<string, PoolEntry>) => {
-  const origin = layer.getBoundingClientRect();
+  let origin: DOMRect | undefined;
   const writes: Array<() => void> = [];
   for (const [shapeId, host] of hosts) {
     const slot = activeSlot(entries.get(shapeId)?.slots.get() ?? []);
     const element = slot?.element.current;
     if (slot === undefined || element === null || element === undefined || element.offsetWidth === 0) {
-      writes.push(() => {
-        host.style.visibility = "hidden";
-      });
+      if (host.style.visibility !== "hidden")
+        writes.push(() => {
+          host.style.visibility = "hidden";
+        });
       continue;
     }
+    origin ??= layer.getBoundingClientRect();
     const rect = element.getBoundingClientRect();
     const clip = slot.clip()?.getBoundingClientRect() ?? origin;
     const w = element.offsetWidth;
@@ -151,11 +163,13 @@ const place = (layer: HTMLElement, hosts: ReadonlyMap<string, HTMLDivElement>, e
       right: Math.max(0, rect.right - clip.right) / scale,
     };
     const visible = inset.top + inset.bottom < h && inset.left + inset.right < w;
+    const at = { x: rect.left - origin.left, y: rect.top - origin.top };
     writes.push(() => {
       host.style.width = `${w}px`;
       host.style.height = `${h}px`;
-      host.style.transform = `translate(${rect.left - origin.left}px, ${rect.top - origin.top}px) scale(${scale})`;
+      host.style.transform = `translate(${at.x}px, ${at.y}px) scale(${scale})`;
       host.style.clipPath = `inset(${inset.top}px ${inset.right}px ${inset.bottom}px ${inset.left}px)`;
+      host.style.setProperty("--screen-ring", `${1 / scale}px`);
       host.style.visibility = visible ? "visible" : "hidden";
     });
   }
@@ -166,6 +180,7 @@ const ProjectFrames = ({ project }: { readonly project: string }) => {
   const engine = useEngine();
   const pool = poolOf(project);
   const entries = useValue("screen frames", () => pool.get(), [pool]);
+  const editing = useValue("screen frames editing", () => [...pool.get().values()].some((entry) => activeSlot(entry.slots.get())?.editor === true), [pool]);
   const layer = useRef<HTMLDivElement>(null);
   const hosts = useRef(new Map<string, HTMLDivElement>());
   const host = (shapeId: string, element: HTMLDivElement | null) => {
@@ -174,15 +189,22 @@ const ProjectFrames = ({ project }: { readonly project: string }) => {
   };
   useEffect(() => {
     let frame = requestAnimationFrame(function tick() {
-      if (layer.current !== null) place(layer.current, hosts.current, pool.get());
+      if (layer.current !== null && hosts.current.size > 0) place(layer.current, hosts.current, pool.get());
       frame = requestAnimationFrame(tick);
     });
     return () => cancelAnimationFrame(frame);
   }, [pool]);
   useEffect(() => installFramesDemand(engine, project, () => [...pool.get().values()].map((entry) => (activeSlot(entry.slots.get()) ?? entry.last.current).props.instance)), [engine, project, pool]);
+  useEffect(
+    () => () => {
+      pools.delete(project);
+      forgetLoadQueue(project);
+    },
+    [project],
+  );
   return (
     <CanvasProjectContext.Provider value={project}>
-      <div ref={layer} className="pointer-events-none absolute inset-0 overflow-hidden" data-screen-frames={project}>
+      <div ref={layer} className={`pointer-events-none absolute inset-0 overflow-hidden ${editing ? "z-[701]" : ""}`} data-screen-frames={project}>
         {[...entries].map(([shapeId, entry]) => (
           <PooledScreen key={shapeId} project={project} shapeId={shapeId} entry={entry} host={host} />
         ))}

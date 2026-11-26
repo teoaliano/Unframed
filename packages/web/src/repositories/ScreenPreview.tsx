@@ -1,5 +1,5 @@
 import type { ScreenShapeProps } from "@unframed/contracts";
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 import { useCanvasDoc } from "../canvas/doc.ts";
 import { useCanvasProject } from "../context.ts";
 import { useScreenSlot } from "./framePool.tsx";
@@ -7,7 +7,7 @@ import { ScreenPlaceholder, type ScreenEditHooks } from "./ScreenView.tsx";
 
 const FIRST = { selected: true, distance: 0 };
 
-export const ScreenPreview = ({ shapeId, props, edit }: { readonly shapeId: string; readonly props: ScreenShapeProps; readonly edit: ScreenEditHooks }) => {
+export const ScreenPreview = ({ shapeId, props, edit, overlay }: { readonly shapeId: string; readonly props: ScreenShapeProps; readonly edit: ScreenEditHooks; readonly overlay?: ReactNode }) => {
   const doc = useCanvasDoc();
   const project = useCanvasProject();
   const element = useRef<HTMLDivElement>(null);
@@ -26,6 +26,7 @@ export const ScreenPreview = ({ shapeId, props, edit }: { readonly shapeId: stri
     write,
     rank: () => FIRST,
     edit,
+    overlay,
   });
   return (
     <div ref={element} className="absolute inset-0 overflow-hidden" data-testid="screen-preview" data-route={props.route} data-live={status.live ? "true" : undefined} data-painted={status.painted ? "true" : undefined}>

@@ -18,6 +18,10 @@ export const loadQueueOf = (project: string): ScreenLoadQueue => {
   return queue;
 };
 
+export const forgetLoadQueue = (project: string): void => {
+  queues.delete(project);
+};
+
 export const screenLoadRank = (editor: Editor, id: TLShapeId): ScreenLoadRank => {
   const bounds = editor.getShapePageBounds(id);
   const viewport = editor.getViewportPageBounds();
