@@ -92,7 +92,8 @@ const elementsOf = (ast: Node): Found[] => {
 };
 
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
-const hasToken = (text: string, token: string): boolean => new RegExp(`(^|\\s)${escapeRegExp(token)}(?=\\s|$)`).test(text);
+const tokenAt = (text: string, token: string): RegExpExecArray | null => new RegExp(`(^|\\s)${escapeRegExp(token)}(?=\\s|$)`).exec(text);
+const hasToken = (text: string, token: string): boolean => tokenAt(text, token) !== null;
 
 const classAttr = (element: Node): Node | undefined =>
   element.openingElement.attributes.find((attr: Node) => attr.type === "JSXAttribute" && attr.name.type === "JSXIdentifier" && (attr.name.name === "className" || attr.name.name === "class"));
@@ -148,7 +149,7 @@ const classEdit = (source: string, element: Node, change: JsxChange): SpanEdit[]
     for (const literal of literals) {
       const inner = innerOf(literal);
       const text = source.slice(inner.start, inner.end);
-      const match = new RegExp(`(^|\\s)${escapeRegExp(change.before)}(?=\\s|$)`).exec(text);
+      const match = tokenAt(text, change.before);
       if (match === null) continue;
       const start = inner.start + match.index + match[1]!.length;
       const end = start + change.before.length;
