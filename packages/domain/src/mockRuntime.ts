@@ -332,16 +332,17 @@ export function mockRuntime(
     }
     return undefined;
   };
-  const handled = (method: string, href: string) => {
+  const matching = (method: string, href: string) => {
     const upper = String(method || "GET").toUpperCase();
-    return handlers.some((entry) => (entry.method === "*" || entry.method === upper) && match(entry.pattern, href, origin) !== undefined);
-  };
-  const answer = async (method: string, href: string, body: any, headers: any) => {
-    const upper = String(method || "GET").toUpperCase();
-    for (const entry of handlers) {
-      if (entry.method !== "*" && entry.method !== upper) continue;
+    return handlers.flatMap((entry) => {
+      if (entry.method !== "*" && entry.method !== upper) return [];
       const params = match(entry.pattern, href, origin);
-      if (params === undefined) continue;
+      return params === undefined ? [] : [{ entry, params, upper }];
+    });
+  };
+  const handled = (method: string, href: string) => matching(method, href).length > 0;
+  const answer = async (method: string, href: string, body: any, headers: any) => {
+    for (const { entry, params, upper } of matching(method, href)) {
       let url: any;
       try {
         url = new win.URL(href, win.location.href);
