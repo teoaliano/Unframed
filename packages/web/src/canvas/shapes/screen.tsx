@@ -1,11 +1,12 @@
 import type { ScreenMock, ScreenShapeProps, ScreenStep } from "@unframed/contracts";
 import { screenLabel } from "@unframed/domain";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
 import { isInteractive } from "../../artifacts/state.ts";
 import { useCanvasProject } from "../../context.ts";
 import { noteRender } from "../../fps/renders.ts";
 import { screenOnScreen } from "../../repositories/demand.ts";
+import { loadQueueOf, screenLoadRank } from "../../repositories/loadQueue.ts";
 import { useRepositorySetup } from "../../repositories/store.ts";
 import { useScreenView } from "../../repositories/ScreenView.tsx";
 import { artifactCardClass } from "./looks.ts";
@@ -52,7 +53,8 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
     editor.store.put([{ ...current, props: next } as TLShape]);
     return true;
   };
-  const view = useScreenView({ owner: editor, project, shapeId: shape.id, props, onScreen, interactive, write });
+  const turn = useMemo(() => ({ queue: loadQueueOf(editor), rank: () => screenLoadRank(editor, shape.id) }), [editor, shape.id]);
+  const view = useScreenView({ owner: editor, project, shapeId: shape.id, props, onScreen, interactive, write, turn });
   const label = screenLabel({ branch: view.branch, route: props.route, state: props.state, warnings: setupWarnings });
   return (
     <HTMLContainer
@@ -62,6 +64,7 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
       data-route={props.route}
       data-state={props.state?.trim() ? props.state : undefined}
       data-live={view.live ? "true" : undefined}
+      data-queued={view.queued ? "true" : undefined}
       data-painted={view.painted ? "true" : undefined}
       style={{ width: props.w, height: props.h }}
     >

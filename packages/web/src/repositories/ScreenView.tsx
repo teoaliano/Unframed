@@ -1,5 +1,5 @@
 import type { ScreenShapeProps } from "@unframed/contracts";
-import { describeStep, fixStateInstruction, followNavigation, NO_STATE_BRIDGE, screenOverlay, screenUrl, stateRoute, stepFailure, type DialsAnnouncement, type SetupChatState } from "@unframed/domain";
+import { describeStep, fixStateInstruction, type ScreenLoadQueue, type ScreenLoadRank, followNavigation, NO_STATE_BRIDGE, screenOverlay, screenUrl, stateRoute, stepFailure, type DialsAnnouncement, type SetupChatState } from "@unframed/domain";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useValue } from "tldraw";
 import { Badge } from "~/components/ui/badge";
@@ -11,6 +11,7 @@ import { messageOf, useChatClient, useChats } from "../agent/store.ts";
 import { useEngine } from "../context.ts";
 import { isDeviceClient } from "../deviceMode.ts";
 import { useFeature } from "../features.ts";
+import { countScreens, type ScreenCounts } from "../fps/screens.ts";
 import { screenPropsOf } from "./BranchChip.tsx";
 import { useAskAgent } from "./askAgent.ts";
 import { noteBridge, repositoryState, screenSnapshotUrl } from "./store.ts";
@@ -18,6 +19,13 @@ import { noteBridge, repositoryState, screenSnapshotUrl } from "./store.ts";
 export const SCREEN_SANDBOX = "allow-scripts allow-same-origin allow-forms allow-modals";
 
 const NO_STATE_KEY = "[[],[]]";
+
+const useCounted = (key: keyof ScreenCounts, on: boolean) =>
+  useEffect(() => {
+    if (!on) return;
+    countScreens(key);
+    return () => countScreens(key, -1);
+  }, [key, on]);
 
 const nonEmpty = (dials: Readonly<Record<string, unknown>> | undefined) => dials !== undefined && Object.keys(dials).length > 0;
 
@@ -178,9 +186,10 @@ export interface ScreenViewInput {
   readonly interactive: boolean;
   readonly write: (next: ScreenShapeProps) => boolean;
   readonly edit?: ScreenEditHooks | undefined;
+  readonly turn?: { readonly queue: ScreenLoadQueue; readonly rank: () => ScreenLoadRank } | undefined;
 }
 
-export const useScreenView = ({ owner, project, shapeId, props, onScreen, interactive, write, edit }: ScreenViewInput): { readonly content: ReactNode; readonly painted: boolean; readonly live: boolean; readonly branch: string } => {
+export const useScreenView = ({ owner, project, shapeId, props, onScreen, interactive, write, edit, turn }: ScreenViewInput): { readonly content: ReactNode; readonly painted: boolean; readonly live: boolean; readonly queued: boolean; readonly branch: string } => {
   const engine = useEngine();
   const ask = useAskAgent();
   const repositories = useFeature("repositories");
@@ -194,7 +203,16 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
     [state, props.instance],
   );
   const branch = useValue("screen branch", () => state.instances.get().get(props.instance)?.branch ?? props.title, [state, props.instance, props.title]);
-  const live = repositories && !isDeviceClient() && onScreen && proxyPort !== null;
+  const eligible = repositories && !isDeviceClient() && onScreen && proxyPort !== null;
+  const [admitted, setAdmitted] = useState(false);
+  useEffect(() => {
+    setAdmitted(false);
+    if (!eligible || turn === undefined) return;
+    return turn.queue.enter(shapeId, turn.rank, () => setAdmitted(true));
+  }, [eligible, turn, shapeId]);
+  const queued = eligible && turn !== undefined && !admitted;
+  const live = eligible && !queued;
+  const [settled, setSettled] = useState<number | undefined>(undefined);
   const snapshot = useValue("screen snapshot", () => state.snapshots.get().get(shapeId), [state, shapeId]);
   const bridge = useValue("screen bridge", () => state.bridges.get().get(shapeId), [state, shapeId]);
   const stateKey = JSON.stringify([props.steps ?? [], props.mocks ?? []]);
@@ -204,12 +222,18 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
   const [load, setLoad] = useState<{ readonly url: string; readonly n: number; readonly token: boolean } | undefined>(undefined);
   const frameState = useRef<{ applied: boolean; route: string | undefined }>({ applied: false, route: undefined });
   const [reloads, setReloads] = useState(0);
+  const retried = useRef(false);
+  useEffect(() => {
+    retried.current = false;
+  }, [props.route, stateKey]);
   const [failure, setFailure] = useState<{ readonly step: number; readonly reason: string } | undefined>(undefined);
   const [asking, setAsking] = useState<string | undefined>(undefined);
   const [painted, setPainted] = useState<string | undefined>(undefined);
   useEffect(() => {
     if (!live || proxyPort === null) {
       shown.current = undefined;
+      setPainted(undefined);
+      setLoad(undefined);
       return;
     }
     const want = { route: props.route, stateKey, port: proxyPort, reloads };
@@ -220,6 +244,7 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
     const begin = (token: string | null) => {
       if (seq !== loads.current) return;
       setFailure(undefined);
+      if (token !== null) countScreens("replays");
       frameState.current = { applied: false, route: undefined };
       setLoad({ url: screenUrl(proxyPort, token === null ? props.route : stateRoute(props.route, token)), n: seq, token: token !== null });
     };
@@ -239,9 +264,19 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
     }
     setFailure(undefined);
   };
+  const loaded = () => {
+    setSettled(load?.n);
+    turn?.queue.done(shapeId);
+  };
   const events: FrameEvents = {
-    onPainted: () => setPainted(load?.url),
-    onBridge: (bridged) => noteBridge(project, shapeId, bridged),
+    onPainted: () => {
+      setPainted(load?.url);
+      if (load?.token !== true) loaded();
+    },
+    onBridge: (bridged) => {
+      noteBridge(project, shapeId, bridged);
+      if (!bridged) loaded();
+    },
     onReady: (route, applied) => {
       const frame = frameState.current;
       if (applied) {
@@ -256,7 +291,20 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
       frameState.current = { ...frameState.current, route };
       if (!replaying) follow(route);
     },
-    onSteps: (result) => setFailure(result.ok ? undefined : { step: result.step ?? 0, reason: result.reason ?? "" }),
+    onSteps: (result) => {
+      loaded();
+      if (result.ok) {
+        retried.current = false;
+        setFailure(undefined);
+      } else if (!retried.current) {
+        retried.current = true;
+        countScreens("retries");
+        setReloads((count) => count + 1);
+      } else {
+        countScreens("failed");
+        setFailure({ step: result.step ?? 0, reason: result.reason ?? "" });
+      }
+    },
   };
   const fix = () => {
     const step = failure === undefined ? undefined : props.steps?.[failure.step];
@@ -280,6 +328,9 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
   };
   const url = live ? load?.url : undefined;
   const shownPainted = live && url !== undefined && painted === url;
+  useCounted("live", live && url !== undefined);
+  useCounted("loading", live && (load === undefined || settled !== load.n));
+  useCounted("queued", queued);
   const content = (
     <>
       {live && url !== undefined && <LiveScreen key={load?.n} owner={owner} shapeId={shapeId} url={url} dials={props.dials} interactive={interactive} events={events} edit={edit} />}
@@ -309,5 +360,5 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
       <StateNote note={live && bridge === false ? NO_STATE_BRIDGE : undefined} />
     </>
   );
-  return { content, painted: shownPainted, live, branch };
+  return { content, painted: shownPainted, live, queued, branch };
 };

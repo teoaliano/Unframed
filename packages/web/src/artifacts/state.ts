@@ -40,6 +40,7 @@ interface CanvasArtifacts {
   readonly live: Computed<ReadonlySet<string>>;
   readonly problems: Atom<ReadonlyMap<string, string>>;
   readonly renders: Atom<ReadonlyMap<string, { readonly starting: boolean; readonly status?: RenderStatus }>>;
+  readonly reloads: Atom<ReadonlyMap<string, number>>;
   readonly editPosts: Map<string, (message: unknown) => void>;
   readonly dropHit: Atom<DropHit | undefined>;
   readonly dropHolds: Atom<ReadonlySet<string>>;
@@ -92,6 +93,7 @@ export const artifactsOf = (owner: StoreOwner): CanvasArtifacts => {
       live,
       problems: atom("artifact problems", new Map()),
       renders: atom("motion renders", new Map()),
+      reloads: atom("frame reloads", new Map()),
       editPosts: new Map(),
       dropHit: atom<DropHit | undefined>("image drop hit", undefined),
       dropHolds,
@@ -175,6 +177,11 @@ export const forgetFrame = (editor: StoreOwner, id: string): void => {
     next.delete(id);
     return next;
   });
+};
+
+export const reloadFrame = (owner: StoreOwner, id: string): void => {
+  const { reloads } = artifactsOf(owner);
+  reloads.update((current) => new Map(current).set(id, (current.get(id) ?? 0) + 1));
 };
 
 export const toggleTuning = (editor: Editor, id: TLShapeId): void => {

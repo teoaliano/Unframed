@@ -166,13 +166,13 @@ test("a Screen whose steps no longer work says Couldn't reach this state with th
     await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/app", ...broken } }]);
     const failed = page.locator("[data-testid=screen] [data-testid=screen-state-failed]");
     await expect(failed).toContainText("Couldn't reach this state", { timeout: 30_000 });
-    await expect(failed.getByTestId("screen-state-failed-step")).toHaveText("Step 2, click button Missing, failed: nothing matched button Missing within 5 seconds");
+    await expect(failed.getByTestId("screen-state-failed-step")).toHaveText("Step 2, click button Missing, failed: nothing matched button Missing within 5 seconds of the page going quiet");
     await failed.getByRole("button", { name: "Ask the agent to fix it" }).click();
     await expect(failed.getByTestId("screen-state-asked")).toHaveText("Sent to the agent.");
     const chats = (await engineChats(engine, project)).filter((chat) => chat.title !== "Setup");
     expect(chats).toHaveLength(1);
     expect((await engineChat(engine, chats[0]!.id, project)).messages.find((message) => message.role === "user")?.text).toBe(
-      fixStateInstruction({ shape: first.id.replace(/^shape:/, ""), branch: first.props.title, state: "the menu open", route: "/app", steps: broken.steps, mocks: undefined, number: 2, step: "click button Missing", reason: "nothing matched button Missing within 5 seconds" }),
+      fixStateInstruction({ shape: first.id.replace(/^shape:/, ""), branch: first.props.title, state: "the menu open", route: "/app", steps: broken.steps, mocks: undefined, number: 2, step: "click button Missing", reason: "nothing matched button Missing within 5 seconds of the page going quiet" }),
     );
   });
 });

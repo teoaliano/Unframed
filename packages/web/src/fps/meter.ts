@@ -1,4 +1,5 @@
 import { setRenderSink } from "./renders.ts";
+import { screenCounts } from "./screens.ts";
 
 /** One settled gesture: every frame gap while it ran, and which shape components rendered. */
 export interface Gesture {
@@ -43,6 +44,18 @@ const start = () => {
     "position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:2000;padding:4px 8px;border-radius:6px;font:11px ui-monospace,monospace;pointer-events:none;background:var(--fps-meter-surface);color:var(--fps-meter-foreground);border:1px solid var(--fps-meter-border)";
   readout.textContent = "fps: learning";
   document.body.append(readout);
+
+  const screens = document.createElement("div");
+  screens.setAttribute("data-fps-screens", "");
+  screens.style.cssText = `${readout.style.cssText};top:40px`;
+  screens.hidden = true;
+  document.body.append(screens);
+  setInterval(() => {
+    const counts = screenCounts();
+    if (counts === undefined) return;
+    screens.hidden = false;
+    screens.textContent = `screens: live ${counts.live} · loading ${counts.loading} · queued ${counts.queued} · replays ${counts.replays} · retries ${counts.retries} · failed ${counts.failed}`;
+  }, 500);
 
   const finish = () => {
     if (!current) return;
@@ -102,6 +115,7 @@ const start = () => {
   (window as Window & { __fps?: unknown }).__fps = {
     dump: (): Gesture[] => settled.slice(),
     frameTime: () => frameTime,
+    screens: () => screenCounts(),
   };
 };
 

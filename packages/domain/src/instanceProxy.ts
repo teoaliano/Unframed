@@ -14,12 +14,22 @@ const first = (value: ProxyHeaderValue): string | undefined => (typeof value ===
 
 export const rewritesOrigin = (path: string, upgrade: boolean): boolean => upgrade || NEXT_DEV_PATH.test(path);
 
-export const upstreamRequestHeaders = (
-  headers: ProxyHeaders,
-  input: { readonly upstreamPort: number; readonly path: string; readonly upgrade: boolean },
-): Record<string, ProxyHeaderValue> => {
+const LOOPBACK_ORIGIN = /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\]):(\d+)$/i;
+const LOOPBACK_HOST = /^(?:localhost|127\.0\.0\.1|\[::1\]):(\d+)$/i;
+
+const proxyPortOf = (headers: ProxyHeaders): string | undefined => {
+  const origin = LOOPBACK_ORIGIN.exec(first(headers.origin) ?? "");
+  const host = LOOPBACK_HOST.exec(first(headers.host) ?? "");
+  return origin !== null && host !== null && Number(origin[1]) === Number(host[1]) ? host[1] : undefined;
+};
+
+export const upstreamRequestHeaders = (headers: ProxyHeaders, input: { readonly path: string; readonly upgrade: boolean }): Record<string, ProxyHeaderValue> => {
   const next: Record<string, ProxyHeaderValue> = { ...headers };
-  if (next.origin !== undefined && rewritesOrigin(input.path, input.upgrade)) next.origin = `http://localhost:${input.upstreamPort}`;
+  const proxyPort = rewritesOrigin(input.path, input.upgrade) ? proxyPortOf(headers) : undefined;
+  if (proxyPort !== undefined) {
+    next.origin = `http://localhost:${proxyPort}`;
+    if (input.upgrade) next.host = `localhost:${proxyPort}`;
+  }
   if (!input.upgrade && /text\/html/i.test(first(next.accept) ?? "")) next["accept-encoding"] = "identity";
   return next;
 };

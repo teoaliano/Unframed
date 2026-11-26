@@ -32,12 +32,12 @@ test("a component shape shows its board in its frame when selected, its snapshot
   await expect(insideFrame(page, "shape:card").getByText("secondary · md", { exact: true })).toBeVisible();
 });
 
-test("a selected component offers Editor and Agent in its toolbar, and neither Render nor Parameters", async ({ page, engine }) => {
+test("a selected component offers Editor, Reload and Agent in its toolbar, and neither Render nor Parameters", async ({ page, engine }) => {
   await openCanvas(page, engine);
   await writeSheet(engine, PRICE_CARD);
   await putRecords(engine, [componentShape({ id: "shape:card", ref: "150", at: { x: 420, y: 60 }, tag: "uf-price-card", title: "Price card" })]);
   await clickShape(page, "shape:card");
-  await expect(toolbar(page).locator("button:not([data-testid='style-row'] *)")).toHaveText(["", "Editor", "Agent"]);
+  await expect(toolbar(page).locator("button:not([data-testid='style-row'] *)")).toHaveText(["", "Editor", "", "Agent"]);
 });
 
 test("a double-click on the label opens its name field under the kind word Component", async ({ page, engine }) => {

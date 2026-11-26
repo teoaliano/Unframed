@@ -37,7 +37,8 @@ const rawHead = (req: http.IncomingMessage, headers: Record<string, unknown>): s
   let head = `${req.method ?? "GET"} ${req.url ?? "/"} HTTP/1.1\r\n`;
   for (let index = 0; index < req.rawHeaders.length; index += 2) {
     const name = req.rawHeaders[index]!;
-    const value = name.toLowerCase() === "origin" ? String(headers.origin) : req.rawHeaders[index + 1];
+    const lower = name.toLowerCase();
+    const value = lower === "origin" || lower === "host" ? String(headers[lower]) : req.rawHeaders[index + 1];
     head += `${name}: ${value}\r\n`;
   }
   return `${head}\r\n`;
@@ -80,7 +81,7 @@ export const startInstanceProxy = async (input: { readonly upstreamPort: number;
     const stateKey = token === undefined ? undefined : input.states.takePage(token);
     const proxyOrigin = `http://${req.headers.host}`;
     void hostFor().then((host) => {
-      const headers = upstreamRequestHeaders(req.headers, { upstreamPort, path, upgrade: false });
+      const headers = upstreamRequestHeaders(req.headers, { path, upgrade: false });
       const upstream = http.request({ host, port: upstreamPort, method: req.method, path, headers: headers as http.OutgoingHttpHeaders, setHost: false }, (answer) => {
         const rewritten = proxiedResponseHeaders(answer.headers, { upstreamPort, proxyOrigin });
         const out = rewritten.headers as http.OutgoingHttpHeaders;
@@ -113,7 +114,7 @@ export const startInstanceProxy = async (input: { readonly upstreamPort: number;
       socket.end(`HTTP/1.1 ${decision.status} Forbidden\r\nConnection: close\r\n\r\n`);
       return;
     }
-    const headers = upstreamRequestHeaders(req.headers, { upstreamPort, path: req.url ?? "/", upgrade: true });
+    const headers = upstreamRequestHeaders(req.headers, { path: req.url ?? "/", upgrade: true });
     void hostFor().then((host) => {
       const upstream = net.connect({ host, port: upstreamPort }, () => {
         upstream.write(rawHead(req, headers));

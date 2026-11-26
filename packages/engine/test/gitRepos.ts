@@ -51,6 +51,7 @@ const APP_PAGE = [
   "}).catch(function () { document.getElementById('list-state').textContent = 'Could not load items'; });",
   "</script></body></html>",
 ].join("");
+const hits = {};
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
   if (url.pathname === "/login") {
@@ -69,6 +70,37 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "text/html" });
     res.write("<!doctype html><html><he");
     return setTimeout(() => res.end("ad><title>Split</title></head><body>split</body></html>"), 50);
+  }
+  if (url.pathname === "/slow") {
+    return setTimeout(() => {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end("<!doctype html><html><head><title>Slow</title></head><body><h1>Slow " + url.search + "</h1></body></html>");
+    }, Number(url.searchParams.get("ms") || 1000));
+  }
+  if (url.pathname === "/__fake/hits") {
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify(hits[url.searchParams.get("key")] || 0));
+  }
+  if (url.pathname === "/flaky") {
+    const key = url.searchParams.get("key") || "";
+    hits[key] = (hits[key] || 0) + 1;
+    const ready = hits[key] > Number(url.searchParams.get("fails") || 1);
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end("<!doctype html><html><head><title>Flaky</title></head><body><p id=\\"load\\">Load " + hits[key] + "</p><div id=\\"menu\\" role=\\"menu\\" hidden><div role=\\"menuitem\\">Settings</div></div>" + (ready ? "<button onclick=\\"document.getElementById('menu').hidden = false\\">Open menu</button>" : "") + "</body></html>");
+  }
+  if (url.pathname === "/boot") {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end([
+      "<!doctype html><html><head><title>Booting</title></head><body><p id=\\"boot\\">Booting</p><div id=\\"menu\\" role=\\"menu\\" hidden><div role=\\"menuitem\\">Settings</div></div><script>",
+      "var until = Date.now() + Number(new URLSearchParams(location.search).get('ms') || 7000);",
+      "var tick = function () {",
+      "  if (Date.now() < until) return fetch('/api/items?t=' + Date.now()).then(function () { setTimeout(tick, 150); });",
+      "  var button = document.createElement('button'); button.textContent = 'Open menu'; button.onclick = function () { document.getElementById('menu').hidden = false; };",
+      "  document.getElementById('boot').textContent = 'Booted'; document.body.appendChild(button);",
+      "};",
+      "tick();",
+      "</script></body></html>",
+    ].join(""));
   }
   if (url.pathname === "/dials") {
     res.writeHead(200, { "content-type": "text/html" });
@@ -99,6 +131,10 @@ const server = http.createServer((req, res) => {
   res.end(html);
 });
 server.on("upgrade", (req, socket) => {
+  if (req.url.split("?")[0] === "/ws" && req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) {
+    console.log("fake dev server: refused /ws, Origin " + req.headers.origin + " is not Host " + req.headers.host);
+    return socket.end("HTTP/1.1 403 Forbidden\\r\\nConnection: close\\r\\n\\r\\n");
+  }
   const accept = crypto.createHash("sha1").update(req.headers["sec-websocket-key"] + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest("base64");
   socket.write("HTTP/1.1 101 Switching Protocols\\r\\nUpgrade: websocket\\r\\nConnection: Upgrade\\r\\nSec-WebSocket-Accept: " + accept + "\\r\\n\\r\\n");
   const payload = Buffer.from("hello " + req.url + " from " + (req.headers.origin || "nowhere") + " at " + (req.headers.host || ""));
