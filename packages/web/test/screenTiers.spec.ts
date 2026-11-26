@@ -4,19 +4,26 @@ import { clickShape } from "./generation.ts";
 import { putShapes, screenShapes, withRepository } from "./screenHarness.ts";
 
 const IDS = ["shape:tier-a", "shape:tier-b", "shape:tier-c"];
+const MORE = [...IDS, "shape:tier-d", "shape:tier-e"];
 
 const screenOf = (page: Page, id: string) => page.locator(`[data-shape-id="${id}"] [data-testid=screen]`);
 
-const putBusyScreens = async (page: Page, engine: Parameters<Parameters<typeof withRepository>[2]>[0], project: string) => {
+const putBusyScreens = async (page: Page, engine: Parameters<Parameters<typeof withRepository>[2]>[0], project: string, ids: ReadonlyArray<string> = IDS) => {
   const [first] = await screenShapes(engine, project);
   await putShapes(engine, project, [
     { ...first, x: -2000, y: -2000 },
-    ...IDS.map((id, index) => ({ ...first, id, index: `a${index + 5}`, x: index * 440, y: 0, props: { ...first.props, route: `/busy?n=${index}`, w: 390, h: 300 } })),
+    ...ids.map((id, index) => ({ ...first, id, index: `a${index + 5}`, x: (index % 3) * 440, y: Math.floor(index / 3) * 340, props: { ...first.props, route: `/busy?n=${index}`, w: 390, h: 300 } })),
   ]);
   await page.mouse.click(5, 300);
   await page.keyboard.press("Shift+1");
-  for (const id of IDS) await expect(screenOf(page, id)).toHaveAttribute("data-picture", /^[a-f0-9]{40}$/, { timeout: 60_000 });
+  for (const id of ids) await expect(screenOf(page, id)).toHaveAttribute("data-picture", /^[a-f0-9]{40}$/, { timeout: 60_000 });
 };
+
+const frameOf = (page: Page, id: string) => page.locator(`[data-screen-of="${id}"] iframe[data-screen-frame]`);
+
+const mark = (page: Page, id: string) => page.frameLocator(`[data-screen-of="${id}"] iframe[data-screen-frame]`).locator("body").evaluate((_, id) => ((window as any).__kept = id), id);
+
+const marked = (page: Page, id: string) => page.frameLocator(`[data-screen-of="${id}"] iframe[data-screen-frame]`).locator("body").evaluate(() => (window as any).__kept as string | undefined);
 
 const openFrames = (page: Page) => page.locator("iframe[data-screen-frame]:not([data-parked])").count();
 
@@ -137,5 +144,61 @@ test("a Screen large on screen shows a static copy of its page in a closed shado
     await expect(screenOf(page, a)).toHaveAttribute("data-level", /tiny|small/, { timeout: 10_000 });
     await expect(screenOf(page, a).locator("[data-testid=screen-page-copy]")).toHaveCount(0);
     await expect(screenOf(page, a).locator("img[data-testid=screen-snapshot]")).toHaveAttribute("src", /\.w(128|384)\.png$/);
+  });
+});
+
+test("one Screen is live and three stay parked at most: a fifth selection drops the oldest frame", async ({ page }) => {
+  await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
+    await putBusyScreens(page, engine, project, MORE);
+    for (const id of MORE) {
+      await clickShape(page, id);
+      await expect(screenOf(page, id)).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
+      expect(await openFrames(page)).toBe(1);
+      expect(await page.locator("iframe[data-screen-frame]").count()).toBeLessThanOrEqual(4);
+    }
+    await expect(page.locator("iframe[data-screen-frame]")).toHaveCount(4);
+    await expect(frameOf(page, MORE[0]!)).toHaveCount(0);
+    await expect(screenOf(page, MORE[0]!)).toHaveAttribute("data-tier", /^(picture|snapshot)$/);
+    for (const id of MORE.slice(1, 4)) await expect(screenOf(page, id)).toHaveAttribute("data-tier", "parked");
+  });
+});
+
+test("a Screen's editor tab makes it live and holds it while open, and parked frames survive the editor and a project tab switch with no reload", async ({ page }) => {
+  await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
+    await putBusyScreens(page, engine, project);
+    const [a, b, c] = IDS as [string, string, string];
+    for (const id of [a, b]) {
+      await clickShape(page, id);
+      await expect(screenOf(page, id)).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
+      await mark(page, id);
+    }
+    await page.keyboard.press("Escape");
+    await expect(screenOf(page, b)).toHaveAttribute("data-tier", "parked");
+
+    await page.getByTestId("tab-strip").getByRole("tab", { name: "default", exact: true }).click();
+    await expect(page.locator("[data-canvas-project='default']")).toBeVisible();
+    await expect(page.locator("iframe[data-screen-frame]")).toHaveCount(2);
+    await page.getByTestId("tab-strip").getByRole("tab", { name: "my-app", exact: true }).click();
+    await expect(screenOf(page, a)).toHaveAttribute("data-tier", "parked");
+    expect([await marked(page, a), await marked(page, b)]).toEqual([a, b]);
+
+    await clickShape(page, c);
+    await page.getByTestId("selection-toolbar").getByRole("button", { name: "Editor" }).click();
+    await expect(page.getByTestId("screen-preview")).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
+    await expect(frameOf(page, c)).not.toHaveAttribute("data-parked", "true");
+    expect(await openFrames(page)).toBe(1);
+    await mark(page, c);
+    await page.waitForTimeout(500);
+    await expect(page.getByTestId("screen-preview")).toHaveAttribute("data-painted", "true");
+
+    await page.keyboard.press("Escape");
+    await expect(page.getByTestId("artifact-editor")).toHaveCount(0);
+    await expect(screenOf(page, c)).toHaveAttribute("data-painted", "true");
+    await page.mouse.click(5, 300);
+    await expect(screenOf(page, c)).toHaveAttribute("data-tier", "parked");
+    expect([await marked(page, a), await marked(page, b), await marked(page, c)]).toEqual([a, b, c]);
+    await clickShape(page, a);
+    await expect(screenOf(page, a)).toHaveAttribute("data-painted", "true", { timeout: 2000 });
+    expect(await marked(page, a)).toBe(a);
   });
 });
