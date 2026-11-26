@@ -324,68 +324,45 @@ export class AnalysisTools {
     return { value: { base: patch.base, files: patch.files, patch: truncated ? patch.patch.slice(0, PATCH_ANSWER_CHARS) : patch.patch, truncated } };
   }
 
-  private async run(binding: McpBinding, name: string, args: Record<string, unknown>): Promise<ToolAnswer> {
-    switch (name) {
-      case "repo_analyse":
-        return this.analyse(binding, args);
-      case "code_map_read":
-        return this.codeMap(binding, args);
-      case "design_search":
-        return this.designSearch(binding, args);
-      case "route_states":
-        return this.routeStatesTool(binding, args);
-      case "mocks_read":
-        return this.mocksRead(binding, args);
-      case "mock_write":
-        return this.mockWrite(binding, args);
-      case "screens_place":
-        return this.screensPlace(binding, args);
-      case "states_place":
-        return this.statesPlace(binding, args);
-      case "state_freeze":
-        return this.stateFreeze(binding, args);
-      case "instance_patch":
-        return this.instancePatch(binding, args);
-      default:
-        return refusal(`no such analysis tool ${name}`);
-    }
-  }
-
-  private async call(binding: McpBinding, name: string, args: Record<string, unknown>): Promise<ToolAnswer> {
+  private async call(run: () => Promise<ToolAnswer>): Promise<ToolAnswer> {
     try {
-      return await this.run(binding, name, args);
+      return await run();
     } catch (error) {
       return refusal(error instanceof Refused || error instanceof NotLive ? error.message : errorText(error));
     }
   }
 
   tools(): McpTool[] {
-    const schema = (name: string, properties: Record<string, Record<string, unknown>>, required: string[] = []) => ({
-      type: "object",
-      properties: Object.fromEntries(Object.entries(properties).map(([key, shape]) => [key, { ...shape, description: text(name).arguments[key] ?? "" }])),
-      ...(required.length === 0 ? {} : { required }),
-      additionalProperties: false,
-    });
     const string = { type: "string" };
     const shape = { shapeId: string };
-    const definitions: Array<[string, Record<string, unknown>]> = [
-      ["repo_analyse", schema("repo_analyse", shape)],
-      ["code_map_read", schema("code_map_read", { ...shape, section: { type: "string", enum: ["stack", "routes", "dialogs", "flags", "features", "notes"] } })],
-      ["design_search", schema("design_search", { ...shape, query: string, kind: { type: "string", enum: ["component", "token"] }, limit: { type: "number" } }, ["query"])],
-      ["route_states", schema("route_states", { ...shape, route: string })],
-      ["mocks_read", schema("mocks_read", shape)],
-      ["mock_write", schema("mock_write", { ...shape, file: string, content: string }, ["file", "content"])],
-      ["screens_place", schema("screens_place", { ...shape, routes: { type: "array", items: string } })],
-      ["states_place", schema("states_place", { shapeId: string, states: { type: "array", items: { type: "object" } } }, ["shapeId", "states"])],
-      ["state_freeze", schema("state_freeze", { shapeId: string, keep: { type: "array", items: { type: "number" } } }, ["shapeId"])],
-      ["instance_patch", schema("instance_patch", { id: string }, ["id"])],
-    ];
-    return definitions.map(([name, inputSchema]) => ({
+    const define = (
+      name: string,
+      properties: Record<string, Record<string, unknown>>,
+      required: string[],
+      run: (binding: McpBinding, args: Record<string, unknown>) => Promise<ToolAnswer>,
+    ): McpTool => ({
       name,
       description: text(name).description,
-      inputSchema,
-      scope: "repository" as const,
-      call: (binding, args) => this.call(binding, name, args),
-    }));
+      inputSchema: {
+        type: "object",
+        properties: Object.fromEntries(Object.entries(properties).map(([key, value]) => [key, { ...value, description: text(name).arguments[key] ?? "" }])),
+        ...(required.length === 0 ? {} : { required }),
+        additionalProperties: false,
+      },
+      scope: "repository",
+      call: (binding, args) => this.call(() => run(binding, args)),
+    });
+    return [
+      define("repo_analyse", shape, [], (binding, args) => this.analyse(binding, args)),
+      define("code_map_read", { ...shape, section: { type: "string", enum: ["stack", "routes", "dialogs", "flags", "features", "notes"] } }, [], (binding, args) => this.codeMap(binding, args)),
+      define("design_search", { ...shape, query: string, kind: { type: "string", enum: ["component", "token"] }, limit: { type: "number" } }, ["query"], (binding, args) => this.designSearch(binding, args)),
+      define("route_states", { ...shape, route: string }, [], (binding, args) => this.routeStatesTool(binding, args)),
+      define("mocks_read", shape, [], (binding, args) => this.mocksRead(binding, args)),
+      define("mock_write", { ...shape, file: string, content: string }, ["file", "content"], (binding, args) => this.mockWrite(binding, args)),
+      define("screens_place", { ...shape, routes: { type: "array", items: string } }, [], (binding, args) => this.screensPlace(binding, args)),
+      define("states_place", { shapeId: string, states: { type: "array", items: { type: "object" } } }, ["shapeId", "states"], (binding, args) => this.statesPlace(binding, args)),
+      define("state_freeze", { shapeId: string, keep: { type: "array", items: { type: "number" } } }, ["shapeId"], (binding, args) => this.stateFreeze(binding, args)),
+      define("instance_patch", { id: string }, ["id"], (binding, args) => this.instancePatch(binding, args)),
+    ];
   }
 }
