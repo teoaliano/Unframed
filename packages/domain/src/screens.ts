@@ -22,7 +22,7 @@ export const NO_BRIDGE = "Parameters need Unframed's script in the page, and thi
 
 export const NO_STATE_BRIDGE = "This page did not load Unframed's script, so it cannot show its state or follow navigation.";
 
-export const screenUrl = (proxyPort: number, route: string): string => `http://127.0.0.1:${proxyPort}${route}`;
+export const screenUrl = (proxyPort: number, route: string, host = "127.0.0.1"): string => `http://${host}:${proxyPort}${route}`;
 
 const LOOPBACK_URL = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(?=[/?#]|$)/i;
 

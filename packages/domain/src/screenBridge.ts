@@ -1,13 +1,47 @@
 import { dialsBridgeSource } from "./artifacts/dials.ts";
 import { editBridgeSource } from "./artifacts/editBridge.ts";
+import { crossSiteCookie } from "./instanceProxy.ts";
 import { matchMock } from "./screenStates.ts";
 
 export const STATE_PARAM = "__unframed_state";
 export const STEP_TIMEOUT_MS = 5000;
+export const QUIET_IDLE_MS = 500;
+export const QUIET_CAP_MS = 15_000;
 
 export interface BridgeConfig {
   readonly param: string;
   readonly stepTimeout: number;
+  readonly quietIdle: number;
+  readonly quietCap: number;
+}
+
+export interface QuietWatch {
+  readonly load: (now: number) => void;
+  readonly busy: (now: number) => void;
+  readonly check: (now: number) => number | undefined;
+}
+
+export function quietWatch(config: { readonly idle: number; readonly cap: number }, start: number): QuietWatch {
+  let loaded = false;
+  let busy = start;
+  let quietAt: number | undefined;
+  return {
+    load: (now: number) => {
+      loaded = true;
+      busy = Math.max(busy, now);
+    },
+    busy: (now: number) => {
+      busy = Math.max(busy, now);
+    },
+    check: (now: number) => {
+      if (quietAt === undefined && ((loaded && now - busy >= config.idle) || now - start >= config.cap)) quietAt = now;
+      return quietAt;
+    },
+  };
+}
+
+export function stepExpired(started: number, quietAt: number | undefined, now: number, timeout: number): boolean {
+  return quietAt !== undefined && now > Math.max(started, quietAt) + timeout;
 }
 
 export function cutParam(query: string, param: string): { readonly query: string; readonly value: string | undefined } {
@@ -35,6 +69,8 @@ export function screenBridge(
   config: BridgeConfig,
   match: (mocks: ReadonlyArray<any>, request: { method: string; url: string }) => any,
   cut: (query: string, param: string) => { readonly query: string; readonly value: string | undefined },
+  quiet: typeof quietWatch,
+  expired: typeof stepExpired,
 ): void {
   const LOOPBACK = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
   const state = win.__unframedScreenState;
@@ -42,6 +78,18 @@ export function screenBridge(
   const mocks: any[] = state && Array.isArray(state.mocks) ? state.mocks : [];
   win.__unframedScreenBridge = true;
   const sleep = (ms: number) => new Promise((resolve) => win.setTimeout(resolve, ms));
+  const settle = quiet({ idle: config.quietIdle, cap: config.quietCap }, Date.now());
+  if (win.document.readyState === "complete") settle.load(Date.now());
+  else win.addEventListener("load", () => settle.load(Date.now()));
+  if (typeof win.PerformanceObserver === "function") {
+    for (const type of ["resource", "longtask"]) {
+      try {
+        new win.PerformanceObserver(() => settle.busy(Date.now())).observe({ type });
+      } catch {
+        continue;
+      }
+    }
+  }
 
   const routeOf = () => {
     const location = win.location;
@@ -295,7 +343,7 @@ export function screenBridge(
   };
   const describe = (target: any) => (target.role ? (target.name ? `${target.role} ${target.name}` : target.role) : target.text ? `"${target.text}"` : target.selector);
   const locate = async (target: any) => {
-    const deadline = Date.now() + config.stepTimeout;
+    const begun = Date.now();
     for (;;) {
       let found: any[];
       try {
@@ -304,7 +352,8 @@ export function screenBridge(
         throw new Error(`${describe(target)} is not a valid target`);
       }
       if (found.length > 0) return found[0];
-      if (Date.now() > deadline) throw new Error(`nothing matched ${describe(target)} within ${Math.round(config.stepTimeout / 1000)} seconds`);
+      const now = Date.now();
+      if (expired(begun, settle.check(now), now, config.stepTimeout)) throw new Error(`nothing matched ${describe(target)} within ${Math.round(config.stepTimeout / 1000)} seconds of the page going quiet`);
       await sleep(50);
     }
   };
@@ -381,10 +430,24 @@ export function screenBridge(
   else painted();
 }
 
+const patchDocumentCookie = (win: any, rewrite: (cookie: string) => string): void => {
+  const proto = win.Document?.prototype;
+  const native = proto === undefined ? undefined : Object.getOwnPropertyDescriptor(proto, "cookie");
+  if (native?.get === undefined || native.set === undefined) return;
+  const write = native.set;
+  Object.defineProperty(proto, "cookie", {
+    ...native,
+    set(value: unknown) {
+      write.call(this, rewrite(String(value)));
+    },
+  });
+};
+
 export const screenBridgeSource = (): string =>
   [
+    `(${patchDocumentCookie.toString()})(window, ${crossSiteCookie.toString()});`,
     ...dialsBridgeSource().split("\n").slice(1, -1),
-    `(${screenBridge.toString()})(window, ${JSON.stringify({ param: STATE_PARAM, stepTimeout: STEP_TIMEOUT_MS } satisfies BridgeConfig)}, ${matchMock.toString()}, ${cutParam.toString()});`,
+    `(${screenBridge.toString()})(window, ${JSON.stringify({ param: STATE_PARAM, stepTimeout: STEP_TIMEOUT_MS, quietIdle: QUIET_IDLE_MS, quietCap: QUIET_CAP_MS } satisfies BridgeConfig)}, ${matchMock.toString()}, ${cutParam.toString()}, ${quietWatch.toString()}, ${stepExpired.toString()});`,
     ...editBridgeSource({ stamp: true }).split("\n").slice(1, -1),
     "",
   ].join("\n");

@@ -69,11 +69,11 @@ test("Remove branch and worktree removes the Screen's worktree and branch, warni
   });
 });
 
-const frameOf = (page: Page, shapeId?: string) => page.frameLocator(`${shapeId === undefined ? "[data-testid=screen]" : `[data-shape-id="${shapeId}"]`} iframe[data-screen-frame]`);
+const frameOf = (page: Page, shapeId?: string) => page.frameLocator(`${shapeId === undefined ? "[data-screen-of]" : `[data-screen-of="${shapeId}"]`} iframe[data-screen-frame]`);
 
 const selectScreen = async (page: Page, shapeId: string) => {
   await clickShape(page, shapeId);
-  await expect(page.locator(`[data-shape-id="${shapeId}"] iframe[data-screen-frame]`)).toHaveAttribute("data-interactive", "true");
+  await expect(page.locator(`[data-screen-of="${shapeId}"] iframe[data-screen-frame]`)).toHaveAttribute("data-interactive", "true");
 };
 
 const blurFrame = (page: Page) => page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
@@ -164,15 +164,15 @@ test("a Screen whose steps no longer work says Couldn't reach this state with th
     const [first] = await screenShapes(engine, project);
     const broken = { state: "the menu open", steps: [{ action: "click", target: { role: "button", name: "Menu" } }, { action: "click", target: { role: "button", name: "Missing" } }] };
     await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/app", ...broken } }]);
-    const failed = page.locator("[data-testid=screen] [data-testid=screen-state-failed]");
+    const failed = page.locator("[data-screen-of] [data-testid=screen-state-failed]");
     await expect(failed).toContainText("Couldn't reach this state", { timeout: 30_000 });
-    await expect(failed.getByTestId("screen-state-failed-step")).toHaveText("Step 2, click button Missing, failed: nothing matched button Missing within 5 seconds");
+    await expect(failed.getByTestId("screen-state-failed-step")).toHaveText("Step 2, click button Missing, failed: nothing matched button Missing within 5 seconds of the page going quiet");
     await failed.getByRole("button", { name: "Ask the agent to fix it" }).click();
     await expect(failed.getByTestId("screen-state-asked")).toHaveText("Sent to the agent.");
     const chats = (await engineChats(engine, project)).filter((chat) => chat.title !== "Setup");
     expect(chats).toHaveLength(1);
     expect((await engineChat(engine, chats[0]!.id, project)).messages.find((message) => message.role === "user")?.text).toBe(
-      fixStateInstruction({ shape: first.id.replace(/^shape:/, ""), branch: first.props.title, state: "the menu open", route: "/app", steps: broken.steps, mocks: undefined, number: 2, step: "click button Missing", reason: "nothing matched button Missing within 5 seconds" }),
+      fixStateInstruction({ shape: first.id.replace(/^shape:/, ""), branch: first.props.title, state: "the menu open", route: "/app", steps: broken.steps, mocks: undefined, number: 2, step: "click button Missing", reason: "nothing matched button Missing within 5 seconds of the page going quiet" }),
     );
   });
 });

@@ -1,4 +1,5 @@
 import { writeFile } from "node:fs/promises";
+import http from "node:http";
 import net from "node:net";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -121,22 +122,27 @@ describe("serving a live Instance through its proxy", () => {
     const login = await rawRequest(proxy, "/login", { headers: { ...at(proxy), accept: "text/html" } });
     expect(login.status).toBe(302);
     expect(login.headers.location).toBe(`http://127.0.0.1:${proxy}/`);
-    expect(login.headers["set-cookie"]).toEqual(["session=signed-in; Path=/; SameSite=Lax; HttpOnly"]);
+    expect(login.headers["set-cookie"]).toEqual(["session=signed-in; Path=/; HttpOnly; SameSite=None; Secure"]);
     const info = (await rawRequest(proxy, "/__fake/info", { headers: { ...at(proxy), cookie: "session=signed-in" } })).json();
     expect(info.cookie).toBe("session=signed-in");
   });
 
-  it("forwards WebSocket upgrades on every path with the query, Origin rewritten to localhost and Host kept", async () => {
-    const { proxy, upstream } = await liveInstance();
+  it("forwards WebSocket upgrades on every path with the query, Origin and Host both rewritten to the proxy on localhost", async () => {
+    const { proxy } = await liveInstance();
     const origin = `http://127.0.0.1:${proxy}`;
-    expect(await firstMessage(proxy, "/_next/webpack-hmr?page=%2F", { origin, ...at(proxy) })).toBe(
-      `hello /_next/webpack-hmr?page=%2F from http://localhost:${upstream} at 127.0.0.1:${proxy}`,
-    );
-    expect(await firstMessage(proxy, "/?token=abc", { origin, ...at(proxy) })).toBe(`hello /?token=abc from http://localhost:${upstream} at 127.0.0.1:${proxy}`);
+    expect(await firstMessage(proxy, "/_next/webpack-hmr?page=%2F", { origin, ...at(proxy) })).toBe(`hello /_next/webpack-hmr?page=%2F from http://localhost:${proxy} at localhost:${proxy}`);
+    expect(await firstMessage(proxy, "/?token=abc", { origin, ...at(proxy) })).toBe(`hello /?token=abc from http://localhost:${proxy} at localhost:${proxy}`);
     const page = (await rawRequest(proxy, "/__fake/info", { headers: { ...at(proxy), origin } })).json();
-    expect(page.origin).toBe(origin);
+    expect(page).toMatchObject({ origin, host: `127.0.0.1:${proxy}` });
     const dev = (await rawRequest(proxy, "/_next/__fake/info?y=1", { headers: { ...at(proxy), origin } })).json();
-    expect(dev.origin).toBe(`http://localhost:${upstream}`);
+    expect(dev).toMatchObject({ origin: `http://localhost:${proxy}`, host: `127.0.0.1:${proxy}` });
+  });
+
+  it("lets an app that checks Origin against Host on its WebSocket, as ComfyUI does, accept the Screen's own socket", async () => {
+    const { proxy } = await liveInstance();
+    for (const origin of [`http://127.0.0.1:${proxy}`, `http://localhost:${proxy}`]) {
+      expect(await firstMessage(proxy, "/ws?clientId=1", { origin, host: new URL(origin).host })).toBe(`hello /ws?clientId=1 from http://localhost:${proxy} at localhost:${proxy}`);
+    }
   });
 
   it("falls back to [::1] when the dev server listens only there", async () => {
@@ -145,6 +151,17 @@ describe("serving a live Instance through its proxy", () => {
     expect(page.status).toBe(200);
     expect(page.text).toContain(TAG);
     expect(await firstMessage(proxy, "/ws", at(proxy))).toBe(`hello /ws from nowhere at 127.0.0.1:${proxy}`);
+  });
+
+  it("answers on [::1] at the same port, so a Screen on localhost reaches it whichever address the browser tries first", async () => {
+    const { proxy } = await liveInstance();
+    const status = await new Promise<number>((resolve, reject) => {
+      http.get({ host: "::1", port: proxy, path: "/", headers: { host: `localhost:${proxy}`, accept: "text/html" } }, (res) => {
+        res.resume();
+        resolve(res.statusCode ?? 0);
+      }).on("error", reject);
+    });
+    expect(status).toBe(200);
   });
 
   it("refuses a request addressed to a host that is not this machine", async () => {
