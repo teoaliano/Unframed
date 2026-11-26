@@ -18,9 +18,10 @@ const instance = (state: Instance["state"], extra: Partial<Instance> = {}): Inst
 });
 
 describe("Screens", () => {
-  it("point at the proxy on 127.0.0.1 with the route", () => {
+  it("point at the proxy on 127.0.0.1 with the route, or on the host they are given", () => {
     expect(screenUrl(4100, "/")).toBe("http://127.0.0.1:4100/");
     expect(screenUrl(4100, "/settings?tab=2#top")).toBe("http://127.0.0.1:4100/settings?tab=2#top");
+    expect(screenUrl(4100, "/a", "localhost")).toBe("http://localhost:4100/a");
   });
 
   it.each<[string, string | undefined]>([

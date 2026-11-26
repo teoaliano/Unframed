@@ -1,5 +1,5 @@
 import type { ScreenShapeProps } from "@unframed/contracts";
-import { mapFlowInstruction, SCREEN_VIEWPORTS, screenUrl, setupTag } from "@unframed/domain";
+import { mapFlowInstruction, previewHostFor, SCREEN_VIEWPORTS, screenUrl, setupTag } from "@unframed/domain";
 import { ChevronDown, CopyPlus, ExternalLink, Info, MonitorSmartphone, TriangleAlert, Workflow } from "lucide-react";
 import { useState } from "react";
 import { useEditor, useValue, type Editor, type TLShape, type TLShapeId } from "tldraw";
@@ -29,7 +29,7 @@ export const OpenInBrowser = ({ owner, shapeId, size = "icon-sm" }: { readonly o
     () => {
       const props = screenPropsOf(owner, shapeId);
       const instance = props === undefined ? undefined : repositoryState(project).instances.get().get(props.instance);
-      return props === undefined || instance?.state !== "live" || instance.proxyPort === null ? undefined : screenUrl(instance.proxyPort, props.route);
+      return props === undefined || instance?.state !== "live" || instance.proxyPort === null ? undefined : screenUrl(instance.proxyPort, props.route, previewHostFor(window.location.hostname));
     },
     [owner, shapeId, project],
   );

@@ -5,7 +5,7 @@ import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, typ
 import { isInteractive } from "../../artifacts/state.ts";
 import { useCanvasProject } from "../../context.ts";
 import { noteRender } from "../../fps/renders.ts";
-import { screenOnScreen } from "../../repositories/demand.ts";
+import { holdScreenLoaded, screenWanted } from "../../repositories/demand.ts";
 import { loadQueueOf, screenLoadRank } from "../../repositories/loadQueue.ts";
 import { useRepositorySetup } from "../../repositories/store.ts";
 import { useScreenView } from "../../repositories/ScreenView.tsx";
@@ -36,7 +36,7 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
   const project = useCanvasProject();
   const props = shape.props as ScreenShapeProps;
   const setupWarnings = useRepositorySetup(project)?.warnings.length ?? 0;
-  const onScreen = useValue("screen on screen", () => screenOnScreen(editor, shape.id), [editor, shape.id]);
+  const onScreen = useValue("screen on screen", () => screenWanted(editor, shape.id), [editor, shape.id]);
   const selected = useValue("screen interactive", () => isInteractive(editor, shape.id), [editor, shape.id]);
   const [settled, setSettled] = useState(false);
   useEffect(() => {
@@ -55,6 +55,7 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
   };
   const turn = useMemo(() => ({ queue: loadQueueOf(editor), rank: () => screenLoadRank(editor, shape.id) }), [editor, shape.id]);
   const view = useScreenView({ owner: editor, project, shapeId: shape.id, props, onScreen, interactive, write, turn });
+  useEffect(() => (view.live ? holdScreenLoaded(editor, shape.id) : undefined), [view.live, editor, shape.id]);
   const label = screenLabel({ branch: view.branch, route: props.route, state: props.state, warnings: setupWarnings });
   return (
     <HTMLContainer

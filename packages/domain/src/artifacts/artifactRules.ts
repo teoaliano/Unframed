@@ -197,8 +197,8 @@ export const liveArtifacts = (input: {
   return live;
 };
 
-export const farOffscreen = (box: PlacementBox, viewport: PlacementBox): boolean => {
-  const margin = viewport.w;
+export const farOffscreen = (box: PlacementBox, viewport: PlacementBox, reach = 1): boolean => {
+  const margin = viewport.w * reach;
   return (
     box.x + box.w < viewport.x - margin ||
     box.x > viewport.x + viewport.w + margin ||

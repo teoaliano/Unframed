@@ -1,5 +1,5 @@
 import type { ScreenShapeProps } from "@unframed/contracts";
-import { describeStep, fixStateInstruction, type ScreenLoadQueue, type ScreenLoadRank, followNavigation, NO_STATE_BRIDGE, screenOverlay, screenUrl, stateRoute, stepFailure, type DialsAnnouncement, type SetupChatState } from "@unframed/domain";
+import { describeStep, fixStateInstruction, type ScreenLoadQueue, type ScreenLoadRank, followNavigation, NO_STATE_BRIDGE, previewHostFor, screenOverlay, screenUrl, stateRoute, stepFailure, type DialsAnnouncement, type SetupChatState } from "@unframed/domain";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useValue } from "tldraw";
 import { Badge } from "~/components/ui/badge";
@@ -246,7 +246,7 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
       setFailure(undefined);
       if (token !== null) countScreens("replays");
       frameState.current = { applied: false, route: undefined };
-      setLoad({ url: screenUrl(proxyPort, token === null ? props.route : stateRoute(props.route, token)), n: seq, token: token !== null });
+      setLoad({ url: screenUrl(proxyPort, token === null ? props.route : stateRoute(props.route, token), previewHostFor(window.location.hostname)), n: seq, token: token !== null });
     };
     if (!holdsState) begin(null);
     else engine.call("screens.stateToken", { project, instance: props.instance, steps: props.steps ?? [], mocks: props.mocks ?? [] }).then(({ token }) => begin(token), () => begin(null));

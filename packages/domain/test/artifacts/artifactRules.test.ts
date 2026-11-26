@@ -218,6 +218,12 @@ describe("which artifacts run", () => {
     expect(farOffscreen({ x: -1500, y: 0, w: 400, h: 300 }, viewport)).toBe(true);
     expect(farOffscreen({ x: 0, y: 1700, w: 400, h: 300 }, viewport)).toBe(true);
   });
+
+  it("reaches as many viewport widths as it is asked to", () => {
+    const viewport = { x: 0, y: 0, w: 1000, h: 600 };
+    expect(farOffscreen({ x: 3500, y: 0, w: 400, h: 300 }, viewport, 3)).toBe(false);
+    expect(farOffscreen({ x: 4001, y: 0, w: 400, h: 300 }, viewport, 3)).toBe(true);
+  });
 });
 
 describe("snapshot names and fit", () => {

@@ -54,6 +54,22 @@ describe("upstream request headers", () => {
     expect(upstreamRequestHeaders({ ...base, origin }, { path: "/ws", upgrade: true })).toEqual({ ...base, origin });
   });
 
+  it("drops the cookies of an unsafe request another site started, the way SameSite=Lax would have", () => {
+    const posted = { ...base, cookie: "s=1", "sec-fetch-site": "cross-site" };
+    expect(upstreamRequestHeaders({ ...posted, origin: "https://evil.example" }, { path: "/api", upgrade: false, method: "POST" }).cookie).toBeUndefined();
+    expect(upstreamRequestHeaders({ ...posted, origin: undefined }, { path: "/api", upgrade: false, method: "POST" }).cookie).toBeUndefined();
+    expect(upstreamRequestHeaders({ ...posted, origin: "http://127.0.0.1:4000" }, { path: "/api", upgrade: false, method: "POST" }).cookie).toBe("s=1");
+    expect(upstreamRequestHeaders({ ...posted, origin: "https://evil.example" }, { path: "/api", upgrade: false, method: "GET" }).cookie).toBe("s=1");
+    expect(upstreamRequestHeaders({ ...posted, "sec-fetch-site": "same-origin" }, { path: "/api", upgrade: false, method: "POST" }).cookie).toBe("s=1");
+  });
+
+  it("keeps, on an unsafe request from another site, the cookies the app itself set SameSite=None", () => {
+    const answered = proxiedResponseHeaders({ "set-cookie": ["state=abc; Path=/; SameSite=None; Secure", "s=1; SameSite=Lax"] }, { upstreamPort: 3000, proxyOrigin });
+    expect(answered.crossSite).toEqual(new Map([["state", true], ["s", false]]));
+    const posted = { ...base, cookie: "s=1; state=abc", "sec-fetch-site": "cross-site", origin: "null" };
+    expect(upstreamRequestHeaders(posted, { path: "/callback", upgrade: false, method: "POST", crossSite: new Set(["state"]) }).cookie).toBe("state=abc");
+  });
+
   it("asks for an unencoded body when the request accepts HTML", () => {
     const headers = { ...base, accept: "text/html,application/xhtml+xml", "accept-encoding": "gzip, br" };
     expect(upstreamRequestHeaders(headers, { path: "/", upgrade: false })["accept-encoding"]).toBe("identity");
@@ -75,9 +91,14 @@ describe("proxied response headers", () => {
     expect(answered.headers).toEqual({
       "content-security-policy": "script-src 'self'; img-src *",
       location: "http://127.0.0.1:4101/",
-      "set-cookie": ["a=1; SameSite=Lax"],
+      "set-cookie": ["a=1; SameSite=None; Secure"],
     });
     expect(answered.nonce).toBeUndefined();
+  });
+
+  it("marks every cookie SameSite=None and Secure, so it holds in a frame on another site", () => {
+    expect(proxiedResponseHeaders({ "set-cookie": "s=1; Path=/; samesite=strict; HttpOnly" }, { upstreamPort: 3000, proxyOrigin }).headers["set-cookie"]).toEqual(["s=1; Path=/; HttpOnly; SameSite=None; Secure"]);
+    expect(proxiedResponseHeaders({ "set-cookie": ["a=1; Secure; SameSite=Lax", "b=2"] }, { upstreamPort: 3000, proxyOrigin }).headers["set-cookie"]).toEqual(["a=1; SameSite=None; Secure", "b=2; SameSite=None; Secure"]);
   });
 
   it("drops a CSP that only held frame-ancestors", () => {
@@ -146,7 +167,7 @@ describe("HTML injection over a stream", () => {
 });
 
 describe("the Screen bridge", () => {
-  const load = (ancestor: string | undefined) => {
+  const load = (ancestor: string | undefined, extra: Record<string, unknown> = {}) => {
     const posted: Array<{ message: any; to: string }> = [];
     const listeners: Record<string, Array<(event: any) => void>> = {};
     const frames: Array<() => void> = [];
@@ -158,6 +179,7 @@ describe("the Screen bridge", () => {
       console: { error: () => undefined },
       addEventListener: (type: string, listener: (event: any) => void) => (listeners[type] ??= []).push(listener),
       requestAnimationFrame: (callback: () => void) => frames.push(callback),
+      ...extra,
     };
     new Function("window", screenBridgeSource())(win);
     return { win, posted, listeners, frames };
@@ -177,6 +199,17 @@ describe("the Screen bridge", () => {
     expect(posted.filter((entry) => entry.message.type === "unframed:edit:ready")).toEqual([{ message: { type: "unframed:edit:ready" }, to: "http://127.0.0.1:8787" }]);
     for (const listener of listeners.message ?? []) listener({ source: win.parent, origin: "http://127.0.0.1:8787", data: { type: "unframed:edit:hello" } });
     expect(posted.filter((entry) => entry.message.type === "unframed:edit:ready")).toHaveLength(2);
+  });
+
+  it("marks a cookie the page's script writes SameSite=None and Secure, so it holds in a frame on another site", () => {
+    const written: string[] = [];
+    class FakeDocument {}
+    Object.defineProperty(FakeDocument.prototype, "cookie", { configurable: true, get: () => written.join("; "), set: (value: string) => void written.push(value) });
+    const { win } = load("http://127.0.0.1:8787", { Document: FakeDocument });
+    const doc = new win.Document();
+    doc.cookie = "theme=dark; Path=/; SameSite=Lax";
+    expect(written).toEqual(["theme=dark; Path=/; SameSite=None; Secure"]);
+    expect(doc.cookie).toBe("theme=dark; Path=/; SameSite=None; Secure");
   });
 
   it("tells nothing to a parent that is not on this machine", () => {
