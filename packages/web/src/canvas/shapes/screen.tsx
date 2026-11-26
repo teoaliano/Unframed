@@ -1,6 +1,6 @@
 import type { ScreenMock, ScreenShapeProps, ScreenStep } from "@unframed/contracts";
 import { screenLabel } from "@unframed/domain";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
 import { isInteractive } from "../../artifacts/state.ts";
 import { useCanvasProject } from "../../context.ts";
@@ -53,7 +53,8 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
     editor.store.put([{ ...current, props: next } as TLShape]);
     return true;
   };
-  const view = useScreenView({ owner: editor, project, shapeId: shape.id, props, onScreen, interactive, write, turn: { queue: loadQueueOf(editor), rank: () => screenLoadRank(editor, shape.id) } });
+  const turn = useMemo(() => ({ queue: loadQueueOf(editor), rank: () => screenLoadRank(editor, shape.id) }), [editor, shape.id]);
+  const view = useScreenView({ owner: editor, project, shapeId: shape.id, props, onScreen, interactive, write, turn });
   const label = screenLabel({ branch: view.branch, route: props.route, state: props.state, warnings: setupWarnings });
   return (
     <HTMLContainer

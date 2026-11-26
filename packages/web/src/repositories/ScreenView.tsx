@@ -205,15 +205,12 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
   const branch = useValue("screen branch", () => state.instances.get().get(props.instance)?.branch ?? props.title, [state, props.instance, props.title]);
   const eligible = repositories && !isDeviceClient() && onScreen && proxyPort !== null;
   const [admitted, setAdmitted] = useState(false);
-  const ranking = useRef(turn?.rank);
-  ranking.current = turn?.rank;
-  const loadQueue = turn?.queue;
   useEffect(() => {
     setAdmitted(false);
-    if (!eligible || loadQueue === undefined) return;
-    return loadQueue.enter(shapeId, () => ranking.current?.() ?? { selected: false, distance: 0 }, () => setAdmitted(true));
-  }, [eligible, loadQueue, shapeId]);
-  const queued = eligible && loadQueue !== undefined && !admitted;
+    if (!eligible || turn === undefined) return;
+    return turn.queue.enter(shapeId, turn.rank, () => setAdmitted(true));
+  }, [eligible, turn, shapeId]);
+  const queued = eligible && turn !== undefined && !admitted;
   const live = eligible && !queued;
   const [settled, setSettled] = useState<number | undefined>(undefined);
   const snapshot = useValue("screen snapshot", () => state.snapshots.get().get(shapeId), [state, shapeId]);
@@ -269,7 +266,7 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
   };
   const loaded = () => {
     setSettled(load?.n);
-    loadQueue?.done(shapeId);
+    turn?.queue.done(shapeId);
   };
   const events: FrameEvents = {
     onPainted: () => {
