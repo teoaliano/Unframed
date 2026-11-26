@@ -63,6 +63,13 @@ describe("upstream request headers", () => {
     expect(upstreamRequestHeaders({ ...posted, "sec-fetch-site": "same-origin" }, { path: "/api", upgrade: false, method: "POST" }).cookie).toBe("s=1");
   });
 
+  it("keeps, on an unsafe request from another site, the cookies the app itself set SameSite=None", () => {
+    const answered = proxiedResponseHeaders({ "set-cookie": ["state=abc; Path=/; SameSite=None; Secure", "s=1; SameSite=Lax"] }, { upstreamPort: 3000, proxyOrigin });
+    expect(answered.crossSite).toEqual(new Map([["state", true], ["s", false]]));
+    const posted = { ...base, cookie: "s=1; state=abc", "sec-fetch-site": "cross-site", origin: "null" };
+    expect(upstreamRequestHeaders(posted, { path: "/callback", upgrade: false, method: "POST", crossSite: new Set(["state"]) }).cookie).toBe("state=abc");
+  });
+
   it("asks for an unencoded body when the request accepts HTML", () => {
     const headers = { ...base, accept: "text/html,application/xhtml+xml", "accept-encoding": "gzip, br" };
     expect(upstreamRequestHeaders(headers, { path: "/", upgrade: false })["accept-encoding"]).toBe("identity");

@@ -62,6 +62,7 @@ export const startInstanceProxy = async (input: { readonly upstreamPort: number;
   };
 
   const sockets = new Set<net.Socket>();
+  const crossSite = new Set<string>();
   const onRequest = (req: http.IncomingMessage, res: http.ServerResponse) => {
     const decision = loopbackGuard({ origin: rewritesOrigin(req.url ?? "/", false) ? req.headers.origin : undefined, host: req.headers.host });
     if (!decision.allowed) {
@@ -81,9 +82,13 @@ export const startInstanceProxy = async (input: { readonly upstreamPort: number;
     const stateKey = token === undefined ? undefined : input.states.takePage(token);
     const proxyOrigin = `http://${req.headers.host}`;
     void hostFor().then((host) => {
-      const headers = upstreamRequestHeaders(req.headers, { path, upgrade: false, method: req.method });
+      const headers = upstreamRequestHeaders(req.headers, { path, upgrade: false, method: req.method, crossSite });
       const upstream = http.request({ host, port: upstreamPort, method: req.method, path, headers: headers as http.OutgoingHttpHeaders, setHost: false }, (answer) => {
         const rewritten = proxiedResponseHeaders(answer.headers, { upstreamPort, proxyOrigin });
+        for (const [name, none] of rewritten.crossSite) {
+          if (none) crossSite.add(name);
+          else crossSite.delete(name);
+        }
         const out = rewritten.headers as http.OutgoingHttpHeaders;
         const status = answer.statusCode ?? 502;
         const isHtml = /text\/html/i.test(String(answer.headers["content-type"] ?? ""));

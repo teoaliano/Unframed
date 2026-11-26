@@ -28,9 +28,27 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const unsafeFromAnotherSite = (headers: ProxyHeaders, method: string): boolean =>
   !SAFE_METHODS.has(method.toUpperCase()) && first(headers["sec-fetch-site"]) === "cross-site" && !LOOPBACK_ORIGIN.test(first(headers.origin) ?? "");
 
-export const upstreamRequestHeaders = (headers: ProxyHeaders, input: { readonly path: string; readonly upgrade: boolean; readonly method?: string | undefined }): Record<string, ProxyHeaderValue> => {
+const cookieName = (pair: string): string => pair.slice(0, Math.max(pair.indexOf("="), 0)).trim();
+
+const keptCookies = (header: string, crossSite: ReadonlySet<string>): string | undefined => {
+  const kept = header
+    .split(";")
+    .map((pair) => pair.trim())
+    .filter((pair) => pair !== "" && crossSite.has(cookieName(pair)));
+  return kept.length === 0 ? undefined : kept.join("; ");
+};
+
+export const upstreamRequestHeaders = (
+  headers: ProxyHeaders,
+  input: { readonly path: string; readonly upgrade: boolean; readonly method?: string | undefined; readonly crossSite?: ReadonlySet<string> | undefined },
+): Record<string, ProxyHeaderValue> => {
   const next: Record<string, ProxyHeaderValue> = { ...headers };
-  if (unsafeFromAnotherSite(headers, input.method ?? "GET")) delete next.cookie;
+  const cookie = first(headers.cookie);
+  if (cookie !== undefined && unsafeFromAnotherSite(headers, input.method ?? "GET")) {
+    const kept = keptCookies(cookie, input.crossSite ?? new Set());
+    if (kept === undefined) delete next.cookie;
+    else next.cookie = kept;
+  }
   const proxyPort = rewritesOrigin(input.path, input.upgrade) ? proxyPortOf(headers) : undefined;
   if (proxyPort !== undefined) {
     next.origin = `http://localhost:${proxyPort}`;
@@ -55,12 +73,14 @@ const nonceOf = (policy: string): string | undefined => {
   return undefined;
 };
 
+const SAME_SITE_NONE = /;\s*samesite\s*=\s*none\s*(?=;|$)/i;
+
 export const crossSiteCookie = (cookie: string): string => `${cookie.replace(/;\s*(?:samesite(?:=[^;]*)?|secure)\s*(?=;|$)/gi, "")}; SameSite=None; Secure`;
 
 export const proxiedResponseHeaders = (
   headers: ProxyHeaders,
   input: { readonly upstreamPort: number; readonly proxyOrigin: string },
-): { readonly headers: Record<string, ProxyHeaderValue>; readonly nonce: string | undefined } => {
+): { readonly headers: Record<string, ProxyHeaderValue>; readonly nonce: string | undefined; readonly crossSite: ReadonlyMap<string, boolean> } => {
   const next: Record<string, ProxyHeaderValue> = { ...headers };
   delete next["x-frame-options"];
   let nonce: string | undefined;
@@ -73,9 +93,10 @@ export const proxiedResponseHeaders = (
   }
   const location = first(next.location);
   if (location !== undefined) next.location = rewriteLocation(location, input.upstreamPort, input.proxyOrigin);
-  const cookies = next["set-cookie"];
-  if (cookies !== undefined) next["set-cookie"] = (typeof cookies === "string" ? [cookies] : cookies).map(crossSiteCookie);
-  return { headers: next, nonce };
+  const cookies = next["set-cookie"] === undefined ? [] : typeof next["set-cookie"] === "string" ? [next["set-cookie"]] : next["set-cookie"];
+  if (cookies.length > 0) next["set-cookie"] = cookies.map(crossSiteCookie);
+  const crossSite = new Map(cookies.map((cookie) => [cookieName(cookie.split(";")[0]!), SAME_SITE_NONE.test(cookie)] as const));
+  return { headers: next, nonce, crossSite };
 };
 
 const attribute = (value: string): string => value.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
