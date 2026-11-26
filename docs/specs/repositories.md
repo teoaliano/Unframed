@@ -10,7 +10,7 @@ A person building a real web app wants to see and compare versions of it the way
 
 A second kind of project, the **Repository**, beside today's **Whiteboard**, which stays unchanged. The person adds an existing local git repository. Unframed creates the first **Instance**, which is a branch checked out in its own worktree and running its frontend. Unframed then starts **Setup**, an agent thread that works out what this repo needs to run and proves a **Screen** shows real content.
 
-Each Screen on the canvas is one route of one Instance at one viewport. It's live while visible and a snapshot otherwise, served through an Unframed proxy so logins, Parameters and comments work. Forking a Screen creates a new Instance. Exploding a head into a **Flow** lays out its routes. Agent threads can fork several Instances and work across them. Git actions (commit, push, PR, diff) come from t3code's model. All of it sits behind the `repositories` feature flag, on a long-lived branch, built as the dev app for real-world testing before anything reaches `main`.
+Each Screen on the canvas is one route of one Instance at one viewport. It's live while selected and a picture otherwise (`screen-tiers.md`), served through an Unframed proxy so logins, Parameters and comments work. Forking a Screen creates a new Instance. Exploding a head into a **Flow** lays out its routes. Agent threads can fork several Instances and work across them. Git actions (commit, push, PR, diff) come from t3code's model. All of it sits behind the `repositories` feature flag, on a long-lived branch, built as the dev app for real-world testing before anything reaches `main`.
 
 ## User Stories
 
@@ -159,7 +159,7 @@ Each Screen on the canvas is one route of one Instance at one viewport. It's liv
   - plus `--strictPort` for the Vite family
 
   It then verifies the bound port by probing the expected one and parsing stdout. A Repository in `single` mode always uses its fixed port and keeps at most one Instance live.
-- **Budget**: the budget is about 25% of total RAM, measured by summing the RSS of each Instance's process tree. `demand` comes from the web (visible or selected Screens). When over budget, the least recently demanded Instance stops. An Instance with no demand and no file changes stops after 10 minutes. Starts are ordered: demanded first, one at a time. Build caches (`.next/`, `node_modules/.vite/`) are kept across stops.
+- **Budget**: the budget is about 25% of total RAM, measured by summing the RSS of each Instance's process tree. `demand` comes from the web (live, parked and selected Screens, and near Screens with no picture yet). When over budget, the least recently demanded Instance stops. An Instance with no demand and no file changes stops after 10 minutes. Starts are ordered: demanded first, one at a time. Build caches (`.next/`, `node_modules/.vite/`) are kept across stops.
 
 ### Proxy (inside the engine, one listener per live Instance)
 
@@ -184,7 +184,7 @@ Each Screen on the canvas is one route of one Instance at one viewport. It's liv
 - A new shape kind `screen` with props:
   - `instance` (Instance id), `route`, `w`, `h` (viewport), `title`
   - `dials` (Parameter values, per Screen), `mode`
-- Like a page, it renders the live iframe when it's demanded and on screen, and its snapshot otherwise. The snapshot stays until the live frame reports its first paint.
+- It renders the live iframe while it is the selected Screen, and a picture otherwise (`screen-tiers.md`). The picture stays until the live frame reports its first paint.
 - The iframe:
   - URL: `http://localhost:<proxy port><route>` on the canvas, `http://127.0.0.1:<proxy port><route>` in the engine's headless Chrome
   - `sandbox`: allows scripts, same-origin, forms and modals; denies top navigation, popups to top and downloads

@@ -1,5 +1,7 @@
 # Screens in their own process, loaded until far away
 
+The reach rules described here were replaced by `screen-tiers.md`: a Screen stays live while selected and stays parked after, wherever it is.
+
 ## Problem
 
 After Screens learned to load one at a time (`docs/specs/screen-load.md`), panning a ComfyUI board still lagged, and loaded Screens went back to their app's boot splash:
