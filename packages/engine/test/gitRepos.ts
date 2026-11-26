@@ -55,6 +55,7 @@ const TODOS_PAGE = [
   "<!doctype html><html><head><title>Todos</title></head><body>",
   "<h1>Todos</h1><p id=\\"greeting\\"></p><p id=\\"count\\">Loading todos</p><ul id=\\"todos\\"></ul>",
   "<label>Name <input id=\\"todo-name\\"></label><button id=\\"add\\">Add</button>",
+  "<label>Note <input id=\\"todo-note\\" oninput=\\"this.defaultValue = this.value\\"></label>",
   "<script>",
   "function load() { return fetch('/api/todos').then(function (r) { if (!r.ok) throw new Error('no backend'); return r.json(); }).then(function (todos) {",
   "  document.getElementById('count').textContent = todos.length + ' todos';",

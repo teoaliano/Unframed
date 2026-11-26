@@ -558,7 +558,7 @@ export function mockRuntime(
     for (const element of all) {
       const type = String(element.type || "text").toLowerCase();
       if (["password", "hidden", "file", "submit", "button", "reset", "image", "checkbox", "radio"].indexOf(type) !== -1) continue;
-      if (element.value === element.defaultValue) continue;
+      if (element.value === "" && element.defaultValue === "") continue;
       out.push({ path: cssPath(element), value: String(element.value) });
     }
     return out;

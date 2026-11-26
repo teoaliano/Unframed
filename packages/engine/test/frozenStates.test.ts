@@ -35,6 +35,7 @@ describe.skipIf(chrome === undefined)("a frozen state", () => {
             { action: "click", target: { role: "button", name: "Add" } },
             { action: "wait", target: { text: "3 todos" } },
             { action: "type", target: NAME, text: "Bread" },
+            { action: "type", target: { role: "textbox", name: "Note" }, text: "Oat" },
           ],
         },
       },
@@ -44,8 +45,8 @@ describe.skipIf(chrome === undefined)("a frozen state", () => {
     const [saved] = toolResults(chat, "screen_state");
     expect(saved!.status).toBe("completed");
     const [badKeep, frozen] = toolResults(chat, "state_freeze");
-    expect(badKeep).toMatchObject({ status: "failed", result: { error: "keep is a list of step numbers from 1 to 4" } });
-    expect(frozen).toMatchObject({ status: "completed", result: { screen, route: expect.stringMatching(/^\/todos\?__unframed_restore=s_[0-9a-f]{32}$/), fields: 1, collections: ["todos"], steps: 0 } });
+    expect(badKeep).toMatchObject({ status: "failed", result: { error: "keep is a list of step numbers from 1 to 5" } });
+    expect(frozen).toMatchObject({ status: "completed", result: { screen, route: expect.stringMatching(/^\/todos\?__unframed_restore=s_[0-9a-f]{32}$/), fields: 2, collections: ["todos"], steps: 0 } });
     const route = frozen!.result.route as string;
 
     const shown = (await agent.records()).find((record) => record.id === agent.screen.id);
@@ -59,6 +60,7 @@ describe.skipIf(chrome === undefined)("a frozen state", () => {
         await page.goto(`http://127.0.0.1:${proxy}${route}`, { waitUntil: "load" });
         await page.waitForFunction("document.getElementById('count').textContent === '3 todos'");
         await page.waitForFunction("document.getElementById('todo-name').value === 'Bread'");
+        await page.waitForFunction("document.getElementById('todo-note').value === 'Oat'");
         expect(await page.$$eval("#todos li", (items) => items.map((item) => item.textContent))).toEqual(["Apples", "Pears", "Milk"]);
         expect(await page.evaluate("location.search")).toBe(route.slice("/todos".length));
         await page.close();
