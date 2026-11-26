@@ -42,8 +42,7 @@ export type TierEvent =
   | { readonly type: "picture"; readonly id: string }
   | { readonly type: "captured"; readonly id: string }
   | { readonly type: "captureFailed"; readonly id: string }
-  | { readonly type: "hidden"; readonly hidden: boolean }
-  | { readonly type: "removed"; readonly ids: ReadonlyArray<string> };
+  | { readonly type: "hidden"; readonly hidden: boolean };
 
 export interface TierState {
   readonly entries: ReadonlyMap<string, TierEntry>;
@@ -244,9 +243,6 @@ export const reduceTiers = (state: TierState, event: TierEvent): TierState => {
     case "hidden":
       draft.hidden = event.hidden;
       if (event.hidden) for (const id of [...draft.parked]) dropFrame(draft, id);
-      break;
-    case "removed":
-      for (const id of event.ids) forget(draft, id);
       break;
   }
   admitPages(draft);

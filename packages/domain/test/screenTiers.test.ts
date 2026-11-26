@@ -151,14 +151,12 @@ describe("reduceTiers", () => {
     expect(tiers(state).s1).toBe("warming");
   });
 
-  it("forgets removed Screens, live or parked", () => {
+  it("forgets Screens missing from the view, live or parked", () => {
     let state = run([board(3), { type: "activate", id: "s0" }, { type: "ready", id: "s0" }, { type: "activate", id: "s1" }]);
-    state = reduceTiers(state, { type: "removed", ids: ["s0", "s1"] });
+    state = reduceTiers(state, view(screen("s2")));
     expect([...state.entries.keys()]).toEqual(["s2"]);
     expect(state.parked).toEqual([]);
     expect(state.active).toBeUndefined();
-    state = reduceTiers(state, view(screen("s2")));
-    expect([...state.entries.keys()]).toEqual(["s2"]);
   });
 
   it("keeps an entry's identity when nothing about it changed", () => {
@@ -190,8 +188,8 @@ describe("reduceTiers", () => {
     expect(state.parked).toEqual([]);
   });
 
-  it("lets go of a held Screen that is removed", () => {
-    const state = run([board(2), { type: "hold", id: "s0" }, { type: "removed", ids: ["s0"] }, { type: "activate", id: "s1" }]);
+  it("lets go of a held Screen that leaves the view", () => {
+    const state = run([board(2), { type: "hold", id: "s0" }, view(screen("s1")), { type: "activate", id: "s1" }]);
     expect(state.held).toBeUndefined();
     expect(tiers(state).s1).toBe("warming");
   });
