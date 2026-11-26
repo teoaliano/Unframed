@@ -16,7 +16,6 @@ export interface TierEntry {
   readonly pictured: boolean;
   readonly page: PageCopyState;
   readonly capture: boolean;
-  readonly failed: boolean;
 }
 
 export interface ViewScreen {
@@ -50,7 +49,6 @@ export interface TierState {
   readonly held: string | undefined;
   readonly parked: ReadonlyArray<string>;
   readonly moving: boolean;
-  readonly hidden: boolean;
   readonly pending: Extract<TierEvent, { type: "view" }> | undefined;
 }
 
@@ -59,12 +57,12 @@ export const pictureLevel = (width: number, dpr: number): PictureLevel => (width
 export const tierOf = (entry: TierEntry): ScreenTier =>
   entry.frame === "live" ? "live" : entry.frame === "warming" ? "warming" : entry.frame === "parked" ? "parked" : entry.page === "built" ? "snapshot" : "picture";
 
-export const emptyTiers = (): TierState => ({ entries: new Map(), active: undefined, held: undefined, parked: [], moving: false, hidden: false, pending: undefined });
+export const emptyTiers = (): TierState => ({ entries: new Map(), active: undefined, held: undefined, parked: [], moving: false, pending: undefined });
 
-const FRESH: TierEntry = { frame: "none", level: "small", near: true, distance: 0, pictured: false, page: "none", capture: false, failed: false };
+const FRESH: TierEntry = { frame: "none", level: "small", near: true, distance: 0, pictured: false, page: "none", capture: false };
 
 const same = (a: TierEntry, b: TierEntry): boolean =>
-  a.frame === b.frame && a.level === b.level && a.near === b.near && a.distance === b.distance && a.pictured === b.pictured && a.page === b.page && a.capture === b.capture && a.failed === b.failed;
+  a.frame === b.frame && a.level === b.level && a.near === b.near && a.distance === b.distance && a.pictured === b.pictured && a.page === b.page && a.capture === b.capture;
 
 class Draft {
   readonly entries: Map<string, TierEntry>;
@@ -72,7 +70,6 @@ class Draft {
   held: string | undefined;
   parked: string[];
   moving: boolean;
-  hidden: boolean;
   pending: TierState["pending"];
   private readonly from: TierState;
 
@@ -83,7 +80,6 @@ class Draft {
     this.held = from.held;
     this.parked = [...from.parked];
     this.moving = from.moving;
-    this.hidden = from.hidden;
     this.pending = from.pending;
   }
 
@@ -103,14 +99,13 @@ class Draft {
       this.active === this.from.active &&
       this.held === this.from.held &&
       this.moving === this.from.moving &&
-      this.hidden === this.from.hidden &&
       this.pending === this.from.pending &&
       this.parked.length === this.from.parked.length &&
       this.parked.every((id, index) => this.from.parked[index] === id) &&
       this.entries.size === this.from.entries.size &&
       [...this.entries].every(([id, entry]) => this.from.entries.get(id) === entry);
     if (unchanged) return this.from;
-    return { entries: this.entries, active: this.active, held: this.held, parked: this.parked, moving: this.moving, hidden: this.hidden, pending: this.pending };
+    return { entries: this.entries, active: this.active, held: this.held, parked: this.parked, moving: this.moving, pending: this.pending };
   }
 }
 
@@ -143,11 +138,11 @@ const activate = (draft: Draft, id: string) => {
   draft.active = id;
   if (draft.get(id).frame === "parked") {
     draft.parked = draft.parked.filter((parked) => parked !== id);
-    draft.set(id, { frame: "live", failed: false });
+    draft.set(id, { frame: "live" });
     return;
   }
   for (const [other, entry] of draft.entries) if (other !== id && entry.frame === "warming") draft.set(other, { frame: "none" });
-  draft.set(id, { frame: "warming", failed: false });
+  draft.set(id, { frame: "warming" });
 };
 
 const applyView = (draft: Draft, screens: ReadonlyArray<ViewScreen>) => {
@@ -221,8 +216,7 @@ export const reduceTiers = (state: TierState, event: TierEvent): TierState => {
     case "loadFailed":
       if (!known(draft, event.id)) break;
       if (draft.active === event.id) draft.active = undefined;
-      draft.parked = draft.parked.filter((parked) => parked !== event.id);
-      draft.set(event.id, { frame: "none", failed: true });
+      dropFrame(draft, event.id);
       break;
     case "pageBuilt":
       if (draft.get(event.id).page === "loading") draft.set(event.id, { page: "built" });
@@ -241,7 +235,6 @@ export const reduceTiers = (state: TierState, event: TierEvent): TierState => {
       if (known(draft, event.id)) draft.set(event.id, { capture: false });
       break;
     case "hidden":
-      draft.hidden = event.hidden;
       if (event.hidden) for (const id of [...draft.parked]) dropFrame(draft, id);
       break;
   }

@@ -90,10 +90,9 @@ describe("reduceTiers", () => {
     expect(tiers(state)).toMatchObject({ s1: "picture", s2: "live" });
   });
 
-  it("drops a frame that failed to load and marks the Screen", () => {
+  it("drops a frame that failed to load", () => {
     const state = run([board(2), { type: "activate", id: "s0" }, { type: "loadFailed", id: "s0" }]);
     expect(tiers(state).s0).toBe("picture");
-    expect(state.entries.get("s0")!.failed).toBe(true);
     expect(state.active).toBeUndefined();
   });
 
