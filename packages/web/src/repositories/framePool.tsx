@@ -143,18 +143,27 @@ const PooledScreen = ({ project, shapeId, entry, host }: { readonly project: str
       const focused = document.activeElement;
       return focused instanceof HTMLElement && self.current?.contains(focused) === true ? focused : undefined;
     };
+    const focused = document.activeElement;
+    let outside = focused instanceof HTMLElement && self.current?.contains(focused) !== true ? focused : undefined;
     inside()?.blur();
-    const onFocusOut = (event: FocusEvent) => {
-      const from = event.target;
-      setTimeout(() => {
-        const taken = inside();
-        if (taken === undefined) return;
-        if (from instanceof HTMLElement && from.isConnected && !self.current?.contains(from)) from.focus({ preventScroll: true });
-        else taken.blur();
-      });
+    const reclaim = () => {
+      const taken = inside();
+      if (taken === undefined) return;
+      if (outside?.isConnected === true) outside.focus({ preventScroll: true });
+      else taken.blur();
     };
+    const onFocusIn = (event: FocusEvent) => {
+      if (event.target instanceof HTMLElement && self.current?.contains(event.target) !== true) outside = event.target;
+    };
+    const onFocusOut = () => setTimeout(reclaim);
+    window.addEventListener("blur", reclaim);
+    document.addEventListener("focusin", onFocusIn, true);
     document.addEventListener("focusout", onFocusOut, true);
-    return () => document.removeEventListener("focusout", onFocusOut, true);
+    return () => {
+      window.removeEventListener("blur", reclaim);
+      document.removeEventListener("focusin", onFocusIn, true);
+      document.removeEventListener("focusout", onFocusOut, true);
+    };
   }, [interactive]);
   const watching = tier?.frame === "live" && frame.status.painted;
   useEffect(() => {

@@ -382,8 +382,13 @@ export function screenBridge(
     element.dispatchEvent(new win.KeyboardEvent("keyup", init));
     if (down && key === "Enter" && element.form && typeof element.form.requestSubmit === "function" && element.tagName === "INPUT") element.form.requestSubmit();
   };
+  let pressed: any;
+  const focusOn = (element: any) => {
+    pressed = element;
+    if (win.document.hasFocus() && typeof element.focus === "function") element.focus();
+  };
   const fill = (element: any, text: string) => {
-    if (typeof element.focus === "function") element.focus();
+    focusOn(element);
     if (element.isContentEditable) element.textContent = text;
     else {
       const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), "value")?.set;
@@ -395,7 +400,7 @@ export function screenBridge(
   };
   const perform = async (step: any) => {
     if (step.action === "press") {
-      const element = step.target ? await locate(step.target) : win.document.activeElement || win.document.body;
+      const element = step.target ? await locate(step.target) : (win.document.hasFocus() ? win.document.activeElement : pressed) || win.document.activeElement || win.document.body;
       keys(element, String(step.key));
       return;
     }
@@ -403,7 +408,7 @@ export function screenBridge(
     if (typeof element.scrollIntoView === "function") element.scrollIntoView({ block: "center", inline: "center" });
     if (step.action === "click") {
       mouse(element, ["pointerover", "pointerenter", "mouseover", "pointerdown", "mousedown"]);
-      if (typeof element.focus === "function") element.focus();
+      focusOn(element);
       mouse(element, ["pointerup", "mouseup"]);
       element.click();
     } else if (step.action === "hover") mouse(element, ["pointerover", "pointerenter", "mouseover", "mouseenter", "pointermove", "mousemove"]);
