@@ -159,7 +159,7 @@ Each Screen on the canvas is one route of one Instance at one viewport. It's liv
   - plus `--strictPort` for the Vite family
 
   It then verifies the bound port by probing the expected one and parsing stdout. A Repository in `single` mode always uses its fixed port and keeps at most one Instance live.
-- **Budget**: the budget is about 25% of total RAM, measured by summing the RSS of each Instance's process tree. `demand` comes from the web (live, parked and selected Screens, and near Screens with no picture yet). When over budget, the least recently demanded Instance stops. An Instance with no demand and no file changes stops after 10 minutes. Starts are ordered: demanded first, one at a time. Build caches (`.next/`, `node_modules/.vite/`) are kept across stops.
+- **Budget**: the budget is about 25% of total RAM, measured by summing the RSS of each Instance's process tree. `demand` comes from the web (live, warming and parked Screens, and near Screens with no picture yet). When over budget, the least recently demanded Instance stops. An Instance with no demand and no file changes stops after 10 minutes. Starts are ordered: demanded first, one at a time. Build caches (`.next/`, `node_modules/.vite/`) are kept across stops.
 
 ### Proxy (inside the engine, one listener per live Instance)
 
@@ -184,7 +184,7 @@ Each Screen on the canvas is one route of one Instance at one viewport. It's liv
 - A new shape kind `screen` with props:
   - `instance` (Instance id), `route`, `w`, `h` (viewport), `title`
   - `dials` (Parameter values, per Screen), `mode`
-- It renders the live iframe while it is the selected Screen, and a picture otherwise (`screen-tiers.md`). The picture stays until the live frame reports its first paint.
+- It renders a picture, and while it is the selected Screen the project's pool lays its live iframe over it (`screen-tiers.md`, `screen-frames.md`). The picture stays until the live frame reports its first paint.
 - The iframe:
   - URL: `http://localhost:<proxy port><route>` on the canvas, `http://127.0.0.1:<proxy port><route>` in the engine's headless Chrome
   - `sandbox`: allows scripts, same-origin, forms and modals; denies top navigation, popups to top and downloads

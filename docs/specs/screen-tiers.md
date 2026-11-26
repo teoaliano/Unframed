@@ -6,7 +6,7 @@ A Repository's board runs every Screen near the view as a live iframe of the per
 
 - **Every visible Screen runs its app.** A board of 200 Screens of a page with a spinner mounted 86 iframes at once, and panning it at fit missed a frame in 7 % of frames (p95 33 ms on a 120 Hz display). Each Screen keeps animating, polling and holding memory while nobody looks at it.
 - **A duplicate starts from nothing.** A snapshot belongs to one shape id. Duplicating 200 Screens showed 0 pictures 300 ms later: each copy waits for its own load or its own headless capture.
-- **Coming back to a board loads it again.** The canvas remounts on a project switch and every Screen boots again, one at a time, behind its last snapshot.
+- **Coming back to a board loads it again.** The canvas remounts on a project switch or after the editor tab, and every Screen boots again, one at a time, behind its last snapshot.
 - **Zoomed out, a Screen is still a full app.** A Screen 40 pixels wide on screen runs the same page as one filling the window.
 
 ## Solution
@@ -15,6 +15,8 @@ Only the Screen the person is using runs. Every other Screen shows a picture tha
 
 - **One live Screen.** Selecting a Screen (or double-clicking it, or an agent's edit landing on a Screen when nothing else is live) makes it the live Screen. Its iframe mounts behind its picture and is revealed once the app has painted. Escape, a click on empty canvas, or selecting something else demotes it: the bridge takes a fresh capture and the iframe is parked.
 - **Parked, not gone.** Up to three recently live Screens keep their iframe mounted but hidden, so selecting one of them again shows it at once. The oldest is dropped past three. A parked Screen does not animate or update.
+- **Frames outlive the canvas.** The few frames the tiers allow live in the project's pool (`screen-frames.md`), not inside the Screen's shape, so a live or parked Screen keeps its page across its editor tab, the way back to the canvas and a project tab switch.
+- **The editor tab holds its Screen.** Opening a Screen's editor tab makes it the live Screen and keeps it live until the tab closes.
 - **Pictures by size on screen.** A Screen that is tiny on screen shows a 128 pixel wide image, a small one a 384 pixel wide image, and one wider than about 230 css pixels a static copy of its page: the app's DOM and styles, without scripts, in a closed shadow root. Levels change only when the camera stops.
 - **Pictures addressed by content.** The engine stores every picture under the hash of its content and serves it as immutable. A Screen records its picture key in its tldraw record, so a duplicate shows the original's picture at once, and opening a board paints every visible Screen's picture from the HTTP cache with no load.
 - **Fresh by key, not by invalidation.** The engine knows which picture belongs to which state of which Instance: the Instance, its worktree revision, the route, the Steps and Mocks, the viewport and the Parameters. A copy with the same state reuses the key. A change of code, route or state captures a new picture, and the old one stays on screen until the new one is ready.
@@ -30,16 +32,18 @@ Only the Screen the person is using runs. Every other Screen shows a picture tha
 7. As a person switching back to a board, I want its Screens to show their pictures straight away, so that I never see a loading board.
 8. As a person zooming out, I want small Screens to be cheap images, and zooming in to show a sharp copy of the page, so that the board reads at any zoom.
 9. As a person, I want the live app to replace its picture without a flash, so that selecting a Screen feels like it was already running.
-10. As a person whose agent edits the code, I want the Screen it works on to go live when nothing else is, and every picture of that branch to refresh, so that the board shows the new code.
-11. As a person, I want dev servers to start only for the Screen I use or for Screens that have never been pictured, so that opening a board does not start every branch.
+10. As a person, I want a Screen I open in its editor tab, or leave behind in another project tab, to come back with no reload, so that the app keeps the state I left it in.
+11. As a person whose agent edits the code, I want the Screen it works on to go live when nothing else is, and every picture of that branch to refresh, so that the board shows the new code.
+12. As a person, I want dev servers to start only for the Screen I use or for Screens that have never been pictured, so that opening a board does not start every branch.
 
 ## Implementation Decisions
 
 ### The tier scheduler (domain, `screenTiers.ts`)
 
 - A pure reducer: `reduceTiers(state, event) → state`. Each Screen has a frame state (`none`, `warming`, `live`, `parked`), a picture level (`tiny`, `small`, `page`), a page copy state (`none`, `queued`, `loading`, `built`, `missing`) and whether a capture is wanted. Its tier is what it shows: `live`, `warming` or `parked` from its frame, else `snapshot` when its page copy is built, else `picture`.
-- Events: `view` (each Screen's on-screen width in device pixels, whether it is near the view, and its distance from the view's centre), `camera` (moving or still), `activate`, `edited` (an agent's edit landed on the Screen), `deactivate`, `ready`, `loadFailed`, `pageBuilt`, `pageMissing`, `captured`, `captureFailed`, `hidden` (the tab is hidden or shown) and `removed`.
+- Events: `view` (each Screen's on-screen width in device pixels, whether it is near the view, and its distance from the view's centre), `camera` (moving or still), `activate`, `edited` (an agent's edit landed on the Screen), `deactivate`, `hold` (the Screen's editor tab opened, or closed with no id), `ready`, `loadFailed`, `pageBuilt`, `pageMissing`, `captured`, `captureFailed`, `hidden` (the tab is hidden or shown) and `removed`.
 - Budgets: one live Screen, one warming, three parked, four page copies loading at once. `edited` activates only when no Screen is active.
+- `hold` activates its Screen and makes the reducer ignore `activate` and `deactivate` until the hold is released. Releasing it leaves the Screen live; the canvas's selection then keeps or parks it.
 - `activate` on a parked Screen makes it live at once. On any other Screen it starts `warming`; the iframe mounts and the picture stays on top. `ready` turns the warming Screen live. A new activation drops a Screen still warming.
 - `deactivate` parks the live Screen with a capture wanted, at the front of the parked list. Past three, the least recently live loses its frame. A hidden tab drops every parked frame.
 - `view` events wait while the camera moves and apply once it is still. A Screen's level comes from its on-screen width: up to 160 device pixels is `tiny`, up to 230 css pixels is `small`, wider is `page`. Page copies are queued for near Screens at level `page`, nearest first, four loading at once. A Screen that leaves the view drops its page copy.
@@ -47,7 +51,7 @@ Only the Screen the person is using runs. Every other Screen shows a picture tha
 
 ### Picture levels on the canvas
 
-- The scheduler lives beside the canvas document, one per editor. It sends `view` when the camera becomes still (tldraw's `getCameraState`), when Screens are added, removed or resized, and when the window's pixel ratio changes. Selection drives `activate` and `deactivate`. `visibilitychange` sends `hidden`.
+- The scheduler's state belongs to the project, one per open project tab, so it outlives the canvas while the editor tab is open or another project tab shows. A mounted canvas sends `view` when the camera becomes still (tldraw's `getCameraState`), when Screens are added, removed or resized, and when the window's pixel ratio changes. Its selection drives `activate` and `deactivate`. The editor tab sends `hold`. The project's pool sends `hidden` on `visibilitychange`, and closing the project tab clears the state.
 - A Screen shape reads only its own entry with `useValue`. Nothing in the shape reads the camera, so panning and zooming re-render no Screen. The shape's container has `contain: strict`. The label stays in `ShapeLabel` as today.
 - The static layer is an `<img>` of `<key>.w128.png` or `<key>.w384.png`, or, at level `page`, the page copy over the 384 image. Before a Screen has a scheduler entry it uses the level the current zoom gives, so a board's first frame already has its pictures.
 - Page copies are built by one queue per document, nearest first, at most 6 ms of work per animation frame. The prepared copy of a key is shared: one parsed template and one constructed stylesheet per key, cloned into each Screen's closed shadow root, with `@font-face` rules hoisted to the document once.
@@ -55,9 +59,10 @@ Only the Screen the person is using runs. Every other Screen shows a picture tha
 
 ### The live frame
 
-- `useScreenView` keeps everything it does today (state tokens, Steps, Mocks, navigation following, Parameters, the one retry, the editor tab), but it mounts its iframe when told to, not when the Screen is on screen. The load queue and the reach rules are removed: the scheduler admits one frame at a time.
-- The iframe sits under the static layer. The static layer is removed when the Screen is live and its page has painted, so the app replaces its picture with no blank frame. A parked iframe gets `visibility: hidden`, so Chromium stops painting it and throttles its animation frames.
-- Pointer events reach a live Screen after the double-click delay, as today.
+- The project's pool (`screen-frames.md`) renders a frame for each live, warming or parked Screen and for nothing else. `useScreenFrame` keeps everything a frame did before (state tokens, Steps, Mocks, navigation following, Parameters, the one retry, the editor tab). The load queue and the reach rules are removed: the scheduler admits one frame at a time.
+- The pool lays the frame over the Screen's card, with the frame transparent until the app has painted. The card's static layer is removed when the Screen is live and its page has painted, so the app replaces its picture with no blank frame. A parked frame's host is hidden and its iframe gets `visibility: hidden`, so Chromium stops painting it and throttles its animation frames.
+- The pool asks the bridge for captures: it turns the bridge's watch on while its Screen is live and painted, and takes a final capture when the tiers want one.
+- Pointer events reach a live Screen after the double-click delay, while it is selected and the camera is still.
 
 ### Capturing the page copy (the bridge)
 
@@ -76,7 +81,7 @@ Only the Screen the person is using runs. Every other Screen shows a picture tha
 
 ### Demand
 
-- A window demands the Instances of its active, warming and parked Screens, of its selected Screens, and of near Screens with no picture. The editor tab demands its own Instance as today. The engine's budget, idle stop and one-start-at-a-time rules are unchanged.
+- A window demands the Instances of its live, warming and parked Screens, and of near Screens with no picture. The pool sends the first, so they stay demanded while their canvas is not shown; the canvas sends the second. The editor tab demands its own Instance as today. The engine's budget, idle stop and one-start-at-a-time rules are unchanged.
 
 ### Measuring
 
@@ -103,7 +108,7 @@ Only the Screen the person is using runs. Every other Screen shows a picture tha
 - Tests check what the person sees: which Screens have a frame, which picture a Screen shows, what the engine serves and stores.
 - **Domain**: the reducer (activate, warming to live, park and LRU, capture wanted, page copy budget and order, camera freeze, hidden tab, `edited` only when free, entry identity), the level choice, `screenSignature`, and the CSS helpers of `pageSnapshot.ts` (viewport units, `url()` rewriting, root selectors).
 - **Engine**: the store names parts and pictures by content; a second Screen with the same signature gets the key without a capture; a changed revision captures again; `/api/pictures` serves immutable files with the strict policy and refuses other names; a headless capture writes HTML with parts and three rasters; `screens.capture` stores a live copy, rasterises it and sets the Screen's key; `screens.capture` is refused with the flag off.
-- **Browser**: selecting Screens keeps at most one live iframe; a reselected parked Screen shows its page with no reload; Escape demotes and captures; a duplicate shows the original's picture at once; switching back to a board shows every visible picture in its first frame; zooming in shows the page copy in a closed shadow root; the flag off shows pictures and no frame.
+- **Browser**: selecting Screens keeps at most one live iframe; selecting five in turn leaves one live and three parked; a reselected parked Screen shows its page with no reload; the editor tab makes its Screen live and parked frames survive it and a project tab switch; Escape demotes and captures; a duplicate shows the original's picture at once; switching back to a board shows every visible picture in its first frame; zooming in shows the page copy in a closed shadow root; the flag off shows pictures and no frame.
 - **Performance**: `screenBoardPerformance.spec.ts` in `pnpm test:perf`.
 
 ## Out of scope
@@ -111,4 +116,4 @@ Only the Screen the person is using runs. Every other Screen shows a picture tha
 - Predicting the camera to fetch pictures early.
 - Pixel-exact page copies of pages whose stylesheets come from another origin, or that draw with WebGL.
 - Sharing pictures between projects.
-- Keeping the canvas mounted across project tabs.
+- Keeping the canvas itself mounted across project tabs. Its frames stay in the pool instead.
