@@ -184,6 +184,25 @@ test("a Screen whose steps no longer work says Couldn't reach this state with th
   });
 });
 
+test("a selected Screen replaying its steps takes no keyboard focus from the page around it; it takes input once its state is reached", async ({ page }) => {
+  await withRepository(page, {}, async (engine, project) => {
+    const [first] = await screenShapes(engine, project);
+    await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/boot?ms=1500", w: 640, h: 480, state: "the menu open", steps: [{ action: "click", target: { role: "button", name: "Open menu" } }] } }]);
+    await clickShape(page, first.id);
+    await page.evaluate(() => {
+      const input = document.createElement("input");
+      input.id = "host-input";
+      document.body.append(input);
+      input.focus();
+    });
+    const frame = page.frameLocator(`[data-screen-of="${first.id}"] iframe[data-screen-frame]`);
+    await expect(frame.getByRole("menuitem", { name: "Settings" })).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(`[data-screen-of="${first.id}"] iframe[data-screen-frame]`)).toHaveAttribute("data-interactive", "true", { timeout: 10_000 });
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("host-input");
+  });
+});
+
 test("Duplicate leaves a copy of the Screen at its current page, size and Parameters beside it, without its state", async ({ page }) => {
   await withRepository(page, {}, async (engine, project) => {
     const [first] = await screenShapes(engine, project);

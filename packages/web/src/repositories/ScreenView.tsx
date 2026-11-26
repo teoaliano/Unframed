@@ -194,6 +194,7 @@ export const ScreenOverlay = ({ project, instance }: { readonly project: string;
 export interface FrameStatus {
   readonly live: boolean;
   readonly painted: boolean;
+  readonly settled: boolean;
 }
 
 interface ScreenFrameInput {
@@ -263,6 +264,8 @@ export const useScreenFrame = ({ owner, project, shapeId, props, interactive, wr
   }, [props.route, stateKey]);
   const [failure, setFailure] = useState<{ readonly step: number; readonly reason: string } | undefined>(undefined);
   const [painted, setPainted] = useState<string | undefined>(undefined);
+  const stepsPending = useRef(false);
+  const [settledLoad, setSettledLoad] = useState<number | undefined>(undefined);
   useEffect(() => {
     if (!live || proxyPort === null) {
       shown.current = undefined;
@@ -280,6 +283,7 @@ export const useScreenFrame = ({ owner, project, shapeId, props, interactive, wr
       setFailure(undefined);
       if (token !== null) countScreens("replays");
       frameState.current = { applied: false, route: undefined };
+      stepsPending.current = false;
       setLoad({ url: screenUrl(proxyPort, token === null ? props.route : stateRoute(props.route, token), previewHostFor(window.location.hostname)), n: seq, token: token !== null });
     };
     if (!holdsState) begin(null);
@@ -301,6 +305,7 @@ export const useScreenFrame = ({ owner, project, shapeId, props, interactive, wr
   const events: FrameEvents = {
     onPainted: () => {
       setPainted(load?.url);
+      if (!stepsPending.current) setSettledLoad(load?.n);
       onReady();
     },
     onSnapshot,
@@ -311,6 +316,7 @@ export const useScreenFrame = ({ owner, project, shapeId, props, interactive, wr
       const frame = frameState.current;
       if (applied) {
         frameState.current = { applied: true, route };
+        stepsPending.current = true;
         return;
       }
       if (route === undefined) return;
@@ -322,7 +328,9 @@ export const useScreenFrame = ({ owner, project, shapeId, props, interactive, wr
       if (!replaying) follow(route);
     },
     onSteps: (result) => {
+      stepsPending.current = false;
       if (result.ok) {
+        setSettledLoad(load?.n);
         retried.current = false;
         setFailure(undefined);
       } else if (!retried.current) {
@@ -352,7 +360,8 @@ export const useScreenFrame = ({ owner, project, shapeId, props, interactive, wr
   };
   const url = live ? load?.url : undefined;
   const shownPainted = live && url !== undefined && painted === url;
-  const content = live && url !== undefined && <LiveScreen key={load?.n} owner={owner} shapeId={shapeId} url={url} dials={props.dials} interactive={interactive} parked={parked} events={events} edit={edit} onPost={onPost} />;
+  const settled = shownPainted && failure === undefined && load !== undefined && settledLoad === load.n;
+  const content = live && url !== undefined && <LiveScreen key={load?.n} owner={owner} shapeId={shapeId} url={url} dials={props.dials} interactive={interactive && settled} parked={parked} events={events} edit={edit} onPost={onPost} />;
   const failed = live && failure !== undefined && (
     <div
       className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-(--artifact-card-surface) p-6 text-center font-sans text-sm text-(--artifact-card-foreground)"
@@ -363,7 +372,7 @@ export const useScreenFrame = ({ owner, project, shapeId, props, interactive, wr
       <FixButton shapeId={shapeId} instruction={instruction} />
     </div>
   );
-  return { content, failure: failed, status: { live, painted: shownPainted && failure === undefined } };
+  return { content, failure: failed, status: { live, painted: shownPainted && failure === undefined, settled } };
 };
 
 export const ScreenStateNote = ({ project, shapeId, live }: { readonly project: string; readonly shapeId: string; readonly live: boolean }) => {

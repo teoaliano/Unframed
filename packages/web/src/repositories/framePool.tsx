@@ -31,7 +31,7 @@ interface PoolEntry {
   readonly last: { current: ScreenSlot };
 }
 
-const NOT_LOADED: FrameStatus = { live: false, painted: false };
+const NOT_LOADED: FrameStatus = { live: false, painted: false, settled: false };
 const CAPTURE_WAIT_MS = 8000;
 
 const pools = new Map<string, Atom<ReadonlyMap<string, PoolEntry>>>();
@@ -97,16 +97,11 @@ const PooledScreen = ({ project, shapeId, entry, host }: { readonly project: str
   const slot = useValue("screen slot", () => activeSlot(entry.slots.get()), [entry]);
   if (slot !== undefined) entry.last.current = slot;
   const shown = slot ?? entry.last.current;
-  const interactive = slot?.interactive === true;
+  const wanted = slot?.interactive === true;
   const engine = useEngine();
   const tier = useValue("screen frame tier", () => tiersOf(project).get().entries.get(shapeId), [project, shapeId]);
   const parked = tier?.frame === "parked";
   const self = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (interactive) return;
-    const focused = document.activeElement;
-    if (focused instanceof HTMLElement && self.current?.contains(focused)) focused.blur();
-  }, [interactive]);
   const post = useRef<FramePost | undefined>(undefined);
   const sent = useRef<string | undefined>(undefined);
   const capture = (snapshot: PageSnapshotMessage | null, final: boolean) => {
@@ -131,7 +126,7 @@ const PooledScreen = ({ project, shapeId, entry, host }: { readonly project: str
     project,
     shapeId,
     props: shown.props,
-    interactive,
+    interactive: wanted,
     write: slot?.write ?? (() => false),
     edit: slot?.edit,
     parked,
@@ -141,6 +136,26 @@ const PooledScreen = ({ project, shapeId, entry, host }: { readonly project: str
       post.current = next;
     },
   });
+  const interactive = wanted && frame.status.settled;
+  useEffect(() => {
+    if (interactive) return;
+    const inside = () => {
+      const focused = document.activeElement;
+      return focused instanceof HTMLElement && self.current?.contains(focused) === true ? focused : undefined;
+    };
+    inside()?.blur();
+    const onFocusOut = (event: FocusEvent) => {
+      const from = event.target;
+      setTimeout(() => {
+        const taken = inside();
+        if (taken === undefined) return;
+        if (from instanceof HTMLElement && from.isConnected && !self.current?.contains(from)) from.focus({ preventScroll: true });
+        else taken.blur();
+      });
+    };
+    document.addEventListener("focusout", onFocusOut, true);
+    return () => document.removeEventListener("focusout", onFocusOut, true);
+  }, [interactive]);
   const watching = tier?.frame === "live" && frame.status.painted;
   useEffect(() => {
     if (frame.status.painted) post.current?.({ type: "unframed:snapshot:watch", on: watching });
@@ -159,7 +174,7 @@ const PooledScreen = ({ project, shapeId, entry, host }: { readonly project: str
   }, [wantsCapture, project, shapeId]);
   useLayoutEffect(() => {
     const current = entry.status.get();
-    if (current.live !== frame.status.live || current.painted !== frame.status.painted) entry.status.set(frame.status);
+    if (current.live !== frame.status.live || current.painted !== frame.status.painted || current.settled !== frame.status.settled) entry.status.set(frame.status);
   });
   useEffect(
     () => () => {
@@ -177,7 +192,7 @@ const PooledScreen = ({ project, shapeId, entry, host }: { readonly project: str
       data-screen-of={shapeId}
       data-parked={parked ? "true" : undefined}
       data-painted={frame.status.painted ? "true" : undefined}
-      style={{ visibility: "hidden", transformOrigin: "0 0", pointerEvents: interactive ? "auto" : "none" }}
+      style={{ visibility: "hidden", transformOrigin: "0 0", pointerEvents: wanted ? "auto" : "none" }}
     >
       <div className="absolute inset-0" inert={!interactive} style={{ opacity: frame.status.painted ? 1 : 0 }}>
         {frame.content}
