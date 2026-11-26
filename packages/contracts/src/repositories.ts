@@ -223,9 +223,12 @@ export const ScreensInspect = Rpc.make("screens.inspect", {
   error: UnframedError,
 });
 
+export const ScreenWriteKind = Schema.Literals(["class", "text", "attr", "style"]);
+export type ScreenWriteKind = typeof ScreenWriteKind.Type;
+
 export const ScreenWrite = Schema.Struct({
   id: Schema.String,
-  kind: Schema.Literals(["class", "text", "attr", "style"]),
+  kind: ScreenWriteKind,
   property: Schema.String,
   before: Schema.NullOr(Schema.String),
   after: Schema.NullOr(Schema.String),

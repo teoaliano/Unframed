@@ -1,10 +1,8 @@
-import type { ScreenCva, ScreenJsx } from "@unframed/contracts";
+import type { ScreenCva, ScreenJsx, ScreenWriteKind } from "@unframed/contracts";
 import { parse } from "@babel/parser";
 
-export type JsxChangeKind = "class" | "text" | "attr" | "style";
-
 export interface JsxChange {
-  readonly kind: JsxChangeKind;
+  readonly kind: ScreenWriteKind;
   readonly property: string;
   readonly before: string | null;
   readonly after: string | null;

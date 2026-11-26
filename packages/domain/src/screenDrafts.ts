@@ -1,4 +1,4 @@
-import type { SourceEdit } from "@unframed/contracts";
+import type { ScreenWriteKind, SourceEdit } from "@unframed/contracts";
 import { classFor, classSetting, looksTailwind, parseColour, pxOf, type TailwindToken } from "./tailwind.ts";
 
 export interface DraftSource {
@@ -22,12 +22,11 @@ export interface DraftElement {
   readonly selfMapped: boolean;
 }
 
-export type DraftKind = "style" | "class" | "text" | "attr";
 export type DraftScope = "all" | "one";
 
 export interface DraftChange {
   readonly id: string;
-  readonly kind: DraftKind;
+  readonly kind: ScreenWriteKind;
   readonly property: string;
   readonly before: string | null;
   readonly after: string | null;
