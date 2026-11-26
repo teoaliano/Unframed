@@ -10,6 +10,7 @@ import { errorText, logError, logInfo } from "../log.ts";
 import type { ScreenStatePayload } from "../instances/stateTokens.ts";
 import { isScreenShape, type ScreenShape } from "./firstScreen.ts";
 import { pictureKey, type PictureRasters, type PictureStore } from "./pictureStore.ts";
+import { scalePngs } from "./pngScale.ts";
 import { screenStatePayload } from "./screenState.ts";
 
 export const SCREEN_SNAPSHOT_FOLDER = join(".cache", "screens");
@@ -79,12 +80,10 @@ export const stubScreenRasterizer: ScreenRasterizer = async (job) => {
   return stubRasters({ html: pictureKey(job.html, job.w, job.h), w: job.w, h: job.h });
 };
 
-const rastersOf = async (page: Page, w: number, h: number): Promise<PictureRasters> => {
+const rastersOf = async (page: Page): Promise<PictureRasters> => {
   const png = Buffer.from(await page.screenshot({ type: "png" }));
-  const at = (await page.evaluate("[window.scrollX, window.scrollY]")) as [number, number];
-  const scaled = async (width: number) =>
-    Buffer.from(await page.screenshot({ type: "png", clip: { x: at[0], y: at[1], width: w, height: h, scale: width / (w * 2) } }));
-  return { png, w384: await scaled(384), w128: await scaled(128) };
+  const [w384, w128] = await scalePngs(png, [384, 128]);
+  return { png, w384: w384!, w128: w128! };
 };
 
 const viewportOf = (w: number, h: number) => ({ width: Math.max(1, Math.round(w)), height: Math.max(1, Math.round(h)), deviceScaleFactor: 2 });
@@ -124,7 +123,7 @@ export const chromeScreenRenderer =
           page.evaluate("window.__unframedSnapshot ? window.__unframedSnapshot() : null").catch(() => null),
           sleep(SNAPSHOT_TIMEOUT_MS).then(() => null),
         ]);
-        const rasters = await rastersOf(page, viewport.width, viewport.height);
+        const rasters = await rastersOf(page);
         return isPageCopy(snapshot) ? { ...rasters, snapshot } : rasters;
       } finally {
         await page.close().catch(() => undefined);
@@ -157,7 +156,7 @@ export const chromeScreenRasterizer =
         });
         await page.goto(PICTURE_PAGE, { waitUntil: "load", timeout: LOAD_TIMEOUT_MS });
         await page.evaluate("document.fonts.ready.then(() => true)").catch(() => undefined);
-        return await rastersOf(page, viewport.width, viewport.height);
+        return await rastersOf(page);
       } finally {
         await page.close().catch(() => undefined);
       }
