@@ -9,25 +9,29 @@ const route = (path: string, extra: Partial<CodeRoute> = {}): CodeRoute => {
 
 describe("routes placed on the canvas", () => {
   it("place every static route and each dynamic route that has an example, and say why the others were skipped", () => {
-    const routes = [route("/"), route("/posts"), route("/posts/:id", { example: "/posts/1" }), route("/users/:id"), route("/settings")];
+    const routes = [route("/"), route("/posts"), route("/posts/:id", { example: "/posts/1" }), route("/users/:id"), route("/teams/:team", { example: "/teams/:team" }), route("/settings")];
     const { place, skipped } = placeableRoutes(routes, { shown: new Set(["/settings"]) });
     expect(place.map((entry) => entry.path)).toEqual(["/", "/posts", "/posts/1"]);
     expect(place[2]).toEqual({ path: "/posts/1", group: "posts", name: "posts" });
     expect(skipped).toEqual([
       { path: "/users/:id", reason: "a dynamic route with no example" },
+      { path: "/teams/:team", reason: "a dynamic route with no example" },
       { path: "/settings", reason: "already on the canvas" },
     ]);
   });
 
   it("take asked paths, naming them from the route they fit, and stop at the most one call places", () => {
     const routes = [route("/posts/:id"), route("/files/:path*")];
-    const { place, skipped } = placeableRoutes(routes, { asked: ["/posts/7", "/files/a/b", "/new-thing", "nope", "/posts/7"], shown: new Set(), most: 3 });
+    const { place, skipped } = placeableRoutes(routes, { asked: ["/posts/7", "/posts/:id", "/files/a/b", "/new-thing", "nope", "/posts/7"], shown: new Set(), most: 3 });
     expect(place).toEqual([
       { path: "/posts/7", group: "posts", name: "posts" },
       { path: "/files/a/b", group: "files", name: "files" },
       { path: "/new-thing", group: "new-thing", name: "New Thing" },
     ]);
-    expect(skipped).toEqual([{ path: "nope", reason: "not a path in the app" }]);
+    expect(skipped).toEqual([
+      { path: "/posts/:id", reason: "a dynamic route with no example" },
+      { path: "nope", reason: "not a path in the app" },
+    ]);
     expect(placeableRoutes([route("/a"), route("/b")], { shown: new Set(), most: 1 }).skipped).toEqual([{ path: "/b", reason: "more than 1 Screens in one call" }]);
   });
 

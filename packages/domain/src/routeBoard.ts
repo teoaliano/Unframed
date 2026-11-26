@@ -66,6 +66,7 @@ export const placeableRoutes = (
     }
   for (const route of wanted) {
     if (!route.path.startsWith("/")) skipped.push({ path: route.path, reason: "not a path in the app" });
+    else if (segments(route.path).some((part) => part.startsWith(":"))) skipped.push({ path: route.path, reason: "a dynamic route with no example" });
     else if (options.shown.has(withoutRestore(route.path))) skipped.push({ path: route.path, reason: "already on the canvas" });
     else if (place.some((placed) => placed.path === route.path)) continue;
     else if (place.length >= most) skipped.push({ path: route.path, reason: `more than ${most} Screens in one call` });
