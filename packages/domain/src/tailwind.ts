@@ -60,6 +60,10 @@ const sizeValue = (rest: string): string | undefined => {
   return spacingValue(rest);
 };
 const isColour = (value: string): boolean => /^(#|rgb|hsl|oklch|oklab|lab|lch|color\(|var\(--color)/i.test(value) || /^[a-z]+-\d{2,3}(\/\d+)?$/.test(value) || ["white", "black", "transparent", "current", "inherit"].includes(value);
+const colourValue = (rest: string): string | undefined => {
+  const raw = arbitrary(rest) ?? rest;
+  return isColour(raw) ? raw : undefined;
+};
 
 const READERS: ReadonlyArray<Reader> = [
   ...Object.entries(SIDES).flatMap(([side, sides]) => [
@@ -87,33 +91,9 @@ const READERS: ReadonlyArray<Reader> = [
     },
   },
   { prefix: "text", sets: ["text-align"], kind: "align", value: (rest) => (ALIGN.includes(rest) ? rest : undefined) },
-  {
-    prefix: "text",
-    sets: ["color"],
-    kind: "color",
-    value: (rest) => {
-      const raw = arbitrary(rest) ?? rest;
-      return isColour(raw) ? raw : undefined;
-    },
-  },
-  {
-    prefix: "bg",
-    sets: ["background-color"],
-    kind: "color",
-    value: (rest) => {
-      const raw = arbitrary(rest) ?? rest;
-      return isColour(raw) ? raw : undefined;
-    },
-  },
-  {
-    prefix: "border",
-    sets: ["border-color"],
-    kind: "color",
-    value: (rest) => {
-      const raw = arbitrary(rest) ?? rest;
-      return isColour(raw) ? raw : undefined;
-    },
-  },
+  { prefix: "text", sets: ["color"], kind: "color", value: colourValue },
+  { prefix: "bg", sets: ["background-color"], kind: "color", value: colourValue },
+  { prefix: "border", sets: ["border-color"], kind: "color", value: colourValue },
   {
     prefix: "font",
     sets: ["font-weight"],
