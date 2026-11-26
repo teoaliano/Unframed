@@ -1,6 +1,6 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { Instance, ScreenSnapshot } from "@unframed/contracts";
+import type { Instance, ScreenCapturePart, ScreenSnapshot } from "@unframed/contracts";
 import { partExtension, pictureFileName, resolvePictureParts, screenSignature, screenSnapshotName, screenUrl, STEP_TIMEOUT_MS, stateRoute } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import type { Page } from "puppeteer-core";
@@ -29,17 +29,11 @@ export interface ScreenJob {
   readonly steps?: number | undefined;
 }
 
-export interface PagePart {
-  readonly url: string;
-  readonly type: string;
-  readonly data: string | null;
-}
-
 export interface PageCopy {
   readonly html: string;
   readonly w: number;
   readonly h: number;
-  readonly parts: ReadonlyArray<PagePart>;
+  readonly parts: ReadonlyArray<ScreenCapturePart>;
 }
 
 export interface ScreenCapture extends PictureRasters {

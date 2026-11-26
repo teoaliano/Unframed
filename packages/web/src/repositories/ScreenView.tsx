@@ -1,4 +1,4 @@
-import type { ScreenShapeProps } from "@unframed/contracts";
+import type { ScreenCapturePart, ScreenShapeProps } from "@unframed/contracts";
 import { describeStep, fixStateInstruction, followNavigation, NO_STATE_BRIDGE, previewHostFor, screenOverlay, screenUrl, stateRoute, stepFailure, type DialsAnnouncement, type SetupChatState } from "@unframed/domain";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useValue } from "tldraw";
@@ -40,7 +40,7 @@ export interface PageSnapshotMessage {
   readonly html: string;
   readonly w: number;
   readonly h: number;
-  readonly parts: ReadonlyArray<{ readonly url: string; readonly type: string; readonly data: string | null }>;
+  readonly parts: ReadonlyArray<ScreenCapturePart>;
 }
 
 export type FramePost = (message: unknown) => void;
