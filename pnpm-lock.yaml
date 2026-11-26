@@ -51,6 +51,9 @@ importers:
 
   packages/domain:
     dependencies:
+      '@babel/parser':
+        specifier: 7.29.9
+        version: 7.29.9
       '@hyperframes/parsers':
         specifier: 0.8.206
         version: 0.8.206

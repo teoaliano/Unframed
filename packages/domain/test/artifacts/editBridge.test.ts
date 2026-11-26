@@ -120,7 +120,7 @@ class FakeDocument {
 
 const ORIGIN = "http://localhost:18787";
 
-const stubEditWindow = (options: { peer?: string; timelines?: unknown; loading?: boolean; stamp?: boolean } = {}) => {
+const stubEditWindow = (options: { peer?: string; timelines?: unknown; loading?: boolean; stamp?: boolean; source?: unknown } = {}) => {
   const posted: Array<{ message: any; targetOrigin: string }> = [];
   const errors: unknown[][] = [];
   const listeners: Listener[] = [];
@@ -159,6 +159,7 @@ const stubEditWindow = (options: { peer?: string; timelines?: unknown; loading?:
     clearTimeout: (timer: number) => timers.delete(timer),
     ...(options.peer === undefined ? {} : { unframedEditPeer: options.peer }),
     ...(options.timelines === undefined ? {} : { __timelines: options.timelines }),
+    ...(options.source === undefined ? {} : { __unframedSource: options.source }),
   };
   new Function("window", editBridgeSource(options.stamp === true ? { stamp: true } : {}))(win);
   const send = (data: unknown, from: { source?: unknown; origin?: string } = {}) => {
@@ -531,6 +532,60 @@ describe("the edit bridge in a Screen, which stamps the app's elements on demand
     expect(main.children.map((node: { name: string }) => node.name)).toEqual(["btn", "Cancel changes"]);
     expect(main.children.every((node: { id: string | null }) => typeof node.id === "string")).toBe(true);
     expect(title).toMatchObject({ tag: "h1", name: "title", path: "#title" });
+  });
+});
+
+describe("the edit bridge in a Screen whose app React renders", () => {
+  const reactApp = () => {
+    let main: FakeElement | undefined;
+    let save: FakeElement | undefined;
+    const source = {
+      owner: (el: FakeElement) => (el === save ? "Toolbar" : null),
+      describe: (el: FakeElement) => ({ key: "/repo/src/Toolbar.tsx:4:7", tag: el.tagName.toLowerCase(), instanceIndex: 0, instanceCount: 2 }),
+      levels: (el: FakeElement) => [
+        { el: main, component: "Toolbar" },
+        { el, component: null },
+      ],
+    };
+    const stub = stubEditWindow({ stamp: true, source });
+    main = stub.document.body.add(new FakeElement("main"));
+    save = main.add(new FakeElement("button", { text: "Save" }));
+    return { ...stub, main, save };
+  };
+
+  it("sends each pick with its component levels, stamped outermost first, and the gesture", () => {
+    const { document, save, main, mode, messages } = reactApp();
+    mode("edit");
+    document.fire("click", save, { metaKey: true, detail: 2 });
+    const pick = messages("unframed:edit:pick")[0];
+    expect(pick.levels).toEqual([
+      { id: main.getAttribute("data-hf-id"), component: "Toolbar" },
+      { id: save.getAttribute("data-hf-id"), component: null },
+    ]);
+    expect(pick).toMatchObject({ deepest: true, clicks: 2, additive: false });
+    expect(pick.element).toMatchObject({ owner: "Toolbar", source: { key: "/repo/src/Toolbar.tsx:4:7", instanceCount: 2 } });
+  });
+
+  it("leaves text editing to Enter, so a double-click only goes deeper", () => {
+    const { document, save, mode, messages } = reactApp();
+    mode("edit");
+    document.fire("dblclick", save);
+    expect(messages("unframed:edit:textStart")).toEqual([]);
+  });
+
+  it("previews text on the element's own text node, so the app's next render still lands", () => {
+    const { save, send, messages } = reactApp();
+    const node = { nodeType: 3, nodeValue: "Save" };
+    save.childNodes.splice(0, 1, node);
+    send({ type: "unframed:edit:select", ids: [] });
+    send({ type: "unframed:edit:tree" });
+    const id = save.getAttribute("data-hf-id");
+    send({ type: "unframed:edit:patch", patches: [{ type: "text", elementId: id, text: "Keep" }] });
+    expect(node.nodeValue).toBe("Keep");
+    expect(save.childNodes[0]).toBe(node);
+    send({ type: "unframed:edit:reset" });
+    expect(node.nodeValue).toBe("Save");
+    expect(messages("unframed:edit:report").length).toBeGreaterThan(0);
   });
 });
 

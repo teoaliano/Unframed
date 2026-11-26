@@ -8,15 +8,25 @@ import {
   fieldOwner,
   framePatchesOf,
   releaseDials as releaseHeldDials,
+  addDraft,
+  checkResolved,
+  withResolved,
   addScreenOverride,
+  draftOf,
+  pickTarget,
   screenOverrideOf,
   screenSourceTree,
   undoScreenOverride,
   withoutEdit,
   type EditorKind,
   type ScreenOverride,
+  type DraftChange,
+  type DraftElement,
+  type DraftScope,
+  type ResolvedElement,
   type Burst,
   type ComponentDeclaration,
+  type Measured,
   type EditBox,
   type FieldOwner,
   type Kit,
@@ -56,6 +66,21 @@ export interface EditReport {
   readonly sheetOverrides?: ReadonlyArray<SheetRuleReport>;
   readonly path?: string;
   readonly name?: string;
+  readonly className?: string | null;
+  readonly owner?: string | null;
+  readonly source?: ElementSource | null;
+}
+
+export type ResolvedSource = ResolvedElement;
+export type ElementSource = Omit<ResolvedElement, "source">;
+
+export interface MeasureTarget {
+  readonly stamp?: string;
+  readonly key?: string;
+  readonly index?: number;
+  readonly selector?: string;
+  readonly properties?: readonly string[];
+  readonly attributes?: readonly string[];
 }
 
 interface TweenPatch {
@@ -103,8 +128,7 @@ interface EditSessionInput {
   readonly kit: Kit | null;
   readonly editing: boolean;
   readonly target?: "file" | "screen";
-  readonly onOverrides?: (overrides: readonly ScreenOverride[]) => void;
-  readonly onNewDocument?: () => void;
+  readonly onUndoEmpty?: () => void;
 }
 
 export interface EditSession {
@@ -139,6 +163,14 @@ export interface EditSession {
   readonly releaseDials: (values: Readonly<Record<string, unknown>>) => void;
   readonly overridden: Readonly<Record<string, boolean>>;
   readonly overrides: readonly ScreenOverride[];
+  readonly drafts: readonly DraftChange[];
+  readonly resolved: Readonly<Record<string, ResolvedSource | null>>;
+  readonly resolve: (stamp: string, fresh?: boolean) => Promise<ResolvedSource | null>;
+  readonly measure: (targets: readonly MeasureTarget[]) => Promise<readonly Measured[]>;
+  readonly nextUpdate: (timeout: number) => Promise<boolean>;
+  readonly discardDraft: (id: string) => void;
+  readonly scopeDraft: (id: string, scope: DraftScope) => void;
+  readonly showDrafts: (shown: boolean) => void;
   readonly patch: (edit: SourceEdit) => void;
   readonly patchTween: (edit: SourceEdit, frame: TweenPatch) => void;
   readonly previewTween: (frame: TweenPatch) => void;
@@ -164,7 +196,7 @@ const sameIds = (a: readonly string[], b: readonly string[]): boolean => a.lengt
 const conflictSentence = (kind: EditorKind, reason: unknown): string =>
   reason === "agent" ? "The agent rewrote this. Your last change wasn't saved." : `This ${kind} changed somewhere else. Your last change wasn't saved.`;
 
-export const useEditSession = ({ doc, engine, project, shapeId, kind, file, locked, kit, editing, target = "file", onOverrides, onNewDocument }: EditSessionInput): EditSession => {
+export const useEditSession = ({ doc, engine, project, shapeId, kind, file, locked, kit, editing, target = "file", onUndoEmpty }: EditSessionInput): EditSession => {
   const screen = target === "screen";
   const [mode, setModeState] = useState<EditMode>(editing ? "edit" : "interact");
   const [selection, setSelectionState] = useState<readonly string[]>([]);
@@ -190,10 +222,18 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
   const [overridden, setOverridden] = useState<Readonly<Record<string, boolean>>>({});
   const [overrides, setOverridesState] = useState<readonly ScreenOverride[]>([]);
   const overridesRef = useRef<readonly ScreenOverride[]>([]);
-  const overridesTo = useRef(onOverrides);
-  overridesTo.current = onOverrides;
-  const newDocumentTo = useRef(onNewDocument);
-  newDocumentTo.current = onNewDocument;
+  const undoEmptyTo = useRef(onUndoEmpty);
+  undoEmptyTo.current = onUndoEmpty;
+  const [drafts, setDraftsState] = useState<readonly DraftChange[]>([]);
+  const draftFor = useRef(new Map<SourceEdit, DraftChange>());
+  const scopes = useRef(new Map<string, DraftScope>());
+  const [resolved, setResolved] = useState<Readonly<Record<string, ResolvedSource | null>>>({});
+  const resolvedRef = useRef<Readonly<Record<string, ResolvedSource | null>>>({});
+  const resolving = useRef(new Map<string, Promise<ResolvedSource | null>>());
+  const unanswered = useRef(new Set<string>());
+  const asks = useRef(new Map<number, (value: unknown) => void>());
+  const nextAsk = useRef(0);
+  const updateWaiters = useRef(new Set<() => void>());
   const screenTree = useMemo<SourceTree | undefined>(() => (screen ? { ready: true, elements: screenSourceTree(live, reports), offTokens: [] } : undefined), [screen, live, reports]);
   const tree = screen ? screenTree : sourceTree;
   const inFlight = useRef<Readonly<Record<string, unknown>>>({});
@@ -225,12 +265,89 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
 
   const post = useCallback((message: unknown) => postRef.current?.(message), []);
 
-  const setOverrides = (next: readonly ScreenOverride[], tell = true) => {
+  const withSource = (element: DraftElement): DraftElement => (element.source !== null ? element : withResolved(element, resolvedRef.current[element.stamp]));
+  const deriveDrafts = () => {
+    let list: DraftChange[] = [];
+    for (const override of overridesRef.current) {
+      const draft = draftFor.current.get(override.edit);
+      if (draft !== undefined) list = addDraft(list, draft);
+    }
+    setDraftsState(list.map((draft) => ({ ...draft, scope: scopes.current.get(draft.id) ?? draft.scope, element: withSource(draft.element) })));
+  };
+  const setOverrides = (next: readonly ScreenOverride[]) => {
     if (next === overridesRef.current || (next.length === 0 && overridesRef.current.length === 0)) return;
     overridesRef.current = next;
     setOverridesState(next);
     setPending(next.map((override) => override.edit));
-    if (tell) overridesTo.current?.(next);
+    deriveDrafts();
+  };
+  const ask = <T,>(message: Record<string, unknown>, timeout: number, fallback: T): Promise<T> =>
+    new Promise<T>((resolve) => {
+      nextAsk.current += 1;
+      const id = nextAsk.current;
+      const timer = window.setTimeout(() => {
+        asks.current.delete(id);
+        resolve(fallback);
+      }, timeout);
+      asks.current.set(id, (value) => {
+        window.clearTimeout(timer);
+        asks.current.delete(id);
+        resolve(value as T);
+      });
+      post({ ...message, id });
+    });
+  const resolve = (stamp: string, fresh = false): Promise<ResolvedSource | null> => {
+    if (!fresh && !unanswered.current.has(stamp)) {
+      const known = resolvedRef.current[stamp];
+      if (known !== undefined) return Promise.resolve(known);
+      const running = resolving.current.get(stamp);
+      if (running !== undefined) return running;
+    }
+    const asked: Promise<ResolvedSource | null> = ask<ResolvedSource | null | undefined>({ type: "unframed:source:resolve", target: { stamp } }, 5_000, undefined).then((answer) => {
+      if (resolving.current.get(stamp) === asked) resolving.current.delete(stamp);
+      const found = answer ?? null;
+      if (answer === undefined) unanswered.current.add(stamp);
+      else unanswered.current.delete(stamp);
+      resolvedRef.current = { ...resolvedRef.current, [stamp]: found };
+      setResolved(resolvedRef.current);
+      deriveDrafts();
+      return found;
+    });
+    resolving.current.set(stamp, asked);
+    return asked;
+  };
+  const measure = (targets: readonly MeasureTarget[]): Promise<readonly Measured[]> => ask<readonly Measured[]>({ type: "unframed:source:measure", targets }, 3_000, []);
+  const nextUpdate = (timeout: number): Promise<boolean> =>
+    new Promise<boolean>((done) => {
+      const timer = window.setTimeout(() => {
+        updateWaiters.current.delete(wake);
+        done(false);
+      }, timeout);
+      const wake = () => {
+        window.clearTimeout(timer);
+        updateWaiters.current.delete(wake);
+        done(true);
+      };
+      updateWaiters.current.add(wake);
+    });
+  const updated = () => {
+    for (const wake of [...updateWaiters.current]) wake();
+  };
+  const draftKeyOf = (edit: SourceEdit): string => (edit.type === "style" ? edit.property : edit.type === "text" ? "#text" : "display");
+  const draftElementOf = (stamp: string, known: { readonly name?: string; readonly tag: string; readonly path?: string; readonly selector: string }): DraftElement => {
+    const source = checkResolved(reportsRef.current[stamp]?.source);
+    return withSource({
+      stamp,
+      selector: known.path ?? known.selector,
+      name: known.name ?? known.tag,
+      tag: source?.tag ?? known.tag,
+      key: source?.key ?? null,
+      source: null,
+      component: source?.owner ?? null,
+      instanceIndex: source?.instanceIndex ?? 0,
+      instanceCount: source?.instanceCount ?? 1,
+      selfMapped: source?.selfMapped ?? false,
+    });
   };
   const repaint = (list: readonly ScreenOverride[]) => {
     post({ type: "unframed:edit:reset" });
@@ -389,6 +506,15 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
         const override = known === undefined ? undefined : screenOverrideOf(edit, { name: known.name ?? known.tag, path: known.path ?? known.selector });
         if (override === undefined) return;
         lastEdit.current[override.edit.elementId] = edit;
+        const report = reportsRef.current[override.edit.elementId];
+        const draft = draftOf(edit, {
+          id: `${override.edit.elementId}:${draftKeyOf(edit)}`,
+          element: draftElementOf(override.edit.elementId, known!),
+          className: report?.className ?? null,
+          computed: report?.computed ?? {},
+          text: report?.text ?? null,
+        });
+        if (draft !== undefined) draftFor.current.set(edit, draft);
         setOverrides(addScreenOverride(overridesRef.current, override));
         const patches = framePatchesOf(edit, null);
         if (showInFrame && patches.length > 0) post({ type: "unframed:edit:patch", patches });
@@ -518,8 +644,9 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
       selectionRef.current = ids;
       setSelectionState(ids);
       post({ type: "unframed:edit:select", ids });
+      if (screen) for (const id of ids) void resolve(id);
     },
-    [commit, post],
+    [commit, post, screen],
   );
 
   const setTween = useCallback(
@@ -536,7 +663,10 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
 
   const undo = () => {
     if (screen) {
-      if (overridesRef.current.length === 0) return;
+      if (overridesRef.current.length === 0) {
+        undoEmptyTo.current?.();
+        return;
+      }
       const next = undoScreenOverride(overridesRef.current);
       setOverrides(next);
       repaint(next);
@@ -569,6 +699,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
       return true;
     }
     if (modified || !editing) return false;
+    if (screen && (key === "Backspace" || key === "Delete") && selectionRef.current.length > 0) return true;
     if (key.toLowerCase() === "v") {
       setMode("edit");
       return true;
@@ -600,11 +731,15 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
         window.clearInterval(helloTimer.current);
         helloTimer.current = undefined;
         if (screen) {
+          updated();
+          resolvedRef.current = {};
+          resolving.current.clear();
+          unanswered.current.clear();
+          setResolved({});
           reportsRef.current = {};
           setReports({});
           setHovered(null);
-          setOverrides([], false);
-          newDocumentTo.current?.();
+          setOverrides([]);
           selectionRef.current = [];
           setSelectionState([]);
         }
@@ -680,12 +815,27 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
         const id = element.id;
         reportsRef.current = { ...reportsRef.current, [id]: element };
         setReports((previous) => ({ ...previous, [id]: element }));
+        if (screen && Array.isArray(message.levels)) {
+          const levels = (message.levels as Array<{ id?: unknown }>).map((level) => ({ id: typeof level.id === "string" ? level.id : null }));
+          setSelection(pickTarget({ levels, selection: selectionRef.current, clicks: typeof message.clicks === "number" ? message.clicks : 1, deepest: message.deepest === true, additive }));
+          return;
+        }
         if (additive) {
           const current = selectionRef.current;
           setSelection(current.includes(id) ? current.filter((other) => other !== id) : [...current, id]);
         } else {
           setSelection([id]);
         }
+        return;
+      }
+      case "unframed:source:resolved":
+      case "unframed:source:measured": {
+        const answer = typeof message.id === "number" ? asks.current.get(message.id) : undefined;
+        answer?.(message.type === "unframed:source:resolved" ? checkResolved(message.element) : Array.isArray(message.results) ? message.results : []);
+        return;
+      }
+      case "unframed:source:commit": {
+        updated();
         return;
       }
       case "unframed:edit:textStart": {
@@ -826,6 +976,25 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
     releaseDials,
     overridden,
     overrides,
+    drafts,
+    resolved,
+    resolve,
+    measure,
+    nextUpdate,
+    discardDraft: (id: string) => {
+      const next = overridesRef.current.filter((override) => draftFor.current.get(override.edit)?.id !== id);
+      if (next.length === overridesRef.current.length) return;
+      setOverrides(next);
+      repaint(next);
+    },
+    scopeDraft: (id: string, scope: DraftScope) => {
+      scopes.current.set(id, scope);
+      deriveDrafts();
+    },
+    showDrafts: (shown: boolean) => {
+      if (shown) repaint(overridesRef.current);
+      else post({ type: "unframed:edit:reset" });
+    },
     patch,
     patchTween,
     previewTween,
