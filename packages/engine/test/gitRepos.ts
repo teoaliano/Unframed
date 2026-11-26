@@ -76,6 +76,20 @@ const server = http.createServer((req, res) => {
       res.end("<!doctype html><html><head><title>Slow</title></head><body><h1>Slow " + url.search + "</h1></body></html>");
     }, Number(url.searchParams.get("ms") || 1000));
   }
+  if (url.pathname === "/boot") {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end([
+      "<!doctype html><html><head><title>Booting</title></head><body><p id=\\"boot\\">Booting</p><div id=\\"menu\\" role=\\"menu\\" hidden><div role=\\"menuitem\\">Settings</div></div><script>",
+      "var until = Date.now() + Number(new URLSearchParams(location.search).get('ms') || 7000);",
+      "var tick = function () {",
+      "  if (Date.now() < until) return fetch('/api/items?t=' + Date.now()).then(function () { setTimeout(tick, 150); });",
+      "  var button = document.createElement('button'); button.textContent = 'Open menu'; button.onclick = function () { document.getElementById('menu').hidden = false; };",
+      "  document.getElementById('boot').textContent = 'Booted'; document.body.appendChild(button);",
+      "};",
+      "tick();",
+      "</script></body></html>",
+    ].join(""));
+  }
   if (url.pathname === "/dials") {
     res.writeHead(200, { "content-type": "text/html" });
     return res.end("<!doctype html><html><head><title>Dials</title></head><body><h1 id=\\"title\\">Tuned</h1><script>window.unframed?.dials(\\"Look\\", { accent: \\"#ff0000\\" }, function (v) { document.getElementById(\\"title\\").dataset.accent = v.accent; }, { accent: \\"The heading colour\\" });</script></body></html>");

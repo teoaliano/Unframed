@@ -74,3 +74,16 @@ test("a Screen selected while others wait loads next", async ({ page }) => {
     expect(seen.filter((id) => SLOW.includes(id))[1]).toBe(farthest);
   });
 });
+
+const OPEN_MENU = { state: "the menu open", steps: [{ action: "click", target: { role: "button", name: "Open menu" } }] };
+
+test("an app that boots for seven seconds, busy on the network, still reaches its state", async ({ page }) => {
+  await withRepository(page, {}, async (engine, project) => {
+    const [first] = await screenShapes(engine, project);
+    await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/boot?ms=7000", w: 640, h: 480, ...OPEN_MENU } }]);
+    const frame = page.frameLocator(`[data-shape-id="${first.id}"] iframe[data-screen-frame]`);
+    await expect(frame.locator("#boot")).toHaveText("Booted", { timeout: 30_000 });
+    await expect(frame.getByRole("menuitem", { name: "Settings" })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("screen-state-failed")).toHaveCount(0);
+  });
+});
