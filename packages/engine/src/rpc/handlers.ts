@@ -171,7 +171,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
           return state === undefined ? Effect.succeed({ token: null as string | null }) : Effect.map(instances.stateToken(project, instance, state), (token): { token: string | null } => ({ token }));
         }),
       "screens.inspect": ({ project, instance, file, line, col, tag }) =>
-        featureOn("repositories", () => directEdits.inspect({ project, instance, file, line, col, ...(tag === undefined ? {} : { tag }) })),
+        featureOn("repositories", () => directEdits.inspect({ project, instance, file, line, col, tag })),
       "screens.apply": ({ project, instance, changes }) => featureOn("repositories", () => directEdits.apply({ project, instance, changes })),
       "screens.revert": ({ project, apply }) => featureOn("repositories", () => directEdits.revert({ project, apply })),
       "repositories.setup": ({ project }) => featureOn("repositories", () => Effect.map(agents.openSetup(project), (chatId) => ({ chatId }))),

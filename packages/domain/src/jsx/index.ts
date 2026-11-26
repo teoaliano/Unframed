@@ -13,7 +13,7 @@ export interface JsxChange {
 export interface JsxPlace {
   readonly line: number;
   readonly col: number;
-  readonly tag?: string;
+  readonly tag?: string | undefined;
 }
 
 export interface SpanEdit {

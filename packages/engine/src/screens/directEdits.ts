@@ -40,13 +40,13 @@ export const findInWorktree = async (worktree: string, reported: string): Promis
 export const makeDirectEdits = (worktreeOf: (project: string, instance: string) => Effect.Effect<string, UnframedError>) => {
   const applied = new Map<string, Applied>();
 
-  const inspect = (input: { project: string; instance: string; file: string; line: number; col: number; tag?: string }): Effect.Effect<ScreenJsx, UnframedError> =>
+  const inspect = (input: { project: string; instance: string; file: string; line: number; col: number; tag?: string | undefined }): Effect.Effect<ScreenJsx, UnframedError> =>
     Effect.gen(function* () {
       const worktree = yield* worktreeOf(input.project, input.instance);
       const file = yield* Effect.promise(() => findInWorktree(worktree, input.file));
       if (file === undefined) return yield* unframedError("not_found", NOT_IN_WORKTREE(input.file));
       const source = yield* Effect.promise(() => readFile(join(worktree, file), "utf8"));
-      const found = inspectJsx(source, file, { line: input.line, col: input.col, ...(input.tag === undefined ? {} : { tag: input.tag }) });
+      const found = inspectJsx(source, file, { line: input.line, col: input.col, tag: input.tag });
       if (found === undefined) return yield* unframedError("not_found", `No JSX element starts at ${file}:${input.line}:${input.col}.`);
       return { file, ...found };
     });
@@ -64,7 +64,7 @@ export const makeDirectEdits = (worktreeOf: (project: string, instance: string) 
           continue;
         }
         const source = texts.get(file) ?? (yield* Effect.promise(() => readFile(join(worktree, file), "utf8")));
-        const result = writeJsx(source, file, { line: change.line, col: change.col, ...(change.tag === undefined ? {} : { tag: change.tag }) }, change);
+        const result = writeJsx(source, file, { line: change.line, col: change.col, tag: change.tag }, change);
         if (!result.ok) {
           results.push({ id: change.id, written: false, reason: result.reason, file, line: change.line });
           continue;
