@@ -9,8 +9,6 @@ import type { StoreOwner } from "../canvas/doc.ts";
 import { forgetFrame, hearFrame, reachFrame } from "../artifacts/state.ts";
 import { messageOf, useChatClient, useChats } from "../agent/store.ts";
 import { useEngine } from "../context.ts";
-import { isDeviceClient } from "../deviceMode.ts";
-import { useFeature } from "../features.ts";
 import { countScreens } from "../fps/screens.ts";
 import { screenPropsOf } from "./BranchChip.tsx";
 import { useAskAgent } from "./askAgent.ts";
@@ -83,10 +81,10 @@ const LiveScreen = ({ owner, shapeId, url, dials, interactive, parked, events, e
   };
   useEffect(() => {
     reachFrame(owner, shapeId, (values) => post({ type: "unframed:dials:set", values }));
-    editing.current?.onEditReady(post);
+    if (ready.current) post({ type: "unframed:dials:hello" });
     posting.current?.(post);
     const onMessage = (event: MessageEvent) => {
-      if (event.source !== frame.current?.contentWindow) return;
+      if (event.source !== frame.current?.contentWindow || event.origin !== target) return;
       const data = event.data as { type?: unknown; route?: unknown; state?: unknown; replaying?: unknown; ok?: unknown; step?: unknown; reason?: unknown } | null;
       if (typeof data !== "object" || data === null) return;
       if (typeof data.type === "string" && data.type.startsWith("unframed:edit:")) {
@@ -106,8 +104,7 @@ const LiveScreen = ({ owner, shapeId, url, dials, interactive, parked, events, e
         const posted = data as { snapshot?: unknown; final?: unknown };
         const snapshot = typeof posted.snapshot === "object" && posted.snapshot !== null ? (posted.snapshot as PageSnapshotMessage) : null;
         if (snapshot !== null || posted.final === true) handlers.current.onSnapshot(snapshot, posted.final === true);
-      }
-      else if (data.type === "unframed:dials") {
+      } else if (data.type === "unframed:dials") {
         if (nonEmpty(saved.current)) post({ type: "unframed:dials:set", values: saved.current });
         hearFrame(owner, shapeId, data as DialsAnnouncement);
       }
@@ -119,6 +116,16 @@ const LiveScreen = ({ owner, shapeId, url, dials, interactive, parked, events, e
       posting.current?.(undefined);
     };
   }, [owner, shapeId, target]);
+  const editReady = edit?.onEditReady;
+  useEffect(() => {
+    if (editReady === undefined) return;
+    editReady(post);
+    post({ type: "unframed:edit:hello" });
+    return () => {
+      post({ type: "unframed:edit:mode", mode: "interact", locked: [] });
+      post({ type: "unframed:edit:reset" });
+    };
+  }, [editReady]);
   const serialised = JSON.stringify(dials ?? null);
   useEffect(() => {
     if (nonEmpty(dials)) post({ type: "unframed:dials:set", values: dials });
@@ -157,7 +164,7 @@ const useSetupChat = (project: string): SetupChatState | undefined => {
   return chat.status === "running" ? "running" : "idle";
 };
 
-const Overlay = ({ project, instance }: { readonly project: string; readonly instance: string }) => {
+export const ScreenOverlay = ({ project, instance }: { readonly project: string; readonly instance: string }) => {
   const state = repositoryState(project);
   const setupChat = useSetupChat(project);
   const overlay = useValue(
@@ -184,43 +191,54 @@ const Overlay = ({ project, instance }: { readonly project: string; readonly ins
   );
 };
 
-const StateNote = ({ note }: { readonly note: string | undefined }) =>
-  note === undefined ? null : (
-    <div className="pointer-events-none absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1">
-      <Badge size="sm" variant="warning" className="min-w-0 shrink" data-testid="screen-state-note">
-        <span className="truncate">{note}</span>
-      </Badge>
-    </div>
-  );
+export interface FrameStatus {
+  readonly live: boolean;
+  readonly painted: boolean;
+}
 
-export interface ScreenViewInput {
+interface ScreenFrameInput {
   readonly owner: StoreOwner;
   readonly project: string;
   readonly shapeId: string;
   readonly props: ScreenShapeProps;
-  readonly mounted: boolean;
-  readonly parked?: boolean | undefined;
   readonly interactive: boolean;
   readonly write: (next: ScreenShapeProps) => boolean;
   readonly edit?: ScreenEditHooks | undefined;
-  readonly onReady?: (() => void) | undefined;
-  readonly onSnapshot?: ((snapshot: PageSnapshotMessage | null, final: boolean) => void) | undefined;
-  readonly onPost?: ((post: FramePost | undefined) => void) | undefined;
+  readonly parked: boolean;
+  readonly onReady: () => void;
+  readonly onSnapshot: (snapshot: PageSnapshotMessage | null, final: boolean) => void;
+  readonly onPost: (post: FramePost | undefined) => void;
 }
 
-export interface ScreenView {
-  readonly content: ReactNode;
-  readonly frame: ReactNode;
-  readonly overlays: ReactNode;
-  readonly painted: boolean;
-  readonly live: boolean;
-  readonly branch: string;
-}
+export const useScreenBranch = (project: string, props: ScreenShapeProps): string => {
+  const state = repositoryState(project);
+  return useValue("screen branch", () => state.instances.get().get(props.instance)?.branch ?? props.title, [state, props.instance, props.title]);
+};
 
-export const useScreenView = ({ owner, project, shapeId, props, mounted, parked = false, interactive, write, edit, onReady, onSnapshot, onPost }: ScreenViewInput): ScreenView => {
-  const engine = useEngine();
+const FixButton = ({ shapeId, instruction }: { readonly shapeId: string; readonly instruction: () => string | undefined }) => {
   const ask = useAskAgent();
-  const repositories = useFeature("repositories");
+  const [asking, setAsking] = useState<string | undefined>(undefined);
+  const fix = () => {
+    const text = instruction();
+    if (text === undefined) return;
+    setAsking(undefined);
+    ask(shapeId as Parameters<typeof ask>[0], text).then(
+      () => setAsking("Sent to the agent."),
+      (error: unknown) => setAsking(messageOf(error)),
+    );
+  };
+  return (
+    <>
+      <Button size="sm" className="pointer-events-auto" onPointerDown={(event) => event.stopPropagation()} onClick={fix}>
+        Ask the agent to fix it
+      </Button>
+      {asking !== undefined && <span data-testid="screen-state-asked">{asking}</span>}
+    </>
+  );
+};
+
+export const useScreenFrame = ({ owner, project, shapeId, props, interactive, write, edit, parked, onReady, onSnapshot, onPost }: ScreenFrameInput): { readonly content: ReactNode; readonly failure: ReactNode; readonly status: FrameStatus } => {
+  const engine = useEngine();
   const state = repositoryState(project);
   const proxyPort = useValue(
     "screen proxy",
@@ -230,9 +248,8 @@ export const useScreenView = ({ owner, project, shapeId, props, mounted, parked 
     },
     [state, props.instance],
   );
-  const branch = useValue("screen branch", () => state.instances.get().get(props.instance)?.branch ?? props.title, [state, props.instance, props.title]);
-  const live = repositories && !isDeviceClient() && mounted && proxyPort !== null;
-  const bridge = useValue("screen bridge", () => state.bridges.get().get(shapeId), [state, shapeId]);
+  const branch = useScreenBranch(project, props);
+  const live = proxyPort !== null;
   const stateKey = JSON.stringify([props.steps ?? [], props.mocks ?? []]);
   const holdsState = stateKey !== NO_STATE_KEY;
   const shown = useRef<{ readonly route: string; readonly stateKey: string; readonly port: number; readonly reloads: number } | undefined>(undefined);
@@ -245,7 +262,6 @@ export const useScreenView = ({ owner, project, shapeId, props, mounted, parked 
     retried.current = false;
   }, [props.route, stateKey]);
   const [failure, setFailure] = useState<{ readonly step: number; readonly reason: string } | undefined>(undefined);
-  const [asking, setAsking] = useState<string | undefined>(undefined);
   const [painted, setPainted] = useState<string | undefined>(undefined);
   useEffect(() => {
     if (!live || proxyPort === null) {
@@ -285,9 +301,9 @@ export const useScreenView = ({ owner, project, shapeId, props, mounted, parked 
   const events: FrameEvents = {
     onPainted: () => {
       setPainted(load?.url);
-      onReady?.();
+      onReady();
     },
-    onSnapshot: (snapshot, final) => onSnapshot?.(snapshot, final),
+    onSnapshot,
     onBridge: (bridged) => {
       noteBridge(project, shapeId, bridged);
     },
@@ -319,10 +335,10 @@ export const useScreenView = ({ owner, project, shapeId, props, mounted, parked 
       }
     },
   };
-  const fix = () => {
+  const instruction = () => {
     const step = failure === undefined ? undefined : props.steps?.[failure.step];
-    if (failure === undefined || step === undefined) return;
-    const instruction = fixStateInstruction({
+    if (failure === undefined || step === undefined) return undefined;
+    return fixStateInstruction({
       shape: shapeId.replace(/^shape:/, ""),
       branch,
       state: props.state?.trim() || props.route,
@@ -333,40 +349,41 @@ export const useScreenView = ({ owner, project, shapeId, props, mounted, parked 
       step: describeStep(step),
       reason: failure.reason,
     });
-    setAsking(undefined);
-    ask(shapeId as Parameters<typeof ask>[0], instruction).then(
-      () => setAsking("Sent to the agent."),
-      (error: unknown) => setAsking(messageOf(error)),
-    );
   };
   const url = live ? load?.url : undefined;
   const shownPainted = live && url !== undefined && painted === url;
-  const frame = live && url !== undefined ? <LiveScreen key={load?.n} owner={owner} shapeId={shapeId} url={url} dials={props.dials} interactive={interactive} parked={parked} events={events} edit={edit} onPost={onPost} /> : null;
-  const overlays = (
+  const content = live && url !== undefined && <LiveScreen key={load?.n} owner={owner} shapeId={shapeId} url={url} dials={props.dials} interactive={interactive} parked={parked} events={events} edit={edit} onPost={onPost} />;
+  const failed = live && failure !== undefined && (
+    <div
+      className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-(--artifact-card-surface) p-6 text-center font-sans text-sm text-(--artifact-card-foreground)"
+      data-testid="screen-state-failed"
+    >
+      <span className="font-medium text-(--artifact-card-title)">Couldn't reach this state</span>
+      <span data-testid="screen-state-failed-step">{stepFailure(props.steps ?? [], failure.step, failure.reason)}</span>
+      <FixButton shapeId={shapeId} instruction={instruction} />
+    </div>
+  );
+  return { content, failure: failed, status: { live, painted: shownPainted && failure === undefined } };
+};
+
+export const ScreenStateNote = ({ project, shapeId, live }: { readonly project: string; readonly shapeId: string; readonly live: boolean }) => {
+  const bridge = useValue("screen bridge", () => repositoryState(project).bridges.get().get(shapeId), [project, shapeId]);
+  if (!live || bridge !== false) return null;
+  return (
+    <div className="pointer-events-none absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1">
+      <Badge size="sm" variant="warning" className="min-w-0 shrink" data-testid="screen-state-note">
+        <span className="truncate">{NO_STATE_BRIDGE}</span>
+      </Badge>
+    </div>
+  );
+};
+
+export const ScreenPlaceholder = ({ project, shapeId, props, painted }: { readonly project: string; readonly shapeId: string; readonly props: ScreenShapeProps; readonly painted: boolean }) => {
+  const branch = useScreenBranch(project, props);
+  return (
     <>
-      <Overlay project={project} instance={props.instance} />
-      {live && failure !== undefined && (
-        <div
-          className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-(--artifact-card-surface) p-6 text-center font-sans text-sm text-(--artifact-card-foreground)"
-          data-testid="screen-state-failed"
-        >
-          <span className="font-medium text-(--artifact-card-title)">Couldn't reach this state</span>
-          <span data-testid="screen-state-failed-step">{stepFailure(props.steps ?? [], failure.step, failure.reason)}</span>
-          <Button size="sm" className="pointer-events-auto" onPointerDown={(event) => event.stopPropagation()} onClick={fix}>
-            Ask the agent to fix it
-          </Button>
-          {asking !== undefined && <span data-testid="screen-state-asked">{asking}</span>}
-        </div>
-      )}
-      <StateNote note={live && bridge === false ? NO_STATE_BRIDGE : undefined} />
+      {!painted && <ScreenPicture project={project} shapeId={shapeId} props={props} branch={branch} size="full" />}
+      <ScreenOverlay project={project} instance={props.instance} />
     </>
   );
-  const content = (
-    <>
-      {frame}
-      {!shownPainted && <ScreenPicture project={project} shapeId={shapeId} props={props} branch={branch} size="full" />}
-      {overlays}
-    </>
-  );
-  return { content, frame, overlays, painted: shownPainted, live, branch };
 };

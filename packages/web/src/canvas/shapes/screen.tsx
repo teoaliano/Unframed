@@ -3,15 +3,16 @@ import { picturePartsUrl, pictureUrl, screenLabel, tierOf } from "@unframed/doma
 import { useEffect, useRef, useState } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type Editor, type RecordProps, type TLResizeInfo, type TLShape, type TLShapeId } from "tldraw";
 import { isInteractive } from "../../artifacts/state.ts";
-import { useCanvasProject, useEngine } from "../../context.ts";
+import { useCanvasProject } from "../../context.ts";
 import { useFeature } from "../../features.ts";
 import { noteRender } from "../../fps/renders.ts";
 import { mountPageCopy, preparePageCopy } from "../../repositories/pageCopy.ts";
 import { schedulePageBuild } from "../../repositories/pageBuilds.ts";
 import { pictureKeyOf, ScreenPicture } from "../../repositories/ScreenPicture.tsx";
-import { repositoryState, useRepositorySetup } from "../../repositories/store.ts";
+import { forgetScreenFrame, useScreenSlot } from "../../repositories/framePool.tsx";
+import { useRepositorySetup } from "../../repositories/store.ts";
 import { dispatchTier, tierEntry } from "../../repositories/tiers.ts";
-import { useScreenView, type FramePost, type PageSnapshotMessage } from "../../repositories/ScreenView.tsx";
+import { ScreenOverlay, useScreenBranch } from "../../repositories/ScreenView.tsx";
 import { artifactCardClass } from "./looks.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
 import { currentSlots } from "../../chrome/slots.ts";
@@ -34,8 +35,6 @@ const screenProps: RecordProps<ScreenShape> = {
   picture: T.string.optional(),
 };
 
-const CAPTURE_WAIT_MS = 8000;
-
 const PageCopy = ({ editor, project, shapeId, pictureKey, w, h }: { readonly editor: Editor; readonly project: string; readonly shapeId: TLShapeId; readonly pictureKey: string; readonly w: number; readonly h: number }) => {
   const host = useRef<HTMLDivElement>(null);
   const [built, setBuilt] = useState(false);
@@ -51,17 +50,17 @@ const PageCopy = ({ editor, project, shapeId, pictureKey, w, h }: { readonly edi
         if (cancelled) return;
         cancelBuild = schedulePageBuild(
           editor,
-          () => tierEntry(editor, shapeId)?.distance ?? Number.POSITIVE_INFINITY,
+          () => tierEntry(project, shapeId)?.distance ?? Number.POSITIVE_INFINITY,
           () => {
             if (cancelled) return;
             unmount = mountPageCopy(element, copy, { w, h });
             setBuilt(true);
-            dispatchTier(editor, { type: "pageBuilt", id: shapeId });
+            dispatchTier(project, { type: "pageBuilt", id: shapeId });
           },
         );
       },
       () => {
-        if (!cancelled) dispatchTier(editor, { type: "pageMissing", id: shapeId });
+        if (!cancelled) dispatchTier(project, { type: "pageMissing", id: shapeId });
       },
     );
     return () => {
@@ -76,23 +75,24 @@ const PageCopy = ({ editor, project, shapeId, pictureKey, w, h }: { readonly edi
 const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
   noteRender(shape.id);
   const editor = useEditor();
-  const engine = useEngine();
   const project = useCanvasProject();
   const repositories = useFeature("repositories");
   const props = shape.props as ScreenShapeProps;
   const setupWarnings = useRepositorySetup(project)?.warnings.length ?? 0;
-  const entry = useValue("screen tier", () => tierEntry(editor, shape.id), [editor, shape.id]);
+  const entry = useValue("screen tier", () => tierEntry(project, shape.id), [project, shape.id]);
   const tier = entry === undefined ? "picture" : tierOf(entry);
   const level = entry?.level ?? "small";
-  const selected = useValue("screen interactive", () => isInteractive(editor, shape.id), [editor, shape.id]);
+  const selected = useValue("screen selected", () => editor.getSelectedShapeIds().includes(shape.id), [editor, shape.id]);
+  const ready = useValue("screen interactive", () => isInteractive(editor, shape.id) && editor.getCameraState() === "idle", [editor, shape.id]);
   const [settled, setSettled] = useState(false);
   useEffect(() => {
     setSettled(false);
-    if (!selected) return;
+    if (!ready) return;
     const timer = setTimeout(() => setSettled(true), editor.options.doubleClickDurationMs);
     return () => clearTimeout(timer);
-  }, [selected, editor]);
-  const interactive = selected && settled && tier === "live";
+  }, [ready, editor]);
+  const element = useRef<HTMLDivElement>(null);
+  const canvas = useRef<Element | null>(null);
   const write = (next: ScreenShapeProps) => {
     const current = editor.getShape(shape.id);
     if (current?.type !== "screen" || !editor.getSelectedShapeIds().includes(shape.id)) return false;
@@ -100,71 +100,39 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
     editor.store.put([{ ...current, props: next } as TLShape]);
     return true;
   };
-  const post = useRef<FramePost | undefined>(undefined);
-  const sent = useRef<string | undefined>(undefined);
-  const capture = (snapshot: PageSnapshotMessage | null, final: boolean) => {
-    if (snapshot === null) {
-      dispatchTier(editor, { type: "captureFailed", id: shape.id });
-      return;
-    }
-    if (!final && snapshot.html === sent.current) return;
-    sent.current = snapshot.html;
-    const stored = engine.call("screens.capture", { project, shape: shape.id, w: snapshot.w, h: snapshot.h, html: snapshot.html, parts: [...snapshot.parts] });
-    if (!final) {
-      stored.catch(() => undefined);
-      return;
-    }
-    stored.then(
-      () => dispatchTier(editor, { type: "captured", id: shape.id }),
-      () => dispatchTier(editor, { type: "captureFailed", id: shape.id }),
-    );
-  };
-  const view = useScreenView({
+  const status = useScreenSlot(project, shape.id, {
+    element,
+    clip: () => (canvas.current ??= editor.getContainer().querySelector(".tl-canvas")),
+    upright: () => editor.getShapePageTransform(shape.id).rotation() === 0,
     owner: editor,
-    project,
-    shapeId: shape.id,
     props,
-    mounted: entry !== undefined && entry.frame !== "none",
-    parked: entry?.frame === "parked",
-    interactive,
+    interactive: ready && settled && tier === "live",
+    selected,
+    editor: false,
     write,
-    onReady: () => dispatchTier(editor, { type: "ready", id: shape.id }),
-    onSnapshot: capture,
-    onPost: (next) => {
-      post.current = next;
-    },
   });
-  const revealed = tier === "live" && view.painted;
-  const watching = revealed;
-  useEffect(() => {
-    if (view.painted) post.current?.({ type: "unframed:snapshot:watch", on: watching });
-  }, [watching, view.painted]);
-  const wantsCapture = entry?.capture === true;
-  useEffect(() => {
-    if (!wantsCapture) return;
-    const bridged = repositoryState(project).bridges.get().get(shape.id) !== false;
-    if (post.current === undefined || !bridged) {
-      dispatchTier(editor, { type: "captureFailed", id: shape.id });
-      return;
-    }
-    post.current({ type: "unframed:snapshot:take" });
-    const timer = setTimeout(() => dispatchTier(editor, { type: "captureFailed", id: shape.id }), CAPTURE_WAIT_MS);
-    return () => clearTimeout(timer);
-  }, [wantsCapture, editor, project, shape.id]);
+  useEffect(
+    () => () => {
+      if (editor.getShape(shape.id) === undefined) forgetScreenFrame(project, shape.id);
+    },
+    [editor, project, shape.id],
+  );
   const key = pictureKeyOf(props);
   const shownKey = useRef(key);
   useEffect(() => {
     if (shownKey.current === key) return;
     shownKey.current = key;
-    dispatchTier(editor, { type: "picture", id: shape.id });
-  }, [key, editor, shape.id]);
+    dispatchTier(project, { type: "picture", id: shape.id });
+  }, [key, project, shape.id]);
+  const revealed = tier === "live" && status.painted;
   const showPage = repositories && key !== undefined && level === "page" && (entry?.page === "loading" || entry?.page === "built");
   const size = level === "tiny" ? "tiny" : level === "small" ? "small" : !repositories || entry?.page === "missing" ? "full" : "small";
-  const label = screenLabel({ branch: view.branch, route: props.route, state: props.state, warnings: setupWarnings });
+  const branch = useScreenBranch(project, props);
+  const label = screenLabel({ branch, route: props.route, state: props.state, warnings: setupWarnings });
   return (
     <HTMLContainer
       id={shape.id}
-      className={`${artifactCardClass} overflow-hidden`}
+      className={artifactCardClass}
       data-testid="screen"
       data-route={props.route}
       data-state={props.state?.trim() ? props.state : undefined}
@@ -176,15 +144,17 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
       style={{ width: props.w, height: props.h }}
     >
       <ShapeLabel shapeId={shape.id} kind="screen" width={props.w} text={label} />
-      <div className="absolute inset-0 overflow-hidden" style={{ contain: "strict" }}>
-        {view.frame}
-        {!revealed && <ScreenPicture project={project} shapeId={shape.id} props={props} branch={view.branch} size={size} />}
+      <div ref={element} className="absolute inset-0 overflow-hidden" style={{ contain: "strict" }} data-screen-slot="">
+        {!revealed && <ScreenPicture project={project} shapeId={shape.id} props={props} branch={branch} size={size} />}
         {!revealed && showPage && key !== undefined && <PageCopy editor={editor} project={project} shapeId={shape.id} pictureKey={key} w={props.w} h={props.h} />}
-        {view.overlays}
+        <ScreenOverlay project={project} instance={props.instance} />
       </div>
     </HTMLContainer>
   );
 };
+
+export const keepScreensUpright = (editor: Editor): (() => void) =>
+  editor.sideEffects.registerBeforeChangeHandler("shape", (_, next) => (next.type === "screen" && next.rotation !== 0 ? { ...next, rotation: 0 } : next));
 
 export class ScreenShapeUtil extends BaseBoxShapeUtil<ScreenShape> {
   static override type = "screen" as const;
@@ -196,6 +166,10 @@ export class ScreenShapeUtil extends BaseBoxShapeUtil<ScreenShape> {
 
   override canEdit() {
     return false;
+  }
+
+  override hideRotateHandle() {
+    return true;
   }
 
   override component(shape: ScreenShape) {

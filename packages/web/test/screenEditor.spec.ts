@@ -12,7 +12,9 @@ const centreColumn = (page: Page) => editor(page).locator('[data-editor-column="
 const panels = (page: Page) => editor(page).locator('[data-editor-column="parameters"]');
 const rail = (page: Page) => editor(page).locator('[data-editor-column="rail"]');
 const preview = (page: Page) => editor(page).getByTestId("screen-preview");
-const app = (page: Page) => preview(page).frameLocator("iframe[data-screen-frame]");
+const SHOWN_FRAME = '[data-screen-of][style*="visibility: visible"] iframe[data-screen-frame]';
+const shownFrame = (page: Page) => page.locator(SHOWN_FRAME);
+const app = (page: Page) => page.frameLocator(SHOWN_FRAME);
 const editorTab = (page: Page) => page.locator("[data-slot=top-bar] [role=tab][data-variant='secondary']");
 const modeButton = (page: Page, name: "Edit" | "Interact") => centreColumn(page).getByRole("group", { name: "Mode" }).getByRole("button", { name, exact: true });
 
@@ -38,6 +40,8 @@ test("a Screen opens in the editor from its toolbar and by double-click, live th
     await expect(centreColumn(page).getByTestId("artifact-editor-kind")).toHaveText("screen");
     await expect(app(page).getByRole("heading", { name: "Fake app" })).toBeVisible({ timeout: 30_000 });
     await expect(preview(page)).toHaveAttribute("data-painted", "true");
+    const box = (await preview(page).boundingBox())!;
+    expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.tagName, { x: box.x + box.width / 2, y: box.y + box.height / 2 })).toBe("IFRAME");
     await expect(editorTab(page)).toHaveText(title);
     await expect(rail(page).getByRole("heading", { name: "Agent" })).toBeVisible();
 
@@ -45,12 +49,22 @@ test("a Screen opens in the editor from its toolbar and by double-click, live th
     await expect(editor(page)).toBeVisible({ timeout: 20_000 });
     await expect(app(page).getByRole("heading", { name: "Fake app" })).toBeVisible({ timeout: 30_000 });
 
+    await app(page).locator("body").focus();
     await page.keyboard.press("Escape");
     await expect(editor(page)).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).not.toBe("IFRAME");
     await page.keyboard.press("Escape");
     const at = await centre(shapeOnScreen(page, first.id));
+    const probe = () =>
+      page.evaluate(({ x, y, id }) => {
+        const hit = document.elementFromPoint(x, y);
+        const card = document.querySelector(`[data-shape-id="${id}"] [data-testid=screen]`);
+        const host = document.querySelector(`[data-screen-of="${id}"]`) as HTMLElement | null;
+        return JSON.stringify({ hit: hit?.tagName, hitScreenOf: hit?.closest("[data-screen-of]")?.getAttribute("data-screen-of") ?? null, hitClass: (hit as HTMLElement | null)?.className?.toString().slice(0, 80), active: document.activeElement?.tagName, interactive: host?.querySelector("iframe")?.getAttribute("data-interactive") ?? null, hostPointer: host?.style.pointerEvents, layerZ: host?.parentElement?.className, painted: card?.getAttribute("data-painted"), selected: (window as any).__selected ?? null });
+      }, { x: at.x, y: at.y, id: first.id });
+    const before = await probe();
     await page.mouse.dblclick(at.x, at.y);
-    await expect(editor(page)).toBeVisible();
+    await expect(editor(page), `before the double-click: ${before}; after: ${await probe()}`).toBeVisible();
     await expect(centreColumn(page).getByTestId("artifact-editor-title")).toHaveText(title);
   });
 });
@@ -154,7 +168,7 @@ test("a reload of the Screen drops its overrides but keeps the draft, and the ne
     await resize("48");
     await expect(promptBox(rail(page))).toContainText("- Fake app (body > h1): font-size: 48px");
 
-    await preview(page).locator("iframe[data-screen-frame]").evaluate((frame: HTMLIFrameElement) => {
+    await shownFrame(page).evaluate((frame: HTMLIFrameElement) => {
       frame.src = frame.src;
     });
     await expect(heading).not.toHaveCSS("font-size", "48px", { timeout: 30_000 });

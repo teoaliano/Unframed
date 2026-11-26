@@ -29,12 +29,12 @@ test("only the selected Screen runs live; the last ones stay parked, come back w
     await clickShape(page, a);
     await expect(screenOf(page, a)).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
     await expect(screenOf(page, a)).toHaveAttribute("data-tier", "live");
-    await page.frameLocator(`[data-shape-id="${a}"] iframe[data-screen-frame]`).locator("body").evaluate(() => ((window as any).__kept = true));
+    await page.frameLocator(`[data-screen-of="${a}"] iframe[data-screen-frame]`).locator("body").evaluate(() => ((window as any).__kept = true));
 
     await clickShape(page, b);
     await expect(screenOf(page, b)).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
     await expect(screenOf(page, a)).toHaveAttribute("data-tier", "parked");
-    await expect(screenOf(page, a).locator("iframe[data-screen-frame]")).toHaveAttribute("data-parked", "true");
+    await expect(page.locator(`[data-screen-of="${a}"] iframe[data-screen-frame]`)).toHaveAttribute("data-parked", "true");
     expect(await openFrames(page)).toBe(1);
 
     await clickShape(page, c);
@@ -44,11 +44,11 @@ test("only the selected Screen runs live; the last ones stay parked, come back w
 
     await clickShape(page, a);
     await expect(screenOf(page, a)).toHaveAttribute("data-painted", "true", { timeout: 2000 });
-    expect(await page.frameLocator(`[data-shape-id="${a}"] iframe[data-screen-frame]`).locator("body").evaluate(() => (window as any).__kept === true)).toBe(true);
+    expect(await page.frameLocator(`[data-screen-of="${a}"] iframe[data-screen-frame]`).locator("body").evaluate(() => (window as any).__kept === true)).toBe(true);
     expect(await openFrames(page)).toBe(1);
 
     const before = await screenOf(page, a).getAttribute("data-picture");
-    await page.frameLocator(`[data-shape-id="${a}"] iframe[data-screen-frame]`).locator("body").evaluate(() => {
+    await page.frameLocator(`[data-screen-of="${a}"] iframe[data-screen-frame]`).locator("body").evaluate(() => {
       document.getElementById("bar")!.textContent = "Changed in the live Screen";
     });
     await page.keyboard.press("Escape");

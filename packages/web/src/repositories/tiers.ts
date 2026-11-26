@@ -6,24 +6,41 @@ import { repositoryState } from "./store.ts";
 
 const NEAR_MARGIN = 0.5;
 
-const stores = new WeakMap<Editor, Atom<TierState>>();
+const stores = new Map<string, Atom<TierState>>();
 
-export const tiersOf = (editor: Editor): Atom<TierState> => {
-  let found = stores.get(editor);
+export const tiersOf = (project: string): Atom<TierState> => {
+  let found = stores.get(project);
   if (found === undefined) {
-    found = atom("screen tiers", emptyTiers());
-    stores.set(editor, found);
+    found = atom(`screen tiers ${project}`, emptyTiers());
+    stores.set(project, found);
   }
   return found;
 };
 
-export const dispatchTier = (editor: Editor, event: TierEvent): void => {
-  const store = tiersOf(editor);
+export const dispatchTier = (project: string, event: TierEvent): void => {
+  const store = tiersOf(project);
   const next = reduceTiers(store.get(), event);
   if (next !== store.get()) store.set(next);
 };
 
-export const tierEntry = (editor: Editor, id: TLShapeId): TierEntry | undefined => tiersOf(editor).get().entries.get(id);
+export const tierEntry = (project: string, id: string): TierEntry | undefined => tiersOf(project).get().entries.get(id);
+
+export const forgetTiers = (project: string): void => {
+  stores.get(project)?.set(emptyTiers());
+};
+
+export const holdScreen = (project: string, id: string): (() => void) => {
+  dispatchTier(project, { type: "hold", id });
+  return () => {
+    if (tiersOf(project).get().held === id) dispatchTier(project, { type: "hold", id: undefined });
+  };
+};
+
+export const watchTierVisibility = (project: string): (() => void) => {
+  const onVisibility = () => dispatchTier(project, { type: "hidden", hidden: document.visibilityState === "hidden" });
+  document.addEventListener("visibilitychange", onVisibility);
+  return () => document.removeEventListener("visibilitychange", onVisibility);
+};
 
 const pixelRatio = atom("device pixel ratio", typeof window === "undefined" ? 1 : window.devicePixelRatio || 1);
 
@@ -78,21 +95,21 @@ const nearestOf = (editor: Editor, state: TierState, instance: string): string |
 
 export const installScreenTiers = (editor: Editor, project: string, options: { readonly live: boolean }): (() => void) => {
   const stops: Array<() => void> = [watchPixelRatio()];
-  stops.push(react("screen camera", () => dispatchTier(editor, { type: "camera", moving: editor.getCameraState() === "moving" })));
+  stops.push(react("screen camera", () => dispatchTier(project, { type: "camera", moving: editor.getCameraState() === "moving" })));
   stops.push(
     react("screen view", () => {
       if (editor.getCameraState() === "moving") return;
-      dispatchTier(editor, { type: "view", screens: screenView(editor) });
+      dispatchTier(project, { type: "view", screens: screenView(editor) });
     }),
   );
-  stops.push(react("screen tier counts", () => countTiers(tiersOf(editor).get())));
+  stops.push(react("screen tier counts", () => countTiers(tiersOf(project).get())));
   if (options.live) {
     stops.push(
       react("screen activation", () => {
         const ids = editor.getSelectedShapeIds();
         const only = ids.length === 1 ? editor.getShape(ids[0]!) : undefined;
-        if (only?.type === "screen") dispatchTier(editor, { type: "activate", id: only.id });
-        else dispatchTier(editor, { type: "deactivate" });
+        if (only?.type === "screen") dispatchTier(project, { type: "activate", id: only.id });
+        else dispatchTier(project, { type: "deactivate" });
       }),
     );
     const changes = new Map<string, number>();
@@ -102,17 +119,14 @@ export const installScreenTiers = (editor: Editor, project: string, options: { r
           const before = changes.get(instance.id);
           changes.set(instance.id, instance.changes);
           if (before === undefined || before === instance.changes) continue;
-          const id = nearestOf(editor, tiersOf(editor).__unsafe__getWithoutCapture(), instance.id);
-          if (id !== undefined) dispatchTier(editor, { type: "edited", id });
+          const id = nearestOf(editor, tiersOf(project).__unsafe__getWithoutCapture(), instance.id);
+          if (id !== undefined) dispatchTier(project, { type: "edited", id });
         }
       }),
     );
-    const onVisibility = () => dispatchTier(editor, { type: "hidden", hidden: document.visibilityState === "hidden" });
-    document.addEventListener("visibilitychange", onVisibility);
-    stops.push(() => document.removeEventListener("visibilitychange", onVisibility));
   }
   return () => {
     for (const stop of stops) stop();
-    tiersOf(editor).set(emptyTiers());
+    dispatchTier(project, { type: "camera", moving: false });
   };
 };

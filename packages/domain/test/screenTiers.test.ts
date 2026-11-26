@@ -164,4 +164,25 @@ describe("reduceTiers", () => {
     const state = run([{ type: "activate", id: "new" }]);
     expect(tiers(state).new).toBe("warming");
   });
+  it("holds the editor tab's Screen live until the tab closes, whatever the selection does", () => {
+    let state = run([board(3), { type: "activate", id: "s0" }, { type: "ready", id: "s0" }, { type: "hold", id: "s1" }]);
+    expect(tiers(state)).toMatchObject({ s0: "parked", s1: "warming" });
+    state = run([{ type: "ready", id: "s1" }, { type: "deactivate" }, { type: "activate", id: "s2" }], state);
+    expect(tiers(state)).toMatchObject({ s1: "live", s2: "picture" });
+    state = run([{ type: "hold", id: undefined }, { type: "deactivate" }], state);
+    expect(tiers(state)).toMatchObject({ s0: "parked", s1: "parked", s2: "picture" });
+    expect(state.held).toBeUndefined();
+  });
+
+  it("brings a parked Screen back live at once when its editor tab opens", () => {
+    const state = run([board(2), { type: "activate", id: "s0" }, { type: "ready", id: "s0" }, { type: "deactivate" }, { type: "hold", id: "s0" }]);
+    expect(tiers(state).s0).toBe("live");
+    expect(state.parked).toEqual([]);
+  });
+
+  it("lets go of a held Screen that is removed", () => {
+    const state = run([board(2), { type: "hold", id: "s0" }, { type: "removed", ids: ["s0"] }, { type: "activate", id: "s1" }]);
+    expect(state.held).toBeUndefined();
+    expect(tiers(state).s1).toBe("warming");
+  });
 });

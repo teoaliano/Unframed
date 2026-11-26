@@ -19,7 +19,7 @@ const installDemand = (engine: EngineConnection, project: string, client: string
     void engine.call("instances.demand", { project, client, ids: key === "" ? [] : key.split(" ") }).catch(() => undefined);
   };
   const stop = react("send screen demand", () => {
-    const key = wanted();
+    const key = state.repository.get() ? wanted() : "";
     clearTimeout(timer);
     if (key === sent) return;
     timer = setTimeout(() => send(key), SEND_AFTER_MS);
@@ -41,23 +41,21 @@ const installDemand = (engine: EngineConnection, project: string, client: string
 export const installScreenDemand = (editor: Editor, engine: EngineConnection, project: string): (() => void) => {
   const state = repositoryState(project);
   const wanted = computed("demanded instances", () => {
-    if (!state.repository.get()) return "";
-    const selected = new Set<string>(editor.getSelectedShapeIds());
     const snapshots = state.snapshots.get();
-    const { entries } = tiersOf(editor).get();
+    const { entries } = tiersOf(project).get();
     const ids = new Set<string>();
     for (const shape of editor.getCurrentPageShapes()) {
       if (shape.type !== "screen") continue;
       const props = shape.props as ScreenShapeProps;
-      const entry = entries.get(shape.id);
-      const framed = entry !== undefined && entry.frame !== "none";
-      const unpictured = entry?.near === true && pictureKeyOf(props) === undefined && !snapshots.has(shape.id);
-      if (selected.has(shape.id) || framed || unpictured) ids.add(props.instance);
+      if (entries.get(shape.id)?.near === true && pictureKeyOf(props) === undefined && !snapshots.has(shape.id)) ids.add(props.instance);
     }
     return [...ids].sort().join(" ");
   });
   return installDemand(engine, project, WINDOW_CLIENT, () => wanted.get());
 };
 
+export const installFramesDemand = (engine: EngineConnection, project: string, instances: () => ReadonlyArray<string>): (() => void) =>
+  installDemand(engine, project, `${WINDOW_CLIENT}-frames`, () => [...new Set(instances())].sort().join(" "));
+
 export const installEditorDemand = (engine: EngineConnection, project: string, instance: () => string | undefined): (() => void) =>
-  installDemand(engine, project, `${WINDOW_CLIENT}-editor`, () => (repositoryState(project).repository.get() ? (instance() ?? "") : ""));
+  installDemand(engine, project, `${WINDOW_CLIENT}-editor`, () => instance() ?? "");

@@ -10,7 +10,7 @@ test("an app that boots for seven seconds, busy on the network, still reaches it
     const [first] = await screenShapes(engine, project);
     await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/boot?ms=7000", w: 640, h: 480, ...OPEN_MENU } }]);
     await clickShape(page, first.id);
-    const frame = page.frameLocator(`[data-shape-id="${first.id}"] iframe[data-screen-frame]`);
+    const frame = page.frameLocator(`[data-screen-of="${first.id}"] iframe[data-screen-frame]`);
     await expect(frame.locator("#boot")).toHaveText("Booted", { timeout: 30_000 });
     await expect(frame.getByRole("menuitem", { name: "Settings" })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId("screen-state-failed")).toHaveCount(0);
@@ -34,7 +34,7 @@ test("a state that fails once is tried again from a fresh load, and shows no fai
     });
     await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/flaky?key=once&fails=1", w: 640, h: 480, ...OPEN_MENU } }]);
     await clickShape(page, first.id);
-    const frame = page.frameLocator(`[data-shape-id="${first.id}"] iframe[data-screen-frame]`);
+    const frame = page.frameLocator(`[data-screen-of="${first.id}"] iframe[data-screen-frame]`);
     await expect(frame.getByRole("menuitem", { name: "Settings" })).toBeVisible({ timeout: 30_000 });
     await expect(frame.locator("#load")).toHaveText("Load 2");
     expect(await page.evaluate(() => (window as any).__failed)).toBe(false);

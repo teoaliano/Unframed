@@ -32,6 +32,7 @@ export type TierEvent =
   | { readonly type: "activate"; readonly id: string }
   | { readonly type: "edited"; readonly id: string }
   | { readonly type: "deactivate" }
+  | { readonly type: "hold"; readonly id: string | undefined }
   | { readonly type: "ready"; readonly id: string }
   | { readonly type: "loadFailed"; readonly id: string }
   | { readonly type: "pageBuilt"; readonly id: string }
@@ -45,6 +46,7 @@ export type TierEvent =
 export interface TierState {
   readonly entries: ReadonlyMap<string, TierEntry>;
   readonly active: string | undefined;
+  readonly held: string | undefined;
   readonly parked: ReadonlyArray<string>;
   readonly moving: boolean;
   readonly hidden: boolean;
@@ -56,7 +58,7 @@ export const pictureLevel = (width: number, dpr: number): PictureLevel => (width
 export const tierOf = (entry: TierEntry): ScreenTier =>
   entry.frame === "live" ? "live" : entry.frame === "warming" ? "warming" : entry.frame === "parked" ? "parked" : entry.page === "built" ? "snapshot" : "picture";
 
-export const emptyTiers = (): TierState => ({ entries: new Map(), active: undefined, parked: [], moving: false, hidden: false, pending: undefined });
+export const emptyTiers = (): TierState => ({ entries: new Map(), active: undefined, held: undefined, parked: [], moving: false, hidden: false, pending: undefined });
 
 const FRESH: TierEntry = { frame: "none", level: "small", near: true, distance: 0, page: "none", capture: false, failed: false };
 
@@ -66,6 +68,7 @@ const same = (a: TierEntry, b: TierEntry): boolean =>
 class Draft {
   readonly entries: Map<string, TierEntry>;
   active: string | undefined;
+  held: string | undefined;
   parked: string[];
   moving: boolean;
   hidden: boolean;
@@ -76,6 +79,7 @@ class Draft {
     this.from = from;
     this.entries = new Map(from.entries);
     this.active = from.active;
+    this.held = from.held;
     this.parked = [...from.parked];
     this.moving = from.moving;
     this.hidden = from.hidden;
@@ -96,6 +100,7 @@ class Draft {
   done(): TierState {
     const unchanged =
       this.active === this.from.active &&
+      this.held === this.from.held &&
       this.moving === this.from.moving &&
       this.hidden === this.from.hidden &&
       this.pending === this.from.pending &&
@@ -104,7 +109,7 @@ class Draft {
       this.entries.size === this.from.entries.size &&
       [...this.entries].every(([id, entry]) => this.from.entries.get(id) === entry);
     if (unchanged) return this.from;
-    return { entries: this.entries, active: this.active, parked: this.parked, moving: this.moving, hidden: this.hidden, pending: this.pending };
+    return { entries: this.entries, active: this.active, held: this.held, parked: this.parked, moving: this.moving, hidden: this.hidden, pending: this.pending };
   }
 }
 
@@ -159,6 +164,7 @@ const applyView = (draft: Draft, screens: ReadonlyArray<ViewScreen>) => {
 
 const forget = (draft: Draft, id: string) => {
   if (draft.active === id) draft.active = undefined;
+  if (draft.held === id) draft.held = undefined;
   draft.parked = draft.parked.filter((parked) => parked !== id);
   draft.entries.delete(id);
 };
@@ -196,13 +202,17 @@ export const reduceTiers = (state: TierState, event: TierEvent): TierState => {
       }
       break;
     case "activate":
-      activate(draft, event.id);
+      if (draft.held === undefined) activate(draft, event.id);
       break;
     case "edited":
       if (draft.active === undefined) activate(draft, event.id);
       break;
     case "deactivate":
-      deactivate(draft);
+      if (draft.held === undefined) deactivate(draft);
+      break;
+    case "hold":
+      draft.held = event.id;
+      if (event.id !== undefined) activate(draft, event.id);
       break;
     case "ready":
       if (draft.active === event.id && draft.get(event.id).frame === "warming") draft.set(event.id, { frame: "live" });
