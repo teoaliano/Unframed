@@ -48,7 +48,7 @@ export const makeDirectEdits = (worktreeOf: (project: string, instance: string) 
       const source = yield* Effect.promise(() => readFile(join(worktree, file), "utf8"));
       const found = inspectJsx(source, file, { line: input.line, col: input.col, ...(input.tag === undefined ? {} : { tag: input.tag }) });
       if (found === undefined) return yield* unframedError("not_found", `No JSX element starts at ${file}:${input.line}:${input.col}.`);
-      return { file, ...found, cva: found.cva.map((entry) => ({ name: entry.name, variants: entry.variants.map((variant) => ({ ...variant, options: [...variant.options] })) })) };
+      return { file, ...found };
     });
 
   const apply = (input: { project: string; instance: string; changes: ReadonlyArray<ScreenWrite> }): Effect.Effect<{ apply: string; results: ScreenWriteResult[] }, UnframedError> =>

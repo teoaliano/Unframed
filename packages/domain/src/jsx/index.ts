@@ -1,3 +1,4 @@
+import type { ScreenCva, ScreenJsx } from "@unframed/contracts";
 import { parse } from "@babel/parser";
 
 export type JsxChangeKind = "class" | "text" | "attr" | "style";
@@ -24,23 +25,7 @@ export interface SpanEdit {
 
 export type JsxWrite = { readonly ok: true; readonly text: string; readonly edits: ReadonlyArray<SpanEdit>; readonly line: number } | { readonly ok: false; readonly reason: string };
 
-export interface CvaVariants {
-  readonly name: string;
-  readonly variants: ReadonlyArray<{ readonly name: string; readonly options: ReadonlyArray<string>; readonly default: string | null }>;
-}
-
-export interface JsxInspect {
-  readonly line: number;
-  readonly col: number;
-  readonly endLine: number;
-  readonly endCol: number;
-  readonly tag: string;
-  readonly span: string;
-  readonly className: string | null;
-  readonly classLiteral: boolean;
-  readonly component: string | null;
-  readonly cva: ReadonlyArray<CvaVariants>;
-}
+export type JsxInspect = Omit<ScreenJsx, "file">;
 
 type Node = { type: string; start: number; end: number; loc: { start: { line: number; column: number }; end: { line: number; column: number } }; [key: string]: any };
 
@@ -282,8 +267,8 @@ const componentOf = (parents: ReadonlyArray<Node>): string | null => {
 
 const keyName = (key: Node): string | null => (key.type === "Identifier" ? key.name : key.type === "StringLiteral" ? key.value : key.type === "NumericLiteral" ? String(key.value) : null);
 
-const cvaOf = (ast: Node): CvaVariants[] => {
-  const found: CvaVariants[] = [];
+const cvaOf = (ast: Node): ScreenCva[] => {
+  const found: ScreenCva[] = [];
   walk(ast, (node, parents) => {
     if (node.type !== "CallExpression" || node.callee.type !== "Identifier" || node.callee.name !== "cva") return;
     const config = node.arguments[1] as Node | undefined;
