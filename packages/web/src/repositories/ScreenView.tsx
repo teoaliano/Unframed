@@ -383,13 +383,13 @@ export const ScreenStateNote = ({ project, shapeId, live }: { readonly project: 
   return <StateNote note={live && bridge === false ? NO_STATE_BRIDGE : undefined} />;
 };
 
-export const ScreenPlaceholder = ({ project, shapeId, props, status }: { readonly project: string; readonly shapeId: string; readonly props: ScreenShapeProps; readonly status: FrameStatus }) => {
+export const ScreenPlaceholder = ({ project, shapeId, props, painted }: { readonly project: string; readonly shapeId: string; readonly props: ScreenShapeProps; readonly painted: boolean }) => {
   const state = repositoryState(project);
   const snapshot = useValue("screen snapshot", () => state.snapshots.get().get(shapeId), [state, shapeId]);
   const branch = useScreenBranch(project, props);
   return (
     <>
-      {!status.painted &&
+      {!painted &&
         (snapshot !== undefined ? (
           <img className="pointer-events-none absolute inset-0 block size-full object-cover select-none" data-testid="screen-snapshot" src={screenSnapshotUrl(project, snapshot)} alt="" draggable={false} />
         ) : (

@@ -88,7 +88,7 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
     >
       <ShapeLabel shapeId={shape.id} kind="screen" width={props.w} text={label} />
       <div ref={element} className="absolute inset-0" data-screen-slot="">
-        <ScreenPlaceholder project={project} shapeId={shape.id} props={props} status={status} />
+        <ScreenPlaceholder project={project} shapeId={shape.id} props={props} painted={status.painted} />
       </div>
     </HTMLContainer>
   );

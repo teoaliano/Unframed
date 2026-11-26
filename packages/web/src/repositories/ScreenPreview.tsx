@@ -30,7 +30,7 @@ export const ScreenPreview = ({ shapeId, props, edit, overlay }: { readonly shap
   });
   return (
     <div ref={element} className="absolute inset-0 overflow-hidden" data-testid="screen-preview" data-route={props.route} data-live={status.live ? "true" : undefined} data-painted={status.painted ? "true" : undefined}>
-      <ScreenPlaceholder project={project} shapeId={shapeId} props={props} status={status} />
+      <ScreenPlaceholder project={project} shapeId={shapeId} props={props} painted={status.painted} />
     </div>
   );
 };
