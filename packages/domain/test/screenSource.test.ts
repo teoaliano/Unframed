@@ -128,7 +128,7 @@ describe("the developer-tools hook", () => {
     expect(hook.inject({ version: "19.0.0" })).toBe(1);
     expect(hook.renderers.size).toBe(1);
     hook.onCommitFiberRoot(1, {});
-    expect(posted).toContainEqual({ type: "unframed:source:commit", commits: 1 });
+    expect(posted).toContainEqual({ type: "unframed:source:commit" });
   });
 
   it("wraps a hook that is already there and still calls it", () => {

@@ -125,7 +125,6 @@ export function installSourceModule(win: any, tools: SourceTools): void {
   const SHELL = 0.9;
   const LOOPBACK = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
   const doc = win.document;
-  let commits = 0;
   let commitTimer: unknown = null;
   const post = (message: Record<string, unknown>) => {
     const peer = win.unframedEditPeer;
@@ -137,11 +136,10 @@ export function installSourceModule(win: any, tools: SourceTools): void {
     }
   };
   const committed = () => {
-    commits += 1;
     if (commitTimer !== null) return;
     commitTimer = win.setTimeout(() => {
       commitTimer = null;
-      post({ type: "unframed:source:commit", commits });
+      post({ type: "unframed:source:commit" });
     }, 50);
   };
 
@@ -419,7 +417,7 @@ export function installSourceModule(win: any, tools: SourceTools): void {
     return { found: true, computed, text: el.textContent, className: el.getAttribute("class"), attributes };
   };
 
-  win.__unframedSource = { levels, describe, resolve, owner: ownerOf, find, commits: () => commits };
+  win.__unframedSource = { levels, describe, resolve, owner: ownerOf, find };
 
   win.addEventListener("message", (event: any) => {
     if (event.source !== win.parent || !LOOPBACK.test(event.origin)) return;
@@ -432,7 +430,7 @@ export function installSourceModule(win: any, tools: SourceTools): void {
         .then((element: unknown) => post({ type: "unframed:source:resolved", id: data.id, element }));
     } else if (data.type === "unframed:source:measure") {
       const targets = Array.isArray(data.targets) ? data.targets : [];
-      post({ type: "unframed:source:measured", id: data.id, results: targets.map(measure), commits });
+      post({ type: "unframed:source:measured", id: data.id, results: targets.map(measure) });
     }
   });
 }
