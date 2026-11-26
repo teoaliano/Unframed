@@ -69,11 +69,11 @@ test("Remove branch and worktree removes the Screen's worktree and branch, warni
   });
 });
 
-const frameOf = (page: Page, shapeId?: string) => page.frameLocator(`${shapeId === undefined ? "[data-testid=screen]" : `[data-shape-id="${shapeId}"]`} iframe[data-screen-frame]`);
+const frameOf = (page: Page, shapeId?: string) => page.frameLocator(`${shapeId === undefined ? "[data-screen-of]" : `[data-screen-of="${shapeId}"]`} iframe[data-screen-frame]`);
 
 const selectScreen = async (page: Page, shapeId: string) => {
   await clickShape(page, shapeId);
-  await expect(page.locator(`[data-shape-id="${shapeId}"] iframe[data-screen-frame]`)).toHaveAttribute("data-interactive", "true");
+  await expect(page.locator(`[data-screen-of="${shapeId}"] iframe[data-screen-frame]`)).toHaveAttribute("data-interactive", "true");
 };
 
 const blurFrame = (page: Page) => page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());

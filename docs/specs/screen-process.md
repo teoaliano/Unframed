@@ -1,4 +1,4 @@
-# Screens in their own process, loaded until far away
+# Screens in their own process
 
 ## Problem
 
@@ -13,7 +13,7 @@ After Screens learned to load one at a time (`docs/specs/screen-load.md`), panni
 - **Cookies cross the site line.** In a cross-site frame Chromium drops `SameSite=Lax` and `Strict` cookies, so a login inside a Screen would not hold. The proxy rewrites every `Set-Cookie` it passes on: it removes `SameSite` and `Secure` and appends `SameSite=None; Secure`. The bridge script does the same to every cookie the page writes through `document.cookie`. Chromium accepts `Secure` cookies on `http://localhost` and `http://127.0.0.1`.
 - **Lax, kept by the proxy.** With every cookie `SameSite=None`, a page on any site could post to the dev app with its session, for example after "Open in browser". On an unsafe request (not GET, HEAD or OPTIONS) whose `Sec-Fetch-Site` is `cross-site` and whose Origin is not a loopback origin, the proxy drops every cookie except those the app last set as `SameSite=None` itself, which is what the app's own attributes would have done. A sign-in that posts back from its provider (`form_post`) keeps its state cookie. The proxy remembers those names while it runs; after a restart it drops them too until the app sets them again.
 - **Both loopback addresses.** The proxy listens on `::1` as well as `127.0.0.1`, at the same port, like the preview origin, so `localhost` reaches it whichever address the browser tries first.
-- **Loaded until far away.** A Screen loads when it comes within one viewport width of the view, as before. Once its frame is live it stays live, and its Instance stays demanded, until it is three viewport widths away. Panning back and forth and opening panels no longer reload it. A Screen that only passed near, and never went live, gets no extra reach.
+- **Loaded once.** Screens no longer unload when they go far off screen. See `docs/specs/screen-frames.md`.
 - "Open in browser" uses the same host as the Screen.
 
 ## Costs
@@ -26,6 +26,5 @@ After Screens learned to load one at a time (`docs/specs/screen-load.md`), panni
 ## Tests
 
 - Browser: a Screen loads from the other loopback host, and a login made inside it (a Lax cookie set on a redirect) holds.
-- Browser: a loaded Screen keeps its page (no reload) when the canvas narrows and when it is panned two viewport widths away and back, and unloads past three.
-- Domain: cookies are rewritten, in headers and through `document.cookie`; an unsafe cross-site request loses its cookies; `screenUrl` takes a host; `farOffscreen` takes a reach.
+- Domain: cookies are rewritten, in headers and through `document.cookie`; an unsafe cross-site request loses its cookies; `screenUrl` takes a host.
 - Engine: the proxy answers on `[::1]` at its port.

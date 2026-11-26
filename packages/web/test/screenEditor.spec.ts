@@ -12,7 +12,8 @@ const centreColumn = (page: Page) => editor(page).locator('[data-editor-column="
 const panels = (page: Page) => editor(page).locator('[data-editor-column="parameters"]');
 const rail = (page: Page) => editor(page).locator('[data-editor-column="rail"]');
 const preview = (page: Page) => editor(page).getByTestId("screen-preview");
-const app = (page: Page) => preview(page).frameLocator("iframe[data-screen-frame]");
+const shownFrame = (page: Page) => page.locator('[data-screen-of][style*="visibility: visible"] iframe[data-screen-frame]');
+const app = (page: Page) => page.frameLocator('[data-screen-of][style*="visibility: visible"] iframe[data-screen-frame]');
 const editorTab = (page: Page) => page.locator("[data-slot=top-bar] [role=tab][data-variant='secondary']");
 const modeButton = (page: Page, name: "Edit" | "Interact") => centreColumn(page).getByRole("group", { name: "Mode" }).getByRole("button", { name, exact: true });
 
@@ -154,7 +155,7 @@ test("a reload of the Screen drops its overrides but keeps the draft, and the ne
     await resize("48");
     await expect(promptBox(rail(page))).toContainText("- Fake app (body > h1): font-size: 48px");
 
-    await preview(page).locator("iframe[data-screen-frame]").evaluate((frame: HTMLIFrameElement) => {
+    await shownFrame(page).evaluate((frame: HTMLIFrameElement) => {
       frame.src = frame.src;
     });
     await expect(heading).not.toHaveCSS("font-size", "48px", { timeout: 30_000 });

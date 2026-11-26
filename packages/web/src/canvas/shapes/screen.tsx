@@ -1,14 +1,14 @@
 import type { ScreenMock, ScreenShapeProps, ScreenStep } from "@unframed/contracts";
 import { screenLabel } from "@unframed/domain";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type RecordProps, type TLResizeInfo, type TLShape } from "tldraw";
 import { isInteractive } from "../../artifacts/state.ts";
 import { useCanvasProject } from "../../context.ts";
 import { noteRender } from "../../fps/renders.ts";
-import { holdScreenLoaded, screenWanted } from "../../repositories/demand.ts";
-import { loadQueueOf, screenLoadRank } from "../../repositories/loadQueue.ts";
+import { forgetScreenFrame, useScreenSlot } from "../../repositories/framePool.tsx";
+import { screenLoadRank } from "../../repositories/loadQueue.ts";
 import { useRepositorySetup } from "../../repositories/store.ts";
-import { useScreenView } from "../../repositories/ScreenView.tsx";
+import { ScreenPlaceholder, useScreenBranch } from "../../repositories/ScreenView.tsx";
 import { artifactCardClass } from "./looks.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
 import { currentSlots } from "../../chrome/slots.ts";
@@ -36,16 +36,16 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
   const project = useCanvasProject();
   const props = shape.props as ScreenShapeProps;
   const setupWarnings = useRepositorySetup(project)?.warnings.length ?? 0;
-  const onScreen = useValue("screen on screen", () => screenWanted(editor, shape.id), [editor, shape.id]);
-  const selected = useValue("screen interactive", () => isInteractive(editor, shape.id), [editor, shape.id]);
+  const selected = useValue("screen selected", () => editor.getSelectedShapeIds().includes(shape.id), [editor, shape.id]);
+  const ready = useValue("screen interactive", () => isInteractive(editor, shape.id), [editor, shape.id]);
   const [settled, setSettled] = useState(false);
   useEffect(() => {
     setSettled(false);
-    if (!selected) return;
+    if (!ready) return;
     const timer = setTimeout(() => setSettled(true), editor.options.doubleClickDurationMs);
     return () => clearTimeout(timer);
-  }, [selected, editor]);
-  const interactive = selected && settled;
+  }, [ready, editor]);
+  const element = useRef<HTMLDivElement>(null);
   const write = (next: ScreenShapeProps) => {
     const current = editor.getShape(shape.id);
     if (current?.type !== "screen" || !editor.getSelectedShapeIds().includes(shape.id)) return false;
@@ -53,10 +53,25 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
     editor.store.put([{ ...current, props: next } as TLShape]);
     return true;
   };
-  const turn = useMemo(() => ({ queue: loadQueueOf(editor), rank: () => screenLoadRank(editor, shape.id) }), [editor, shape.id]);
-  const view = useScreenView({ owner: editor, project, shapeId: shape.id, props, onScreen, interactive, write, turn });
-  useEffect(() => (view.live ? holdScreenLoaded(editor, shape.id) : undefined), [view.live, editor, shape.id]);
-  const label = screenLabel({ branch: view.branch, route: props.route, state: props.state, warnings: setupWarnings });
+  const status = useScreenSlot(project, shape.id, {
+    element,
+    clip: () => editor.getContainer().querySelector(".tl-canvas"),
+    owner: editor,
+    props,
+    interactive: ready && settled,
+    selected,
+    editor: false,
+    write,
+    rank: () => screenLoadRank(editor, shape.id),
+  });
+  useEffect(
+    () => () => {
+      if (editor.getShape(shape.id) === undefined) forgetScreenFrame(project, shape.id);
+    },
+    [editor, project, shape.id],
+  );
+  const branch = useScreenBranch(project, props);
+  const label = screenLabel({ branch, route: props.route, state: props.state, warnings: setupWarnings });
   return (
     <HTMLContainer
       id={shape.id}
@@ -64,13 +79,15 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
       data-testid="screen"
       data-route={props.route}
       data-state={props.state?.trim() ? props.state : undefined}
-      data-live={view.live ? "true" : undefined}
-      data-queued={view.queued ? "true" : undefined}
-      data-painted={view.painted ? "true" : undefined}
+      data-live={status.live ? "true" : undefined}
+      data-queued={status.queued ? "true" : undefined}
+      data-painted={status.painted ? "true" : undefined}
       style={{ width: props.w, height: props.h }}
     >
       <ShapeLabel shapeId={shape.id} kind="screen" width={props.w} text={label} />
-      {view.content}
+      <div ref={element} className="absolute inset-0" data-screen-slot="">
+        <ScreenPlaceholder project={project} shapeId={shape.id} props={props} status={status} />
+      </div>
     </HTMLContainer>
   );
 };
