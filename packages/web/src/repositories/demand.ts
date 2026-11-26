@@ -1,7 +1,7 @@
 import type { ScreenShapeProps } from "@unframed/contracts";
+import { pictureKeyOf } from "@unframed/domain";
 import { computed, react, type Editor } from "tldraw";
 import type { EngineConnection } from "../rpc/engine.ts";
-import { pictureKeyOf } from "./ScreenPicture.tsx";
 import { repositoryState } from "./store.ts";
 import { tiersOf } from "./tiers.ts";
 

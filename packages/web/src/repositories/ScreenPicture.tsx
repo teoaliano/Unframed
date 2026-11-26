@@ -1,11 +1,9 @@
 import type { ScreenShapeProps } from "@unframed/contracts";
-import { PICTURE_KEY, pictureUrl } from "@unframed/domain";
+import { pictureKeyOf, pictureUrl } from "@unframed/domain";
 import { useValue } from "tldraw";
 import { repositoryState, screenSnapshotUrl } from "./store.ts";
 
 export type PictureSize = "tiny" | "small" | "full";
-
-export const pictureKeyOf = (props: ScreenShapeProps): string | undefined => (props.picture !== undefined && PICTURE_KEY.test(props.picture) ? props.picture : undefined);
 
 export const ScreenPicture = ({
   project,

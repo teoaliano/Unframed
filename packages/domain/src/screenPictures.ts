@@ -1,5 +1,7 @@
 export const PICTURE_KEY = /^[a-f0-9]{40}$/;
 
+export const pictureKeyOf = (props: { readonly picture?: string | undefined }): string | undefined => (props.picture !== undefined && PICTURE_KEY.test(props.picture) ? props.picture : undefined);
+
 export type PictureVariant = "w128" | "w384" | "full" | "html";
 
 export const PICTURE_POLICY = "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; font-src 'self' data:; sandbox";

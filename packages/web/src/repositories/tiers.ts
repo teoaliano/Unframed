@@ -1,8 +1,7 @@
-import { emptyTiers, pictureLevel, reduceTiers, tierOf, type PictureLevel, type ScreenTier, type TierEntry, type TierEvent, type TierState, type ViewScreen } from "@unframed/domain";
+import { emptyTiers, pictureKeyOf, pictureLevel, reduceTiers, tierOf, type PictureLevel, type ScreenTier, type TierEntry, type TierEvent, type TierState, type ViewScreen } from "@unframed/domain";
 import type { ScreenShapeProps } from "@unframed/contracts";
 import { atom, react, unsafe__withoutCapture, type Atom, type Editor, type TLShapeId } from "tldraw";
 import { setTierCounts } from "../fps/screens.ts";
-import { pictureKeyOf } from "./ScreenPicture.tsx";
 import { repositoryState } from "./store.ts";
 
 const NEAR_MARGIN = 0.5;

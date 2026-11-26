@@ -1,5 +1,5 @@
 import type { ScreenMock, ScreenShapeProps, ScreenStep } from "@unframed/contracts";
-import { picturePartsUrl, pictureUrl, screenLabel, tierOf } from "@unframed/domain";
+import { pictureKeyOf, picturePartsUrl, pictureUrl, screenLabel, tierOf } from "@unframed/domain";
 import { useEffect, useRef, useState } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type Editor, type RecordProps, type TLResizeInfo, type TLShape, type TLShapeId } from "tldraw";
 import { isInteractive } from "../../artifacts/state.ts";
@@ -8,7 +8,7 @@ import { useFeature } from "../../features.ts";
 import { noteRender } from "../../fps/renders.ts";
 import { mountPageCopy, preparePageCopy } from "../../repositories/pageCopy.ts";
 import { schedulePageBuild } from "../../repositories/pageBuilds.ts";
-import { pictureKeyOf, ScreenPicture } from "../../repositories/ScreenPicture.tsx";
+import { ScreenPicture } from "../../repositories/ScreenPicture.tsx";
 import { forgetScreenFrame, useScreenSlot } from "../../repositories/framePool.tsx";
 import { useRepositorySetup } from "../../repositories/store.ts";
 import { dispatchTier, screenLevel, tierEntry } from "../../repositories/tiers.ts";
