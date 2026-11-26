@@ -9,7 +9,6 @@ import {
   mockLogKept,
   mockModulePaths,
   mockRuntimeSource,
-  restoreIdOf,
   restorePrefix,
   restoreRoute,
   switchesOf,
@@ -73,10 +72,10 @@ describe("the restore parameter", () => {
   it("is written onto a frozen location, replacing an older one, and read back", () => {
     const route = restoreRoute("/todos?tab=2#top", ID);
     expect(route).toBe(`/todos?tab=2&__unframed_restore=${ID}#top`);
-    expect(restoreIdOf(route)).toBe(ID);
+    expect(takeUnframedParams(route).restore).toBe(ID);
     expect(restoreRoute(route, `s_${"b".repeat(32)}`)).toBe(`/todos?tab=2&__unframed_restore=s_${"b".repeat(32)}#top`);
     expect(withoutRestore(route)).toBe("/todos?tab=2#top");
-    expect(restoreIdOf("/todos")).toBeUndefined();
+    expect(takeUnframedParams("/todos").restore).toBeUndefined();
   });
 
   it("carries a frozen payload into the page as script data that cannot close the script tag", () => {

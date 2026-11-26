@@ -143,11 +143,6 @@ export const restoreRoute = (url: string, id: string): string => {
 
 export const withoutRestore = (route: string): string => cutParams(route, [RESTORE_PARAM]).path;
 
-export const restoreIdOf = (route: string): string | undefined => {
-  const value = cutParams(route, [RESTORE_PARAM]).values[RESTORE_PARAM];
-  return value !== undefined && FREEZE_ID.test(value) ? value : undefined;
-};
-
 export const mockModulePaths = (pathname: string): ReadonlyArray<string> => {
   if (pathname.indexOf("/__unframed/") === 0 || pathname.indexOf("..") !== -1) return [];
   const trimmed = pathname.replace(/^\/+/, "");
