@@ -2,6 +2,7 @@ import { dialsBridgeSource } from "./artifacts/dials.ts";
 import { editBridgeSource } from "./artifacts/editBridge.ts";
 import { crossSiteCookie } from "./instanceProxy.ts";
 import { matchMock } from "./screenStates.ts";
+import { sourceModuleSource } from "./screenSource.ts";
 
 export const STATE_PARAM = "__unframed_state";
 export const STEP_TIMEOUT_MS = 5000;
@@ -445,6 +446,7 @@ const patchDocumentCookie = (win: any, rewrite: (cookie: string) => string): voi
 
 export const screenBridgeSource = (): string =>
   [
+    sourceModuleSource(),
     `(${patchDocumentCookie.toString()})(window, ${crossSiteCookie.toString()});`,
     ...dialsBridgeSource().split("\n").slice(1, -1),
     `(${screenBridge.toString()})(window, ${JSON.stringify({ param: STATE_PARAM, stepTimeout: STEP_TIMEOUT_MS, quietIdle: QUIET_IDLE_MS, quietCap: QUIET_CAP_MS } satisfies BridgeConfig)}, ${matchMock.toString()}, ${cutParam.toString()}, ${quietWatch.toString()}, ${stepExpired.toString()});`,

@@ -247,7 +247,18 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     const text = textOnly(el) ? (el.textContent ?? "").replace(/\s+/g, " ").trim() : "";
     return el.getAttribute("id") ?? classesOf(el)[0] ?? (text === "" ? el.tagName.toLowerCase() : text.slice(0, 40));
   };
-  const screenFields = (el: EditElement): { path?: string; name?: string } => (stamp ? { path: pathOf(el), name: nameOf(el) } : {});
+  const sourceOf = (): { describe(el: EditElement): unknown; levels(el: EditElement): Array<{ el: EditElement; component: string | null }>; owner(el: EditElement): string | null } | undefined =>
+    stamp ? (win as unknown as { __unframedSource?: never }).__unframedSource : undefined;
+  const screenFields = (el: EditElement, deep = false): { path?: string; name?: string; owner?: string | null; source?: unknown } => {
+    if (!stamp) return {};
+    const source = sourceOf();
+    return { path: pathOf(el), name: nameOf(el), owner: source?.owner(el) ?? null, ...(deep && source !== undefined ? { source: source.describe(el) } : {}) };
+  };
+  const levelsOf = (el: EditElement): Array<{ id: string | null; component: string | null }> | undefined => {
+    const source = sourceOf();
+    if (source === undefined) return undefined;
+    return source.levels(el).map((level) => ({ id: validId(level.el), component: level.component }));
+  };
 
   const keyOf = (el: EditElement): string => validId(el) ?? selectorOf(el);
   const resolveKey = (key: string): EditElement | null => {
@@ -369,7 +380,7 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     return { rules: found, overrides };
   };
 
-  const reportOf = (el: EditElement) => {
+  const reportOf = (el: EditElement, deep = false) => {
     const sheet = sheetRulesOf(el);
     const style = win.getComputedStyle(el);
     const inline: Record<string, string | null> = {};
@@ -394,7 +405,7 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
       component: componentOf(el),
       sheetRules: sheet?.rules,
       sheetOverrides: sheet?.overrides,
-      ...screenFields(el),
+      ...screenFields(el, deep),
     };
   };
 
@@ -474,7 +485,7 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     const elements: Array<ReturnType<typeof reportOf>> = [];
     for (const key of selection) {
       const el = resolveKey(key);
-      if (el !== null) elements.push(reportOf(el));
+      if (el !== null) elements.push(reportOf(el, true));
     }
     post({ type: "unframed:edit:report", elements, families: familiesOf() });
     last = {};
@@ -502,11 +513,17 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     const el = hoverTarget(targetOf(event));
     if (el !== null && isCopy(el)) picked.set(validId(el)!, el);
     if (win.focus) win.focus();
-    post({ type: "unframed:edit:pick", element: el === null ? null : reportOf(el), additive: event.shiftKey === true });
+    const levels = el === null || isCopy(el) ? undefined : levelsOf(el);
+    post({
+      type: "unframed:edit:pick",
+      element: el === null ? null : reportOf(el, true),
+      additive: event.shiftKey === true,
+      ...(levels === undefined ? {} : { levels, deepest: event.metaKey === true || event.ctrlKey === true, clicks: typeof (event as { detail?: unknown }).detail === "number" ? (event as unknown as { detail: number }).detail : 1 }),
+    });
   };
 
   const onDoubleClick = (event: EditEvent) => {
-    if (!listening || editing !== null) return;
+    if (!listening || editing !== null || sourceOf() !== undefined) return;
     const el = hoverTarget(event.target);
     const id = el === null ? null : validId(el);
     if (el === null || id === null || !textOnly(el)) return;
@@ -989,13 +1006,17 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
       const overridden = value !== null && overriddenBy(el, property, value, before);
       flags.set(el, flags.get(el) === true || overridden);
     } else if (patch.type === "text" && typeof patch.text === "string") {
+      const nodes = Array.from(el.childNodes) as unknown as Array<{ nodeType: number; nodeValue: string | null }>;
+      const only = stamp && nodes.length === 1 && nodes[0]!.nodeType === 3 ? nodes[0]! : null;
       touch(el, "text", () => {
-        const value = el.textContent;
+        const value = only === null ? el.textContent : only.nodeValue;
         return () => {
-          el.textContent = value;
+          if (only === null) el.textContent = value;
+          else only.nodeValue = value;
         };
       });
-      el.textContent = patch.text;
+      if (only === null) el.textContent = patch.text;
+      else only.nodeValue = patch.text;
       flags.set(el, flags.get(el) === true);
     } else if (patch.type === "hide" && typeof patch.hidden === "boolean") {
       if (patch.hidden) {
