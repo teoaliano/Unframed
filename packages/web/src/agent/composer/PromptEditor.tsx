@@ -4,7 +4,7 @@ import { closeHistory } from "@tiptap/pm/history";
 import { Selection } from "@tiptap/pm/state";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 
 /** The draft's text with chips as placeholders: two drafts that read the same have their positions in the same places. */
 const docText = (doc: { readonly content: { readonly size: number }; textBetween: (from: number, to: number, block?: string, leaf?: string) => string }) =>
@@ -199,6 +199,9 @@ export interface PromptEditorProps {
   readonly autofocus?: boolean;
   /** A resting composer's prompt: one line, clipped. */
   readonly resting?: boolean;
+  /** The floating composer's prompt: one line while it holds one, the placeholder cut with an ellipsis; more lines grow it. */
+  readonly oneLine?: boolean;
+  readonly inline?: boolean;
   /** The draft the box opens with. */
   readonly initialText?: string;
 }
@@ -208,10 +211,14 @@ export interface PromptEditorProps {
  * formatting off, so typed markdown stays literal, and one paragraph per line. Shift+Enter,
  * Option+Enter and any Enter the composer does not send with break the line.
  */
-export const PromptEditor = ({ placeholder, label, onChange, onFocus, onBlur, onTrigger, onKey, onPaste, handle, disabled, autofocus, initialText, resting = false }: PromptEditorProps) => {
+export const PromptEditor = ({ placeholder, label, onChange, onFocus, onBlur, onTrigger, onKey, onPaste, handle, disabled, autofocus, initialText, resting = false, inline = false, oneLine = false }: PromptEditorProps) => {
   const latest = useRef({ onChange, onFocus, onBlur, onTrigger, onKey, onPaste });
   latest.current = { onChange, onFocus, onBlur, onTrigger, onKey, onPaste };
   const placeholderRef = useRef(placeholder);
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    if (oneLine) setScrolled(false);
+  }, [oneLine]);
   placeholderRef.current = placeholder;
   const editor = useEditor({
     extensions: [
@@ -389,9 +396,16 @@ export const PromptEditor = ({ placeholder, label, onChange, onFocus, onBlur, on
       className={
         resting
           ? "relative h-8 min-w-0 flex-1 overflow-hidden text-sm [&_.ProseMirror]:min-h-8 [&_.ProseMirror]:overflow-hidden [&_.ProseMirror]:leading-8 [&_.ProseMirror]:whitespace-pre"
-          : "relative max-h-45 overflow-y-auto text-sm"
+          : inline && oneLine
+            ? "relative h-8 min-w-0 overflow-hidden text-sm [&_.ProseMirror]:min-h-8 [&_.ProseMirror]:overflow-hidden [&_.ProseMirror]:leading-8 [&_.ProseMirror]:whitespace-pre"
+            : inline
+              ? "relative max-h-45 min-w-0 overflow-y-auto py-1 text-sm data-scrolled:mask-t-from-[calc(100%-(--spacing(4)))] [&_.ProseMirror]:min-h-6"
+              : "relative max-h-45 overflow-y-auto text-sm"
       }
-      data-scrolls={resting ? undefined : "true"}
+      data-scrolls={resting || (inline && oneLine) ? undefined : "true"}
+      data-one-line={inline && oneLine ? "" : undefined}
+      data-scrolled={inline && !oneLine && scrolled ? "" : undefined}
+      onScroll={inline ? (event) => setScrolled(event.currentTarget.scrollTop > 0) : undefined}
     >
       <EditorContent editor={editor} />
     </div>

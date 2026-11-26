@@ -239,7 +239,7 @@
 }
 
 /* Unframed: with the chat rail docked open, bottom-left toasts start past it, so they never cover the composer. */
-body:has(aside[aria-label="Agent"][data-state="open"]:not([data-embedded])) [data-slot="toast-viewport"][data-position*="left"] {
+body:has(aside[data-slot="docked-rail"][data-state="open"]) [data-slot="toast-viewport"][data-position*="left"] {
   left: calc(var(--agent-rail-width) + var(--toast-inset));
 }
 

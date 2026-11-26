@@ -144,9 +144,26 @@ export const Transcript = ({ client, chatId, embedded, onLocate, onOpenEditor }:
     }
     anchored.current = lastUser;
   });
+  const hasChat = chat !== undefined;
+  const seenHeight = useRef(0);
+  useEffect(() => {
+    const element = scroller.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => {
+      seenHeight.current = element.clientHeight;
+      if (following.current) element.scrollTop = element.scrollHeight;
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [hasChat]);
   const onScroll = () => {
     const element = scroller.current;
     if (!element) return;
+    if (following.current && seenHeight.current !== 0 && element.clientHeight !== seenHeight.current) {
+      seenHeight.current = element.clientHeight;
+      element.scrollTop = element.scrollHeight;
+      return;
+    }
     following.current = element.scrollHeight - element.scrollTop - element.clientHeight <= 40;
     setPill(!following.current);
   };

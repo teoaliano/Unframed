@@ -29,6 +29,14 @@
   pointer-events: none;
 }
 
+[data-one-line] [data-agent-prompt] p.is-editor-empty:first-child::before {
+  height: auto;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 [data-agent-prompt] .ProseMirror-selectednode {
   outline: 2px solid var(--composer-selected-node-ring);
   outline-offset: 1px;

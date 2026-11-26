@@ -13,6 +13,7 @@ import { useNarrowWindow } from "../chrome/narrowWindow.ts";
 import { Tip } from "../chrome/ui.tsx";
 import { useEngine } from "../context.ts";
 import { ParametersContent } from "./editor/Parameters.tsx";
+import { canvasRoom, placeBeside } from "../generate/floating.ts";
 import { useFloatingPlacement } from "./panelPlacement.ts";
 import { usePanelPrefs } from "./panelPrefs.ts";
 import { artifactsOf } from "./state.ts";
@@ -61,7 +62,13 @@ export const ParametersPanel = ({ shapeId }: { readonly shapeId: TLShapeId }) =>
   const announcement = useValue("tuned announcement", () => artifactsOf(editor).heard.get().get(shapeId), [editor, shapeId]);
   const close = () => artifactsOf(editor).tuning.set(undefined);
   const shown: Shown | undefined = prefs === undefined ? undefined : prefs.mode === "float" ? "float" : narrow ? "sheet" : "dock";
-  const placement = useFloatingPlacement({ editor, element, shapeId, floating: shown === "float", prefs, save: savePrefs });
+  const firstPlace = (size: { readonly w: number; readonly h: number }) => {
+    const bounds = editor.getShapePageBounds(shapeId);
+    const topLeft = bounds ? editor.pageToViewport({ x: bounds.minX, y: bounds.minY }) : { x: 0, y: 0 };
+    const bottomRight = bounds ? editor.pageToViewport({ x: bounds.maxX, y: bounds.maxY }) : { x: 0, y: 0 };
+    return placeBeside({ x: topLeft.x, y: topLeft.y, w: bottomRight.x - topLeft.x, h: bottomRight.y - topLeft.y }, size, canvasRoom(editor));
+  };
+  const placement = useFloatingPlacement({ editor, element, firstPlace, floating: shown === "float", prefs, save: savePrefs });
   useDrawerWidth(DOCK_WIDTH_VAR, prefs?.dockW);
   const live = useRef({ close, placement });
   live.current = { close, placement };

@@ -1,5 +1,5 @@
 import { UnframedError, type ProviderStatuses, type Settings, type SettingsPatch } from "@unframed/contracts";
-import { ELEVENLABS_KEY, elevenLabsStatusCopy, GENERATION_PROVIDERS, VERCEL_KEY_SAVED_MESSAGE, vercelCreditsCopy, keyStatusCopy, OPENROUTER_KEY, sendShortcutOf, VERCEL_KEY, type SendShortcut } from "@unframed/domain";
+import { chatLayoutOf, ELEVENLABS_KEY, elevenLabsStatusCopy, GENERATION_PROVIDERS, VERCEL_KEY_SAVED_MESSAGE, vercelCreditsCopy, keyStatusCopy, OPENROUTER_KEY, sendShortcutOf, VERCEL_KEY, type ChatLayout, type SendShortcut } from "@unframed/domain";
 import { Bot, CircleAlert, CircleCheck, FolderOpen, Plug, SlidersHorizontal, Sparkles, Tablet, type LucideIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
@@ -16,7 +16,7 @@ import { restartOnboarding } from "../onboarding/store.ts";
 import { setThemeChoice, THEME_CHOICES, THEME_KEY, themeChoice, themeChoiceOf, type ThemeChoice } from "../theme/theme.ts";
 import { showNotice } from "../toasts.tsx";
 import { Copy, linkClass, ModelSelect, SectionHeading } from "./fields.tsx";
-import { FOLLOW_UP_KEY, LocalAgents, PLAN_MODE_KEY, SEND_SHORTCUT_KEY, type FollowUp } from "./LocalAgents.tsx";
+import { CHAT_LAYOUT_KEY, FOLLOW_UP_KEY, LocalAgents, PLAN_MODE_KEY, SEND_SHORTCUT_KEY, type FollowUp } from "./LocalAgents.tsx";
 import { ConfirmDialog } from "../agent/ConfirmDialog.tsx";
 import { useIsDevice } from "../deviceMode.ts";
 import { IpadAccess, useIpadAvailable } from "./IpadAccess.tsx";
@@ -150,6 +150,7 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   const [followUp, setFollowUp] = useState<FollowUp>("queue");
   const [sendShortcut, setSendShortcut] = useState<SendShortcut>("enter");
   const [planMode, setPlanMode] = useState(false);
+  const [chatLayout, setChatLayout] = useState<ChatLayout>("panel");
   const [theme, setTheme] = useState<ThemeChoice>(themeChoice);
   const themeId = useId();
   const keyField = useRef<HTMLInputElement>(null);
@@ -245,10 +246,11 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
   useEffect(() => {
     if (!open) return;
     checkProviders(false);
-    return engine.subscribe("preferences.subscribe", { keys: [FOLLOW_UP_KEY, PLAN_MODE_KEY, SEND_SHORTCUT_KEY, THEME_KEY] }, ({ key, value }) => {
+    return engine.subscribe("preferences.subscribe", { keys: [FOLLOW_UP_KEY, PLAN_MODE_KEY, SEND_SHORTCUT_KEY, CHAT_LAYOUT_KEY, THEME_KEY] }, ({ key, value }) => {
       if (key === FOLLOW_UP_KEY) setFollowUp(value === "steer" ? "steer" : "queue");
       if (key === SEND_SHORTCUT_KEY) setSendShortcut(sendShortcutOf(value));
       if (key === PLAN_MODE_KEY) setPlanMode(value === true);
+      if (key === CHAT_LAYOUT_KEY) setChatLayout(chatLayoutOf(value));
       if (key === THEME_KEY) setTheme(themeChoiceOf(value));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -378,6 +380,10 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
     setTheme(value);
     setThemeChoice(value);
     engine.call("preferences.set", { key: THEME_KEY, value }).catch((error: unknown) => setBanner({ kind: "error", message: messageOf(error) }));
+  };
+  const setChatLayoutPreference = (value: ChatLayout) => {
+    setChatLayout(value);
+    engine.call("preferences.set", { key: CHAT_LAYOUT_KEY, value }).catch((error: unknown) => setBanner({ kind: "error", message: messageOf(error) }));
   };
   const setFollowUpPreference = (value: FollowUp) => {
     setFollowUp(value);
@@ -585,6 +591,8 @@ export const SettingsDialog = ({ ui }: { readonly ui: SettingsUi }) => {
       onSendShortcut={setSendShortcutPreference}
       followUp={followUp}
       onFollowUp={setFollowUpPreference}
+      chatLayout={chatLayout}
+      onChatLayout={setChatLayoutPreference}
       planMode={planMode}
       onPlanMode={setPlanModePreference}
     />

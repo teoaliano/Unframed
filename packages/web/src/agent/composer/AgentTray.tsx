@@ -38,7 +38,7 @@ import {
 } from "@unframed/domain";
 import { ArrowLeft, Check, CircleAlert, CornerUpRight, ListPlus, Minimize2, Paperclip, Play } from "lucide-react";
 import { createPortal } from "react-dom";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { AgentTrayProps as SlotProps } from "../../chrome/slots.ts";
 import { useEngine } from "../../context.ts";
 import { effectiveModel, noProviderReady, providerName, readyProviders } from "../providers.ts";
@@ -104,6 +104,7 @@ const PLACEHOLDERS = {
   planFollowUp: "Add feedback to refine the plan, or leave this blank to implement it",
   noProvider: "Connect Claude or Codex to start",
   default: "Ask, or say what should change… @ to mention, / for commands",
+  short: "Ask the agent…",
 } as const;
 
 export interface AgentTrayProps {
@@ -118,6 +119,10 @@ export interface AgentTrayProps {
   readonly onMenuOpen?: (key: string, open: boolean) => void;
   readonly dropTarget?: RefObject<HTMLElement | null>;
   readonly notices?: ReadonlyArray<ComposerNotice>;
+  /** First in the controls row: the floating composer's conversation toggle. */
+  readonly leadingControl?: ReactNode;
+  /** The floating composer: one row of icon controls around a one-line prompt, growing upward with more lines. */
+  readonly inline?: boolean;
   readonly flush?: boolean;
 }
 
@@ -152,7 +157,7 @@ const markAt = (at: CaretMark | undefined) => (at === undefined ? {} : { at });
 
 const withElements = (elements: ReadonlyArray<ElementChip>) => (elements.length > 0 ? { elements } : {});
 
-export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, onSent, underChips, note, onMenuOpen, dropTarget, notices = [], flush = false }: AgentTrayProps) => {
+export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, onSent, underChips, note, onMenuOpen, dropTarget, notices = [], leadingControl, inline = false, flush = false }: AgentTrayProps) => {
   const ui = useRailUi(client);
   const { statuses } = useProviders(client);
   const chat = useWatchedThread(client, chatId);
@@ -586,6 +591,23 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const lengthError = answering ? undefined : promptLengthError(text);
   const planFollowUp = variant === "rail" && chat !== undefined && !running && !answering && interactionMode === "plan" && attachments.staged.length === 0 ? actionablePlan(chat) : undefined;
 
+  const promptPart = useRef<HTMLDivElement | null>(null);
+  const [cramped, setCramped] = useState(false);
+  useLayoutEffect(() => {
+    const part = inline ? promptPart.current : null;
+    const context = part ? document.createElement("canvas").getContext("2d") : null;
+    if (!part || !context) return;
+    const measure = () => {
+      const style = getComputedStyle(part.querySelector(".ProseMirror") ?? part);
+      context.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      setCramped(context.measureText(PLACEHOLDERS.default).width > part.clientWidth);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(part);
+    return () => observer.disconnect();
+  }, [inline]);
+
   const placeholder = approvalPending
     ? PLACEHOLDERS.approval
     : answering
@@ -596,7 +618,9 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         ? PLACEHOLDERS.planFollowUp
         : noProvider
           ? PLACEHOLDERS.noProvider
-          : PLACEHOLDERS.default;
+          : inline && cramped
+            ? PLACEHOLDERS.short
+            : PLACEHOLDERS.default;
 
   const canSend = answering
     ? questions.ready
@@ -874,8 +898,30 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
       ? [...notices, { id: "error", variant: "error", icon: <CircleAlert />, title: ui.error, dismissLabel: "Dismiss error", onDismiss: () => client.setUi({ error: undefined }) }]
       : notices;
 
+  // The floating composer takes two rows, the prompt over its controls, once the draft is more than one line:
+  // a line break, or one line wider than the one-row prompt. It goes back to one row when the text fits there again.
+  const [twoRows, setTwoRows] = useState(false);
+  const oneRowWidth = useRef(0);
+  useLayoutEffect(() => {
+    const prompt = inline ? box.current?.element() : null;
+    // The one paragraph's inline contents: the text's own lines and width, not the block's.
+    const line = prompt?.firstElementChild;
+    if (!prompt || !line) return;
+    const range = document.createRange();
+    range.selectNodeContents(line);
+    const lineBreak = text.includes("\n");
+    if (!twoRows) {
+      oneRowWidth.current = prompt.clientWidth;
+      const boxes = range.getClientRects();
+      const wraps = boxes.length > 1 && boxes[boxes.length - 1]!.top > boxes[0]!.top + 1;
+      if (lineBreak || wraps) setTwoRows(true);
+      return;
+    }
+    if (!lineBreak && range.getBoundingClientRect().width < oneRowWidth.current) setTwoRows(false);
+  }, [inline, text, twoRows]);
+
   const resting = useRestingComposer({
-    enabled: variant === "rail" && chatId !== null,
+    enabled: variant === "rail" && chatId !== null && !inline,
     chatId,
     rail: dropElement,
     shell: boxElement,
@@ -937,6 +983,34 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
     };
   }, [variant, dropElement]);
 
+  const extras = (
+    <>
+      <TraitsPicker
+        provider={selection.provider}
+        model={model}
+        traits={selection.traits}
+        disabled={running}
+        open={traitsOpen}
+        onOpenChange={setTraitsOpen}
+        onChange={(traits) => setModelSelection({ ...selection, traits: declaredTraits(model, traits) })}
+      />
+      <CompactControlsMenu
+        runtimeMode={runtimeMode}
+        onRuntimeMode={setRuntime}
+        {...(planMode ? { interactionMode, onInteractionMode: setInteraction } : {})}
+        open={modeOpen}
+        onOpenChange={setModeOpen}
+      />
+      {usage && chat && (
+        <ContextMeter
+          usage={usage}
+          compactUnavailable={!compactable}
+          onCompact={() => void sendMessage(client, chat.id, { text: "/compact", selection: [], attachments: [] }, { steer: running }).catch((error: unknown) => client.reportError(error))}
+        />
+      )}
+    </>
+  );
+
   return (
     <div className="flex min-h-0 flex-col gap-1.5" data-variant={variant} data-testid="agent-tray" ref={root}>
       <div className="-mx-1 flex min-h-0 shrink flex-col gap-1.5 overflow-y-auto overscroll-contain px-1 empty:hidden">
@@ -988,14 +1062,15 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         </div>
       )}
       <div
-        className={`${COMPOSER_SHELL} ${COMPOSER_EDGE[flush ? "flush" : "floating"]} ${resting.resting ? "grid! grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1.5 gap-y-1 pt-1.5! pb-1!" : ""}`}
+        className={`${COMPOSER_SHELL} ${COMPOSER_EDGE[flush ? "flush" : "floating"]} ${resting.resting ? "grid! grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1.5 gap-y-1 pt-1.5! pb-1!" : inline ? `flex-row! flex-wrap items-center gap-x-1.5 px-2! py-1.5! ${twoRows ? "gap-y-1.5 pt-2.5!" : "gap-y-1"}` : ""}`}
         ref={boxElement}
         data-testid="agent-composer"
         data-dragging={dragging ? "" : undefined}
         data-resting={resting.resting ? "true" : undefined}
+        data-inline={inline ? (twoRows ? "two-rows" : "one-row") : undefined}
         {...resting.shellProps}
       >
-        <div className={resting.resting ? "col-span-2 row-start-1 flex flex-col gap-1.5 empty:hidden" : "contents"}>
+        <div className={resting.resting ? "col-span-2 row-start-1 flex flex-col gap-1.5 empty:hidden" : inline ? "order-first flex basis-full flex-col gap-1.5 px-1 pt-1 empty:hidden" : "contents"}>
           <AttachmentShelf staged={resting.resting ? attachments.staged.filter((item) => item.kind === "file") : attachments.staged} onRemove={removeAttachment} onRetry={attachments.retry} />
           {!answering && (
             <ElementChipRow
@@ -1020,9 +1095,11 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           />
           {underChips}
         </div>
-        <div className={resting.resting ? "col-start-1 row-start-2 flex min-w-0 items-center gap-1" : "min-w-0"} data-composer-prompt>
+        <div className={resting.resting ? "col-start-1 row-start-2 flex min-w-0 items-center gap-1" : inline ? (twoRows ? "order-1 min-w-0 basis-full px-1.5" : "order-2 min-w-0 flex-1") : "min-w-0"} data-composer-prompt ref={promptPart}>
           <PromptEditor
             resting={resting.resting}
+            inline={inline}
+            oneLine={!twoRows}
             placeholder={placeholder}
             label={PROMPT_LABEL}
             onChange={onDraftChange}
@@ -1050,24 +1127,27 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           )}
         </div>
         {lengthError !== undefined && (
-          <div className="mx-1 mt-1">
+          <div className={inline ? "order-last mx-1 mb-1 basis-full" : "mx-1 mt-1"}>
             <Alert variant="error" data-testid="prompt-length-error">
               <AlertDescription>{lengthError}</AlertDescription>
             </Alert>
           </div>
         )}
         {menu && <ComposerMenu label={menu.label} items={menu.items} highlight={highlight} empty={menu.empty} anchor={boxElement} onPick={menu.pick} onHighlight={setHighlight} />}
-        <div className={resting.resting ? "contents" : "flex items-center gap-1"}>
+        <div className={resting.resting || inline ? "contents" : "flex items-center gap-1"}>
           <div
             className={
               resting.resting
                 ? "col-span-2 row-start-3 -mx-1 flex min-w-0 items-center gap-0.5 text-(--composer-resting-controls-foreground) [&_button]:text-xs!"
-                : "flex min-w-0 flex-1 items-center gap-0.5"
+                : inline
+                  ? `flex shrink-0 items-center gap-0.5 ${twoRows ? "order-2" : "order-1"}`
+                  : "flex min-w-0 flex-1 items-center gap-0.5"
             }
             data-composer-controls
             data-resting-controls={resting.resting ? "" : undefined}
             data-testid={resting.resting ? "resting-controls" : undefined}
           >
+            {leadingControl}
             <Tip label="Attach files" side="top">
               <Button variant="ghost-muted" size="icon-sm" aria-label="Attach files" disabled={answering && choiceOnly(question)} onClick={() => files.current?.click()}>
                 <Paperclip aria-hidden />
@@ -1095,35 +1175,15 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
               disabled={running}
               open={modelOpen}
               onOpenChange={setModelOpen}
+              iconOnly={inline}
               onPick={(provider, picked) =>
                 setModelSelection({ provider, model: picked.id, traits: provider === selection.provider ? declaredTraits(picked, selection.traits) : {} })
               }
             />
-            <TraitsPicker
-              provider={selection.provider}
-              model={model}
-              traits={selection.traits}
-              disabled={running}
-              open={traitsOpen}
-              onOpenChange={setTraitsOpen}
-              onChange={(traits) => setModelSelection({ ...selection, traits: declaredTraits(model, traits) })}
-            />
-            <CompactControlsMenu
-              runtimeMode={runtimeMode}
-              onRuntimeMode={setRuntime}
-              {...(planMode ? { interactionMode, onInteractionMode: setInteraction } : {})}
-              open={modeOpen}
-              onOpenChange={setModeOpen}
-            />
-            {usage && chat && (
-              <ContextMeter
-                usage={usage}
-                compactUnavailable={!compactable}
-                onCompact={() => void sendMessage(client, chat.id, { text: "/compact", selection: [], attachments: [] }, { steer: running }).catch((error: unknown) => client.reportError(error))}
-              />
-            )}
+            {!inline && extras}
           </div>
-          <div className={`ml-auto flex shrink-0 items-center gap-1.5 ${resting.resting ? "col-start-2 row-start-2" : ""}`} data-composer-actions>
+          <div className={`ml-auto flex shrink-0 items-center gap-1.5 ${resting.resting ? "col-start-2 row-start-2" : inline ? (twoRows ? "order-3" : "order-3 ml-0") : ""}`} data-composer-actions>
+            {inline && <div className="flex items-center gap-0.5">{extras}</div>}
             {note?.(providerName(selection.provider))}
             {running && (
               <MessageAction tone="stop" aria-label="Stop generation" onClick={interrupt}>

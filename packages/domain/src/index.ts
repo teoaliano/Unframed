@@ -59,6 +59,7 @@ export * from "./agent/scriptedAgent.ts";
 export * from "./agent/claudeEvents.ts";
 export * from "./agent/codexEvents.ts";
 export * from "./agent/railRules.ts";
+export * from "./agent/chatLayout.ts";
 export * from "./agent/planRules.ts";
 export * from "./agent/shapeLabel.ts";
 export * from "./agent/threadSearch.ts";
