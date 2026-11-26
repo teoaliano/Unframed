@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PICTURE_KEY, partExtension, pictureFile, pictureFileName, picturePartsUrl, pictureUrl, resolvePictureParts, screenSignature } from "../src/index.ts";
+import { PICTURE_KEY, partExtension, pictureContentType, pictureFile, pictureFileName, picturePartsUrl, pictureUrl, resolvePictureParts, screenSignature } from "../src/index.ts";
 
 const KEY = "0123456789abcdef0123456789abcdef01234567";
 
@@ -20,6 +20,14 @@ describe("picture names", () => {
     for (const name of [`${KEY}.w256.png`, `${KEY}.js`, `${KEY.slice(1)}.png`, `parts/${KEY}.html`, `parts/../${KEY}.png`, `signatures/${KEY}`, `../${KEY}.png`, `${KEY.toUpperCase()}.png`, `x/${KEY}.png`]) {
       expect(pictureFileName(name)).toBeUndefined();
     }
+  });
+
+  it("serves a stored file under its content type", () => {
+    expect(pictureContentType(`${KEY}.html`)).toBe("text/html; charset=utf-8");
+    expect(pictureContentType(`${KEY}.w384.png`)).toBe("image/png");
+    expect(pictureContentType(`parts/${KEY}.jpg`)).toBe("image/jpeg");
+    expect(pictureContentType(`parts/${KEY}.woff2`)).toBe("font/woff2");
+    expect(pictureContentType(`parts/${KEY}.constructor`)).toBe("application/octet-stream");
   });
 
   it("maps a part's content type to its extension", () => {

@@ -1,10 +1,10 @@
 import { stat } from "node:fs/promises";
 import { extname, join } from "node:path";
-import { AUDIO_SERVED_TYPES, PICTURE_POLICY, pictureFileName, screenSnapshotName, snapshotFileName } from "@unframed/domain";
+import { AUDIO_SERVED_TYPES, PICTURE_POLICY, pictureContentType, pictureFileName, screenSnapshotName, snapshotFileName } from "@unframed/domain";
 import { PREVIEW_FOLDER, previewFileName } from "../media/mediaStore.ts";
 import { SNAPSHOT_FOLDER } from "../artifacts/snapshots.ts";
 import { SCREEN_SNAPSHOT_FOLDER } from "../screens/screenSnapshots.ts";
-import { PICTURE_FOLDER, pictureContentType } from "../screens/pictureStore.ts";
+import { PICTURE_FOLDER } from "../screens/pictureStore.ts";
 import { fileNameOf } from "../paths.ts";
 import type { Route } from "./api.ts";
 import { sendError } from "./respond.ts";

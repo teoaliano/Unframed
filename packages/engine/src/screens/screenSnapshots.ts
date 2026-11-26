@@ -1,7 +1,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Instance, ScreenCapturePart, ScreenSnapshot } from "@unframed/contracts";
-import { partExtension, pictureFileName, resolvePictureParts, screenSignature, screenSnapshotName, screenUrl, STEP_TIMEOUT_MS, stateRoute } from "@unframed/domain";
+import { partExtension, pictureContentType, pictureFileName, resolvePictureParts, screenSignature, screenSnapshotName, screenUrl, STEP_TIMEOUT_MS, stateRoute } from "@unframed/domain";
 import type { TLRecord } from "@tldraw/tlschema";
 import type { Page } from "puppeteer-core";
 import type { HeadlessChrome } from "../artifacts/headlessChrome.ts";
@@ -9,7 +9,7 @@ import { stubSnapshotPng } from "../artifacts/snapshots.ts";
 import { errorText, logError, logInfo } from "../log.ts";
 import type { ScreenStatePayload } from "../instances/stateTokens.ts";
 import { isScreenShape, type ScreenShape } from "./firstScreen.ts";
-import { pictureContentType, pictureKey, type PictureRasters, type PictureStore } from "./pictureStore.ts";
+import { pictureKey, type PictureRasters, type PictureStore } from "./pictureStore.ts";
 import { screenStatePayload } from "./screenState.ts";
 
 export const SCREEN_SNAPSHOT_FOLDER = join(".cache", "screens");

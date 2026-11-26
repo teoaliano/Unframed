@@ -18,25 +18,28 @@ export const picturePartsUrl = (project: string): string => `/api/pictures/${enc
 
 export const pictureFileName = (name: string): string | undefined => (PICTURE_FILE.test(name) || PART_FILE.test(name) ? name : undefined);
 
-const PART_EXTENSIONS: Readonly<Record<string, string>> = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/gif": "gif",
-  "image/webp": "webp",
-  "image/svg+xml": "svg",
-  "image/avif": "avif",
-  "font/woff2": "woff2",
-  "application/font-woff2": "woff2",
-  "font/woff": "woff",
-  "application/font-woff": "woff",
-  "font/ttf": "ttf",
-  "application/x-font-ttf": "ttf",
-  "font/otf": "otf",
+const PART_TYPES: Readonly<Record<string, readonly [string, ...string[]]>> = {
+  png: ["image/png"],
+  jpg: ["image/jpeg"],
+  gif: ["image/gif"],
+  webp: ["image/webp"],
+  svg: ["image/svg+xml"],
+  avif: ["image/avif"],
+  woff2: ["font/woff2", "application/font-woff2"],
+  woff: ["font/woff", "application/font-woff"],
+  ttf: ["font/ttf", "application/x-font-ttf"],
+  otf: ["font/otf"],
 };
 
 export const partExtension = (contentType: string): string | undefined => {
   const bare = contentType.split(";")[0]!.trim().toLowerCase();
-  return Object.hasOwn(PART_EXTENSIONS, bare) ? PART_EXTENSIONS[bare] : undefined;
+  return Object.keys(PART_TYPES).find((extension) => PART_TYPES[extension]!.includes(bare));
+};
+
+export const pictureContentType = (name: string): string => {
+  if (name.endsWith(".html")) return "text/html; charset=utf-8";
+  const extension = /\.([a-z0-9]+)$/.exec(name)?.[1];
+  return (extension !== undefined && Object.hasOwn(PART_TYPES, extension) ? PART_TYPES[extension]![0] : undefined) ?? "application/octet-stream";
 };
 
 export interface ScreenSignatureInput {

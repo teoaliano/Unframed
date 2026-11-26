@@ -100,22 +100,3 @@ export class PictureStore {
 }
 
 export const pictureKey = (html: string, w: number, h: number): string => hashOf(`${Math.round(w)}x${Math.round(h)}\n${html}`);
-
-const PART_TYPES: Readonly<Record<string, string>> = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  gif: "image/gif",
-  webp: "image/webp",
-  svg: "image/svg+xml",
-  avif: "image/avif",
-  woff2: "font/woff2",
-  woff: "font/woff",
-  ttf: "font/ttf",
-  otf: "font/otf",
-};
-
-export const pictureContentType = (name: string): string => {
-  if (name.endsWith(".html")) return "text/html; charset=utf-8";
-  const extension = /\.([a-z0-9]+)$/.exec(name)?.[1];
-  return (extension === undefined ? undefined : PART_TYPES[extension]) ?? "application/octet-stream";
-};
