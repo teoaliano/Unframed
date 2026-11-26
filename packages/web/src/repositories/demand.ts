@@ -10,12 +10,6 @@ const RESEND_EVERY_MS = 10_000;
 
 const SCREEN_KEEP_REACH = 3;
 
-export const screenOnScreen = (editor: Editor, id: TLShapeId, reach: number): boolean => {
-  const bounds = editor.getShapePageBounds(id);
-  const viewport = editor.getViewportPageBounds();
-  return !!bounds && !farOffscreen({ x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h }, { x: viewport.x, y: viewport.y, w: viewport.w, h: viewport.h }, reach);
-};
-
 const loaded = new WeakMap<Editor, Atom<ReadonlySet<TLShapeId>>>();
 
 const loadedOf = (editor: Editor): Atom<ReadonlySet<TLShapeId>> => {
@@ -37,7 +31,11 @@ export const holdScreenLoaded = (editor: Editor, id: TLShapeId): (() => void) =>
     });
 };
 
-export const screenWanted = (editor: Editor, id: TLShapeId): boolean => screenOnScreen(editor, id, loadedOf(editor).get().has(id) ? SCREEN_KEEP_REACH : 1);
+export const screenWanted = (editor: Editor, id: TLShapeId): boolean => {
+  const bounds = editor.getShapePageBounds(id);
+  const reach = loadedOf(editor).get().has(id) ? SCREEN_KEEP_REACH : 1;
+  return !!bounds && !farOffscreen(bounds, editor.getViewportPageBounds(), reach);
+};
 
 const installDemand = (engine: EngineConnection, project: string, client: string, wanted: () => string): (() => void) => {
   const state = repositoryState(project);
