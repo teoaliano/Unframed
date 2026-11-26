@@ -433,15 +433,10 @@ export function screenBridge(
 const crossSiteCookies = (win: any, rewrite: (cookie: string) => string): void => {
   const proto = win.Document?.prototype;
   const native = proto === undefined ? undefined : Object.getOwnPropertyDescriptor(proto, "cookie");
-  const read = native?.get;
-  const write = native?.set;
-  if (proto === undefined || read === undefined || write === undefined) return;
+  if (native?.get === undefined || native.set === undefined) return;
+  const write = native.set;
   Object.defineProperty(proto, "cookie", {
-    configurable: true,
-    enumerable: native?.enumerable ?? true,
-    get() {
-      return read.call(this);
-    },
+    ...native,
     set(value: unknown) {
       write.call(this, rewrite(String(value)));
     },
