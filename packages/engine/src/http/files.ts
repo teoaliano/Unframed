@@ -1,14 +1,17 @@
+import { stat } from "node:fs/promises";
 import { extname, join } from "node:path";
-import { AUDIO_SERVED_TYPES, screenSnapshotName, snapshotFileName } from "@unframed/domain";
+import { AUDIO_SERVED_TYPES, PICTURE_POLICY, pictureFileName, screenSnapshotName, snapshotFileName } from "@unframed/domain";
 import { PREVIEW_FOLDER, previewFileName } from "../media/mediaStore.ts";
 import { SNAPSHOT_FOLDER } from "../artifacts/snapshots.ts";
 import { SCREEN_SNAPSHOT_FOLDER } from "../screens/screenSnapshots.ts";
+import { PICTURE_FOLDER, pictureContentType } from "../screens/pictureStore.ts";
 import { fileNameOf } from "../paths.ts";
 import type { Route } from "./api.ts";
 import { sendError } from "./respond.ts";
 import { sendFile } from "./sendFile.ts";
 
 const FILE_PREFIX = "/api/file/";
+const PICTURE_PREFIX = "/api/pictures/";
 
 const CONTENT_TYPES: Record<string, string> = {
   ".png": "image/png",
@@ -88,5 +91,41 @@ export const projectFileRoute =
         { ranges: true },
       ));
     if (!sent) sendError(res, 404, "File not found.");
+    return true;
+  };
+
+export const pictureRoute =
+  (projectFolder: (project: string) => Promise<string | undefined>): Route =>
+  async (req, res, url) => {
+    if (!url.pathname.startsWith(PICTURE_PREFIX) || (req.method !== "GET" && req.method !== "HEAD")) return false;
+    const rest = url.pathname.slice(PICTURE_PREFIX.length);
+    const slash = rest.indexOf("/");
+    let folder: string | undefined;
+    let name: string | undefined;
+    if (slash >= 0) {
+      try {
+        name = pictureFileName(decodeURIComponent(rest.slice(slash + 1)));
+        folder = name === undefined ? undefined : await projectFolder(decodeURIComponent(rest.slice(0, slash)));
+      } catch {
+      }
+    }
+    if (folder === undefined || name === undefined) {
+      sendError(res, 404, "File not found.");
+      return true;
+    }
+    const etag = `"${/[a-f0-9]{40}/.exec(name)![0]}"`;
+    const headers = {
+      "content-type": pictureContentType(name),
+      "cache-control": "private, max-age=31536000, immutable",
+      etag,
+      "content-security-policy": PICTURE_POLICY,
+    };
+    const path = join(folder, PICTURE_FOLDER, name);
+    if (req.headers["if-none-match"]?.split(",").some((tag) => tag.trim() === etag) && (await stat(path).then((info) => info.isFile(), () => false))) {
+      res.writeHead(304, { ...headers, "x-content-type-options": "nosniff" });
+      res.end();
+      return true;
+    }
+    if (!(await sendFile(req, res, path, headers))) sendError(res, 404, "File not found.");
     return true;
   };

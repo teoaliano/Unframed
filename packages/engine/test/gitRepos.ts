@@ -122,6 +122,14 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "text/html" });
     return res.end("<body>no head here</body>");
   }
+  if (url.pathname === "/page-text") {
+    let text = "";
+    try {
+      text = require("node:fs").readFileSync("page.txt", "utf8");
+    } catch {}
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end("<!doctype html><html><head><title>Page text</title></head><body><h1 id=\\"text\\">" + text.replace(/</g, "&lt;") + "</h1></body></html>");
+  }
   if (url.pathname === "/logo.png") {
     res.writeHead(200, { "content-type": "image/png" });
     return res.end(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==", "base64"));

@@ -177,6 +177,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
       "instances.diff": ({ project, id }) => featureOn("repositories", () => instanceGit.diff(project, id)),
       "instances.gitAction": ({ project, id, action }) => featureOn("repositories", () => instanceGit.act(project, id, action)),
       "screens.snapshots": ({ project }) => artifacts.screenSnapshots(project),
+      "screens.capture": ({ project, shape, w, h, html, parts }) => featureOn("repositories", () => artifacts.screenCapture(project, shape, { w, h, html, parts })),
       "instances.create": ({ project, base, branch }) =>
         featureOn("repositories", () => instances.create(project, { ...(base === undefined ? {} : { base }), ...(branch === undefined ? {} : { branch }) })),
       "instances.remove": ({ project, id, force, deleteBranch }) =>

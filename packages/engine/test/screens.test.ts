@@ -44,6 +44,14 @@ const addRepository = async (env: Record<string, string> = {}) => {
   return { root, engine, rpc, project: added.name, instance: added.instance };
 };
 
+const pictureFile = (engine: TestEngine, project: string, name: string) => join(engine.dataDir, "output", project, ".cache", "pictures", name);
+
+const pictureOf = (rpc: TestRpcClient, project: string, id: string, unlike?: string) =>
+  eventually(
+    async () => (await screensOf(rpc, project)).find((record) => record.id === id)?.props.picture as string | undefined,
+    (picture) => picture !== undefined && picture !== unlike,
+  ) as Promise<string>;
+
 const snapshotFile = (engine: TestEngine, project: string, shapeId: string) => join(engine.dataDir, "output", project, ".cache", "screens", `${shapeId.replace(/^shape:/, "")}.png`);
 
 describe("Screens", () => {
@@ -54,28 +62,25 @@ describe("Screens", () => {
     expect(screen).toMatchObject({ type: "screen", x: 0, y: 0, props: { instance: instance.id, route: "/", w: 1280, h: 800, title: instance.branch } });
   });
 
-  it("snapshots a Screen through its Instance's proxy once the Instance is live, caches it, and renders again when the route changes", async () => {
+  it("pictures a Screen through its Instance's proxy once the Instance is live, writes no legacy snapshot, and pictures it again when the route changes", async () => {
     const { engine, rpc, project, instance } = await addRepository({ UNFRAMED_TEST_RENDERER: "ok" });
     const [screen] = await screensOf(rpc, project);
-    const stream = rpc.subscribe("screens.snapshots", { project });
     await becomes(rpc, project, instance.id, "stopped");
     await rpc.call("instances.demand", { project, client: "window-1", ids: [instance.id] });
     const live = await becomes(rpc, project, instance.id, "live");
 
-    await eventually(async () => stream.values.length, (count) => count >= 1);
-    expect(stream.values[0]).toEqual({ shape: screen.id, w: 1280, h: 800, at: expect.any(Number) });
-    expect(pictured(await readFile(snapshotFile(engine, project, screen.id)))).toMatchObject({ url: `http://127.0.0.1:${live.proxyPort}/`, w: 1280, h: 800, dials: null });
-    const served = await engine.request(`/api/file/${project}/${screen.id.replace(/^shape:/, "")}.png?screen=1`);
+    const first = await pictureOf(rpc, project, screen.id);
+    expect(pictured(await readFile(pictureFile(engine, project, `${first}.png`)))).toMatchObject({ url: `http://127.0.0.1:${live.proxyPort}/`, w: 1280, h: 800, dials: null });
+    const served = await engine.request(`/api/pictures/${project}/${first}.w384.png`);
     expect(served.status).toBe(200);
     expect(served.headers["content-type"]).toBe("image/png");
+    expect(existsSync(snapshotFile(engine, project, screen.id))).toBe(false);
 
-    await rpc.call("testCanvas.apply", { project, change: { put: [{ ...screen, props: { ...screen.props, route: "/settings", dials: { accent: "#ff0000" } } }], remove: [] }, origin: { kind: "server", id: "test" } });
-    await eventually(async () => stream.values.length, (count) => count >= 2);
-    expect(pictured(await readFile(snapshotFile(engine, project, screen.id)))).toMatchObject({ url: `http://127.0.0.1:${live.proxyPort}/settings`, dials: { accent: "#ff0000" } });
-
-    const later = rpc.subscribe("screens.snapshots", { project });
-    await eventually(async () => later.values.length, (count) => count >= 1);
-    expect(later.values[0]).toMatchObject({ shape: screen.id, w: 1280, h: 800 });
+    const placed = (await screensOf(rpc, project)).find((record) => record.id === screen.id);
+    await rpc.call("testCanvas.apply", { project, change: { put: [{ ...placed, props: { ...placed.props, route: "/settings", dials: { accent: "#ff0000" } } }], remove: [] }, origin: { kind: "server", id: "test" } });
+    const second = await pictureOf(rpc, project, screen.id, first);
+    expect(pictured(await readFile(pictureFile(engine, project, `${second}.png`)))).toMatchObject({ url: `http://127.0.0.1:${live.proxyPort}/settings`, dials: { accent: "#ff0000" } });
+    expect(existsSync(snapshotFile(engine, project, screen.id))).toBe(false);
   });
 
   it("does not snapshot a Screen whose Instance never runs", async () => {
@@ -84,6 +89,7 @@ describe("Screens", () => {
     await becomes(rpc, project, instance.id, "stopped");
     await new Promise((resolve) => setTimeout(resolve, 2000));
     expect(existsSync(snapshotFile(engine, project, screen.id))).toBe(false);
+    expect((await screensOf(rpc, project))[0].props.picture).toBeUndefined();
   });
 
   it("lists the Repository's branches with the current one", async () => {

@@ -148,6 +148,15 @@ export const ScreensStateToken = Rpc.make("screens.stateToken", {
   error: UnframedError,
 });
 
+export const ScreenCapturePart = Schema.Struct({ url: Schema.String, type: Schema.String, data: Schema.NullOr(Schema.String) });
+export type ScreenCapturePart = typeof ScreenCapturePart.Type;
+
+export const ScreensCapture = Rpc.make("screens.capture", {
+  payload: Schema.Struct({ project: Schema.String, shape: Schema.String, w: Schema.Number, h: Schema.Number, html: Schema.String, parts: Schema.Array(ScreenCapturePart) }),
+  success: Schema.Struct({ key: Schema.NullOr(Schema.String) }),
+  error: UnframedError,
+});
+
 export const DiffFile = Schema.Struct({ path: Schema.String, additions: Schema.Number, deletions: Schema.Number, binary: Schema.Boolean });
 export type DiffFile = typeof DiffFile.Type;
 

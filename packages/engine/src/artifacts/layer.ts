@@ -35,12 +35,15 @@ import { watchFolder } from "./folderWatch.ts";
 import { chromeSnapshotRenderer, Snapshots, stubSnapshotRenderer, type SnapshotRenderer } from "./snapshots.ts";
 import { SettingsStore } from "../settingsStore.ts";
 import { Instances } from "../instances/layer.ts";
-import { chromeScreenRenderer, ScreenSnapshots, stubScreenRenderer, type ScreenRenderer } from "../screens/screenSnapshots.ts";
+import { chromeScreenRasterizer, chromeScreenRenderer, ScreenCaptureRefused, ScreenSnapshots, stubScreenRasterizer, stubScreenRenderer, type PageCopy, type ScreenRasterizer, type ScreenRenderer } from "../screens/screenSnapshots.ts";
+import { PictureStore } from "../screens/pictureStore.ts";
+import { isScreenShape } from "../screens/firstScreen.ts";
 import { Shutdown } from "../shutdown.ts";
 
 const UPLOAD_LIMIT = 20 * 1_048_576;
 
 const PREPARE_ORIGIN: ChangeOrigin = { kind: "server", id: "artifact:prepare" };
+const PICTURE_ORIGIN: ChangeOrigin = { kind: "system", id: "screen-picture" };
 
 export class Artifacts extends Context.Service<
   Artifacts,
@@ -57,6 +60,7 @@ export class Artifacts extends Context.Service<
     readonly renderStatus: (project: string, id: string) => Effect.Effect<RenderStatus, UnframedError>;
     readonly snapshots: (project: string) => Stream.Stream<ArtifactSnapshot, UnframedError>;
     readonly screenSnapshots: (project: string) => Stream.Stream<ScreenSnapshot, UnframedError>;
+    readonly screenCapture: (project: string, shapeId: string, copy: PageCopy) => Effect.Effect<{ key: string | null }, UnframedError>;
     readonly fileChanges: (project: string) => Stream.Stream<ArtifactFileChange, UnframedError>;
     readonly timeline: (project: string, file: string) => Effect.Effect<MotionTimelineReading, UnframedError>;
     readonly componentPins: (project: string) => Stream.Stream<ComponentPinsItem, UnframedError>;
@@ -110,16 +114,32 @@ export const artifactsLayer = Layer.effect(
     const instances = yield* Instances;
     const screenRenderer: ScreenRenderer | undefined =
       config.testRenderer === "ok" ? stubScreenRenderer : config.testRenderer === "fail" || config.testRenderer === "no-chrome" ? undefined : chromeScreenRenderer(headless);
-    const screensWritten = yield* PubSub.unbounded<{ readonly project: string; readonly snapshot: ScreenSnapshot }>();
+    const screenRasterizer: ScreenRasterizer | undefined =
+      config.testRenderer === "ok" ? stubScreenRasterizer : config.testRenderer === "fail" || config.testRenderer === "no-chrome" ? undefined : chromeScreenRasterizer(headless);
     const screens = new ScreenSnapshots({
       renderer: screenRenderer,
+      rasterizer: screenRasterizer,
+      pictures: new PictureStore((project) => media.folder(project)),
       folder: (project) => media.folder(project),
       read: (project) => run(rooms.read(project)),
       instance: (project, id) => run(Effect.orElseSucceed(instances.status(project, id), () => undefined)),
-      publish: (project, snapshot) => void run(PubSub.publish(screensWritten, { project, snapshot })),
       stateToken: (project, id, payload) => run(instances.stateToken(project, id, payload)),
+      setPicture: async (project, shapeId, key) => {
+        await run(
+          rooms.applyWhen(
+            project,
+            (get) => {
+              const record = get(shapeId);
+              if (!isScreenShape(record) || record.props.picture === key) return undefined;
+              return { put: [{ ...record, props: { ...record.props, picture: key } } as TLRecord], remove: [] };
+            },
+            PICTURE_ORIGIN,
+          ),
+        );
+      },
     });
     Effect.runForkWith(context)(Stream.runForEach(instances.everyChange, (instance) => Effect.sync(() => screens.instanceChanged(instance))));
+    Effect.runForkWith(context)(Stream.runForEach(instances.touched, ({ project, id }) => Effect.sync(() => screens.touched(project, id))));
     yield* rooms.afterOpen((project, room) => {
       screens.opened(project, room.read());
       void run(openProjects.register(project, "screen snapshots", Effect.sync(() => screens.forget(project))));
@@ -301,17 +321,17 @@ export const artifactsLayer = Layer.effect(
           }),
         ),
       screenSnapshots: (project) =>
-        Stream.unwrap(
-          Effect.map(PubSub.subscribe(screensWritten), (subscription) => {
-            const slug = projectSlug(project);
-            return Stream.concat(
-              Stream.unwrap(Effect.map(Effect.promise(() => screens.list(slug)), (known) => Stream.fromIterable(known))),
-              Stream.fromSubscription(subscription).pipe(
-                Stream.filter((item) => item.project === slug),
-                Stream.map((item) => item.snapshot),
-              ),
-            );
+        Stream.concat(
+          Stream.unwrap(Effect.map(Effect.promise(() => screens.list(projectSlug(project))), (known) => Stream.fromIterable(known))),
+          Stream.never,
+        ),
+      screenCapture: (project, shapeId, copy) =>
+        Effect.map(
+          Effect.tryPromise({
+            try: () => screens.capture(projectSlug(project), shapeId, copy),
+            catch: (error) => (error instanceof ScreenCaptureRefused ? unframedError("not_found", error.message) : unframedError("internal", `Could not store the picture: ${errorText(error)}`)),
           }),
+          (key) => ({ key }),
         ),
       fileChanges: (project) =>
         Stream.unwrap(

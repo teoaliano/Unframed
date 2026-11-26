@@ -22,7 +22,7 @@ import { nodeRunsLayer } from "./nodes/nodeRuns.ts";
 import { readEnvFileSync } from "./envFile.ts";
 import { createApiServer } from "./http/api.ts";
 import { clientRoute } from "./http/client.ts";
-import { projectFileRoute } from "./http/files.ts";
+import { pictureRoute, projectFileRoute } from "./http/files.ts";
 import { uploadRoute } from "./http/upload.ts";
 import { startPreviewOrigin } from "./http/preview.ts";
 import { listenLoopback, LOOPBACK_HOST } from "./listen.ts";
@@ -173,11 +173,12 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
   const { settings, sockets, rooms, media, projects, shutdown, agents, oauth, ipad } = booted;
 
   const fileRoute = projectFileRoute((project) => runtime.runPromise(projects.folder(project)));
+  const pictures = pictureRoute((project) => runtime.runPromise(projects.folder(project)));
   const upload = uploadRoute(media);
   const clientRoutes = config.clientDist === undefined ? [] : [clientRoute(config.clientDist)];
   const upgrade = [sockets.upgrade, rooms.upgrade];
   const api = createApiServer({
-    http: [fileRoute, upload, ...agents.routes, oauth.callbackRoute, ...clientRoutes],
+    http: [fileRoute, pictures, upload, ...agents.routes, oauth.callbackRoute, ...clientRoutes],
     upgrade,
   });
   const apiPort = await listenLoopback(api, port.port).catch((error: unknown) => {
@@ -188,7 +189,7 @@ export const startEngine = async (host: EngineHost): Promise<RunningEngine> => {
   oauth.setApiPort(apiPort);
   await runtime.runPromise(
     ipad.install({
-      routes: [fileRoute, upload, ...agents.attachmentRoutes, ...clientRoutes],
+      routes: [fileRoute, pictures, upload, ...agents.attachmentRoutes, ...clientRoutes],
       upgrades: upgrade,
     }),
   );
