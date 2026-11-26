@@ -122,6 +122,25 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "text/html" });
     return res.end("<body>no head here</body>");
   }
+  if (url.pathname === "/logo.png") {
+    res.writeHead(200, { "content-type": "image/png" });
+    return res.end(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==", "base64"));
+  }
+  if (url.pathname === "/busy") {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end([
+      "<!doctype html><html><head><title>Busy</title><style>",
+      ":root { --accent: rgb(59, 130, 246); } html { font-family: sans-serif; } body { margin: 0; background: rgb(248, 250, 252); }",
+      ".bar { height: 10vh; background: var(--accent); color: white; display: flex; align-items: center; padding: 0 16px; }",
+      ".card { margin: 12px; padding: 12px; border-radius: 8px; background: white; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); }",
+      ".spin { width: 24px; height: 24px; border: 3px solid rgb(204, 204, 204); border-top-color: var(--accent); border-radius: 50%; }",
+      "@media (max-width: 500px) { .wide { display: none; } }",
+      "</style></head><body><div class=\\"bar\\" id=\\"bar\\">Busy app " + url.search + "</div><div class=\\"card wide\\" id=\\"wide\\">Wide only</div>",
+      "<div class=\\"card\\">Frame <span id=\\"tick\\">0</span></div><img id=\\"logo\\" src=\\"/logo.png\\" width=\\"32\\" height=\\"32\\" alt=\\"\\"><div class=\\"spin\\" id=\\"spin\\"></div>",
+      "<script>var n = 0; var f = function () { n++; document.getElementById('tick').textContent = n; document.getElementById('spin').style.transform = 'rotate(' + (n * 6) + 'deg)'; var x = 0; for (var i = 0; i < 20000; i++) x += Math.sqrt(i); requestAnimationFrame(f); }; requestAnimationFrame(f);</script>",
+      "</body></html>",
+    ].join(""));
+  }
   if (url.pathname === "/api/items") {
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify(["Apples", "Pears"]));
