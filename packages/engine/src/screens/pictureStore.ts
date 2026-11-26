@@ -51,10 +51,10 @@ export class PictureStore {
     return name;
   }
 
-  async putPicture(project: string, picture: PictureRasters & { readonly html?: string | undefined }): Promise<string | undefined> {
+  async putPicture(project: string, picture: PictureRasters & { readonly html?: string | undefined; readonly w: number; readonly h: number }): Promise<string | undefined> {
     const dir = await this.dir(project);
     if (dir === undefined) return undefined;
-    const key = hashOf(picture.html ?? picture.png);
+    const key = picture.html === undefined ? hashOf(picture.png) : pictureKey(picture.html, picture.w, picture.h);
     if (picture.html !== undefined) await writeOnce(join(dir, pictureFile(key, "html")), picture.html);
     await writeOnce(join(dir, pictureFile(key, "w128")), picture.w128);
     await writeOnce(join(dir, pictureFile(key, "w384")), picture.w384);
@@ -98,7 +98,7 @@ export class PictureStore {
   }
 }
 
-export const pictureKey = hashOf;
+export const pictureKey = (html: string, w: number, h: number): string => hashOf(`${Math.round(w)}x${Math.round(h)}\n${html}`);
 
 const PART_TYPES: Readonly<Record<string, string>> = {
   png: "image/png",

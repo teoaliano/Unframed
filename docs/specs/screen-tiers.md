@@ -46,14 +46,14 @@ Only the Screen the person is using runs. Every other Screen shows a picture tha
 - `hold` activates its Screen and makes the reducer ignore `activate` and `deactivate` until the hold is released. Releasing it leaves the Screen live; the canvas's selection then keeps or parks it.
 - `activate` on a parked Screen makes it live at once. On any other Screen it starts `warming`; the iframe mounts and the picture stays on top. `ready` turns the warming Screen live. A new activation drops a Screen still warming.
 - `deactivate` parks the live Screen with a capture wanted, at the front of the parked list. Past three, the least recently live loses its frame. A hidden tab drops every parked frame.
-- `view` events wait while the camera moves and apply once it is still. A Screen's level comes from its on-screen width: up to 160 device pixels is `tiny`, up to 230 css pixels is `small`, wider is `page`. Page copies are queued for near Screens at level `page`, nearest first, four loading at once. A Screen that leaves the view drops its page copy.
+- `view` events wait while the camera moves and apply once it is still. A Screen's level comes from its on-screen width: up to 160 device pixels is `tiny`, up to 230 css pixels is `small`, wider is `page`. Page copies are queued for near Screens at level `page` that have a picture, nearest first, four loading at once. A Screen that leaves the view drops its page copy.
 - The reducer keeps each Screen's entry object when nothing about it changed, so the canvas re-renders only the Screens whose tier changed.
 
 ### Picture levels on the canvas
 
 - The scheduler's state belongs to the project, one per open project tab, so it outlives the canvas while the editor tab is open or another project tab shows. A mounted canvas sends `view` when the camera becomes still (tldraw's `getCameraState`), when Screens are added, removed or resized, and when the window's pixel ratio changes. Its selection drives `activate` and `deactivate`. The editor tab sends `hold`. The project's pool sends `hidden` on `visibilitychange`, and closing the project tab clears the state.
 - A Screen shape reads only its own entry with `useValue`. Nothing in the shape reads the camera, so panning and zooming re-render no Screen. The shape's container has `contain: strict`. The label stays in `ShapeLabel` as today.
-- The static layer is an `<img>` of `<key>.w128.png` or `<key>.w384.png`, or, at level `page`, the page copy over the 384 image. Before a Screen has a scheduler entry it uses the level the current zoom gives, so a board's first frame already has its pictures.
+- The static layer is an `<img>` of `<key>.w128.png` or `<key>.w384.png`, or, at level `page`, the page copy over the 384 image. Before a Screen has a scheduler entry it uses the level the current zoom gives, once the canvas has placed its camera, so a board's first frame already has its pictures at the right size.
 - Page copies are built by one queue per document, nearest first, at most 6 ms of work per animation frame. The prepared copy of a key is shared: one parsed template and one constructed stylesheet per key, cloned into each Screen's closed shadow root, with `@font-face` rules hoisted to the document once.
 - A Screen with no picture yet shows its branch and route, as today.
 
@@ -72,12 +72,12 @@ Only the Screen the person is using runs. Every other Screen shows a picture tha
 
 ### Storing and serving pictures (the engine)
 
-- `PictureStore` keeps `<project>/.cache/pictures/`: `<key>.html`, `<key>.png`, `<key>.w384.png`, `<key>.w128.png`, `parts/<hash>.<ext>` and `signatures/<hash>` (a state's signature to its key). A part's name is the SHA-256 of its bytes. A picture's key is the SHA-256 of its HTML with its parts resolved, or of its PNG when the page has no bridge. Keys and part names are 40 hex characters.
+- `PictureStore` keeps `<project>/.cache/pictures/`: `<key>.html`, `<key>.png`, `<key>.w384.png`, `<key>.w128.png`, `parts/<hash>.<ext>` and `signatures/<hash>` (a state's signature to its key). A part's name is the SHA-256 of its bytes. A picture's key is the SHA-256 of its viewport size and its HTML with its parts resolved, or of its PNG when the page has no bridge, so the same page at another size gets its own rasters. Keys and part names are 40 hex characters.
 - `screenSignature` (domain) writes the state a picture shows as canonical JSON: Instance, worktree revision, route, Steps, Mocks, width, height and Parameters. The revision grows each time the Instance's worktree is touched.
 - A capture, headless or from the live Screen, ends by writing every file, then the signature, then the Screen's `picture` prop through the canvas room with a system origin, which no undo stack records. A Screen whose signature already has a key gets that key with no capture, which is how a duplicate stays free.
 - Headless captures run as today, one at a time, only for Screens of a live Instance, and only when the Screen's signature has no key. Rasters of a live capture come from loading its HTML in headless Chrome with requests answered from the store. Rasters never block the canvas: the shape keeps its old key until the new picture is complete.
 - `GET /api/pictures/<project>/<file>` serves the store with `Cache-Control: private, max-age=31536000, immutable`, an ETag of the hash and `X-Content-Type-Options: nosniff`. Every response carries a Content Security Policy that allows nothing but its own images, fonts and inline styles, inside a sandbox. Names outside the store's patterns answer 404.
-- `screens.capture` takes a live capture from the canvas. It is refused when the `repositories` flag is off.
+- `screens.capture` takes a live capture from the canvas. When live captures of one Screen overlap, only the latest one sets its picture. It is refused when the `repositories` flag is off.
 
 ### Demand
 

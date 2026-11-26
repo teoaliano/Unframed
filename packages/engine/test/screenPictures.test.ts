@@ -78,7 +78,7 @@ describe("Screen pictures", () => {
     const answer = await rpc.call("screens.capture", { project, shape: screen.id, w: 1280, h: 800, html, parts });
     const part = `${hash(LOGO)}.png`;
     const resolved = `<!doctype html><html><head><style>body { background: url(data:,); }</style></head><body><img src="parts/${part}"><img src="data:,"><img src="parts/${part}"></body></html>`;
-    expect(answer).toEqual({ key: hash(resolved) });
+    expect(answer).toEqual({ key: hash(`1280x800\n${resolved}`) });
     const key = answer.key!;
     expect((await screenOf(rpc, project, screen.id)).props.picture).toBe(key);
     expect((await readdir(join(store(engine, project), "parts"))).filter((name) => !name.endsWith(".tmp"))).toEqual([part]);
@@ -148,6 +148,29 @@ describe("Screen pictures", () => {
     expect((await screenOf(rpc, project, screen.id)).props.picture).toBe(first);
   });
 
+  it("gives the same page at another size its own key and rasters", async () => {
+    const { engine, rpc, project, screen } = await addRepository({ UNFRAMED_TEST_RENDERER: "ok" });
+    const html = "<!doctype html><html><head></head><body><p>Same page</p></body></html>";
+    const short = await rpc.call("screens.capture", { project, shape: screen.id, w: 1280, h: 800, html, parts: [] });
+    const tall = await rpc.call("screens.capture", { project, shape: screen.id, w: 1280, h: 1200, html, parts: [] });
+    expect(tall.key).toMatch(KEY);
+    expect(tall.key).not.toBe(short.key);
+    expect((await screenOf(rpc, project, screen.id)).props.picture).toBe(tall.key);
+    const dir = store(engine, project);
+    expect((await readFile(join(dir, `${tall.key}.png`))).equals(await readFile(join(dir, `${short.key}.png`)))).toBe(false);
+  });
+
+  it("keeps the picture of the latest live copy when an earlier one finishes after it", async () => {
+    const { rpc, project, screen } = await addRepository({ UNFRAMED_TEST_RENDERER: "ok" });
+    const earlier = `<!doctype html><html><head></head><body><p>${"Earlier ".repeat(5000)}</p></body></html>`;
+    const later = "<!doctype html><html><head></head><body><p>Later</p></body></html>";
+    const slow = rpc.call("screens.capture", { project, shape: screen.id, w: 1280, h: 800, html: earlier, parts: [] });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const fast = await rpc.call("screens.capture", { project, shape: screen.id, w: 1280, h: 800, html: later, parts: [] });
+    expect((await slow).key).toMatch(KEY);
+    expect((await screenOf(rpc, project, screen.id)).props.picture).toBe(fast.key);
+  });
+
   it("does not capture a Screen whose Instance never runs", async () => {
     const { engine, rpc, project, instance, screen } = await addRepository({ UNFRAMED_TEST_RENDERER: "ok" });
     await becomes(rpc, project, instance.id, "stopped");
@@ -170,7 +193,7 @@ describe.skipIf(chrome === undefined)("Screen pictures in headless Chrome", () =
     expect(pngSize(await readFile(join(dir, `${key}.w384.png`)))).toEqual({ width: 384, height: 240 });
     expect(pngSize(await readFile(join(dir, `${key}.w128.png`)))).toEqual({ width: 128, height: 80 });
     const html = await readFile(join(dir, `${key}.html`), "utf8");
-    expect(key).toBe(hash(html));
+    expect(key).toBe(hash(`1280x800\n${html}`));
     expect(html).not.toContain("uf-part:");
     expect(html).not.toContain("<script");
     expect(html).toContain("Busy app");

@@ -180,8 +180,6 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     bindNodeCatalogues(editor);
     const stopCatalogues = watchNodeCatalogues(editor, engine);
     const stopLongPress = installLongPressMenu(editor);
-    const stopScreenTiers = installScreenTiers(editor, project, { live: featureOn("repositories") && !isDeviceClient() });
-    const stopScreenDemand = featureOn("repositories") ? installScreenDemand(editor, engine, project) : undefined;
     const detach = doc?.attach(editor);
     artifactsOf(editor).canvas.set(editor);
     pruneScreenFrames(project, new Set(editor.store.query.records("shape", () => ({ type: { eq: "screen" } })).get().map((shape) => shape.id)));
@@ -190,6 +188,8 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     const camera = recalledCamera(project);
     if (camera) editor.setCamera(camera, { animation: { duration: 0 } });
     else fitToShapes(editor);
+    const stopScreenTiers = installScreenTiers(editor, project, { live: featureOn("repositories") && !isDeviceClient() });
+    const stopScreenDemand = featureOn("repositories") ? installScreenDemand(editor, engine, project) : undefined;
     return () => {
       rememberCamera(project, editor.getCamera());
       stopTheme();

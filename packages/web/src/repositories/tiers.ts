@@ -1,7 +1,8 @@
-import { emptyTiers, reduceTiers, tierOf, type ScreenTier, type TierEntry, type TierEvent, type TierState, type ViewScreen } from "@unframed/domain";
+import { emptyTiers, pictureLevel, reduceTiers, tierOf, type PictureLevel, type ScreenTier, type TierEntry, type TierEvent, type TierState, type ViewScreen } from "@unframed/domain";
 import type { ScreenShapeProps } from "@unframed/contracts";
-import { atom, react, type Atom, type Editor, type TLShapeId } from "tldraw";
+import { atom, react, unsafe__withoutCapture, type Atom, type Editor, type TLShapeId } from "tldraw";
 import { setTierCounts } from "../fps/screens.ts";
+import { pictureKeyOf } from "./ScreenPicture.tsx";
 import { repositoryState } from "./store.ts";
 
 const NEAR_MARGIN = 0.5;
@@ -59,6 +60,24 @@ const watchPixelRatio = (): (() => void) => {
   return () => query?.removeEventListener("change", changed);
 };
 
+const placed = new Map<string, Atom<boolean>>();
+
+const placedOf = (project: string): Atom<boolean> => {
+  let found = placed.get(project);
+  if (found === undefined) {
+    found = atom(`screen camera placed ${project}`, false);
+    placed.set(project, found);
+  }
+  return found;
+};
+
+export const screenLevel = (editor: Editor, project: string, id: string, w: number): PictureLevel | undefined => {
+  const entry = tierEntry(project, id);
+  if (entry !== undefined) return entry.level;
+  if (!placedOf(project).get()) return undefined;
+  return unsafe__withoutCapture(() => pictureLevel(w * editor.getZoomLevel(), pixelRatio.get()));
+};
+
 export const screenView = (editor: Editor): ViewScreen[] => {
   const viewport = editor.getViewportPageBounds();
   const zoom = editor.getZoomLevel();
@@ -71,7 +90,8 @@ export const screenView = (editor: Editor): ViewScreen[] => {
     const bounds = editor.getShapePageBounds(shape.id);
     if (bounds === undefined) continue;
     const near = bounds.maxX >= viewport.minX - padX && bounds.minX <= viewport.maxX + padX && bounds.maxY >= viewport.minY - padY && bounds.minY <= viewport.maxY + padY;
-    screens.push({ id: shape.id, width: (shape.props as ScreenShapeProps).w * zoom, dpr, near, distance: Math.round(Math.hypot(bounds.midX - viewport.midX, bounds.midY - viewport.midY)) });
+    const props = shape.props as ScreenShapeProps;
+    screens.push({ id: shape.id, width: props.w * zoom, dpr, near, pictured: pictureKeyOf(props) !== undefined, distance: Math.round(Math.hypot(bounds.midX - viewport.midX, bounds.midY - viewport.midY)) });
   }
   return screens;
 };
@@ -95,6 +115,7 @@ const nearestOf = (editor: Editor, state: TierState, instance: string): string |
 
 export const installScreenTiers = (editor: Editor, project: string, options: { readonly live: boolean }): (() => void) => {
   const stops: Array<() => void> = [watchPixelRatio()];
+  placedOf(project).set(true);
   stops.push(react("screen camera", () => dispatchTier(project, { type: "camera", moving: editor.getCameraState() === "moving" })));
   stops.push(
     react("screen view", () => {
@@ -127,6 +148,7 @@ export const installScreenTiers = (editor: Editor, project: string, options: { r
   }
   return () => {
     for (const stop of stops) stop();
+    placedOf(project).set(false);
     dispatchTier(project, { type: "camera", moving: false });
   };
 };

@@ -11,7 +11,7 @@ import { schedulePageBuild } from "../../repositories/pageBuilds.ts";
 import { pictureKeyOf, ScreenPicture } from "../../repositories/ScreenPicture.tsx";
 import { forgetScreenFrame, useScreenSlot } from "../../repositories/framePool.tsx";
 import { useRepositorySetup } from "../../repositories/store.ts";
-import { dispatchTier, tierEntry } from "../../repositories/tiers.ts";
+import { dispatchTier, screenLevel, tierEntry } from "../../repositories/tiers.ts";
 import { ScreenOverlay, useScreenBranch } from "../../repositories/ScreenView.tsx";
 import { artifactCardClass } from "./looks.ts";
 import { ShapeLabel } from "./ShapeLabel.tsx";
@@ -81,7 +81,7 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
   const setupWarnings = useRepositorySetup(project)?.warnings.length ?? 0;
   const entry = useValue("screen tier", () => tierEntry(project, shape.id), [project, shape.id]);
   const tier = entry === undefined ? "picture" : tierOf(entry);
-  const level = entry?.level ?? "small";
+  const level = useValue("screen level", () => screenLevel(editor, project, shape.id, props.w), [editor, project, shape.id, props.w]);
   const selected = useValue("screen selected", () => editor.getSelectedShapeIds().includes(shape.id), [editor, shape.id]);
   const ready = useValue("screen interactive", () => isInteractive(editor, shape.id) && editor.getCameraState() === "idle", [editor, shape.id]);
   const [settled, setSettled] = useState(false);
@@ -145,7 +145,7 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
     >
       <ShapeLabel shapeId={shape.id} kind="screen" width={props.w} text={label} />
       <div ref={element} className="absolute inset-0 overflow-hidden" style={{ contain: "strict" }} data-screen-slot="">
-        {!revealed && <ScreenPicture project={project} shapeId={shape.id} props={props} branch={branch} size={size} />}
+        {!revealed && level !== undefined && <ScreenPicture project={project} shapeId={shape.id} props={props} branch={branch} size={size} />}
         {!revealed && showPage && key !== undefined && <PageCopy editor={editor} project={project} shapeId={shape.id} pictureKey={key} w={props.w} h={props.h} />}
         <ScreenOverlay project={project} instance={props.instance} />
       </div>

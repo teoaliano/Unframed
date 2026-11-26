@@ -3,7 +3,7 @@ import { emptyTiers, pictureLevel, reduceTiers, tierOf, TIER_BUDGETS, type TierE
 
 const run = (events: ReadonlyArray<TierEvent>, from: TierState = emptyTiers()): TierState => events.reduce(reduceTiers, from);
 
-const screen = (id: string, over: Partial<ViewScreen> = {}): ViewScreen => ({ id, width: 100, dpr: 2, near: true, distance: 0, ...over });
+const screen = (id: string, over: Partial<ViewScreen> = {}): ViewScreen => ({ id, width: 100, dpr: 2, near: true, distance: 0, pictured: true, ...over });
 
 const view = (...screens: ViewScreen[]): TierEvent => ({ type: "view", screens });
 
@@ -113,6 +113,16 @@ describe("reduceTiers", () => {
     expect(tiers(state).s5).toBe("snapshot");
     expect(state.entries.get("s1")!.page).toBe("loading");
     expect(state.entries.get("s0")!.page).toBe("queued");
+  });
+
+  it("queues no page copy for a Screen with no picture, so it never holds a load", () => {
+    const wide = view(...Array.from({ length: 6 }, (_, index) => screen(`s${index}`, { width: 400, distance: index, pictured: index >= 4 })));
+    let state = run([wide]);
+    expect(Object.fromEntries([...state.entries].map(([id, entry]) => [id, entry.page]))).toEqual({ s0: "none", s1: "none", s2: "none", s3: "none", s4: "loading", s5: "loading" });
+    state = reduceTiers(state, { type: "picture", id: "s0" });
+    expect(state.entries.get("s0")!.page).toBe("none");
+    state = run([view(...Array.from({ length: 6 }, (_, index) => screen(`s${index}`, { width: 400, distance: index, pictured: index === 0 || index >= 4 })))], state);
+    expect(state.entries.get("s0")!.page).toBe("loading");
   });
 
   it("drops a page copy when its Screen leaves the view or becomes small, and never retries a missing one", () => {

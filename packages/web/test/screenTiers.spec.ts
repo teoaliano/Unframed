@@ -123,6 +123,21 @@ test("switching back to a board shows every visible Screen's picture in its firs
   });
 });
 
+test("a board opened zoomed out asks only for the pictures its zoom gives", async ({ page }) => {
+  await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
+    await putBusyScreens(page, engine, project);
+    await page.reload();
+    await expect(page.locator(`[data-canvas-project="${project}"] .tl-canvas`)).toBeVisible();
+    for (const id of IDS) await expect(screenOf(page, id)).toHaveAttribute("data-level", "tiny", { timeout: 10_000 });
+    await expect(screenOf(page, IDS[0]!).locator("img[data-testid=screen-snapshot]")).toHaveAttribute("src", /\.w128\.png$/);
+    await page.waitForTimeout(500);
+    const keys = await Promise.all(IDS.map((id) => screenOf(page, id).getAttribute("data-picture")));
+    const fetched = await page.evaluate((keys) => performance.getEntriesByType("resource").map((entry) => entry.name).filter((name) => keys.some((key) => key !== null && name.includes(key))), keys);
+    expect(fetched.length).toBeGreaterThan(0);
+    expect(fetched.filter((name) => !name.endsWith(".w128.png"))).toEqual([]);
+  });
+});
+
 test("a Screen large on screen shows a static copy of its page in a closed shadow root, and a small one an image", async ({ page }) => {
   await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
     await putBusyScreens(page, engine, project);

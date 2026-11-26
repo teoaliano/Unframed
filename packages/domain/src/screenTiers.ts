@@ -13,6 +13,7 @@ export interface TierEntry {
   readonly level: PictureLevel;
   readonly near: boolean;
   readonly distance: number;
+  readonly pictured: boolean;
   readonly page: PageCopyState;
   readonly capture: boolean;
   readonly failed: boolean;
@@ -24,6 +25,7 @@ export interface ViewScreen {
   readonly dpr: number;
   readonly near: boolean;
   readonly distance: number;
+  readonly pictured: boolean;
 }
 
 export type TierEvent =
@@ -60,10 +62,10 @@ export const tierOf = (entry: TierEntry): ScreenTier =>
 
 export const emptyTiers = (): TierState => ({ entries: new Map(), active: undefined, held: undefined, parked: [], moving: false, hidden: false, pending: undefined });
 
-const FRESH: TierEntry = { frame: "none", level: "small", near: true, distance: 0, page: "none", capture: false, failed: false };
+const FRESH: TierEntry = { frame: "none", level: "small", near: true, distance: 0, pictured: false, page: "none", capture: false, failed: false };
 
 const same = (a: TierEntry, b: TierEntry): boolean =>
-  a.frame === b.frame && a.level === b.level && a.near === b.near && a.distance === b.distance && a.page === b.page && a.capture === b.capture && a.failed === b.failed;
+  a.frame === b.frame && a.level === b.level && a.near === b.near && a.distance === b.distance && a.pictured === b.pictured && a.page === b.page && a.capture === b.capture && a.failed === b.failed;
 
 class Draft {
   readonly entries: Map<string, TierEntry>;
@@ -155,9 +157,9 @@ const applyView = (draft: Draft, screens: ReadonlyArray<ViewScreen>) => {
     seen.add(screen.id);
     const entry = draft.get(screen.id);
     const level = pictureLevel(screen.width, screen.dpr);
-    const wantsPage = screen.near && level === "page";
+    const wantsPage = screen.pictured && screen.near && level === "page";
     const page = entry.page === "missing" ? "missing" : wantsPage ? (entry.page === "none" ? "queued" : entry.page) : "none";
-    draft.set(screen.id, { level, near: screen.near, distance: screen.distance, page });
+    draft.set(screen.id, { level, near: screen.near, distance: screen.distance, pictured: screen.pictured, page });
   }
   for (const id of [...draft.entries.keys()]) if (!seen.has(id)) forget(draft, id);
 };
@@ -232,7 +234,7 @@ export const reduceTiers = (state: TierState, event: TierEvent): TierState => {
     case "picture": {
       if (!known(draft, event.id)) break;
       const entry = draft.get(event.id);
-      draft.set(event.id, { page: entry.near && entry.level === "page" ? "queued" : "none" });
+      draft.set(event.id, { page: entry.pictured && entry.near && entry.level === "page" ? "queued" : "none" });
       break;
     }
     case "captured":
