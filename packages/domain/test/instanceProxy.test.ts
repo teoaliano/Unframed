@@ -33,27 +33,31 @@ describe("upstream request headers", () => {
   const base = { host: "127.0.0.1:4101", origin: "http://127.0.0.1:4101", accept: "*/*", cookie: "session=1" };
 
   it("keeps the browser's Host and Origin on ordinary requests", () => {
-    expect(upstreamRequestHeaders(base, { upstreamPort: 3000, path: "/dashboard", upgrade: false })).toEqual(base);
+    expect(upstreamRequestHeaders(base, { path: "/dashboard", upgrade: false })).toEqual(base);
   });
 
-  it.each([
-    ["/_next/static/chunk.js", false],
-    ["/_next/webpack-hmr?page=/", true],
-    ["/__nextjs_original-stack-frames", false],
-    ["/?token=abc", true],
-  ])("rewrites Origin to localhost on %j (upgrade %j)", (path, upgrade) => {
-    expect(upstreamRequestHeaders(base, { upstreamPort: 3000, path, upgrade })).toEqual({ ...base, origin: "http://localhost:3000" });
+  it.each([["/_next/static/chunk.js"], ["/__nextjs_original-stack-frames"]])("rewrites Origin to the proxy on localhost on %j and keeps Host", (path) => {
+    expect(upstreamRequestHeaders(base, { path, upgrade: false })).toEqual({ ...base, origin: "http://localhost:4101" });
   });
 
-  it("adds no Origin where the browser sent none", () => {
+  it.each([["/_next/webpack-hmr?page=/"], ["/?token=abc"], ["/ws"]])("gives an upgrade on %j an Origin and a Host that agree, both the proxy on localhost", (path) => {
+    expect(upstreamRequestHeaders(base, { path, upgrade: true })).toEqual({ ...base, host: "localhost:4101", origin: "http://localhost:4101" });
+    expect(upstreamRequestHeaders({ ...base, host: "localhost:4101", origin: "http://localhost:4101" }, { path, upgrade: true })).toEqual({ ...base, host: "localhost:4101", origin: "http://localhost:4101" });
+  });
+
+  it("adds no Origin where the browser sent none, and leaves Host alone then", () => {
     const { origin: _origin, ...noOrigin } = base;
-    expect(upstreamRequestHeaders(noOrigin, { upstreamPort: 3000, path: "/_next/x", upgrade: true })).toEqual(noOrigin);
+    expect(upstreamRequestHeaders(noOrigin, { path: "/_next/x", upgrade: true })).toEqual(noOrigin);
+  });
+
+  it.each([["null"], ["https://evil.example"], ["http://127.0.0.1:3000"], ["http://localhost"]])("rewrites neither Origin %j nor Host when the Origin does not name the proxy", (origin) => {
+    expect(upstreamRequestHeaders({ ...base, origin }, { path: "/ws", upgrade: true })).toEqual({ ...base, origin });
   });
 
   it("asks for an unencoded body when the request accepts HTML", () => {
     const headers = { ...base, accept: "text/html,application/xhtml+xml", "accept-encoding": "gzip, br" };
-    expect(upstreamRequestHeaders(headers, { upstreamPort: 3000, path: "/", upgrade: false })["accept-encoding"]).toBe("identity");
-    expect(upstreamRequestHeaders({ ...base, "accept-encoding": "gzip" }, { upstreamPort: 3000, path: "/app.js", upgrade: false })["accept-encoding"]).toBe("gzip");
+    expect(upstreamRequestHeaders(headers, { path: "/", upgrade: false })["accept-encoding"]).toBe("identity");
+    expect(upstreamRequestHeaders({ ...base, "accept-encoding": "gzip" }, { path: "/app.js", upgrade: false })["accept-encoding"]).toBe("gzip");
   });
 });
 
