@@ -1,11 +1,10 @@
 import type { ScreenShapeProps } from "@unframed/contracts";
 import { STARTUP_GRACE_MS, startupCover } from "@unframed/domain";
 import { useEffect, useState } from "react";
-import { useEditor, useValue } from "tldraw";
+import { Box, useEditor, useValue } from "tldraw";
 import { Empty, EmptyDescription, EmptyMedia } from "~/components/ui/empty";
 import { Spinner } from "~/components/ui/spinner";
 import { useCanvasProject } from "../context.ts";
-import { screenOnScreen } from "./demand.ts";
 import { repositoryState } from "./store.ts";
 
 const SHOW_AFTER_MS = 200;
@@ -32,9 +31,14 @@ export const ScreensStarting = () => {
     () => {
       const instances = state.instances.get();
       const repository = state.repository.get();
+      const viewport = editor.getViewportPageBounds();
       const inView = editor
         .getCurrentPageShapes()
-        .filter((shape) => shape.type === "screen" && screenOnScreen(editor, shape.id))
+        .filter((shape) => {
+          if (shape.type !== "screen") return false;
+          const bounds = editor.getShapePageBounds(shape.id);
+          return bounds !== undefined && Box.Collides(bounds, viewport);
+        })
         .map((shape) => instances.get((shape.props as ScreenShapeProps).instance));
       return startupCover({ repository: repository === null ? null : repository?.status, loaded: state.loaded.get(), instances: inView, graceOver });
     },
