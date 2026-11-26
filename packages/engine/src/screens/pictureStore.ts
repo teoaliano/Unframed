@@ -22,12 +22,16 @@ const exists = (path: string) =>
 
 let written = 0;
 
-const writeOnce = async (path: string, content: Buffer | string): Promise<void> => {
-  if (await exists(path)) return;
+const writeAtomic = async (path: string, content: Buffer | string): Promise<void> => {
   await mkdir(dirname(path), { recursive: true });
   const temp = `${path}.${process.pid}.${++written}.tmp`;
   await writeFile(temp, content);
   await rename(temp, path);
+};
+
+const writeOnce = async (path: string, content: Buffer | string): Promise<void> => {
+  if (await exists(path)) return;
+  await writeAtomic(path, content);
 };
 
 export class PictureStore {
@@ -81,10 +85,7 @@ export class PictureStore {
     if (dir === undefined || !PICTURE_KEY.test(key)) return;
     const path = join(dir, "signatures", hashOf(signature));
     if ((await readFile(path, "utf8").catch(() => undefined)) === key) return;
-    await mkdir(dirname(path), { recursive: true });
-    const temp = `${path}.${process.pid}.${++written}.tmp`;
-    await writeFile(temp, key);
-    await rename(temp, path);
+    await writeAtomic(path, key);
   }
 
   async path(project: string, name: string): Promise<string | undefined> {
