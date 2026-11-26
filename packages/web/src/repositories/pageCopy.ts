@@ -1,7 +1,6 @@
 import { fontFamilyKey, rootSelectors, scopeFontFamilies } from "@unframed/domain";
 
 export interface PreparedPageCopy {
-  readonly url: string;
   readonly template: HTMLTemplateElement;
   readonly sheet: CSSStyleSheet;
   readonly shadows: ReadonlyArray<CSSStyleSheet>;
@@ -191,7 +190,7 @@ const build = async (url: string, partsUrl: string): Promise<PreparedPageCopy> =
   scopeElements(page, families);
   const template = document.createElement("template");
   template.content.append(template.content.ownerDocument.importNode(page, true));
-  return { url, template, sheet, shadows };
+  return { template, sheet, shadows };
 };
 
 export const preparePageCopy = (url: string, partsUrl: string): Promise<PreparedPageCopy> => {
@@ -203,10 +202,6 @@ export const preparePageCopy = (url: string, partsUrl: string): Promise<Prepared
     if (prepared.get(url) === pending) prepared.delete(url);
   });
   return pending;
-};
-
-export const forgetPageCopy = (url: string): void => {
-  prepared.delete(url);
 };
 
 const scrollTo = (element: Element, value: string | null): void => {
