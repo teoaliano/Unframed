@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 import { clickShape } from "./generation.ts";
-import { REACT_APP, REACT_CARD, positionOf, prepareReactApp } from "./reactFixture.ts";
+import { REACT_APP, REACT_CARD, positionOf, prepareReactApp } from "../../engine/test/reactFixture.ts";
 import { putShapes, screenShapes, withRepository } from "./screenHarness.ts";
 
 const editor = (page: Page) => page.getByTestId("artifact-editor");

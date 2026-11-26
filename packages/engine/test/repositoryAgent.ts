@@ -26,8 +26,9 @@ export interface RepositoryAgent {
   session(chatId: string): Promise<{ url: string; token: string; cwd?: string; systemPrompt?: string; granted?: string[] }>;
 }
 
-export const startRepositoryAgent = async (env: Record<string, string> = {}, initial: Record<string, unknown> = {}): Promise<RepositoryAgent> => {
+export const startRepositoryAgent = async (env: Record<string, string> = {}, initial: Record<string, unknown> = {}, prepare?: (root: string) => Promise<void>): Promise<RepositoryAgent> => {
   const root = await makeRepo();
+  await prepare?.(root);
   const scripts = await makeTempDir("unframed-scripts-");
   const seeded = { setup: { when: "^Set up this Repository", turns: [{ text: "Looking." }] }, ...initial };
   for (const [name, script] of Object.entries(seeded)) await writeFile(join(scripts, `${name}.json`), JSON.stringify(script));
@@ -95,8 +96,8 @@ export const startRepositoryAgent = async (env: Record<string, string> = {}, ini
 
 export const CHROME_TURN_MS = 90_000;
 
-export const liveAgent = async (): Promise<{ agent: RepositoryAgent; proxy: number }> => {
-  const agent = await startRepositoryAgent();
+export const liveAgent = async (prepare?: (root: string) => Promise<void>): Promise<{ agent: RepositoryAgent; proxy: number }> => {
+  const agent = await startRepositoryAgent({}, {}, prepare);
   const live = await agent.rpc.call("instances.start", { project: agent.project, id: agent.instance.id });
   return { agent, proxy: live.proxyPort! };
 };

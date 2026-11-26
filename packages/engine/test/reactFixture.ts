@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { git } from "../../engine/test/gitRepos.ts";
+import { git } from "./gitRepos.ts";
 
 export const REACT_MAIN = `import { createRoot } from "react-dom/client";
 import App from "./App.jsx";
@@ -51,7 +51,7 @@ export const positionOf = (source: string, needle: string) => {
 };
 
 const ESBUILD = fileURLToPath(new URL("../../../node_modules/esbuild", import.meta.url));
-const NODE_MODULES = fileURLToPath(new URL("../node_modules", import.meta.url));
+const NODE_MODULES = fileURLToPath(new URL("../../web/node_modules", import.meta.url));
 
 export const prepareReactApp = async (root: string) => {
   await mkdir(join(root, "src"), { recursive: true });

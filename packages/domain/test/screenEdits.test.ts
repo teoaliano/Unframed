@@ -6,6 +6,7 @@ import {
   elementContext,
   ELEMENT_CONTEXT_INTRO,
   ELEMENT_CONTEXT_SCREEN,
+  ELEMENT_CONTEXT_SOURCE,
   screenChip,
   screenOverrideOf,
   screenSourceTree,
@@ -82,5 +83,11 @@ describe("a Screen in the element context", () => {
       [ELEMENT_CONTEXT_INTRO, `${ELEMENT_CONTEXT_SCREEN.replace("{label}", "trunk · /app").replace("{id}", "s1")}\n- body > button: <button>Save</button>`].join("\n\n"),
     );
     expect(asset("element-context.md")).toContain(ELEMENT_CONTEXT_SCREEN);
+  });
+
+  it("says where a mapped chip's JSX is", () => {
+    const chip = { shapeId: "s1", elementId: null, selector: "body > header", tag: "header", label: "Header", excerpt: "<header>", source: "src/App.jsx:5:5 in Header" };
+    expect(elementContext([chip], [{ shapeId: "s1", kind: "screen", label: "trunk · /app" }])).toContain("- body > header: <header> (rendered by src/App.jsx:5:5 in Header)");
+    expect(asset("element-context.md")).toContain(ELEMENT_CONTEXT_SOURCE.trim());
   });
 });

@@ -4,7 +4,7 @@ import type { Page } from "@playwright/test";
 import { ONLY_THIS_ONE } from "@unframed/domain";
 import { expect, test } from "./fixtures.ts";
 import { clickShape } from "./generation.ts";
-import { REACT_APP, prepareReactApp } from "./reactFixture.ts";
+import { REACT_APP, prepareReactApp } from "../../engine/test/reactFixture.ts";
 import { putShapes, screenShapes, withRepository } from "./screenHarness.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 

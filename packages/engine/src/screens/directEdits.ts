@@ -25,7 +25,7 @@ export const NOT_IN_WORKTREE = (file: string): string => `${file} is not a file 
 
 const isFile = (path: string): Promise<boolean> => stat(path).then((info) => info.isFile(), () => false);
 
-const findInWorktree = async (worktree: string, reported: string): Promise<string | undefined> => {
+export const findInWorktree = async (worktree: string, reported: string): Promise<string | undefined> => {
   const relative = worktreeFile(reported, worktree);
   if (relative === undefined || relative.startsWith(".git/")) return undefined;
   if (await isFile(join(worktree, relative))) return relative;

@@ -56,7 +56,7 @@ describe("UNFRAMED_FEATURES", () => {
     expect(description("canvas_read")).not.toMatch(/screen/i);
     expect(description("canvas_write")).not.toMatch(/screen/i);
     expect(description("preview_open")).not.toMatch(/Screen/);
-    expect(tools.map((tool) => tool.name).filter((name) => name.startsWith("instance_") || name === "screen_state" || name === "flow_create")).toEqual([]);
+    expect(tools.map((tool) => tool.name).filter((name) => name.startsWith("instance_") || name === "screen_state" || name === "flow_create" || name === "screen_element")).toEqual([]);
 
     const { tools: allTools } = await toolsOf("all");
     expect(allTools.find((tool) => tool.name === "canvas_read")!.description).toContain("a screen shows one state of one Instance");

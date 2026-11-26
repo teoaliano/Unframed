@@ -64,14 +64,14 @@ const leftReason = (change: DraftChange): string | null => {
 
 const chipOf = (shapeId: string, change: DraftChange): ElementChip => {
   const source = change.element.source;
-  const where = source === null ? "" : ` · ${source.file}:${source.line}`;
   return {
     shapeId,
     elementId: null,
     selector: change.element.selector,
     tag: change.element.tag,
     label: `${elementKind(change.element.tag)} · ${change.element.name}`,
-    excerpt: `<${change.element.tag}>${where}${change.element.component === null ? "" : ` in ${change.element.component}`}`,
+    excerpt: `<${change.element.tag}>`,
+    ...(source === null ? {} : { source: `${source.file}:${source.line}:${source.col}${change.element.component === null ? "" : ` in ${change.element.component}`}` }),
   };
 };
 

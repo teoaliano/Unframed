@@ -31,6 +31,7 @@ export const ELEMENT_CONTEXT_INTRO =
 export const ELEMENT_CONTEXT_ARTIFACT = '{Kind} "{label}" (shape {id}):';
 export const ELEMENT_CONTEXT_CHIP = "- {selector}: {excerpt}";
 export const ELEMENT_CONTEXT_SCREEN = 'Screen "{label}" (shape {id}), the running app; each selector finds the element in the page as it renders, not in a source file:';
+export const ELEMENT_CONTEXT_SOURCE = " (rendered by {source})";
 
 const fill = (template: string, values: Readonly<Record<string, string>>): string =>
   template.replace(/\{(\w+)\}/g, (whole, key: string) => values[key] ?? whole);
@@ -44,7 +45,7 @@ export const elementContext = (
     if (mine.length === 0) return [];
     const kind = shape.kind.charAt(0).toUpperCase() + shape.kind.slice(1);
     const header = fill(shape.kind === "screen" ? ELEMENT_CONTEXT_SCREEN : ELEMENT_CONTEXT_ARTIFACT, { Kind: kind, label: shape.label, id: shape.shapeId });
-    const lines = mine.map((chip) => fill(ELEMENT_CONTEXT_CHIP, { selector: chip.selector, excerpt: chip.excerpt }));
+    const lines = mine.map((chip) => fill(ELEMENT_CONTEXT_CHIP, { selector: chip.selector, excerpt: chip.excerpt }) + (chip.source === undefined ? "" : fill(ELEMENT_CONTEXT_SOURCE, { source: chip.source })));
     return [[header, ...lines].join("\n")];
   });
   return blocks.length === 0 ? "" : [ELEMENT_CONTEXT_INTRO, ...blocks].join("\n\n");

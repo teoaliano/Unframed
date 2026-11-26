@@ -51,3 +51,50 @@ export const proofUrl = (proxyPort: number, route: string, token: string | undef
 export const proofFailure = (proof: Extract<Proof, { ok: false }>, steps: ReadonlyArray<ScreenStep>): string => {
   return proof.step === undefined ? proof.reason : stepFailure(steps, proof.step, proof.reason);
 };
+
+export interface LocateJob {
+  readonly url: string;
+  readonly w: number;
+  readonly h: number;
+  readonly steps: number;
+  readonly selector: string;
+}
+
+export interface Located {
+  readonly bridge: boolean;
+  readonly matched: boolean;
+  readonly tag: string | null;
+  readonly found: {
+    readonly key: string;
+    readonly selfMapped: boolean;
+    readonly tag: string;
+    readonly owner: string | null;
+    readonly instanceOf: string | null;
+    readonly props: Readonly<Record<string, unknown>> | null;
+    readonly instanceIndex: number;
+    readonly instanceCount: number;
+    readonly source: { readonly file: string; readonly line: number; readonly col: number; readonly mapped: boolean } | null;
+  } | null;
+}
+
+export type ElementLocator = (job: LocateJob) => Promise<Located | undefined>;
+
+export const chromeElementLocator =
+  (chrome: HeadlessChrome): ElementLocator =>
+  (job) =>
+    chrome.use(async (browser) => {
+      const page = await browser.newPage();
+      try {
+        await page.setViewport({ width: Math.max(1, Math.round(job.w)), height: Math.max(1, Math.round(job.h)), deviceScaleFactor: 1 });
+        await page.goto(job.url, { waitUntil: "load", timeout: LOAD_TIMEOUT_MS });
+        if ((await page.evaluate("window.__unframedScreenBridge === true")) !== true) return { bridge: false, matched: false, tag: null, found: null };
+        if (job.steps > 0) await page.waitForFunction("window.__unframedStateResult !== undefined", { timeout: job.steps * (STEP_TIMEOUT_MS + 1000) + LOAD_TIMEOUT_MS });
+        await sleep(SETTLE_MS);
+        const answer = (await page.evaluate(
+          `(async () => { const el = document.querySelector(${JSON.stringify(job.selector)}); if (el === null) return { matched: false, tag: null, found: null }; const found = window.__unframedSource ? await window.__unframedSource.resolve(el) : null; return { matched: true, tag: el.tagName.toLowerCase(), found }; })()`,
+        )) as Omit<Located, "bridge">;
+        return { bridge: true, ...answer };
+      } finally {
+        await page.close().catch(() => undefined);
+      }
+    });

@@ -1,12 +1,16 @@
 import type { Instance, ScreenMock, ScreenStep } from "@unframed/contracts";
-import { agentShapeId, checkMocks, checkSteps, flowCapacity, FLOW_CREATE_TEXT, FLOW_NO_STATES, flowTooMany, INSTANCE_TOOL_TEXT, logTail, NO_CHROME_PREVIEW_MESSAGE, normaliseRoute, roomShapeId, SCREEN_STATE_TEXT } from "@unframed/domain";
+import { agentShapeId, checkMocks, checkSteps, flowCapacity, FLOW_CREATE_TEXT, FLOW_NO_STATES, flowTooMany, INSTANCE_TOOL_TEXT, logTail, NO_CHROME_PREVIEW_MESSAGE, NO_STATE_BRIDGE, normaliseRoute, roomShapeId, SCREEN_ELEMENT_TEXT, SCREEN_STATE_TEXT } from "@unframed/domain";
+import { inspectJsx } from "@unframed/domain/jsx";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { TLRecord } from "@tldraw/tlschema";
 import { refusal, type McpBinding, type McpTool, type ToolAnswer } from "../agent/mcp.ts";
 import type { Applied, CanvasChange, ChangeOrigin } from "../canvas/rooms.ts";
 import { errorText } from "../log.ts";
 import { isScreenShape, screenBeside, type ScreenShape } from "../screens/firstScreen.ts";
 import { flowRecords } from "../screens/flows.ts";
-import { proofFailure, proofUrl, type Proof, type StateProver } from "../screens/screenState.ts";
+import { findInWorktree } from "../screens/directEdits.ts";
+import { proofFailure, proofUrl, screenStatePayload, type ElementLocator, type Proof, type StateProver } from "../screens/screenState.ts";
 import { NotLive, untilLive } from "./liveInstance.ts";
 import type { ScreenStatePayload } from "./stateTokens.ts";
 
@@ -23,6 +27,7 @@ export interface InstanceToolDeps {
   readonly apply: (project: string, change: CanvasChange, origin: ChangeOrigin) => Promise<Applied>;
   readonly stateToken: (project: string, id: string, payload: ScreenStatePayload) => Promise<string>;
   readonly prove: StateProver | undefined;
+  readonly locate?: ElementLocator | undefined;
 }
 
 class Refused extends Error {}
@@ -41,7 +46,7 @@ const summary = (instance: Instance) => ({
 const detail = (instance: Instance) => ({ ...summary(instance), log: logTail(instance.log, LOG_LINES) });
 
 const text = (name: string): { readonly description: string; readonly arguments: Readonly<Record<string, string>> } =>
-  name === "flow_create" ? FLOW_CREATE_TEXT : name === "screen_state" ? SCREEN_STATE_TEXT : INSTANCE_TOOL_TEXT[name]!;
+  name === "flow_create" ? FLOW_CREATE_TEXT : name === "screen_state" ? SCREEN_STATE_TEXT : name === "screen_element" ? SCREEN_ELEMENT_TEXT : INSTANCE_TOOL_TEXT[name]!;
 
 interface CheckedState {
   readonly route: string;
@@ -135,6 +140,40 @@ export class InstanceTools {
     return { value: { screen: agentShapeId(put.id), route: state.route, state: state.state }, images };
   }
 
+  private async screenElement(binding: McpBinding, args: Record<string, unknown>): Promise<ToolAnswer> {
+    const screen = screenNamed(await this.deps.read(binding.project), args);
+    const selector = optionalString(args.selector);
+    if (selector === undefined) throw new Refused("pass a CSS selector for the element");
+    if (this.deps.locate === undefined) throw new Refused(NO_CHROME_PREVIEW_MESSAGE);
+    const instance = await this.live(binding.project, screen.props.instance);
+    const state = screenStatePayload(screen.props);
+    const token = state === undefined ? undefined : await this.deps.stateToken(binding.project, instance.id, state);
+    const located = await this.deps.locate({ url: proofUrl(instance.proxyPort, screen.props.route, token), w: Math.round(screen.props.w), h: Math.round(screen.props.h), steps: state?.steps.length ?? 0, selector });
+    if (located === undefined) throw new Refused(NO_CHROME_PREVIEW_MESSAGE);
+    if (!located.bridge) throw new Refused(NO_STATE_BRIDGE);
+    if (!located.matched) throw new Refused(`nothing on the Screen matches ${selector}`);
+    const found = located.found;
+    if (found === null || found.source === null) throw new Refused(`no React source was found for the ${located.tag ?? "element"} that ${selector} matches`);
+    const file = await findInWorktree(instance.worktree, found.source.file);
+    const jsx = file === undefined ? undefined : inspectJsx(await readFile(join(instance.worktree, file), "utf8"), file, { line: found.source.line, col: found.source.col, tag: found.tag });
+    return {
+      value: {
+        file: file ?? found.source.file,
+        line: jsx?.line ?? found.source.line,
+        col: jsx?.col ?? found.source.col,
+        ...(jsx === undefined ? {} : { endLine: jsx.endLine, endCol: jsx.endCol }),
+        tag: found.tag,
+        component: found.owner,
+        instanceOf: found.instanceOf,
+        props: found.props,
+        instanceIndex: found.instanceIndex,
+        instanceCount: found.instanceCount,
+        selfMapped: found.selfMapped,
+        ...(jsx === undefined ? {} : { jsx: jsx.span.split("\n").slice(0, 40).join("\n") }),
+      },
+    };
+  }
+
   private async flowCreate(binding: McpBinding, args: Record<string, unknown>): Promise<ToolAnswer> {
     const source = screenNamed(await this.deps.read(binding.project), args);
     const asked = Array.isArray(args.states) ? args.states : [];
@@ -176,6 +215,8 @@ export class InstanceTools {
         return this.screenState(binding, args);
       case "flow_create":
         return this.flowCreate(binding, args);
+      case "screen_element":
+        return this.screenElement(binding, args);
       default:
         return refusal(`no such Instance tool ${name}`);
     }
@@ -206,6 +247,7 @@ export class InstanceTools {
       ["instance_stop", schema("instance_stop", { id: "string" }, ["id"])],
       ["screen_state", schema("screen_state", { shapeId: "string", route: "string", steps: "array", mocks: "array", state: "string", newScreen: "boolean" }, ["shapeId", "route", "state"])],
       ["flow_create", schema("flow_create", { shapeId: "string", states: "array" }, ["shapeId", "states"])],
+      ["screen_element", schema("screen_element", { shapeId: "string", selector: "string" }, ["shapeId", "selector"])],
     ];
     return definitions.map(([name, inputSchema]) => ({
       name,
