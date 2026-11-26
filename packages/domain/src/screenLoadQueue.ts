@@ -22,7 +22,7 @@ interface Entry {
 
 const ahead = (a: ScreenLoadRank, b: ScreenLoadRank): boolean => (a.selected !== b.selected ? a.selected : a.distance < b.distance);
 
-export const screenLoadQueue = (timers: ScreenLoadTimers, cap: number = SCREEN_LOAD_CAP_MS): ScreenLoadQueue => {
+export const screenLoadQueue = (timers: ScreenLoadTimers): ScreenLoadQueue => {
   const waiting: Entry[] = [];
   let active: { readonly entry: Entry; readonly stop: () => void } | undefined;
   let scheduled: (() => void) | undefined;
@@ -40,7 +40,7 @@ export const screenLoadQueue = (timers: ScreenLoadTimers, cap: number = SCREEN_L
       }
     }
     const [entry] = waiting.splice(best, 1);
-    const turn = { entry: entry!, stop: timers.after(cap, () => finish(turn.entry)) };
+    const turn = { entry: entry!, stop: timers.after(SCREEN_LOAD_CAP_MS, () => finish(turn.entry)) };
     active = turn;
     entry!.start();
   };
