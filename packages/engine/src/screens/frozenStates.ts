@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { FREEZE_ID, frozenState, NO_STATE_BRIDGE, type FrozenState } from "@unframed/domain";
+import type { Page } from "puppeteer-core";
 import type { HeadlessChrome } from "../artifacts/headlessChrome.ts";
 
 const STATES_FOLDER = "states";
@@ -50,43 +51,41 @@ const STEP_ALLOWANCE_MS = 6_000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const withPage = <A>(chrome: HeadlessChrome, job: FreezeJob, run: (page: Page) => Promise<A>) =>
+  chrome.use(async (browser) => {
+    const page = await browser.newPage();
+    try {
+      await page.setViewport({ width: Math.max(1, Math.round(job.w)), height: Math.max(1, Math.round(job.h)), deviceScaleFactor: 1 });
+      await page.goto(job.url, { waitUntil: "load", timeout: LOAD_TIMEOUT_MS });
+      return await run(page);
+    } finally {
+      await page.close().catch(() => undefined);
+    }
+  });
+
 export const chromeFreezer =
   (chrome: HeadlessChrome): Freezer =>
-  (job) =>
-    chrome.use(async (browser) => {
-      const page = await browser.newPage();
-      try {
-        await page.setViewport({ width: Math.max(1, Math.round(job.w)), height: Math.max(1, Math.round(job.h)), deviceScaleFactor: 1 });
-        await page.goto(job.url, { waitUntil: "load", timeout: LOAD_TIMEOUT_MS });
-        if ((await page.evaluate("typeof window.__unframedFreeze === 'function'")) !== true) return { ok: false, reason: NO_STATE_BRIDGE };
-        if (job.steps > 0) {
-          await page.waitForFunction("window.__unframedStateResult !== undefined", { timeout: job.steps * STEP_ALLOWANCE_MS + LOAD_TIMEOUT_MS });
-          const result = (await page.evaluate("window.__unframedStateResult")) as { ok?: boolean; reason?: string };
-          if (result.ok !== true) return { ok: false, reason: result.reason ?? "a step failed" };
-        }
-        await sleep(QUIET_MS);
-        const state = frozenState(await page.evaluate("window.__unframedFreeze()"));
-        return state === undefined ? { ok: false, reason: "the page gave no state to freeze" } : { ok: true, state };
-      } finally {
-        await page.close().catch(() => undefined);
+  (job): Promise<Freeze | undefined> =>
+    withPage(chrome, job, async (page) => {
+      if ((await page.evaluate("typeof window.__unframedFreeze === 'function'")) !== true) return { ok: false, reason: NO_STATE_BRIDGE };
+      if (job.steps > 0) {
+        await page.waitForFunction("window.__unframedStateResult !== undefined", { timeout: job.steps * STEP_ALLOWANCE_MS + LOAD_TIMEOUT_MS });
+        const result = (await page.evaluate("window.__unframedStateResult")) as { ok?: boolean; reason?: string };
+        if (result.ok !== true) return { ok: false, reason: result.reason ?? "a step failed" };
       }
+      await sleep(QUIET_MS);
+      const state = frozenState(await page.evaluate("window.__unframedFreeze()"));
+      return state === undefined ? { ok: false, reason: "the page gave no state to freeze" } : { ok: true, state };
     });
 
 export const chromeRestoreProver =
   (chrome: HeadlessChrome): RestoreProver =>
-  (job) =>
-    chrome.use(async (browser) => {
-      const page = await browser.newPage();
-      try {
-        await page.setViewport({ width: Math.max(1, Math.round(job.w)), height: Math.max(1, Math.round(job.h)), deviceScaleFactor: 1 });
-        await page.goto(job.url, { waitUntil: "load", timeout: LOAD_TIMEOUT_MS });
-        const restored = await page
-          .waitForFunction("window.__unframedRestored !== undefined", { timeout: job.steps * STEP_ALLOWANCE_MS + LOAD_TIMEOUT_MS + 20_000 })
-          .then(() => page.evaluate("window.__unframedRestored === true"))
-          .catch(() => false);
-        await sleep(QUIET_MS);
-        return { restored: restored === true, png: Buffer.from(await page.screenshot({ type: "png" })) };
-      } finally {
-        await page.close().catch(() => undefined);
-      }
+  (job): Promise<RestoreProof | undefined> =>
+    withPage(chrome, job, async (page) => {
+      const restored = await page
+        .waitForFunction("window.__unframedRestored !== undefined", { timeout: job.steps * STEP_ALLOWANCE_MS + LOAD_TIMEOUT_MS + 20_000 })
+        .then(() => page.evaluate("window.__unframedRestored === true"))
+        .catch(() => false);
+      await sleep(QUIET_MS);
+      return { restored: restored === true, png: Buffer.from(await page.screenshot({ type: "png" })) };
     });
