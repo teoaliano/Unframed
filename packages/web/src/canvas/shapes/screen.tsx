@@ -53,7 +53,7 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
     editor.store.put([{ ...current, props: next } as TLShape]);
     return true;
   };
-  const view = useScreenView({ owner: editor, project, shapeId: shape.id, props, onScreen, interactive, write, queue: { queue: loadQueueOf(editor), rank: () => screenLoadRank(editor, shape.id) } });
+  const view = useScreenView({ owner: editor, project, shapeId: shape.id, props, onScreen, interactive, write, turn: { queue: loadQueueOf(editor), rank: () => screenLoadRank(editor, shape.id) } });
   const label = screenLabel({ branch: view.branch, route: props.route, state: props.state, warnings: setupWarnings });
   return (
     <HTMLContainer

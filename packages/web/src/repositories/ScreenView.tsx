@@ -186,10 +186,10 @@ export interface ScreenViewInput {
   readonly interactive: boolean;
   readonly write: (next: ScreenShapeProps) => boolean;
   readonly edit?: ScreenEditHooks | undefined;
-  readonly queue?: { readonly queue: ScreenLoadQueue; readonly rank: () => ScreenLoadRank } | undefined;
+  readonly turn?: { readonly queue: ScreenLoadQueue; readonly rank: () => ScreenLoadRank } | undefined;
 }
 
-export const useScreenView = ({ owner, project, shapeId, props, onScreen, interactive, write, edit, queue }: ScreenViewInput): { readonly content: ReactNode; readonly painted: boolean; readonly live: boolean; readonly queued: boolean; readonly branch: string } => {
+export const useScreenView = ({ owner, project, shapeId, props, onScreen, interactive, write, edit, turn }: ScreenViewInput): { readonly content: ReactNode; readonly painted: boolean; readonly live: boolean; readonly queued: boolean; readonly branch: string } => {
   const engine = useEngine();
   const ask = useAskAgent();
   const repositories = useFeature("repositories");
@@ -205,9 +205,9 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
   const branch = useValue("screen branch", () => state.instances.get().get(props.instance)?.branch ?? props.title, [state, props.instance, props.title]);
   const eligible = repositories && !isDeviceClient() && onScreen && proxyPort !== null;
   const [admitted, setAdmitted] = useState(false);
-  const ranking = useRef(queue?.rank);
-  ranking.current = queue?.rank;
-  const loadQueue = queue?.queue;
+  const ranking = useRef(turn?.rank);
+  ranking.current = turn?.rank;
+  const loadQueue = turn?.queue;
   useEffect(() => {
     setAdmitted(false);
     if (!eligible || loadQueue === undefined) return;
@@ -225,7 +225,10 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
   const [load, setLoad] = useState<{ readonly url: string; readonly n: number; readonly token: boolean } | undefined>(undefined);
   const frameState = useRef<{ applied: boolean; route: string | undefined }>({ applied: false, route: undefined });
   const [reloads, setReloads] = useState(0);
-  const retried = useRef<string | undefined>(undefined);
+  const retried = useRef(false);
+  useEffect(() => {
+    retried.current = false;
+  }, [props.route, stateKey]);
   const [failure, setFailure] = useState<{ readonly step: number; readonly reason: string } | undefined>(undefined);
   const [asking, setAsking] = useState<string | undefined>(undefined);
   const [painted, setPainted] = useState<string | undefined>(undefined);
@@ -233,6 +236,7 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
     if (!live || proxyPort === null) {
       shown.current = undefined;
       setPainted(undefined);
+      setLoad(undefined);
       return;
     }
     const want = { route: props.route, stateKey, port: proxyPort, reloads };
@@ -292,12 +296,11 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
     },
     onSteps: (result) => {
       loaded();
-      const attempt = `${props.route} ${stateKey}`;
       if (result.ok) {
-        retried.current = undefined;
+        retried.current = false;
         setFailure(undefined);
-      } else if (retried.current !== attempt) {
-        retried.current = attempt;
+      } else if (!retried.current) {
+        retried.current = true;
         countScreens("retries");
         setReloads((count) => count + 1);
       } else {
@@ -329,7 +332,7 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
   const url = live ? load?.url : undefined;
   const shownPainted = live && url !== undefined && painted === url;
   useCounted("live", live && url !== undefined);
-  useCounted("loading", live && url !== undefined && settled !== load?.n);
+  useCounted("loading", live && (load === undefined || settled !== load.n));
   useCounted("queued", queued);
   const content = (
     <>

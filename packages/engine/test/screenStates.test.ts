@@ -69,7 +69,7 @@ describe.skipIf(chrome === undefined)("the screen_state tool", () => {
     expect(menu).toMatchObject({ status: "completed", result: { screen, route: "/app", state: "the menu open while searching" } });
     expect(empty).toMatchObject({ status: "completed", result: { route: "/app", state: "an empty list" } });
     expect(failed).toMatchObject({ status: "completed", result: { route: "/app", state: "a failed list" } });
-    expect(unmocked).toMatchObject({ status: "failed", result: { error: 'Step 1, wait for "No items yet", failed: nothing matched "No items yet" within 5 seconds', step: 1 } });
+    expect(unmocked).toMatchObject({ status: "failed", result: { error: 'Step 1, wait for "No items yet", failed: nothing matched "No items yet" within 5 seconds of the page going quiet', step: 1 } });
 
     const records = await agent.records();
     const shown = records.find((record) => record.id === agent.screen.id);

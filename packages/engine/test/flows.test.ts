@@ -52,7 +52,7 @@ describe.skipIf(chromeOnMachine === undefined)("flow_create", () => {
       { name: "flow_create", input: { shapeId: screen, states: Array.from({ length: 9 }, () => OPEN) } },
     ]);
     const [failed, tooMany] = toolResults(chat, "flow_create");
-    expect(failed).toMatchObject({ status: "failed", result: { error: "State 2, a missing menu: Step 1, click button Missing, failed: nothing matched button Missing within 5 seconds. Nothing was built.", state: 2 } });
+    expect(failed).toMatchObject({ status: "failed", result: { error: "State 2, a missing menu: Step 1, click button Missing, failed: nothing matched button Missing within 5 seconds of the page going quiet. Nothing was built.", state: 2 } });
     expect(tooMany).toMatchObject({ status: "failed", result: { error: flowTooMany(8) } });
     expect((await agent.records()).filter((record) => record.type === "frame")).toEqual([]);
   });

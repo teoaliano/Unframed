@@ -31,7 +31,7 @@ Screens, the live frames of a Repository's dev app behind the `repositories` fla
 
 ### The proxy's Origin and Host
 
-- `upstreamRequestHeaders` takes the proxy's own port. Where the proxy rewrites (upgrades, and `/_next*` and `/__nextjs*` requests, as today), and only when the request carries an Origin that names the proxy itself, that Origin becomes `http://localhost:<proxy port>`. On an upgrade the Host becomes `localhost:<proxy port>` too, so the two agree. An Origin that is absent, or names anything else, is left alone; the loopback guard already refuses a foreign Origin on exactly these requests before any rewrite.
+- `upstreamRequestHeaders` reads the proxy's own port from the request's Host. Where the proxy rewrites (upgrades, and `/_next*` and `/__nextjs*` requests, as today), and only when the request carries an Origin that names the proxy itself, that Origin becomes `http://localhost:<proxy port>`. On an upgrade the Host becomes `localhost:<proxy port>` too, so the two agree. An Origin that is absent, or names anything else, is left alone; the loopback guard already refuses a foreign Origin on exactly these requests before any rewrite.
 - `localhost` because Next's dev server trusts only that hostname for its dev resources and hot reload, which is why the proxy rewrites at all. Vite accepts it, and an Origin equal to Host passes ComfyUI's check.
 - Plain HTTP requests keep the browser's Host, so the app's redirects and cookies stay on the proxy origin. The proxy writes the upgrade's raw request head itself, so it writes the rewritten Host there as well as the Origin.
 - The security property stays: Origin checks apply only on the requests where the proxy rewrites.

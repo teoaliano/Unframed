@@ -352,7 +352,7 @@ export function screenBridge(
       }
       if (found.length > 0) return found[0];
       const now = Date.now();
-      if (expired(begun, settle.check(now), now, config.stepTimeout)) throw new Error(`nothing matched ${describe(target)} within ${Math.round(config.stepTimeout / 1000)} seconds`);
+      if (expired(begun, settle.check(now), now, config.stepTimeout)) throw new Error(`nothing matched ${describe(target)} within ${Math.round(config.stepTimeout / 1000)} seconds of the page going quiet`);
       await sleep(50);
     }
   };
