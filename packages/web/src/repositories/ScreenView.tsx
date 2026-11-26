@@ -176,15 +176,6 @@ const Overlay = ({ project, instance }: { readonly project: string; readonly ins
   );
 };
 
-const StateNote = ({ note }: { readonly note: string | undefined }) =>
-  note === undefined ? null : (
-    <div className="pointer-events-none absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1">
-      <Badge size="sm" variant="warning" className="min-w-0 shrink" data-testid="screen-state-note">
-        <span className="truncate">{note}</span>
-      </Badge>
-    </div>
-  );
-
 export interface FrameStatus {
   readonly live: boolean;
   readonly queued: boolean;
@@ -380,7 +371,14 @@ export const useScreenFrame = ({ owner, project, shapeId, props, interactive, wr
 
 export const ScreenStateNote = ({ project, shapeId, live }: { readonly project: string; readonly shapeId: string; readonly live: boolean }) => {
   const bridge = useValue("screen bridge", () => repositoryState(project).bridges.get().get(shapeId), [project, shapeId]);
-  return <StateNote note={live && bridge === false ? NO_STATE_BRIDGE : undefined} />;
+  if (!live || bridge !== false) return null;
+  return (
+    <div className="pointer-events-none absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1">
+      <Badge size="sm" variant="warning" className="min-w-0 shrink" data-testid="screen-state-note">
+        <span className="truncate">{NO_STATE_BRIDGE}</span>
+      </Badge>
+    </div>
+  );
 };
 
 export const ScreenPlaceholder = ({ project, shapeId, props, painted }: { readonly project: string; readonly shapeId: string; readonly props: ScreenShapeProps; readonly painted: boolean }) => {
