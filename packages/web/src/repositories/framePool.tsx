@@ -48,7 +48,7 @@ const poolOf = (project: string): Atom<ReadonlyMap<string, PoolEntry>> => {
 const entryOf = (project: string, shapeId: string, slot: ScreenSlot): PoolEntry =>
   poolOf(project).get().get(shapeId) ?? { slots: atom(`screen slots ${shapeId}`, []), status: atom(`screen status ${shapeId}`, NOT_LOADED), last: { current: slot } };
 
-const keep = (project: string, shapeId: string, entry: PoolEntry): void => {
+const register = (project: string, shapeId: string, entry: PoolEntry): void => {
   const pool = poolOf(project);
   if (pool.get().get(shapeId) !== entry) pool.update((entries) => new Map(entries).set(shapeId, entry));
 };
@@ -75,7 +75,7 @@ export const useScreenSlot = (project: string, shapeId: string, slot: ScreenSlot
   const [token] = useState(() => ({}));
   const entry = useMemo(() => entryOf(project, shapeId, slot), [project, shapeId]);
   useLayoutEffect(() => {
-    keep(project, shapeId, entry);
+    register(project, shapeId, entry);
     entry.slots.update((slots) => {
       const at = slots.findIndex((each) => each.token === token);
       if (at === -1) return [...slots, { token, slot }];

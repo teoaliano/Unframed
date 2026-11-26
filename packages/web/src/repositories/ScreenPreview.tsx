@@ -5,7 +5,7 @@ import { useCanvasProject } from "../context.ts";
 import { useScreenSlot } from "./framePool.tsx";
 import { ScreenPlaceholder, type ScreenEditHooks } from "./ScreenView.tsx";
 
-const FIRST = { selected: true, distance: 0 };
+const FIRST_IN_LINE = { selected: true, distance: 0 };
 
 export const ScreenPreview = ({ shapeId, props, edit, overlay }: { readonly shapeId: string; readonly props: ScreenShapeProps; readonly edit: ScreenEditHooks; readonly overlay?: ReactNode }) => {
   const doc = useCanvasDoc();
@@ -24,7 +24,7 @@ export const ScreenPreview = ({ shapeId, props, edit, overlay }: { readonly shap
     selected: false,
     editor: true,
     write,
-    rank: () => FIRST,
+    rank: () => FIRST_IN_LINE,
     edit,
     overlay,
   });
