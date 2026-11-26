@@ -54,6 +54,43 @@ const shortValue = (value: string | null): string => {
   return value;
 };
 
+const KINDS: Readonly<Record<string, string>> = {
+  header: "Header",
+  footer: "Footer",
+  nav: "Navigation",
+  main: "Main",
+  aside: "Aside",
+  section: "Section",
+  article: "Article",
+  h1: "Heading",
+  h2: "Heading",
+  h3: "Heading",
+  h4: "Heading",
+  h5: "Heading",
+  h6: "Heading",
+  p: "Text",
+  span: "Text",
+  label: "Label",
+  a: "Link",
+  button: "Button",
+  img: "Image",
+  svg: "Icon",
+  input: "Input",
+  textarea: "Input",
+  select: "Select",
+  ul: "List",
+  ol: "List",
+  li: "List item",
+  form: "Form",
+  table: "Table",
+  div: "Frame",
+};
+
+export const elementKind = (tag: string): string => KINDS[tag.toLowerCase()] ?? tag.toLowerCase();
+
+export const elementLabel = (input: { readonly tag: string; readonly owner: string | null; readonly w: number; readonly h: number }): string =>
+  `${elementKind(input.tag)}${input.owner === null ? "" : ` · in ${input.owner}`} ${Math.round(input.w)}×${Math.round(input.h)}`;
+
 export const propertyLabel = (property: string): string => {
   if (property === "#text") return "Text";
   const words = property.replace(/-/g, " ");
@@ -156,6 +193,11 @@ export const changeTook = (change: DraftChange, measured: Measured): boolean => 
   return sameValue(change.asked, shown);
 };
 
+export const NO_SOURCE = "Unframed found no React source for this element.";
+export const NOT_SELF_MAPPED = "The element is not written as JSX of its own; the nearest JSX is named.";
+export const ONLY_THIS_ONE = "Only this instance should change, which needs a prop or a wrapper at its callsite.";
+export const DID_NOT_TAKE = "The page did not show it after the write.";
+
 export const SCREEN_DRAFTS_TEMPLATE =
   'Make these changes in the app shown by the Screen <shape> on the branch "<branch>", at <state>. The person made them by hand in the Screen editor, and Unframed could not write them into the code itself. Each line names the JSX that renders the element, the change, and why it was left to you:\n\n<changes>\n\nWork in the Instance\'s worktree at <worktree>, and nowhere else. Make each change at the place named, the way the project already styles its components, so that the Screen shows it. Leave the change uncommitted.';
 
@@ -172,7 +214,7 @@ export const draftInstructionLine = (change: DraftChange, reason: string): strin
   const instances = element.instanceCount > 1 ? `, instance ${element.instanceIndex + 1} of ${element.instanceCount}${change.scope === "one" ? ", change only this one" : ", change every one"}` : "";
   const token = change.token === undefined ? "" : ` (${change.token.name}, ${change.token.value})`;
   const value = change.kind === "class" ? `class ${change.before ?? "(none)"} → ${change.after ?? "(none)"}${token}` : `${change.property} ${JSON.stringify(change.shownBefore || change.before || "")} → ${JSON.stringify(change.after ?? "")}`;
-  return `- ${element.name}${component} at ${whereOf(element)}${instances}: ${value}. ${reason}`;
+  return `- ${elementKind(element.tag)}${component} at ${whereOf(element)}${instances}: ${value}. ${reason}`;
 };
 
 export const screenDraftInstruction = (input: {

@@ -11,6 +11,7 @@ import {
   pickTarget,
   readClass,
   scopeDraft,
+  elementLabel,
   screenDraftInstruction,
   SCREEN_DRAFTS_TEMPLATE,
   type DraftElement,
@@ -114,6 +115,13 @@ describe("picking in a Screen", () => {
     expect(pickTarget({ levels, selection: ["other"], clicks: 1, deepest: false, additive: true })).toEqual(["other", "list"]);
     expect(pickTarget({ levels, selection: ["other", "list"], clicks: 1, deepest: false, additive: true })).toEqual(["other"]);
     expect(pickTarget({ levels: [{ id: "uf1" }], selection: [], clicks: 2, deepest: false, additive: false })).toEqual(["uf1"]);
+  });
+});
+
+describe("the selection label", () => {
+  it("names the element by its kind and the component whose JSX holds it, with its size", () => {
+    expect(elementLabel({ tag: "header", owner: "AgentRail", w: 359.4, h: 48 })).toBe("Header · in AgentRail 359×48");
+    expect(elementLabel({ tag: "custom-el", owner: null, w: 10, h: 10 })).toBe("custom-el 10×10");
   });
 });
 

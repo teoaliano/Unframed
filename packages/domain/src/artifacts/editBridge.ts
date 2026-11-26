@@ -249,10 +249,10 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
   };
   const sourceOf = (): { describe(el: EditElement): unknown; levels(el: EditElement): Array<{ el: EditElement; component: string | null }>; owner(el: EditElement): string | null } | undefined =>
     stamp ? (win as unknown as { __unframedSource?: never }).__unframedSource : undefined;
-  const screenFields = (el: EditElement, deep = false): { path?: string; name?: string; owner?: string | null; source?: unknown } => {
+  const screenFields = (el: EditElement, deep = false): { path?: string; name?: string; className?: string | null; owner?: string | null; source?: unknown } => {
     if (!stamp) return {};
     const source = sourceOf();
-    return { path: pathOf(el), name: nameOf(el), owner: source?.owner(el) ?? null, ...(deep && source !== undefined ? { source: source.describe(el) } : {}) };
+    return { path: pathOf(el), name: nameOf(el), className: el.getAttribute("class"), owner: source?.owner(el) ?? null, ...(deep && source !== undefined ? { source: source.describe(el) } : {}) };
   };
   const levelsOf = (el: EditElement): Array<{ id: string | null; component: string | null }> | undefined => {
     const source = sourceOf();

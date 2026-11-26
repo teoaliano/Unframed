@@ -4,9 +4,11 @@ import {
   NO_BRIDGE,
   SCREEN_EDIT_NOTE,
   SCREEN_VIEWPORTS,
+  classSetting,
+  looksTailwind,
   screenChip,
-  screenEditInstruction,
   screenLabel,
+  elementLabel,
   dialsWith,
   editorPreviewViewport,
   FEATURE_OFF_MESSAGES,
@@ -18,7 +20,6 @@ import {
   type ChipElement,
   type DialsAnnouncement,
   type EditorKind,
-  type ScreenOverride,
 } from "@unframed/domain";
 import {
   Component,
@@ -72,12 +73,15 @@ import { COLUMN, ColumnHeader, ParametersContent } from "./Parameters.tsx";
 import { PreviewSizeControl, usePreviewSize } from "./PreviewSize.tsx";
 import { useEditSession, type EditMode } from "./editSession.ts";
 import { chipDataFor } from "./chipData.ts";
-import { draftScreenEdits, makeEditableInstruction, NO_SCREEN_DRAFT, tellAgent, type ScreenDraft } from "./tellAgent.ts";
+import { makeEditableInstruction, tellAgent } from "./tellAgent.ts";
 import { screenInstructions } from "../ParametersPanel.tsx";
 import { BranchChip } from "../../repositories/BranchChip.tsx";
 import { installEditorDemand } from "../../repositories/demand.ts";
 import { OpenInBrowser } from "../../repositories/ScreenActions.tsx";
 import { ScreenPreview } from "../../repositories/ScreenPreview.tsx";
+import { ScreenDrafts } from "../../repositories/ScreenDrafts.tsx";
+import { ScreenSource } from "../../repositories/ScreenSource.tsx";
+import { useScreenApply } from "../../repositories/screenApply.ts";
 import { repositoryState } from "../../repositories/store.ts";
 import { MotionTimeline } from "../timeline/MotionTimeline.tsx";
 import { MotionTransport, type TransportZone } from "../timeline/transport.ts";
@@ -180,7 +184,6 @@ export const ArtifactEditor = ({
   const screenBridge = useValue("screen bridge", () => repositoryState(project).bridges.get().get(shapeId), [project, shapeId]);
   const heard = useValue("screen announcement", () => artifactsOf(doc).heard.get().get(shapeId), [doc, shapeId]);
   useEffect(() => (isScreen ? installEditorDemand(engine, project, () => (doc.shape(shapeId)?.props as { instance?: string } | undefined)?.instance) : undefined), [isScreen, engine, project, doc, shapeId]);
-  const screenDraft = useRef<ScreenDraft>(NO_SCREEN_DRAFT);
   const uses = useValue(
     "component uses",
     () => {
@@ -197,26 +200,6 @@ export const ArtifactEditor = ({
   const gone = facts === undefined;
   const editing = useFeature("element-editing");
 
-  const onOverrides = (overrides: readonly ScreenOverride[]) => {
-    if (screen === undefined) return;
-    const reports = sessionRef.current.reports;
-    const elements = [...new Set(overrides.map((override) => override.edit.elementId))].map((id) => {
-      const source = sessionRef.current.tree?.elements.find((element) => element.id === id);
-      const override = overrides.find((each) => each.edit.elementId === id)!;
-      return screenChip(chipDataFor(id, source, reports[id], false), { path: override.path, name: override.name });
-    });
-    const instruction =
-      overrides.length === 0
-        ? ""
-        : screenEditInstruction({
-            shape: shapeId.replace(/^shape:/, ""),
-            branch: instance?.branch ?? screen.title,
-            state: screen.state?.trim() || screen.route,
-            worktree: instance?.worktree ?? "",
-            overrides,
-          });
-    screenDraft.current = draftScreenEdits(chatClient, shapeId, elements, instruction, screenDraft.current);
-  };
   const session = useEditSession({
     doc,
     engine,
@@ -228,13 +211,27 @@ export const ArtifactEditor = ({
     kit,
     editing,
     target: isScreen ? "screen" : "file",
-    onOverrides,
-    onNewDocument: () => {
-      screenDraft.current = NO_SCREEN_DRAFT;
-    },
+    onUndoEmpty: () => void screenApplyRef.current.undo(),
   });
   const sessionRef = useRef(session);
   sessionRef.current = session;
+  const screenApply = useScreenApply({
+    engine,
+    project,
+    shapeId,
+    instance: instance === undefined ? undefined : { id: instance.id, branch: instance.branch, worktree: instance.worktree },
+    state: screen === undefined ? "" : screen.state?.trim() || screen.route,
+    session,
+    client: chatClient,
+  });
+  const screenApplyRef = useRef(screenApply);
+  screenApplyRef.current = screenApply;
+  const classOf = (id: string, property: string): string | undefined => {
+    const draft = session.drafts.find((change) => change.element.stamp === id && change.property === property && change.kind === "class");
+    if (draft !== undefined) return draft.after ?? undefined;
+    const className = session.reports[id]?.className;
+    return looksTailwind(className) ? classSetting(className, property)?.name : undefined;
+  };
   const closePanel = useRef<(() => boolean) | undefined>(undefined);
   const [transport] = useState(() => new MotionTransport());
   useEffect(() => () => transport.dispose(), [transport]);
@@ -369,6 +366,11 @@ export const ArtifactEditor = ({
 
   useEffect(() => {
     const onUndo = (event: KeyboardEvent) => {
+      if ((event.key === "Backspace" || event.key === "Delete") && !typingIn(event.target) && !typingIn(document.activeElement) && sessionRef.current.handleKey(event.key, { shift: event.shiftKey, meta: event.metaKey, ctrl: event.ctrlKey })) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       if (
         !isUndo(event) ||
         typingIn(event.target) ||
@@ -596,6 +598,13 @@ export const ArtifactEditor = ({
   const names: Record<string, string> = {};
   for (const element of session.tree?.elements ?? [])
     names[element.id] = element.name;
+  if (isScreen)
+    for (const id of session.selection) {
+      const report = session.reports[id];
+      if (report === undefined) continue;
+      const owner = session.resolved[id]?.owner ?? report.owner ?? null;
+      names[id] = elementLabel({ tag: report.tag, owner, w: report.box.w, h: report.box.h });
+    }
 
   const timeline = facts.kind === "motion" && hasFile && editing;
   const columns = railFolded
@@ -631,8 +640,14 @@ export const ArtifactEditor = ({
           {SCREEN_EDIT_NOTE}
         </p>
       )}
+      {isScreen && shownPanel === "design" && session.selection.length === 1 && (
+        <div className="shrink-0 px-2.5 pt-2.5">
+          <ScreenSource session={session} engine={engine} project={project} instance={instance?.id} />
+        </div>
+      )}
       {shownPanel === "design" && (
         <DesignTab
+          classOf={isScreen ? classOf : undefined}
           session={session}
           kind={facts.kind}
           images={!isScreen}
@@ -796,6 +811,7 @@ export const ArtifactEditor = ({
               </span>
             )}
           </span>
+          {isScreen && <ScreenDrafts session={session} run={screenApply.run} onApply={() => void screenApply.apply()} onDismiss={screenApply.clear} />}
           {isScreen && <BranchChip owner={doc} shapeId={shapeId} />}
           {previewable && editing && (
             <ToggleGroup
@@ -1066,6 +1082,7 @@ export const ArtifactEditor = ({
                     boxes={session.boxes}
                     copies={session.copies}
                     names={names}
+                    tagged={!isScreen}
                   />
                 )}
               </div>

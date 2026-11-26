@@ -389,14 +389,14 @@ export function installSourceModule(win: any, tools: SourceTools): void {
 
   const find = (target: any): any => {
     if (target === null || typeof target !== "object") return null;
-    if (typeof target.stamp === "string") {
-      const stamped = doc.querySelector('[data-hf-id="' + target.stamp + '"]');
-      if (stamped !== null) return stamped;
-    }
     if (typeof target.key === "string") {
       const twins = sameSite(target.key);
       const index = typeof target.index === "number" ? target.index : 0;
       if (twins[index]) return twins[index];
+    }
+    if (typeof target.stamp === "string") {
+      const stamped = doc.querySelector('[data-hf-id="' + target.stamp + '"]');
+      if (stamped !== null) return stamped;
     }
     if (typeof target.selector === "string") {
       try {

@@ -80,7 +80,7 @@ const LiveScreen = ({ owner, shapeId, url, dials, interactive, events, edit }: {
       if (event.source !== frame.current?.contentWindow) return;
       const data = event.data as { type?: unknown; route?: unknown; state?: unknown; replaying?: unknown; ok?: unknown; step?: unknown; reason?: unknown } | null;
       if (typeof data !== "object" || data === null) return;
-      if (typeof data.type === "string" && data.type.startsWith("unframed:edit:")) {
+      if (typeof data.type === "string" && (data.type.startsWith("unframed:edit:") || data.type.startsWith("unframed:source:"))) {
         editing.current?.onEdit(data as { type: string });
         return;
       }

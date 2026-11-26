@@ -114,5 +114,7 @@ The person asked for no questions. These are the calls made while writing this s
 
 ## Further Notes
 
+- `screen-direct-edit.md` replaces the composer draft described above: hand edits now collect in a pending list and Apply writes them into the worktree, handing to the agent only what it cannot write.
+
 - Builds on `docs/specs/repositories.md` and `docs/specs/screen-states-and-branches.md`.
 - Real frameworks stay out of CI: stamping on a React app is checked in the dev app before merging.

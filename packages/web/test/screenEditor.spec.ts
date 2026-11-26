@@ -14,6 +14,8 @@ const rail = (page: Page) => editor(page).locator('[data-editor-column="rail"]')
 const preview = (page: Page) => editor(page).getByTestId("screen-preview");
 const app = (page: Page) => preview(page).frameLocator("iframe[data-screen-frame]");
 const editorTab = (page: Page) => page.locator("[data-slot=top-bar] [role=tab][data-variant='secondary']");
+const drafts = (page: Page) => editor(page).getByTestId("screen-drafts");
+const draftRows = (page: Page) => page.getByRole("list", { name: "Changes" }).locator("[data-draft-row]");
 const modeButton = (page: Page, name: "Edit" | "Interact") => centreColumn(page).getByRole("group", { name: "Mode" }).getByRole("button", { name, exact: true });
 
 const onRoute = async (engine: TestEngine, project: string, route: string) => {
@@ -103,37 +105,41 @@ test("navigating in Interact mode moves the Screen and its tab title follows; de
   });
 });
 
-test("Edit mode selects an element in the live app; a Design change previews at once and fills the draft, and undo takes it back out", async ({ page }) => {
+test("Edit mode selects an element in the live app; a Design change previews at once and joins the pending list, and undo takes it back out", async ({ page }) => {
   await withRepository(page, {}, async (engine, project) => {
     const first = await onRoute(engine, project, "/app");
     await openFromToolbar(page, first.id);
     await expect(app(page).getByRole("heading", { name: "Fake app" })).toBeVisible({ timeout: 30_000 });
     await expect(modeButton(page, "Edit")).toHaveAttribute("aria-pressed", "true");
     await expect(panels(page).getByTestId("screen-edit-note")).toHaveText(SCREEN_EDIT_NOTE);
+    await expect(drafts(page)).toHaveCount(0);
 
     await expect(async () => {
       await app(page).getByRole("heading", { name: "Fake app" }).dispatchEvent("click");
       await expect(page.locator('[data-edit-outline="selected"]')).toHaveCount(1, { timeout: 1000 });
     }).toPass({ timeout: 20_000 });
+    await expect(panels(page).getByTestId("screen-source-none")).toBeVisible();
     const size = panels(page).getByRole("spinbutton", { name: "Size", exact: true });
     await expect(size).toBeEnabled();
     await size.fill("48");
     await size.press("Enter");
     await expect(app(page).getByRole("heading", { name: "Fake app" })).toHaveCSS("font-size", "48px");
-    await expect(promptBox(rail(page))).toContainText(`Make these changes in the app shown by the Screen ${first.id.replace(/^shape:/, "")}`);
-    await expect(promptBox(rail(page))).toContainText("- Fake app (body > h1): font-size: 48px");
-    await expect(rail(page).getByText("h1 · Fake app", { exact: true })).toBeVisible();
+    await expect(drafts(page)).toHaveText("1 change");
+    await drafts(page).click();
+    await expect(draftRows(page)).toHaveCount(1);
+    await expect(draftRows(page).first().getByTestId("draft-line")).toHaveText("Font size 32 → 48");
+    await page.keyboard.press("Escape");
+    await expect(promptBox(rail(page))).not.toContainText("Make these changes");
 
     await centreColumn(page).getByTestId("artifact-editor-title").click();
     await page.keyboard.press("ControlOrMeta+z");
     await expect(app(page).getByRole("heading", { name: "Fake app" })).not.toHaveCSS("font-size", "48px");
-    await expect(promptBox(rail(page))).not.toContainText("Make these changes");
-    await expect(rail(page).getByText("h1 · Fake app", { exact: true })).toHaveCount(0);
+    await expect(drafts(page)).toHaveCount(0);
     expect((await screenShapes(engine, project))[0].props).not.toHaveProperty("lockedElements");
   });
 });
 
-test("a reload of the Screen drops its overrides but keeps the draft, and the next change does not take the earlier one out", async ({ page }) => {
+test("a reload of the Screen drops its overrides and its pending changes, and the next change starts a new list", async ({ page }) => {
   await withRepository(page, {}, async (engine, project) => {
     const first = await onRoute(engine, project, "/app");
     await openFromToolbar(page, first.id);
@@ -152,21 +158,22 @@ test("a reload of the Screen drops its overrides but keeps the draft, and the ne
     };
 
     await resize("48");
-    await expect(promptBox(rail(page))).toContainText("- Fake app (body > h1): font-size: 48px");
+    await expect(drafts(page)).toHaveText("1 change");
 
     await preview(page).locator("iframe[data-screen-frame]").evaluate((frame: HTMLIFrameElement) => {
       frame.src = frame.src;
     });
     await expect(heading).not.toHaveCSS("font-size", "48px", { timeout: 30_000 });
-    await expect(promptBox(rail(page))).toContainText("- Fake app (body > h1): font-size: 48px");
+    await expect(drafts(page)).toHaveCount(0);
 
     await resize("30");
-    await expect(promptBox(rail(page))).toContainText("- Fake app (body > h1): font-size: 48px");
-    await expect(rail(page).getByText("h1 · Fake app", { exact: true })).toBeVisible();
+    await expect(drafts(page)).toHaveText("1 change");
+    await drafts(page).click();
+    await expect(draftRows(page).first().getByTestId("draft-line")).toHaveText("Font size 32 → 30");
   });
 });
 
-test("Layers lists the live page's elements, with no lock or rename, and hiding one previews and says so in the draft", async ({ page }) => {
+test("Layers lists the live page's elements, with no lock or rename, and hiding one previews and joins the pending list", async ({ page }) => {
   await withRepository(page, {}, async (engine, project) => {
     const first = await onRoute(engine, project, "/app");
     await openFromToolbar(page, first.id);
@@ -178,6 +185,8 @@ test("Layers lists the live page's elements, with no lock or rename, and hiding 
     await expect(layers.getByRole("button", { name: /^Locked / })).toHaveCount(0);
     await layers.getByRole("button", { name: "Hidden menu-button" }).click();
     await expect(app(page).locator("#menu-button")).toBeHidden();
-    await expect(promptBox(rail(page))).toContainText("- menu-button (#menu-button): hidden");
+    await drafts(page).click();
+    await expect(draftRows(page).first()).toContainText("menu-button");
+    await expect(draftRows(page).first().getByTestId("draft-line")).toHaveText("Hidden");
   });
 });

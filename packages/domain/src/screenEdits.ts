@@ -3,10 +3,7 @@ import { artifactTitle, isArtifactKind, type EditorKind } from "./artifacts/arti
 import type { ChipElement } from "./elementChips.ts";
 import { screenLabel } from "./screenStates.ts";
 
-export const SCREEN_EDITS_TEMPLATE =
-  'Make these changes in the app shown by the Screen <shape> on the branch "<branch>", at <state>. The person tried them in the Screen editor as overrides on the running page, which are not saved. Each line names an element by a CSS path that finds it in the page as it renders, not in a source file, and says what to change:\n\n<changes>\n\nWork in the Instance\'s worktree at <worktree>, and nowhere else. Find the code that renders each element and make the change there, the way the project already styles and writes its components, then check that the Screen shows it. Leave the change uncommitted.';
-
-export const SCREEN_EDIT_NOTE = "Changes preview on the running app and are not saved. Send the draft to have the agent make them in the code.";
+export const SCREEN_EDIT_NOTE = "Changes preview on the running app. Apply writes them into this branch's code.";
 
 export const editorTabFacts = (
   shape: { readonly type: string; readonly props: Readonly<Record<string, unknown>> },
@@ -87,44 +84,6 @@ const sameChange = (a: ScreenEdit, b: ScreenEdit): boolean =>
 export const addScreenOverride = (list: ReadonlyArray<ScreenOverride>, next: ScreenOverride): ScreenOverride[] => [...list.filter((each) => !sameChange(each.edit, next.edit)), next];
 
 export const undoScreenOverride = (list: ReadonlyArray<ScreenOverride>): ScreenOverride[] => list.slice(0, -1);
-
-const changeText = (edit: ScreenEdit): string => {
-  if (edit.type === "style") return edit.value === null ? `remove ${edit.property}` : `${edit.property}: ${edit.value}`;
-  if (edit.type === "text") return `text ${JSON.stringify(edit.text)}`;
-  return edit.hidden ? "hidden" : "shown";
-};
-
-export const screenEditLines = (list: ReadonlyArray<ScreenOverride>): string[] => {
-  const order: string[] = [];
-  const byElement = new Map<string, { name: string; path: string; changes: string[] }>();
-  for (const override of list) {
-    const id = override.edit.elementId;
-    let entry = byElement.get(id);
-    if (entry === undefined) {
-      entry = { name: override.name, path: override.path, changes: [] };
-      byElement.set(id, entry);
-      order.push(id);
-    }
-    entry.changes.push(changeText(override.edit));
-  }
-  return order.map((id) => {
-    const entry = byElement.get(id)!;
-    return `- ${entry.name} (${entry.path}): ${entry.changes.join("; ")}`;
-  });
-};
-
-export const screenEditInstruction = (input: {
-  readonly shape: string;
-  readonly branch: string;
-  readonly state: string;
-  readonly worktree: string;
-  readonly overrides: ReadonlyArray<ScreenOverride>;
-}): string =>
-  SCREEN_EDITS_TEMPLATE.replace("<shape>", () => input.shape)
-    .replace("<branch>", () => input.branch)
-    .replace("<state>", () => input.state)
-    .replace("<worktree>", () => input.worktree)
-    .replace("<changes>", () => screenEditLines(input.overrides).join("\n"));
 
 export const screenChip = (chip: ChipElement, element: { readonly path?: string | undefined; readonly name?: string | undefined }): ChipElement => ({
   ...chip,
