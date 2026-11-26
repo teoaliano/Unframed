@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useEditor, useValue, type Editor, type TLShape, type TLShapeId } from "tldraw";
 import { Button } from "~/components/ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
+import { Textarea } from "~/components/ui/textarea";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuRadioItemIndicator, MenuTrigger } from "~/components/ui/menu";
 import { messageOf } from "../agent/store.ts";
 import { Tip } from "../chrome/ui.tsx";
@@ -46,11 +47,11 @@ const KeepView = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   const editor = useEditor();
   const instance = useScreenInstance(editor, shapeId);
   return (
-    <Tip label="Keep this view">
+    <Tip label="Duplicate">
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label="Keep this view"
+        aria-label="Duplicate"
         disabled={instance === undefined || instance.state === "removed"}
         onClick={() => instance !== undefined && placeScreenBeside(editor, shapeId, instance, "keep this view", "view")}
       >
@@ -106,22 +107,57 @@ const MapFlow = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
   const editor = useEditor();
   const project = useCanvasProject();
   const ask = useAskAgent();
+  const [open, setOpen] = useState(false);
+  const [flow, setFlow] = useState("");
   const [busy, setBusy] = useState(false);
   const map = () => {
     const props = screenPropsOf(editor, shapeId);
     const instance = props === undefined ? undefined : repositoryState(project).instances.get().get(props.instance);
     if (props === undefined || instance === undefined) return;
     setBusy(true);
-    ask(shapeId, mapFlowInstruction({ shape: shapeId.replace(/^shape:/, ""), state: props.state?.trim() || props.route, route: props.route, branch: instance.branch, worktree: instance.worktree }))
+    ask(shapeId, mapFlowInstruction({ shape: shapeId.replace(/^shape:/, ""), state: props.state?.trim() || props.route, route: props.route, branch: instance.branch, worktree: instance.worktree, flow }))
+      .then(() => {
+        setOpen(false);
+        setFlow("");
+      })
       .catch((error: unknown) => showError(messageOf(error)))
       .finally(() => setBusy(false));
   };
   return (
-    <Tip label="Map a Flow">
-      <Button variant="ghost" size="icon-sm" aria-label="Map a Flow" disabled={busy} onClick={map}>
-        <Workflow aria-hidden />
-      </Button>
-    </Tip>
+    <Popover open={open} onOpenChange={setOpen}>
+      <Tip label="Map a Flow">
+        <PopoverTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Map a Flow" />}>
+          <Workflow aria-hidden />
+        </PopoverTrigger>
+      </Tip>
+      <PopoverPopup side="bottom" align="start" sideOffset={6} padding="compact" className="w-80" aria-label="Map a Flow">
+        <form
+          className="flex flex-col gap-2"
+          aria-label="Map a Flow"
+          onSubmit={(event) => {
+            event.preventDefault();
+            map();
+          }}
+        >
+          <Textarea
+            size="sm"
+            aria-label="Flow"
+            placeholder="Describe the flow to map, or leave it empty and the agent maps the whole app."
+            value={flow}
+            autoFocus
+            onChange={(event) => setFlow(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }}
+          />
+          <Button type="submit" size="sm" className="self-end" disabled={busy}>
+            {flow.trim() === "" ? "Map the app" : "Map this flow"}
+          </Button>
+        </form>
+      </PopoverPopup>
+    </Popover>
   );
 };
 

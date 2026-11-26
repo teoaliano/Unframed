@@ -1,8 +1,6 @@
 import { screenLoadQueue, type ScreenLoadQueue, type ScreenLoadRank } from "@unframed/domain";
 import type { Editor, TLShapeId } from "tldraw";
-import type { StoreOwner } from "../canvas/doc.ts";
-
-const queues = new WeakMap<StoreOwner, ScreenLoadQueue>();
+const queues = new Map<string, ScreenLoadQueue>();
 
 const timers = {
   after: (ms: number, run: () => void) => {
@@ -11,11 +9,11 @@ const timers = {
   },
 };
 
-export const loadQueueOf = (owner: StoreOwner): ScreenLoadQueue => {
-  let queue = queues.get(owner);
+export const loadQueueOf = (project: string): ScreenLoadQueue => {
+  let queue = queues.get(project);
   if (queue === undefined) {
     queue = screenLoadQueue(timers);
-    queues.set(owner, queue);
+    queues.set(project, queue);
   }
   return queue;
 };

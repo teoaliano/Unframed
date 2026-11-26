@@ -35,7 +35,7 @@ import {
   SETUP_TOOL_TEXT,
   setupRejection,
   FLOW_CREATE_TEXT,
-  MAP_FLOW_TEMPLATE,
+  MAP_APP_TEMPLATE, MAP_FLOW_TEMPLATE,
   mapFlowInstruction,
   SCREEN_STATE_TEXT,
   SCREEN_ELEMENT_TEXT,
@@ -136,13 +136,20 @@ describe("Setup's model-facing text is the asset's text", () => {
 });
 
 describe("the Flow's model-facing text is the asset's text", () => {
-  it("holds flow_create and the instruction that asks the agent to map a Flow", () => {
+  it("holds flow_create and the instructions that ask the agent to map the app, or the Flow the person describes", () => {
     const all = Object.fromEntries(sections("flow.md").map((section) => [section.name, section]));
     expect(FLOW_CREATE_TEXT).toEqual({ description: all.flow_create!.text, arguments: all.flow_create!.args });
-    expect(MAP_FLOW_TEMPLATE).toBe(all["Map a Flow"]!.text);
-    const text = mapFlowInstruction({ shape: "a1b2", state: "the menu open", route: "/app", branch: "feature/x", worktree: "/data/worktrees/app/x" });
-    expect(text).not.toMatch(/<shape>|<state>|<route>|<branch>|<worktree>/);
-    expect(text).toContain('Map a Flow from the Screen a1b2, which shows the menu open on the branch "feature/x" (its worktree is /data/worktrees/app/x). Explore the app from /app');
+    expect(MAP_APP_TEMPLATE).toBe(all["Map the app"]!.text);
+    expect(MAP_FLOW_TEMPLATE).toBe(all["Map a described Flow"]!.text);
+    const input = { shape: "a1b2", state: "the menu open", route: "/app", branch: "feature/x", worktree: "/data/worktrees/app/x" };
+    const whole = mapFlowInstruction({ ...input, flow: "  " });
+    expect(whole).toBe(mapFlowInstruction(input));
+    expect(whole).not.toMatch(/<shape>|<state>|<route>|<branch>|<worktree>|<flow>/);
+    expect(whole).toContain('Map the app from the Screen a1b2, which shows the menu open on the branch "feature/x" (its worktree is /data/worktrees/app/x). Explore the app from /app');
+    expect(whole).toContain("call flow_create once per flow");
+    const described = mapFlowInstruction({ ...input, flow: " signing up with a taken email " });
+    expect(described).not.toMatch(/<shape>|<state>|<route>|<branch>|<worktree>|<flow>/);
+    expect(described).toContain("The person describes the flow as: signing up with a taken email. Explore the app from /app");
   });
 });
 

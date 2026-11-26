@@ -730,6 +730,18 @@ export const ArtifactEditor = ({
       )}
     </>
   );
+  const editOverlay = session.mode === "edit" && (
+    <EditOverlay
+      hovered={session.hovered}
+      layerHover={session.layerHover}
+      selection={session.selection}
+      reports={session.reports}
+      boxes={session.boxes}
+      copies={session.copies}
+      names={names}
+      tagged={!isScreen}
+    />
+  );
   return (
     <div
       ref={grid}
@@ -1050,7 +1062,7 @@ export const ArtifactEditor = ({
                 }
               >
                 {screen !== undefined ? (
-                  <ScreenPreview shapeId={shapeId} props={screen} edit={{ onEdit, onEditReady }} />
+                  <ScreenPreview shapeId={shapeId} props={screen} edit={{ onEdit, onEditReady }} overlay={editOverlay} />
                 ) : port !== undefined && (
                 <ArtifactFrame
                   key={reloads}
@@ -1073,18 +1085,7 @@ export const ArtifactEditor = ({
                   onPlayerReady={onPlayerReady}
                 />
                 )}
-                {session.mode === "edit" && (
-                  <EditOverlay
-                    hovered={session.hovered}
-                    layerHover={session.layerHover}
-                    selection={session.selection}
-                    reports={session.reports}
-                    boxes={session.boxes}
-                    copies={session.copies}
-                    names={names}
-                    tagged={!isScreen}
-                  />
-                )}
+                {screen === undefined && editOverlay}
               </div>
             </div>
           )}
