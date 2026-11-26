@@ -59,7 +59,7 @@ import { SyncSocket } from "./syncSocket.ts";
 import { CommentTool } from "../comments/CommentTool.ts";
 import { recalledCamera, rememberCamera } from "../project/tabMemory.ts";
 import { TLDRAW_ASSET_URLS, TLDRAW_CHROME, TLDRAW_OPTIONS } from "./tldrawChrome.tsx";
-import { featureOn, useFeature } from "../features.ts";
+import { useFeature } from "../features.ts";
 import { CanvasDoc, CanvasDocContext } from "./doc.ts";
 
 
