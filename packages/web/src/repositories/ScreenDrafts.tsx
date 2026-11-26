@@ -20,8 +20,7 @@ const STATE_LOOK: Readonly<Record<ApplyState, string>> = {
 
 const where = (change: DraftChange): string => {
   const element = change.element;
-  const owner = element.component === null ? "" : ` · in ${element.component}`;
-  return `${elementKind(element.tag)}${owner}`;
+  return `${elementKind(element.tag)} · ${element.component === null ? element.name : `in ${element.component}`}`;
 };
 
 const Row = ({ change, row, session, busy }: { readonly change: DraftChange; readonly row: ApplyRow | undefined; readonly session: EditSession; readonly busy: boolean }) => {

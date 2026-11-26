@@ -7,6 +7,8 @@ import { toolbar } from "./generation.ts";
 import { clickShape, nodeCard, nodeShape, promptShape, seedBoard, wireShape } from "./nodes.ts";
 import { makeRepo, repoEngineEnv } from "../../engine/test/gitRepos.ts";
 import { startHostedEngine } from "./fixtures.ts";
+import { prepareReactApp } from "../../engine/test/reactFixture.ts";
+import { putShapes, screenShapes, withRepository } from "./screenHarness.ts";
 
 const test = base.extend<{ plain: TestEngine }>({
   plain: async ({}, use) => {
@@ -144,4 +146,27 @@ test("with repositories off, a Repository opens read-only on its Screens' last s
   } finally {
     await off.dispose();
   }
+});
+
+test("with element editing off, a React Screen's editor has no Edit mode, nothing to select and no pending changes", async ({ page }) => {
+  await withRepository(
+    page,
+    { UNFRAMED_FEATURES: "repositories" },
+    async (engine, project) => {
+      const [first] = await screenShapes(engine, project);
+      await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/react" } }]);
+      await expect(page.locator("[data-testid=screen]")).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
+      await clickShape(page, first.id);
+      await page.getByRole("button", { name: "Editor", exact: true }).click();
+      const editor = page.getByTestId("artifact-editor");
+      const app = editor.getByTestId("screen-preview").frameLocator("iframe[data-screen-frame]");
+      await expect(app.getByRole("heading", { name: "Agent" })).toBeVisible({ timeout: 30_000 });
+      await expect(editor.getByRole("group", { name: "Mode" })).toHaveCount(0);
+      await app.getByRole("heading", { name: "Agent" }).dispatchEvent("click");
+      await expect(page.locator('[data-edit-outline="selected"]')).toHaveCount(0);
+      await expect(editor.getByTestId("screen-drafts")).toHaveCount(0);
+      await expect(editor.getByTestId("screen-source")).toHaveCount(0);
+    },
+    prepareReactApp,
+  );
 });

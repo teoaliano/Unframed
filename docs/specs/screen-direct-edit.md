@@ -70,7 +70,7 @@ The Design panel speaks the project's Tailwind: values read as the element's cla
   - **Props.** The props of the outermost component rooted at the element, with primitives kept and everything else summarised (`ƒ`, `{…}`, `[…]`), `children` left out.
 - An element with no fiber of its own is **not self-mapped**: it reports the nearest mapped ancestor's source plus its CSS path.
 - The engine turns a reported file into a worktree path: absolute paths inside the worktree, URL paths from the dev server's root, and `webpack://` prefixes all resolve; anything outside the worktree is refused.
-- Next.js: in development the App Router renders through React 19 in the browser for client components, so the same path applies. Server components have no fiber in the browser; their elements fall back to the nearest client component or the CSS path. Turbopack and webpack source maps both carry `sources` the normaliser handles.
+- Next.js: in development the App Router renders through React 19 in the browser for client components, so the same path applies. Server components have no fiber in the browser; their elements fall back to the nearest client component or the CSS path. Webpack's `webpack-internal:///(app-pages-browser)/./src/…` and `webpack://app/./src/…` names resolve to worktree paths. When a reported line does not land on JSX (an eval source map that shifts lines), the writer looks for the one element in the file with the same tag and the class being changed, and otherwise refuses, so the change goes to the agent with the file and the component.
 
 ### Selecting
 
@@ -90,7 +90,8 @@ The Design panel speaks the project's Tailwind: values read as the element's cla
 - A draft change is `{ id, kind: style | class | text | attr, property, before, after, token?, element }`, where `element` is `{ source { file, line, col, endLine?, endCol? }, component, instanceIndex, instanceCount, selector, name, selfMapped }`.
 - A style change on an element whose classes are Tailwind becomes a class change: `before` is the class that sets the property today (or none), `after` the class for the new value, `token` its name and value. Otherwise it stays a style change.
 - The live preview keeps today's overrides. Text overrides write to the element's own text node so React's later updates still land.
-- The pending list sits in the editor header: a count button opens it, each row reads like "Padding left 14 → 8 · pl-2", with compare (shows the page without drafts while held), discard, Discard all and Apply.
+- The pending list sits in the editor header: a count button opens it, each row names the element by its kind and component and reads like "Padding left 14 → 8 · pl-2", with discard, and All N or Only this one when the JSX has more than one instance. Compare shows the page without the drafts while it is on; Discard all and Apply close the list.
+- A reload of the Screen drops the drafts with the overrides, as before.
 
 ### Writing
 
@@ -124,8 +125,8 @@ The Design panel speaks the project's Tailwind: values read as the element's cla
 
 - Tests check what a caller sees: the file on disk after Apply, the page after a hot reload, the pending list, the message the agent receives.
 - **Domain seam**: source-map lookup and stack parsing; the source module on fake React 18 and 19 fibers (source, component, levels, instance count, props, hook chaining); the pick rule; Tailwind mapping and snapping; draft changes from an edit; the JSX writer on fixture sources (each kind, `cn` arguments, formatting kept, every refusal); worktree path normalising; the check; the agent instruction.
-- **Engine seam**: `screens.inspect`, `screens.apply` and `screens.revert` against a real repository's worktree, and refusal with the flag off; the bridge served with the source module first.
-- **Browser seam** (`screenDirectEdit.spec.ts`): a fixture app built with real React 19 and a JSX dev transform with source maps, served by the fake dev server, reloading on a file change. Select maps to the file and component; levels by click and double-click; a padding change shows its class, joins the pending list, Apply writes the file and the row reads took; Delete with an element selected keeps the Screen; flag off in `featureFlags.spec.ts`.
+- **Engine seam**: `screens.inspect`, `screens.apply` and `screens.revert` against a real repository's worktree (`screenDirectEdits.test.ts`), and refusal with the flag off; the bridge served with the source module first; `screen_element` in headless Chrome against the fixture app (`screenElement.test.ts`).
+- **Browser seam**: a fixture app (`packages/engine/test/reactFixture.ts`) built with real React 19 and esbuild's JSX dev transform with inline source maps, served by the fake dev server with a small Tailwind-like stylesheet, and reloading the page when a source file changes. `screenReactSource.spec.ts` checks the mapping itself. `screenDirectEdit.spec.ts` checks levels by click, double-click and Cmd-click, the label, the Source section, a padding change that shows its class, joins the pending list, is written by Apply and reads took, undo putting the file back, a change kept to one instance going to the agent, and Delete with an element selected keeping the Screen. `screenEditor.spec.ts` keeps the page without React on CSS paths.
 
 ## Tasks
 
