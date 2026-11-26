@@ -197,13 +197,15 @@ const ProjectFrames = ({ project }: { readonly project: string }) => {
     if (element === null) hosts.current.delete(shapeId);
     else hosts.current.set(shapeId, element);
   };
+  const placing = entries.size > 0;
   useEffect(() => {
+    if (!placing) return;
     let frame = requestAnimationFrame(function tick() {
-      if (layer.current !== null && hosts.current.size > 0) place(layer.current, hosts.current, pool.get());
+      if (layer.current !== null) place(layer.current, hosts.current, pool.get());
       frame = requestAnimationFrame(tick);
     });
     return () => cancelAnimationFrame(frame);
-  }, [pool]);
+  }, [pool, placing]);
   useEffect(() => installFramesDemand(engine, project, () => [...pool.get().values()].map((entry) => (activeSlot(entry.slots.get()) ?? entry.last.current).props.instance)), [engine, project, pool]);
   useEffect(() => {
     pools.set(project, pool);
