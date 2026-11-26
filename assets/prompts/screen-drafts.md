@@ -1,6 +1,6 @@
 # Screen drafts
 
-Used by the Screen direct edit spec ("Apply and check"). When the person applies their hand edits in the Screen editor, the changes Unframed cannot write into the code itself, the ones the person scoped to one instance, and the ones that did not take on the reloaded page go to the Screen's agent thread as this message: `<shape>` is the Screen's id, `<branch>` the Instance's branch, `<state>` the Screen's state in plain words or its route, `<worktree>` the Instance's worktree and `<changes>` one line per change, from the change lines below.
+When the person applies their hand edits in the Screen editor, the changes Unframed cannot write into the code itself, the ones the person scoped to one instance, and the ones that did not take on the reloaded page go to the Screen's agent thread as this message: `<shape>` is the Screen's id, `<branch>` the Instance's branch, `<state>` the Screen's state in plain words or its route, `<worktree>` the Instance's worktree and `<changes>` one line per change, from the change lines below.
 
 ## Instruction
 

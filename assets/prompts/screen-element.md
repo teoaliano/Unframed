@@ -1,6 +1,6 @@
 # Screen element
 
-Used by the Screen direct edit spec ("Agent"). The model-facing description of the screen_element tool on the Unframed MCP server and of its arguments. No placeholders.
+The model-facing description of the screen_element tool on the Unframed MCP server and of its arguments. No placeholders.
 
 ## screen_element
 
