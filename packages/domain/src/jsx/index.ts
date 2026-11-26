@@ -135,13 +135,17 @@ const locate = (ast: Node, source: string, place: JsxPlace, change?: JsxChange):
 
 const fail = (reason: string): JsxWrite => ({ ok: false, reason });
 
+const addAfterName = (element: Node, text: string): SpanEdit[] => {
+  const at = element.openingElement.name.end;
+  return [{ start: at, end: at, before: "", after: ` ${text}` }];
+};
+
 const classEdit = (source: string, element: Node, change: JsxChange): SpanEdit[] | string => {
   const attr = classAttr(element);
   if (attr === undefined) {
     if (change.before !== null) return `The class ${change.before} is not written on this element; it comes from a prop or a variant.`;
     if (change.after === null) return [];
-    const at = element.openingElement.name.end;
-    return [{ start: at, end: at, before: "", after: ` className="${change.after}"` }];
+    return addAfterName(element, `className="${change.after}"`);
   }
   const literals = literalsOf(attr.value);
   if (literals === "computed") return "The className is computed, so its classes cannot be changed in place.";
@@ -197,8 +201,7 @@ const attrEdit = (source: string, element: Node, change: JsxChange): SpanEdit[] 
   const attr = element.openingElement.attributes.find((each: Node) => each.type === "JSXAttribute" && tagOf(each.name) === change.property);
   if (attr === undefined) {
     if (change.after === null) return [];
-    const at = element.openingElement.name.end;
-    return [{ start: at, end: at, before: "", after: ` ${change.property}=${JSON.stringify(change.after)}` }];
+    return addAfterName(element, `${change.property}=${JSON.stringify(change.after)}`);
   }
   if (change.after === null) {
     let start = attr.start;
@@ -219,8 +222,7 @@ const styleEdit = (source: string, element: Node, change: JsxChange): SpanEdit[]
   const attr = element.openingElement.attributes.find((each: Node) => each.type === "JSXAttribute" && tagOf(each.name) === "style");
   if (attr === undefined) {
     if (change.after === null) return [];
-    const at = element.openingElement.name.end;
-    return [{ start: at, end: at, before: "", after: ` style={{ ${keyText}: ${JSON.stringify(change.after)} }}` }];
+    return addAfterName(element, `style={{ ${keyText}: ${JSON.stringify(change.after)} }}`);
   }
   const object = attr.value?.type === "JSXExpressionContainer" ? attr.value.expression : undefined;
   if (object === undefined || object.type !== "ObjectExpression") return "The style is computed, so it cannot be changed in place.";
