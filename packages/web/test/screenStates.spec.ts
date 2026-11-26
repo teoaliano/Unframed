@@ -164,7 +164,7 @@ test("a Screen whose steps no longer work says Couldn't reach this state with th
     const [first] = await screenShapes(engine, project);
     const broken = { state: "the menu open", steps: [{ action: "click", target: { role: "button", name: "Menu" } }, { action: "click", target: { role: "button", name: "Missing" } }] };
     await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/app", ...broken } }]);
-    const failed = page.locator("[data-testid=screen] [data-testid=screen-state-failed]");
+    const failed = page.locator("[data-screen-of] [data-testid=screen-state-failed]");
     await expect(failed).toContainText("Couldn't reach this state", { timeout: 30_000 });
     await expect(failed.getByTestId("screen-state-failed-step")).toHaveText("Step 2, click button Missing, failed: nothing matched button Missing within 5 seconds of the page going quiet");
     await failed.getByRole("button", { name: "Ask the agent to fix it" }).click();
