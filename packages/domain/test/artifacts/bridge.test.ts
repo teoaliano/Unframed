@@ -3,7 +3,7 @@ import { dialsBridgeSource } from "../../src/index.ts";
 
 type Listener = (event: { source: unknown; origin: string; data: unknown }) => void;
 
-const stubWindow = (options: { origin?: string; framed?: boolean; variables?: unknown } = {}) => {
+const stubWindow = (options: { origin?: string; framed?: boolean; variables?: unknown; peers?: readonly string[] } = {}) => {
   const posted: Array<{ message: any; targetOrigin: string }> = [];
   const errors: unknown[][] = [];
   const listeners: Listener[] = [];
@@ -28,7 +28,7 @@ const stubWindow = (options: { origin?: string; framed?: boolean; variables?: un
     ...(options.variables === undefined ? {} : { __hfVariables: options.variables }),
   };
   win.parent = options.framed === false ? win : parent;
-  new Function("window", dialsBridgeSource())(win);
+  new Function("window", dialsBridgeSource(options.peers ?? []))(win);
   const send = (data: unknown, from: { source?: unknown; origin?: string } = {}) => {
     for (const listener of listeners) listener({ source: from.source ?? parent, origin: from.origin ?? "http://localhost:8787", data });
   };
@@ -143,6 +143,17 @@ describe("the built bridge", () => {
     const handle = alone.win.unframed.dials("Scene", { on: true }, undefined);
     expect(handle.values).toEqual({ on: true });
     expect(alone.posted).toEqual([]);
+  });
+
+  it("accepts one configured https peer, and refuses a different https origin", () => {
+    const peer = "https://homebox.tail1234.ts.net:5173";
+    const { win, send } = stubWindow({ peers: [peer, "https://evil.example/app", "not a url"] });
+    const applied: unknown[] = [];
+    win.unframed.dials("Scene", { speed: [1, 0, 5] }, (values: unknown) => applied.push(values));
+    send({ type: "unframed:dials:set", values: { speed: 2 } }, { origin: "https://other.example:5173" });
+    send({ type: "unframed:dials:set", values: { speed: 3 } }, { origin: peer });
+    send({ type: "unframed:dials:hello" }, { origin: "http://localhost:5173" });
+    expect(applied.slice(1)).toEqual([{ speed: 3 }]);
   });
 
   it("accepts a message only from its parent with its own origin or a loopback one", () => {

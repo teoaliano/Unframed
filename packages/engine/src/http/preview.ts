@@ -3,13 +3,10 @@ import { stat } from "node:fs/promises";
 import http from "node:http";
 import { basename, dirname, join } from "node:path";
 import { pipeline } from "node:stream/promises";
-import { COMPONENT_HELPER_FILE, LIVE_CHECK_FILE, LIVE_VIEWER_FILE, loopbackGuard, projectSlug } from "@unframed/domain";
+import { COMPONENT_HELPER_FILE, LIVE_CHECK_FILE, LIVE_VIEWER_FILE, loopbackGuard, previewContentSecurityPolicy, projectSlug, sharePeerOrigins } from "@unframed/domain";
 import { BRIDGE_FILE, EDIT_BRIDGE_FILE, ensureBridge, ensureComponentHelper, ensureCompiledComponent, ensureLiveViewer } from "../artifacts/artifactStore.ts";
 import { NOT_FOUND } from "./respond.ts";
 import { guardUpgrade, refuseUpgrade } from "./guard.ts";
-
-const PREVIEW_CSP =
-  "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-ancestors http://localhost:* http://127.0.0.1:*";
 
 const CONTENT_TYPES: Readonly<Record<string, string>> = {
   html: "text/html; charset=utf-8",
@@ -112,7 +109,7 @@ const handler =
     }
     const etag = etagOf(info.size, info.mtimeMs);
     const headers: http.OutgoingHttpHeaders = {
-      "content-security-policy": PREVIEW_CSP,
+      "content-security-policy": previewContentSecurityPolicy(sharePeerOrigins(process.env.UNFRAMED_DEV_SHARE_ORIGIN)),
       "cross-origin-resource-policy": "same-origin",
       "x-content-type-options": "nosniff",
       "referrer-policy": "no-referrer",
