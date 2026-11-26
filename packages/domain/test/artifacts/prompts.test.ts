@@ -49,10 +49,8 @@ import {
 const prompts = join(import.meta.dirname, "../../../../assets/prompts");
 const read = (file: string) => readFileSync(join(prompts, file), "utf8");
 
-/** Every fenced `text` block of a prompt asset, in order. */
 const blocks = (file: string): string[] => [...read(file).matchAll(/^(`{3,})text\n([\s\S]*?)\n\1$/gm)].map((match) => match[2]!);
 
-/** A file's `## ` sections, each with its text block and its `- \`arg\`: description` bullets. */
 const sections = (file: string) =>
   read(file)
     .split(/^## /m)

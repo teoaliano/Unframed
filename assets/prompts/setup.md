@@ -1,7 +1,5 @@
 # Setup
 
-Used by the Repositories spec ("Setup"). Setup is the thread Unframed opens when a Repository is added or Setup is run again. The system section is added to the Setup thread's system prompt after the Repository section. The first message is the thread's first message, sent with the first Screen selected. The rejection is the next message when the person rejects Setup's result, with `<note>` their note. The tool sections describe Setup's own tools and their arguments.
-
 ## System
 
 ```text

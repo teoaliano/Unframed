@@ -1,7 +1,5 @@
 # Repository analysis
 
-Used by the Repository analysis spec ("Agent tools"). The tool sections describe the agent's tools for the Code map, the Design-system index, the States index, mock files, placing Screens, frozen states and the take-home patch, with their arguments. The instruction is what "Show states" sends into a thread started from a Screen when its route has no prepared states: `<shape>` is the Screen's id, `<route>` its route, `<branch>` the Instance's branch, `<worktree>` the absolute path of its worktree and `<cases>` how many cases the States index lists for the route.
-
 ## repo_analyse
 
 ```text
