@@ -112,9 +112,11 @@ export const useScreenApply = (input: ScreenApplyInput) => {
     runRef.current = next;
     setRunState(next);
   };
-  const update = (ids: readonly string[], state: ApplyState, reason?: string | null) => {
+  const generation = useRef(0);
+  const resolving = useRef(false);
+  const update = (ids: readonly string[], state: ApplyState, reason?: string | null, of = generation.current) => {
     const current = runRef.current;
-    if (current === undefined) return;
+    if (current === undefined || of !== generation.current) return;
     setRun({ ...current, rows: current.rows.map((row) => (ids.includes(row.change.id) ? { ...row, state, reason: reason === undefined ? row.reason : reason } : row)) });
   };
 
@@ -139,7 +141,7 @@ export const useScreenApply = (input: ScreenApplyInput) => {
     return { took, missed: [...pending.keys()] };
   };
 
-  const handOff = async (rows: readonly ApplyRow[]) => {
+  const handOff = async (rows: readonly ApplyRow[], of: number) => {
     const { client, shapeId, instance, state } = latest.current;
     const text = screenDraftInstruction({
       shape: shapeId.replace(/^shape:/, ""),
@@ -156,7 +158,7 @@ export const useScreenApply = (input: ScreenApplyInput) => {
         if (client.providers === undefined) await client.loadProviders();
         const ready = readyProviders(client.providers);
         if (ready.length === 0) {
-          update(ids, "unsent", NO_PROVIDER);
+          update(ids, "unsent", NO_PROVIDER, of);
           return;
         }
         chatId = await createChat(client, { modelSelection: { provider: ready[0]!, model: "", traits: {} }, runtimeMode: DEFAULT_RUNTIME_MODE, interactionMode: "default", tags: [shapeId] }, text);
@@ -164,31 +166,36 @@ export const useScreenApply = (input: ScreenApplyInput) => {
       client.setUi({ open: true, chosen: chatId, pinned: null });
       const ended = turnEnded(client, chatId);
       await sendMessage(client, chatId, { text, selection: [shapeId], attachments: [], elements: rows.map((row) => chipOf(shapeId, row.change)) });
-      update(ids, "agent");
+      update(ids, "agent", undefined, of);
       await ended;
+      if (of !== generation.current) return;
       const outcome = await check(rows, CHECK_WINDOW_MS);
-      update(outcome.took, "took", null);
-      update(outcome.missed, "missed", DID_NOT_TAKE);
+      update(outcome.took, "took", null, of);
+      update(outcome.missed, "missed", DID_NOT_TAKE, of);
     } catch (error) {
-      update(ids, "unsent", messageOf(error));
+      update(ids, "unsent", messageOf(error), of);
     }
   };
 
   const apply = async () => {
     const { session, engine, project, instance } = latest.current;
-    if (instance === undefined || session.drafts.length === 0 || runRef.current?.busy === true) return;
+    if (instance === undefined || session.drafts.length === 0 || runRef.current?.busy === true || resolving.current) return;
+    resolving.current = true;
     const drafts = await Promise.all(
       session.drafts.map(async (change) => {
-        if (change.element.source !== null) return change;
-        const found = await session.resolve(change.element.stamp);
-        if (found === null || found.source === null) return change;
+        const found = await session.resolve(change.element.stamp, true);
+        if (found === null || found.source === null) return { ...change, element: { ...change.element, source: null } };
         return { ...change, element: { ...change.element, key: found.key, source: { file: found.source.file, line: found.source.line, col: found.source.col }, component: found.owner, selfMapped: found.selfMapped, instanceIndex: found.instanceIndex, instanceCount: found.instanceCount, tag: found.tag } };
       }),
-    );
+    ).finally(() => {
+      resolving.current = false;
+    });
     const rows: ApplyRow[] = drafts.map((change) => {
       const reason = leftReason(change);
       return { change, state: reason === null ? "writing" : "agent", reason };
     });
+    generation.current += 1;
+    const of = generation.current;
     setRun({ apply: null, rows, busy: true });
     const writes = rows.filter((row) => row.state === "writing").flatMap((row) => writeOf(row.change) ?? []);
     try {
@@ -217,8 +224,8 @@ export const useScreenApply = (input: ScreenApplyInput) => {
       update(outcome.missed, "agent", DID_NOT_TAKE);
     }
     const forAgent = runRef.current!.rows.filter((row) => row.state === "agent");
-    if (forAgent.length > 0) await handOff(forAgent);
     setRun({ ...runRef.current!, busy: false });
+    if (forAgent.length > 0) await handOff(forAgent, of);
   };
 
   const undo = async (): Promise<boolean> => {
@@ -227,6 +234,7 @@ export const useScreenApply = (input: ScreenApplyInput) => {
     if (current === undefined || current.apply === null || current.busy) return false;
     try {
       const answer = await engine.call("screens.revert", { project, apply: current.apply });
+      generation.current += 1;
       setRun(undefined);
       showNotice(answer.kept.length === 0 ? `Put back ${answer.reverted === 1 ? "the change" : `${answer.reverted} changes`} Apply wrote.` : `Put back ${answer.reverted}; left ${answer.kept.length} that changed since.`, "info");
     } catch (error) {
@@ -235,5 +243,13 @@ export const useScreenApply = (input: ScreenApplyInput) => {
     return true;
   };
 
-  return { run, apply, undo, clear: () => setRun(undefined) };
+  return {
+    run,
+    apply,
+    undo,
+    clear: () => {
+      generation.current += 1;
+      setRun(undefined);
+    },
+  };
 };

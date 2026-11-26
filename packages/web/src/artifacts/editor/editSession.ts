@@ -181,7 +181,7 @@ export interface EditSession {
   readonly overrides: readonly ScreenOverride[];
   readonly drafts: readonly DraftChange[];
   readonly resolved: Readonly<Record<string, ResolvedSource | null>>;
-  readonly resolve: (stamp: string) => Promise<ResolvedSource | null>;
+  readonly resolve: (stamp: string, fresh?: boolean) => Promise<ResolvedSource | null>;
   readonly measure: (targets: readonly MeasureTarget[]) => Promise<readonly MeasureResult[]>;
   readonly nextUpdate: (timeout: number) => Promise<boolean>;
   readonly discardDraft: (id: string) => void;
@@ -246,6 +246,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
   const [resolved, setResolved] = useState<Readonly<Record<string, ResolvedSource | null>>>({});
   const resolvedRef = useRef<Readonly<Record<string, ResolvedSource | null>>>({});
   const resolving = useRef(new Map<string, Promise<ResolvedSource | null>>());
+  const unanswered = useRef(new Set<string>());
   const asks = useRef(new Map<number, (value: unknown) => void>());
   const nextAsk = useRef(0);
   const updateWaiters = useRef(new Set<() => void>());
@@ -316,13 +317,18 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
       });
       post({ ...message, id });
     });
-  const resolve = (stamp: string): Promise<ResolvedSource | null> => {
-    const known = resolvedRef.current[stamp];
-    if (known !== undefined) return Promise.resolve(known);
-    const running = resolving.current.get(stamp);
-    if (running !== undefined) return running;
-    const asked = ask<ResolvedSource | null>({ type: "unframed:source:resolve", target: { stamp } }, 5_000, null).then((found) => {
-      resolving.current.delete(stamp);
+  const resolve = (stamp: string, fresh = false): Promise<ResolvedSource | null> => {
+    if (!fresh && !unanswered.current.has(stamp)) {
+      const known = resolvedRef.current[stamp];
+      if (known !== undefined) return Promise.resolve(known);
+      const running = resolving.current.get(stamp);
+      if (running !== undefined) return running;
+    }
+    const asked: Promise<ResolvedSource | null> = ask<ResolvedSource | null | undefined>({ type: "unframed:source:resolve", target: { stamp } }, 5_000, undefined).then((answer) => {
+      if (resolving.current.get(stamp) === asked) resolving.current.delete(stamp);
+      const found = answer ?? null;
+      if (answer === undefined) unanswered.current.add(stamp);
+      else unanswered.current.delete(stamp);
       resolvedRef.current = { ...resolvedRef.current, [stamp]: found };
       setResolved(resolvedRef.current);
       deriveDrafts();
@@ -749,6 +755,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
           updated();
           resolvedRef.current = {};
           resolving.current.clear();
+          unanswered.current.clear();
           setResolved({});
           reportsRef.current = {};
           setReports({});

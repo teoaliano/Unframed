@@ -116,9 +116,9 @@ const innerOf = (literal: Node): { start: number; end: number } =>
 const locate = (ast: Node, source: string, place: JsxPlace, change?: JsxChange): Found | string => {
   const all = elementsOf(ast);
   const at = (found: Found) => found.element.openingElement.loc.start;
-  const exact = all.filter((found) => at(found).line === place.line && Math.abs(at(found).column + 1 - place.col) <= 1);
+  const tagged = (found: Found) => place.tag === undefined || tagOf(found.element.openingElement.name).toLowerCase() === place.tag.toLowerCase();
+  const exact = all.filter((found) => at(found).line === place.line && Math.abs(at(found).column + 1 - place.col) <= 1 && tagged(found));
   if (exact.length > 0) return exact.sort((a, b) => Math.abs(at(a).column + 1 - place.col) - Math.abs(at(b).column + 1 - place.col))[0]!;
-  const tagged = (found: Found) => place.tag === undefined || tagOf(found.element.openingElement.name) === place.tag;
   const onLine = all.filter((found) => at(found).line === place.line && tagged(found));
   if (onLine.length === 1) return onLine[0]!;
   if (change?.kind === "class" && change.before !== null && place.tag !== undefined) {

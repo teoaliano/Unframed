@@ -131,6 +131,38 @@ test("a change kept to one instance goes to the Screen's agent with the file, th
   );
 });
 
+test("undo right after Apply puts back what Apply wrote while the agent still has the rest", async ({ page }) => {
+  await withRepository(
+    page,
+    {},
+    async (engine, project) => {
+      await openReact(page, engine, project);
+      await pick(page, app(page).getByRole("heading", { name: "Agent" }), { detail: 1 }, /^Header · in Header /);
+      const padding = panels(page).getByRole("spinbutton", { name: "Padding left", exact: true });
+      await padding.fill("8");
+      await padding.press("Enter");
+      await pick(page, app(page).getByRole("heading", { name: "Second" }), { detail: 1 }, /^List item · in Card /);
+      await padding.fill("24");
+      await padding.press("Enter");
+      await expect(drafts(page)).toHaveText("2 changes");
+      await drafts(page).click();
+      await rows(page).nth(1).getByRole("button", { name: "Only this one" }).click();
+
+      const file = join(await worktreeOf(engine, project), "src", "App.jsx");
+      await page.getByRole("button", { name: "Apply", exact: true }).click();
+      await expect(rows(page).first().getByTestId("draft-state")).toHaveText("Took", { timeout: 30_000 });
+      await expect(rows(page).nth(1).getByTestId("draft-state")).toHaveText("With the agent", { timeout: 20_000 });
+      expect(await readFile(file, "utf8")).toBe(REACT_APP.replace("pl-3.5 pr-2", "pl-2 pr-2"));
+
+      await page.keyboard.press("Escape");
+      await centreColumn(page).getByTestId("artifact-editor-title").click();
+      await page.keyboard.press("ControlOrMeta+z");
+      await expect.poll(() => readFile(file, "utf8"), { timeout: 10_000 }).toBe(REACT_APP);
+    },
+    prepareReactApp,
+  );
+});
+
 test("Delete and Backspace with an element selected never delete the Screen", async ({ page }) => {
   await withRepository(
     page,

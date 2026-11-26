@@ -64,6 +64,12 @@ describe("the JSX writer", () => {
     expect(ok(writeJsx(RAIL, "src/AgentRail.tsx", { line: 40, col: 1, tag: "header" }, { kind: "class", property: "padding-left", before: "pl-3.5", after: "pl-2" })).line).toBe(6);
     expect(ok(writeJsx(RAIL, "src/AgentRail.tsx", { line: 7, col: 30, tag: "h2" }, { kind: "text", property: "#text", before: "Agent", after: "Chat" })).line).toBe(7);
   });
+
+  it("never writes to a different element that now starts at the reported position", () => {
+    expect(refused(writeJsx(RAIL, "src/AgentRail.tsx", { line: 6, col: 7, tag: "li" }, { kind: "class", property: "padding-left", before: null, after: "pl-2" }))).toMatch(/No JSX element starts at line 6/);
+    const svg = `export const Mark = () => (\n  <svg>\n    <linearGradient id="g" />\n  </svg>\n);\n`;
+    expect(ok(writeJsx(svg, "src/Mark.tsx", { line: 3, col: 5, tag: "lineargradient" }, { kind: "attr", property: "id", before: "g", after: "h" })).text).toContain('<linearGradient id="h" />');
+  });
 });
 
 describe("inspecting JSX", () => {

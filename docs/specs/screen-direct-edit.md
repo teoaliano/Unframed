@@ -75,7 +75,7 @@ The Design panel speaks the project's Tailwind: values read as the element's cla
 ### Selecting
 
 - The edit bridge, in stamp mode, sends each pick with its levels (stamped ids and component names) and the gesture: click count, Cmd and Shift.
-- A pure rule chooses the selection: a click takes the outermost level (or the next level below the current selection when the pointer is inside it); a double-click goes one level deeper than the current selection; Cmd-click takes the deepest element; Shift adds. A page with no React reports one level, the element itself, which is today's behaviour.
+- A pure rule chooses the selection: a click takes the outermost level, or keeps the current selection when the pointer is inside it; a double-click goes one level deeper than the current selection; Cmd-click takes the deepest element; Shift adds. A page with no React reports one level, the element itself, which is today's behaviour.
 - The overlay draws the selection label as `<name> · in <component> <w>×<h>`.
 - In the Screen editor, Delete and Backspace with an element selected are swallowed, so tldraw never sees them; the Screen shape stays.
 
