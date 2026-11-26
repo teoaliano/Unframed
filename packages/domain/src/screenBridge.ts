@@ -21,29 +21,6 @@ export interface SnapshotConfig {
   readonly totalMax: number;
 }
 
-export interface CapturedPart {
-  readonly url: string;
-  readonly type: string;
-  readonly data: string | null;
-}
-
-export interface CapturedPage {
-  readonly html: string;
-  readonly w: number;
-  readonly h: number;
-  readonly parts: ReadonlyArray<CapturedPart>;
-}
-
-export type SnapshotMessage = { readonly type: "unframed:snapshot:watch"; readonly on: boolean } | { readonly type: "unframed:snapshot:take" };
-
-export interface SnapshotPosted {
-  readonly type: "unframed:snapshot";
-  readonly href: string;
-  readonly final: boolean;
-  readonly snapshot: CapturedPage | null;
-  readonly error?: string;
-}
-
 export interface BridgeConfig {
   readonly param: string;
   readonly stepTimeout: number;
