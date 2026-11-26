@@ -49,8 +49,10 @@ test("a Screen opens in the editor from its toolbar and by double-click, live th
     await expect(editor(page)).toBeVisible({ timeout: 20_000 });
     await expect(app(page).getByRole("heading", { name: "Fake app" })).toBeVisible({ timeout: 30_000 });
 
+    await app(page).locator("body").focus();
     await page.keyboard.press("Escape");
     await expect(editor(page)).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).not.toBe("IFRAME");
     await page.keyboard.press("Escape");
     const at = await centre(shapeOnScreen(page, first.id));
     await page.mouse.dblclick(at.x, at.y);

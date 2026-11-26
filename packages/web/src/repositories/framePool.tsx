@@ -98,6 +98,12 @@ const PooledScreen = ({ project, shapeId, entry, host }: { readonly project: str
   if (slot !== undefined) entry.last.current = slot;
   const shown = slot ?? entry.last.current;
   const interactive = slot?.interactive === true;
+  const self = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (interactive) return;
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && self.current?.contains(focused)) focused.blur();
+  }, [interactive]);
   const frame = useScreenFrame({
     owner: shown.owner,
     project,
@@ -121,7 +127,10 @@ const PooledScreen = ({ project, shapeId, entry, host }: { readonly project: str
   );
   return (
     <div
-      ref={(element) => host(shapeId, element)}
+      ref={(element) => {
+        self.current = element;
+        host(shapeId, element);
+      }}
       className="absolute top-0 left-0 overflow-hidden"
       data-screen-of={shapeId}
       data-painted={frame.status.painted ? "true" : undefined}
