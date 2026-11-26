@@ -1,5 +1,5 @@
 import { readdir, readFile, mkdir, writeFile } from "node:fs/promises";
-import { dirname, join, relative, sep } from "node:path";
+import { dirname, join } from "node:path";
 import type { Instance, ScreenMock, ScreenStep } from "@unframed/contracts";
 import {
   agentShapeId,
@@ -30,6 +30,7 @@ import { refusal, type McpBinding, type McpTool, type ToolAnswer } from "../agen
 import type { Applied, CanvasChange, ChangeOrigin } from "../canvas/rooms.ts";
 import type { InstanceTools } from "../instances/instanceTools.ts";
 import type { InstancePatch } from "../instances/instancePatch.ts";
+import { listFiles } from "../instances/mockFiles.ts";
 import { NotLive } from "../instances/liveInstance.ts";
 import type { ScreenStatePayload } from "../instances/stateTokens.ts";
 import { errorText } from "../log.ts";
@@ -64,17 +65,6 @@ class Refused extends Error {}
 const optionalString = (value: unknown): string | undefined => (typeof value === "string" && value.trim() !== "" ? value.trim() : undefined);
 
 const text = (name: string) => ANALYSIS_TOOL_TEXT[name]!;
-
-const listFiles = async (root: string, folder: string): Promise<string[]> => {
-  const entries = await readdir(folder, { withFileTypes: true }).catch(() => []);
-  const found: string[] = [];
-  for (const entry of entries) {
-    const path = join(folder, entry.name);
-    if (entry.isDirectory()) found.push(...(await listFiles(root, path)));
-    else if (entry.isFile()) found.push(relative(root, path).split(sep).join("/"));
-  }
-  return found.sort();
-};
 
 const mockPath = (file: string): string => {
   const path = file.trim().replace(/^\.unframed\/mocks\//, "").replace(/^\/+/, "");
@@ -196,7 +186,8 @@ export class AnalysisTools {
     const names = (await readdir(folder).catch(() => [] as string[])).filter(isMockFileName).sort();
     const files = [];
     for (const name of names) files.push(mockFileSummary(name, await readFile(join(folder, name), "utf8").catch(() => "")));
-    const modules = await listFiles(join(instance.worktree, MOCK_MODULES_FOLDER), join(instance.worktree, MOCK_MODULES_FOLDER));
+    const modulesFolder = join(instance.worktree, MOCK_MODULES_FOLDER);
+    const modules = (await listFiles(modulesFolder, modulesFolder)).sort();
     const requests = [...(await this.deps.mockLog(binding.project, instance.id))].reverse().slice(0, LOG_ANSWER);
     return { value: { folder: MOCKS_FOLDER, files, modules, requests } };
   }

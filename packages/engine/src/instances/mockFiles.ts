@@ -21,12 +21,12 @@ const isUnder = (path: string, folder: string): boolean => {
   return normal === folder || normal.startsWith(`${folder}/`);
 };
 
-const walk = async (root: string, folder: string): Promise<string[]> => {
+export const listFiles = async (root: string, folder: string): Promise<string[]> => {
   const entries = await readdir(folder, { withFileTypes: true }).catch(() => []);
   const found: string[] = [];
   for (const entry of entries) {
     const path = join(folder, entry.name);
-    if (entry.isDirectory()) found.push(...(await walk(root, path)));
+    if (entry.isDirectory()) found.push(...(await listFiles(root, path)));
     else if (entry.isFile()) found.push(relative(root, path).split(sep).join("/"));
   }
   return found;
@@ -53,7 +53,7 @@ export const mockFilesOf = (worktree: string): MockFiles => {
   };
 
   const listModules = (): Promise<ReadonlySet<string>> => {
-    modules ??= walk(modulesFolder, modulesFolder).then((found) => new Set(found));
+    modules ??= listFiles(modulesFolder, modulesFolder).then((found) => new Set(found));
     return modules;
   };
 
