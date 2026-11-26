@@ -7,7 +7,6 @@ import {
   classSetting,
   draftLine,
   draftOf,
-  dropDraft,
   pickTarget,
   readClass,
   scopeDraft,
@@ -97,7 +96,6 @@ describe("draft changes", () => {
     expect(list).toHaveLength(1);
     expect(list[0]).toMatchObject({ id: "d1", before: "pl-3.5", after: "pl-4" });
     expect(scopeDraft(list, "d1", "one")[0]!.scope).toBe("one");
-    expect(dropDraft(list, "d1")).toEqual([]);
   });
 });
 

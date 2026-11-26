@@ -207,8 +207,6 @@ export const addDraft = (list: ReadonlyArray<DraftChange>, next: DraftChange): D
   return list.map((each) => (each === earlier ? merged : each));
 };
 
-export const dropDraft = (list: ReadonlyArray<DraftChange>, id: string): DraftChange[] => list.filter((each) => each.id !== id);
-
 export const scopeDraft = (list: ReadonlyArray<DraftChange>, id: string, scope: DraftScope): DraftChange[] => list.map((each) => (each.id === id ? { ...each, scope } : each));
 
 export interface PickInput {
