@@ -1,3 +1,4 @@
+import { unframedError } from "@unframed/contracts";
 import * as Effect from "effect/Effect";
 import { runCommand, type Spawned, type SpawnSetup } from "../loginShell.ts";
 
@@ -15,3 +16,5 @@ export const makeGit =
 export const gitOutput = (ran: Spawned): string | undefined => (ran.kind === "exited" && ran.code === 0 ? ran.output : undefined);
 
 export const gitStdout = (ran: Spawned): string | undefined => (ran.kind === "exited" && ran.code === 0 ? (ran.stdout ?? ran.output) : undefined);
+
+export const gitFailure = (what: string, ran: { readonly kind: string; readonly output?: string }) => unframedError("internal", `${what}: ${ran.output?.trim() || ran.kind}`);

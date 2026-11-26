@@ -31,7 +31,7 @@ import { errorText } from "../log.ts";
 import { LoginShell, runCommand } from "../loginShell.ts";
 import { Config } from "../services.ts";
 import { ProjectDatabase } from "../projectDatabase.ts";
-import { gitOutput, gitStdout, makeGit } from "../repositories/git.ts";
+import { gitFailure, gitOutput, gitStdout, makeGit } from "../repositories/git.ts";
 import { Repositories } from "../repositories/layer.ts";
 import { Instances } from "./layer.ts";
 import { instancePatch, mergeBaseOf, withTemporaryIndex, type InstancePatch } from "./instancePatch.ts";
@@ -86,9 +86,6 @@ export const instanceGitLayer = Layer.effect(
         } satisfies InstanceTarget;
       });
 
-    const failed = (what: string, ran: { readonly kind: string; readonly output?: string }) =>
-      unframedError("internal", `${what}: ${ran.output?.trim() || ran.kind}`);
-
     const diff = (project: string, id: string) =>
       Effect.gen(function* () {
         const at = yield* target(project, id);
@@ -96,13 +93,13 @@ export const instanceGitLayer = Layer.effect(
         return yield* withTemporaryIndex(git, at.worktree, (env) =>
           Effect.gen(function* () {
             const added = yield* git(at.worktree, ["add", "-A", ...at.pathspec], env);
-            if (gitOutput(added) === undefined) return yield* failed("Could not read the Instance's changes", added);
+            if (gitOutput(added) === undefined) return yield* gitFailure("Could not read the Instance's changes", added);
             const numstat = yield* git(at.worktree, ["diff", "--cached", "--no-renames", "--numstat", "-z", base, ...at.pathspec], env);
             const patch = yield* git(at.worktree, ["diff", "--cached", "--no-renames", "--no-color", "--no-ext-diff", base, ...at.pathspec], env);
             const numstatText = gitStdout(numstat);
             const patchText = gitStdout(patch);
-            if (numstatText === undefined) return yield* failed("Could not diff the Instance", numstat);
-            if (patchText === undefined) return yield* failed("Could not diff the Instance", patch);
+            if (numstatText === undefined) return yield* gitFailure("Could not diff the Instance", numstat);
+            if (patchText === undefined) return yield* gitFailure("Could not diff the Instance", patch);
             return { base, baseRef: at.baseRef, files: parseNumstat(numstatText), ...limitPatch(patchText) } satisfies InstanceDiff;
           }),
         );
@@ -173,7 +170,7 @@ export const instanceGitLayer = Layer.effect(
     const commitAll = (at: InstanceTarget) =>
       Effect.gen(function* () {
         const added = yield* git(at.worktree, ["add", "-A", ...at.pathspec]);
-        if (gitOutput(added) === undefined) return yield* failed("Could not stage the Instance's changes", added);
+        if (gitOutput(added) === undefined) return yield* gitFailure("Could not stage the Instance's changes", added);
         const staged = yield* git(at.worktree, ["diff", "--cached", "--quiet", ...at.pathspec]);
         if (staged.kind === "exited" && staged.code === 0) return null;
         const files = (gitStdout(yield* git(at.worktree, ["diff", "--cached", "--name-only", ...at.pathspec])) ?? "").split("\n").filter((line) => line !== "");

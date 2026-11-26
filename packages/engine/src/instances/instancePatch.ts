@@ -2,10 +2,10 @@ import { randomBytes } from "node:crypto";
 import { copyFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
-import { unframedError, type UnframedError } from "@unframed/contracts";
+import type { UnframedError } from "@unframed/contracts";
 import { excludedPathspecs, parseNumstat, takeHomePathspecs } from "@unframed/domain";
 import * as Effect from "effect/Effect";
-import { gitOutput, gitStdout, type Git } from "../repositories/git.ts";
+import { gitFailure, gitOutput, gitStdout, type Git } from "../repositories/git.ts";
 
 export interface PatchTarget {
   readonly worktree: string;
@@ -38,8 +38,6 @@ export const withTemporaryIndex = <A>(git: Git, worktree: string, run: (env: Rec
     return yield* run({ GIT_INDEX_FILE: path }).pipe(Effect.ensuring(Effect.promise(() => Promise.all([rm(path, { force: true }), rm(`${path}.lock`, { force: true })]))));
   });
 
-const failed = (what: string, ran: { readonly kind: string; readonly output?: string }) => unframedError("internal", `${what}: ${ran.output?.trim() || ran.kind}`);
-
 export const instancePatch = (git: Git, at: PatchTarget) =>
   Effect.gen(function* () {
     const base = yield* mergeBaseOf(git, at);
@@ -47,12 +45,12 @@ export const instancePatch = (git: Git, at: PatchTarget) =>
     return yield* withTemporaryIndex(git, at.worktree, (env) =>
       Effect.gen(function* () {
         const added = yield* git(at.worktree, ["add", "-A", ...pathspec], env);
-        if (gitOutput(added) === undefined) return yield* failed("Could not read the Instance's changes", added);
+        if (gitOutput(added) === undefined) return yield* gitFailure("Could not read the Instance's changes", added);
         const numstat = yield* git(at.worktree, ["diff", "--cached", "--no-renames", "--numstat", "-z", base, ...pathspec], env);
         const patch = yield* git(at.worktree, ["diff", "--cached", "--binary", "--no-color", "--no-ext-diff", base, ...pathspec], env);
         const numstatText = gitStdout(numstat);
         const patchText = gitStdout(patch);
-        if (numstatText === undefined || patchText === undefined) return yield* failed("Could not export the Instance's changes", numstatText === undefined ? numstat : patch);
+        if (numstatText === undefined || patchText === undefined) return yield* gitFailure("Could not export the Instance's changes", numstatText === undefined ? numstat : patch);
         return { base, files: parseNumstat(numstatText), patch: patchText } satisfies InstancePatch;
       }),
     );
