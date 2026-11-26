@@ -154,7 +154,9 @@ export const checkResolved = (value: unknown): ResolvedElement | null => {
   };
 };
 
-export const quoted = (text: string, most = 300): string => JSON.stringify(text.replace(new RegExp(CONTROL.source, "g"), " ").replace(/\s+/g, " ").trim().slice(0, most));
+export const oneLine = (text: string, most: number): string => text.replace(new RegExp(CONTROL.source, "g"), " ").replace(/\s+/g, " ").trim().slice(0, most);
+
+export const quoted = (text: string, most = 300): string => JSON.stringify(oneLine(text, most));
 
 export const elementLabel = (input: { readonly tag: string; readonly owner: string | null; readonly w: number; readonly h: number }): string =>
   `${elementKind(input.tag)}${input.owner === null ? "" : ` · in ${input.owner}`} ${Math.round(input.w)}×${Math.round(input.h)}`;
@@ -268,8 +270,6 @@ export const NOT_IN_WORKTREE = "The file the page named is not in this branch's 
 export const SCREEN_DRAFTS_TEMPLATE =
   'Make these changes in the app shown by the Screen <shape> on the branch "<branch>", at <state>. The person made them by hand in the Screen editor, and Unframed could not write them into the code itself. Each line names the JSX that renders the element, the change, and why it was left to you:\n\n<changes>\n\nWork in the Instance\'s worktree at <worktree>, and nowhere else. Make each change at the place named, the way the project already styles its components, so that the Screen shows it. Leave the change uncommitted.';
 
-const plain = (text: string, most: number): string => text.replace(new RegExp(CONTROL.source, "g"), " ").replace(/\s+/g, " ").trim().slice(0, most);
-
 const whereOf = (element: DraftElement, at: DraftSource | null): string => {
   if (at === null) return `CSS path ${quoted(element.selector)}`;
   const end = at.endLine === undefined ? "" : `–${at.endLine}:${at.endCol ?? 0}`;
@@ -280,12 +280,12 @@ export const draftInstructionLine = (change: DraftChange, reason: string, at: Dr
   const element = change.element;
   const component = element.component === null ? "" : ` in ${quoted(element.component, 80)}`;
   const instances = element.instanceCount > 1 ? `, instance ${element.instanceIndex + 1} of ${element.instanceCount}${change.scope === "one" ? ", change only this one" : ", change every one"}` : "";
-  const token = change.token === undefined ? "" : ` (${plain(change.token.name, 100)}, ${plain(change.token.value, 100)})`;
+  const token = change.token === undefined ? "" : ` (${oneLine(change.token.name, 100)}, ${oneLine(change.token.value, 100)})`;
   const value =
     change.kind === "class"
-      ? `class ${plain(change.before ?? "(none)", 100)} → ${plain(change.after ?? "(none)", 100)}${token}`
-      : `${plain(change.property, 60)} ${JSON.stringify(change.shownBefore || change.before || "")} → ${JSON.stringify(change.after ?? "")}`;
-  return `- ${elementKind(element.tag)}${component} at ${whereOf(element, at)}${instances}: ${value}. ${plain(reason, 300)}`;
+      ? `class ${oneLine(change.before ?? "(none)", 100)} → ${oneLine(change.after ?? "(none)", 100)}${token}`
+      : `${oneLine(change.property, 60)} ${JSON.stringify(change.shownBefore || change.before || "")} → ${JSON.stringify(change.after ?? "")}`;
+  return `- ${elementKind(element.tag)}${component} at ${whereOf(element, at)}${instances}: ${value}. ${oneLine(reason, 300)}`;
 };
 
 export const screenDraftInstruction = (input: {

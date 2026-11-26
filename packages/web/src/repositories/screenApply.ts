@@ -1,5 +1,5 @@
 import type { ElementChip, ScreenWrite } from "@unframed/contracts";
-import { changeTook, continuableChat, DEFAULT_RUNTIME_MODE, DID_NOT_TAKE, elementKind, NO_SOURCE, NOT_IN_WORKTREE, NOT_SELF_MAPPED, ONLY_THIS_ONE, screenDraftInstruction, type DraftChange, type DraftSource } from "@unframed/domain";
+import { changeTook, continuableChat, DEFAULT_RUNTIME_MODE, DID_NOT_TAKE, elementKind, NO_SOURCE, NOT_IN_WORKTREE, NOT_SELF_MAPPED, ONLY_THIS_ONE, oneLine, screenDraftInstruction, type DraftChange, type DraftSource } from "@unframed/domain";
 import { useRef, useState } from "react";
 import { readyProviders } from "../agent/providers.ts";
 import { createChat, sendMessage } from "../agent/send.ts";
@@ -61,8 +61,6 @@ const leftReason = (change: DraftChange): string | null => {
   if (change.scope === "one" && change.element.instanceCount > 1) return ONLY_THIS_ONE;
   return null;
 };
-
-const oneLine = (text: string, most: number): string => text.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, " ").replace(/\s+/g, " ").trim().slice(0, most);
 
 const chipOf = (shapeId: string, change: DraftChange, at: DraftSource | null): ElementChip => {
   const kind = elementKind(change.element.tag);
