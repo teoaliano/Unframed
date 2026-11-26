@@ -34,7 +34,7 @@ import { ProjectDatabase } from "../projectDatabase.ts";
 import { gitOutput, gitStdout, makeGit } from "../repositories/git.ts";
 import { Repositories } from "../repositories/layer.ts";
 import { Instances } from "./layer.ts";
-import { instancePatch, mergeBaseOf as mergeBaseOf_, withTemporaryIndex as withTemporaryIndex_, type InstancePatch } from "./instancePatch.ts";
+import { instancePatch, mergeBaseOf, withTemporaryIndex, type InstancePatch } from "./instancePatch.ts";
 import { readInstances } from "./tables.ts";
 
 export class InstanceGit extends Context.Service<
@@ -89,15 +89,11 @@ export const instanceGitLayer = Layer.effect(
     const failed = (what: string, ran: { readonly kind: string; readonly output?: string }) =>
       unframedError("internal", `${what}: ${ran.output?.trim() || ran.kind}`);
 
-    const mergeBaseOf = (at: InstanceTarget) => mergeBaseOf_(git, at);
-
-    const withTemporaryIndex = <A>(at: InstanceTarget, run: (env: Record<string, string>) => Effect.Effect<A, UnframedError>) => withTemporaryIndex_(git, at.worktree, run);
-
     const diff = (project: string, id: string) =>
       Effect.gen(function* () {
         const at = yield* target(project, id);
-        const base = yield* mergeBaseOf(at);
-        return yield* withTemporaryIndex(at, (env) =>
+        const base = yield* mergeBaseOf(git, at);
+        return yield* withTemporaryIndex(git, at.worktree, (env) =>
           Effect.gen(function* () {
             const added = yield* git(at.worktree, ["add", "-A", ...at.pathspec], env);
             if (gitOutput(added) === undefined) return yield* failed("Could not read the Instance's changes", added);
@@ -211,7 +207,7 @@ export const instanceGitLayer = Layer.effect(
         if (existing !== undefined && typeof existing.number === "number") {
           return { number: existing.number, url: String(existing.html_url ?? ""), title: String(existing.title ?? ""), existing: true };
         }
-        const mergeBase = yield* mergeBaseOf(at);
+        const mergeBase = yield* mergeBaseOf(git, at);
         const commits = gitStdout(yield* git(at.worktree, ["log", "--format=%s%n%b", `${mergeBase}..HEAD`])) ?? "";
         const stat = gitStdout(yield* git(at.worktree, ["diff", "--stat", `${mergeBase}..HEAD`, ...at.pathspec])) ?? "";
         const patch = gitStdout(yield* git(at.worktree, ["diff", "--no-color", "--no-ext-diff", `${mergeBase}..HEAD`, ...at.pathspec])) ?? "";
@@ -241,7 +237,7 @@ export const instanceGitLayer = Layer.effect(
         let push: GitActionResult["push"] = null;
         if (remote !== undefined) {
           if (commit === null) {
-            const ahead = gitOutput(yield* git(at.worktree, ["rev-list", "--count", `${yield* mergeBaseOf(at)}..HEAD`]))?.trim();
+            const ahead = gitOutput(yield* git(at.worktree, ["rev-list", "--count", `${yield* mergeBaseOf(git, at)}..HEAD`]))?.trim();
             if (ahead === "0") return yield* refused(NOTHING_TO_PUSH);
           }
           const pushed = yield* git(at.worktree, ["push", "--quiet", "--set-upstream", remote, `refs/heads/${at.branch}:refs/heads/${at.branch}`]);
