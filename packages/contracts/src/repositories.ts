@@ -204,3 +204,67 @@ export const ScreensSnapshots = Rpc.make("screens.snapshots", {
   error: UnframedError,
   stream: true,
 });
+
+export const ScreenCva = Schema.Struct({
+  name: Schema.String,
+  variants: Schema.Array(Schema.Struct({ name: Schema.String, options: Schema.Array(Schema.String), default: Schema.NullOr(Schema.String) })),
+});
+export type ScreenCva = typeof ScreenCva.Type;
+
+export const ScreenJsx = Schema.Struct({
+  file: Schema.String,
+  line: Schema.Number,
+  col: Schema.Number,
+  endLine: Schema.Number,
+  endCol: Schema.Number,
+  tag: Schema.String,
+  span: Schema.String,
+  className: Schema.NullOr(Schema.String),
+  classLiteral: Schema.Boolean,
+  component: Schema.NullOr(Schema.String),
+  cva: Schema.Array(ScreenCva),
+});
+export type ScreenJsx = typeof ScreenJsx.Type;
+
+export const ScreensInspect = Rpc.make("screens.inspect", {
+  payload: Schema.Struct({ project: Schema.String, instance: Schema.String, file: Schema.String, line: Schema.Number, col: Schema.Number, tag: Schema.optionalKey(Schema.String) }),
+  success: ScreenJsx,
+  error: UnframedError,
+});
+
+export const ScreenWriteKind = Schema.Literals(["class", "text", "attr", "style"]);
+export type ScreenWriteKind = typeof ScreenWriteKind.Type;
+
+export const ScreenWrite = Schema.Struct({
+  id: Schema.String,
+  kind: ScreenWriteKind,
+  property: Schema.String,
+  before: Schema.NullOr(Schema.String),
+  after: Schema.NullOr(Schema.String),
+  file: Schema.String,
+  line: Schema.Number,
+  col: Schema.Number,
+  tag: Schema.optionalKey(Schema.String),
+});
+export type ScreenWrite = typeof ScreenWrite.Type;
+
+export const ScreenWriteResult = Schema.Struct({
+  id: Schema.String,
+  written: Schema.Boolean,
+  reason: Schema.NullOr(Schema.String),
+  file: Schema.NullOr(Schema.String),
+  line: Schema.NullOr(Schema.Number),
+});
+export type ScreenWriteResult = typeof ScreenWriteResult.Type;
+
+export const ScreensApply = Rpc.make("screens.apply", {
+  payload: Schema.Struct({ project: Schema.String, instance: Schema.String, changes: Schema.Array(ScreenWrite) }),
+  success: Schema.Struct({ apply: Schema.String, results: Schema.Array(ScreenWriteResult) }),
+  error: UnframedError,
+});
+
+export const ScreensRevert = Rpc.make("screens.revert", {
+  payload: Schema.Struct({ project: Schema.String, apply: Schema.String }),
+  success: Schema.Struct({ reverted: Schema.Number, kept: Schema.Array(Schema.String) }),
+  error: UnframedError,
+});

@@ -6,11 +6,9 @@ import {
   elementContext,
   ELEMENT_CONTEXT_INTRO,
   ELEMENT_CONTEXT_SCREEN,
+  ELEMENT_CONTEXT_SOURCE,
   screenChip,
-  screenEditInstruction,
-  screenEditLines,
   screenOverrideOf,
-  SCREEN_EDITS_TEMPLATE,
   screenSourceTree,
   undoScreenOverride,
   type ScreenOverride,
@@ -69,25 +67,6 @@ describe("overrides in a Screen", () => {
     expect(undoScreenOverride(list)).toEqual([text]);
     expect(undoScreenOverride([])).toEqual([]);
   });
-
-  it("lists each element once with its changes, in the order they were first changed", () => {
-    const lines = screenEditLines([
-      color("red"),
-      { edit: { type: "hide", elementId: "uf2", hidden: true }, name: "Banner", path: "#banner" },
-      { edit: { type: "text", elementId: "uf1", text: "Go" }, name: "Save", path: "body > button" },
-      { edit: { type: "style", elementId: "uf1", property: "padding-top", value: null }, name: "Save", path: "body > button" },
-      { edit: { type: "hide", elementId: "uf3", hidden: false }, name: "Note", path: "#note" },
-    ]);
-    expect(lines).toEqual(['- Save (body > button): color: red; text "Go"; remove padding-top', "- Banner (#banner): hidden", "- Note (#note): shown"]);
-  });
-
-  it("writes the instruction from the asset, naming the Screen, its branch, state and worktree", () => {
-    const instruction = screenEditInstruction({ shape: "s1", branch: "trunk", state: "/app", worktree: "/w/trunk", overrides: [color("red")] });
-    expect(instruction).toBe(
-      SCREEN_EDITS_TEMPLATE.replace("<shape>", "s1").replace("<branch>", "trunk").replace("<state>", "/app").replace("<worktree>", "/w/trunk").replace("<changes>", "- Save (body > button): color: red"),
-    );
-    expect(asset("screen-edits.md")).toContain(SCREEN_EDITS_TEMPLATE);
-  });
 });
 
 describe("a Screen's element chip", () => {
@@ -104,5 +83,11 @@ describe("a Screen in the element context", () => {
       [ELEMENT_CONTEXT_INTRO, `${ELEMENT_CONTEXT_SCREEN.replace("{label}", "trunk · /app").replace("{id}", "s1")}\n- body > button: <button>Save</button>`].join("\n\n"),
     );
     expect(asset("element-context.md")).toContain(ELEMENT_CONTEXT_SCREEN);
+  });
+
+  it("says where a mapped chip's JSX is", () => {
+    const chip = { shapeId: "s1", elementId: null, selector: "body > header", tag: "header", label: "Header", excerpt: "<header>", source: "src/App.jsx:5:5 in Header" };
+    expect(elementContext([chip], [{ shapeId: "s1", kind: "screen", label: "trunk · /app" }])).toContain("- body > header: <header> (rendered by src/App.jsx:5:5 in Header)");
+    expect(asset("element-context.md")).toContain(ELEMENT_CONTEXT_SOURCE.trim());
   });
 });

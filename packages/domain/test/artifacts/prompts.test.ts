@@ -38,6 +38,7 @@ import {
   MAP_APP_TEMPLATE, MAP_FLOW_TEMPLATE,
   mapFlowInstruction,
   SCREEN_STATE_TEXT,
+  SCREEN_ELEMENT_TEXT,
   FIX_STATE_TEMPLATE,
   fixStateInstruction,
 } from "../../src/index.ts";
@@ -149,6 +150,14 @@ describe("the Flow's model-facing text is the asset's text", () => {
     const described = mapFlowInstruction({ ...input, flow: " signing up with a taken email " });
     expect(described).not.toMatch(/<shape>|<state>|<route>|<branch>|<worktree>|<flow>/);
     expect(described).toContain("The person describes the flow as: signing up with a taken email. Explore the app from /app");
+  });
+});
+
+describe("the screen_element tool's model-facing text is the asset's text", () => {
+  it("holds its description and arguments", () => {
+    const [section] = sections("screen-element.md");
+    expect(section!.name).toBe("screen_element");
+    expect(SCREEN_ELEMENT_TEXT).toEqual({ description: section!.text, arguments: section!.args });
   });
 });
 

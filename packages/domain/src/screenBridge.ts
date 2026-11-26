@@ -3,6 +3,7 @@ import { editBridgeSource } from "./artifacts/editBridge.ts";
 import { crossSiteCookie } from "./instanceProxy.ts";
 import { inlineViewportUnits, rewriteCssUrls, snapshotPage, type SnapshotHelpers } from "./pageSnapshot.ts";
 import { matchMock } from "./screenStates.ts";
+import { sourceModuleSource } from "./screenSource.ts";
 
 export const STATE_PARAM = "__unframed_state";
 export const STEP_TIMEOUT_MS = 5000;
@@ -610,6 +611,7 @@ const patchDocumentCookie = (win: any, rewrite: (cookie: string) => string): voi
 
 export const screenBridgeSource = (): string =>
   [
+    sourceModuleSource(),
     `(${patchDocumentCookie.toString()})(window, ${crossSiteCookie.toString()});`,
     ...dialsBridgeSource().split("\n").slice(1, -1),
     `(${snapshotBridge.toString()})(window, ${JSON.stringify({ settle: SNAPSHOT_SETTLE_MS, gap: SNAPSHOT_GAP_MS, partMax: SNAPSHOT_PART_MAX_BYTES, totalMax: SNAPSHOT_TOTAL_MAX_BYTES } satisfies SnapshotConfig)}, ${snapshotPage.toString()}, { units: ${inlineViewportUnits.toString()}, urls: ${rewriteCssUrls.toString()} });`,

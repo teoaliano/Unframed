@@ -16,8 +16,101 @@ const gitEnv = {
 
 export const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, env: gitEnv, stdio: ["ignore", "pipe", "pipe"] }).toString();
 
+const REACT_FIXTURE_ROUTES = String.raw`
+const reactFs = require("node:fs");
+const reactPath = require("node:path");
+const reactFixture = (() => {
+  try {
+    return JSON.parse(reactFs.readFileSync(reactPath.join(__dirname, "react-fixture.json"), "utf8"));
+  } catch {
+    return null;
+  }
+})();
+const reactSrc = reactPath.join(__dirname, "src");
+const reactVendorEntry = [
+  "import * as React from 'react';",
+  "export default React;",
+  "export const { Children, Component, Fragment, StrictMode, createContext, createElement, forwardRef, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } = React;",
+  "export { jsxDEV } from 'react/jsx-dev-runtime';",
+  "export { createRoot, hydrateRoot } from 'react-dom/client';",
+].join("\n");
+let reactVendor = null;
+const reactEsbuild = () => require(reactFixture.esbuild);
+const jsxFiles = () => reactFs.readdirSync(reactSrc).filter((name) => name.endsWith(".jsx"));
+const reactVersion = () => Math.max(0, ...jsxFiles().map((name) => reactFs.statSync(reactPath.join(reactSrc, name)).mtimeMs));
+const twEscape = (name) => name.replace(/[^a-zA-Z0-9_-]/g, (char) => "\\" + char);
+const TW_SPACE = { p: ["padding"], px: ["padding-left", "padding-right"], py: ["padding-top", "padding-bottom"], pt: ["padding-top"], pr: ["padding-right"], pb: ["padding-bottom"], pl: ["padding-left"], m: ["margin"], mx: ["margin-left", "margin-right"], my: ["margin-top", "margin-bottom"], mt: ["margin-top"], mr: ["margin-right"], mb: ["margin-bottom"], ml: ["margin-left"], gap: ["gap"], h: ["height"], w: ["width"] };
+const TW_RANK = ["p", "m", "px", "py", "mx", "my", "pt", "pr", "pb", "pl", "mt", "mr", "mb", "ml", "gap", "h", "w"];
+const TW_TEXT = { xs: ["0.75rem", "1rem"], sm: ["0.875rem", "1.25rem"], base: ["1rem", "1.5rem"], lg: ["1.125rem", "1.75rem"], xl: ["1.25rem", "1.75rem"], "2xl": ["1.5rem", "2rem"] };
+const TW_FIXED = { flex: "display: flex", "min-h-screen": "min-height: 100vh", "items-center": "align-items: center", hidden: "display: none", rounded: "border-radius: 0.25rem", "rounded-lg": "border-radius: 0.5rem", "font-medium": "font-weight: 500", "font-semibold": "font-weight: 600", "font-bold": "font-weight: 700" };
+const twRule = (name) => {
+  if (TW_FIXED[name]) return [0, TW_FIXED[name]];
+  const text = /^text-(xs|sm|base|lg|xl|2xl)$/.exec(name);
+  if (text) return [1, "font-size: " + TW_TEXT[text[1]][0] + "; line-height: " + TW_TEXT[text[1]][1]];
+  const colour = /^(text|bg)-\[(#[0-9a-fA-F]{3,8})\]$/.exec(name);
+  if (colour) return [3, (colour[1] === "text" ? "color: " : "background-color: ") + colour[2]];
+  const space = /^(p|px|py|pt|pr|pb|pl|m|mx|my|mt|mr|mb|ml|gap|h|w)-(?:(\d+(?:\.\d+)?)|\[(\d+(?:\.\d+)?px)\])$/.exec(name);
+  if (space) {
+    const value = space[3] ?? Number(space[2]) * 0.25 + "rem";
+    return [2 + TW_RANK.indexOf(space[1]) / 100, TW_SPACE[space[1]].map((property) => property + ": " + value).join("; ")];
+  }
+  return null;
+};
+const twCss = () => {
+  const names = new Set();
+  for (const file of jsxFiles()) for (const token of reactFs.readFileSync(reactPath.join(reactSrc, file), "utf8").split(/[\s"'{}()<>=,;:]+/)) names.add(token);
+  const rules = [];
+  for (const name of names) {
+    const rule = twRule(name);
+    if (rule) rules.push([rule[0], "." + twEscape(name) + " { " + rule[1] + "; }"]);
+  }
+  return "*, ::before, ::after { box-sizing: border-box; }\n" + rules.sort((a, b) => a[0] - b[0]).map((rule) => rule[1]).join("\n") + "\n";
+};
+const REACT_IMPORTS = JSON.stringify({ imports: { react: "/node_modules/.vendor/react.js", "react/jsx-dev-runtime": "/node_modules/.vendor/react.js", "react-dom/client": "/node_modules/.vendor/react.js" } });
+const reactPage = () => [
+  "<!doctype html><html><head><title>React app</title><link rel=\"stylesheet\" href=\"/tw.css\">",
+  "<script type=\"importmap\">" + REACT_IMPORTS + "</script>",
+  "</head><body><div id=\"root\"></div><script type=\"module\" src=\"/src/main.jsx\"></script>",
+  "<script>(function () { var seen = " + JSON.stringify(reactVersion()) + "; setInterval(function () { fetch('/__fake/version', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (v) { if (v !== seen) location.reload(); }).catch(function () {}); }, 250); })();</script>",
+  "</body></html>",
+].join("");
+const reactRoute = (req, res, url) => {
+  if (reactFixture === null) return false;
+  const send = (type, body) => {
+    res.writeHead(200, { "content-type": type, "cache-control": "no-store" });
+    res.end(body);
+    return true;
+  };
+  if (url.pathname === "/react" || url.pathname.startsWith("/react/")) return send("text/html; charset=utf-8", reactPage());
+  if (url.pathname === "/__fake/version") return send("application/json", JSON.stringify(reactVersion()));
+  if (url.pathname === "/tw.css") return send("text/css; charset=utf-8", twCss());
+  if (url.pathname === "/node_modules/.vendor/react.js") {
+    if (reactVendor === null) {
+      reactVendor = reactEsbuild().buildSync({
+        stdin: { contents: reactVendorEntry, resolveDir: reactPath.dirname(reactFixture.nodeModules), loader: "js" },
+        bundle: true,
+        format: "esm",
+        write: false,
+        nodePaths: [reactFixture.nodeModules],
+        define: { "process.env.NODE_ENV": "\"development\"" },
+      }).outputFiles[0].text;
+    }
+    return send("text/javascript; charset=utf-8", reactVendor);
+  }
+  const jsx = /^\/src\/([\w.-]+\.jsx)$/.exec(url.pathname);
+  if (jsx) {
+    const file = reactPath.join(reactSrc, jsx[1]);
+    if (!reactFs.existsSync(file)) return false;
+    const out = reactEsbuild().transformSync(reactFs.readFileSync(file, "utf8"), { loader: "jsx", jsx: "automatic", jsxDev: true, sourcemap: "inline", sourcefile: "/src/" + jsx[1], format: "esm" });
+    return send("text/javascript; charset=utf-8", out.code);
+  }
+  return false;
+};
+`;
+
 export const FAKE_DEV_SERVER = `const http = require("node:http");
 const crypto = require("node:crypto");
+${REACT_FIXTURE_ROUTES}
 const args = process.argv.slice(2);
 if (process.env.FAKE_DEV_EXIT_CODE) {
   console.error("fake dev server: giving up");
@@ -54,6 +147,7 @@ const APP_PAGE = [
 const hits = {};
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
+  if (reactRoute(req, res, url)) return;
   if (url.pathname === "/login") {
     res.writeHead(302, { "set-cookie": "session=signed-in; Path=/; SameSite=Lax; HttpOnly", location: "http://localhost:" + port + "/" });
     return res.end();

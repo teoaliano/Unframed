@@ -39,6 +39,7 @@ export const ElementChip = Schema.Struct({
   tag: Schema.String,
   label: Schema.String,
   excerpt: Schema.String,
+  source: Schema.optionalKey(Schema.String),
 });
 export type ElementChip = typeof ElementChip.Type;
 

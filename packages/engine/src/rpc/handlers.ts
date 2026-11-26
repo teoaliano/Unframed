@@ -31,6 +31,7 @@ import { Instances } from "../instances/layer.ts";
 import { RpcSockets } from "./sockets.ts";
 import { screenRecord } from "../screens/firstScreen.ts";
 import { screenStatePayload } from "../screens/screenState.ts";
+import { makeDirectEdits } from "../screens/directEdits.ts";
 import { Repositories } from "../repositories/layer.ts";
 import { InstanceGit } from "../instances/instanceGit.ts";
 import { filePath, revealFiles } from "../reveal.ts";
@@ -91,6 +92,7 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
     const legacy = legacyImportMethods(yield* ProjectDatabase, projects);
     const context = yield* Effect.context<SettingsStore | Projects | Native>();
 
+    const directEdits = makeDirectEdits((project, id) => Effect.map(instances.status(project, id), (instance) => instance.worktree));
     const testOnly = <A, E>(run: () => Effect.Effect<A, E>) =>
       config.testCanvasRpc ? run() : Effect.fail(unframedError("unavailable", "That method is only for tests."));
 
@@ -168,6 +170,10 @@ export const rpcHandlersLayer = UnframedRpcs.toLayer(
           const state = screenStatePayload({ steps, mocks });
           return state === undefined ? Effect.succeed({ token: null as string | null }) : Effect.map(instances.stateToken(project, instance, state), (token): { token: string | null } => ({ token }));
         }),
+      "screens.inspect": ({ project, instance, file, line, col, tag }) =>
+        featureOn("repositories", () => directEdits.inspect({ project, instance, file, line, col, tag })),
+      "screens.apply": ({ project, instance, changes }) => featureOn("repositories", () => directEdits.apply({ project, instance, changes })),
+      "screens.revert": ({ project, apply }) => featureOn("repositories", () => directEdits.revert({ project, apply })),
       "repositories.setup": ({ project }) => featureOn("repositories", () => Effect.map(agents.openSetup(project), (chatId) => ({ chatId }))),
       "repositories.confirmLogin": ({ project }) => featureOn("repositories", () => Effect.map(agents.confirmLogin(project), (waiting) => ({ waiting }))),
       "repositories.setupVerdict": ({ project, accepted, note }) => featureOn("repositories", () => Effect.map(agents.setupVerdict(project, accepted, note), (repository) => ({ repository }))),
