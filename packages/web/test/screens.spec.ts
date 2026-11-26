@@ -51,6 +51,9 @@ test("the canvas waits behind one loading state while its Screens' dev servers s
       const screen = page.locator("[data-testid=screen]");
       const cover = page.getByTestId("screens-starting");
       await expect(cover.getByRole("status")).toHaveText("Installing dependencies…");
+      const watermark = page.getByTestId("tl-watermark-unlicensed");
+      const box = (await watermark.boundingBox())!;
+      expect(await page.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest("[data-testid=tl-watermark-unlicensed]"), { x: box.x + box.width / 2, y: box.y + box.height / 2 })).toBe(true);
       await expect(screen.locator("[data-testid=screen-overlay]")).toHaveText("Installing dependencies…");
       await expect(screen.locator("[data-testid=screen-overlay]")).toHaveCount(0, { timeout: 30_000 });
       await expect(cover).toHaveCount(0);

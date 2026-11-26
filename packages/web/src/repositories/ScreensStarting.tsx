@@ -45,7 +45,7 @@ export const ScreensStarting = () => {
   }, [label]);
   if (done || label === undefined || !(shown || loaded)) return null;
   return (
-    <div className="pointer-events-auto absolute inset-0 z-[calc(var(--tl-layer-watermark)_-_1)] flex bg-(--screens-starting-surface)" data-testid="screens-starting">
+    <div className="pointer-events-auto absolute inset-0 z-[calc(var(--tl-layer-watermark)_-_1)] flex bg-(--screens-starting-surface)" data-testid="screens-starting" data-screens-starting="">
       <Empty>
         <EmptyMedia>
           <Spinner size="lg" tone="muted" aria-hidden />
