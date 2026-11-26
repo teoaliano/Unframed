@@ -52,6 +52,11 @@ const frameRecord = (records: ReadonlyArray<TLRecord>, at: { readonly x: number;
   } as unknown as TLRecord;
 };
 
+const screenOn = (minted: ReadonlyArray<TLRecord>, instance: Instance, spot: Parameters<typeof screenRecord>[2], index: IndexKey | null, props: Record<string, unknown>): TLRecord => {
+  const made = screenRecord(minted, instance, spot) as TLRecord & { props: Record<string, unknown> };
+  return { ...made, index, props: { ...made.props, ...props } } as TLRecord;
+};
+
 const plain = (screen: ScreenShape): boolean =>
   (screen.props.state ?? "") === "" && (!Array.isArray(screen.props.steps) || screen.props.steps.length === 0) && (!Array.isArray(screen.props.mocks) || screen.props.mocks.length === 0);
 
@@ -91,8 +96,7 @@ export const routeScreenRecords = (records: ReadonlyArray<TLRecord>, instance: I
     let index: IndexKey | null = null;
     for (const at of frame.screens) {
       index = getIndexAbove(index);
-      const made = screenRecord(minted, instance, { x: at.x, y: at.y, route: at.route.path, w: size.w, h: size.h, parentId: group.id as string }) as TLRecord & { props: Record<string, unknown> };
-      const screen = { ...made, index, props: { ...made.props, title: at.route.name } } as TLRecord;
+      const screen = screenOn(minted, instance, { x: at.x, y: at.y, route: at.route.path, w: size.w, h: size.h, parentId: group.id as string }, index, { title: at.route.name });
       minted.push(screen);
       put.push(screen);
       screens.push(screen.id as string);
@@ -125,8 +129,7 @@ export const stateScreenRecords = (records: ReadonlyArray<TLRecord>, source: Scr
   let index: IndexKey | null = null;
   states.forEach((state, at) => {
     index = getIndexAbove(index);
-    const made = screenRecord(minted, instance, { ...layout.screens[at]!, route: state.route, w, h, parentId: group.id as string }) as TLRecord & { props: Record<string, unknown> };
-    const screen = { ...made, index, props: { ...made.props, steps: [...state.steps], mocks: [...state.mocks], state: state.state } } as TLRecord;
+    const screen = screenOn(minted, instance, { ...layout.screens[at]!, route: state.route, w, h, parentId: group.id as string }, index, { steps: [...state.steps], mocks: [...state.mocks], state: state.state });
     minted.push(screen);
     put.push(screen);
     screens.push(screen.id as string);
