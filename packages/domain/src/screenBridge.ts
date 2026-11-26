@@ -430,7 +430,7 @@ export function screenBridge(
   else painted();
 }
 
-const crossSiteCookies = (win: any, rewrite: (cookie: string) => string): void => {
+const patchDocumentCookie = (win: any, rewrite: (cookie: string) => string): void => {
   const proto = win.Document?.prototype;
   const native = proto === undefined ? undefined : Object.getOwnPropertyDescriptor(proto, "cookie");
   if (native?.get === undefined || native.set === undefined) return;
@@ -445,7 +445,7 @@ const crossSiteCookies = (win: any, rewrite: (cookie: string) => string): void =
 
 export const screenBridgeSource = (): string =>
   [
-    `(${crossSiteCookies.toString()})(window, ${crossSiteCookie.toString()});`,
+    `(${patchDocumentCookie.toString()})(window, ${crossSiteCookie.toString()});`,
     ...dialsBridgeSource().split("\n").slice(1, -1),
     `(${screenBridge.toString()})(window, ${JSON.stringify({ param: STATE_PARAM, stepTimeout: STEP_TIMEOUT_MS, quietIdle: QUIET_IDLE_MS, quietCap: QUIET_CAP_MS } satisfies BridgeConfig)}, ${matchMock.toString()}, ${cutParam.toString()}, ${quietWatch.toString()}, ${stepExpired.toString()});`,
     ...editBridgeSource({ stamp: true }).split("\n").slice(1, -1),
