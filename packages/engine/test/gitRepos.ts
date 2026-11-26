@@ -51,6 +51,7 @@ const APP_PAGE = [
   "}).catch(function () { document.getElementById('list-state').textContent = 'Could not load items'; });",
   "</script></body></html>",
 ].join("");
+const hits = {};
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
   if (url.pathname === "/login") {
@@ -75,6 +76,17 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       res.end("<!doctype html><html><head><title>Slow</title></head><body><h1>Slow " + url.search + "</h1></body></html>");
     }, Number(url.searchParams.get("ms") || 1000));
+  }
+  if (url.pathname === "/__fake/hits") {
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify(hits[url.searchParams.get("key")] || 0));
+  }
+  if (url.pathname === "/flaky") {
+    const key = url.searchParams.get("key") || "";
+    hits[key] = (hits[key] || 0) + 1;
+    const ready = hits[key] > Number(url.searchParams.get("fails") || 1);
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end("<!doctype html><html><head><title>Flaky</title></head><body><p id=\\"load\\">Load " + hits[key] + "</p><div id=\\"menu\\" role=\\"menu\\" hidden><div role=\\"menuitem\\">Settings</div></div>" + (ready ? "<button onclick=\\"document.getElementById('menu').hidden = false\\">Open menu</button>" : "") + "</body></html>");
   }
   if (url.pathname === "/boot") {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });

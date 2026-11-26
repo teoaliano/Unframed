@@ -217,6 +217,7 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
   const [load, setLoad] = useState<{ readonly url: string; readonly n: number; readonly token: boolean } | undefined>(undefined);
   const frameState = useRef<{ applied: boolean; route: string | undefined }>({ applied: false, route: undefined });
   const [reloads, setReloads] = useState(0);
+  const retried = useRef<string | undefined>(undefined);
   const [failure, setFailure] = useState<{ readonly step: number; readonly reason: string } | undefined>(undefined);
   const [asking, setAsking] = useState<string | undefined>(undefined);
   const [painted, setPainted] = useState<string | undefined>(undefined);
@@ -278,7 +279,14 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
     },
     onSteps: (result) => {
       loaded();
-      setFailure(result.ok ? undefined : { step: result.step ?? 0, reason: result.reason ?? "" });
+      const attempt = `${props.route} ${stateKey}`;
+      if (result.ok) {
+        retried.current = undefined;
+        setFailure(undefined);
+      } else if (retried.current !== attempt) {
+        retried.current = attempt;
+        setReloads((count) => count + 1);
+      } else setFailure({ step: result.step ?? 0, reason: result.reason ?? "" });
     },
   };
   const fix = () => {

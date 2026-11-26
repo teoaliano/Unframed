@@ -87,3 +87,37 @@ test("an app that boots for seven seconds, busy on the network, still reaches it
     await expect(page.getByTestId("screen-state-failed")).toHaveCount(0);
   });
 });
+
+const hits = async (page: Page, key: string) => {
+  const frame = page.frames().find((item) => item.url().includes(`key=${key}`));
+  if (frame === undefined) throw new Error(`no frame for ${key}`);
+  return frame.evaluate(async (key) => (await fetch(`/__fake/hits?key=${key}`)).json() as Promise<number>, key);
+};
+
+test("a state that fails once is tried again from a fresh load, and shows no failure when that works", async ({ page }) => {
+  await withRepository(page, {}, async (engine, project) => {
+    const [first] = await screenShapes(engine, project);
+    await page.evaluate(() => {
+      (window as any).__failed = false;
+      new MutationObserver(() => {
+        if (document.querySelector("[data-testid=screen-state-failed]") !== null) (window as any).__failed = true;
+      }).observe(document.body, { subtree: true, childList: true });
+    });
+    await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/flaky?key=once&fails=1", w: 640, h: 480, ...OPEN_MENU } }]);
+    const frame = page.frameLocator(`[data-shape-id="${first.id}"] iframe[data-screen-frame]`);
+    await expect(frame.getByRole("menuitem", { name: "Settings" })).toBeVisible({ timeout: 30_000 });
+    await expect(frame.locator("#load")).toHaveText("Load 2");
+    expect(await page.evaluate(() => (window as any).__failed)).toBe(false);
+  });
+});
+
+test("a state that keeps failing shows Couldn't reach this state after one retry", async ({ page }) => {
+  await withRepository(page, {}, async (engine, project) => {
+    const [first] = await screenShapes(engine, project);
+    await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/flaky?key=always&fails=99", w: 640, h: 480, ...OPEN_MENU } }]);
+    await expect(page.getByTestId("screen-state-failed")).toBeVisible({ timeout: 30_000 });
+    expect(await hits(page, "always")).toBe(2);
+    await page.waitForTimeout(1000);
+    expect(await hits(page, "always")).toBe(2);
+  });
+});
