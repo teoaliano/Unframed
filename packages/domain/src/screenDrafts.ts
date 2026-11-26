@@ -86,7 +86,76 @@ const KINDS: Readonly<Record<string, string>> = {
   div: "Frame",
 };
 
-export const elementKind = (tag: string): string => KINDS[tag.toLowerCase()] ?? tag.toLowerCase();
+const TAG = /^[a-z][a-z0-9-]{0,63}$/;
+
+export const elementKind = (tag: string): string => {
+  const lower = tag.toLowerCase();
+  return KINDS[lower] ?? (TAG.test(lower) ? lower : "Element");
+};
+
+export interface ResolvedElement {
+  readonly key: string;
+  readonly selfMapped: boolean;
+  readonly tag: string;
+  readonly owner: string | null;
+  readonly instanceOf: string | null;
+  readonly props: Readonly<Record<string, string | number | boolean | null>> | null;
+  readonly instanceIndex: number;
+  readonly instanceCount: number;
+  readonly source: { readonly file: string; readonly line: number; readonly col: number; readonly mapped: boolean } | null;
+}
+
+const CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+const COMPONENT = /^[A-Za-z_$][\w$.:-]{0,79}$/;
+const PROP = /^[A-Za-z_$][\w$:.-]{0,63}$/;
+const MAX_PROPS = 50;
+
+const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
+const count = (value: unknown, least: number): number | undefined => (typeof value === "number" && Number.isInteger(value) && value >= least && value <= 1_000_000 ? value : undefined);
+const line = (value: unknown, most: number): string | undefined => (typeof value === "string" && value !== "" && value.length <= most && !CONTROL.test(value) ? value : undefined);
+const componentName = (value: unknown): string | null => (typeof value === "string" && COMPONENT.test(value) ? value : null);
+
+const propsOf = (value: unknown): ResolvedElement["props"] => {
+  if (!isRecord(value)) return null;
+  const out: Record<string, string | number | boolean | null> = {};
+  for (const [name, each] of Object.entries(value).slice(0, MAX_PROPS)) {
+    if (!PROP.test(name)) continue;
+    if (each === null || typeof each === "boolean" || (typeof each === "number" && Number.isFinite(each))) out[name] = each;
+    else if (typeof each === "string") out[name] = each.replace(new RegExp(CONTROL.source, "g"), " ").slice(0, 200);
+  }
+  return out;
+};
+
+const sourceOf = (value: unknown): ResolvedElement["source"] => {
+  if (!isRecord(value)) return null;
+  const file = line(value.file, 512);
+  const at = count(value.line, 1);
+  const col = count(value.col, 0);
+  if (file === undefined || at === undefined || col === undefined) return null;
+  return { file, line: at, col, mapped: value.mapped === true };
+};
+
+export const checkResolved = (value: unknown): ResolvedElement | null => {
+  if (!isRecord(value)) return null;
+  const key = line(value.key, 2048);
+  const tag = typeof value.tag === "string" ? value.tag.toLowerCase() : "";
+  const instanceIndex = count(value.instanceIndex, 0);
+  const instanceCount = count(value.instanceCount, 1);
+  if (key === undefined || !TAG.test(tag) || instanceIndex === undefined || instanceCount === undefined || typeof value.selfMapped !== "boolean") return null;
+  return {
+    key,
+    selfMapped: value.selfMapped,
+    tag,
+    owner: componentName(value.owner),
+    instanceOf: componentName(value.instanceOf),
+    props: propsOf(value.props),
+    instanceIndex,
+    instanceCount,
+    source: sourceOf(value.source),
+  };
+};
+
+export const quoted = (text: string, most = 300): string => JSON.stringify(text.replace(new RegExp(CONTROL.source, "g"), " ").replace(/\s+/g, " ").trim().slice(0, most));
 
 export const elementLabel = (input: { readonly tag: string; readonly owner: string | null; readonly w: number; readonly h: number }): string =>
   `${elementKind(input.tag)}${input.owner === null ? "" : ` · in ${input.owner}`} ${Math.round(input.w)}×${Math.round(input.h)}`;
@@ -197,24 +266,29 @@ export const NO_SOURCE = "Unframed found no React source for this element.";
 export const NOT_SELF_MAPPED = "The element is not written as JSX of its own; the nearest JSX is named.";
 export const ONLY_THIS_ONE = "Only this instance should change, which needs a prop or a wrapper at its callsite.";
 export const DID_NOT_TAKE = "The page did not show it after the write.";
+export const NOT_IN_WORKTREE = "The file the page named is not in this branch's worktree.";
 
 export const SCREEN_DRAFTS_TEMPLATE =
   'Make these changes in the app shown by the Screen <shape> on the branch "<branch>", at <state>. The person made them by hand in the Screen editor, and Unframed could not write them into the code itself. Each line names the JSX that renders the element, the change, and why it was left to you:\n\n<changes>\n\nWork in the Instance\'s worktree at <worktree>, and nowhere else. Make each change at the place named, the way the project already styles its components, so that the Screen shows it. Leave the change uncommitted.';
 
-const whereOf = (element: DraftElement): string => {
-  const source = element.source;
-  if (source === null) return `CSS path ${element.selector}`;
-  const end = source.endLine === undefined ? "" : `–${source.endLine}:${source.endCol ?? 0}`;
-  return `${source.file}:${source.line}:${source.col}${end}${element.selfMapped ? "" : ` (the nearest JSX; the element itself is ${element.selector})`}`;
+const plain = (text: string, most: number): string => text.replace(new RegExp(CONTROL.source, "g"), " ").replace(/\s+/g, " ").trim().slice(0, most);
+
+const whereOf = (element: DraftElement, at: DraftSource | null): string => {
+  if (at === null) return `CSS path ${quoted(element.selector)}`;
+  const end = at.endLine === undefined ? "" : `–${at.endLine}:${at.endCol ?? 0}`;
+  return `${quoted(at.file)}:${at.line}:${at.col}${end}${element.selfMapped ? "" : ` (the nearest JSX; the element itself is ${quoted(element.selector)})`}`;
 };
 
-export const draftInstructionLine = (change: DraftChange, reason: string): string => {
+export const draftInstructionLine = (change: DraftChange, reason: string, at: DraftSource | null): string => {
   const element = change.element;
-  const component = element.component === null ? "" : ` in ${element.component}`;
+  const component = element.component === null ? "" : ` in ${quoted(element.component, 80)}`;
   const instances = element.instanceCount > 1 ? `, instance ${element.instanceIndex + 1} of ${element.instanceCount}${change.scope === "one" ? ", change only this one" : ", change every one"}` : "";
-  const token = change.token === undefined ? "" : ` (${change.token.name}, ${change.token.value})`;
-  const value = change.kind === "class" ? `class ${change.before ?? "(none)"} → ${change.after ?? "(none)"}${token}` : `${change.property} ${JSON.stringify(change.shownBefore || change.before || "")} → ${JSON.stringify(change.after ?? "")}`;
-  return `- ${elementKind(element.tag)}${component} at ${whereOf(element)}${instances}: ${value}. ${reason}`;
+  const token = change.token === undefined ? "" : ` (${plain(change.token.name, 100)}, ${plain(change.token.value, 100)})`;
+  const value =
+    change.kind === "class"
+      ? `class ${plain(change.before ?? "(none)", 100)} → ${plain(change.after ?? "(none)", 100)}${token}`
+      : `${plain(change.property, 60)} ${JSON.stringify(change.shownBefore || change.before || "")} → ${JSON.stringify(change.after ?? "")}`;
+  return `- ${elementKind(element.tag)}${component} at ${whereOf(element, at)}${instances}: ${value}. ${plain(reason, 300)}`;
 };
 
 export const screenDraftInstruction = (input: {
@@ -222,10 +296,10 @@ export const screenDraftInstruction = (input: {
   readonly branch: string;
   readonly state: string;
   readonly worktree: string;
-  readonly changes: ReadonlyArray<{ readonly change: DraftChange; readonly reason: string }>;
+  readonly changes: ReadonlyArray<{ readonly change: DraftChange; readonly reason: string; readonly at: DraftSource | null }>;
 }): string =>
   SCREEN_DRAFTS_TEMPLATE.replace("<shape>", () => input.shape)
     .replace("<branch>", () => input.branch)
     .replace("<state>", () => input.state)
     .replace("<worktree>", () => input.worktree)
-    .replace("<changes>", () => input.changes.map(({ change, reason }) => draftInstructionLine(change, reason)).join("\n"));
+    .replace("<changes>", () => input.changes.map(({ change, reason, at }) => draftInstructionLine(change, reason, at)).join("\n"));

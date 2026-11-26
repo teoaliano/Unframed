@@ -1,5 +1,5 @@
 import type { ElementChip, ScreenWrite } from "@unframed/contracts";
-import { changeTook, continuableChat, DEFAULT_RUNTIME_MODE, DID_NOT_TAKE, elementKind, NO_SOURCE, NOT_SELF_MAPPED, ONLY_THIS_ONE, screenDraftInstruction, type DraftChange } from "@unframed/domain";
+import { changeTook, continuableChat, DEFAULT_RUNTIME_MODE, DID_NOT_TAKE, elementKind, NO_SOURCE, NOT_IN_WORKTREE, NOT_SELF_MAPPED, ONLY_THIS_ONE, screenDraftInstruction, type DraftChange, type DraftSource } from "@unframed/domain";
 import { useRef, useState } from "react";
 import { readyProviders } from "../agent/providers.ts";
 import { createChat, sendMessage } from "../agent/send.ts";
@@ -62,16 +62,19 @@ const leftReason = (change: DraftChange): string | null => {
   return null;
 };
 
-const chipOf = (shapeId: string, change: DraftChange): ElementChip => {
-  const source = change.element.source;
+const oneLine = (text: string, most: number): string => text.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, " ").replace(/\s+/g, " ").trim().slice(0, most);
+
+const chipOf = (shapeId: string, change: DraftChange, at: DraftSource | null): ElementChip => {
+  const kind = elementKind(change.element.tag);
+  const tag = /^[a-z][a-z0-9-]{0,63}$/.test(change.element.tag) ? change.element.tag : "element";
   return {
     shapeId,
     elementId: null,
-    selector: change.element.selector,
-    tag: change.element.tag,
-    label: `${elementKind(change.element.tag)} · ${change.element.name}`,
-    excerpt: `<${change.element.tag}>`,
-    ...(source === null ? {} : { source: `${source.file}:${source.line}:${source.col}${change.element.component === null ? "" : ` in ${change.element.component}`}` }),
+    selector: oneLine(change.element.selector, 300),
+    tag,
+    label: oneLine(`${kind} · ${change.element.name}`, 80),
+    excerpt: `<${tag}>`,
+    ...(at === null ? {} : { source: JSON.stringify(oneLine(at.file, 300)) + `:${at.line}:${at.col}${change.element.component === null ? "" : ` in ${JSON.stringify(oneLine(change.element.component, 80))}`}` }),
   };
 };
 
@@ -141,14 +144,27 @@ export const useScreenApply = (input: ScreenApplyInput) => {
     return { took, missed: [...pending.keys()] };
   };
 
+  const confirmed = (change: DraftChange): Promise<DraftSource | null> => {
+    const { engine, project, instance } = latest.current;
+    const source = change.element.source;
+    if (source === null || instance === undefined) return Promise.resolve(null);
+    return engine
+      .call("screens.inspect", { project, instance: instance.id, file: source.file, line: source.line, col: source.col, tag: change.element.tag })
+      .then(
+        (found): DraftSource => ({ file: found.file, line: found.line, col: found.col, endLine: found.endLine, endCol: found.endCol }),
+        () => null,
+      );
+  };
+
   const handOff = async (rows: readonly ApplyRow[], of: number) => {
     const { client, shapeId, instance, state } = latest.current;
+    const places = await Promise.all(rows.map((row) => confirmed(row.change)));
     const text = screenDraftInstruction({
       shape: shapeId.replace(/^shape:/, ""),
       branch: instance?.branch ?? "",
       state,
       worktree: instance?.worktree ?? "",
-      changes: rows.map((row) => ({ change: row.change, reason: row.reason ?? DID_NOT_TAKE })),
+      changes: rows.map((row, index) => ({ change: row.change, reason: row.reason ?? DID_NOT_TAKE, at: places[index] ?? null })),
     });
     const ids = rows.map((row) => row.change.id);
     try {
@@ -165,7 +181,7 @@ export const useScreenApply = (input: ScreenApplyInput) => {
       }
       client.setUi({ open: true, chosen: chatId, pinned: null });
       const ended = turnEnded(client, chatId);
-      await sendMessage(client, chatId, { text, selection: [shapeId], attachments: [], elements: rows.map((row) => chipOf(shapeId, row.change)) });
+      await sendMessage(client, chatId, { text, selection: [shapeId], attachments: [], elements: rows.map((row, index) => chipOf(shapeId, row.change, places[index] ?? null)) });
       update(ids, "agent", undefined, of);
       await ended;
       if (of !== generation.current) return;
@@ -207,7 +223,7 @@ export const useScreenApply = (input: ScreenApplyInput) => {
         rows: current.rows.map((row) => {
           const result = answer.results.find((each) => each.id === row.change.id);
           if (result === undefined) return row;
-          return result.written ? { ...row, state: "checking" } : { ...row, state: "agent", reason: result.reason };
+          return result.written ? { ...row, state: "checking" } : { ...row, state: "agent", reason: result.file === null ? NOT_IN_WORKTREE : result.reason };
         }),
       });
     } catch (error) {

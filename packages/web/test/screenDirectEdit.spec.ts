@@ -124,7 +124,7 @@ test("a change kept to one instance goes to the Screen's agent with the file, th
       await page.getByRole("button", { name: "Apply", exact: true }).click();
       await expect(row.getByTestId("draft-reason")).toHaveText(ONLY_THIS_ONE, { timeout: 20_000 });
       await expect(rail(page)).toContainText("Unframed could not write them into the code itself", { timeout: 20_000 });
-      await expect(rail(page)).toContainText("List item in Card at /src/Card.jsx:3:5, instance 2 of 3, change only this one: class (none) → pl-6");
+      await expect(rail(page)).toContainText(/List item in "Card" at "src\/Card\.jsx":3:5–\d+:\d+, instance 2 of 3, change only this one: class \(none\) → pl-6/);
       expect(await readFile(file, "utf8")).toBe(before);
     },
     prepareReactApp,

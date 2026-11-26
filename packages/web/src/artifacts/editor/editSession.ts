@@ -9,6 +9,7 @@ import {
   framePatchesOf,
   releaseDials as releaseHeldDials,
   addDraft,
+  checkResolved,
   addScreenOverride,
   draftOf,
   pickTarget,
@@ -21,6 +22,7 @@ import {
   type DraftChange,
   type DraftElement,
   type DraftScope,
+  type ResolvedElement,
   type Burst,
   type ComponentDeclaration,
   type EditBox,
@@ -67,20 +69,8 @@ export interface EditReport {
   readonly source?: ElementSource | null;
 }
 
-export interface ElementSource {
-  readonly key: string;
-  readonly selfMapped: boolean;
-  readonly tag: string;
-  readonly owner: string | null;
-  readonly instanceOf: string | null;
-  readonly props: Readonly<Record<string, unknown>> | null;
-  readonly instanceIndex: number;
-  readonly instanceCount: number;
-}
-
-export interface ResolvedSource extends ElementSource {
-  readonly source: { readonly file: string; readonly line: number; readonly col: number; readonly mapped: boolean } | null;
-}
+export type ResolvedSource = ResolvedElement;
+export type ElementSource = Omit<ResolvedElement, "source">;
 
 export interface MeasureTarget {
   readonly stamp?: string;
@@ -356,7 +346,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
   };
   const draftKeyOf = (edit: SourceEdit): string => (edit.type === "style" ? edit.property : edit.type === "text" ? "#text" : "display");
   const draftElementOf = (stamp: string, known: { readonly name?: string; readonly tag: string; readonly path?: string; readonly selector: string }): DraftElement => {
-    const source = reportsRef.current[stamp]?.source ?? null;
+    const source = checkResolved(reportsRef.current[stamp]?.source);
     return withSource({
       stamp,
       selector: known.path ?? known.selector,
@@ -852,7 +842,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
       case "unframed:source:resolved":
       case "unframed:source:measured": {
         const answer = typeof message.id === "number" ? asks.current.get(message.id) : undefined;
-        answer?.(message.type === "unframed:source:resolved" ? (message.element ?? null) : Array.isArray(message.results) ? message.results : []);
+        answer?.(message.type === "unframed:source:resolved" ? checkResolved(message.element) : Array.isArray(message.results) ? message.results : []);
         return;
       }
       case "unframed:source:commit": {
