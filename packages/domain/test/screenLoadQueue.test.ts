@@ -48,7 +48,6 @@ describe("the Screen load queue", () => {
     expect(started).toEqual([]);
     timers.advance(0);
     expect(started).toEqual(["near"]);
-    expect(queue.counts()).toEqual({ loading: 1, queued: 2 });
     queue.done("near");
     timers.advance(0);
     expect(started).toEqual(["near", "middle"]);
@@ -56,7 +55,6 @@ describe("the Screen load queue", () => {
     timers.advance(0);
     expect(started).toEqual(["near", "middle", "far"]);
     queue.done("far");
-    expect(queue.counts()).toEqual({ loading: 0, queued: 0 });
   });
 
   it("puts the selected Screen first, reading ranks when it picks, without interrupting the one loading", () => {
@@ -88,7 +86,7 @@ describe("the Screen load queue", () => {
   });
 
   it("lets a Screen that leaves give up its place or its turn", () => {
-    const { timers, queue, started, enter } = board();
+    const { timers, started, enter } = board();
     const leaveA = enter("a", { selected: false, distance: 0 });
     const leaveB = enter("b", { selected: false, distance: 1 });
     enter("c", { selected: false, distance: 2 });
@@ -97,7 +95,6 @@ describe("the Screen load queue", () => {
     leaveA();
     timers.advance(0);
     expect(started).toEqual(["a", "c"]);
-    expect(queue.counts()).toEqual({ loading: 1, queued: 0 });
   });
 
   it("forgets a Screen that is done, so entering again waits a new turn", () => {

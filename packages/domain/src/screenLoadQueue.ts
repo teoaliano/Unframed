@@ -12,7 +12,6 @@ export interface ScreenLoadTimers {
 export interface ScreenLoadQueue {
   readonly enter: (id: string, rank: () => ScreenLoadRank, start: () => void) => () => void;
   readonly done: (id: string) => void;
-  readonly counts: () => { readonly loading: number; readonly queued: number };
 }
 
 interface Entry {
@@ -76,5 +75,5 @@ export const screenLoadQueue = (timers: ScreenLoadTimers, cap: number = SCREEN_L
     if (active?.entry.id === id) finish(active.entry);
   };
 
-  return { enter, done, counts: () => ({ loading: active === undefined ? 0 : 1, queued: waiting.length }) };
+  return { enter, done };
 };
