@@ -18,9 +18,9 @@ export interface TailwindClass {
 
 const ROOT_PX = 16;
 
-export const FONT_SIZES: Readonly<Record<string, number>> = { xs: 12, sm: 14, base: 16, lg: 18, xl: 20, "2xl": 24, "3xl": 30, "4xl": 36, "5xl": 48, "6xl": 60, "7xl": 72, "8xl": 96, "9xl": 128 };
-export const FONT_WEIGHTS: Readonly<Record<string, number>> = { thin: 100, extralight: 200, light: 300, normal: 400, medium: 500, semibold: 600, bold: 700, extrabold: 800, black: 900 };
-export const RADII: Readonly<Record<string, number>> = { none: 0, xs: 2, sm: 4, "": 4, md: 6, lg: 8, xl: 12, "2xl": 16, "3xl": 24, "4xl": 32, full: 9999 };
+const FONT_SIZES: Readonly<Record<string, number>> = { xs: 12, sm: 14, base: 16, lg: 18, xl: 20, "2xl": 24, "3xl": 30, "4xl": 36, "5xl": 48, "6xl": 60, "7xl": 72, "8xl": 96, "9xl": 128 };
+const FONT_WEIGHTS: Readonly<Record<string, number>> = { thin: 100, extralight: 200, light: 300, normal: 400, medium: 500, semibold: 600, bold: 700, extrabold: 800, black: 900 };
+const RADII: Readonly<Record<string, number>> = { none: 0, xs: 2, sm: 4, "": 4, md: 6, lg: 8, xl: 12, "2xl": 16, "3xl": 24, "4xl": 32, full: 9999 };
 const LEADING: Readonly<Record<string, string>> = { none: "1", tight: "1.25", snug: "1.375", normal: "1.5", relaxed: "1.625", loose: "2" };
 const TRACKING: Readonly<Record<string, string>> = { tighter: "-0.05em", tight: "-0.025em", normal: "0em", wide: "0.025em", wider: "0.05em", widest: "0.1em" };
 const ALIGN = ["left", "center", "right", "justify", "start", "end"];
@@ -161,7 +161,7 @@ export const classNames = (className: string | null | undefined): string[] => (c
 
 export const looksTailwind = (className: string | null | undefined): boolean => classNames(className).some((name) => readClass(name) !== undefined);
 
-export const classesSetting = (className: string | null | undefined, property: string): TailwindClass[] =>
+const classesSetting = (className: string | null | undefined, property: string): TailwindClass[] =>
   classNames(className)
     .map(readClass)
     .filter((each): each is TailwindClass => each !== undefined && each.variant === "" && each.sets.includes(property))
