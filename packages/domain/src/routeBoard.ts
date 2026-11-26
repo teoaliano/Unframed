@@ -2,6 +2,7 @@ import type { CodeRoute } from "./repoAnalysis/types.ts";
 import { flowLayout } from "./flows.ts";
 import { SCREEN_GAP } from "./screens.ts";
 import { withoutRestore } from "./mockRuntime.ts";
+import { titleCase } from "./repoAnalysis/text.ts";
 
 export const ANALYSIS_FILES = {
   codeMap: ".unframed/analysis/code-map.json",
@@ -26,13 +27,6 @@ const segments = (path: string): string[] => path.split(/[?#]/)[0]!.split("/").f
 
 const groupOf = (path: string): string => segments(path)[0] ?? "home";
 
-const titled = (word: string): string =>
-  word
-    .split(/[-_\s]+/)
-    .filter((part) => part !== "")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-
 const fits = (pattern: string, path: string): boolean => {
   const want = segments(pattern);
   const have = segments(path);
@@ -56,7 +50,7 @@ export const placeableRoutes = (
   if (options.asked !== undefined) {
     for (const path of options.asked) {
       const route = routes.find((candidate) => candidate.params.length === 0 && candidate.path === path) ?? routes.find((candidate) => fits(candidate.path, path));
-      wanted.push({ path, group: route?.group ?? groupOf(path), name: route?.name ?? (titled(segments(path).at(-1) ?? "") || "Home") });
+      wanted.push({ path, group: route?.group ?? groupOf(path), name: route?.name ?? (titleCase(segments(path).at(-1) ?? "") || "Home") });
     }
   } else
     for (const route of routes) {
@@ -86,7 +80,7 @@ export const routeBoardLayout = (input: { readonly x: number; readonly y: number
   const frames = [...groups.entries()].map(([group, routes]) => {
     const layout = flowLayout({ x: input.x, y, w: input.w, h: input.h, count: routes.length });
     y += layout.group.h + 2 * SCREEN_GAP;
-    return { name: titled(group) || "Home", ...layout.group, screens: layout.screens.map((at, index) => ({ ...at, route: routes[index]! })) };
+    return { name: titleCase(group) || "Home", ...layout.group, screens: layout.screens.map((at, index) => ({ ...at, route: routes[index]! })) };
   });
   return { frames };
 };

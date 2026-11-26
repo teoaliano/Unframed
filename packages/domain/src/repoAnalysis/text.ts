@@ -142,3 +142,10 @@ export const dirOf = (path: string): string => {
 export const joinPath = (dir: string, relative: string): string => normalisePath(dir === "" ? relative : `${dir}/${relative}`);
 
 export const sortedPaths = (files: ReadonlyMap<string, string>): string[] => [...files.keys()].sort();
+
+export const titleCase = (words: string): string =>
+  words
+    .split(/[-_\s]+/)
+    .filter((word) => word !== "")
+    .map((word) => word[0]!.toUpperCase() + word.slice(1))
+    .join(" ");

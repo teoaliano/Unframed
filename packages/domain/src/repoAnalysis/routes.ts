@@ -1,6 +1,6 @@
 import type { CodeRoute, CodeStack, SourceFiles } from "./types.ts";
 import { aliasConfigs, parsedJson, resolveImport } from "./imports.ts";
-import { dirOf, lineAt, matchingClose, objectEntries, sortedPaths } from "./text.ts";
+import { dirOf, lineAt, matchingClose, objectEntries, sortedPaths, titleCase } from "./text.ts";
 
 type Dependencies = ReadonlySet<string>;
 
@@ -18,13 +18,6 @@ export const dependenciesOf = (files: SourceFiles): Dependencies => {
 };
 
 const hasPrefix = (deps: Dependencies, prefix: string): boolean => [...deps].some((name) => name.startsWith(prefix));
-
-const titleCase = (segment: string): string =>
-  segment
-    .split(/[-_\s]+/)
-    .filter((word) => word !== "")
-    .map((word) => word[0]!.toUpperCase() + word.slice(1))
-    .join(" ");
 
 export const routePath = (segments: ReadonlyArray<string>): string => {
   const path = `/${segments.filter((segment) => segment !== "").join("/")}`;
