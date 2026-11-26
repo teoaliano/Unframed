@@ -512,34 +512,7 @@ export const instancesLayer = Layer.effect(
       }
     };
 
-    const saveSetup = (project: string, setup: RepositorySetup, from: string) =>
-      Effect.gen(function* () {
-        const { context, live } = yield* find(project, from);
-        if (isRemoved(live)) return yield* unframedError("bad_request", INSTANCE_REMOVED);
-        const files: string[] = [];
-        for (const file of setup.files) {
-          const path = setupFilePath(file);
-          if (path === undefined) return yield* unframedError("bad_request", setupFileOutside(file));
-          if (gitOutput(yield* git(live.stored.worktree, ["ls-files", "--error-unmatch", "--", path])) !== undefined) return yield* unframedError("bad_request", setupFileTracked(path));
-          if (!(yield* Effect.promise(() => fileExists(join(live.stored.worktree, path))))) return yield* unframedError("bad_request", setupFileMissing(path));
-          if (!files.includes(path)) files.push(path);
-        }
-        const folder = yield* projects.folder(context.slug);
-        if (folder === undefined) return yield* unframedError("not_found", REPOSITORY_NOT_FOUND);
-        const others = [...lives.values()].filter((other) => other.project === context.slug && other !== live && !isRemoved(other));
-        yield* Effect.tryPromise({
-          try: async () => {
-            await copyOver(live.stored.worktree, join(folder, SETUP_FILES_FOLDER), files);
-            for (const other of others) await copyOver(join(folder, SETUP_FILES_FOLDER), other.stored.worktree, files);
-            await excludeFromGit(context.repository.gitCommonDir, files);
-          },
-          catch: (error) => unframedError("internal", `Could not copy Setup's files: ${errorText(error)}`),
-        });
-        yield* writeDb(context.slug, (db) => writeRepository(db, { ...(readRepository(db) ?? context.repository), setup: { ...setup, files } }));
-        return { copiedInto: others.map((other) => other.stored.id) };
-      });
-
-    const shareSetupFiles = (project: string, from: string, asked: ReadonlyArray<string>) =>
+    const shareFiles = (project: string, from: string, asked: ReadonlyArray<string>) =>
       Effect.gen(function* () {
         const { context, live } = yield* find(project, from);
         if (isRemoved(live)) return yield* unframedError("bad_request", INSTANCE_REMOVED);
@@ -562,12 +535,25 @@ export const instancesLayer = Layer.effect(
           },
           catch: (error) => unframedError("internal", `Could not copy Setup's files: ${errorText(error)}`),
         });
+        return { context, files, copiedInto: others.map((other) => other.stored.id) };
+      });
+
+    const saveSetup = (project: string, setup: RepositorySetup, from: string) =>
+      Effect.gen(function* () {
+        const { context, files, copiedInto } = yield* shareFiles(project, from, setup.files);
+        yield* writeDb(context.slug, (db) => writeRepository(db, { ...(readRepository(db) ?? context.repository), setup: { ...setup, files } }));
+        return { copiedInto };
+      });
+
+    const shareSetupFiles = (project: string, from: string, asked: ReadonlyArray<string>) =>
+      Effect.gen(function* () {
+        const { context, files, copiedInto } = yield* shareFiles(project, from, asked);
         yield* writeDb(context.slug, (db) => {
           const current = readRepository(db) ?? context.repository;
           if (current.setup === null) return;
           writeRepository(db, { ...current, setup: { ...current.setup, files: [...new Set([...current.setup.files, ...files])] } });
         });
-        return { copiedInto: others.map((other) => other.stored.id) };
+        return { copiedInto };
       });
 
     const mockLog = (project: string, id: string) => Effect.map(find(project, id), ({ live }) => live.mocks.log());
