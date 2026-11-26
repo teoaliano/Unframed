@@ -146,9 +146,7 @@ export function installSourceModule(win: any, tools: SourceTools): void {
   let existing: any;
   try {
     existing = win[HOOK];
-  } catch {
-    existing = undefined;
-  }
+  } catch {}
   if (existing !== null && typeof existing === "object") {
     const original = existing.onCommitFiberRoot;
     try {
@@ -157,9 +155,7 @@ export function installSourceModule(win: any, tools: SourceTools): void {
         if (typeof original === "function") return original.apply(this, arguments as any);
         return undefined;
       };
-    } catch {
-      existing = undefined;
-    }
+    } catch {}
   } else {
     let next = 0;
     const renderers = new Map();
