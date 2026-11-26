@@ -24,7 +24,7 @@ const FOLLOW_UPS: ReadonlyArray<{ readonly value: FollowUp; readonly label: stri
 ];
 
 const CHAT_LAYOUT_OPTIONS: ReadonlyArray<{ readonly value: ChatLayout; readonly label: string; readonly hint: string }> = [
-  { value: "panel", label: "Side panel", hint: "Left panel, as today" },
+  { value: "panel", label: "Side panel", hint: "Docked to the left edge" },
   { value: "composer", label: "Floating composer", hint: "Composer at the bottom center, conversation opens above it" },
   { value: "window", label: "Floating window", hint: "A movable, resizable window, like Parameters" },
 ];

@@ -1,6 +1,6 @@
 import { clearAllChats, clearedNotice, railShown, resetMoment, usageLimitHit } from "@unframed/domain";
 import { BrushCleaning, ChevronDown, CircleAlert, Gauge, GripVertical, MessagesSquare, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useMaybeEditor, useValue } from "tldraw";
 import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";
@@ -54,6 +54,8 @@ export interface AgentRailProps {
 }
 
 const ARTIFACT_TYPES = new Set(["page", "motion"]);
+
+const SHORT_TRANSCRIPT = 160;
 
 /** A key typed in a text field or a menu, dialog or list belongs there, not to the editor around the rail. */
 const keyIsTaken = (target: EventTarget | null): boolean => {
@@ -129,6 +131,26 @@ export const AgentRail = ({
   /** The chat the delete confirmation is about: the active one from the header, any from its tab menu. */
   const [deleting, setDeleting] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
+  const tabsPart = useRef<HTMLDivElement | null>(null);
+  const bodyPart = useRef<HTMLDivElement | null>(null);
+  const [short, setShort] = useState(false);
+  useLayoutEffect(() => {
+    const body = bodyPart.current;
+    if (!(floatingComposer || floatingWindow) || !body) {
+      setShort(false);
+      return;
+    }
+    let tabsHeight = 0;
+    const measure = () => {
+      const shown = tabsPart.current?.offsetHeight ?? 0;
+      if (shown > 0) tabsHeight = shown;
+      setShort(body.offsetHeight + shown - tabsHeight < SHORT_TRANSCRIPT);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(body);
+    return () => observer.disconnect();
+  }, [floatingComposer, floatingWindow]);
   /** Clear all's counts, taken when its confirmation opens and kept after, so the dialog's words hold still while it closes. */
   const [clearCounts, setClearCounts] = useState(() => clearAllChats([]));
 
@@ -244,6 +266,7 @@ export const AgentRail = ({
       aria-label="Agent"
       data-slot={docked ? "docked-rail" : undefined}
       data-layout={onCanvas ? container : undefined}
+      data-short={short ? "" : undefined}
       // A click outside a field focuses the rail, not the page, so a key typed next stays here and goes to the composer.
       tabIndex={-1}
       className={`${!onCanvas ? EMBEDDED_CLASS : floatingWindow ? WINDOW_CLASS : floatingComposer ? COMPOSER_CLASS : RAIL_CLASS} outline-none`}
@@ -362,10 +385,12 @@ export const AgentRail = ({
         )}
       </header>
       <div className="relative shrink-0">
-        <TabStrip client={client} chats={visible} observed={chats} active={active} selectedCount={selectedArtifacts.length} onDelete={setDeleting} />
+        <div ref={tabsPart} hidden={short}>
+          <TabStrip client={client} chats={visible} observed={chats} active={active} selectedCount={selectedArtifacts.length} onDelete={setDeleting} />
+        </div>
         {ui.searchOpen && <ThreadSearch client={client} chats={chats} onClose={() => client.setUi({ searchOpen: false })} />}
       </div>
-      <div className="relative flex min-h-12 flex-1 flex-col overflow-hidden">
+      <div ref={bodyPart} className="relative flex min-h-12 flex-1 flex-col overflow-hidden">
         {none && statuses ? (
           <NoProvider client={client} />
         ) : active ? (

@@ -102,6 +102,7 @@ const PLACEHOLDERS = {
   planFollowUp: "Add feedback to refine the plan, or leave this blank to implement it",
   noProvider: "Connect Claude or Codex to start",
   default: "Ask, or say what should change… @ to mention, / for commands",
+  short: "Ask the agent…",
 } as const;
 
 export interface AgentTrayProps {
@@ -587,6 +588,23 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
   const lengthError = answering ? undefined : promptLengthError(text);
   const planFollowUp = variant === "rail" && chat !== undefined && !running && !answering && interactionMode === "plan" && attachments.staged.length === 0 ? actionablePlan(chat) : undefined;
 
+  const promptPart = useRef<HTMLDivElement | null>(null);
+  const [cramped, setCramped] = useState(false);
+  useLayoutEffect(() => {
+    const part = inline ? promptPart.current : null;
+    const context = part ? document.createElement("canvas").getContext("2d") : null;
+    if (!part || !context) return;
+    const measure = () => {
+      const style = getComputedStyle(part.querySelector(".ProseMirror") ?? part);
+      context.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      setCramped(context.measureText(PLACEHOLDERS.default).width > part.clientWidth);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(part);
+    return () => observer.disconnect();
+  }, [inline]);
+
   const placeholder = approvalPending
     ? PLACEHOLDERS.approval
     : answering
@@ -597,7 +615,9 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         ? PLACEHOLDERS.planFollowUp
         : noProvider
           ? PLACEHOLDERS.noProvider
-          : PLACEHOLDERS.default;
+          : inline && cramped
+            ? PLACEHOLDERS.short
+            : PLACEHOLDERS.default;
 
   const canSend = answering
     ? questions.ready
@@ -1072,7 +1092,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           />
           {underChips}
         </div>
-        <div className={resting.resting ? "col-start-1 row-start-2 flex min-w-0 items-center gap-1" : inline ? (twoRows ? "order-1 min-w-0 basis-full px-1" : "order-2 min-w-0 flex-1") : "min-w-0"} data-composer-prompt>
+        <div className={resting.resting ? "col-start-1 row-start-2 flex min-w-0 items-center gap-1" : inline ? (twoRows ? "order-1 min-w-0 basis-full px-1.5" : "order-2 min-w-0 flex-1") : "min-w-0"} data-composer-prompt ref={promptPart}>
           <PromptEditor
             resting={resting.resting}
             inline={inline}

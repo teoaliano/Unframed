@@ -44,6 +44,7 @@ export const useFloatingPlacement = ({
   readonly limits?: PanelLimits;
 }) => {
   const box = useRef<Floating | undefined>(undefined);
+  const wanted = useRef<Floating | undefined>(undefined);
   const prefsNow = useRef(prefs);
   prefsNow.current = prefs;
   const saveNow = useRef(save);
@@ -70,6 +71,7 @@ export const useFloatingPlacement = ({
   };
 
   const remember = (next: Floating) => {
+    wanted.current = next;
     const dockW = prefsNow.current?.dockW;
     const place: PanelPrefs = { mode: "float", x: next.x, y: next.y, w: next.w, ...(dockW === undefined ? {} : { dockW }) };
     saveNow.current(next.h === undefined ? place : { ...place, h: next.h });
@@ -87,19 +89,21 @@ export const useFloatingPlacement = ({
       box.current = settle({ x: beside.left, y: beside.top, w: size.w, h: size.h });
       remember(box.current);
     } else {
+      wanted.current = { x: saved.x, y: saved.y, w: saved.w ?? size.w, h: saved.h };
       box.current = settle({ x: saved.x, y: saved.y, w: size.w, h: size.h });
     }
     paint();
     const observer = new ResizeObserver(() => {
       if (!box.current) return;
       editor.updateViewportScreenBounds(editor.getContainer());
-      box.current = settle(box.current);
+      box.current = settle(wanted.current ?? box.current);
       paint();
     });
     observer.observe(editor.getContainer());
     return () => {
       observer.disconnect();
       box.current = undefined;
+      wanted.current = undefined;
       for (const property of ["transform", "width", "height", "max-height", "visibility"]) element.style.removeProperty(property);
     };
   }, [editor, element, on]);

@@ -67,7 +67,7 @@ test("Agent chat layout sits in Settings → Agents: Side panel by default, thre
   await expect(select).toHaveText("Side panel");
   await select.click();
   await expect(page.getByRole("option")).toHaveCount(3);
-  await expect(page.getByRole("option", { name: /Side panel/ })).toContainText("Left panel, as today");
+  await expect(page.getByRole("option", { name: /Side panel/ })).toContainText("Docked to the left edge");
   await expect(page.getByRole("option", { name: /Floating composer/ })).toContainText("Composer at the bottom center, conversation opens above it");
   await expect(page.getByRole("option", { name: /Floating window/ })).toContainText("A movable, resizable window, like Parameters");
   await page.getByRole("option", { name: /Floating window/ }).click();
@@ -510,4 +510,100 @@ test("the floating window and a floating Parameters panel sit on the canvas toge
   await expect.poll(async () => Math.round((await boxOf(parameters)).y)).toBe(Math.round(parametersAt.y) + 120);
   expect(Math.round((await boxOf(chat)).x)).toBe(880);
   await expect(chat).toBeVisible();
+});
+
+/** How far the transcript is from its end, in pixels. */
+const fromEnd = (page: Page) => rail(page).getByTestId("transcript").evaluate((element) => Math.round(element.scrollHeight - element.clientHeight - element.scrollTop));
+
+const formatted = async (page: Page, scope: Locator) => {
+  await say(scope, "show me formatting");
+  await expect(rail(page).locator("[data-role='assistant']").last()).toContainText("Nothing else on the canvas was touched.");
+};
+
+test("the floating window reopens at the end of its transcript", async ({ page, agent }) => {
+  await page.setViewportSize({ width: 1440, height: 800 });
+  await setLayout(agent, "window");
+  await openCanvas(page, agent);
+  await agentChromeButton(page).click();
+  await formatted(page, rail(page));
+  await expect.poll(() => fromEnd(page)).toBeLessThanOrEqual(1);
+  await agentChromeButton(page).click();
+  await expect(rail(page)).toHaveCount(0);
+  await agentChromeButton(page).click();
+  await expect(rail(page)).toHaveAttribute("data-state", "open");
+  await expect.poll(() => fromEnd(page)).toBeLessThanOrEqual(1);
+});
+
+test("a chat at the end of its transcript stays there when the window gets shorter, and stays put when scrolled up", async ({ page, agent }) => {
+  await page.setViewportSize({ width: 1440, height: 800 });
+  await openCanvas(page, agent);
+  await agentChromeButton(page).click();
+  await formatted(page, rail(page));
+  await expect.poll(() => fromEnd(page)).toBeLessThanOrEqual(1);
+  await page.setViewportSize({ width: 1440, height: 560 });
+  await expect.poll(() => fromEnd(page)).toBeLessThanOrEqual(1);
+
+  await rail(page).getByTestId("transcript").evaluate((element) => element.scrollTo({ top: 0 }));
+  await expect.poll(() => rail(page).getByTestId("transcript").evaluate((element) => element.scrollTop)).toBe(0);
+  await page.setViewportSize({ width: 1440, height: 500 });
+  await page.waitForTimeout(200);
+  expect(await rail(page).getByTestId("transcript").evaluate((element) => element.scrollTop)).toBe(0);
+});
+
+for (const layout of ["composer", "window"] as const) {
+  test(`a ${layout === "composer" ? "floating composer's conversation" : "floating window"} too short for its transcript hides the tabs, and shows them again with room`, async ({ page, agent }) => {
+    await page.setViewportSize({ width: 1440, height: 800 });
+    await setLayout(agent, layout);
+    await openCanvas(page, agent);
+    await agentChromeButton(page).click();
+    await formatted(page, layout === "composer" ? floatingComposer(page) : rail(page));
+    await expect(tabs(page)).toHaveText(["Markdown formatting"]);
+    await expect(rail(page)).not.toHaveAttribute("data-short");
+    await expect.poll(() => fromEnd(page)).toBeLessThanOrEqual(1);
+    const tall = await boxOf(rail(page));
+
+    await page.setViewportSize({ width: 1440, height: 380 });
+    await expect(rail(page)).toHaveAttribute("data-short", "");
+    await expect(tabs(page)).toBeHidden();
+    expect((await boxOf(rail(page).getByTestId("transcript"))).height).toBeGreaterThanOrEqual(100);
+    await expect.poll(() => fromEnd(page)).toBeLessThanOrEqual(1);
+    await expect(rail(page).getByRole("button", { name: "Search chats" })).toBeVisible();
+
+    await page.setViewportSize({ width: 1440, height: 800 });
+    await expect(rail(page)).not.toHaveAttribute("data-short");
+    await expect(tabs(page)).toBeVisible();
+    await expect.poll(async () => boxOf(rail(page))).toEqual(tall);
+  });
+}
+
+test("the floating composer shortens its placeholder when the full one would not fit", async ({ page, agent }) => {
+  await page.setViewportSize({ width: 1440, height: 800 });
+  await setLayout(agent, "composer");
+  await openCanvas(page, agent);
+  const empty = floatingComposer(page).locator("[data-agent-prompt] p.is-editor-empty");
+  await expect(empty).toHaveAttribute("data-placeholder", "Ask, or say what should change… @ to mention, / for commands");
+  await page.setViewportSize({ width: 420, height: 800 });
+  await expect(empty).toHaveAttribute("data-placeholder", "Ask the agent…");
+  expect(await placeholderFits(floatingComposer(page))).toBe(true);
+  await page.setViewportSize({ width: 1440, height: 800 });
+  await expect(empty).toHaveAttribute("data-placeholder", "Ask, or say what should change… @ to mention, / for commands");
+});
+
+test("a floating composer draft scrolled past its first lines fades at the top, and not before", async ({ page, agent }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await setLayout(agent, "composer");
+  await openCanvas(page, agent);
+  const box = promptBox(floatingComposer(page));
+  await box.click();
+  for (let line = 1; line <= 20; line++) {
+    await box.pressSequentially(`line ${line}`);
+    await box.press("Shift+Enter");
+  }
+  const scroller = floatingComposer(page).locator("[data-composer-prompt] [data-scrolls]");
+  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await expect(scroller).toHaveAttribute("data-scrolled", "");
+  await expect.poll(() => scroller.evaluate((element) => getComputedStyle(element).maskImage)).toContain("gradient");
+  await scroller.evaluate((element) => element.scrollTo({ top: 0 }));
+  await expect(scroller).not.toHaveAttribute("data-scrolled");
+  expect(await scroller.evaluate((element) => getComputedStyle(element).maskImage)).toBe("none");
 });
