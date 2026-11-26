@@ -121,3 +121,18 @@ test("a state that keeps failing shows Couldn't reach this state after one retry
     expect(await hits(page, "always")).toBe(2);
   });
 });
+
+test("with ?fps=1 the meter counts live, loading and queued Screens, replays, retries and failed states", async ({ page }) => {
+  await withRepository(page, {}, async (engine, project) => {
+    await page.goto(`${engine.origin}/?fps=1`);
+    const screen = page.locator(`[data-canvas-project="${project}"] [data-testid=screen]`);
+    await expect(screen).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
+    const line = page.locator("[data-fps-screens]");
+    await expect(line).toHaveText("screens: live 1 · loading 0 · queued 0 · replays 0 · retries 0 · failed 0");
+    const [first] = await screenShapes(engine, project);
+    await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/flaky?key=meter&fails=99", w: 640, h: 480, ...OPEN_MENU } }]);
+    await expect(page.getByTestId("screen-state-failed")).toBeVisible({ timeout: 30_000 });
+    await expect(line).toHaveText("screens: live 1 · loading 0 · queued 0 · replays 2 · retries 1 · failed 1");
+    expect(await page.evaluate(() => (window as any).__fps.screens())).toEqual({ live: 1, loading: 0, queued: 0, replays: 2, retries: 1, failed: 1 });
+  });
+});

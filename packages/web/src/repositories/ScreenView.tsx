@@ -11,6 +11,7 @@ import { messageOf, useChatClient, useChats } from "../agent/store.ts";
 import { useEngine } from "../context.ts";
 import { isDeviceClient } from "../deviceMode.ts";
 import { useFeature } from "../features.ts";
+import { countScreens, type ScreenCounts } from "../fps/screens.ts";
 import { screenPropsOf } from "./BranchChip.tsx";
 import { useAskAgent } from "./askAgent.ts";
 import { noteBridge, repositoryState, screenSnapshotUrl } from "./store.ts";
@@ -18,6 +19,13 @@ import { noteBridge, repositoryState, screenSnapshotUrl } from "./store.ts";
 export const SCREEN_SANDBOX = "allow-scripts allow-same-origin allow-forms allow-modals";
 
 const NO_STATE_KEY = "[[],[]]";
+
+const useCounted = (key: keyof ScreenCounts, on: boolean) =>
+  useEffect(() => {
+    if (!on) return;
+    countScreens(key);
+    return () => countScreens(key, -1);
+  }, [key, on]);
 
 const nonEmpty = (dials: Readonly<Record<string, unknown>> | undefined) => dials !== undefined && Object.keys(dials).length > 0;
 
@@ -207,7 +215,7 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
   }, [eligible, loadQueue, shapeId]);
   const queued = eligible && loadQueue !== undefined && !admitted;
   const live = eligible && !queued;
-  const loaded = () => loadQueue?.done(shapeId);
+  const [settled, setSettled] = useState<number | undefined>(undefined);
   const snapshot = useValue("screen snapshot", () => state.snapshots.get().get(shapeId), [state, shapeId]);
   const bridge = useValue("screen bridge", () => state.bridges.get().get(shapeId), [state, shapeId]);
   const stateKey = JSON.stringify([props.steps ?? [], props.mocks ?? []]);
@@ -235,6 +243,7 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
     const begin = (token: string | null) => {
       if (seq !== loads.current) return;
       setFailure(undefined);
+      if (token !== null) countScreens("replays");
       frameState.current = { applied: false, route: undefined };
       setLoad({ url: screenUrl(proxyPort, token === null ? props.route : stateRoute(props.route, token)), n: seq, token: token !== null });
     };
@@ -253,6 +262,10 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
       return;
     }
     setFailure(undefined);
+  };
+  const loaded = () => {
+    setSettled(load?.n);
+    loadQueue?.done(shapeId);
   };
   const events: FrameEvents = {
     onPainted: () => {
@@ -285,8 +298,12 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
         setFailure(undefined);
       } else if (retried.current !== attempt) {
         retried.current = attempt;
+        countScreens("retries");
         setReloads((count) => count + 1);
-      } else setFailure({ step: result.step ?? 0, reason: result.reason ?? "" });
+      } else {
+        countScreens("failed");
+        setFailure({ step: result.step ?? 0, reason: result.reason ?? "" });
+      }
     },
   };
   const fix = () => {
@@ -311,6 +328,9 @@ export const useScreenView = ({ owner, project, shapeId, props, onScreen, intera
   };
   const url = live ? load?.url : undefined;
   const shownPainted = live && url !== undefined && painted === url;
+  useCounted("live", live && url !== undefined);
+  useCounted("loading", live && url !== undefined && settled !== load?.n);
+  useCounted("queued", queued);
   const content = (
     <>
       {live && url !== undefined && <LiveScreen key={load?.n} owner={owner} shapeId={shapeId} url={url} dials={props.dials} interactive={interactive} events={events} edit={edit} />}
