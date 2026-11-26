@@ -38,7 +38,7 @@ test("a new Repository's first Screen gets its picture, goes live through the pr
   });
 });
 
-test("a Screen shows Setup's progress while its Instance installs, then the app", async ({ page }) => {
+test("the canvas waits behind one loading state while its Screens' dev servers start, then shows them, each with its own progress underneath", async ({ page }) => {
   const slowInstall = async (root: string) => {
     await writeFile(join(root, "install.js"), 'setTimeout(() => require("node:fs").writeFileSync("installed.txt", "yes\\n"), 4000);\n');
     git(root, "commit", "-qam", "slow install");
@@ -48,12 +48,19 @@ test("a Screen shows Setup's progress while its Instance installs, then the app"
     {},
     async (engine, project) => {
       const screen = page.locator("[data-testid=screen]");
+      const cover = page.getByTestId("screens-starting");
+      await expect(cover.getByRole("status")).toHaveText("Installing dependencies…");
+      const watermark = page.getByTestId("tl-watermark-unlicensed");
+      const box = (await watermark.boundingBox())!;
+      expect(await page.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest("[data-testid=tl-watermark-unlicensed]"), { x: box.x + box.width / 2, y: box.y + box.height / 2 })).toBe(true);
       await expect(screen.locator("[data-testid=screen-overlay]")).toHaveText("Installing dependencies…");
       await clickShape(page, await firstScreenId(engine, project));
       await expect(screen.locator("[data-testid=screen-overlay]")).toHaveCount(0, { timeout: 30_000 });
+      await expect(cover).toHaveCount(0);
       await expect(screen).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
     },
     slowInstall,
+    { whileStarting: true },
   );
 });
 
@@ -63,6 +70,8 @@ test("a Screen whose server fails shows the failure with the log's last lines", 
     await expect(overlay).toHaveAttribute("data-overlay", "failed", { timeout: 30_000 });
     await expect(overlay).toContainText("The dev server exited with code 1");
     await expect(overlay.locator("[data-testid=screen-log]")).toContainText("fake dev server: giving up");
+    await expect(page.getByTestId("screens-starting")).toHaveCount(0);
+    await expect(overlay).toBeVisible();
   });
 });
 

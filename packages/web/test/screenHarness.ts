@@ -6,7 +6,13 @@ import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { openCanvas } from "./canvas.ts";
 import { expect, startHostedEngine } from "./fixtures.ts";
 
-export const withRepository = async (page: Page, env: Record<string, string | undefined>, use: (engine: TestEngine, project: string, root: string) => Promise<void>, prepare?: (root: string) => Promise<void>) => {
+export const withRepository = async (
+  page: Page,
+  env: Record<string, string | undefined>,
+  use: (engine: TestEngine, project: string, root: string) => Promise<void>,
+  prepare?: (root: string) => Promise<void>,
+  { whileStarting = false }: { readonly whileStarting?: boolean } = {},
+) => {
   const root = await makeRepo("My App");
   await prepare?.(root);
   const engine = await startHostedEngine({ env: await repoEngineEnv({ UNFRAMED_TEST_PICK_FOLDER: root, ...env }) });
@@ -15,6 +21,7 @@ export const withRepository = async (page: Page, env: Record<string, string | un
     await page.getByRole("button", { name: "All projects" }).click();
     await page.getByRole("menuitem", { name: "Add Repository…" }).click();
     await expect(page.locator("[data-canvas-project='my-app'] .tl-canvas")).toBeVisible();
+    if (!whileStarting) await screensStarted(page);
     await use(engine, "my-app", root);
   } finally {
     await engine.dispose();
@@ -50,3 +57,5 @@ export const putShapes = async (engine: TestEngine, project: string, put: any[])
     await rpc.close();
   }
 };
+
+export const screensStarted = (page: Page) => expect(page.getByTestId("screens-starting")).toHaveCount(0, { timeout: 30_000 });

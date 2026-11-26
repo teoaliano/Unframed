@@ -1908,6 +1908,7 @@ Components	rename-field/surface	COLOR	{surface/background}
 Components	render-progress/fill	COLOR	{action/highlight}		
 Components	render-progress/foreground	COLOR	{text/muted}		
 Components	render-progress/track	COLOR	{border/strong}		
+Components	screens-starting/surface	COLOR	{surface/background}		
 Components	scroll-area/fade-size	FLOAT	24		
 Components	scroll-area/ring	COLOR	{border/focus}		
 Components	scroll-area/ring-offset	COLOR	{surface/background}		

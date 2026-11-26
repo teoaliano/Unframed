@@ -170,7 +170,8 @@
 }
 
 :root .tl-container[data-parameters-panel],
-:root .tl-container:has([data-comments-sidebar]) {
+:root .tl-container:has([data-comments-sidebar]),
+:root .tl-container:has([data-screens-starting]) {
   --tl-layer-watermark: 251;
 }
 

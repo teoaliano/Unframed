@@ -133,7 +133,8 @@ test("with repositories off, a Repository opens read-only on its Screens' last s
     await expect(screen.locator("[data-testid=screen-page-copy]")).toHaveCount(0);
     await expect(page.getByTestId("screen-route")).toHaveCount(0);
     await expect(page.getByTestId("screen-branch")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Keep this view" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Duplicate", exact: true })).toHaveCount(0);
+    await expect(page.getByTestId("screens-starting")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Map a Flow" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Parameters" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Editor", exact: true })).toHaveCount(0);
