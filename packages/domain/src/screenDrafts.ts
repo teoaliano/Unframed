@@ -134,6 +134,11 @@ const sourceOf = (value: unknown): ResolvedElement["source"] => {
   return { file, line: at, col, mapped: value.mapped === true };
 };
 
+export const withResolved = (element: DraftElement, found: ResolvedElement | null | undefined): DraftElement =>
+  found === null || found === undefined || found.source === null
+    ? { ...element, source: null }
+    : { ...element, key: found.key, source: { file: found.source.file, line: found.source.line, col: found.source.col }, component: found.owner, instanceIndex: found.instanceIndex, instanceCount: found.instanceCount, selfMapped: found.selfMapped, tag: found.tag };
+
 export const checkResolved = (value: unknown): ResolvedElement | null => {
   if (!isRecord(value)) return null;
   const key = line(value.key, 2048);

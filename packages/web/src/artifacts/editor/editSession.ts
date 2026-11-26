@@ -10,6 +10,7 @@ import {
   releaseDials as releaseHeldDials,
   addDraft,
   checkResolved,
+  withResolved,
   addScreenOverride,
   draftOf,
   pickTarget,
@@ -264,12 +265,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
 
   const post = useCallback((message: unknown) => postRef.current?.(message), []);
 
-  const withSource = (element: DraftElement): DraftElement => {
-    if (element.source !== null) return element;
-    const found = resolvedRef.current[element.stamp];
-    if (found === undefined || found === null || found.source === null) return element;
-    return { ...element, key: found.key, source: { file: found.source.file, line: found.source.line, col: found.source.col }, component: found.owner, instanceIndex: found.instanceIndex, instanceCount: found.instanceCount, selfMapped: found.selfMapped, tag: found.tag };
-  };
+  const withSource = (element: DraftElement): DraftElement => (element.source !== null ? element : withResolved(element, resolvedRef.current[element.stamp]));
   const deriveDrafts = () => {
     let list: DraftChange[] = [];
     for (const override of overridesRef.current) {

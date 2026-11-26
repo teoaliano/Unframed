@@ -1,5 +1,5 @@
 import type { ElementChip, ScreenWrite } from "@unframed/contracts";
-import { changeTook, continuableChat, DEFAULT_RUNTIME_MODE, DID_NOT_TAKE, elementKind, NO_SOURCE, NOT_IN_WORKTREE, NOT_SELF_MAPPED, ONLY_THIS_ONE, oneLine, screenDraftInstruction, type DraftChange, type DraftSource } from "@unframed/domain";
+import { changeTook, continuableChat, DEFAULT_RUNTIME_MODE, DID_NOT_TAKE, elementKind, NO_SOURCE, NOT_IN_WORKTREE, NOT_SELF_MAPPED, ONLY_THIS_ONE, oneLine, screenDraftInstruction, withResolved, type DraftChange, type DraftSource } from "@unframed/domain";
 import { useRef, useState } from "react";
 import { readyProviders } from "../agent/providers.ts";
 import { createChat, sendMessage } from "../agent/send.ts";
@@ -195,13 +195,7 @@ export const useScreenApply = (input: ScreenApplyInput) => {
     const { session, engine, project, instance } = latest.current;
     if (instance === undefined || session.drafts.length === 0 || runRef.current?.busy === true || resolving.current) return;
     resolving.current = true;
-    const drafts = await Promise.all(
-      session.drafts.map(async (change) => {
-        const found = await session.resolve(change.element.stamp, true);
-        if (found === null || found.source === null) return { ...change, element: { ...change.element, source: null } };
-        return { ...change, element: { ...change.element, key: found.key, source: { file: found.source.file, line: found.source.line, col: found.source.col }, component: found.owner, selfMapped: found.selfMapped, instanceIndex: found.instanceIndex, instanceCount: found.instanceCount, tag: found.tag } };
-      }),
-    ).finally(() => {
+    const drafts = await Promise.all(session.drafts.map(async (change) => ({ ...change, element: withResolved(change.element, await session.resolve(change.element.stamp, true)) }))).finally(() => {
       resolving.current = false;
     });
     const rows: ApplyRow[] = drafts.map((change) => {
