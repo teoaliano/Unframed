@@ -24,6 +24,8 @@ export const excludedPathspecs = (files: ReadonlyArray<string>): string[] => fil
 
 export const takeHomePathspecs: ReadonlyArray<string> = [":(exclude).unframed"];
 
+export const patchFileName = (branch: string): string => `${branch.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "changes"}.patch`;
+
 export const COMMIT_SYSTEM_PROMPT = "You write concise git commit messages. Answer with the JSON object alone.";
 export const COMMIT_PROMPT_TEMPLATE = "Return a JSON object with keys: subject, body.\nRules:\n- subject must be imperative, <= 72 chars, and no trailing period\n- body can be empty string or short bullet points\n- capture the primary user-visible or developer-visible change\n\nBranch: <branch>\n\nStaged files:\n<files>\n\nStaged patch:\n<patch>";
 export const PR_SYSTEM_PROMPT = "You write source control change request content. Answer with the JSON object alone.";

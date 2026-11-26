@@ -130,6 +130,7 @@ test("with repositories off, a Repository opens read-only on its Screens' last s
     await expect(page.getByTestId("screen-branch")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Keep this view" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Map a Flow" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Show states" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Parameters" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Editor", exact: true })).toHaveCount(0);
     await page.keyboard.press("Escape");

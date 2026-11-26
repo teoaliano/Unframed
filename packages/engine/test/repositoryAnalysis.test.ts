@@ -5,60 +5,10 @@ import { describe, expect, it } from "vitest";
 import { toolResults } from "./agentCanvas.ts";
 import { chromeOnMachine as chrome } from "./chrome.ts";
 import { git } from "./gitRepos.ts";
+import { ROUTER_APP } from "./routerApp.ts";
 import { outsideLink } from "./outsideCalls.ts";
 import { makeTempDir } from "./harness.ts";
 import { startRepositoryAgent, stateTurn, type RepositoryAgent } from "./repositoryAgent.ts";
-
-export const ROUTER_APP: Readonly<Record<string, string>> = {
-  "package.json": JSON.stringify({
-    name: "router-app",
-    private: true,
-    scripts: { dev: "node server.js", postinstall: "node install.js" },
-  }),
-  "tsconfig.json": JSON.stringify({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./src/*"] } } }),
-  "src/main.tsx": [
-    'import { createBrowserRouter, RouterProvider } from "react-router-dom";',
-    'import { Home } from "./pages/Home";',
-    'import { Posts } from "./pages/Posts";',
-    'import { Post } from "./pages/Post";',
-    "const router = createBrowserRouter([",
-    '  { path: "/", element: <Home /> },',
-    '  { path: "/app", element: <Home /> },',
-    '  { path: "/posts", element: <Posts /> },',
-    '  { path: "/posts/:id", element: <Post /> },',
-    "]);",
-    "export const App = () => <RouterProvider router={router} />;",
-    "",
-  ].join("\n"),
-  "src/pages/Home.tsx": ['import { Button } from "@/components/ui/button";', "export function Home() {", '  return <Button variant="ghost">Menu</Button>;', "}", ""].join("\n"),
-  "src/pages/Posts.tsx": [
-    'import { Button } from "@/components/ui/button";',
-    'import { usePosts } from "../api/posts";',
-    "export function Posts() {",
-    "  const { data, isLoading, error } = usePosts();",
-    "  if (isLoading) return <p>Loading</p>;",
-    "  if (error) return <p>Could not load posts</p>;",
-    "  if (data.length === 0) return <p>No posts yet</p>;",
-    "  return <Button>New post</Button>;",
-    "}",
-    "",
-  ].join("\n"),
-  "src/pages/Post.tsx": ["export function Post() {", "  return <article>Post</article>;", "}", ""].join("\n"),
-  "src/api/posts.ts": ["export const usePosts = () => ({ data: [], isLoading: false, error: null });", ""].join("\n"),
-  "src/components/ui/button.tsx": [
-    'import { cva, type VariantProps } from "class-variance-authority";',
-    'const buttonVariants = cva("rounded", { variants: { variant: { default: "bg-primary", ghost: "bg-transparent" }, size: { sm: "h-8", lg: "h-12" } } });',
-    "export interface ButtonProps extends VariantProps<typeof buttonVariants> {",
-    "  children?: React.ReactNode;",
-    "  disabled?: boolean;",
-    "}",
-    "export function Button({ variant, size, children }: ButtonProps) {",
-    "  return <button className={buttonVariants({ variant, size })}>{children}</button>;",
-    "}",
-    "",
-  ].join("\n"),
-  "src/index.css": ['@import "tailwindcss";', "@theme {", "  --color-primary: oklch(0.6 0.2 250);", "  --radius-card: 12px;", "}", ""].join("\n"),
-};
 
 const write = async (agent: RepositoryAgent, path: string, content: string) => {
   const full = join(agent.instance.worktree, path);
