@@ -12,8 +12,9 @@ const centreColumn = (page: Page) => editor(page).locator('[data-editor-column="
 const panels = (page: Page) => editor(page).locator('[data-editor-column="parameters"]');
 const rail = (page: Page) => editor(page).locator('[data-editor-column="rail"]');
 const preview = (page: Page) => editor(page).getByTestId("screen-preview");
-const shownFrame = (page: Page) => page.locator('[data-screen-of][style*="visibility: visible"] iframe[data-screen-frame]');
-const app = (page: Page) => page.frameLocator('[data-screen-of][style*="visibility: visible"] iframe[data-screen-frame]');
+const SHOWN_FRAME = '[data-screen-of][style*="visibility: visible"] iframe[data-screen-frame]';
+const shownFrame = (page: Page) => page.locator(SHOWN_FRAME);
+const app = (page: Page) => page.frameLocator(SHOWN_FRAME);
 const editorTab = (page: Page) => page.locator("[data-slot=top-bar] [role=tab][data-variant='secondary']");
 const modeButton = (page: Page, name: "Edit" | "Interact") => centreColumn(page).getByRole("group", { name: "Mode" }).getByRole("button", { name, exact: true });
 
