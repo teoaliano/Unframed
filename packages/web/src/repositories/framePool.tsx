@@ -42,13 +42,12 @@ const poolOf = (project: string): Atom<ReadonlyMap<string, PoolEntry>> => {
   return pool;
 };
 
-const entryOf = (project: string, shapeId: string, slot: ScreenSlot): PoolEntry => {
+const entryOf = (project: string, shapeId: string, slot: ScreenSlot): PoolEntry =>
+  poolOf(project).get().get(shapeId) ?? { slots: atom(`screen slots ${shapeId}`, []), status: atom(`screen status ${shapeId}`, NOT_LOADED), last: { current: slot } };
+
+const keep = (project: string, shapeId: string, entry: PoolEntry): void => {
   const pool = poolOf(project);
-  const found = pool.get().get(shapeId);
-  if (found !== undefined) return found;
-  const entry: PoolEntry = { slots: atom(`screen slots ${shapeId}`, []), status: atom(`screen status ${shapeId}`, NOT_LOADED), last: { current: slot } };
-  pool.update((entries) => new Map(entries).set(shapeId, entry));
-  return entry;
+  if (pool.get().get(shapeId) !== entry) pool.update((entries) => new Map(entries).set(shapeId, entry));
 };
 
 export const forgetScreenFrame = (project: string, shapeId: string): void => {
@@ -65,8 +64,9 @@ const activeSlot = (slots: ReadonlyArray<{ readonly slot: ScreenSlot }>): Screen
 
 export const useScreenSlot = (project: string, shapeId: string, slot: ScreenSlot): FrameStatus => {
   const [token] = useState(() => ({}));
-  const entry = entryOf(project, shapeId, slot);
+  const [entry] = useState(() => entryOf(project, shapeId, slot));
   useLayoutEffect(() => {
+    keep(project, shapeId, entry);
     entry.slots.update((slots) => {
       const at = slots.findIndex((each) => each.token === token);
       if (at === -1) return [...slots, { token, slot }];
