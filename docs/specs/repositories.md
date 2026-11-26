@@ -10,7 +10,7 @@ A person building a real web app wants to see and compare versions of it the way
 
 A second kind of project, the **Repository**, beside today's **Whiteboard**, which stays unchanged. The person adds an existing local git repository. Unframed creates the first **Instance**, which is a branch checked out in its own worktree and running its frontend. Unframed then starts **Setup**, an agent thread that works out what this repo needs to run and proves a **Screen** shows real content.
 
-Each Screen on the canvas is one route of one Instance at one viewport. It's live while selected and a picture otherwise (`screen-tiers.md`), served through an Unframed proxy so logins, Parameters and comments work. Forking a Screen creates a new Instance. Exploding a head into a **Flow** lays out its routes. Agent threads can fork several Instances and work across them. All of it sits behind the `repositories` feature flag, on a long-lived branch, built as the dev app for real-world testing before anything reaches `main`.
+Each Screen on the canvas is one route of one Instance at one viewport. It's live while selected and a picture otherwise (`screen-tiers.md`), served through an Unframed proxy so logins, Parameters and comments work. Forking a Screen creates a new Instance. Exploding a head into a **Flow** lays out its routes. Agent threads can fork several Instances and work across them. Git actions (commit, push, PR, diff) come from t3code's model. All of it sits behind the `repositories` feature flag, on a long-lived branch, built as the dev app for real-world testing before anything reaches `main`.
 
 ## User Stories
 
@@ -106,7 +106,7 @@ Each Screen on the canvas is one route of one Instance at one viewport. It's liv
 ### Git
 
 69. As a person, I want to see a diff of an Instance's changes against its base, so that I know what the agent did in that version.
-70. As a person, I want commit, push, and open-PR actions on an Instance (chained, with generated messages), so that I can move a version I like toward review without leaving Unframed.
+70. As a person, I want commit, push, and open-PR actions on an Instance (chained like t3code, with generated messages), so that I can move a version I like toward review without leaving Unframed.
 71. As a person, I want Setup's files excluded from every diff, commit and PR, so that only my real changes travel.
 72. As a person, I want merging left to GitHub and my own git tools, so that Unframed never destroys work with a bad merge.
 
@@ -224,7 +224,7 @@ Each Screen on the canvas is one route of one Instance at one viewport. It's liv
 
 ### Git actions
 
-- These run on the engine's existing process layer. They are:
+- These are ported from t3code's logic onto the engine's existing process layer, with no Effect modules lifted wholesale. They are:
   - an Instance diff (`git diff <merge-base>...` on the worktree, Setup's excluded files never shown)
   - stacked actions: commit, commit and push, commit, push and open PR
   - a generated commit message and PR title and body through the person's agent provider
