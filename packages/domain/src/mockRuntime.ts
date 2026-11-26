@@ -2,7 +2,6 @@ export const RESTORE_PARAM = "__unframed_restore";
 export const SWITCH_PARAM = "__unframed_switch";
 export const MOCKS_FOLDER = ".unframed/mocks";
 export const MOCK_MODULES_FOLDER = ".unframed/mocks/modules";
-export const MOCK_FILE_SUFFIX = ".mock.js";
 export const MOCKS_SOURCE_PATH = "/__unframed/mocks.js";
 export const MOCKS_EVENTS_PATH = "/__unframed/mocks/events";
 export const MOCKS_LOG_PATH = "/__unframed/mocks/log";

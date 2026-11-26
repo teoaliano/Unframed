@@ -124,12 +124,6 @@ export const firstBrace = (source: string, from: number): number => {
   return -1;
 };
 
-export const sourceExtension = (path: string): string => {
-  const slash = path.lastIndexOf("/");
-  const dot = path.lastIndexOf(".");
-  return dot > slash ? path.slice(dot) : "";
-};
-
 export const normalisePath = (path: string): string => {
   const parts: string[] = [];
   for (const part of path.split("/")) {
