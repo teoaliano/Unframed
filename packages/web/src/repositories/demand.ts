@@ -8,10 +8,17 @@ const WINDOW_CLIENT = `window-${Math.random().toString(36).slice(2, 10)}`;
 const SEND_AFTER_MS = 250;
 const RESEND_EVERY_MS = 10_000;
 
-export const screenOnScreen = (editor: Editor, id: TLShapeId): boolean => {
+const SCREEN_KEEP_REACH = 3;
+
+export const screenOnScreen = (editor: Editor, id: TLShapeId, reach = 1): boolean => {
   const bounds = editor.getShapePageBounds(id);
   const viewport = editor.getViewportPageBounds();
-  return !!bounds && !farOffscreen({ x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h }, { x: viewport.x, y: viewport.y, w: viewport.w, h: viewport.h });
+  return !!bounds && !farOffscreen({ x: bounds.x, y: bounds.y, w: bounds.w, h: bounds.h }, { x: viewport.x, y: viewport.y, w: viewport.w, h: viewport.h }, reach);
+};
+
+export const screenPresence = (editor: Editor, id: TLShapeId): (() => boolean) => {
+  let present = false;
+  return () => (present = screenOnScreen(editor, id) || (present && screenOnScreen(editor, id, SCREEN_KEEP_REACH)));
 };
 
 const installDemand = (engine: EngineConnection, project: string, client: string, wanted: () => string): (() => void) => {

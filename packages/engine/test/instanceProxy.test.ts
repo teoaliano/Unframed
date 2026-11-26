@@ -121,7 +121,7 @@ describe("serving a live Instance through its proxy", () => {
     const login = await rawRequest(proxy, "/login", { headers: { ...at(proxy), accept: "text/html" } });
     expect(login.status).toBe(302);
     expect(login.headers.location).toBe(`http://127.0.0.1:${proxy}/`);
-    expect(login.headers["set-cookie"]).toEqual(["session=signed-in; Path=/; SameSite=Lax; HttpOnly"]);
+    expect(login.headers["set-cookie"]).toEqual(["session=signed-in; Path=/; HttpOnly; SameSite=None; Secure"]);
     const info = (await rawRequest(proxy, "/__fake/info", { headers: { ...at(proxy), cookie: "session=signed-in" } })).json();
     expect(info.cookie).toBe("session=signed-in");
   });

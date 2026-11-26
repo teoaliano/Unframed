@@ -49,6 +49,10 @@ const nonceOf = (policy: string): string | undefined => {
   return undefined;
 };
 
+const SITE_ATTRIBUTES = /;\s*(?:samesite(?:=[^;]*)?|secure)\s*(?=;|$)/gi;
+
+const crossSiteCookie = (cookie: string): string => `${cookie.replace(SITE_ATTRIBUTES, "")}; SameSite=None; Secure`;
+
 export const proxiedResponseHeaders = (
   headers: ProxyHeaders,
   input: { readonly upstreamPort: number; readonly proxyOrigin: string },
@@ -65,6 +69,8 @@ export const proxiedResponseHeaders = (
   }
   const location = first(next.location);
   if (location !== undefined) next.location = rewriteLocation(location, input.upstreamPort, input.proxyOrigin);
+  const cookies = next["set-cookie"];
+  if (cookies !== undefined) next["set-cookie"] = (typeof cookies === "string" ? [cookies] : cookies).map(crossSiteCookie);
   return { headers: next, nonce };
 };
 

@@ -75,9 +75,14 @@ describe("proxied response headers", () => {
     expect(answered.headers).toEqual({
       "content-security-policy": "script-src 'self'; img-src *",
       location: "http://127.0.0.1:4101/",
-      "set-cookie": ["a=1; SameSite=Lax"],
+      "set-cookie": ["a=1; SameSite=None; Secure"],
     });
     expect(answered.nonce).toBeUndefined();
+  });
+
+  it("marks every cookie SameSite=None and Secure, so it holds in a frame on another site", () => {
+    expect(proxiedResponseHeaders({ "set-cookie": "s=1; Path=/; samesite=strict; HttpOnly" }, { upstreamPort: 3000, proxyOrigin }).headers["set-cookie"]).toEqual(["s=1; Path=/; HttpOnly; SameSite=None; Secure"]);
+    expect(proxiedResponseHeaders({ "set-cookie": ["a=1; Secure; SameSite=Lax", "b=2"] }, { upstreamPort: 3000, proxyOrigin }).headers["set-cookie"]).toEqual(["a=1; SameSite=None; Secure", "b=2; SameSite=None; Secure"]);
   });
 
   it("drops a CSP that only held frame-ancestors", () => {

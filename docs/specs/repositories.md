@@ -163,7 +163,7 @@ Each Screen on the canvas is one route of one Instance at one viewport. It's liv
 
 ### Proxy (inside the engine, one listener per live Instance)
 
-- It listens on `127.0.0.1:<proxy port>`, same-site with the canvas (served from `127.0.0.1`), so the app's Lax cookies work in the iframe and every Instance of a Repository shares them.
+- It listens on `127.0.0.1:<proxy port>`. The canvas loads Screens from the other loopback name (`localhost` when the canvas is on `127.0.0.1`, the rule pages use), so each frame is another site and runs in its own renderer process. Every `Set-Cookie` is rewritten to `SameSite=None; Secure`, so the app's cookies still work in that cross-site frame, and every Instance of a Repository shares them. See `docs/specs/screen-process.md`.
 - Requests go upstream to `127.0.0.1:<upstream>`, falling back to `[::1]:<upstream>`, because Vite listens only on `::1` by default on macOS. The browser's Host header is kept, except on upgrades (see Origin).
 - **WebSocket upgrades** are forwarded on every path, with the query string intact.
 - **Origin**: on upgrades and on `/_next*` and `/__nextjs*` requests, an Origin that names the proxy itself is rewritten to `http://localhost:<proxy port>`. Without this, Next refuses hot reload from `127.0.0.1`. On upgrades the Host becomes `localhost:<proxy port>` too, so an app that checks Origin against Host on its WebSocket (ComfyUI) accepts it. See `docs/specs/screen-load.md`.
@@ -186,7 +186,7 @@ Each Screen on the canvas is one route of one Instance at one viewport. It's liv
   - `dials` (Parameter values, per Screen), `mode`
 - Like a page, it renders the live iframe when it's demanded and on screen, and its snapshot otherwise. The snapshot stays until the live frame reports its first paint.
 - The iframe:
-  - URL: `http://127.0.0.1:<proxy port><route>`
+  - URL: `http://localhost:<proxy port><route>` on the canvas, `http://127.0.0.1:<proxy port><route>` in the engine's headless Chrome
   - `sandbox`: allows scripts, same-origin, forms and modals; denies top navigation, popups to top and downloads
   - `allow=""`
   - pointer events only when selected, as pages work today

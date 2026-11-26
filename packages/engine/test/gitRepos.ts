@@ -58,6 +58,14 @@ const server = http.createServer((req, res) => {
     res.writeHead(302, { "set-cookie": "session=signed-in; Path=/; SameSite=Lax; HttpOnly", location: "http://localhost:" + port + "/" });
     return res.end();
   }
+  if (url.pathname === "/whoami") {
+    if (url.searchParams.has("login") && !(req.headers.cookie ?? "").includes("session=")) {
+      res.writeHead(302, { "set-cookie": "session=signed-in; Path=/; SameSite=Lax; HttpOnly", location: "/whoami" });
+      return res.end();
+    }
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end("<!doctype html><html><head><title>Who</title></head><body><p id=\\"who\\">" + (req.headers.cookie ?? "nobody") + "</p></body></html>");
+  }
   if (url.pathname.endsWith("/__fake/info")) {
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify({ argv: args, envPort: process.env.PORT ?? null, cwd: process.cwd(), pid: process.pid, host: req.headers.host ?? null, cookie: req.headers.cookie ?? null, origin: req.headers.origin ?? null, acceptEncoding: req.headers["accept-encoding"] ?? null }));
