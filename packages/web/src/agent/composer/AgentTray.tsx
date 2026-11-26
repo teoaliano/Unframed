@@ -36,7 +36,7 @@ import {
   type PromptHistoryPosition,
   type RuntimeMode,
 } from "@unframed/domain";
-import { ArrowLeft, Check, CircleAlert, CornerUpRight, ListPlus, Minimize2, Paperclip, Play } from "lucide-react";
+import { Check, ChevronDown, CircleAlert, CornerUpRight, ListPlus, Minimize2, Paperclip, Play, Sparkles, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { AgentTrayProps as SlotProps } from "../../chrome/slots.ts";
@@ -65,6 +65,7 @@ import {
 } from "../store.ts";
 import { latestCompletedTool, returnQueued, sendQueued } from "../queue.tsx";
 import { Button } from "~/components/ui/button";
+import { Menu, MenuGroup, MenuGroupLabel, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "~/components/ui/menu";
 import { Tip } from "../../chrome/ui.tsx";
 import { MessageAction, SendArrow, StopSquare } from "../../chrome/MessageAction.tsx";
 import { formatSize, useAttachments } from "./attachments.ts";
@@ -114,8 +115,7 @@ export interface AgentTrayProps {
   readonly newChatTags: ReadonlyArray<string>;
   readonly beforeSend?: (chatId: string) => void;
   readonly onSent?: () => void;
-  readonly underChips?: ReactNode;
-  readonly note?: (provider: string) => ReactNode;
+  readonly header?: ReactNode;
   readonly onMenuOpen?: (key: string, open: boolean) => void;
   readonly dropTarget?: RefObject<HTMLElement | null>;
   readonly notices?: ReadonlyArray<ComposerNotice>;
@@ -157,7 +157,7 @@ const markAt = (at: CaretMark | undefined) => (at === undefined ? {} : { at });
 
 const withElements = (elements: ReadonlyArray<ElementChip>) => (elements.length > 0 ? { elements } : {});
 
-export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, onSent, underChips, note, onMenuOpen, dropTarget, notices = [], leadingControl, inline = false, flush = false }: AgentTrayProps) => {
+export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, onSent, header, onMenuOpen, dropTarget, notices = [], leadingControl, inline = false, flush = false }: AgentTrayProps) => {
   const ui = useRailUi(client);
   const { statuses } = useProviders(client);
   const chat = useWatchedThread(client, chatId);
@@ -1071,6 +1071,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         {...resting.shellProps}
       >
         <div className={resting.resting ? "col-span-2 row-start-1 flex flex-col gap-1.5 empty:hidden" : inline ? "order-first flex basis-full flex-col gap-1.5 px-1 pt-1 empty:hidden" : "contents"}>
+          {header}
           <AttachmentShelf staged={resting.resting ? attachments.staged.filter((item) => item.kind === "file") : attachments.staged} onRemove={removeAttachment} onRetry={attachments.retry} />
           {!answering && (
             <ElementChipRow
@@ -1093,7 +1094,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
               box.current?.focus();
             }}
           />
-          {underChips}
         </div>
         <div className={resting.resting ? "col-start-1 row-start-2 flex min-w-0 items-center gap-1" : inline ? (twoRows ? "order-1 min-w-0 basis-full px-1.5" : "order-2 min-w-0 flex-1") : "min-w-0"} data-composer-prompt ref={promptPart}>
           <PromptEditor
@@ -1184,7 +1184,6 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
           </div>
           <div className={`ml-auto flex shrink-0 items-center gap-1.5 ${resting.resting ? "col-start-2 row-start-2" : inline ? (twoRows ? "order-3" : "order-3 ml-0") : ""}`} data-composer-actions>
             {inline && <div className="flex items-center gap-0.5">{extras}</div>}
-            {note?.(providerName(selection.provider))}
             {running && (
               <MessageAction tone="stop" aria-label="Stop generation" onClick={interrupt}>
                 <StopSquare />
@@ -1333,35 +1332,37 @@ export const ToolbarAgentTray = ({ project, close, onMenuOpen }: SlotProps) => {
       beforeSend={(chatId) => client.setUi({ open: true, chosen: chatId, pinned: null })}
       onSent={close}
       {...(onMenuOpen ? { onMenuOpen } : {})}
-      underChips={
-        <div className="flex min-h-7 items-center gap-1.5 px-0.5 text-xs text-(--composer-target-foreground)" data-testid="agent-target">
-          <span className="min-w-0 truncate" data-testid="agent-target-line">
-            {target !== null && continuable ? (
-              <>
-                continues <em className="text-(--composer-target-chat-foreground)">{tabLabel(continuable)}</em>
-              </>
-            ) : (
-              "new chat"
-            )}
-          </span>
-          {target !== null ? (
-            <Button variant="ghost" size="xs" onClick={() => setFresh(true)}>
-              New chat instead
-            </Button>
-          ) : continuable ? (
-            <Button variant="ghost" size="xs" onClick={() => setFresh(false)}>
-              Continue the earlier chat
-            </Button>
-          ) : null}
+      header={
+        <div className="-mx-3 mb-0.5 flex items-center gap-1.5 border-b border-(--composer-border) px-3 pb-2" data-testid="agent-target">
+          <Sparkles aria-hidden className="size-3.5 text-(--composer-target-chat-foreground)" />
+          <span className="text-xs font-medium text-(--composer-target-chat-foreground)">Agent</span>
+          <Menu onOpenChange={(open) => onMenuOpen?.("agent-target", open)}>
+            <MenuTrigger render={<Button variant="ghost-muted" size="xs" className="min-w-0 shrink" />} aria-label="Chat to send to" data-testid="agent-target-line">
+              <span className="min-w-0 truncate">{target !== null && continuable ? `Continue “${tabLabel(continuable)}”` : "New chat"}</span>
+              <ChevronDown aria-hidden className="size-3 opacity-60" />
+            </MenuTrigger>
+            <MenuPopup side="top" align="start">
+              <MenuGroup>
+                <MenuGroupLabel>Send to</MenuGroupLabel>
+                <MenuRadioGroup value={target !== null ? "continue" : "new"} onValueChange={(value) => setFresh(value === "new")}>
+                  <MenuRadioItem value="new" closeOnClick>
+                    New chat
+                  </MenuRadioItem>
+                  <MenuRadioItem value="continue" closeOnClick disabled={!continuable}>
+                    {continuable ? `Continue “${tabLabel(continuable)}”` : "No earlier chat on this selection"}
+                  </MenuRadioItem>
+                </MenuRadioGroup>
+              </MenuGroup>
+            </MenuPopup>
+          </Menu>
           <span className="flex-1" />
-          <Tip label="Back to tools (Esc)" side="top">
-            <Button variant="ghost-muted" size="icon-xs" aria-label="Back to tools (Esc)" onClick={close}>
-              <ArrowLeft aria-hidden />
+          <Tip label="Close (Esc)" side="top">
+            <Button variant="ghost-muted" size="icon-xs" aria-label="Close (Esc)" onClick={close}>
+              <X aria-hidden />
             </Button>
           </Tip>
         </div>
       }
-      note={(provider) => <span className="text-xs whitespace-nowrap text-(--composer-note)">{`${provider} · not metered`}</span>}
     />
   );
 };
