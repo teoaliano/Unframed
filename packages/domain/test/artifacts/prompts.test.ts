@@ -39,6 +39,10 @@ import {
   mapFlowInstruction,
   SCREEN_STATE_TEXT,
   SCREEN_ELEMENT_TEXT,
+  ANALYSIS_TOOL_TEXT,
+  OUTSIDE_ANALYSIS_TOOLS,
+  SHOW_STATES_TEMPLATE,
+  showStatesInstruction,
   FIX_STATE_TEMPLATE,
   fixStateInstruction,
 } from "../../src/index.ts";
@@ -46,10 +50,8 @@ import {
 const prompts = join(import.meta.dirname, "../../../../assets/prompts");
 const read = (file: string) => readFileSync(join(prompts, file), "utf8");
 
-/** Every fenced `text` block of a prompt asset, in order. */
 const blocks = (file: string): string[] => [...read(file).matchAll(/^(`{3,})text\n([\s\S]*?)\n\1$/gm)].map((match) => match[2]!);
 
-/** A file's `## ` sections, each with its text block and its `- \`arg\`: description` bullets. */
 const sections = (file: string) =>
   read(file)
     .split(/^## /m)
@@ -169,5 +171,19 @@ describe("the Screen states' model-facing text is the asset's text", () => {
     const text = fixStateInstruction({ shape: "a1b2", branch: "trunk", state: "the menu open", route: "/app", steps: [{ action: "press", key: "Escape" }], mocks: [], number: 1, step: "press Escape", reason: "nothing matched" });
     expect(text).not.toMatch(/<shape>|<branch>|<state>|<number>|<step>|<reason>|<route>|<steps>|<mocks>/);
     expect(text).toContain('The Screen a1b2 on the branch "trunk" no longer reaches its state "the menu open": step 1, press Escape, failed: nothing matched. It starts from /app, with the steps [{"action":"press","key":"Escape"}] and the mocks [].');
+  });
+});
+
+describe("the Repository analysis model-facing text is the asset's text", () => {
+  it("holds the analysis tools and the instruction Show states sends", () => {
+    const all = sections("repository-analysis.md");
+    const tools = all.filter((section) => section.name !== "Show states");
+    expect(ANALYSIS_TOOL_TEXT).toEqual(Object.fromEntries(tools.map((section) => [section.name, { description: section.text, arguments: section.args }])));
+    expect(Object.keys(ANALYSIS_TOOL_TEXT)).toEqual(["repo_analyse", "code_map_read", "design_search", "route_states", "mocks_read", "mock_write", "screens_place", "states_place", "state_freeze", "instance_patch"]);
+    for (const name of OUTSIDE_ANALYSIS_TOOLS) expect(ANALYSIS_TOOL_TEXT[name]).toBeDefined();
+    expect(SHOW_STATES_TEMPLATE).toBe(all.find((section) => section.name === "Show states")!.text);
+    const text = showStatesInstruction({ shape: "a1b2", route: "/items", branch: "trunk", worktree: "/data/worktrees/app/x", cases: 4 });
+    expect(text).not.toMatch(/<shape>|<route>|<branch>|<worktree>|<cases>/);
+    expect(text).toContain('Show the states of the Screen a1b2, at /items on the branch "trunk" (its worktree is /data/worktrees/app/x). The States index lists 4 cases');
   });
 });

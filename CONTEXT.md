@@ -38,3 +38,25 @@ _Avoid_: Fixture, stub
 **Flow**:
 A group of Screens from the same Instance, laid out in order and joined by arrows labelled with the action that leads from one Screen to the next, and labelled with the Instance's branch.
 _Avoid_: Journey, sequence
+
+## Analysis
+
+**Code map**:
+What Unframed knows about a Repository's code, written per Instance by analysis: the stack, the routes, dialogs, flags, and the features and notes the agent adds.
+_Avoid_: Sitemap, manifest
+
+**Design-system index**:
+The app's own components (file, props, variants, how often they are used) and design tokens, so the agent reuses them.
+_Avoid_: Component library, registry
+
+**States index**:
+For each route, the visible cases its import closure contains (empty, error, loading, a role, a dialog), plus the prepared states the agent has proven for it.
+_Avoid_: Variants, scenarios
+
+**Mock files**:
+A Repository's fake backend, written by Setup as files under `.unframed/mocks/`: request handlers, Collections of rows they read and write, and Switches a Screen's route can set. A Screen's own Mocks answer before them.
+_Avoid_: Fixtures, stubs, fake API
+
+**Frozen state**:
+A Screen's location, storage, Collections and typed field values saved under a content id, restored before the app boots whenever the Screen loads.
+_Avoid_: Snapshot (a snapshot is a picture), checkpoint

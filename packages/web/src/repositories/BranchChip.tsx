@@ -1,5 +1,5 @@
 import type { GitAction, GitActionResult, Instance, InstanceDiff, ScreenShapeProps } from "@unframed/contracts";
-import { branchChip, forkBranchName, SCREEN_GAP } from "@unframed/domain";
+import { branchChip, forkBranchName, patchFileName, SCREEN_GAP } from "@unframed/domain";
 import { ChevronDown, GitBranch } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createShapeId, useValue, type Editor, type TLShapeId } from "tldraw";
@@ -163,6 +163,16 @@ const ChangesPanel = ({ instance }: { readonly instance: Instance }) => {
       setResult(await engine.call("instances.gitAction", { project, id: instance.id, action }));
       await load();
     });
+  const exportPatch = () =>
+    run(async () => {
+      const taken = await engine.call("instances.patch", { project, id: instance.id });
+      const url = URL.createObjectURL(new Blob([taken.patch], { type: "text/x-patch" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = patchFileName(instance.branch);
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
   return (
     <div className="flex flex-col gap-2" aria-label="Changes">
       {diff === undefined ? (
@@ -191,6 +201,9 @@ const ChangesPanel = ({ instance }: { readonly instance: Instance }) => {
       )}
       {problem !== undefined && <span className={problemClass}>{problem}</span>}
       <div className="flex flex-wrap justify-end gap-2">
+        <Button type="button" variant="ghost" size="sm" disabled={busy || diff === undefined || diff.files.length === 0} onClick={exportPatch}>
+          Export patch
+        </Button>
         {GIT_ACTION_LABELS.map(([action, label]) => (
           <Button key={action} type="button" variant={action === "commit" ? "default" : "outline"} size="sm" disabled={busy || diff === undefined} onClick={() => act(action)}>
             {label}

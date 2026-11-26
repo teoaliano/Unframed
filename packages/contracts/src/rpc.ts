@@ -35,6 +35,8 @@ import { ArtifactEdit, ArtifactImages, ArtifactPrepareEdit, ArtifactSourceTree }
 import {
   InstancesBranches,
   InstancesDiff,
+  InstancesPatch,
+  ScreensShowStates,
   InstancesGitAction,
   InstancesCreate,
   InstancesDemand,
@@ -373,6 +375,8 @@ export const UnframedRpcs = RpcGroup.make(
   InstancesSubscribe,
   InstancesBranches,
   InstancesDiff,
+  InstancesPatch,
+  ScreensShowStates,
   InstancesGitAction,
   RepositoriesRead,
   RepositoriesLocate,

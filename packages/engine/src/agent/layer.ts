@@ -3,7 +3,7 @@ import { NodeRuns } from "../nodes/nodeRuns.ts";
 import { MediaStore } from "../media/mediaStore.ts";
 import type { ClientChatCommand, ShellStreamItem, ThreadSearchMatch, ThreadStreamItem, TurnDiff } from "@unframed/contracts";
 import { UnframedError, unframedError } from "@unframed/contracts";
-import { defaultModel, noPagesInRepository, NO_SETUP_OPEN, NOT_A_REPOSITORY_PROJECT, WHITEBOARD_ONLY_TOOLS, projectSlug, REJECTION_NEEDS_NOTE, SETUP_FIRST_MESSAGE, setupRejection, type AgentProvider, type ClientCommand } from "@unframed/domain";
+import { defaultModel, noPagesInRepository, OUTSIDE_ANALYSIS_TOOLS, NO_SETUP_OPEN, NOT_A_REPOSITORY_PROJECT, WHITEBOARD_ONLY_TOOLS, projectSlug, REJECTION_NEEDS_NOTE, SETUP_FIRST_MESSAGE, setupRejection, type AgentProvider, type ClientCommand } from "@unframed/domain";
 import type { Repository } from "@unframed/contracts";
 import { randomUUID } from "node:crypto";
 import { SetupTools } from "../repositories/setupTools.ts";
@@ -45,6 +45,13 @@ import { InstanceTools } from "../instances/instanceTools.ts";
 import { chromeElementLocator, chromeStateProver } from "../screens/screenState.ts";
 import { Repositories } from "../repositories/layer.ts";
 import { isScreenShape } from "../screens/firstScreen.ts";
+import { AnalysisTools } from "../repositories/analysisTools.ts";
+import { analyseWorktree } from "../repositories/analysis.ts";
+import { makeGit } from "../repositories/git.ts";
+import { LoginShell } from "../loginShell.ts";
+import { instancePatch } from "../instances/instancePatch.ts";
+import { readInstances } from "../instances/tables.ts";
+import { chromeFreezer, chromeRestoreProver } from "../screens/frozenStates.ts";
 
 export class Agents extends Context.Service<
   Agents,
@@ -61,6 +68,7 @@ export class Agents extends Context.Service<
     readonly openSetup: (project: string) => Effect.Effect<string | null, UnframedError>;
     readonly confirmLogin: (project: string) => Effect.Effect<boolean>;
     readonly setupVerdict: (project: string, accepted: boolean, note: string | undefined) => Effect.Effect<Repository, UnframedError>;
+    readonly showStates: (project: string, shape: string) => Effect.Effect<{ readonly placed: number; readonly cases: number; readonly route: string }, UnframedError>;
     readonly writeText: (input: { readonly projectDir: string; readonly system: string; readonly prompt: string }) => Effect.Effect<string | undefined>;
   }
 >()("unframed/engine/Agents") {}
@@ -87,6 +95,8 @@ export const agentsLayer = Layer.effect(
     const preferences = yield* PreferencesStore;
     const instances = yield* Instances;
     const repositories = yield* Repositories;
+    const loginShell = yield* LoginShell;
+    const git = makeGit(loginShell);
     const context = yield* Effect.context<never>();
     const run = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
       Effect.runPromiseWith(context)(effect).catch((error: unknown) => {
@@ -122,6 +132,31 @@ export const agentsLayer = Layer.effect(
       stateToken: (project, id, payload) => run(instances.stateToken(project, id, payload)),
       prove: chromeStateProver(artifacts.chrome),
       locate: chromeElementLocator(artifacts.chrome),
+    });
+
+    const analysisTools = new AnalysisTools({
+      read: (project) => run(rooms.read(project)),
+      apply: (project, change, origin) => run(rooms.apply(project, change, origin)),
+      list: (project) => run(instances.list(project)),
+      status: (project, id) => run(instances.status(project, id)),
+      gitCommonDir: async (project) => (await run(repositories.read(project)))?.gitCommonDir,
+      analyse: (worktree, gitCommonDir) => run(analyseWorktree(git, { worktree, gitCommonDir })),
+      mockLog: (project, id) => run(instances.mockLog(project, id)),
+      shareSetupFiles: (project, from, files) => run(instances.shareSetupFiles(project, from, files)),
+      projectFolder: (project) => run(projects.folder(projectSlug(project))),
+      patch: async (project, id) => {
+        const slug = projectSlug(project);
+        const repository = await run(repositories.read(slug));
+        if (repository === undefined) throw unframedError("bad_request", NOT_A_REPOSITORY_PROJECT);
+        const instance = await run(instances.status(slug, id));
+        if (instance.state === "removed") throw unframedError("conflict", "That Instance was removed.");
+        const stored = (await run(database.peek(slug, readInstances)))?.find((candidate) => candidate.id === id);
+        return run(instancePatch(git, { worktree: instance.worktree, baseRef: instance.baseRef, baseCommit: stored?.baseCommit ?? instance.baseRef, setupFiles: repository.setup?.files ?? [] }));
+      },
+      stateToken: (project, id, payload) => run(instances.stateToken(project, id, payload)),
+      instances: instanceTools,
+      freeze: chromeFreezer(artifacts.chrome),
+      proveRestore: chromeRestoreProver(artifacts.chrome),
     });
 
     const preview = new PreviewTools({
@@ -193,6 +228,7 @@ export const agentsLayer = Layer.effect(
         ...new ComponentTools(tools, () => previewPort).tools(),
         ...preview.tools(),
         ...(repositoriesOn ? instanceTools.tools() : []),
+        ...(repositoriesOn ? analysisTools.tools() : []),
       ],
       repository: async (project) => {
         const repository = await run(repositories.read(project));
@@ -273,6 +309,7 @@ export const agentsLayer = Layer.effect(
           if (accepted) {
             const saved = await run(repositories.update(slug, (stored) => ({ ...stored, status: "ready", setupChat: null })));
             await runtime.dispatch({ type: "thread.session.stop", commandId: randomUUID(), projectId: slug, threadId: chatId }).catch(() => undefined);
+            await analysisTools.placeAfterSetup(slug).catch((error: unknown) => logInfo(`no Screens placed for routes: ${errorText(error)}`));
             return saved;
           }
           const text = note?.trim() ?? "";
@@ -358,7 +395,10 @@ export const agentsLayer = Layer.effect(
         mcpRoute(runtime.tokens, runtime.registry, undefined, {
           book: connections.book,
           listProjects: () => outsideProjects(),
-          tools: () => [...runtime.registry.list().filter((tool) => tool.scope === undefined), ...runtime.outsideTools],
+          tools: () => [
+            ...runtime.registry.list().filter((tool) => tool.scope === undefined || (tool.scope === "repository" && OUTSIDE_ANALYSIS_TOOLS.has(tool.name))),
+            ...runtime.outsideTools,
+          ],
           projectSlug: async (name) => {
             const slug = projectSlug(name);
             const names = await projects.list.pipe(Effect.runPromise);
@@ -366,6 +406,7 @@ export const agentsLayer = Layer.effect(
           },
           call: async (call) => {
             if (WHITEBOARD_ONLY_TOOLS.has(call.tool.name) && (await run(repositories.kinds([call.slug])))[call.slug] === "repository") return refusal(noPagesInRepository(call.slug));
+            if (call.tool.scope === "repository" && (await run(repositories.kinds([call.slug])))[call.slug] !== "repository") return refusal(NOT_A_REPOSITORY_PROJECT);
             return runtime.outside.call(call);
           },
           endSession: (sessionId) => runtime.endOutsideSession(sessionId),
@@ -376,6 +417,7 @@ export const agentsLayer = Layer.effect(
       openSetup,
       confirmLogin: (project) => Effect.sync(() => setupTools.confirmLogin(project)),
       setupVerdict,
+      showStates: (project, shape) => Effect.tryPromise({ try: () => analysisTools.showStates(projectSlug(project), shape), catch: (error) => (error instanceof UnframedError ? error : unframedError("bad_request", errorText(error))) }),
       writeText: (input) =>
         Effect.promise(async () => {
           const provider = await setupProvider();

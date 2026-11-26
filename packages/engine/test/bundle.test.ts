@@ -1,7 +1,3 @@
-/**
- * The published bundle, built by `pnpm build`. CI's smoke step points
- * `UNFRAMED_BUNDLE_DIR` at the bundle it just built; otherwise these tests build one.
- */
 import { execFile, spawn } from "node:child_process";
 import readline from "node:readline";
 import { createHash } from "node:crypto";
@@ -13,11 +9,10 @@ import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildBundle, RUNTIME_DEPENDENCIES } from "../../../scripts/build.ts";
 import { makeTempDir, repoRoot, startEngine } from "./harness.ts";
-import { UNFRAMED_TOOLS } from "./agent.ts";
+import { UNFRAMED_TOOLS, OUTSIDE_TOOLS } from "./agent.ts";
 
 const execFileAsync = promisify(execFile);
 
-/** npm, killed well before its test times out, so no install outlives the test that started it. */
 const npm = (args: string[], options: { cwd?: string; env: NodeJS.ProcessEnv }) =>
   execFileAsync("npm", args, { ...options, timeout: 90_000, killSignal: "SIGKILL" }).catch(
     (error: { stderr?: string; message: string }) => {
@@ -60,9 +55,6 @@ describe("the published bundle", () => {
   const npmEnv = () => ({ ...process.env, npm_config_cache: join(scratch, "npm-cache"), npm_config_update_notifier: "false" });
 
   beforeAll(async () => {
-    // Inside the repository, not the OS temp folder: npm looks for a workspace root in
-    // every folder above the one it runs in, and a stray manifest above the temp folder
-    // turns the client shim into someone else's workspace member.
     const base = join(repoRoot, "node_modules", ".cache");
     await mkdir(base, { recursive: true });
     scratch = await mkdtemp(join(base, "unframed-bundle-"));
@@ -154,15 +146,12 @@ describe("the published bundle", () => {
     const target = join(scratch, "install-target");
     await mkdir(packs, { recursive: true });
     await mkdir(target, { recursive: true });
-    // A manifest of its own, so npm installs here and does not walk up to the repository's.
-    // The key stands in for the installing app's own: puppeteer (under the HyperFrames producer) skips its browser download.
     await writeFile(join(target, "package.json"), `${JSON.stringify({ name: "install-check", private: true, puppeteer: { skipDownload: true } })}\n`);
     const { stdout } = await npm(["pack", bundle, "--pack-destination", packs, "--silent"], { env: npmEnv() });
     const tarball = join(packs, stdout.trim().split("\n").at(-1)!);
     const browsers = join(scratch, "puppeteer-cache");
     await npm(["install", tarball, "--no-audit", "--no-fund"], { cwd: target, env: { ...npmEnv(), PUPPETEER_CACHE_DIR: browsers } });
     const installed = join(target, "node_modules", "unframed");
-    // npm brings the runtime dependencies and theirs, and no browser.
     expect(await readdir(join(target, "node_modules"))).toEqual(expect.arrayContaining([".package-lock.json", "unframed", "@anthropic-ai", "@hyperframes", "gsap", "puppeteer-core"]));
     expect(existsSync(join(target, "node_modules", "@anthropic-ai", "claude-agent-sdk", "package.json"))).toBe(true);
     expect(existsSync(browsers)).toBe(false);
@@ -172,7 +161,6 @@ describe("the published bundle", () => {
     });
     expect(engine.messages).toContainEqual({ type: "ready", port: engine.port, previewPort: engine.previewPort });
     expect((await engine.request("/")).text).toContain("<title>Unframed</title>");
-    // The motion library comes from the installed packages' own files.
     const rpc = await engine.rpc();
     await rpc.call("projects.create", { name: "installed" });
     await rpc.call("motion.upload", { project: "installed", fileName: "clip.html", html: "<!doctype html><html><head></head><body></body></html>" });
@@ -210,7 +198,7 @@ describe("the published bundle", () => {
     const listed = await ask({ jsonrpc: "2.0", id: 2, method: "tools/list" });
     const names = listed.result.tools.map((tool: { name: string }) => tool.name);
     expect(names[0]).toBe("projects_list");
-    expect(names.slice(1)).toEqual([...UNFRAMED_TOOLS, "canvas_select", "canvas_snapshot", "chat_note", "file_add"]);
+    expect(names.slice(1)).toEqual(OUTSIDE_TOOLS.slice(1));
     const exited = new Promise((resolve) => shim.once("exit", resolve));
     shim.stdin.end();
     await exited;
@@ -230,7 +218,6 @@ describe("tldraw license key plumbing", () => {
     expect(await servedAssets(keyed)).toContain("test-key");
     const plain = await startEngine({ entry: join(withoutKey, "server", "index.js"), clientDist: join(withoutKey, "client", "dist") });
     expect(await servedAssets(plain)).not.toContain("test-key");
-    // The engine never reads or prints the key.
     expect(await readFile(join(withKey, "server", "index.js"), "utf8")).not.toContain("test-key");
     expect(keyed.stdout()).not.toContain("test-key");
   });
