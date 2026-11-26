@@ -8,14 +8,16 @@ const watchLoads = (page: Page) =>
     const seen: string[] = [];
     let most = 0;
     let queued = false;
+    const idOf = (screen: HTMLElement) => screen.closest("[data-shape-id]")?.getAttribute("data-shape-id") ?? "";
+    const framed = (id: string) => document.querySelector(`[data-screen-of="${id}"] iframe[data-screen-frame]`) !== null;
     const check = () => {
       const screens = [...document.querySelectorAll<HTMLElement>("[data-testid=screen]")];
       for (const screen of screens) {
-        const id = screen.closest("[data-shape-id]")?.getAttribute("data-shape-id") ?? "";
-        if (document.querySelector(`[data-screen-of="${id}"] iframe[data-screen-frame]`) !== null && !seen.includes(id)) seen.push(id);
+        const id = idOf(screen);
+        if (framed(id) && !seen.includes(id)) seen.push(id);
         if (screen.getAttribute("data-queued") === "true") queued = true;
       }
-      most = Math.max(most, screens.filter((screen) => document.querySelector(`[data-screen-of="${screen.closest("[data-shape-id]")?.getAttribute("data-shape-id") ?? ""}"] iframe[data-screen-frame]`) !== null && screen.getAttribute("data-painted") !== "true").length);
+      most = Math.max(most, screens.filter((screen) => framed(idOf(screen)) && screen.getAttribute("data-painted") !== "true").length);
     };
     new MutationObserver(check).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-painted", "data-queued"] });
     (window as any).__loads = () => ({ seen, most, queued });
