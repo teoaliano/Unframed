@@ -16,7 +16,7 @@ const installDemand = (engine: EngineConnection, project: string, client: string
     void engine.call("instances.demand", { project, client, ids: key === "" ? [] : key.split(" ") }).catch(() => undefined);
   };
   const stop = react("send screen demand", () => {
-    const key = wanted();
+    const key = state.repository.get() ? wanted() : "";
     clearTimeout(timer);
     if (key === sent) return;
     timer = setTimeout(() => send(key), SEND_AFTER_MS);
@@ -36,7 +36,7 @@ const installDemand = (engine: EngineConnection, project: string, client: string
 };
 
 export const installFramesDemand = (engine: EngineConnection, project: string, instances: () => ReadonlyArray<string>): (() => void) =>
-  installDemand(engine, project, `${WINDOW_CLIENT}-frames`, () => (repositoryState(project).repository.get() ? [...new Set(instances())].sort().join(" ") : ""));
+  installDemand(engine, project, `${WINDOW_CLIENT}-frames`, () => [...new Set(instances())].sort().join(" "));
 
 export const installEditorDemand = (engine: EngineConnection, project: string, instance: () => string | undefined): (() => void) =>
-  installDemand(engine, project, `${WINDOW_CLIENT}-editor`, () => (repositoryState(project).repository.get() ? (instance() ?? "") : ""));
+  installDemand(engine, project, `${WINDOW_CLIENT}-editor`, () => instance() ?? "");
