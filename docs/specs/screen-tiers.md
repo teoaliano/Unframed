@@ -82,6 +82,7 @@ Only the Screen the person is using runs. Every other Screen shows a picture tha
 ### Demand
 
 - A window demands the Instances of its live, warming and parked Screens, and of near Screens with no picture. The pool sends the first, so they stay demanded while their canvas is not shown; the canvas sends the second. The editor tab demands its own Instance as today. The engine's budget, idle stop and one-start-at-a-time rules are unchanged.
+- The "Starting N dev servers…" cover over the canvas counts only the Screens in view that have no picture, so a board whose visible Screens are all pictured opens with no cover.
 
 ### Measuring
 

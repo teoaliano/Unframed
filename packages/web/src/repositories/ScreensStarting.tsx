@@ -1,5 +1,5 @@
 import type { ScreenShapeProps } from "@unframed/contracts";
-import { STARTUP_GRACE_MS, startupCover } from "@unframed/domain";
+import { STARTUP_GRACE_MS, pictureKeyOf, startupCover } from "@unframed/domain";
 import { useEffect, useState } from "react";
 import { Box, useEditor, useValue } from "tldraw";
 import { Empty, EmptyDescription, EmptyMedia } from "~/components/ui/empty";
@@ -35,7 +35,7 @@ export const ScreensStarting = () => {
       const inView = editor
         .getCurrentPageShapes()
         .filter((shape) => {
-          if (shape.type !== "screen") return false;
+          if (shape.type !== "screen" || pictureKeyOf(shape.props as ScreenShapeProps) !== undefined) return false;
           const bounds = editor.getShapePageBounds(shape.id);
           return bounds !== undefined && Box.Collides(bounds, viewport);
         })

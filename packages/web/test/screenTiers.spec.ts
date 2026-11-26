@@ -138,6 +138,32 @@ test("a board opened zoomed out asks only for the pictures its zoom gives", asyn
   });
 });
 
+test("a board whose Screens in view all have pictures opens with no starting cover, even with their dev server stopped", async ({ page }) => {
+  await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
+    await putBusyScreens(page, engine, project);
+    await expect(page.locator("[data-testid=screen]:not([data-picture])")).toHaveCount(0, { timeout: 60_000 });
+    const [first] = await screenShapes(engine, project);
+    const rpc = await engine.rpc();
+    try {
+      await rpc.call("instances.stop", { project, id: first.props.instance });
+      await expect.poll(async () => (await rpc.call("instances.status", { project, id: first.props.instance })).state, { timeout: 30_000 }).toBe("stopped");
+    } finally {
+      await rpc.close();
+    }
+    await page.addInitScript(() => {
+      (window as any).__covered = false;
+      new MutationObserver(() => {
+        if (document.querySelector("[data-testid=screens-starting]") !== null) (window as any).__covered = true;
+      }).observe(document, { subtree: true, childList: true });
+    });
+    await page.reload();
+    await expect(page.locator(`[data-canvas-project="${project}"] .tl-canvas`)).toBeVisible();
+    for (const id of IDS) await expect(screenOf(page, id).locator("img[data-testid=screen-snapshot]")).toBeVisible();
+    await page.waitForTimeout(4000);
+    expect(await page.evaluate(() => (window as any).__covered)).toBe(false);
+  });
+});
+
 test("a Screen large on screen shows a static copy of its page in a closed shadow root, and a small one an image", async ({ page }) => {
   await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
     await putBusyScreens(page, engine, project);
