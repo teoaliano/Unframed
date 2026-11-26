@@ -36,7 +36,6 @@ export interface DraftChange {
   readonly token?: TailwindToken;
   readonly element: DraftElement;
   readonly scope: DraftScope;
-  readonly edit: SourceEdit;
 }
 
 export interface DraftContext {
@@ -167,7 +166,7 @@ export const propertyLabel = (property: string): string => {
 };
 
 export const draftOf = (edit: SourceEdit, context: DraftContext): DraftChange | undefined => {
-  const base = { id: context.id, element: context.element, scope: "all" as DraftScope, edit };
+  const base = { id: context.id, element: context.element, scope: "all" as DraftScope };
   if (edit.type === "text") return { ...base, kind: "text", property: "#text", before: context.text, after: edit.text, shownBefore: context.text ?? "", asked: edit.text };
   if (edit.type === "hide") {
     if (looksTailwind(context.className))
