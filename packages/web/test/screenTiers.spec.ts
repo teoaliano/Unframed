@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 import { clickShape } from "./generation.ts";
-import { putShapes, screenShapes, withRepository } from "./screenHarness.ts";
+import { putShapes, screenShapes, withRepository, zoomOn } from "./screenHarness.ts";
 
 const IDS = ["shape:tier-a", "shape:tier-b", "shape:tier-c"];
 const MORE = [...IDS, "shape:tier-d", "shape:tier-e"];
@@ -168,21 +168,13 @@ test("a Screen large on screen shows a static copy of its page in a closed shado
   await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
     await putBusyScreens(page, engine, project);
     const [a] = IDS as [string];
-    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-    await page.keyboard.press("Shift+0");
-    await expect(screenOf(page, a)).toHaveAttribute("data-level", "page", { timeout: 10_000 });
+    await zoomOn(page, screenOf(page, a), /^page$/, -60);
     const copy = screenOf(page, a).locator("[data-testid=screen-page-copy]");
     await expect(copy).toHaveAttribute("data-built", "true", { timeout: 10_000 });
     await expect(screenOf(page, a)).toHaveAttribute("data-tier", "snapshot");
     expect(await copy.evaluate((element) => element.shadowRoot)).toBeNull();
     await expect(page.locator("iframe[data-screen-frame]")).toHaveCount(0);
-    for (let step = 0; step < 14; step++) {
-      await page.keyboard.down("Control");
-      await page.mouse.wheel(0, 60);
-      await page.keyboard.up("Control");
-      await page.waitForTimeout(20);
-    }
-    await expect(screenOf(page, a)).toHaveAttribute("data-level", /tiny|small/, { timeout: 10_000 });
+    await zoomOn(page, screenOf(page, a), /^(tiny|small)$/, 60);
     await expect(screenOf(page, a).locator("[data-testid=screen-page-copy]")).toHaveCount(0);
     await expect(screenOf(page, a).locator("img[data-testid=screen-snapshot]")).toHaveAttribute("src", /\.w(128|384)\.png$/);
   });
@@ -210,9 +202,7 @@ test("a page copy that declares a font the canvas uses leaves the canvas's fonts
     }
     expect(key).toMatch(/^[a-f0-9]{40}$/);
     await expect(screenOf(page, a)).toHaveAttribute("data-picture", key!);
-    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-    await page.keyboard.press("Shift+0");
-    await expect(screenOf(page, a)).toHaveAttribute("data-level", "page", { timeout: 10_000 });
+    await zoomOn(page, screenOf(page, a), /^page$/, -60);
     await expect(screenOf(page, a).locator("[data-testid=screen-page-copy]")).toHaveAttribute("data-built", "true", { timeout: 10_000 });
     const faces = () => page.evaluate(() => [...document.fonts].map((face) => ({ family: face.family.replace(/^["']|["']$/g, ""), status: face.status })));
     await expect.poll(async () => (await faces()).filter((face) => /^uf\d+-\d+$/.test(face.family) && face.status !== "unloaded").length, { timeout: 10_000 }).toBe(3);

@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { makeRepo, repoEngineEnv } from "../../engine/test/gitRepos.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { openCanvas } from "./canvas.ts";
@@ -59,3 +59,16 @@ export const putShapes = async (engine: TestEngine, project: string, put: any[])
 };
 
 export const screensStarted = (page: Page) => expect(page.getByTestId("screens-starting")).toHaveCount(0, { timeout: 30_000 });
+
+export const zoomOn = async (page: Page, screen: Locator, level: RegExp, deltaY: number) => {
+  for (let step = 0; step < 80; step++) {
+    if (level.test((await screen.getAttribute("data-level")) ?? "")) return;
+    const box = await screen.boundingBox();
+    if (box !== null) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.keyboard.down("Control");
+    await page.mouse.wheel(0, deltaY);
+    await page.keyboard.up("Control");
+    await page.waitForTimeout(box === null ? 30 : 120);
+  }
+  await expect(screen).toHaveAttribute("data-level", level);
+};

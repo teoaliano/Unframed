@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { expectFrameBudget, expectNoLongTasks, frameStats, gestureCount, lastGesture } from "./board.ts";
 import { expect, test } from "./fixtures.ts";
 import { clickShape } from "./generation.ts";
-import { putShapes, screenShapes, withRepository } from "./screenHarness.ts";
+import { putShapes, screenShapes, withRepository, zoomOn } from "./screenHarness.ts";
 
 test.describe.configure({ timeout: 300_000 });
 
@@ -81,12 +81,7 @@ test("a board of 200 Screens of a busy page pans, zooms and duplicates within th
 
     await page.keyboard.press("Escape");
     await page.keyboard.press("Shift+1");
-    for (let step = 0; step < 12; step++) {
-      await page.keyboard.down("Control");
-      await page.mouse.wheel(0, -40);
-      await page.keyboard.up("Control");
-      await page.waitForTimeout(30);
-    }
+    await zoomOn(page, host.locator(`[data-shape-id="shape:board-${SCREENS / 2 + COLUMNS / 2}"] [data-testid=screen]`), /^page$/, -40);
     await expect.poll(() => host.locator("[data-testid=screen][data-tier=snapshot]").count(), { timeout: 20_000 }).toBeGreaterThan(0);
     await measure(page, "pan zoomed in on page copies", () => wheel(page, 12, 8, 4000), "wheel");
 

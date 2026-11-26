@@ -50,6 +50,8 @@ test("a live Screen's page loads once: a narrower canvas, zoom, a far pan, parki
     expect(await kept()).toBe(true);
     await page.keyboard.press("Escape");
     await expect(screen).toHaveAttribute("data-tier", "parked");
+    await page.keyboard.press("Shift+1");
+    await expect(screen).toBeInViewport({ ratio: 1 });
     await clickShape(page, first.id);
     await expect(screen).toHaveAttribute("data-painted", "true");
     expect(await kept()).toBe(true);
