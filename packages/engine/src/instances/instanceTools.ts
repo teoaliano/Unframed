@@ -45,8 +45,14 @@ const summary = (instance: Instance) => ({
 
 const detail = (instance: Instance) => ({ ...summary(instance), log: logTail(instance.log, LOG_LINES) });
 
-const text = (name: string): { readonly description: string; readonly arguments: Readonly<Record<string, string>> } =>
-  name === "flow_create" ? FLOW_CREATE_TEXT : name === "screen_state" ? SCREEN_STATE_TEXT : name === "screen_element" ? SCREEN_ELEMENT_TEXT : INSTANCE_TOOL_TEXT[name]!;
+const TOOL_TEXT: Readonly<Record<string, { readonly description: string; readonly arguments: Readonly<Record<string, string>> }>> = {
+  ...INSTANCE_TOOL_TEXT,
+  flow_create: FLOW_CREATE_TEXT,
+  screen_state: SCREEN_STATE_TEXT,
+  screen_element: SCREEN_ELEMENT_TEXT,
+};
+
+const text = (name: string) => TOOL_TEXT[name]!;
 
 interface CheckedState {
   readonly route: string;
