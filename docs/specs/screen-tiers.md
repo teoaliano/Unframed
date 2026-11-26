@@ -1,0 +1,114 @@
+# Screen tiers: one live Screen, pictures for the rest
+
+## Problem
+
+A Repository's board runs every Screen near the view as a live iframe of the person's app. With the load queue (`screen-load.md`) and Screens in their own process (`screen-process.md`) the canvas no longer freezes while they boot, but a board with many Screens still costs what many running apps cost:
+
+- **Every visible Screen runs its app.** A board of 200 Screens of a page with a spinner mounted 86 iframes at once, and panning it at fit missed a frame in 7 % of frames (p95 33 ms on a 120 Hz display). Each Screen keeps animating, polling and holding memory while nobody looks at it.
+- **A duplicate starts from nothing.** A snapshot belongs to one shape id. Duplicating 200 Screens showed 0 pictures 300 ms later: each copy waits for its own load or its own headless capture.
+- **Coming back to a board loads it again.** The canvas remounts on a project switch and every Screen boots again, one at a time, behind its last snapshot.
+- **Zoomed out, a Screen is still a full app.** A Screen 40 pixels wide on screen runs the same page as one filling the window.
+
+## Solution
+
+Only the Screen the person is using runs. Every other Screen shows a picture that costs about what an image costs.
+
+- **One live Screen.** Selecting a Screen (or double-clicking it, or an agent's edit landing on a Screen when nothing else is live) makes it the live Screen. Its iframe mounts behind its picture and is revealed once the app has painted. Escape, a click on empty canvas, or selecting something else demotes it: the bridge takes a fresh capture and the iframe is parked.
+- **Parked, not gone.** Up to three recently live Screens keep their iframe mounted but hidden, so selecting one of them again shows it at once. The oldest is dropped past three. A parked Screen does not animate or update.
+- **Pictures by size on screen.** A Screen that is tiny on screen shows a 128 pixel wide image, a small one a 384 pixel wide image, and one wider than about 230 css pixels a static copy of its page: the app's DOM and styles, without scripts, in a closed shadow root. Levels change only when the camera stops.
+- **Pictures addressed by content.** The engine stores every picture under the hash of its content and serves it as immutable. A Screen records its picture key in its tldraw record, so a duplicate shows the original's picture at once, and opening a board paints every visible Screen's picture from the HTTP cache with no load.
+- **Fresh by key, not by invalidation.** The engine knows which picture belongs to which state of which Instance: the Instance, its worktree revision, the route, the Steps and Mocks, the viewport and the Parameters. A copy with the same state reuses the key. A change of code, route or state captures a new picture, and the old one stays on screen until the new one is ready.
+
+## User Stories
+
+1. As a person with a board of hundreds of Screens, I want panning and zooming to stay smooth, so that the board feels like a canvas of images.
+2. As a person, I want the Screen I select to become the running app, so that I can click through it on the canvas.
+3. As a person, I want a Screen I just used to come back instantly when I select it again, so that switching between a few Screens does not reload them.
+4. As a person, I want Screens I am not using to stay still, so that a board is calm and my Mac is quiet.
+5. As a person, I want a demoted Screen to keep showing what I last saw in it, so that the board reads as I left it.
+6. As a person who duplicates Screens, I want the copies to show their picture at once, so that I can lay out variations without waiting.
+7. As a person switching back to a board, I want its Screens to show their pictures straight away, so that I never see a loading board.
+8. As a person zooming out, I want small Screens to be cheap images, and zooming in to show a sharp copy of the page, so that the board reads at any zoom.
+9. As a person, I want the live app to replace its picture without a flash, so that selecting a Screen feels like it was already running.
+10. As a person whose agent edits the code, I want the Screen it works on to go live when nothing else is, and every picture of that branch to refresh, so that the board shows the new code.
+11. As a person, I want dev servers to start only for the Screen I use or for Screens that have never been pictured, so that opening a board does not start every branch.
+
+## Implementation Decisions
+
+### The tier scheduler (domain, `screenTiers.ts`)
+
+- A pure reducer: `reduceTiers(state, event) → state`. Each Screen has a frame state (`none`, `warming`, `live`, `parked`), a picture level (`tiny`, `small`, `page`), a page copy state (`none`, `queued`, `loading`, `built`, `missing`) and whether a capture is wanted. Its tier is what it shows: `live`, `warming` or `parked` from its frame, else `snapshot` when its page copy is built, else `picture`.
+- Events: `view` (each Screen's on-screen width in device pixels, whether it is near the view, and its distance from the view's centre), `camera` (moving or still), `activate`, `edited` (an agent's edit landed on the Screen), `deactivate`, `ready`, `loadFailed`, `pageBuilt`, `pageMissing`, `captured`, `captureFailed`, `hidden` (the tab is hidden or shown) and `removed`.
+- Budgets: one live Screen, one warming, three parked, four page copies loading at once. `edited` activates only when no Screen is active.
+- `activate` on a parked Screen makes it live at once. On any other Screen it starts `warming`; the iframe mounts and the picture stays on top. `ready` turns the warming Screen live. A new activation drops a Screen still warming.
+- `deactivate` parks the live Screen with a capture wanted, at the front of the parked list. Past three, the least recently live loses its frame. A hidden tab drops every parked frame.
+- `view` events wait while the camera moves and apply once it is still. A Screen's level comes from its on-screen width: up to 160 device pixels is `tiny`, up to 230 css pixels is `small`, wider is `page`. Page copies are queued for near Screens at level `page`, nearest first, four loading at once. A Screen that leaves the view drops its page copy.
+- The reducer keeps each Screen's entry object when nothing about it changed, so the canvas re-renders only the Screens whose tier changed.
+
+### Picture levels on the canvas
+
+- The scheduler lives beside the canvas document, one per editor. It sends `view` when the camera becomes still (tldraw's `getCameraState`), when Screens are added, removed or resized, and when the window's pixel ratio changes. Selection drives `activate` and `deactivate`. `visibilitychange` sends `hidden`.
+- A Screen shape reads only its own entry with `useValue`. Nothing in the shape reads the camera, so panning and zooming re-render no Screen. The shape's container has `contain: strict`. The label stays in `ShapeLabel` as today.
+- The static layer is an `<img>` of `<key>.w128.png` or `<key>.w384.png`, or, at level `page`, the page copy over the 384 image. Before a Screen has a scheduler entry it uses the level the current zoom gives, so a board's first frame already has its pictures.
+- Page copies are built by one queue per document, nearest first, at most 6 ms of work per animation frame. The prepared copy of a key is shared: one parsed template and one constructed stylesheet per key, cloned into each Screen's closed shadow root, with `@font-face` rules hoisted to the document once.
+- A Screen with no picture yet shows its branch and route, as today.
+
+### The live frame
+
+- `useScreenView` keeps everything it does today (state tokens, Steps, Mocks, navigation following, Parameters, the one retry, the editor tab), but it mounts its iframe when told to, not when the Screen is on screen. The load queue and the reach rules are removed: the scheduler admits one frame at a time.
+- The iframe sits under the static layer. The static layer is removed when the Screen is live and its page has painted, so the app replaces its picture with no blank frame. A parked iframe gets `visibility: hidden`, so Chromium stops painting it and throttles its animation frames.
+- Pointer events reach a live Screen after the double-click delay, as today.
+
+### Capturing the page copy (the bridge)
+
+- `snapshotPage` in `pageSnapshot.ts` serialises the document as inert HTML. It removes scripts, `noscript`, frames, preloads, event handler attributes and `srcset`. It collects every readable stylesheet, keeps `@media` rules that match the page's viewport and drops the rest, writes viewport units as pixels, keeps `@font-face`, and writes the values of form fields as attributes. Images, CSS `url()` references and fonts become numbered parts (`uf-part:N`), fetched by the page itself. Canvas elements become images. Scroll positions are kept as `data-uf-scroll`. Animations are paused when the copy is shown.
+- The bridge serialises the page while its Screen is live: after changes settle (300 ms with no mutation, scroll or input), and at most every 800 ms. It serialises once more when the Screen is demoted. It posts `unframed:snapshot` with the HTML and the parts' bytes. The canvas forwards a copy that differs from the last one to the engine.
+- The same function runs in the engine's headless Chrome through `window.__unframedSnapshot()`.
+
+### Storing and serving pictures (the engine)
+
+- `PictureStore` keeps `<project>/.cache/pictures/`: `<key>.html`, `<key>.png`, `<key>.w384.png`, `<key>.w128.png`, `parts/<hash>.<ext>` and `signatures/<hash>` (a state's signature to its key). A part's name is the SHA-256 of its bytes. A picture's key is the SHA-256 of its HTML with its parts resolved, or of its PNG when the page has no bridge. Keys and part names are 40 hex characters.
+- `screenSignature` (domain) writes the state a picture shows as canonical JSON: Instance, worktree revision, route, Steps, Mocks, width, height and Parameters. The revision grows each time the Instance's worktree is touched.
+- A capture, headless or from the live Screen, ends by writing every file, then the signature, then the Screen's `picture` prop through the canvas room with a system origin, which no undo stack records. A Screen whose signature already has a key gets that key with no capture, which is how a duplicate stays free.
+- Headless captures run as today, one at a time, only for Screens of a live Instance, and only when the Screen's signature has no key. Rasters of a live capture come from loading its HTML in headless Chrome with requests answered from the store. Rasters never block the canvas: the shape keeps its old key until the new picture is complete.
+- `GET /api/pictures/<project>/<file>` serves the store with `Cache-Control: private, max-age=31536000, immutable`, an ETag of the hash and `X-Content-Type-Options: nosniff`. Every response carries a Content Security Policy that allows nothing but its own images, fonts and inline styles, inside a sandbox. Names outside the store's patterns answer 404.
+- `screens.capture` takes a live capture from the canvas. It is refused when the `repositories` flag is off.
+
+### Demand
+
+- A window demands the Instances of its active, warming and parked Screens, of its selected Screens, and of near Screens with no picture. The editor tab demands its own Instance as today. The engine's budget, idle stop and one-start-at-a-time rules are unchanged.
+
+### Measuring
+
+- The `?fps=1` meter's Screen line counts tiers: `screens: live N · warming N · parked N · snapshot N · picture N · replays N · retries N · failed N`.
+- `pnpm test:perf` gains a board of 200 Screens of a busy page: pan and zoom at fit and pan zoomed in within the frame budget, Cmd+D of all 200 within budget with every copy pictured, and at most one iframe outside the parked ones.
+
+### Delivery
+
+- Everything sits behind the existing `repositories` flag. With the flag off a Screen shows its picture, from its key or its old snapshot, with no frame, no page copy and no capture.
+- Shapes from before this change have no `picture` prop and keep their old snapshot until their next capture.
+
+### Calls made without the person
+
+- A Screen becomes active on a single selection. Selecting several Screens, or anything else, demotes the live one. This keeps "one live" true while the person arranges Screens.
+- "An agent's edit lands on a Screen" means its Instance's worktree changed while that Screen is the nearest visible Screen of that Instance; it goes live only if no Screen is active.
+- Near Screens with no picture still wake their Instance, so a new board gets its first pictures. Without that, a Screen would show only its branch and route until someone selects it.
+- Rasters come from headless Chrome, which already captures Screens. Rasterising in the canvas through SVG `foreignObject` would add main-thread work and taint rules for little gain on a local machine.
+- A page copy that fails to parse or has no HTML shows the full PNG at level `page`.
+- Fonts are hoisted to the document under their own family names. Two apps that declare the same family name with different files on one board may show one of them in the other's page copy.
+- The camera predictor is left for later; levels change on settle.
+
+## Testing
+
+- Tests check what the person sees: which Screens have a frame, which picture a Screen shows, what the engine serves and stores.
+- **Domain**: the reducer (activate, warming to live, park and LRU, capture wanted, page copy budget and order, camera freeze, hidden tab, `edited` only when free, entry identity), the level choice, `screenSignature`, and the CSS helpers of `pageSnapshot.ts` (viewport units, `url()` rewriting, root selectors).
+- **Engine**: the store names parts and pictures by content; a second Screen with the same signature gets the key without a capture; a changed revision captures again; `/api/pictures` serves immutable files with the strict policy and refuses other names; a headless capture writes HTML with parts and three rasters; `screens.capture` stores a live copy, rasterises it and sets the Screen's key; `screens.capture` is refused with the flag off.
+- **Browser**: selecting Screens keeps at most one live iframe; a reselected parked Screen shows its page with no reload; Escape demotes and captures; a duplicate shows the original's picture at once; switching back to a board shows every visible picture in its first frame; zooming in shows the page copy in a closed shadow root; the flag off shows pictures and no frame.
+- **Performance**: `screenBoardPerformance.spec.ts` in `pnpm test:perf`.
+
+## Out of scope
+
+- Predicting the camera to fetch pictures early.
+- Pixel-exact page copies of pages whose stylesheets come from another origin, or that draw with WebGL.
+- Sharing pictures between projects.
+- Keeping the canvas mounted across project tabs.
