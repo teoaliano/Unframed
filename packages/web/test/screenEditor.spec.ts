@@ -64,6 +64,7 @@ test("a Screen opens in the editor from its toolbar and by double-click, live th
         const host = document.querySelector(`[data-screen-of="${id}"]`) as HTMLElement | null;
         return JSON.stringify({ hit: hit?.tagName, hitScreenOf: hit?.closest("[data-screen-of]")?.getAttribute("data-screen-of") ?? null, hitClass: (hit as HTMLElement | null)?.className?.toString().slice(0, 80), active: document.activeElement?.tagName, interactive: host?.querySelector("iframe")?.getAttribute("data-interactive") ?? null, hostPointer: host?.style.pointerEvents, layerZ: host?.parentElement?.className, painted: card?.getAttribute("data-painted"), selected: (window as any).__selected ?? null });
       }, { x: at.x, y: at.y, id: first.id });
+    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
     const before = await probe();
     await page.mouse.dblclick(at.x, at.y);
     await expect(editor(page), `before the double-click: ${before}; after: ${await probe()}`).toBeVisible();
