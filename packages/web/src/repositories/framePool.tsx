@@ -54,8 +54,8 @@ const keep = (project: string, shapeId: string, entry: PoolEntry): void => {
 };
 
 export const forgetScreenFrame = (project: string, shapeId: string): void => {
-  const pool = poolOf(project);
-  if (!pool.get().has(shapeId)) return;
+  const pool = pools.get(project);
+  if (pool === undefined || !pool.get().has(shapeId)) return;
   pool.update((entries) => {
     const next = new Map(entries);
     next.delete(shapeId);
