@@ -106,10 +106,11 @@ test("with repositories off, a Repository opens read-only on its Screens' last s
   const placed = ((await onRpc.call("testCanvas.read", { project: "shop" })).records as any[]).find((record) => record.type === "screen");
   const held = { route: "/app", state: "the menu open", steps: [{ action: "click", target: { role: "button", name: "Menu" } }], mocks: [{ url: "/api/items", status: 200, headers: {}, body: "[]", delay: 0 }] };
   await onRpc.call("testCanvas.apply", { project: "shop", change: { put: [{ ...placed, props: { ...placed.props, ...held } }], remove: [] }, origin: { kind: "server", id: "test" } });
-  const snapshots = onRpc.subscribe("screens.snapshots", { project: "shop" });
   await expect.poll(async () => (await onRpc.call("instances.status", { project: "shop", id: added.instance.id })).state, { timeout: 30_000 }).toBe("stopped");
   await onRpc.call("instances.demand", { project: "shop", client: "window-1", ids: [added.instance.id] });
-  await snapshots.next();
+  await expect
+    .poll(async () => ((await onRpc.call("testCanvas.read", { project: "shop" })).records as any[]).find((record) => record.type === "screen")?.props.picture, { timeout: 30_000 })
+    .toMatch(/^[a-f0-9]{40}$/);
   await on.dispose();
   const off = await startHostedEngine({ dataDir, samplePrompts: false, env: await repoEngineEnv({ UNFRAMED_FEATURES: undefined, UNFRAMED_TEST_RENDERER: "ok" }) });
   try {
@@ -118,6 +119,7 @@ test("with repositories off, a Repository opens read-only on its Screens' last s
     await openCanvas(page, off, "shop");
     const screen = page.locator("[data-testid=screen]");
     await expect(screen.locator("[data-testid=screen-snapshot]")).toBeVisible();
+    await expect(screen.locator("[data-testid=screen-snapshot]")).toHaveAttribute("src", /^\/api\/pictures\/shop\/[a-f0-9]{40}\.w(128|384)\.png$/);
     await expect(screen.locator("iframe")).toHaveCount(0);
     await expect(screen.locator("[data-testid=screen-overlay]")).toHaveCount(0);
     await expect(screen.locator("[data-testid=screen-state-failed]")).toHaveCount(0);
@@ -126,6 +128,9 @@ test("with repositories off, a Repository opens read-only on its Screens' last s
     expect(records.find((record) => record.type === "screen")!.props).toMatchObject(held);
     await clickShape(page, records.find((record) => record.type === "screen")!.id);
     await expect(toolbar(page)).toBeVisible();
+    await page.waitForTimeout(500);
+    await expect(page.locator("iframe[data-screen-frame]")).toHaveCount(0);
+    await expect(screen.locator("[data-testid=screen-page-copy]")).toHaveCount(0);
     await expect(page.getByTestId("screen-route")).toHaveCount(0);
     await expect(page.getByTestId("screen-branch")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Keep this view" })).toHaveCount(0);

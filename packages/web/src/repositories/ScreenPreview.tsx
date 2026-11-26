@@ -10,7 +10,7 @@ export const ScreenPreview = ({ shapeId, props, edit }: { readonly shapeId: stri
     doc.update(shapeId, { ...next, steps: undefined, mocks: undefined, state: undefined }, "screen navigation");
     return true;
   };
-  const view = useScreenView({ owner: doc, project, shapeId, props, onScreen: true, interactive: true, write, edit });
+  const view = useScreenView({ owner: doc, project, shapeId, props, mounted: true, interactive: true, write, edit });
   return (
     <div className="absolute inset-0 overflow-hidden" data-testid="screen-preview" data-route={props.route} data-live={view.live ? "true" : undefined} data-painted={view.painted ? "true" : undefined}>
       {view.content}

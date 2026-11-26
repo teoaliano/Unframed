@@ -1,41 +1,13 @@
-import { farOffscreen } from "@unframed/domain";
 import type { ScreenShapeProps } from "@unframed/contracts";
-import { atom, computed, react, type Atom, type Editor, type TLShapeId } from "tldraw";
+import { computed, react, type Editor } from "tldraw";
 import type { EngineConnection } from "../rpc/engine.ts";
+import { pictureKeyOf } from "./ScreenPicture.tsx";
 import { repositoryState } from "./store.ts";
+import { tiersOf } from "./tiers.ts";
 
 const WINDOW_CLIENT = `window-${Math.random().toString(36).slice(2, 10)}`;
 const SEND_AFTER_MS = 250;
 const RESEND_EVERY_MS = 10_000;
-
-const SCREEN_KEEP_REACH = 3;
-
-const loadedAtoms = new WeakMap<Editor, Atom<ReadonlySet<TLShapeId>>>();
-
-const loadedOf = (editor: Editor): Atom<ReadonlySet<TLShapeId>> => {
-  let found = loadedAtoms.get(editor);
-  if (found === undefined) {
-    found = atom("loaded screens", new Set<TLShapeId>());
-    loadedAtoms.set(editor, found);
-  }
-  return found;
-};
-
-export const holdScreenLoaded = (editor: Editor, id: TLShapeId): (() => void) => {
-  loadedOf(editor).update((ids) => new Set(ids).add(id));
-  return () =>
-    loadedOf(editor).update((ids) => {
-      const next = new Set(ids);
-      next.delete(id);
-      return next;
-    });
-};
-
-export const screenWanted = (editor: Editor, id: TLShapeId): boolean => {
-  const bounds = editor.getShapePageBounds(id);
-  const reach = loadedOf(editor).get().has(id) ? SCREEN_KEEP_REACH : 1;
-  return !!bounds && !farOffscreen(bounds, editor.getViewportPageBounds(), reach);
-};
 
 const installDemand = (engine: EngineConnection, project: string, client: string, wanted: () => string): (() => void) => {
   const state = repositoryState(project);
@@ -70,11 +42,17 @@ export const installScreenDemand = (editor: Editor, engine: EngineConnection, pr
   const state = repositoryState(project);
   const wanted = computed("demanded instances", () => {
     if (!state.repository.get()) return "";
-    const selected = new Set(editor.getSelectedShapeIds());
+    const selected = new Set<string>(editor.getSelectedShapeIds());
+    const snapshots = state.snapshots.get();
+    const { entries } = tiersOf(editor).get();
     const ids = new Set<string>();
     for (const shape of editor.getCurrentPageShapes()) {
       if (shape.type !== "screen") continue;
-      if (selected.has(shape.id) || screenWanted(editor, shape.id)) ids.add((shape.props as ScreenShapeProps).instance);
+      const props = shape.props as ScreenShapeProps;
+      const entry = entries.get(shape.id);
+      const framed = entry !== undefined && entry.frame !== "none";
+      const unpictured = entry?.near === true && pictureKeyOf(props) === undefined && !snapshots.has(shape.id);
+      if (selected.has(shape.id) || framed || unpictured) ids.add(props.instance);
     }
     return [...ids].sort().join(" ");
   });
