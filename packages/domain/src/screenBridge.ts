@@ -1,12 +1,48 @@
 import { dialsBridgeSource } from "./artifacts/dials.ts";
 import { editBridgeSource } from "./artifacts/editBridge.ts";
 import { crossSiteCookie } from "./instanceProxy.ts";
+import { inlineViewportUnits, rewriteCssUrls, snapshotPage, type SnapshotHelpers } from "./pageSnapshot.ts";
 import { matchMock } from "./screenStates.ts";
 
 export const STATE_PARAM = "__unframed_state";
 export const STEP_TIMEOUT_MS = 5000;
 export const QUIET_IDLE_MS = 500;
 export const QUIET_CAP_MS = 15_000;
+
+export const SNAPSHOT_SETTLE_MS = 300;
+export const SNAPSHOT_GAP_MS = 800;
+export const SNAPSHOT_PART_MAX_BYTES = 8 * 1024 * 1024;
+export const SNAPSHOT_TOTAL_MAX_BYTES = 24 * 1024 * 1024;
+
+export interface SnapshotConfig {
+  readonly settle: number;
+  readonly gap: number;
+  readonly partMax: number;
+  readonly totalMax: number;
+}
+
+export interface CapturedPart {
+  readonly url: string;
+  readonly type: string;
+  readonly data: string | null;
+}
+
+export interface CapturedPage {
+  readonly html: string;
+  readonly w: number;
+  readonly h: number;
+  readonly parts: ReadonlyArray<CapturedPart>;
+}
+
+export type SnapshotMessage = { readonly type: "unframed:snapshot:watch"; readonly on: boolean } | { readonly type: "unframed:snapshot:take" };
+
+export interface SnapshotPosted {
+  readonly type: "unframed:snapshot";
+  readonly href: string;
+  readonly final: boolean;
+  readonly snapshot: CapturedPage | null;
+  readonly error?: string;
+}
 
 export interface BridgeConfig {
   readonly param: string;
@@ -430,6 +466,153 @@ export function screenBridge(
   else painted();
 }
 
+export function snapshotBridge(win: any, config: SnapshotConfig, snapshot: typeof snapshotPage, helpers: SnapshotHelpers): void {
+  const LOOPBACK = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+  const load = typeof win.fetch === "function" ? win.fetch.bind(win) : undefined;
+  const fetched = new Map<string, Promise<{ type: string; data: string | null; size: number }>>();
+  const encode = (blob: any): Promise<string | null> =>
+    new Promise((resolve) => {
+      const reader = new win.FileReader();
+      reader.onload = () => {
+        const text = String(reader.result);
+        resolve(text.slice(text.indexOf(",") + 1));
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  const fetchPart = (url: string) => {
+    const known = fetched.get(url);
+    if (known !== undefined) return known;
+    const pending = (async () => {
+      try {
+        if (load === undefined) throw new Error("no fetch");
+        const response = await load(url, { credentials: "same-origin" });
+        if (!response.ok) throw new Error(String(response.status));
+        const blob = await response.blob();
+        const type = blob.type || response.headers.get("content-type") || "";
+        if (blob.size > config.partMax) return { type, data: null, size: blob.size };
+        const data = await encode(blob);
+        if (data === null) throw new Error("unreadable");
+        return { type, data, size: blob.size };
+      } catch {
+        fetched.delete(url);
+        return { type: "", data: null, size: 0 };
+      }
+    })();
+    fetched.set(url, pending);
+    return pending;
+  };
+  win.__unframedSnapshot = async () => {
+    const page = snapshot(win, helpers);
+    const loaded = await Promise.all(page.parts.map(fetchPart));
+    let total = 0;
+    let over = false;
+    const parts = page.parts.map((url, index) => {
+      const found = loaded[index]!;
+      let data = found.data;
+      if (data !== null) {
+        if (over || total + found.size > config.totalMax) {
+          over = true;
+          data = null;
+        } else total += found.size;
+      }
+      return { url, type: found.type, data };
+    });
+    return { html: page.html, w: page.w, h: page.h, parts };
+  };
+
+  let peer: string | undefined;
+  let watching = false;
+  let observer: any;
+  let timer: any;
+  let changedAt = 0;
+  let capturedAt = -Infinity;
+  let busy = false;
+  let again = false;
+  let posted: string | undefined;
+  const post = (message: Record<string, unknown>) => {
+    if (peer === undefined) return;
+    try {
+      win.parent.postMessage({ type: "unframed:snapshot", href: win.location.href, ...message }, peer);
+    } catch {
+      return;
+    }
+  };
+  const capture = async (final: boolean) => {
+    busy = true;
+    capturedAt = Date.now();
+    try {
+      const taken = await win.__unframedSnapshot();
+      if (final || taken.html !== posted) {
+        posted = taken.html;
+        post({ final, snapshot: taken });
+      }
+    } catch (error) {
+      if (final) post({ final, snapshot: null, error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      busy = false;
+      if (again && watching) {
+        again = false;
+        changed();
+      }
+    }
+  };
+  const fire = () => {
+    timer = undefined;
+    if (!watching) return;
+    const now = Date.now();
+    const wait = Math.max(changedAt + config.settle - now, capturedAt + config.gap - now);
+    if (wait > 0) {
+      timer = win.setTimeout(fire, wait);
+      return;
+    }
+    if (busy) {
+      again = true;
+      return;
+    }
+    void capture(false);
+  };
+  const changed = () => {
+    if (!watching) return;
+    changedAt = Date.now();
+    if (timer === undefined) timer = win.setTimeout(fire, config.settle);
+  };
+  const watch = (on: boolean) => {
+    if (on === watching) return;
+    watching = on;
+    if (on) {
+      if (typeof win.MutationObserver === "function") {
+        observer = new win.MutationObserver(changed);
+        observer.observe(win.document, { subtree: true, childList: true, attributes: true, characterData: true });
+      }
+      win.addEventListener("scroll", changed, true);
+      win.addEventListener("input", changed, true);
+      changed();
+      return;
+    }
+    observer?.disconnect();
+    observer = undefined;
+    win.removeEventListener("scroll", changed, true);
+    win.removeEventListener("input", changed, true);
+    if (timer !== undefined) win.clearTimeout(timer);
+    timer = undefined;
+    again = false;
+  };
+  win.addEventListener("message", (event: any) => {
+    if (win.parent === win || event.source !== win.parent) return;
+    if (typeof event.origin !== "string" || !LOOPBACK.test(event.origin)) return;
+    const data = event.data;
+    if (data === null || typeof data !== "object") return;
+    if (data.type === "unframed:snapshot:watch") {
+      peer = event.origin;
+      watch(data.on === true);
+    } else if (data.type === "unframed:snapshot:take") {
+      peer = event.origin;
+      void capture(true);
+    }
+  });
+}
+
 const patchDocumentCookie = (win: any, rewrite: (cookie: string) => string): void => {
   const proto = win.Document?.prototype;
   const native = proto === undefined ? undefined : Object.getOwnPropertyDescriptor(proto, "cookie");
@@ -447,6 +630,7 @@ export const screenBridgeSource = (): string =>
   [
     `(${patchDocumentCookie.toString()})(window, ${crossSiteCookie.toString()});`,
     ...dialsBridgeSource().split("\n").slice(1, -1),
+    `(${snapshotBridge.toString()})(window, ${JSON.stringify({ settle: SNAPSHOT_SETTLE_MS, gap: SNAPSHOT_GAP_MS, partMax: SNAPSHOT_PART_MAX_BYTES, totalMax: SNAPSHOT_TOTAL_MAX_BYTES } satisfies SnapshotConfig)}, ${snapshotPage.toString()}, { units: ${inlineViewportUnits.toString()}, urls: ${rewriteCssUrls.toString()} });`,
     `(${screenBridge.toString()})(window, ${JSON.stringify({ param: STATE_PARAM, stepTimeout: STEP_TIMEOUT_MS, quietIdle: QUIET_IDLE_MS, quietCap: QUIET_CAP_MS } satisfies BridgeConfig)}, ${matchMock.toString()}, ${cutParam.toString()}, ${quietWatch.toString()}, ${stepExpired.toString()});`,
     ...editBridgeSource({ stamp: true }).split("\n").slice(1, -1),
     "",
