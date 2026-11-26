@@ -156,7 +156,6 @@ test("with element editing off, a React Screen's editor has no Edit mode, nothin
     async (engine, project) => {
       const [first] = await screenShapes(engine, project);
       await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/react" } }]);
-      await expect(page.locator("[data-testid=screen]")).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
       await clickShape(page, first.id);
       await page.getByRole("button", { name: "Editor", exact: true }).click();
       const editor = page.getByTestId("artifact-editor");

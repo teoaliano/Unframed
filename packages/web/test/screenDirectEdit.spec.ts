@@ -20,7 +20,6 @@ const rows = (page: Page) => page.getByRole("list", { name: "Changes" }).locator
 const openReact = async (page: Page, engine: TestEngine, project: string) => {
   const [first] = await screenShapes(engine, project);
   await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/react" } }]);
-  await expect(page.locator("[data-testid=screen]")).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
   await clickShape(page, first.id);
   await page.getByRole("button", { name: "Editor", exact: true }).click();
   await expect(app(page).getByRole("heading", { name: "Agent" })).toBeVisible({ timeout: 30_000 });

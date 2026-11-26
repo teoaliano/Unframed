@@ -23,12 +23,13 @@ const modeButton = (page: Page, name: "Edit" | "Interact") => centreColumn(page)
 const onRoute = async (engine: TestEngine, project: string, route: string) => {
   const [first] = await screenShapes(engine, project);
   await putShapes(engine, project, [{ ...first, props: { ...first.props, route } }]);
-  return first as { id: string; props: { title: string } };
+  return { ...first, props: { ...first.props, route } } as { id: string; props: { title: string; route: string } };
 };
 
-const openFromToolbar = async (page: Page, id: string) => {
+const openFromToolbar = async (page: Page, screen: { readonly id: string; readonly props: { readonly route: string } }) => {
+  await expect(page.locator(`[data-shape-id="${screen.id}"] [data-testid=screen]`)).toHaveAttribute("data-route", screen.props.route);
+  await clickShape(page, screen.id);
   await expect(page.locator("[data-testid=screen]")).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
-  await clickShape(page, id);
   await page.getByRole("button", { name: "Editor", exact: true }).click();
   await expect(editor(page)).toBeVisible();
 };
@@ -37,7 +38,7 @@ test("a Screen opens in the editor from its toolbar and by double-click, live th
   await withRepository(page, {}, async (engine, project) => {
     const first = await onRoute(engine, project, "/app");
     const title = `${first.props.title} · /app`;
-    await openFromToolbar(page, first.id);
+    await openFromToolbar(page, first);
     await expect(centreColumn(page).getByTestId("artifact-editor-title")).toHaveText(title);
     await expect(centreColumn(page).getByTestId("artifact-editor-kind")).toHaveText("screen");
     await expect(app(page).getByRole("heading", { name: "Fake app" })).toBeVisible({ timeout: 30_000 });
@@ -75,7 +76,7 @@ test("a Screen opens in the editor from its toolbar and by double-click, live th
 test("a Screen's editor header has its chrome and none of a page's own actions, and its preview size is the Screen's viewport", async ({ page }) => {
   await withRepository(page, {}, async (engine, project) => {
     const first = await onRoute(engine, project, "/app");
-    await openFromToolbar(page, first.id);
+    await openFromToolbar(page, first);
     const header = centreColumn(page);
     await expect(header.getByRole("group", { name: "Mode" })).toBeVisible();
     await expect(header.getByTestId("screen-branch")).toContainText(first.props.title);
@@ -104,7 +105,7 @@ test("a Screen's editor header has its chrome and none of a page's own actions, 
 test("navigating in Interact mode moves the Screen and its tab title follows; deleting the Screen closes its editor", async ({ page }) => {
   await withRepository(page, {}, async (engine, project) => {
     const first = await onRoute(engine, project, "/app");
-    await openFromToolbar(page, first.id);
+    await openFromToolbar(page, first);
     await modeButton(page, "Interact").click();
     await app(page).getByRole("link", { name: "About" }).dispatchEvent("click");
     await expect.poll(async () => (await screenShapes(engine, project))[0].props.route).toBe("/app/about");
@@ -123,7 +124,7 @@ test("navigating in Interact mode moves the Screen and its tab title follows; de
 test("Edit mode selects an element in the live app; a Design change previews at once and joins the pending list, and undo takes it back out", async ({ page }) => {
   await withRepository(page, {}, async (engine, project) => {
     const first = await onRoute(engine, project, "/app");
-    await openFromToolbar(page, first.id);
+    await openFromToolbar(page, first);
     await expect(app(page).getByRole("heading", { name: "Fake app" })).toBeVisible({ timeout: 30_000 });
     await expect(modeButton(page, "Edit")).toHaveAttribute("aria-pressed", "true");
     await expect(panels(page).getByTestId("screen-edit-note")).toHaveText(SCREEN_EDIT_NOTE);
@@ -157,7 +158,7 @@ test("Edit mode selects an element in the live app; a Design change previews at 
 test("a reload of the Screen drops its overrides and its pending changes, and the next change starts a new list", async ({ page }) => {
   await withRepository(page, {}, async (engine, project) => {
     const first = await onRoute(engine, project, "/app");
-    await openFromToolbar(page, first.id);
+    await openFromToolbar(page, first);
     const heading = app(page).getByRole("heading", { name: "Fake app" });
     await expect(heading).toBeVisible({ timeout: 30_000 });
     const resize = async (value: string) => {
@@ -191,7 +192,7 @@ test("a reload of the Screen drops its overrides and its pending changes, and th
 test("Layers lists the live page's elements, with no lock or rename, and hiding one previews and joins the pending list", async ({ page }) => {
   await withRepository(page, {}, async (engine, project) => {
     const first = await onRoute(engine, project, "/app");
-    await openFromToolbar(page, first.id);
+    await openFromToolbar(page, first);
     await expect(app(page).getByRole("heading", { name: "Fake app" })).toBeVisible({ timeout: 30_000 });
     await panels(page).getByRole("tab", { name: "Layers" }).click();
     await expect(panels(page).getByTestId("screen-edit-note")).toHaveText(SCREEN_EDIT_NOTE);
