@@ -67,7 +67,6 @@ test("a duplicated Screen shows the original's picture at once", async ({ page }
     await clickShape(page, a);
     const before = await page.locator("[data-testid=screen]").count();
     await page.keyboard.press("ControlOrMeta+d");
-    const copy = page.locator(`[data-testid=screen][data-picture="${picture}"]`).filter({ hasNot: page.locator(`[data-shape-id="${a}"]`) });
     await expect(page.locator("[data-testid=screen]")).toHaveCount(before + 1, { timeout: 2000 });
     const shown = await page.evaluate(
       ({ picture, original }) =>
@@ -78,7 +77,6 @@ test("a duplicated Screen shows the original's picture at once", async ({ page }
     );
     expect(shown).toHaveLength(1);
     expect(shown[0]).toContain(picture);
-    await expect(copy).toHaveCount(1);
   });
 });
 

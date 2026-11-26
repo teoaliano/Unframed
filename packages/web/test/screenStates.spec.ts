@@ -112,6 +112,8 @@ test("a Screen holding a state replays its steps with its own mocks on every loa
       { ...first, props: { ...first.props, route: "/app", w: 640, h: 480, ...MENU_EMPTY } },
       { ...first, id: "shape:plain", y: first.y + 600, props: { ...first.props, route: "/app", w: 640, h: 480 } },
     ]);
+    await expect(page.locator("[data-testid=screen]")).toHaveCount(2);
+    await page.keyboard.press("Shift+1");
     const stateful = frameOf(page, first.id);
     await selectScreen(page, first.id);
     await expect(stateful.getByRole("menuitem", { name: "Settings" })).toBeVisible({ timeout: 30_000 });

@@ -6,7 +6,7 @@ import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { openCanvas } from "./canvas.ts";
 import { expect, startHostedEngine } from "./fixtures.ts";
 
-export const withRepository = async (page: Page, env: Record<string, string>, use: (engine: TestEngine, project: string, root: string) => Promise<void>, prepare?: (root: string) => Promise<void>) => {
+export const withRepository = async (page: Page, env: Record<string, string | undefined>, use: (engine: TestEngine, project: string, root: string) => Promise<void>, prepare?: (root: string) => Promise<void>) => {
   const root = await makeRepo("My App");
   await prepare?.(root);
   const engine = await startHostedEngine({ env: await repoEngineEnv({ UNFRAMED_TEST_PICK_FOLDER: root, ...env }) });

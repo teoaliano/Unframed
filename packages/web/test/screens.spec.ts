@@ -201,6 +201,8 @@ test("Screens of one Instance keep their own Parameters through the bridge, and 
       { ...first, props: { ...first.props, route: "/dials", dials: { accent: "#00ff00" } } },
       { ...first, id: "shape:second", x: first.x, y: first.y + 900, props: { ...first.props, route: "/dials", dials: { accent: "#0000ff" } } },
     ]);
+    await expect(page.locator("[data-testid=screen]")).toHaveCount(2);
+    await page.keyboard.press("Shift+1");
     await clickShape(page, first.id);
     await expect(page.locator(`[data-shape-id="${first.id}"] [data-testid=screen]`)).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
     await clickShape(page, "shape:second");

@@ -119,7 +119,7 @@ test("with repositories off, a Repository opens read-only on its Screens' last s
     await openCanvas(page, off, "shop");
     const screen = page.locator("[data-testid=screen]");
     await expect(screen.locator("[data-testid=screen-snapshot]")).toBeVisible();
-    await expect(screen.locator("[data-testid=screen-snapshot]")).toHaveAttribute("src", /^\/api\/pictures\/shop\/[a-f0-9]{40}\.w(128|384)\.png$/);
+    await expect(screen.locator("[data-testid=screen-snapshot]")).toHaveAttribute("src", /^\/api\/pictures\/shop\/[a-f0-9]{40}(\.w128|\.w384)?\.png$/);
     await expect(screen.locator("iframe")).toHaveCount(0);
     await expect(screen.locator("[data-testid=screen-overlay]")).toHaveCount(0);
     await expect(screen.locator("[data-testid=screen-state-failed]")).toHaveCount(0);

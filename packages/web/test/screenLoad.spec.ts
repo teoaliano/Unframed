@@ -54,7 +54,7 @@ test("a state that keeps failing shows Couldn't reach this state after one retry
 });
 
 test("with ?fps=1 the meter counts Screens by tier, and replays, retries and failed states", async ({ page }) => {
-  await withRepository(page, {}, async (engine, project) => {
+  await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
     await page.goto(`${engine.origin}/?fps=1`);
     const screen = page.locator(`[data-canvas-project="${project}"] [data-testid=screen]`);
     await expect(screen).toHaveAttribute("data-picture", /^[a-f0-9]{40}$/, { timeout: 30_000 });

@@ -51,7 +51,7 @@ const measure = async (page: Page, what: string, gesture: () => Promise<void>, k
 };
 
 test("a board of 200 Screens of a busy page pans, zooms and duplicates within the frame budget, with one live Screen at most", async ({ page }) => {
-  await withRepository(page, {}, async (engine, project) => {
+  await withRepository(page, { UNFRAMED_TEST_RENDERER: undefined }, async (engine, project) => {
     const [first] = await screenShapes(engine, project);
     await putShapes(
       engine,

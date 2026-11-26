@@ -23,8 +23,8 @@ const onRoute = async (engine: TestEngine, project: string, route: string) => {
 };
 
 const openFromToolbar = async (page: Page, id: string) => {
-  await expect(page.locator("[data-testid=screen]")).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
   await clickShape(page, id);
+  await expect(page.locator("[data-testid=screen]")).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
   await page.getByRole("button", { name: "Editor", exact: true }).click();
   await expect(editor(page)).toBeVisible();
 };
