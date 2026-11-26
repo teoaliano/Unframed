@@ -142,7 +142,7 @@ const MapFlow = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
           <Textarea
             size="sm"
             aria-label="Flow"
-            placeholder="Signing up with an email that is taken"
+            placeholder="Describe the flow to map, or leave it empty and the agent maps the whole app."
             value={flow}
             autoFocus
             onChange={(event) => setFlow(event.target.value)}
@@ -152,7 +152,6 @@ const MapFlow = ({ shapeId }: { readonly shapeId: TLShapeId }) => {
               event.currentTarget.form?.requestSubmit();
             }}
           />
-          <span className="text-xs text-(--selection-toolbar-hint)">Describe the flow to map, or leave it empty and the agent maps the whole app.</span>
           <Button type="submit" size="sm" className="self-end" disabled={busy}>
             {flow.trim() === "" ? "Map the app" : "Map this flow"}
           </Button>
