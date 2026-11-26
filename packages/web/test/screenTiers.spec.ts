@@ -162,6 +162,41 @@ test("a Screen large on screen shows a static copy of its page in a closed shado
   });
 });
 
+test("a page copy that declares a font the canvas uses leaves the canvas's fonts alone and draws with its own", async ({ page }) => {
+  await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
+    const [a] = IDS as [string];
+    await putBusyScreens(page, engine, project, [a]);
+    const font = "url(data:font/woff2;base64,AAAA)";
+    const html = [
+      "<!doctype html><html><head><style>",
+      `@font-face { font-family: -apple-system; src: ${font}; }`,
+      `@font-face { font-family: "Brand Sans"; src: ${font}; }`,
+      `@font-face { font-family: 'Inline Face'; src: ${font}; }`,
+      ":root { --brand: \"Brand Sans\", serif; } h1 { font-family: -apple-system, sans-serif; } p { font-family: var(--brand); }",
+      "</style></head><body><h1>System</h1><p>Brand</p><span style=\"font-family: 'Inline Face'\">Inline</span></body></html>",
+    ].join("");
+    const rpc = await engine.rpc();
+    let key: string | null;
+    try {
+      ({ key } = (await rpc.call("screens.capture", { project, shape: a, w: 390, h: 300, html, parts: [] })) as { key: string | null });
+    } finally {
+      await rpc.close();
+    }
+    expect(key).toMatch(/^[a-f0-9]{40}$/);
+    await expect(screenOf(page, a)).toHaveAttribute("data-picture", key!);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.keyboard.press("Shift+0");
+    await expect(screenOf(page, a)).toHaveAttribute("data-level", "page", { timeout: 10_000 });
+    await expect(screenOf(page, a).locator("[data-testid=screen-page-copy]")).toHaveAttribute("data-built", "true", { timeout: 10_000 });
+    const faces = () => page.evaluate(() => [...document.fonts].map((face) => ({ family: face.family.replace(/^["']|["']$/g, ""), status: face.status })));
+    await expect.poll(async () => (await faces()).filter((face) => /^uf\d+-\d+$/.test(face.family) && face.status !== "unloaded").length, { timeout: 10_000 }).toBe(3);
+    const families = (await faces()).map((face) => face.family.toLowerCase());
+    expect(families).not.toContain("-apple-system");
+    expect(families).not.toContain("brand sans");
+    expect(families).not.toContain("inline face");
+  });
+});
+
 test("one Screen is live and three stay parked at most: a fifth selection drops the oldest frame", async ({ page }) => {
   await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
     await putBusyScreens(page, engine, project, MORE);

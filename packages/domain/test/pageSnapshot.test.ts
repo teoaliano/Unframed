@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inlineViewportUnits, rewriteCssUrls, rootSelectors, screenBridgeSource } from "../src/index.ts";
+import { fontFamilyKey, inlineViewportUnits, rewriteCssUrls, rootSelectors, scopeFontFamilies, screenBridgeSource } from "../src/index.ts";
 
 describe("viewport units in a page copy", () => {
   it("writes every viewport unit as pixels of the page's own viewport", () => {
@@ -114,5 +114,31 @@ describe("the page copy in the Screen bridge", () => {
     expect(posted.filter((entry) => entry.message.type === "unframed:snapshot")).toEqual([
       { message: { type: "unframed:snapshot", href: "http://127.0.0.1:4101/", final: true, snapshot: { html: "<p>", w: 1, h: 2, parts: [] } }, to: "http://127.0.0.1:8787" },
     ]);
+  });
+});
+
+describe("font families in a page copy", () => {
+  const scoped = new Map([
+    ["-apple-system", "uf1-0"],
+    ["brand sans", "uf1-1"],
+  ]);
+
+  it("names a family the same whether quoted, escaped or spaced", () => {
+    expect(fontFamilyKey('"Brand Sans"')).toBe("brand sans");
+    expect(fontFamilyKey("  Brand   Sans ")).toBe("brand sans");
+    expect(fontFamilyKey("'Brand\\ Sans'")).toBe("brand sans");
+    expect(fontFamilyKey("-apple-system")).toBe("-apple-system");
+    expect(fontFamilyKey("var(--x)")).toBeUndefined();
+    expect(fontFamilyKey("10px")).toBeUndefined();
+  });
+
+  it("renames the families the copy declares and leaves every other one", () => {
+    expect(scopeFontFamilies('-apple-system, "Brand Sans", system-ui, sans-serif', scoped)).toBe('"uf1-0", "uf1-1", system-ui, sans-serif');
+    expect(scopeFontFamilies("BRAND SANS,serif", scoped)).toBe('"uf1-1",serif');
+    expect(scopeFontFamilies("Arial, sans-serif", scoped)).toBe("Arial, sans-serif");
+  });
+
+  it("leaves values that only contain a family name inside a function or string alone", () => {
+    for (const value of ["var(--brand, Brand Sans)", "0 0 1px rgba(0, 0, 0, 0.5), 0 2px red", '"Brand Sans, more"', "url(Brand Sans)"]) expect(scopeFontFamilies(value, scoped)).toBe(value);
   });
 });

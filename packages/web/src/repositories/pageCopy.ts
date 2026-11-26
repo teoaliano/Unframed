@@ -1,4 +1,4 @@
-import { rootSelectors } from "@unframed/domain";
+import { fontFamilyKey, rootSelectors, scopeFontFamilies } from "@unframed/domain";
 
 export interface PreparedPageCopy {
   readonly url: string;
@@ -40,6 +40,9 @@ const fontTexts = new Set<string>();
 let fontSheet: CSSStyleSheet | undefined;
 let baseSheet: CSSStyleSheet | undefined;
 let stillSheet: CSSStyleSheet | undefined;
+let copies = 0;
+
+type Families = ReadonlyMap<string, string>;
 
 const constructed = (text: string): CSSStyleSheet => {
   const sheet = new CSSStyleSheet();
@@ -61,33 +64,76 @@ const hoistFont = (text: string): void => {
   }
 };
 
-const adapt = (list: CSSRuleList, owner: CSSStyleSheet | CSSGroupingRule, selectors: boolean): void => {
+const declaredFamilies = (list: CSSRuleList, found: Set<string>): void => {
+  for (const rule of Array.from(list)) {
+    if (rule instanceof CSSFontFaceRule) {
+      const key = fontFamilyKey(rule.style.getPropertyValue("font-family"));
+      if (key !== undefined) found.add(key);
+    } else if (rule instanceof CSSGroupingRule || rule instanceof CSSStyleRule) declaredFamilies(rule.cssRules, found);
+  }
+};
+
+const scopedFace = (rule: CSSFontFaceRule, families: Families): string | undefined => {
+  const key = fontFamilyKey(rule.style.getPropertyValue("font-family"));
+  const family = key === undefined ? undefined : families.get(key);
+  if (family === undefined) return undefined;
+  let body = `font-family: "${family}";`;
+  for (const name of Array.from(rule.style)) {
+    if (name !== "font-family") body += ` ${name}: ${rule.style.getPropertyValue(name)};`;
+  }
+  return `@font-face { ${body} }`;
+};
+
+const scopeDeclarations = (style: CSSStyleDeclaration, families: Families): void => {
+  if (families.size === 0) return;
+  for (const name of Array.from(style)) {
+    if (name !== "font-family" && !name.startsWith("--")) continue;
+    const value = style.getPropertyValue(name);
+    const scoped = scopeFontFamilies(value, families);
+    if (scoped !== value) style.setProperty(name, scoped, style.getPropertyPriority(name));
+  }
+};
+
+const adapt = (list: CSSRuleList, owner: CSSStyleSheet | CSSGroupingRule, selectors: boolean, families: Families): void => {
   for (let index = list.length - 1; index >= 0; index--) {
     const rule = list[index]!;
     if (rule instanceof CSSFontFaceRule) {
-      hoistFont(rule.cssText);
+      const face = scopedFace(rule, families);
+      if (face !== undefined) hoistFont(face);
       owner.deleteRule(index);
       continue;
     }
-    if (rule instanceof CSSStyleRule && selectors) {
-      const mapped = rootSelectors(rule.selectorText);
-      if (mapped !== rule.selectorText) rule.selectorText = mapped;
+    if (rule instanceof CSSStyleRule) {
+      if (selectors) {
+        const mapped = rootSelectors(rule.selectorText);
+        if (mapped !== rule.selectorText) rule.selectorText = mapped;
+      }
+      scopeDeclarations(rule.style, families);
     }
     if (rule instanceof CSSGroupingRule || rule instanceof CSSStyleRule) {
-      if (rule.cssRules.length > 0) adapt(rule.cssRules, rule as CSSGroupingRule, selectors);
+      if (rule.cssRules.length > 0) adapt(rule.cssRules, rule as CSSGroupingRule, selectors, families);
     }
   }
 };
 
-const styleSheetOf = (text: string, selectors: boolean): CSSStyleSheet => {
+const parsedSheet = (text: string): CSSStyleSheet => {
   const sheet = new CSSStyleSheet();
   try {
     sheet.replaceSync(text);
   } catch {
-    return sheet;
+    return new CSSStyleSheet();
   }
-  adapt(sheet.cssRules, sheet, selectors);
   return sheet;
+};
+
+const scopeElements = (root: ParentNode, families: Families): void => {
+  if (families.size === 0) return;
+  for (const element of Array.from(root.querySelectorAll("*"))) {
+    if (element instanceof HTMLElement || element instanceof SVGElement) scopeDeclarations(element.style, families);
+    const attribute = element.getAttribute("font-family");
+    if (attribute !== null) element.setAttribute("font-family", scopeFontFamilies(attribute, families));
+    if (element instanceof HTMLTemplateElement) scopeElements(element.content, families);
+  }
 };
 
 const scriptUrl = (value: string): boolean => /^\s*(javascript|vbscript):/i.test(value.replace(/[\u0000-\u001f]/g, ""));
@@ -113,7 +159,7 @@ const takeShadows = (root: ParentNode, shadows: CSSStyleSheet[]): void => {
     }
     template.setAttribute("data-uf-shadow", String(shadows.length));
     template.removeAttribute("shadowrootmode");
-    shadows.push(styleSheetOf(text, false));
+    shadows.push(parsedSheet(text));
   }
 };
 
@@ -124,9 +170,15 @@ const build = async (url: string, partsUrl: string): Promise<PreparedPageCopy> =
   const parsed = new DOMParser().parseFromString(text, "text/html");
   let css = "";
   for (const style of Array.from(parsed.head.querySelectorAll("style"))) css += style.textContent ?? "";
-  const sheet = styleSheetOf(css, true);
+  const sheet = parsedSheet(css);
   const shadows: CSSStyleSheet[] = [];
   takeShadows(parsed.body, shadows);
+  const declared = new Set<string>();
+  for (const each of [sheet, ...shadows]) declaredFamilies(each.cssRules, declared);
+  const copy = ++copies;
+  const families: Families = new Map([...declared].map((key, index) => [key, `uf${copy}-${index}`]));
+  adapt(sheet.cssRules, sheet, true, families);
+  for (const shadow of shadows) adapt(shadow.cssRules, shadow, false, families);
   const page = parsed.createElement("div");
   for (const attribute of Array.from(parsed.documentElement.attributes)) page.setAttribute(attribute.name, attribute.value);
   page.setAttribute("data-uf-html", "");
@@ -136,6 +188,7 @@ const build = async (url: string, partsUrl: string): Promise<PreparedPageCopy> =
   body.append(...Array.from(parsed.body.childNodes));
   page.append(body);
   sanitise(page);
+  scopeElements(page, families);
   const template = document.createElement("template");
   template.content.append(template.content.ownerDocument.importNode(page, true));
   return { url, template, sheet, shadows };

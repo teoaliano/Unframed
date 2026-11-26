@@ -602,3 +602,47 @@ export function snapshotPage(win: any, helpers: SnapshotHelpers): PageSnapshot {
   const html = `<!doctype html><html${attributes(htmlValues)}><head><meta charset="utf-8"><style>${style}</style></head><body${attributes(bodyValues)}>${body.join("")}</body></html>`;
   return { html, w: vw, h: vh, parts };
 }
+
+const FAMILY_WORDS = /^-?[A-Za-z_\u0080-￿][\w\-\u0080-￿]*(?:\s+-?[A-Za-z_\u0080-￿][\w\-\u0080-￿]*)*$/;
+
+export const fontFamilyKey = (item: string): string | undefined => {
+  const text = item.trim();
+  const quoted = /^(["'])((?:\\[\s\S]|(?!\1)[^\\])*)\1$/.exec(text);
+  if (quoted !== null) return quoted[2]!.replace(/\\([\s\S])/g, "$1").toLowerCase();
+  return FAMILY_WORDS.test(text) ? text.split(/\s+/).join(" ").toLowerCase() : undefined;
+};
+
+export const scopeFontFamilies = (value: string, scoped: ReadonlyMap<string, string>): string => {
+  if (scoped.size === 0) return value;
+  let out = "";
+  let start = 0;
+  let depth = 0;
+  let quote: string | undefined;
+  const flush = (end: number) => {
+    const item = value.slice(start, end);
+    const key = fontFamilyKey(item);
+    const to = key === undefined ? undefined : scoped.get(key);
+    if (to === undefined) out += item;
+    else {
+      const lead = item.length - item.trimStart().length;
+      const trail = item.length - item.trimEnd().length;
+      out += `${item.slice(0, lead)}"${to}"${item.slice(item.length - trail)}`;
+    }
+  };
+  for (let at = 0; at < value.length; at++) {
+    const char = value[at]!;
+    if (char === "\\") at++;
+    else if (quote !== undefined) {
+      if (char === quote) quote = undefined;
+    } else if (char === '"' || char === "'") quote = char;
+    else if (char === "(") depth++;
+    else if (char === ")") depth = Math.max(0, depth - 1);
+    else if (char === "," && depth === 0) {
+      flush(at);
+      out += ",";
+      start = at + 1;
+    }
+  }
+  flush(value.length);
+  return out;
+};

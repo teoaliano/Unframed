@@ -54,7 +54,7 @@ Only the Screen the person is using runs. Every other Screen shows a picture tha
 - The scheduler's state belongs to the project, one per open project tab, so it outlives the canvas while the editor tab is open or another project tab shows. A mounted canvas sends `view` when the camera becomes still (tldraw's `getCameraState`), when Screens are added, removed or resized, and when the window's pixel ratio changes. Its selection drives `activate` and `deactivate`. The editor tab sends `hold`. The project's pool sends `hidden` on `visibilitychange`, and closing the project tab clears the state.
 - A Screen shape reads only its own entry with `useValue`. Nothing in the shape reads the camera, so panning and zooming re-render no Screen. The shape's container has `contain: strict`. The label stays in `ShapeLabel` as today.
 - The static layer is an `<img>` of `<key>.w128.png` or `<key>.w384.png`, or, at level `page`, the page copy over the 384 image. Before a Screen has a scheduler entry it uses the level the current zoom gives, once the canvas has placed its camera, so a board's first frame already has its pictures at the right size.
-- Page copies are built by one queue per document, nearest first, at most 6 ms of work per animation frame. The prepared copy of a key is shared: one parsed template and one constructed stylesheet per key, cloned into each Screen's closed shadow root, with `@font-face` rules hoisted to the document once.
+- Page copies are built by one queue per document, nearest first, at most 6 ms of work per animation frame. The prepared copy of a key is shared: one parsed template and one constructed stylesheet per key, cloned into each Screen's closed shadow root, with `@font-face` rules hoisted to the document once, renamed to the copy.
 - A Screen with no picture yet shows its branch and route, as today.
 
 ### The live frame
@@ -100,15 +100,15 @@ Only the Screen the person is using runs. Every other Screen shows a picture tha
 - Near Screens with no picture still wake their Instance, so a new board gets its first pictures. Without that, a Screen would show only its branch and route until someone selects it.
 - Rasters come from headless Chrome, which already captures Screens. Rasterising in the canvas through SVG `foreignObject` would add main-thread work and taint rules for little gain on a local machine.
 - A page copy that fails to parse or has no HTML shows the full PNG at level `page`.
-- Fonts are hoisted to the document under their own family names. Two apps that declare the same family name with different files on one board may show one of them in the other's page copy.
+- Fonts are hoisted to the document under a name of their own copy (`uf<n>-<i>`), and the copy's `font-family` values, custom properties, inline styles and SVG `font-family` attributes are rewritten to it. A copy cannot change the fonts of the canvas or of another copy, even when it declares a family the canvas uses, such as `-apple-system`.
 - The camera predictor is left for later; levels change on settle.
 
 ## Testing
 
 - Tests check what the person sees: which Screens have a frame, which picture a Screen shows, what the engine serves and stores.
-- **Domain**: the reducer (activate, warming to live, park and LRU, capture wanted, page copy budget and order, camera freeze, hidden tab, `edited` only when free, entry identity), the level choice, `screenSignature`, and the CSS helpers of `pageSnapshot.ts` (viewport units, `url()` rewriting, root selectors).
+- **Domain**: the reducer (activate, warming to live, park and LRU, capture wanted, page copy budget and order, camera freeze, hidden tab, `edited` only when free, entry identity), the level choice, `screenSignature`, and the CSS helpers of `pageSnapshot.ts` (viewport units, `url()` rewriting, root selectors, font family names).
 - **Engine**: the store names parts and pictures by content; a second Screen with the same signature gets the key without a capture; a changed revision captures again; `/api/pictures` serves immutable files with the strict policy and refuses other names; a headless capture writes HTML with parts and three rasters; `screens.capture` stores a live copy, rasterises it and sets the Screen's key; `screens.capture` is refused with the flag off.
-- **Browser**: selecting Screens keeps at most one live iframe; selecting five in turn leaves one live and three parked; a reselected parked Screen shows its page with no reload; the editor tab makes its Screen live and parked frames survive it and a project tab switch; Escape demotes and captures; a duplicate shows the original's picture at once; switching back to a board shows every visible picture in its first frame; zooming in shows the page copy in a closed shadow root; the flag off shows pictures and no frame.
+- **Browser**: selecting Screens keeps at most one live iframe; selecting five in turn leaves one live and three parked; a reselected parked Screen shows its page with no reload; the editor tab makes its Screen live and parked frames survive it and a project tab switch; Escape demotes and captures; a duplicate shows the original's picture at once; switching back to a board shows every visible picture in its first frame; zooming in shows the page copy in a closed shadow root; a copy that declares a font the canvas uses leaves the canvas fonts alone and uses its own; the flag off shows pictures and no frame.
 - **Performance**: `screenBoardPerformance.spec.ts` in `pnpm test:perf`.
 
 ## Out of scope
