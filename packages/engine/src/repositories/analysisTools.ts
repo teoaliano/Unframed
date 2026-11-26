@@ -137,7 +137,7 @@ export class AnalysisTools {
   }
 
   private routeStates(analysis: RepoAnalysis, route: string): RouteStates | undefined {
-    const pattern = routeFor(analysis.states, withoutRestore(route)) ?? routeFor(analysis.states, route);
+    const pattern = routeFor(analysis.states, route);
     return analysis.states.routes.find((entry) => entry.route === (pattern ?? withoutRestore(route)));
   }
 
