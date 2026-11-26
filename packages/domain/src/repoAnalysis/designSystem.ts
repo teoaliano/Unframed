@@ -98,25 +98,34 @@ const pascal = (name: string): string =>
     .map((part) => part[0]!.toUpperCase() + part.slice(1))
     .join("");
 
-const usageOf = (files: SourceFiles, name: string, home: string): { readonly uses: number; readonly usedIn: string[] } => {
-  const pattern = new RegExp(`<${name.replace(/\$/g, "\\$")}(?=[\\s/>])`, "g");
-  const counts: Array<readonly [string, number]> = [];
+type Usages = ReadonlyMap<string, ReadonlyMap<string, number>>;
+
+const usagesOf = (files: SourceFiles): Usages => {
+  const usages = new Map<string, Map<string, number>>();
   for (const [path, source] of files) {
-    if (path === home || !/\.(?:tsx|jsx|vue|svelte|astro|mdx)$/.test(path)) continue;
-    const count = [...source.matchAll(pattern)].length;
-    if (count > 0) counts.push([path, count]);
+    if (!/\.(?:tsx|jsx|vue|svelte|astro|mdx)$/.test(path)) continue;
+    for (const match of source.matchAll(/<([A-Za-z_$][\w$]*)(?=[\s/>])/g)) {
+      const counts = usages.get(match[1]!) ?? new Map<string, number>();
+      counts.set(path, (counts.get(path) ?? 0) + 1);
+      usages.set(match[1]!, counts);
+    }
   }
-  counts.sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+  return usages;
+};
+
+const usageOf = (usages: Usages, name: string, home: string): { readonly uses: number; readonly usedIn: string[] } => {
+  const counts = [...(usages.get(name) ?? new Map<string, number>())].filter(([path]) => path !== home).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
   return { uses: counts.reduce((sum, [, count]) => sum + count, 0), usedIn: counts.slice(0, 5).map(([path]) => path) };
 };
 
 const componentsOf = (files: SourceFiles): DesignComponent[] => {
+  const usages = usagesOf(files);
   const components: DesignComponent[] = [];
   for (const path of sortedPaths(files)) {
     const source = files.get(path)!;
     if (SFC_FILE.test(path)) {
       const name = pascal(/([^/]+)\.(?:vue|svelte)$/.exec(path)![1]!);
-      components.push({ name, file: path, line: 1, props: sfcProps(path, source), variants: {}, ...usageOf(files, name, path) });
+      components.push({ name, file: path, line: 1, props: sfcProps(path, source), variants: {}, ...usageOf(usages, name, path) });
       continue;
     }
     if (!COMPONENT_FILE.test(path)) continue;
@@ -129,7 +138,7 @@ const componentsOf = (files: SourceFiles): DesignComponent[] => {
         line: lineAt(source, definition.at),
         props: propsOf(source, definition.name, definition.at),
         variants: related?.variants ?? {},
-        ...usageOf(files, definition.name, path),
+        ...usageOf(usages, definition.name, path),
       });
     }
   }
