@@ -31,6 +31,11 @@ import type { StateTokens } from "./stateTokens.ts";
 const LOG_BODY_LIMIT = 256_000;
 const SCRIPT_HEADERS = { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" };
 
+const sendScript = (res: http.ServerResponse, body?: string) => {
+  res.writeHead(200, SCRIPT_HEADERS);
+  res.end(body);
+};
+
 const readBody = (req: http.IncomingMessage, limit: number): Promise<string | undefined> =>
   new Promise((resolve) => {
     const chunks: Buffer[] = [];
@@ -138,24 +143,14 @@ export const startInstanceProxy = async (input: {
       const key = query.get("state");
       const restore = query.get("restore");
       const state = key === null ? undefined : input.states.takeBridge(key);
-      void Promise.all([restore === null || input.frozen === undefined ? undefined : input.frozen(restore).catch(() => undefined), input.mocks?.runtime().catch(() => "") ?? ""]).then(([frozen, mocks]) => {
-        res.writeHead(200, SCRIPT_HEADERS);
-        res.end([state === undefined ? "" : `window.__unframedScreenState = ${JSON.stringify(state)};\n`, frozen === undefined ? "" : restorePrefix(frozen), mocks, bridge].join(""));
-      });
+      void Promise.all([restore === null || input.frozen === undefined ? undefined : input.frozen(restore).catch(() => undefined), input.mocks?.runtime().catch(() => "") ?? ""]).then(([frozen, mocks]) =>
+        sendScript(res, [state === undefined ? "" : `window.__unframedScreenState = ${JSON.stringify(state)};\n`, frozen === undefined ? "" : restorePrefix(frozen), mocks, bridge].join("")),
+      );
       return;
     }
     const mocks = input.mocks;
     if (mocks !== undefined && pathname === MOCKS_SOURCE_PATH) {
-      void mocks.source().then(
-        (source) => {
-          res.writeHead(200, SCRIPT_HEADERS);
-          res.end(source);
-        },
-        () => {
-          res.writeHead(200, SCRIPT_HEADERS);
-          res.end("");
-        },
-      );
+      void mocks.source().catch(() => "").then((source) => sendScript(res, source));
       return;
     }
     if (mocks !== undefined && pathname === MOCKS_LOG_PATH && req.method === "POST") {
@@ -170,10 +165,7 @@ export const startInstanceProxy = async (input: {
     if (mocks !== undefined && !real.real && (req.method === "GET" || req.method === "HEAD")) {
       void mocks.module(pathname).then((replacement) => {
         if (replacement === undefined) forward(req, res, asked);
-        else {
-          res.writeHead(200, SCRIPT_HEADERS);
-          res.end(req.method === "HEAD" ? undefined : replacement);
-        }
+        else sendScript(res, req.method === "HEAD" ? undefined : replacement);
       }, () => forward(req, res, asked));
       return;
     }
