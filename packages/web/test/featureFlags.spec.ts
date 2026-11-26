@@ -160,7 +160,7 @@ test("with element editing off, a React Screen's editor has no Edit mode, nothin
       await clickShape(page, first.id);
       await page.getByRole("button", { name: "Editor", exact: true }).click();
       const editor = page.getByTestId("artifact-editor");
-      const app = editor.getByTestId("screen-preview").frameLocator("iframe[data-screen-frame]");
+      const app = page.frameLocator('[data-screen-of][style*="visibility: visible"] iframe[data-screen-frame]');
       await expect(app.getByRole("heading", { name: "Agent" })).toBeVisible({ timeout: 30_000 });
       await expect(editor.getByRole("group", { name: "Mode" })).toHaveCount(0);
       await app.getByRole("heading", { name: "Agent" }).dispatchEvent("click");

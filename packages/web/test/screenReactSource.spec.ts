@@ -5,7 +5,7 @@ import { REACT_APP, REACT_CARD, positionOf, prepareReactApp } from "../../engine
 import { putShapes, screenShapes, withRepository } from "./screenHarness.ts";
 
 const editor = (page: Page) => page.getByTestId("artifact-editor");
-const frame = (page: Page) => editor(page).getByTestId("screen-preview").frameLocator("iframe[data-screen-frame]");
+const frame = (page: Page) => page.frameLocator('[data-screen-of][style*="visibility: visible"] iframe[data-screen-frame]');
 
 test("on React 19 the bridge maps a rendered element to the JSX that made it through the stack and the module's source map", async ({ page }) => {
   await withRepository(

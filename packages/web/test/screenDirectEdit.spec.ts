@@ -12,7 +12,7 @@ const editor = (page: Page) => page.getByTestId("artifact-editor");
 const centreColumn = (page: Page) => editor(page).locator('[data-editor-column="centre"]');
 const panels = (page: Page) => editor(page).locator('[data-editor-column="parameters"]');
 const rail = (page: Page) => editor(page).locator('[data-editor-column="rail"]');
-const app = (page: Page) => editor(page).getByTestId("screen-preview").frameLocator("iframe[data-screen-frame]");
+const app = (page: Page) => page.frameLocator('[data-screen-of][style*="visibility: visible"] iframe[data-screen-frame]');
 const label = (page: Page) => page.locator('[data-edit-outline="selected"] [data-edit-label]');
 const drafts = (page: Page) => editor(page).getByTestId("screen-drafts");
 const rows = (page: Page) => page.getByRole("list", { name: "Changes" }).locator("[data-draft-row]");
