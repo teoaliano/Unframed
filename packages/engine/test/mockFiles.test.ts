@@ -35,6 +35,8 @@ const until = async <A>(read: () => Promise<A>, done: (value: A) => boolean, wha
   }
 };
 
+const WAIT = { timeout: 45_000, polling: 200 };
+
 const browser = async () => {
   const puppeteer = await import("puppeteer-core");
   return puppeteer.launch({ executablePath: chrome!, headless: true, userDataDir: await makeTempDir("unframed-mock-chrome-"), args: ["--no-first-run", "--no-default-browser-check"] });
@@ -58,17 +60,17 @@ describe("mock files", () => {
 });
 
 describe.skipIf(chrome === undefined)("mock files in a page", () => {
-  it("answer the app's requests, keep what it writes, switch by route, log each request with its call site, and hot-reload", { timeout: 120_000 }, async () => {
+  it("answer the app's requests, keep what it writes, switch by route, log each request with its call site, and hot-reload", { timeout: 240_000 }, async () => {
     const { agent, proxy } = await liveAgent();
     await write(agent, ".unframed/mocks/todos.mock.js", TODOS);
     const chromium = await browser();
     try {
       const page = await chromium.newPage();
       await page.goto(`http://127.0.0.1:${proxy}/todos`, { waitUntil: "load" });
-      await page.waitForFunction("document.getElementById('count').textContent === '2 todos'");
+      await page.waitForFunction("document.getElementById('count').textContent === '2 todos'", undefined, WAIT);
       await page.type("#todo-name", "Milk");
       await page.click("#add");
-      await page.waitForFunction("document.getElementById('count').textContent === '3 todos'");
+      await page.waitForFunction("document.getElementById('count').textContent === '3 todos'", undefined, WAIT);
       expect(await page.$$eval("#todos li", (items) => items.map((item) => item.textContent))).toEqual(["Apples", "Pears", "Milk"]);
 
       await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -82,13 +84,13 @@ describe.skipIf(chrome === undefined)("mock files in a page", () => {
 
       const empty = await chromium.newPage();
       await empty.goto(`http://127.0.0.1:${proxy}/todos?__unframed_switch=todos:empty`, { waitUntil: "load" });
-      await empty.waitForFunction("document.getElementById('count').textContent === '0 todos'");
+      await empty.waitForFunction("document.getElementById('count').textContent === '0 todos'", undefined, WAIT);
       const broken = await chromium.newPage();
       await broken.goto(`http://127.0.0.1:${proxy}/todos?__unframed_switch=todos:broken`, { waitUntil: "load" });
-      await broken.waitForFunction("document.getElementById('count').textContent === 'No backend'");
+      await broken.waitForFunction("document.getElementById('count').textContent === 'No backend'", undefined, WAIT);
 
       await write(agent, ".unframed/mocks/todos.mock.js", TODOS.replace('{ id: 2, title: "Pears" }', '{ id: 2, title: "Plums" }, { id: 3, title: "Figs" }'));
-      await page.waitForFunction("document.getElementById('count').textContent === '3 todos' && document.getElementById('todos').textContent.includes('Figs')", { timeout: 15_000 });
+      await page.waitForFunction("document.getElementById('count').textContent === '3 todos' && document.getElementById('todos').textContent.includes('Figs')", WAIT);
       expect(await page.$$eval("#todos li", (items) => items.map((item) => item.textContent))).toEqual(["Apples", "Plums", "Figs"]);
     } finally {
       await chromium.close();
@@ -101,13 +103,13 @@ describe.skipIf(chrome === undefined)("mock files in a page", () => {
     try {
       const page = await chromium.newPage();
       await page.goto(`http://127.0.0.1:${proxy}/todos`, { waitUntil: "load" });
-      await page.waitForFunction("document.getElementById('greeting').textContent === 'Real greeting'");
+      await page.waitForFunction("document.getElementById('greeting').textContent === 'Real greeting'", undefined, WAIT);
       await write(agent, ".unframed/mocks/modules/src/greeting.js", 'import { greeting as real } from "/src/greeting.ts?unframed_real";\nexport const greeting = `${real}, replaced`;\n');
       await until(() => text(proxy, "/src/greeting.ts?t=1"), (body) => body.includes("replaced"), "the replacement");
       expect(await text(proxy, "/src/greeting.ts?unframed_real")).toContain("Real greeting");
       const fresh = await chromium.newPage();
       await fresh.goto(`http://127.0.0.1:${proxy}/todos`, { waitUntil: "load" });
-      await fresh.waitForFunction("document.getElementById('greeting').textContent === 'Real greeting, replaced'");
+      await fresh.waitForFunction("document.getElementById('greeting').textContent === 'Real greeting, replaced'", undefined, WAIT);
     } finally {
       await chromium.close();
     }

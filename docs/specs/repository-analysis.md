@@ -71,6 +71,7 @@ A Repository today shows one Screen at `/` once Setup makes the app run. Everyth
 - The payload is stored as `<project folder>/states/<id>.json`, where the id is `s_` plus the first 32 hex characters of its SHA-256. The Screen's route becomes the frozen location with `__unframed_restore=<id>`, and its Steps become the ones the agent asks to keep (none by default; a click that opens a dialog, for example).
 - On a document request carrying `__unframed_restore`, the proxy drops the parameter on the way upstream and adds `restore=<id>` to the bridge tag. The bridge script then starts with the payload. Before the app runs, the runtime writes storage and Collections. After the page paints and its Steps finish, it fills the fields again.
 - The parameter stays in the page's own URL, so the Screen's route matches the page and reloads keep the state. Navigating away is ordinary navigation: the Screen follows and drops the state.
+- Storage belongs to the Instance's origin, which all its Screens share, so a restored key is also seen by the Instance's other Screens. Restoring writes only the keys the freeze holds and clears nothing.
 - The freeze is proven: the tool loads the new route and answers with its picture.
 
 ### Routes and states on the canvas
@@ -109,7 +110,7 @@ All are `repository` scoped and registered only with the flag on. The ones marke
 ## Testing
 
 - **Domain** (`packages/domain/test/repoAnalysis/`, `mockRuntime.test.ts`): route discovery per router family on in-memory trees, components, variants, usage counts and tokens, the import closure and state cases, `routeFor`, the merges, mock pattern matching, call-site parsing, the restore parameter and the route board layout.
-- **Engine**: `repositoryAnalysis.test.ts` (analysis files written and excluded on a fixture repo, merges kept, tools answer), `mockFiles.test.ts` (mock files served with the bridge, a mocked list rendered in headless Chrome, a Collection insert visible to the next read, hot reload, the request log with call sites, a module replaced through the proxy), `frozenStates.test.ts` (freeze and restore of typed text and Collection rows), `instancePatch.test.ts` (the patch applies on the base and leaves excluded files out), `featureFlags.test.ts` (tools absent with the flag off).
+- **Engine**: `repositoryAnalysis.test.ts` (analysis files written and excluded on a fixture repo, merges kept, tools answer, Screens placed for routes by the tool and by "Looks right", states proven, saved and placed again by Show states, outside agents' tools, and the patch applying on the base with excluded files left out), `mockFiles.test.ts` (mock files served with the bridge, a mocked list in headless Chrome, a Collection insert visible to the next read, Switches, hot reload, the request log with call sites, a module replaced through the proxy, `mock_write`), `frozenStates.test.ts` (freeze and restore of typed text and Collection rows), `featureFlags.test.ts` (RPCs refused and tools absent with the flag off).
 - **Browser** (`repositoryAnalysis.spec.ts`): Screens placed for routes after "Looks right", Show states placing prepared states and asking the agent when there are none, a mocked request rendering in a Screen, Export patch; `featureFlags.spec.ts` for Show states hidden with the flag off.
 
 ## Out of scope

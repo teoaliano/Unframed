@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PROJECT, startAgentEngine, UNFRAMED_TOOLS } from "./agent.ts";
+import { PROJECT, startAgentEngine, UNFRAMED_TOOLS, OUTSIDE_TOOLS } from "./agent.ts";
 import { chatsIn, outsideLink as outside } from "./outsideCalls.ts";
 
 describe("outside chats and turns", () => {
@@ -8,7 +8,7 @@ describe("outside chats and turns", () => {
     const link = await outside(agent);
     const session = await link.open();
     const tools = await link.list(session);
-    expect(tools.map((tool) => tool.name)).toEqual(["projects_list", ...UNFRAMED_TOOLS, "canvas_select", "canvas_snapshot", "chat_note", "file_add"]);
+    expect(tools.map((tool) => tool.name)).toEqual(OUTSIDE_TOOLS);
     for (const tool of tools.slice(1)) expect(tool.inputSchema.required).toContain("project");
   });
 

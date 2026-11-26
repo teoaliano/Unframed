@@ -193,6 +193,13 @@ export function mockRuntime(
   const realFetch = typeof win.fetch === "function" ? win.fetch.bind(win) : undefined;
   const RealSocket = win.WebSocket;
   const clone = (value: unknown) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
+  const storageOf = (name: string): any => {
+    try {
+      return win[name];
+    } catch {
+      return undefined;
+    }
+  };
   const writeStorage = (storage: any, values: any) => {
     if (!storage || !values) return;
     for (const key of Object.keys(values)) {
@@ -204,12 +211,8 @@ export function mockRuntime(
     }
   };
   if (restore) {
-    try {
-      writeStorage(win.localStorage, restore.local);
-      writeStorage(win.sessionStorage, restore.session);
-    } catch {
-      undefined;
-    }
+    writeStorage(storageOf("localStorage"), restore.local);
+    writeStorage(storageOf("sessionStorage"), restore.session);
   }
   const picked = switchesFrom(win.location.search || "", config.switchParam);
   let handlers: any[] = [];
@@ -578,15 +581,13 @@ export function mockRuntime(
     collections.forEach((held, name) => {
       rows[name] = clone(held.rows);
     });
-    let local: Record<string, string> = {};
-    let session: Record<string, string> = {};
-    try {
-      local = snapshotStorage(win.localStorage);
-      session = snapshotStorage(win.sessionStorage);
-    } catch {
-      undefined;
-    }
-    return { url: win.location.pathname + withoutParam(win.location.search || "") + (win.location.hash || ""), local, session, collections: rows, fields: fieldsNow() };
+    return {
+      url: win.location.pathname + withoutParam(win.location.search || "") + (win.location.hash || ""),
+      local: snapshotStorage(storageOf("localStorage")),
+      session: snapshotStorage(storageOf("sessionStorage")),
+      collections: rows,
+      fields: fieldsNow(),
+    };
   };
   if (restore && Array.isArray(restore.fields) && restore.fields.length > 0) {
     const fill = (element: any, value: string) => {
@@ -648,16 +649,17 @@ export function mockRuntime(
   };
   const current = win.document.currentScript;
   if (current && current.nonce) win.__unframedMockNonce = current.nonce;
-  if (typeof RealSocket === "function") {
+  const listen = () => {
     try {
       const events = new RealSocket(`${win.location.protocol === "https:" ? "wss:" : "ws:"}//${win.location.host}${config.eventsPath}`);
       events.onmessage = (event: any) => {
         if (event.data === "changed") reload();
       };
     } catch {
-      undefined;
+      return;
     }
-  }
+  };
+  if (typeof RealSocket === "function") listen();
   win.__unframedMockFiles = {
     load,
     log: () => log.slice(),

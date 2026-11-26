@@ -90,7 +90,7 @@ describe("repository analysis", () => {
   it("places a Screen per route when the person confirms Setup", { timeout: 90_000 }, async () => {
     const agent = await startRepositoryAgent({}, {}, ROUTER_APP);
     const repository = (await agent.rpc.call("repositories.read", { project: agent.project })).repository;
-    expect(repository.setupChat).toEqual(expect.any(String));
+    expect(repository?.setupChat).toEqual(expect.any(String));
     await agent.rpc.call("repositories.setupVerdict", { project: agent.project, accepted: true });
     const routes = screensOf(await agent.records()).map((screen) => screen.props.route).sort();
     expect(routes).toEqual(["/", "/app", "/posts"]);

@@ -43,6 +43,15 @@ const readBody = (req: http.IncomingMessage, limit: number): Promise<string | un
     req.on("error", () => resolve(undefined));
   });
 
+const parsedJson = (text: string | undefined): unknown => {
+  if (text === undefined) return undefined;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+};
+
 const withoutRealParam = (path: string): { readonly path: string; readonly real: boolean } => {
   const at = path.indexOf("?");
   if (at === -1) return { path, real: false };
@@ -149,11 +158,7 @@ export const startInstanceProxy = async (input: {
     }
     if (mocks !== undefined && pathname === MOCKS_LOG_PATH && req.method === "POST") {
       void readBody(req, LOG_BODY_LIMIT).then((text) => {
-        try {
-          if (text !== undefined) mocks.note(mockLogEntries(JSON.parse(text)));
-        } catch {
-          undefined;
-        }
+        mocks.note(mockLogEntries(parsedJson(text)));
         res.writeHead(204);
         res.end();
       });
