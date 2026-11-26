@@ -42,6 +42,7 @@ interface EditEvent {
   readonly shiftKey: boolean;
   readonly metaKey: boolean;
   readonly ctrlKey: boolean;
+  readonly detail?: number;
   preventDefault(): void;
 }
 
@@ -56,6 +57,12 @@ interface EditDocument {
   elementFromPoint(x: number, y: number): EditElement | null;
   createElement(tag: string): EditElement;
   createRange?(): { selectNodeContents(node: EditElement): void; collapse?(toEnd: boolean): void };
+}
+
+interface SourceApi {
+  describe(el: EditElement): unknown;
+  levels(el: EditElement): Array<{ el: EditElement; component: string | null }>;
+  owner(el: EditElement): string | null;
 }
 
 interface EditWindow {
@@ -78,6 +85,7 @@ interface EditWindow {
   __timelines?: unknown;
   __player?: { getTime?: () => number; seek?: (time: number) => void };
   unframedDialsApplied?: () => void;
+  __unframedSource?: SourceApi;
 }
 
 export function installEditBridge(win: EditWindow, properties: readonly string[], nonElements: readonly string[], stamp: boolean): void {
@@ -247,8 +255,7 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     const text = textOnly(el) ? (el.textContent ?? "").replace(/\s+/g, " ").trim() : "";
     return el.getAttribute("id") ?? classesOf(el)[0] ?? (text === "" ? el.tagName.toLowerCase() : text.slice(0, 40));
   };
-  const sourceOf = (): { describe(el: EditElement): unknown; levels(el: EditElement): Array<{ el: EditElement; component: string | null }>; owner(el: EditElement): string | null } | undefined =>
-    stamp ? (win as unknown as { __unframedSource?: never }).__unframedSource : undefined;
+  const sourceOf = (): SourceApi | undefined => (stamp ? win.__unframedSource : undefined);
   const screenFields = (el: EditElement, deep = false): { path?: string; name?: string; className?: string | null; owner?: string | null; source?: unknown } => {
     if (!stamp) return {};
     const source = sourceOf();
@@ -518,7 +525,7 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
       type: "unframed:edit:pick",
       element: el === null ? null : reportOf(el, true),
       additive: event.shiftKey === true,
-      ...(levels === undefined ? {} : { levels, deepest: event.metaKey === true || event.ctrlKey === true, clicks: typeof (event as { detail?: unknown }).detail === "number" ? (event as unknown as { detail: number }).detail : 1 }),
+      ...(levels === undefined ? {} : { levels, deepest: event.metaKey === true || event.ctrlKey === true, clicks: event.detail ?? 1 }),
     });
   };
 
