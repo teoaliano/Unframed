@@ -338,6 +338,10 @@ export function mockRuntime(
     }
     return undefined;
   };
+  const handled = (method: string, href: string) => {
+    const upper = String(method || "GET").toUpperCase();
+    return handlers.some((entry) => (entry.method === "*" || entry.method === upper) && match(entry.pattern, href, origin) !== undefined);
+  };
   const answer = async (method: string, href: string, body: any, headers: any) => {
     const upper = String(method || "GET").toUpperCase();
     for (const entry of handlers) {
@@ -433,10 +437,14 @@ export function mockRuntime(
       const xhr = this;
       const args = arguments;
       if (!request || request.url.indexOf(`${origin}/__unframed/`) === 0) return send.apply(this, args as any);
+      const real = () => {
+        xhr.addEventListener("loadend", () => note({ at: Date.now(), method: request.method, url: shortUrl(request.url), status: xhr.status || null, mock: null, site: request.site }));
+        return send.apply(xhr, args as any);
+      };
+      if (!handled(request.method, request.url)) return real();
       void answer(request.method, request.url, body, request.headers).then((found) => {
         if (found === undefined) {
-          xhr.addEventListener("loadend", () => note({ at: Date.now(), method: request.method, url: shortUrl(request.url), status: xhr.status || null, mock: null, site: request.site }));
-          send.apply(xhr, args as any);
+          real();
           return;
         }
         note({ at: Date.now(), method: request.method, url: shortUrl(request.url), status: found.fail ? null : found.status, mock: found.label, site: request.site });
@@ -534,6 +542,7 @@ export function mockRuntime(
     Fake.OPEN = 1;
     Fake.CLOSING = 2;
     Fake.CLOSED = 3;
+    Fake.prototype = RealSocket.prototype;
     win.WebSocket = Fake;
   }
   const cssPath = (element: any): string => {

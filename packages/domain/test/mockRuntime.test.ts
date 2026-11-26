@@ -136,3 +136,67 @@ describe("mock file names and the request log", () => {
     expect((win.__unframedMockFiles as { picked: () => unknown }).picked()).toEqual({ items: "empty" });
   });
 });
+
+describe("the runtime in a page its mock files do not answer", () => {
+  const pageWith = (files: ReadonlyArray<{ readonly name: string; readonly source: string }>) => {
+    const sent: string[] = [];
+    class Xhr extends EventTarget {
+      readyState = 0;
+      status = 0;
+      responseText = "";
+      sync = false;
+      open(_method: string, url: string, async = true) {
+        this.readyState = 1;
+        this.sync = !async;
+        sent.push(`open ${url}`);
+      }
+      setRequestHeader() {}
+      send() {
+        sent.push(`send ${this.readyState}`);
+        if (this.sync) {
+          this.readyState = 4;
+          this.status = 200;
+          this.responseText = "real";
+        }
+      }
+      abort() {
+        sent.push("abort");
+      }
+    }
+    class Socket {
+      readonly url: string;
+      constructor(url: string) {
+        this.url = url;
+      }
+    }
+    const location = { origin: PAGE, href: `${PAGE}/`, search: "", pathname: "/", hash: "", host: "localhost:4100", protocol: "http:" };
+    const win: Record<string, unknown> = { location, document: { currentScript: null, readyState: "complete" }, setTimeout, URL, EventTarget, XMLHttpRequest: Xhr, WebSocket: Socket, console };
+    new Function("window", "console", mockRuntimeSource(files))(win, win.console);
+    return { win: win as { XMLHttpRequest: typeof Xhr; WebSocket: new (url: string) => unknown }, sent, Socket };
+  };
+
+  it("sends a synchronous XHR at once, with its answer ready when send returns", () => {
+    const { win } = pageWith([{ name: "items.mock.js", source: 'unframed.mock(({ http }) => { http.get("/api/items", () => []); });' }]);
+    const xhr = new win.XMLHttpRequest();
+    xhr.open("GET", "/api/config", false);
+    xhr.send();
+    expect([xhr.readyState, xhr.status, xhr.responseText]).toEqual([4, 200, "real"]);
+  });
+
+  it("never sends an XHR the page aborted right after sending it", async () => {
+    const { win, sent } = pageWith([]);
+    const xhr = new win.XMLHttpRequest();
+    xhr.open("GET", "/api/slow");
+    xhr.send();
+    xhr.abort();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(sent).toEqual(["open /api/slow", "send 1", "abort"]);
+  });
+
+  it("keeps a real socket an instance of the page's WebSocket", () => {
+    const { win, Socket } = pageWith([]);
+    const socket = new win.WebSocket("ws://localhost:4100/live");
+    expect(socket).toBeInstanceOf(Socket);
+    expect(socket).toBeInstanceOf(win.WebSocket);
+  });
+});
