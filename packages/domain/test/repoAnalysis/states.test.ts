@@ -121,13 +121,21 @@ describe("the states index", () => {
     expect(routeFor(index, "/elsewhere")).toBeUndefined();
   });
 
-  it("keeps the states an agent prepared when the index is built again", () => {
+  it("keeps the states an agent prepared when the index is built again, also for routes the code no longer shows", () => {
     const prepared = [{ state: "no projects", route: "/", steps: [], mocks: [{ url: "/api/projects", body: "[]" }] }];
-    const before = { version: 1 as const, routes: [{ route: "/", files: 1, cases: [], prepared }, { route: "/gone", files: 0, cases: [], prepared }] };
+    const before = {
+      version: 1 as const,
+      routes: [
+        { route: "/", files: 1, cases: [], prepared },
+        { route: "/items", files: 0, cases: [], prepared },
+        { route: "/unprepared", files: 2, cases: [], prepared: [] },
+      ],
+    };
     const after = mergeStatesIndex(before, statesIndexOf(files, [route("/", "app/page.tsx"), route("/settings", "app/settings/page.tsx")]));
     expect(after.routes.map((entry) => [entry.route, entry.prepared])).toEqual([
       ["/", prepared],
       ["/settings", []],
+      ["/items", prepared],
     ]);
   });
 

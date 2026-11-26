@@ -180,5 +180,7 @@ export const routeFor = (index: { readonly routes: ReadonlyArray<{ readonly rout
 export const mergeStatesIndex = (previous: StatesIndex | undefined, next: StatesIndex): StatesIndex => {
   if (previous === undefined) return next;
   const prepared = new Map(previous.routes.map((route) => [route.route, route.prepared] as const));
-  return { ...next, routes: next.routes.map((route) => ({ ...route, prepared: prepared.get(route.route) ?? route.prepared })) };
+  const known = new Set(next.routes.map((route) => route.route));
+  const kept = previous.routes.filter((route) => !known.has(route.route) && route.prepared.length > 0).map((route) => ({ route: route.route, files: 0, cases: [], prepared: route.prepared }));
+  return { ...next, routes: [...next.routes.map((route) => ({ ...route, prepared: prepared.get(route.route) ?? route.prepared })), ...kept] };
 };
