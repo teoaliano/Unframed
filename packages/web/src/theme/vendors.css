@@ -126,6 +126,54 @@
   box-shadow: 0 1px 2px var(--dial-control-shadow);
 }
 
+:root
+  .dialkit-root[data-theme]
+  :is(
+    .dialkit-slider,
+    .dialkit-segmented,
+    .dialkit-segmented-pill,
+    .dialkit-toggle,
+    .dialkit-button,
+    .dialkit-labeled-control,
+    .dialkit-action-button,
+    .dialkit-toolbar-add,
+    .dialkit-toolbar-copy,
+    .dialkit-text-control,
+    .dialkit-select-trigger,
+    .dialkit-image-control,
+    .dialkit-pad-caption,
+    .dialkit-pad-field,
+    .dialkit-color-control,
+    .dialkit-color-swatch,
+    .dialkit-color-track-row,
+    .dialkit-color-css-input,
+    .dialkit-preset-trigger,
+    .dialkit-shortcuts-trigger
+  ) {
+  border-radius: calc(infinity * 1px);
+}
+
+:root .dialkit-root[data-theme] .dialkit-color-control {
+  padding-right: calc(var(--spacing) * 1.5);
+}
+
+:root .dialkit-root[data-theme] .dialkit-select-trigger {
+  gap: calc(var(--spacing) * 3);
+}
+
+:root .dialkit-root[data-theme] .dialkit-select-right {
+  min-width: 0;
+}
+
+:root .dialkit-root[data-theme] :is(.dialkit-select-label, .dialkit-color-label, .dialkit-labeled-control-label, .dialkit-text-label) {
+  display: block;
+  min-width: 0;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 :root .dialkit-root[data-theme] .dialkit-toggle {
   height: var(--dial-row-height);
   padding: 0 calc(var(--spacing) * 3);

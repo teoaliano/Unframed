@@ -8,7 +8,7 @@ export const ParametersButton = ({ shapeId }: { readonly shapeId: TLShapeId }) =
   const editor = useEditor();
   const open = useValue("parameters open", () => artifactsOf(editor).tuning.get() === shapeId, [editor, shapeId]);
   return (
-    <Button variant={open ? "default" : "outline"} size="sm" aria-pressed={open} onClick={() => toggleTuning(editor, shapeId)}>
+    <Button variant="outline" size="sm" aria-pressed={open} data-pressed={open ? "" : undefined} onClick={() => toggleTuning(editor, shapeId)}>
       <SlidersHorizontal aria-hidden />
       Parameters
     </Button>

@@ -450,7 +450,7 @@ export const AgentRail = ({
         </Suspense>
       )}
       </div>
-      <div ref={trayPart} className={floatingComposer ? FLOATING_TRAY_CLASS : TRAY_CLASS} data-testid={floatingComposer ? "agent-floating-composer" : undefined}>
+      <div ref={trayPart} className={floatingComposer ? FLOATING_TRAY_CLASS : embedded ? "flex min-h-0 flex-col" : TRAY_CLASS} data-testid={floatingComposer ? "agent-floating-composer" : undefined}>
         {activeChat?.outside === undefined ? (
           <AgentTray
             client={client}
@@ -459,6 +459,7 @@ export const AgentRail = ({
             newChatTags={selectedArtifacts}
             dropTarget={floatingComposer ? trayPart : root}
             notices={notices}
+            flush={embedded === true}
             {...(floatingComposer ? { leadingControl: conversationToggle, inline: true } : {})}
           />
         ) : (

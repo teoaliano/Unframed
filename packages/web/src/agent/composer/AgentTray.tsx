@@ -93,7 +93,9 @@ import { composerGlassClass } from "../../chrome/composerSurface.ts";
 const PROMPT_LABEL = "Message the agent";
 
 const COMPOSER_SHELL =
-  `${composerGlassClass} relative isolate flex flex-col gap-1.5 rounded-3xl px-3 pt-2.5 pb-2 shadow-(--shadow-app-floating) dark:shadow-none after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-(--composer-border) data-dragging:after:border-(--composer-border-dragging)`;
+  `${composerGlassClass} relative isolate flex flex-col gap-1.5 px-3 pt-2.5 pb-2 shadow-(--shadow-app-floating) dark:shadow-none after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:border-(--composer-border) data-dragging:after:border-(--composer-border-dragging)`;
+
+const COMPOSER_EDGE = { floating: "rounded-3xl after:border", flush: "rounded-none after:border-t" } as const;
 
 const PLACEHOLDERS = {
   approval: "Resolve this approval request to continue",
@@ -121,6 +123,7 @@ export interface AgentTrayProps {
   readonly leadingControl?: ReactNode;
   /** The floating composer: one row of icon controls around a one-line prompt, growing upward with more lines. */
   readonly inline?: boolean;
+  readonly flush?: boolean;
 }
 
 const useModifiersHeld = (): { readonly command: boolean; readonly shift: boolean } => {
@@ -154,7 +157,7 @@ const markAt = (at: CaretMark | undefined) => (at === undefined ? {} : { at });
 
 const withElements = (elements: ReadonlyArray<ElementChip>) => (elements.length > 0 ? { elements } : {});
 
-export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, onSent, underChips, note, onMenuOpen, dropTarget, notices = [], leadingControl, inline = false }: AgentTrayProps) => {
+export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, onSent, underChips, note, onMenuOpen, dropTarget, notices = [], leadingControl, inline = false, flush = false }: AgentTrayProps) => {
   const ui = useRailUi(client);
   const { statuses } = useProviders(client);
   const chat = useWatchedThread(client, chatId);
@@ -1059,7 +1062,7 @@ export const AgentTray = ({ client, variant, chatId, newChatTags, beforeSend, on
         </div>
       )}
       <div
-        className={`${COMPOSER_SHELL} ${resting.resting ? "grid! grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1.5 gap-y-1 pt-1.5! pb-1!" : inline ? `flex-row! flex-wrap items-center gap-x-1.5 px-2! py-1.5! ${twoRows ? "gap-y-1.5 pt-2.5!" : "gap-y-1"}` : ""}`}
+        className={`${COMPOSER_SHELL} ${COMPOSER_EDGE[flush ? "flush" : "floating"]} ${resting.resting ? "grid! grid-cols-[minmax(0,1fr)_auto] items-center gap-x-1.5 gap-y-1 pt-1.5! pb-1!" : inline ? `flex-row! flex-wrap items-center gap-x-1.5 px-2! py-1.5! ${twoRows ? "gap-y-1.5 pt-2.5!" : "gap-y-1"}` : ""}`}
         ref={boxElement}
         data-testid="agent-composer"
         data-dragging={dragging ? "" : undefined}

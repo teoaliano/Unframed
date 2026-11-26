@@ -29,7 +29,7 @@ test("a usable selection gets Generate and its count; a named group reads by its
   await expect(toolbar(page).getByTestId("selection-hint")).toHaveText("@character");
 });
 
-test("the bar is glass with the kit border and radius; Generate is the kit's primary Button and the hint is muted", async ({ page, generation }) => {
+test("the bar is a glass pill with the kit border; Generate is the kit's primary Button and the hint is muted", async ({ page, generation }) => {
   await openCanvas(page, generation.engine);
   await clickShape(page, "shape:sample-subject");
   const bar = toolbar(page);
@@ -38,7 +38,7 @@ test("the bar is glass with the kit border and radius; Generate is the kit's pri
   await inBothSchemes(page, async () => {
     await page.mouse.move(5, 500);
     expect(await styleOf(bar, "background-color")).toBe(await tokenColor(page, "--selection-toolbar-surface"));
-    expect(await styleOf(bar, "border-top-left-radius")).toBe("14px");
+    expect(parseFloat(await styleOf(bar, "border-top-left-radius"))).toBeGreaterThanOrEqual((await bar.boundingBox())!.height / 2);
     await expectToken(bar, "border-top-color", "--selection-toolbar-border");
     await expectToken(generate, "background-color", "--button-default-surface");
     await expectToken(bar.getByTestId("selection-hint"), "color", "--selection-toolbar-hint");
@@ -59,8 +59,11 @@ test("a selection with nothing to generate from shows Agent only; a filled page 
   // A filled page's frame takes the pointer, so its bar leads with the drag handle, an icon button.
   await clickShape(page, "shape:page");
   const buttons = toolbar(page).getByRole("button");
-  await expect(buttons).toHaveText(["", "Editor", "Parameters", "100%", "Agent"]);
+  await expect(buttons).toHaveText(["", "Editor", "Parameters", "100%", "", "Agent"]);
   await expect(buttons.first()).toHaveAccessibleName("Drag to move");
+  for (const corner of ["top-left", "top-right", "bottom-right", "bottom-left"]) {
+    expect(parseFloat(await styleOf(toolbar(page), `border-${corner}-radius`))).toBeGreaterThanOrEqual((await toolbar(page).boundingBox())!.height / 2);
+  }
 });
 
 test("the bar sits centred above the selection, flips below it at the top edge and stays inside the canvas", async ({ page, generation }) => {

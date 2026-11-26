@@ -18,6 +18,7 @@ import {
   Hand,
   MousePointer2,
   PanelLeft,
+  RotateCw,
   SlidersHorizontal,
 } from "lucide-react";
 import {
@@ -199,6 +200,7 @@ export const ArtifactEditor = ({
     [],
   );
   const [updatesShown, setUpdatesShown] = useState(false);
+  const [reloads, setReloads] = useState(0);
   const [updateNote, setUpdateNote] = useState("");
   const updateFocus = useRef<string | undefined>(undefined);
   useEffect(() => {
@@ -632,7 +634,7 @@ export const ArtifactEditor = ({
       ref={grid}
       data-testid="artifact-editor"
       className={cn(
-        "pointer-events-auto absolute inset-x-0 bottom-0 z-[700] box-border grid gap-3 bg-(--artifact-editor-surface) p-3 font-sans text-(--artifact-editor-foreground)",
+        "pointer-events-auto absolute inset-x-0 bottom-0 z-[700] box-border grid bg-(--artifact-editor-surface) font-sans text-(--artifact-editor-foreground)",
         timeline
           ? "grid-rows-[minmax(0,1fr)_auto]"
           : "grid-rows-[minmax(0,1fr)]",
@@ -643,7 +645,7 @@ export const ArtifactEditor = ({
       {!railFolded && (
         <section
           data-editor-column="rail"
-          className={cn(COLUMN, "col-start-1 row-span-full [&_header:has(>h2)]:border-b")}
+          className={cn(COLUMN, "col-start-1 row-span-full border-r [&_header:has(>h2)]:border-b")}
         >
           <AgentRail
             project={project}
@@ -660,6 +662,7 @@ export const ArtifactEditor = ({
           COLUMN,
           railFolded ? "col-start-1" : "col-start-2",
           "row-start-1",
+          !parametersFolded && "border-r",
         )}
         aria-label={`Editing ${title}`}
       >
@@ -841,6 +844,20 @@ export const ArtifactEditor = ({
             <RenderButton shapeId={shapeId} />
           )}
           {hasFile && port !== undefined && (
+            <Tip label="Reload">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="shrink-0"
+                aria-label="Reload"
+                data-testid="artifact-editor-reload"
+                onClick={() => setReloads((count) => count + 1)}
+              >
+                <RotateCw aria-hidden />
+              </Button>
+            </Tip>
+          )}
+          {hasFile && port !== undefined && (
             <Tip label="Open in a new tab">
               <Button
                 variant="ghost"
@@ -929,6 +946,7 @@ export const ArtifactEditor = ({
                 }
               >
                 <ArtifactFrame
+                  key={reloads}
                   project={project}
                   kind={facts.kind}
                   file={facts.file}
@@ -998,7 +1016,7 @@ export const ArtifactEditor = ({
               ? parametersFolded
                 ? "col-start-1 row-start-2"
                 : "col-start-1 col-span-2 row-start-2"
-              : "col-start-2 row-start-2 max-[1279px]:col-span-2"
+              : "col-start-2 row-start-2 border-r max-[1279px]:col-span-2 max-[1279px]:border-r-0"
           }
         />
       )}

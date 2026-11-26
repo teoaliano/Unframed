@@ -56,7 +56,7 @@ const selectionOnScreen = (editor: Editor): ScreenBox | undefined => {
   return { x: topLeft.x, y: topLeft.y, w: bottomRight.x - topLeft.x, h: bottomRight.y - topLeft.y };
 };
 
-const Floating = ({ target, hidden, expanded, framed, children }: { target: ScreenBox | undefined; hidden: boolean; expanded: boolean; framed: boolean; children: ReactNode }) => {
+const Floating = ({ target, hidden, expanded, framed, pill, children }: { target: ScreenBox | undefined; hidden: boolean; expanded: boolean; framed: boolean; pill: boolean; children: ReactNode }) => {
   const editor = useEditor();
   const root = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -101,7 +101,7 @@ const Floating = ({ target, hidden, expanded, framed, children }: { target: Scre
       ref={root}
       className={cn(
         "pointer-events-auto absolute z-[500] box-border overflow-hidden font-sans text-(--selection-toolbar-foreground) data-[morphing=true]:transition-[left,top,width,height,border-radius,background-color,box-shadow] data-[morphing=true]:duration-200 data-[morphing=true]:ease-out motion-reduce:data-[morphing=true]:transition-none",
-        !expanded ? "rounded-xl border border-(--selection-toolbar-border) bg-(--selection-toolbar-surface) shadow-lg shadow-(color:--selection-toolbar-shadow) surface-glass" : framed ? `${composerGlassClass} rounded-3xl border border-(--composer-border) shadow-(--shadow-app-floating)` : "rounded-3xl",
+        !expanded ? `${pill ? "rounded-full" : "rounded-xl"} border border-(--selection-toolbar-border) bg-(--selection-toolbar-surface) shadow-lg shadow-(color:--selection-toolbar-shadow) surface-glass` : framed ? `${composerGlassClass} rounded-3xl border border-(--composer-border) shadow-(--shadow-app-floating)` : "rounded-3xl",
       )}
       data-testid="selection-toolbar"
       data-side={place?.side}
@@ -309,7 +309,7 @@ const RecipeBar = ({ state, agent, style }: { state: Extract<ToolbarState, { kin
 
 const Bar = ({ state, onGenerate, agent, nodes, style }: { state: Exclude<ToolbarState, { kind: "none" }>; onGenerate: () => void; agent: ReactNode; nodes: number; style: ReactNode }) => {
   const editor = useEditor();
-  const { openArtifact, renderButton: Render, parametersButton: ParametersToggle, kitModeButton: KitModeToggle, scaleButton: Scale } = useSlots();
+  const { openArtifact, renderButton: Render, parametersButton: ParametersToggle, kitModeButton: KitModeToggle, scaleButton: Scale, reloadButton: Reload } = useSlots();
   switch (state.kind) {
     case "recipe":
       return <RecipeBar state={state} agent={agent} style={style} />;
@@ -333,6 +333,7 @@ const Bar = ({ state, onGenerate, agent, nodes, style }: { state: Exclude<Toolba
           {ParametersToggle && editor.getShape(state.shapeId as TLShapeId)?.type !== "component" && <ParametersToggle shapeId={state.shapeId as TLShapeId} />}
           {KitModeToggle && <KitModeToggle shapeId={state.shapeId as TLShapeId} />}
           {Scale && editor.getShape(state.shapeId as TLShapeId)?.type !== "component" && <Scale shapeId={state.shapeId as TLShapeId} />}
+          {Reload && <Reload shapeId={state.shapeId as TLShapeId} />}
           {agent}
         </div>
       );
@@ -413,7 +414,7 @@ export const SelectionToolbar = () => {
   if (!expanded && (state === undefined || state.kind === "none" || (state.kind === "agent" && agent === null && !state.drag && nodes === 0 && style === null))) return null;
 
   return (
-    <Floating target={target ?? lastTarget.current} hidden={hidden} expanded={expanded} framed={composer.mode !== "agent"}>
+    <Floating target={target ?? lastTarget.current} hidden={hidden} expanded={expanded} framed={composer.mode !== "agent"} pill={state?.kind !== "result"}>
       {expanded ? (
         <Composer mode={composer.mode === "agent" ? "agent" : "generate"} project={project} recipe={composer.recipe} onCollapse={collapse} />
       ) : state && state.kind !== "none" ? (

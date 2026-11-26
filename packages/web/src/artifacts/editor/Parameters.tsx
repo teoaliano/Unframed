@@ -13,7 +13,7 @@ import { Tip } from "../../chrome/ui.tsx";
 import { useCanvasProject, useEngine } from "../../context.ts";
 import { DialControls, type DialChrome } from "../DialControls.tsx";
 
-export const COLUMN = "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-(--artifact-editor-column-border) bg-(--artifact-editor-column-surface)";
+export const COLUMN = "flex min-h-0 min-w-0 flex-col overflow-hidden border-(--artifact-editor-column-border) bg-(--artifact-editor-column-surface)";
 
 export const ColumnHeader = ({ children, className }: { readonly children: ReactNode; readonly className?: string }) => (
   <header className={cn("flex h-12 min-w-0 flex-none items-center gap-2 border-b px-2.5", className)}>{children}</header>

@@ -130,7 +130,7 @@ test("a bar that a later bar on its row overlaps in time keeps its own lane, so 
 test("in a strip narrower than 480 px the label column collapses to 24 px of icons, and each name is in a tooltip", async ({ page, agent }) => {
   await page.setViewportSize({ width: 1100, height: 800 });
   await openRows(page, agent);
-  await page.setViewportSize({ width: 480, height: 800 });
+  await page.setViewportSize({ width: 400, height: 800 });
   const strip = await timeline(page).boundingBox();
   if (!strip) throw new Error("no strip");
   expect(strip.width).toBeLessThan(480);
