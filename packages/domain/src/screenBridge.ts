@@ -430,7 +430,7 @@ export function screenBridge(
   else painted();
 }
 
-const crossSiteCookies = (win: Window & typeof globalThis, rewrite: (cookie: string) => string): void => {
+const crossSiteCookies = (win: any, rewrite: (cookie: string) => string): void => {
   const proto = win.Document?.prototype;
   const native = proto === undefined ? undefined : Object.getOwnPropertyDescriptor(proto, "cookie");
   const read = native?.get;
