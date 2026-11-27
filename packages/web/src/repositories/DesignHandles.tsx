@@ -167,6 +167,7 @@ export const DesignHandles = ({ session, id, box, layout, report, tokens, pointe
     if (active === null || event.pointerId !== active.pointer) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     setActive(null);
+    setOver(null);
     onResize(null);
   };
   const drag = (gesture: Gesture, key: string) => ({

@@ -562,3 +562,27 @@ test("the canvas Design panel sits below the top bar and the Screen's toolbar ne
     prepareReactApp,
   );
 });
+
+test("the live chip of a padding drag goes away when the drag ends, and the value comes back as the hover chip", async ({ page }) => {
+  await withRepository(
+    page,
+    {},
+    async (engine, project) => {
+      await openReact(page, engine, project);
+      await enterOn(page, "header h2");
+      await expect(title(page)).toHaveText("Header");
+      const scale = await frameScale(page);
+      const handle = await centreOf(page, '[data-design-padding="left"]');
+      await dragBy(page, handle, { x: 6 * scale, y: 0 }, async () => {
+        await expect(page.getByTestId("design-drag-chip")).toHaveText("20 · pl-5");
+      });
+      await expect(page.getByTestId("design-drag-chip")).toHaveCount(0);
+      await expect(page.getByTestId("design-value-chip")).toHaveCount(0);
+      const moved = await centreOf(page, '[data-design-padding="left"]');
+      await page.mouse.move(moved.x + 60, moved.y + 60);
+      await page.mouse.move(moved.x, moved.y, { steps: 5 });
+      await expect(page.getByTestId("design-value-chip")).toHaveText("20");
+    },
+    prepareReactApp,
+  );
+});
