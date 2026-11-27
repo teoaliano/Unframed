@@ -854,7 +854,7 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     const undo = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z";
     const transport = win.__timelines !== undefined && TRANSPORT_KEYS.includes(event.key);
     if (stamp || KEYS_FORWARDED.includes(event.key) || event.key === "Enter" || undo || transport) {
-      post({ type: "unframed:edit:key", key: event.key, shift: event.shiftKey === true, meta: event.metaKey === true, ctrl: event.ctrlKey === true, alt: event.altKey === true });
+      post({ type: "unframed:edit:key", key: event.key, shift: event.shiftKey === true, meta: event.metaKey === true, ctrl: event.ctrlKey === true, ...(stamp ? { alt: event.altKey === true } : {}) });
     }
   };
   const onKeyUp = (event: EditEvent) => {
