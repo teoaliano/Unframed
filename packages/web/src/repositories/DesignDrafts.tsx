@@ -1,4 +1,4 @@
-import { draftLine, elementKind, pictureKeyOf, pictureUrl, type DraftChange } from "@unframed/domain";
+import { changeLine, elementKind, pictureKeyOf, pictureUrl, type DraftChange } from "@unframed/domain";
 import { ChevronDown, Columns2, Eye, PencilLine, Trash2, X } from "lucide-react";
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Button, InlineButton } from "~/components/ui/button";
@@ -25,11 +25,11 @@ const Row = ({ index, change, row, session, busy }: { readonly index: number; re
         <InlineButton onClick={() => session.setSelection([change.element.stamp])}>{layerOf(change)}</InlineButton>
       </span>
       <span className="w-full min-w-0 truncate font-mono text-xs text-(--artifact-editor-meta)" data-testid="draft-line">
-        {draftLine(change)}
+        {changeLine(change)}
       </span>
     </div>
     {row === undefined ? (
-      <Button variant="ghost" size="icon-xs" aria-label={`Discard: ${draftLine(change)}`} disabled={busy} onClick={() => session.discardDraft(change.id)}>
+      <Button variant="ghost" size="icon-xs" aria-label={`Discard: ${changeLine(change)}`} disabled={busy} onClick={() => session.discardDraft(change.id)}>
         <X aria-hidden />
       </Button>
     ) : (

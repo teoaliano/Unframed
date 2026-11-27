@@ -13,6 +13,16 @@ export interface DesignHooks {
 
 const entries = new Map<string, Atom<DesignEntry | undefined>>();
 const hooks = new Map<string, Atom<DesignHooks | undefined>>();
+const drafts = new Map<string, Atom<number>>();
+
+export const designDraftsOf = (project: string): Atom<number> => {
+  let found = drafts.get(project);
+  if (found === undefined) {
+    found = atom(`design drafts ${project}`, 0);
+    drafts.set(project, found);
+  }
+  return found;
+};
 
 export const designOf = (project: string): Atom<DesignEntry | undefined> => {
   let found = entries.get(project);

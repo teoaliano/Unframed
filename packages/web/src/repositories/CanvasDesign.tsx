@@ -1,11 +1,11 @@
 import type { ScreenShapeProps } from "@unframed/contracts";
-import { classSetting, looksTailwind, screenChip, type ChipElement, type ScreenOverride } from "@unframed/domain";
+import { classSetting, EMPTY_SCALE, looksTailwind, reorderIndex, screenChip, tokenScaleOf, type ChipElement, type ScreenOverride, type TokenScale } from "@unframed/domain";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { react, useEditor, usePassThroughWheelEvents, useValue, type Editor, type TLShapeId } from "tldraw";
+import { atom, react, useEditor, usePassThroughWheelEvents, useValue, type Editor, type TLShapeId } from "tldraw";
 import { useChatClient } from "../agent/store.ts";
 import { DesignTab } from "../artifacts/editor/DesignTab.tsx";
-import { useEditSession, type EditSession } from "../artifacts/editor/editSession.ts";
+import { useEditSession, type EditSession, type SessionStep } from "../artifacts/editor/editSession.ts";
 import { tellAgent } from "../artifacts/editor/tellAgent.ts";
 import type { EditMessage } from "../artifacts/ArtifactFrame.tsx";
 import { useCanvasDoc } from "../canvas/doc.ts";
@@ -13,9 +13,10 @@ import { useCanvasProject, useEngine } from "../context.ts";
 import { useFeature } from "../features.ts";
 import { designCommand, type DesignCommand, type KeyModifiers } from "./designKeys.ts";
 import { DesignDrafts } from "./DesignDrafts.tsx";
-import { layerName, parentAxis, type ElementLayout } from "./designLayout.ts";
-import { designHooksOf, designOf, leaveDesign, type DesignEntry } from "./designMode.ts";
-import { DesignOverlay } from "./DesignOverlay.tsx";
+import { isFlexLike, layerName, mainAxis, parentAxis, type ElementLayout } from "./designLayout.ts";
+import { AltDistance, DesignHandles } from "./DesignHandles.tsx";
+import { designDraftsOf, designHooksOf, designOf, leaveDesign, type DesignEntry } from "./designMode.ts";
+import { boxOf, DesignOverlay, selectionBox } from "./DesignOverlay.tsx";
 import { useScreenApply } from "./screenApply.ts";
 import { ScreenSource } from "./ScreenSource.tsx";
 import type { ScreenEditHooks } from "./ScreenView.tsx";
@@ -23,6 +24,9 @@ import { repositoryState } from "./store.ts";
 import { holdScreen } from "./tiers.ts";
 
 const NONE: readonly string[] = [];
+const TAILWIND_DEFAULT = tokenScaleOf({ css: [{ file: "tailwind", text: '@import "tailwindcss";' }] });
+
+const scaleFor = (tokens: TokenScale, className: string | null | undefined): TokenScale => (tokens.spacing.length === 0 && looksTailwind(className) ? TAILWIND_DEFAULT : tokens);
 const NO_DIALS: Readonly<Record<string, unknown>> = {};
 
 const typingIn = (target: EventTarget | null): boolean =>
@@ -94,9 +98,25 @@ const DesignSession = ({ editor, project, entry }: { readonly editor: Editor; re
   const layoutsRef = useRef(layouts);
   layoutsRef.current = layouts;
   const [alt, setAlt] = useState(false);
+  const [resizing, setResizing] = useState<string | null>(null);
+  const [tokens, setTokens] = useState<TokenScale>(EMPTY_SCALE);
+  const pointer = useMemo(() => atom<{ readonly x: number; readonly y: number } | null>("design pointer", null), []);
+  const reorder = useRef<{ readonly id: string; readonly from: number; readonly axis: "row" | "column" } | null>(null);
+  const instanceId = instance?.id;
+  useEffect(() => {
+    if (instanceId === undefined) return;
+    let live = true;
+    engine.call("screens.tokens", { project, instance: instanceId }).then(
+      (answer) => live && setTokens(answer.scale),
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [engine, project, instanceId]);
   const pendingPick = useRef(entry.at);
-  const discarded = useRef<readonly ScreenOverride[] | undefined>(undefined);
-  const redoable = useRef<ScreenOverride[]>([]);
+  const discarded = useRef<readonly SessionStep[] | undefined>(undefined);
+  const redoable = useRef<SessionStep[]>([]);
 
   useEffect(() => holdScreen(project, shapeId), [project, shapeId]);
 
@@ -167,6 +187,17 @@ const DesignSession = ({ editor, project, entry }: { readonly editor: Editor; re
       }
       case "hide":
         for (const id of selection) current.patch({ type: "hide", elementId: id, hidden: true });
+        return;
+      case "delete":
+        void current.structure({ kind: "delete" }, selection);
+        current.setSelection([]);
+        return;
+      case "duplicate":
+      case "wrap":
+        void current.structure({ kind: command.kind }, selection);
+        return;
+      case "move":
+        void current.structure({ kind: "move", by: command.by }, selection);
         return;
       case "opacity":
         for (const id of selection) current.patch({ type: "style", elementId: id, property: "opacity", value: String(command.value) });
@@ -240,7 +271,27 @@ const DesignSession = ({ editor, project, entry }: { readonly editor: Editor; re
       if (message.key === "Alt") setAlt(false);
       return;
     }
-    if (message.type === "unframed:edit:drag") return;
+    if (message.type === "unframed:edit:pointer") {
+      if (typeof message.x === "number" && typeof message.y === "number") pointer.set({ x: message.x, y: message.y });
+      return;
+    }
+    if (message.type === "unframed:edit:drag") {
+      const key = String(message.key ?? "");
+      const at = { x: Number(message.x), y: Number(message.y) };
+      if (message.phase === "start") {
+        const parent = layoutsRef.current[key]?.parent;
+        const from = parent?.siblings.findIndex((sibling) => sibling.id === key) ?? -1;
+        reorder.current = parent && isFlexLike(parent.display) && from >= 0 ? { id: key, from, axis: mainAxis(parent) } : null;
+        return;
+      }
+      const held = reorder.current;
+      if (held === null) return;
+      if (message.phase === "end") reorder.current = null;
+      const siblings = layoutsRef.current[held.id]?.parent?.siblings ?? [];
+      if (siblings.length < 2 || !Number.isFinite(at.x) || !Number.isFinite(at.y)) return;
+      void current.structure({ kind: "moveTo", to: reorderIndex(siblings.map((sibling) => sibling.box), held.from, at, held.axis) }, [held.id]);
+      return;
+    }
     current.onFrameMessage(message);
     if (message.type === "unframed:edit:ready" && pendingPick.current !== undefined) {
       current.pickAt(pendingPick.current);
@@ -259,6 +310,22 @@ const DesignSession = ({ editor, project, entry }: { readonly editor: Editor; re
     };
   }, [project, shapeId, hooks]);
 
+  const selectionKey = session.selection.join(" ");
+  useEffect(() => {
+    if (selectionKey !== "") sessionRef.current.requestLive();
+  }, [selectionKey]);
+
+  const draftCount = session.drafts.length + (apply.run === undefined ? 0 : 1);
+  useEffect(() => {
+    designDraftsOf(project).set(draftCount);
+  }, [project, draftCount]);
+  useEffect(
+    () => () => {
+      designDraftsOf(project).set(0);
+    },
+    [project],
+  );
+
   const draftKey = session.drafts.map((draft) => draft.element.stamp).join(" ");
   useEffect(() => {
     sessionRef.current.watch(draftKey === "" ? [] : [...new Set(draftKey.split(" "))]);
@@ -275,13 +342,30 @@ const DesignSession = ({ editor, project, entry }: { readonly editor: Editor; re
 
   if (props === undefined) return null;
   const view = { hovered: session.hovered, selection: session.selection, reports: session.reports, boxes: session.boxes, layouts };
+  const [only] = session.selection;
+  const single = session.selection.length === 1 && only !== undefined ? only : undefined;
+  const singleBox = single === undefined ? undefined : boxOf(view, single);
+  const singleLayout = single === undefined ? undefined : layouts[single];
+  const chosen = selectionBox(view);
+  const hoverId = session.hovered?.id ?? null;
+  const hoverBox = hoverId === null || session.selection.includes(hoverId) ? undefined : boxOf(view, hoverId);
   return (
     <>
       {host !== null &&
         createPortal(
-          <DesignOverlay view={view}>
-            <DesignDrafts session={session} run={apply.run} project={project} picture={props.picture} size={{ w: props.w, h: props.h }} onApply={() => void apply.apply()} onDismiss={apply.clear} onDiscardAll={discardAll} />
+          <DesignOverlay view={view} badge={resizing ?? undefined}>
+            {single !== undefined && singleBox !== undefined && singleLayout !== undefined && (
+              <DesignHandles key={single} session={session} id={single} box={singleBox} layout={singleLayout} report={session.reports[single]} tokens={scaleFor(tokens, session.reports[single]?.className)} pointer={pointer} onResize={setResizing} />
+            )}
+            {alt && chosen !== undefined && hoverBox !== undefined && <AltDistance from={chosen} to={hoverBox} />}
           </DesignOverlay>,
+          host,
+        )}
+      {host !== null &&
+        createPortal(
+          <div className="pointer-events-none absolute inset-0" data-testid="design-drafts-layer">
+            <DesignDrafts session={session} run={apply.run} project={project} picture={props.picture} size={{ w: props.w, h: props.h }} onApply={() => void apply.apply()} onDismiss={apply.clear} onDiscardAll={discardAll} />
+          </div>,
           host,
         )}
       <ScreenDesignPanel editor={editor} session={session} project={project} instance={instance?.id} classOf={classOf} onTell={(elements) => tellAgent(client, shapeId, forAgent(elements))} />
@@ -291,7 +375,7 @@ const DesignSession = ({ editor, project, entry }: { readonly editor: Editor; re
 
 const textStyle = (session: EditSession, id: string, style: Extract<DesignCommand, { kind: "text" }>["style"]) => {
   const computed = session.reports[id]?.computed ?? {};
-  const inline = session.overrides.filter((override) => override.edit.elementId === id && override.edit.type === "style");
+  const inline = session.overrides.filter((step): step is ScreenOverride => "edit" in step && step.edit.elementId === id && step.edit.type === "style");
   const shown = (property: string): string => {
     const found = inline.find((override) => override.edit.type === "style" && override.edit.property === property);
     return found?.edit.type === "style" ? (found.edit.value ?? "") : (computed[property] ?? "");

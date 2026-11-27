@@ -1,7 +1,7 @@
 import { DESIGN_FIELDS } from "../designFields.ts";
 import { NON_ELEMENT_TAGS } from "../nonElementTags.ts";
 
-const BRIDGE_PROPERTIES = [...DESIGN_FIELDS.map((field) => field.property), "background-image", "display"];
+const BRIDGE_PROPERTIES = [...DESIGN_FIELDS.map((field) => field.property), "background-image", "display", "width", "height", "font-style", "text-decoration-line", "text-align", "flex-direction"];
 
 export type EditBox = { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
 
@@ -636,6 +636,17 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     const el = selectedAround(targetOf(event));
     press = el === null ? null : { x: event.clientX ?? 0, y: event.clientY ?? 0, key: keyOf(el), started: false };
   };
+  let pointerAt: { x: number; y: number } | null = null;
+  let pointerFrame: unknown = null;
+  const onPointer = (event: EditEvent) => {
+    if (!stamp || !listening) return;
+    pointerAt = { x: event.clientX ?? 0, y: event.clientY ?? 0 };
+    if (pointerFrame !== null) return;
+    pointerFrame = win.requestAnimationFrame(() => {
+      pointerFrame = null;
+      if (pointerAt !== null) post({ type: "unframed:edit:pointer", x: pointerAt.x, y: pointerAt.y });
+    });
+  };
   const onDrag = (event: EditEvent) => {
     if (press === null) return;
     const x = event.clientX ?? 0;
@@ -853,6 +864,7 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
   const LISTENERS: Array<[string, (event: EditEvent) => void]> = [
     ["pointermove", onMove],
     ["pointermove", onDrag],
+    ["pointermove", onPointer],
     ["pointerup", onRelease],
     ["mousedown", block],
     ["pointerdown", onPress],

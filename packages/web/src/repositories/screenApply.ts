@@ -1,5 +1,5 @@
-import type { ElementChip, ScreenWrite } from "@unframed/contracts";
-import { changeTook, continuableChat, DEFAULT_RUNTIME_MODE, DID_NOT_TAKE, elementKind, NO_SOURCE, NOT_IN_WORKTREE, NOT_SELF_MAPPED, ONLY_THIS_ONE, oneLine, screenDraftInstruction, withResolved, type DraftChange, type DraftSource } from "@unframed/domain";
+import type { ElementChip, ScreenWriteKind } from "@unframed/contracts";
+import { changeTook, continuableChat, DEFAULT_RUNTIME_MODE, DID_NOT_TAKE, elementKind, NO_SOURCE, NOT_IN_WORKTREE, NOT_SELF_MAPPED, ONLY_THIS_ONE, oneLine, screenDraftInstruction, screenWritesOf, withResolved, type DraftChange, type DraftSource } from "@unframed/domain";
 import { useRef, useState } from "react";
 import { readyProviders } from "../agent/providers.ts";
 import { createChat, sendMessage } from "../agent/send.ts";
@@ -49,11 +49,9 @@ const targetOf = (change: DraftChange): MeasureTarget => ({
   attributes: change.kind === "attr" ? [change.property] : [],
 });
 
-const writeOf = (change: DraftChange): ScreenWrite | undefined => {
-  const source = change.element.source;
-  if (source === null) return undefined;
-  return { id: change.id, kind: change.kind, property: change.property, before: change.before, after: change.after, file: source.file, line: source.line, col: source.col, tag: change.element.tag };
-};
+const UNMEASURED: ReadonlySet<ScreenWriteKind> = new Set(["reorder", "duplicate", "delete", "wrap", "props"]);
+
+const resultsFor = <T extends { readonly id: string }>(results: ReadonlyArray<T>, change: DraftChange): T[] => results.filter((each) => each.id === change.id || each.id.startsWith(`${change.id}:`));
 
 const leftReason = (change: DraftChange): string | null => {
   if (change.element.source === null) return NO_SOURCE;
@@ -123,8 +121,8 @@ export const useScreenApply = (input: ScreenApplyInput) => {
 
   const check = async (rows: readonly ApplyRow[], window: number): Promise<{ took: string[]; missed: string[] }> => {
     const { session } = latest.current;
-    const pending = new Map(rows.map((row) => [row.change.id, row.change]));
-    const took: string[] = [];
+    const pending = new Map(rows.filter((row) => !UNMEASURED.has(row.change.kind)).map((row) => [row.change.id, row.change]));
+    const took: string[] = rows.filter((row) => UNMEASURED.has(row.change.kind)).map((row) => row.change.id);
     const ends = Date.now() + window;
     while (pending.size > 0) {
       const asked = [...pending.values()];
@@ -205,7 +203,7 @@ export const useScreenApply = (input: ScreenApplyInput) => {
     generation.current += 1;
     const of = generation.current;
     setRun({ apply: null, rows, busy: true });
-    const writes = rows.filter((row) => row.state === "writing").flatMap((row) => writeOf(row.change) ?? []);
+    const writes = rows.filter((row) => row.state === "writing").flatMap((row) => screenWritesOf(row.change));
     try {
       const answer = writes.length === 0 ? { apply: null, results: [] } : await engine.call("screens.apply", { project, instance: instance.id, changes: writes });
       const current = runRef.current!;
@@ -213,7 +211,8 @@ export const useScreenApply = (input: ScreenApplyInput) => {
         ...current,
         apply: answer.apply,
         rows: current.rows.map((row) => {
-          const result = answer.results.find((each) => each.id === row.change.id);
+          const found = resultsFor(answer.results, row.change);
+          const result = found.find((each) => !each.written) ?? found[0];
           if (result === undefined) return row;
           return result.written ? { ...row, state: "checking" } : { ...row, state: "agent", reason: result.file === null ? NOT_IN_WORKTREE : result.reason };
         }),

@@ -54,7 +54,7 @@ export const selectionBox = (view: Pick<OverlayView, "boxes" | "reports" | "sele
     return box === undefined ? [] : [box];
   }));
 
-export const DesignOverlay = ({ view, hideHover = false, children }: { readonly view: OverlayView; readonly hideHover?: boolean; readonly children?: ReactNode }) => {
+export const DesignOverlay = ({ view, hideHover = false, badge, children }: { readonly view: OverlayView; readonly hideHover?: boolean; readonly badge?: string | undefined; readonly children?: ReactNode }) => {
   const { hovered, selection, reports, layouts } = view;
   const hoverId = hovered?.id ?? null;
   const hoverBox = hoverId === null ? undefined : boxOf(view, hoverId);
@@ -96,7 +96,7 @@ export const DesignOverlay = ({ view, hideHover = false, children }: { readonly 
           })}
           <Pinned x={union.x + union.w / 2} y={union.y + union.h} origin="0 0" shift="translateX(-50%)">
             <span className="block pt-1">
-              <Chip testId="design-size-badge">{badgeText(union)}</Chip>
+              <Chip testId="design-size-badge">{badge ?? badgeText(union)}</Chip>
             </span>
           </Pinned>
         </>
