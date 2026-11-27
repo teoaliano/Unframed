@@ -213,6 +213,39 @@ test("a page copy that declares a font the canvas uses leaves the canvas's fonts
   });
 });
 
+test("a page copy keeps the custom properties its page registers, so transforms that use them still place elements", async ({ page }) => {
+  await page.addInitScript(() => {
+    const attach = Element.prototype.attachShadow;
+    Element.prototype.attachShadow = function (init) {
+      const root = attach.call(this, init);
+      (this as any).__copyRoot = root;
+      return root;
+    };
+  });
+  await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
+    const [a] = IDS as [string];
+    await putBusyScreens(page, engine, project, [a]);
+    const html = [
+      "<!doctype html><html><head><style>",
+      '@property --press { syntax: "<number>"; inherits: false; initial-value: 1; }',
+      "#moved { position: absolute; left: 0; top: 0; width: 20px; height: 20px; transform: translate(120px, 80px) scale(var(--press)); }",
+      "</style></head><body><div id=\"moved\"></div></body></html>",
+    ].join("");
+    const rpc = await engine.rpc();
+    let key: string | null;
+    try {
+      ({ key } = (await rpc.call("screens.capture", { project, shape: a, w: 390, h: 300, html, parts: [] })) as { key: string | null });
+    } finally {
+      await rpc.close();
+    }
+    await expect(screenOf(page, a)).toHaveAttribute("data-picture", key!);
+    await zoomOn(page, screenOf(page, a), /^page$/, -60);
+    const copy = screenOf(page, a).locator("[data-testid=screen-page-copy]");
+    await expect(copy).toHaveAttribute("data-built", "true", { timeout: 10_000 });
+    expect(await copy.evaluate((element) => getComputedStyle((element as any).__copyRoot.getElementById("moved")).transform)).toBe("matrix(1, 0, 0, 1, 120, 80)");
+  });
+});
+
 test("one Screen is live and three stay parked at most: a fifth selection drops the oldest frame", async ({ page }) => {
   await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
     await putBusyScreens(page, engine, project, MORE);
