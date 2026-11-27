@@ -16,7 +16,7 @@ export const EXCEPTIONS = {
   primitiveColour: "Figma stores each Tailwind colour as the nearest sRGB hex; code keeps Tailwind's oklch value.",
   runtime: "Base UI, tldraw and the diff viewer set their own custom properties at runtime; code reads them as they are.",
   textRelative: "Lengths in em track the text they sit in (the prompt chip); Figma draws them at one text size.",
-  literalColour: "A few literal colours are data, not paint: mask alpha, colour-picker fallbacks for user colours, a user kit's defaults and an export's background.",
+  literalColour: "A few literal colours are data, not paint: mask alpha, colour-picker fallbacks and gradients for user colours, a user kit's defaults, a new fill's first colour and an export's background.",
   layering: "z-index, transitions and motion live in code only; Figma has no variables for them.",
 } as const;
 
@@ -31,6 +31,8 @@ const LITERAL_COLOURS: Record<string, string[]> = {
   "src/canvas/DesignPanel.tsx": ["#000000"],
   "src/canvas/StyleRow.tsx": ["#000000"],
   "src/canvas/designTarget.ts": ["rgb(${p3.slice(1, 4)"],
+  "src/design/colourPicker.tsx": ["#000", "#fff", "#f00", "#ff0", "#0f0", "#0ff", "#00f", "#f0f"],
+  "src/artifacts/editor/ScreenPaint.tsx": ["#FFFFFF"],
 };
 
 const RUNTIME = new Set([

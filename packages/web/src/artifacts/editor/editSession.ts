@@ -525,7 +525,8 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
           computed: report?.computed ?? {},
           text: report?.text ?? null,
         }, token);
-        if (draft !== undefined) draftFor.current.set(edit, draft);
+        const earlier = draft === undefined ? undefined : overridesRef.current.map((each) => draftFor.current.get(each.edit)).find((each) => each?.id === draft.id);
+        if (draft !== undefined) draftFor.current.set(edit, earlier === undefined ? draft : { ...draft, before: earlier.before, shownBefore: earlier.shownBefore });
         setOverrides(addScreenOverride(overridesRef.current, override));
         const patches = framePatchesOf(edit, null);
         if (showInFrame && patches.length > 0) post({ type: "unframed:edit:patch", patches });

@@ -64,6 +64,25 @@ export default function Button({ variant, size, pressed, children }) {
 }
 `;
 
+export const REACT_CSS = `@import "tailwindcss";
+
+@theme {
+  --color-zinc-800: #27272a;
+  --color-sky-600: #0084d1;
+  --text-5xs: 0.4375rem;
+  --text-5xs--line-height: 0.75rem;
+}
+
+:root {
+  --text-default: var(--color-zinc-800);
+  --action-highlight: var(--color-sky-600);
+  --surface-page: #fafafa;
+  --border-default: #e4e4e7;
+  --button-ghost-foreground: var(--text-default);
+  --button-ghost-surface: #ffffff;
+}
+`;
+
 export const positionOf = (source: string, needle: string) => {
   const at = source.indexOf(needle);
   if (at < 0) throw new Error(`${needle} is not in the source`);
@@ -81,6 +100,7 @@ export const prepareReactApp = async (root: string) => {
   await writeFile(join(root, "src", "App.jsx"), REACT_APP);
   await writeFile(join(root, "src", "Card.jsx"), REACT_CARD);
   await writeFile(join(root, "src", "Button.jsx"), REACT_BUTTON);
+  await writeFile(join(root, "src", "index.css"), REACT_CSS);
   git(root, "add", ".");
   git(root, "commit", "-q", "-m", "react app");
 };

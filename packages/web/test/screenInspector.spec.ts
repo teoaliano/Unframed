@@ -164,3 +164,50 @@ test("a component instance shows its props: a dropdown per cva variant with ever
     prepareReactApp,
   );
 });
+
+test("the colour picker lists the project's colour tokens by group, searches them, and a token or a custom colour joins the drafts", async ({ page }) => {
+  await withRepository(
+    page,
+    {},
+    async (engine, project) => {
+      await openReact(page, engine, project);
+      await pickHeader(page);
+      await pickHeading(page);
+      const colour = panels(page).getByRole("region", { name: "Colour" });
+      await colour.getByRole("button", { name: "Text colour", exact: true }).click();
+      const picker = page.getByRole("dialog", { name: "Text colour picker" });
+      const tokens = picker.getByRole("listbox", { name: "Colour tokens" });
+      await expect(tokens.getByRole("group", { name: "Text" }).getByRole("option")).toHaveText([/text-default\s*27272A/]);
+      await expect(tokens.getByRole("group", { name: "Surfaces" })).toBeVisible();
+      await expect(tokens.getByRole("group", { name: "Button" })).toContainText("2");
+      await picker.getByRole("textbox", { name: "Search name, hex or class" }).fill("0084");
+      await expect(tokens.getByRole("option")).toHaveText([/color-sky-600\s*0084D1/, /action-highlight\s*0084D1/]);
+      await tokens.getByRole("option", { name: "action-highlight" }).click();
+      await expect(heading(page)).toHaveCSS("color", "rgb(0, 132, 209)");
+      await expect(colour.getByRole("button", { name: "Text colour", exact: true })).toContainText("action-highlight");
+      await expect(drafts(page)).toHaveText("1 change");
+
+      await colour.getByRole("button", { name: "Text colour", exact: true }).click();
+      await expect(picker.getByRole("group", { name: "Current" })).toContainText("→ color-sky-600");
+      await picker.getByRole("tab", { name: "Custom" }).click();
+      await expect(picker.getByTestId("colour-same-as")).toHaveText("Same as action-highlight");
+      await picker.getByRole("textbox", { name: "Hex" }).fill("C0392B");
+      await picker.getByRole("textbox", { name: "Hex" }).press("Enter");
+      await expect(heading(page)).toHaveCSS("color", "rgb(192, 57, 43)");
+      await page.keyboard.press("Escape");
+      await field(page, "Text colour opacity").fill("50");
+      await field(page, "Text colour opacity").press("Enter");
+      await expect(heading(page)).toHaveCSS("color", "rgba(192, 57, 43, 0.5)");
+      await colour.getByRole("button", { name: /^Changed from #000000/ }).click();
+      await expect(heading(page)).toHaveCSS("color", "rgb(0, 0, 0)");
+
+      await pick(page, app(page).locator("header"), { detail: 1 }, /^Header · in Header /);
+      const fill = panels(page).getByRole("region", { name: "Fill" });
+      await fill.getByRole("button", { name: "Add fill" }).click();
+      await expect(app(page).locator("header")).toHaveCSS("background-color", "rgb(255, 255, 255)");
+      await fill.getByRole("button", { name: "Remove fill" }).click();
+      await expect(app(page).locator("header")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    },
+    prepareReactApp,
+  );
+});

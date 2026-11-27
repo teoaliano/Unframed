@@ -1,6 +1,6 @@
 import type { SourceEdit } from "@unframed/contracts";
 import type { TokenScale } from "@unframed/contracts";
-import { elementKind, EMPTY_SCALE, fieldAria, fieldToken, pairShown, styleValueRefusal, typeScaleOf, type DraftChange, type FieldToken, type NumberBounds, type TailwindToken } from "@unframed/domain";
+import { elementKind, hexLabel, EMPTY_SCALE, fieldAria, fieldToken, pairShown, styleValueRefusal, typeScaleOf, type DraftChange, type FieldToken, type NumberBounds, type TailwindToken } from "@unframed/domain";
 import { Eye, EyeOff, MoveHorizontal, MoveVertical, Scan, SunDim } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "~/components/ui/button";
@@ -13,6 +13,7 @@ import type { EngineConnection } from "../../rpc/engine.ts";
 import type { EditReport, EditSession } from "./editSession.ts";
 import { ScreenHeader, useInspected } from "./ScreenHeader.tsx";
 import { InstanceSection } from "./ScreenInstance.tsx";
+import { ColourSection, coloursOnPage, FillSection } from "./ScreenPaint.tsx";
 import { TypographySection } from "./ScreenTypography.tsx";
 
 export interface ScreenDesignContext {
@@ -31,6 +32,7 @@ type Side = (typeof SIDES)[number];
 
 const shortOf = (value: string): string => {
   if (value === "") return "none";
+  if (/^(#|rgb|hsl|oklch)/.test(value.trim())) return hexLabel(value) ?? value;
   const number = /^-?\d*\.?\d+(px)?$/.test(value.trim()) ? numberText(value) : "";
   return number === "" ? value : number;
 };
@@ -68,21 +70,26 @@ export interface Field {
   readonly shown: string;
 }
 
+const scales = new Map<string, TokenScale>();
+
 export const useTokenScale = (context: ScreenDesignContext): TokenScale => {
-  const [found, setFound] = useState<{ readonly key: string; readonly scale: TokenScale } | undefined>(undefined);
   const key = context.instance === undefined ? "" : `${context.project}|${context.instance}`;
+  const [found, setFound] = useState<{ readonly key: string; readonly scale: TokenScale } | undefined>(() => (scales.has(key) ? { key, scale: scales.get(key)! } : undefined));
   useEffect(() => {
     if (context.instance === undefined) return;
     let live = true;
     context.engine.call("screens.tokens", { project: context.project, instance: context.instance }).then(
-      (answer) => live && setFound({ key, scale: answer.scale }),
-      () => live && setFound({ key, scale: EMPTY_SCALE }),
+      (answer) => {
+        scales.set(key, answer.scale);
+        if (live) setFound({ key, scale: answer.scale });
+      },
+      () => live && setFound({ key, scale: scales.get(key) ?? EMPTY_SCALE }),
     );
     return () => {
       live = false;
     };
   }, [key]);
-  return found?.key === key ? found.scale : EMPTY_SCALE;
+  return found?.key === key ? found.scale : (scales.get(key) ?? EMPTY_SCALE);
 };
 
 export const useScreenFields = (session: EditSession, subjects: readonly ScreenSubject[], scale: TokenScale, tokenNames: readonly string[]) => {
@@ -277,7 +284,8 @@ export const ScreenDesign = ({
   readonly onTell: () => void;
 }) => {
   const scale = useTokenScale(context);
-  const fields = useScreenFields(session, subjects, scale, tokenNames);
+  const fields = useScreenFields(session, subjects, scale, [...tokenNames, ...scale.colors.flatMap((token) => (token.variable === null ? [] : [token.variable]))]);
+  const onPage = coloursOnPage(session);
   const [first] = subjects;
   const text = subjects.every((subject) => subject.report.text !== null);
   const inspect = useInspected(session, context);
@@ -288,6 +296,8 @@ export const ScreenDesign = ({
       {text ? (
         <>
           <TypographySection fields={fields} subjects={subjects} families={session.families} scale={typeScaleOf(scale)} />
+          <ColourSection fields={fields} subjects={subjects} onPage={onPage} />
+          <FillSection fields={fields} subjects={subjects} onPage={onPage} />
           <PaddingSection fields={fields} />
           <SizeSection fields={fields} />
         </>
@@ -295,6 +305,7 @@ export const ScreenDesign = ({
         <>
           <SizeSection fields={fields} />
           <PaddingSection fields={fields} />
+          <FillSection fields={fields} subjects={subjects} onPage={onPage} />
         </>
       )}
       <AppearanceSection fields={fields} subjects={subjects} session={session} />

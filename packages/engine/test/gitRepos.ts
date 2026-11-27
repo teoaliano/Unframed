@@ -69,6 +69,7 @@ const twCss = () => {
 const REACT_IMPORTS = JSON.stringify({ imports: { react: "/node_modules/.vendor/react.js", "react/jsx-dev-runtime": "/node_modules/.vendor/react.js", "react-dom/client": "/node_modules/.vendor/react.js" } });
 const reactPage = () => [
   "<!doctype html><html><head><title>React app</title><link rel=\"stylesheet\" href=\"/tw.css\">",
+  reactFs.existsSync(reactPath.join(reactSrc, "index.css")) ? "<link rel=\"stylesheet\" href=\"/src/index.css\">" : "",
   "<script type=\"importmap\">" + REACT_IMPORTS + "</script>",
   "</head><body><div id=\"root\"></div><script type=\"module\" src=\"/src/main.jsx\"></script>",
   "<script>(function () { var seen = " + JSON.stringify(reactVersion()) + "; setInterval(function () { fetch('/__fake/version', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (v) { if (v !== seen) location.reload(); }).catch(function () {}); }, 250); })();</script>",
@@ -96,6 +97,12 @@ const reactRoute = (req, res, url) => {
       }).outputFiles[0].text;
     }
     return send("text/javascript; charset=utf-8", reactVendor);
+  }
+  const css = /^\/src\/([\w.-]+\.css)$/.exec(url.pathname);
+  if (css) {
+    const file = reactPath.join(reactSrc, css[1]);
+    if (!reactFs.existsSync(file)) return false;
+    return send("text/css; charset=utf-8", reactFs.readFileSync(file, "utf8").replace(/@import\s+["']tailwindcss["'];?/g, "").replace(/@theme\s*\{/g, ":root {"));
   }
   const jsx = /^\/src\/([\w.-]+\.jsx)$/.exec(url.pathname);
   if (jsx) {
