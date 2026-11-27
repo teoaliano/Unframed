@@ -1,9 +1,11 @@
-export type FrameState = "none" | "warming" | "live" | "parked";
+export type FrameState = "none" | "warming" | "live" | "demoting" | "parked";
 export type PictureLevel = "tiny" | "small" | "page";
 export type PageCopyState = "none" | "queued" | "loading" | "built" | "missing";
-export type ScreenTier = "picture" | "snapshot" | "warming" | "live" | "parked";
+export type ScreenTier = "picture" | "snapshot" | "warming" | "live" | "demoting" | "parked";
 
 export const TIER_BUDGETS = { live: 1, warming: 1, parked: 3, pageLoads: 4 } as const;
+
+export const DEMOTE_WAIT_MS = 2500;
 
 export const TINY_DEVICE_PX = 160;
 export const SMALL_CSS_PX = 230;
@@ -55,7 +57,7 @@ export interface TierState {
 export const pictureLevel = (width: number, dpr: number): PictureLevel => (width * dpr <= TINY_DEVICE_PX ? "tiny" : width <= SMALL_CSS_PX ? "small" : "page");
 
 export const tierOf = (entry: TierEntry): ScreenTier =>
-  entry.frame === "live" ? "live" : entry.frame === "warming" ? "warming" : entry.frame === "parked" ? "parked" : entry.page === "built" ? "snapshot" : "picture";
+  entry.frame === "none" ? (entry.page === "built" ? "snapshot" : "picture") : entry.frame;
 
 export const emptyTiers = (): TierState => ({ entries: new Map(), active: undefined, held: undefined, parked: [], moving: false, pending: undefined });
 
@@ -111,16 +113,22 @@ class Draft {
 
 const dropFrame = (draft: Draft, id: string) => {
   draft.parked = draft.parked.filter((parked) => parked !== id);
-  if (draft.entries.has(id)) draft.set(id, { frame: "none" });
+  if (draft.entries.has(id)) draft.set(id, { frame: "none", capture: false });
 };
 
-const park = (draft: Draft, id: string) => {
-  draft.set(id, { frame: "parked", capture: true });
+const wantsPage = (entry: TierEntry): boolean => entry.pictured && entry.near && entry.level === "page";
+
+const demote = (draft: Draft, id: string) => {
+  draft.set(id, { frame: "demoting", capture: true });
   draft.parked = [id, ...draft.parked.filter((parked) => parked !== id)];
   while (draft.parked.length > TIER_BUDGETS.parked) {
     const oldest = draft.parked.pop()!;
-    draft.set(oldest, { frame: "none" });
+    draft.set(oldest, { frame: "none", capture: false });
   }
+};
+
+const park = (draft: Draft, id: string) => {
+  draft.set(id, { frame: "parked", capture: false });
 };
 
 const deactivate = (draft: Draft) => {
@@ -128,7 +136,7 @@ const deactivate = (draft: Draft) => {
   if (id === undefined) return;
   draft.active = undefined;
   const frame = draft.get(id).frame;
-  if (frame === "live") park(draft, id);
+  if (frame === "live") demote(draft, id);
   else if (frame === "warming") dropFrame(draft, id);
 };
 
@@ -136,9 +144,10 @@ const activate = (draft: Draft, id: string) => {
   if (draft.active === id) return;
   deactivate(draft);
   draft.active = id;
-  if (draft.get(id).frame === "parked") {
+  const frame = draft.get(id).frame;
+  if (frame === "parked" || frame === "demoting") {
     draft.parked = draft.parked.filter((parked) => parked !== id);
-    draft.set(id, { frame: "live" });
+    draft.set(id, { frame: "live", capture: false });
     return;
   }
   for (const [other, entry] of draft.entries) if (other !== id && entry.frame === "warming") draft.set(other, { frame: "none" });
@@ -151,8 +160,7 @@ const applyView = (draft: Draft, screens: ReadonlyArray<ViewScreen>) => {
     seen.add(screen.id);
     const entry = draft.get(screen.id);
     const level = pictureLevel(screen.width, screen.dpr);
-    const wantsPage = screen.pictured && screen.near && level === "page";
-    const page = entry.page === "missing" ? "missing" : wantsPage ? (entry.page === "none" ? "queued" : entry.page) : "none";
+    const page = entry.page === "missing" ? "missing" : wantsPage({ ...entry, level, near: screen.near, pictured: screen.pictured }) ? (entry.page === "none" ? "queued" : entry.page) : "none";
     draft.set(screen.id, { level, near: screen.near, distance: screen.distance, pictured: screen.pictured, page });
   }
   for (const id of [...draft.entries.keys()]) if (!seen.has(id)) forget(draft, id);
@@ -181,6 +189,11 @@ const admitPages = (draft: Draft) => {
 };
 
 const known = (draft: Draft, id: string) => draft.entries.has(id);
+
+const parkWhenShown = (draft: Draft, id: string) => {
+  const entry = draft.get(id);
+  if (entry.frame === "demoting" && !entry.capture && !(wantsPage(entry) && (entry.page === "queued" || entry.page === "loading"))) park(draft, id);
+};
 
 export const reduceTiers = (state: TierState, event: TierEvent): TierState => {
   const draft = new Draft(state);
@@ -220,22 +233,28 @@ export const reduceTiers = (state: TierState, event: TierEvent): TierState => {
       break;
     case "pageBuilt":
       if (draft.get(event.id).page === "loading") draft.set(event.id, { page: "built" });
+      parkWhenShown(draft, event.id);
       break;
     case "pageMissing":
-      if (known(draft, event.id)) draft.set(event.id, { page: "missing" });
-      break;
-    case "picture": {
       if (!known(draft, event.id)) break;
-      const entry = draft.get(event.id);
-      draft.set(event.id, { page: entry.pictured && entry.near && entry.level === "page" ? "queued" : "none" });
+      draft.set(event.id, { page: "missing" });
+      parkWhenShown(draft, event.id);
       break;
-    }
+    case "picture":
+      if (known(draft, event.id)) draft.set(event.id, { page: wantsPage(draft.get(event.id)) ? "queued" : "none" });
+      break;
     case "captured":
+      if (!known(draft, event.id)) break;
+      draft.set(event.id, { capture: false });
+      parkWhenShown(draft, event.id);
+      break;
     case "captureFailed":
-      if (known(draft, event.id)) draft.set(event.id, { capture: false });
+      if (!known(draft, event.id)) break;
+      if (draft.get(event.id).frame === "demoting") park(draft, event.id);
+      else draft.set(event.id, { capture: false });
       break;
     case "hidden":
-      if (event.hidden) for (const id of [...draft.parked]) dropFrame(draft, id);
+      if (event.hidden) for (const id of [...draft.parked]) if (draft.get(id).frame === "parked") dropFrame(draft, id);
       break;
   }
   admitPages(draft);
