@@ -15,7 +15,7 @@ import { designCommand, type DesignCommand, type KeyModifiers } from "./designKe
 import { DesignDrafts } from "./DesignDrafts.tsx";
 import { isFlexLike, layerName, mainAxis, parentAxis, type ElementLayout } from "./designLayout.ts";
 import { AltDistance, DesignHandles } from "./DesignHandles.tsx";
-import { designDraftsOf, designHooksOf, designOf, leaveDesign, type DesignEntry } from "./designMode.ts";
+import { designDraftsOf, designHooksOf, designOf, keepDrafts, keptDraftsOf, leaveDesign, type DesignEntry } from "./designMode.ts";
 import { boxOf, DesignOverlay, selectionBox } from "./DesignOverlay.tsx";
 import { DesignMenu, type MenuAt } from "./DesignMenu.tsx";
 import { useScreenApply } from "./screenApply.ts";
@@ -121,6 +121,27 @@ const DesignSession = ({ editor, project, entry }: { readonly editor: Editor; re
   const redoable = useRef<SessionStep[]>([]);
 
   useEffect(() => holdScreen(project, shapeId), [project, shapeId]);
+
+  const frameReady = session.live.length > 0;
+  const restored = useRef(false);
+  useEffect(() => {
+    if (!frameReady || restored.current) return;
+    restored.current = true;
+    const saved = keptDraftsOf(project).get().get(shapeId);
+    if (saved === undefined) return;
+    keepDrafts(project, shapeId, undefined);
+    sessionRef.current.restoreOverrides(saved.steps, saved.drafts);
+  }, [frameReady, project, shapeId]);
+
+  useEffect(
+    () => () => {
+      if (!restored.current) return;
+      const current = sessionRef.current;
+      const { steps, drafts } = current.keptSteps();
+      keepDrafts(project, shapeId, steps.length === 0 ? undefined : { steps, drafts, count: current.drafts.length });
+    },
+    [project, shapeId],
+  );
 
   useEffect(
     () =>

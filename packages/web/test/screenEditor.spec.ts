@@ -130,7 +130,7 @@ test("Edit mode selects an element in the live app; a Design change previews at 
       await expect(page.locator('[data-edit-outline="selected"]')).toHaveCount(1, { timeout: 1000 });
     }).toPass({ timeout: 20_000 });
     await expect(panels(page).getByTestId("screen-source-none")).toBeVisible();
-    const size = panels(page).getByRole("spinbutton", { name: "Size", exact: true });
+    const size = panels(page).getByRole("spinbutton", { name: "Font size", exact: true });
     await expect(size).toBeEnabled();
     await size.fill("48");
     await size.press("Enter");
@@ -161,7 +161,7 @@ test("a reload of the Screen drops its overrides and its pending changes, and th
         await heading.dispatchEvent("click");
         await expect(page.locator('[data-edit-outline="selected"]')).toHaveCount(1, { timeout: 1000 });
       }).toPass({ timeout: 20_000 });
-      const size = panels(page).getByRole("spinbutton", { name: "Size", exact: true });
+      const size = panels(page).getByRole("spinbutton", { name: "Font size", exact: true });
       await expect(size).toBeEnabled();
       await size.fill(value);
       await size.press("Enter");

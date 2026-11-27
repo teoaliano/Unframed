@@ -176,7 +176,8 @@ export interface EditSession {
   readonly pickAt: (at: { readonly x: number; readonly y: number }, gesture?: { readonly clicks?: number; readonly deepest?: boolean; readonly additive?: boolean }) => void;
   readonly requestLive: () => void;
   readonly watch: (ids: readonly string[]) => void;
-  readonly restoreOverrides: (list: readonly SessionStep[]) => void;
+  readonly restoreOverrides: (list: readonly SessionStep[], drafts?: ReadonlyMap<SourceEdit, DraftChange>) => void;
+  readonly keptSteps: () => { readonly steps: readonly SessionStep[]; readonly drafts: ReadonlyMap<SourceEdit, DraftChange> };
   readonly structure: (command: StructureCommand, ids: readonly string[]) => Promise<void>;
   readonly setLocked: (locked: readonly string[]) => void;
   readonly preparing: boolean;
@@ -1055,9 +1056,19 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
     requestLive,
     watch: (ids) => post({ type: "unframed:edit:watch", ids }),
     structure,
-    restoreOverrides: (list) => {
+    restoreOverrides: (list, drafts) => {
+      if (drafts !== undefined) for (const [edit, draft] of drafts) draftFor.current.set(edit, draft);
       setOverrides(list);
       repaint(list);
+    },
+    keptSteps: () => {
+      const kept = new Map<SourceEdit, DraftChange>();
+      for (const step of overridesRef.current) {
+        if (!isOverride(step)) continue;
+        const draft = draftFor.current.get(step.edit);
+        if (draft !== undefined) kept.set(step.edit, draft);
+      }
+      return { steps: overridesRef.current, drafts: kept };
     },
     setLocked,
     preparing,

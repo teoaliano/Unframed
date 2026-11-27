@@ -335,6 +335,33 @@ test("the drafts bar lists the changes, pins them with Show all, compares by swi
   );
 });
 
+test("drafts survive leaving design mode: the Screen counts them, and entering it again shows them on the page and in the bar", async ({ page }) => {
+  await withRepository(
+    page,
+    {},
+    async (engine, project) => {
+      const id = await openReact(page, engine, project);
+      await enterOn(page, "header h2");
+      const scale = await frameScale(page);
+      await dragBy(page, await centreOf(page, '[data-design-padding="left"]'), { x: 6 * scale, y: 0 });
+      await expect(page.getByTestId("design-drafts-count")).toHaveAccessibleName("1 change");
+
+      const screen = (await page.locator(`[data-shape-id="${id}"]`).boundingBox())!;
+      await page.mouse.click(screen.x / 2, screen.y + screen.height / 2);
+      await expect(overlay(page)).toHaveCount(0);
+      await expect(page.locator(`[data-shape-id="${id}"]`).getByTestId("screen-drafts-badge")).toHaveAccessibleName("1 change not applied");
+
+      await clickShape(page, id);
+      await enterOn(page, "header h2");
+      await expect(page.getByTestId("design-drafts-count")).toHaveAccessibleName("1 change");
+      await expect.poll(() => computed(page, "header", "padding-left"), { timeout: 10_000 }).toBe("20px");
+      await openDrafts(page);
+      await expect(page.getByRole("list", { name: "Changes" }).locator("[data-draft-row]")).toHaveCount(1);
+    },
+    prepareReactApp,
+  );
+});
+
 test("a right-click offers Select layer with the ancestor chain and each one's file and line, and the Design panel shows the selection's source", async ({ page }) => {
   await withRepository(
     page,

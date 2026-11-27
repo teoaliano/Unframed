@@ -1,9 +1,10 @@
 import type { ScreenMock, ScreenShapeProps, ScreenStep } from "@unframed/contracts";
 import { pictureKeyOf, picturePartsUrl, pictureUrl, screenLabel, tierOf } from "@unframed/domain";
+import { PencilLine } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type Editor, type RecordProps, type TLResizeInfo, type TLShape, type TLShapeId } from "tldraw";
 import { artifactsOf, isInteractive } from "../../artifacts/state.ts";
-import { designHooksOf, designOf, enterDesign } from "../../repositories/designMode.ts";
+import { designHooksOf, designOf, enterDesign, keptDraftsOf } from "../../repositories/designMode.ts";
 import { useCanvasProject } from "../../context.ts";
 import { featureOn, useFeature } from "../../features.ts";
 import { noteRender } from "../../fps/renders.ts";
@@ -140,6 +141,7 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
   const size = level === "tiny" ? "tiny" : level === "small" ? "small" : !repositories || entry?.page === "missing" ? "full" : "small";
   const branch = useScreenBranch(project, props);
   const label = screenLabel({ branch, route: props.route, state: props.state, warnings: setupWarnings });
+  const keptDrafts = useValue("screen kept drafts", () => keptDraftsOf(project).get().get(shape.id)?.count ?? 0, [project, shape.id]);
   return (
     <HTMLContainer
       id={shape.id}
@@ -158,6 +160,17 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
       <div ref={element} className="absolute inset-0 overflow-hidden" style={{ contain: "strict" }} data-screen-slot="">
         {!revealed && level !== undefined && <ScreenPicture project={project} shapeId={shape.id} props={props} branch={branch} size={size} />}
         {!revealed && showPage && key !== undefined && <PageCopy editor={editor} project={project} shapeId={shape.id} pictureKey={key} w={props.w} h={props.h} />}
+        {keptDrafts > 0 && (
+          <div
+            className="pointer-events-none absolute top-2 left-2 flex items-center gap-1 rounded-md bg-(--artifact-card-surface) px-2 py-1 font-sans text-xs font-medium text-(--artifact-card-title) shadow-sm"
+            data-testid="screen-drafts-badge"
+            aria-label={`${keptDrafts} ${keptDrafts === 1 ? "change" : "changes"} not applied`}
+            role="status"
+          >
+            <PencilLine className="size-3.5" aria-hidden />
+            <span>{keptDrafts}</span>
+          </div>
+        )}
         <ScreenOverlay project={project} instance={props.instance} pictured={key !== undefined && level !== undefined} />
       </div>
     </HTMLContainer>

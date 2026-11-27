@@ -1,4 +1,7 @@
 import { atom, type Atom } from "tldraw";
+import type { SourceEdit } from "@unframed/contracts";
+import type { DraftChange } from "@unframed/domain";
+import type { SessionStep } from "../artifacts/editor/editSession.ts";
 import type { ScreenEditHooks } from "./ScreenView.tsx";
 
 export interface DesignEntry {
@@ -53,3 +56,30 @@ export const leaveDesign = (project: string): void => {
 };
 
 export const designScreen = (project: string): string | undefined => designOf(project).get()?.screen;
+
+export interface KeptDrafts {
+  readonly steps: readonly SessionStep[];
+  readonly drafts: ReadonlyMap<SourceEdit, DraftChange>;
+  readonly count: number;
+}
+
+const kept = new Map<string, Atom<ReadonlyMap<string, KeptDrafts>>>();
+
+export const keptDraftsOf = (project: string): Atom<ReadonlyMap<string, KeptDrafts>> => {
+  let found = kept.get(project);
+  if (found === undefined) {
+    found = atom(`kept design drafts ${project}`, new Map());
+    kept.set(project, found);
+  }
+  return found;
+};
+
+export const keepDrafts = (project: string, screen: string, drafts: KeptDrafts | undefined): void => {
+  const store = keptDraftsOf(project);
+  const current = store.get();
+  if (drafts === undefined && !current.has(screen)) return;
+  const next = new Map(current);
+  if (drafts === undefined || drafts.steps.length === 0) next.delete(screen);
+  else next.set(screen, drafts);
+  store.set(next);
+};
