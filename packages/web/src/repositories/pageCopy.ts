@@ -35,8 +35,8 @@ const PARTS = /(?<![\w./-])parts\/([0-9a-f]{40}(?:\.[A-Za-z0-9]+)?)/g;
 
 const prepared = new Map<string, Promise<PreparedPageCopy>>();
 const roots = new WeakMap<HTMLElement, ShadowRoot>();
-const fontTexts = new Set<string>();
-let fontSheet: CSSStyleSheet | undefined;
+const hoistedTexts = new Set<string>();
+let hoistedSheet: CSSStyleSheet | undefined;
 let baseSheet: CSSStyleSheet | undefined;
 let stillSheet: CSSStyleSheet | undefined;
 let copies = 0;
@@ -49,17 +49,17 @@ const constructed = (text: string): CSSStyleSheet => {
   return sheet;
 };
 
-const hoistFont = (text: string): void => {
-  if (fontTexts.has(text)) return;
-  fontTexts.add(text);
-  if (fontSheet === undefined) {
-    fontSheet = new CSSStyleSheet();
-    document.adoptedStyleSheets = [...document.adoptedStyleSheets, fontSheet];
+const hoist = (text: string): void => {
+  if (hoistedTexts.has(text)) return;
+  hoistedTexts.add(text);
+  if (hoistedSheet === undefined) {
+    hoistedSheet = new CSSStyleSheet();
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, hoistedSheet];
   }
   try {
-    fontSheet.insertRule(text, fontSheet.cssRules.length);
+    hoistedSheet.insertRule(text, hoistedSheet.cssRules.length);
   } catch {
-    fontTexts.delete(text);
+    hoistedTexts.delete(text);
   }
 };
 
@@ -98,7 +98,12 @@ const adapt = (list: CSSRuleList, owner: CSSStyleSheet | CSSGroupingRule, select
     const rule = list[index]!;
     if (rule instanceof CSSFontFaceRule) {
       const face = scopedFace(rule, families);
-      if (face !== undefined) hoistFont(face);
+      if (face !== undefined) hoist(face);
+      owner.deleteRule(index);
+      continue;
+    }
+    if (rule instanceof CSSPropertyRule) {
+      hoist(rule.cssText);
       owner.deleteRule(index);
       continue;
     }

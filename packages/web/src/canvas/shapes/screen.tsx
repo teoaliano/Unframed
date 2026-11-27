@@ -147,7 +147,7 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
       <div ref={element} className="absolute inset-0 overflow-hidden" style={{ contain: "strict" }} data-screen-slot="">
         {!revealed && level !== undefined && <ScreenPicture project={project} shapeId={shape.id} props={props} branch={branch} size={size} />}
         {!revealed && showPage && key !== undefined && <PageCopy editor={editor} project={project} shapeId={shape.id} pictureKey={key} w={props.w} h={props.h} />}
-        <ScreenOverlay project={project} instance={props.instance} />
+        <ScreenOverlay project={project} instance={props.instance} pictured={key !== undefined && level !== undefined} />
       </div>
     </HTMLContainer>
   );
