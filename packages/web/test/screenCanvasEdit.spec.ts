@@ -676,3 +676,32 @@ test("a text colour that comes from a token, on the element or inherited from an
     prepareReactApp,
   );
 });
+
+test("size fields show a size token's step whole, without the size- prefix", async ({ page }) => {
+  await withRepository(
+    page,
+    {},
+    async (engine, project) => {
+      await openReact(page, engine, project);
+      await app(page).locator("ul").evaluate((element) => element.classList.add("size-full"));
+      await app(page).locator("li:nth-child(1) h3").evaluate((element) => element.classList.add("size-12"));
+      await enterOn(page, "header h2");
+      const list = await pointIn(page, "ul", { x: 0.5, y: 0.98 });
+      await page.mouse.click(list.x, list.y);
+      await expect(title(page)).toHaveText("List · in App");
+      const width = panel(page).getByRole("spinbutton", { name: /^Width/ });
+      await expect(width).toHaveValue("Full");
+      await expect(panel(page).getByRole("spinbutton", { name: /^Height/ })).toHaveValue("Full");
+      expect(await width.evaluate((input) => input.scrollWidth <= input.clientWidth)).toBe(true);
+
+      await page.keyboard.down("ControlOrMeta");
+      const heading = await pointIn(page, "li:nth-child(1) h3");
+      await page.mouse.click(heading.x, heading.y);
+      await page.keyboard.up("ControlOrMeta");
+      await expect(title(page)).toHaveText("First · in Card");
+      await expect(width).toHaveValue("12");
+      await expect(width).toHaveAccessibleName(/size-12/);
+    },
+    prepareReactApp,
+  );
+});

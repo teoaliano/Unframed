@@ -23,7 +23,7 @@ describe("the token step a field shows", () => {
     expect(fieldToken(EMPTY_SCALE, "padding-left", "flex h-12 items-center pl-3.5 pr-2")).toEqual({ name: "pl-3.5", label: "3.5" });
     expect(fieldToken(EMPTY_SCALE, "padding-top", "px-2 py-1")).toEqual({ name: "py-1", label: "1" });
     expect(fieldToken(EMPTY_SCALE, "font-size", "text-sm font-medium")).toEqual({ name: "text-sm", label: "sm" });
-    expect(fieldToken(EMPTY_SCALE, "width", "size-7")).toEqual({ name: "size-7", label: "size-7" });
+    expect(fieldToken(EMPTY_SCALE, "width", "size-7")).toEqual({ name: "size-7", label: "7" });
     expect(fieldToken(EMPTY_SCALE, "height", "h-12")).toEqual({ name: "h-12", label: "12" });
     expect(fieldToken(EMPTY_SCALE, "border-radius", "rounded-2xl")).toEqual({ name: "rounded-2xl", label: "2xl" });
     expect(fieldToken(EMPTY_SCALE, "border-radius", "rounded-full")).toEqual({ name: "rounded-full", label: "Full" });
@@ -46,7 +46,7 @@ describe("the token step a field shows", () => {
 
   it("names the field with both the class and the pixels when a class sets it", () => {
     expect(fieldAria("Gap between items", { name: "gap-1", label: "1" }, "4")).toBe("Gap between items: gap-1 (4)");
-    expect(fieldAria("Width", { name: "size-7", label: "size-7" }, "28")).toBe("Width: size-7 (28)");
+    expect(fieldAria("Width", { name: "size-7", label: "7" }, "28")).toBe("Width: size-7 (28)");
     expect(fieldAria("Padding left", undefined, "13")).toBe("Padding left");
   });
 

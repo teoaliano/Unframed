@@ -605,13 +605,12 @@ const variantless = (name: string): string => {
   return name.slice(cut + 1).replace(/^!|!$/g, "");
 };
 
-const ALL_PREFIXES = ["min-w", "min-h", "max-w", "max-h", "gap-x", "gap-y", "inset-x", "inset-y", "rounded-tl", "rounded-tr", "rounded-br", "rounded-bl", "rounded-t", "rounded-r", "rounded-b", "rounded-l", "rounded", "leading", "tracking", "shadow", "opacity", "decoration", "outline", "border", "stroke", "inset", "bottom", "right", "left", "top", "text", "font", "fill", "gap", "bg", "px", "py", "pt", "pr", "pb", "pl", "mx", "my", "mt", "mr", "mb", "ml", "p", "m", "w", "h"];
+const ALL_PREFIXES = ["min-w", "min-h", "max-w", "max-h", "gap-x", "gap-y", "inset-x", "inset-y", "rounded-tl", "rounded-tr", "rounded-br", "rounded-bl", "rounded-t", "rounded-r", "rounded-b", "rounded-l", "rounded", "leading", "tracking", "shadow", "opacity", "decoration", "outline", "border", "stroke", "inset", "bottom", "right", "left", "top", "text", "font", "fill", "gap", "bg", "size", "px", "py", "pt", "pr", "pb", "pl", "mx", "my", "mt", "mr", "mb", "ml", "p", "m", "w", "h"];
 
 export const tokenLabel = (_property: string, name: string): string => {
   if (name.startsWith("--")) return name.slice(2);
   const bare = variantless(name);
   if (bare === "rounded") return "DEFAULT";
-  if (bare.startsWith("size-")) return bare;
   const prefix = ALL_PREFIXES.find((each) => bare.startsWith(`${each}-`));
   if (prefix === undefined) return bare;
   const rest = bare.slice(prefix.length + 1);

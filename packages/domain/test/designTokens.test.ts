@@ -193,7 +193,7 @@ describe("snapping and naming", () => {
     expect(tokenOf(scale, "column-gap", { computed: "4px", className: "flex h-12 items-center gap-1 pl-3.5" })).toMatchObject({ name: "gap-1", label: "1", value: "4px" });
     expect(tokenOf(scale, "padding-left", { computed: "14px", className: "flex gap-1 pl-3.5" })).toMatchObject({ name: "pl-3.5", label: "3.5" });
     expect(tokenOf(scale, "padding-left", { computed: "8px", className: "px-2 hover:pl-4" })).toMatchObject({ name: "px-2", label: "2" });
-    expect(tokenOf(scale, "width", { computed: "28px", className: "size-7" })).toMatchObject({ name: "size-7", label: "size-7" });
+    expect(tokenOf(scale, "width", { computed: "28px", className: "size-7" })).toMatchObject({ name: "size-7", label: "7" });
     expect(tokenOf(scale, "font-size", { computed: "7px", className: "text-5xs" })).toMatchObject({ name: "text-5xs", label: "5xs", token: { name: "text-5xs" } });
     expect(tokenOf(scale, "border-radius", { computed: "9999px", className: "rounded-full" })).toMatchObject({ name: "rounded-full", label: "Full" });
     expect(tokenOf(scale, "color", { computed: "rgb(0, 132, 209)", authored: "var(--action-highlight)" })).toMatchObject({ name: "--action-highlight", label: "action-highlight" });
@@ -204,7 +204,8 @@ describe("snapping and naming", () => {
 
   it("labels a class or a variable by its step", () => {
     expect(tokenLabel("column-gap", "gap-1")).toBe("1");
-    expect(tokenLabel("width", "size-7")).toBe("size-7");
+    expect(tokenLabel("width", "size-7")).toBe("7");
+    expect(tokenLabel("height", "size-full")).toBe("Full");
     expect(tokenLabel("font-size", "text-2xl")).toBe("2xl");
     expect(tokenLabel("line-height", "leading-6")).toBe("6");
     expect(tokenLabel("border-radius", "rounded-full")).toBe("Full");
