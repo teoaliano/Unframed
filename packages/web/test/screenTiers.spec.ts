@@ -271,6 +271,55 @@ test("a page copy keeps the custom properties its page registers, so transforms 
   });
 });
 
+test("a page copy registers no custom property in the canvas document, and its inheriting ones reach the whole copy", async ({ page }) => {
+  await page.addInitScript(() => {
+    const attach = Element.prototype.attachShadow;
+    Element.prototype.attachShadow = function (init) {
+      const root = attach.call(this, init);
+      (this as any).__copyRoot = root;
+      return root;
+    };
+  });
+  await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
+    const [a] = IDS as [string];
+    await putBusyScreens(page, engine, project, [a]);
+    const html = [
+      "<!doctype html><html><head><style>",
+      '@property --uf-test-gap { syntax: "<length>"; inherits: true; initial-value: 7px; }',
+      '@property --uf-test-ring { syntax: "<length>"; inherits: false; initial-value: 3px; }',
+      "#outer { --uf-test-ring: 9px; } #inner { margin-left: var(--uf-test-gap); padding-left: var(--uf-test-ring); }",
+      "</style></head><body><div id=\"outer\"><div id=\"inner\">Inner</div></div></body></html>",
+    ].join("");
+    const rpc = await engine.rpc();
+    let key: string | null;
+    try {
+      ({ key } = (await rpc.call("screens.capture", { project, shape: a, w: 390, h: 300, html, parts: [] })) as { key: string | null });
+    } finally {
+      await rpc.close();
+    }
+    await expect(screenOf(page, a)).toHaveAttribute("data-picture", key!);
+    await zoomOn(page, screenOf(page, a), /^page$/, -60);
+    const copy = screenOf(page, a).locator("[data-testid=screen-page-copy]");
+    await expect(copy).toHaveAttribute("data-built", "true", { timeout: 10_000 });
+    expect(
+      await copy.evaluate((element) => {
+        const inner = getComputedStyle((element as any).__copyRoot.getElementById("inner"));
+        return { margin: inner.marginLeft, padding: inner.paddingLeft };
+      }),
+    ).toEqual({ margin: "7px", padding: "3px" });
+    expect(
+      await page.evaluate(() => {
+        const probe = document.createElement("div");
+        probe.style.setProperty("--uf-test-ring", "calc(1px + 1px)");
+        document.body.append(probe);
+        const values = [getComputedStyle(document.body).getPropertyValue("--uf-test-gap"), getComputedStyle(document.body).getPropertyValue("--uf-test-ring"), getComputedStyle(probe).getPropertyValue("--uf-test-ring")];
+        probe.remove();
+        return values;
+      }),
+    ).toEqual(["", "", "calc(1px + 1px)"]);
+  });
+});
+
 test("one Screen is live and three stay parked at most: a fifth selection drops the oldest frame", async ({ page }) => {
   await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
     await putBusyScreens(page, engine, project, MORE);

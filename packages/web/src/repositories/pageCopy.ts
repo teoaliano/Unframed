@@ -35,8 +35,8 @@ const PARTS = /(?<![\w./-])parts\/([0-9a-f]{40}(?:\.[A-Za-z0-9]+)?)/g;
 
 const prepared = new Map<string, Promise<PreparedPageCopy>>();
 const roots = new WeakMap<HTMLElement, ShadowRoot>();
-const hoistedTexts = new Set<string>();
-let hoistedSheet: CSSStyleSheet | undefined;
+const fontTexts = new Set<string>();
+let fontSheet: CSSStyleSheet | undefined;
 let baseSheet: CSSStyleSheet | undefined;
 let stillSheet: CSSStyleSheet | undefined;
 let copies = 0;
@@ -49,17 +49,43 @@ const constructed = (text: string): CSSStyleSheet => {
   return sheet;
 };
 
-const hoist = (text: string): void => {
-  if (hoistedTexts.has(text)) return;
-  hoistedTexts.add(text);
-  if (hoistedSheet === undefined) {
-    hoistedSheet = new CSSStyleSheet();
-    document.adoptedStyleSheets = [...document.adoptedStyleSheets, hoistedSheet];
+const hoistFont = (text: string): void => {
+  if (fontTexts.has(text)) return;
+  fontTexts.add(text);
+  if (fontSheet === undefined) {
+    fontSheet = new CSSStyleSheet();
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, fontSheet];
   }
   try {
-    hoistedSheet.insertRule(text, hoistedSheet.cssRules.length);
+    fontSheet.insertRule(text, fontSheet.cssRules.length);
   } catch {
-    hoistedTexts.delete(text);
+    fontTexts.delete(text);
+  }
+};
+
+interface Registered {
+  readonly name: string;
+  readonly inherits: boolean;
+  readonly initial: string;
+}
+
+const registeredDefaults = (registered: ReadonlyArray<Registered>, root: string): string => {
+  const each = (inherits: boolean) =>
+    registered
+      .filter((property) => property.inherits === inherits)
+      .map((property) => `${property.name}: ${property.initial};`)
+      .join(" ");
+  const local = each(false);
+  const inherited = each(true);
+  return `@layer uf-registered { ${local === "" ? "" : `*, ::before, ::after, ::backdrop { ${local} }`} ${inherited === "" ? "" : `${root} { ${inherited} }`} }`;
+};
+
+const fallBack = (sheet: CSSStyleSheet, registered: ReadonlyArray<Registered>, root: string): void => {
+  if (registered.length === 0) return;
+  try {
+    sheet.insertRule(registeredDefaults(registered, root), 0);
+  } catch {
+    return;
   }
 };
 
@@ -93,17 +119,17 @@ const scopeDeclarations = (style: CSSStyleDeclaration, families: Families): void
   }
 };
 
-const adapt = (list: CSSRuleList, owner: CSSStyleSheet | CSSGroupingRule, selectors: boolean, families: Families): void => {
+const adapt = (list: CSSRuleList, owner: CSSStyleSheet | CSSGroupingRule, selectors: boolean, families: Families, registered: Registered[]): void => {
   for (let index = list.length - 1; index >= 0; index--) {
     const rule = list[index]!;
     if (rule instanceof CSSFontFaceRule) {
       const face = scopedFace(rule, families);
-      if (face !== undefined) hoist(face);
+      if (face !== undefined) hoistFont(face);
       owner.deleteRule(index);
       continue;
     }
     if (rule instanceof CSSPropertyRule) {
-      hoist(rule.cssText);
+      registered.unshift({ name: rule.name, inherits: rule.inherits, initial: rule.initialValue ?? "initial" });
       owner.deleteRule(index);
       continue;
     }
@@ -115,7 +141,7 @@ const adapt = (list: CSSRuleList, owner: CSSStyleSheet | CSSGroupingRule, select
       scopeDeclarations(rule.style, families);
     }
     if (rule instanceof CSSGroupingRule || rule instanceof CSSStyleRule) {
-      if (rule.cssRules.length > 0) adapt(rule.cssRules, rule as CSSGroupingRule, selectors, families);
+      if (rule.cssRules.length > 0) adapt(rule.cssRules, rule as CSSGroupingRule, selectors, families, registered);
     }
   }
 };
@@ -181,8 +207,14 @@ const build = async (url: string, partsUrl: string): Promise<PreparedPageCopy> =
   for (const each of [sheet, ...shadows]) declaredFamilies(each.cssRules, declared);
   const copy = ++copies;
   const families: Families = new Map([...declared].map((key, index) => [key, `uf${copy}-${index}`]));
-  adapt(sheet.cssRules, sheet, true, families);
-  for (const shadow of shadows) adapt(shadow.cssRules, shadow, false, families);
+  const registered: Registered[] = [];
+  adapt(sheet.cssRules, sheet, true, families, registered);
+  fallBack(sheet, registered, "[data-uf-html]");
+  const local = registered.filter((property) => !property.inherits);
+  for (const shadow of shadows) {
+    adapt(shadow.cssRules, shadow, false, families, []);
+    fallBack(shadow, local, ":host");
+  }
   const page = parsed.createElement("div");
   for (const attribute of Array.from(parsed.documentElement.attributes)) page.setAttribute(attribute.name, attribute.value);
   page.setAttribute("data-uf-html", "");
