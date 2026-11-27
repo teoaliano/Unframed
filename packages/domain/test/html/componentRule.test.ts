@@ -54,9 +54,9 @@ describe("the componentRule edit (spec 20)", () => {
   });
 
   it("refuses a property the Design tab does not edit", () => {
-    expect(applySourceEdits(SHEET, [edit({ block: 0, selector: "button", occurrence: 0 }, "display", "none")])).toEqual({
+    expect(applySourceEdits(SHEET, [edit({ block: 0, selector: "button", occurrence: 0 }, "cursor", "pointer")])).toEqual({
       ok: false,
-      refusal: "display cannot be edited here.",
+      refusal: "cursor cannot be edited here.",
     });
   });
 });
