@@ -193,7 +193,7 @@ export const propertyLabel = (property: string): string => {
   return words.charAt(0).toUpperCase() + words.slice(1);
 };
 
-export const draftOf = (edit: SourceEdit, context: DraftContext): DraftChange | undefined => {
+export const draftOf = (edit: SourceEdit, context: DraftContext, snapped?: TailwindToken): DraftChange | undefined => {
   const base = { id: context.id, element: context.element, scope: "all" as DraftScope };
   if (edit.type === "text") return { ...base, kind: "text", property: "#text", before: context.text, after: edit.text, shownBefore: context.text ?? "", asked: edit.text };
   if (edit.type === "hide") {
@@ -206,14 +206,14 @@ export const draftOf = (edit: SourceEdit, context: DraftContext): DraftChange | 
   if (edit.type !== "style") return undefined;
   const shownBefore = context.computed[edit.property] ?? "";
   if (edit.value !== null && looksTailwind(context.className)) {
-    const token = classFor(edit.property, edit.value);
+    const token = snapped ?? classFor(edit.property, edit.value);
     if (token !== undefined) {
       const current = classSetting(context.className, edit.property);
       const exact = current !== undefined && current.primary === edit.property ? current.name : null;
       return { ...base, kind: "class", property: edit.property, before: exact, after: token.name, shownBefore, asked: token.value, token };
     }
   }
-  return { ...base, kind: "style", property: edit.property, before: shownBefore === "" ? null : shownBefore, after: edit.value, shownBefore, asked: edit.value };
+  return { ...base, kind: "style", property: edit.property, before: shownBefore === "" ? null : shownBefore, after: edit.value, shownBefore, asked: edit.value, ...(snapped === undefined ? {} : { token: snapped }) };
 };
 
 export const draftLine = (change: DraftChange): string => {
@@ -302,7 +302,58 @@ const whereOf = (element: DraftElement, at: DraftSource | null): string => {
   return `${quoted(at.file)}:${at.line}:${at.col}${end}${element.selfMapped ? "" : ` (the nearest JSX; the element itself is ${quoted(element.selector)})`}`;
 };
 
+const neighbourAt = (neighbour: DraftNeighbour): string => {
+  const tag = `<${TAG.test(neighbour.tag) ? neighbour.tag : "element"}>`;
+  const at = neighbour.source;
+  if (at === null) return `${tag} ${quoted(neighbour.label, 80)}`;
+  return `${tag} at ${quoted(at.file)}:${at.line}:${at.col}${at.endLine === undefined ? "" : `–${at.endLine}:${at.endCol ?? 0}`}`;
+};
+
+const inside = (parent: DraftNeighbour | null | undefined): string => (parent === null || parent === undefined ? "" : ` inside ${neighbourAt(parent)}`);
+
+const literalProp = (name: string, value: PropValue | undefined): string =>
+  value === undefined || value === null ? `no ${oneLine(name, 60)}` : typeof value === "string" ? `${oneLine(name, 60)}=${JSON.stringify(oneLine(value, 200))}` : `${oneLine(name, 60)}={${String(value)}}`;
+
+const structuralLine = (change: DraftChange): string | undefined => {
+  const element = change.element;
+  const tag = `<${TAG.test(element.tag) ? element.tag : "element"}>`;
+  const component = element.component === null ? "" : ` in ${quoted(element.component, 80)}`;
+  const where = whereOf(element, element.source);
+  const self = `${tag}${component} at ${where}`;
+  switch (change.kind) {
+    case "reorder": {
+      const move = change.move;
+      if (move === undefined) return undefined;
+      const numbered = move.siblings.map((sibling, index) => ({ sibling, n: index + 1 }));
+      const order = numbered.filter((_, index) => index !== move.from);
+      order.splice(Math.max(0, Math.min(move.to, order.length)), 0, numbered[move.from]!);
+      const to = order.findIndex((each) => each.n === move.from + 1);
+      const list = (items: typeof numbered) => items.map(({ sibling, n }) => `${n} ${quoted(sibling.label, 80)}`).join(", ");
+      const anchor = to <= 0 ? order[1] : order[to - 1];
+      const relation = to <= 0 ? "right before" : "right after";
+      if (anchor === undefined) return undefined;
+      return `- Move ${tag}${component} at ${where} ${relation} ${neighbourAt(anchor.sibling)}${inside(change.parent)}. The items on the page, in order before the move: ${list(numbered)}. This one, ${move.from + 1}, goes ${relation} ${anchor.n}, so the order after is: ${list(order)}.`;
+    }
+    case "duplicate":
+      return `- Duplicate ${self}: the copy right after it${inside(change.parent)}.`;
+    case "delete":
+      return `- Remove ${self}${inside(change.parent)}. Then remove what only it used and nothing uses now: an import, a helper or a handler, a style rule nothing else matches; never what another element or a prop still reads.`;
+    case "wrap":
+      return `- Wrap ${self} in a new <div> laid out as display: flex; flex-direction: column; align-items: stretch.`;
+    case "hide":
+      return `- Hide ${self} (render it conditionally, or remove it if it is never wanted).`;
+    case "props":
+      return `- On this ${tag}${component} at its call site, ${where}: ${Object.entries(change.props ?? {})
+        .map(([name, value]) => `${literalProp(name, change.propsBefore?.[name])} → ${literalProp(name, value)}`)
+        .join(", ")}.`;
+    default:
+      return undefined;
+  }
+};
+
 export const draftInstructionLine = (change: DraftChange, reason: string, at: DraftSource | null): string => {
+  const structural = structuralLine({ ...change, element: { ...change.element, source: at } });
+  if (structural !== undefined) return `${structural} ${oneLine(reason, 300)}`;
   const element = change.element;
   const component = element.component === null ? "" : ` in ${quoted(element.component, 80)}`;
   const instances = element.instanceCount > 1 ? `, instance ${element.instanceIndex + 1} of ${element.instanceCount}${change.scope === "one" ? ", change only this one" : ", change every one"}` : "";
