@@ -442,3 +442,60 @@ test("in design mode the page sees no pointer event and selects no text: presses
     prepareReactApp,
   );
 });
+
+const shapeBox = async (page: Page) => (await page.locator("[data-shape-id]").filter({ has: page.getByTestId("screen") }).first().boundingBox())!;
+const settledBox = async (page: Page) => {
+  let last = await shapeBox(page);
+  for (;;) {
+    await page.waitForTimeout(150);
+    const now = await shapeBox(page);
+    if (now.x === last.x && now.y === last.y && now.width === last.width) return now;
+    last = now;
+  }
+};
+const zoomLevel = async (page: Page) => (await settledBox(page)).width;
+
+test("canvas zoom and navigation keys work in design mode while the Screen has focus, and design keys stay design keys", async ({ page }) => {
+  await withRepository(
+    page,
+    {},
+    async (engine, project) => {
+      await openReact(page, engine, project);
+      await enterOn(page, "header h2");
+      const second = await pointIn(page, "li:nth-child(2) p");
+      await page.mouse.click(second.x, second.y);
+      await expect(title(page)).toHaveText("Card");
+
+      const start = await zoomLevel(page);
+      await page.keyboard.press("ControlOrMeta+=");
+      await expect.poll(() => zoomLevel(page)).toBeGreaterThan(start);
+      const zoomed = await zoomLevel(page);
+      await page.keyboard.press("ControlOrMeta+-");
+      await expect.poll(() => zoomLevel(page)).toBeLessThan(zoomed);
+      await page.keyboard.press("ControlOrMeta+-");
+      await expect.poll(() => zoomLevel(page)).toBeLessThan(zoomed / 2);
+      const small = await zoomLevel(page);
+      await page.keyboard.press("Shift+2");
+      await expect.poll(() => zoomLevel(page)).toBeGreaterThan(small * 1.5);
+      await expect(overlay(page)).toBeAttached();
+
+      const inside = await pointIn(page, "li:nth-child(1) p");
+      await page.mouse.click(inside.x, inside.y);
+      const before = await settledBox(page);
+      await page.keyboard.down(" ");
+      await dragBy(page, inside, { x: 80, y: 40 });
+      await page.keyboard.up(" ");
+      await expect.poll(async () => (await settledBox(page)).x - before.x).toBeGreaterThan(60);
+      await expect(overlay(page)).toBeAttached();
+
+      const now = await pointIn(page, "li:nth-child(2) p");
+      await page.mouse.click(now.x, now.y);
+      await expect(title(page)).toHaveText("Card");
+      await page.keyboard.press("5");
+      await expect.poll(() => computed(page, "li:nth-child(2)", "opacity")).toBe("0.5");
+      await expect(page.getByTestId("design-drafts-count")).toHaveAccessibleName("1 change");
+      expect(await screenShapes(engine, project)).toHaveLength(1);
+    },
+    prepareReactApp,
+  );
+});

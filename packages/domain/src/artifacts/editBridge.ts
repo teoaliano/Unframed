@@ -44,6 +44,8 @@ interface EditEvent {
   readonly target: EditElement | null;
   composedPath?(): ReadonlyArray<unknown>;
   readonly key: string;
+  readonly code?: string;
+  readonly repeat?: boolean;
   readonly shiftKey: boolean;
   readonly metaKey: boolean;
   readonly ctrlKey: boolean;
@@ -856,11 +858,11 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     const undo = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z";
     const transport = win.__timelines !== undefined && TRANSPORT_KEYS.includes(event.key);
     if (stamp || KEYS_FORWARDED.includes(event.key) || event.key === "Enter" || undo || transport) {
-      post({ type: "unframed:edit:key", key: event.key, shift: event.shiftKey === true, meta: event.metaKey === true, ctrl: event.ctrlKey === true, ...(stamp ? { alt: event.altKey === true } : {}) });
+      post({ type: "unframed:edit:key", key: event.key, shift: event.shiftKey === true, meta: event.metaKey === true, ctrl: event.ctrlKey === true, ...(stamp ? { alt: event.altKey === true, code: event.code ?? "", repeat: event.repeat === true } : {}) });
     }
   };
   const onKeyUp = (event: EditEvent) => {
-    if (stamp && listening && editing === null && event.key === "Alt") post({ type: "unframed:edit:keyup", key: event.key });
+    if (stamp && listening && editing === null) post({ type: "unframed:edit:keyup", key: event.key, code: event.code ?? "", shift: event.shiftKey === true, meta: event.metaKey === true, ctrl: event.ctrlKey === true, alt: event.altKey === true });
   };
 
   const onContext = (event: EditEvent) => {

@@ -59,6 +59,19 @@ export const designCommand = (key: string, modifiers: KeyModifiers, context: Key
   if (command && ["b", "i", "u"].includes(lower)) return { kind: "swallow" };
   const arrow = ARROWS[key];
   if (arrow !== undefined && !command) return context.axis === arrow.axis ? { kind: "move", by: arrow.by } : { kind: "swallow" };
-  if (!command && !modifiers.alt && /^[0-9]$/.test(key)) return { kind: "opacity", value: key === "0" ? 1 : Number(key) / 10 };
+  if (!command && !modifiers.alt && !modifiers.shift && /^[0-9]$/.test(key)) return { kind: "opacity", value: key === "0" ? 1 : Number(key) / 10 };
   return undefined;
+};
+
+const ZOOM_KEYS = ["=", "+", "-", "_"];
+const SHIFTED_DIGITS: Readonly<Record<string, string>> = { "!": "1", "@": "2", ")": "0" };
+
+export const canvasKey = (key: string, code: string, modifiers: KeyModifiers): boolean => {
+  const command = modifiers.meta || modifiers.ctrl;
+  if (key === " ") return !command && !modifiers.alt;
+  if (ZOOM_KEYS.includes(key)) return !modifiers.alt;
+  const digit = SHIFTED_DIGITS[key] ?? (/^Digit[0-9]$/.test(code) ? code.slice(5) : /^[0-9]$/.test(key) ? key : undefined);
+  if (digit === undefined) return false;
+  if (command) return digit === "0" && !modifiers.shift && !modifiers.alt;
+  return modifiers.shift && !modifiers.alt && ["0", "1", "2"].includes(digit);
 };

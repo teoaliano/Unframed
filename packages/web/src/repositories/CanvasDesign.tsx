@@ -11,7 +11,7 @@ import type { EditMessage } from "../artifacts/ArtifactFrame.tsx";
 import { useCanvasDoc } from "../canvas/doc.ts";
 import { useCanvasProject, useEngine } from "../context.ts";
 import { useFeature } from "../features.ts";
-import { designCommand, type DesignCommand, type KeyModifiers } from "./designKeys.ts";
+import { canvasKey, designCommand, type DesignCommand, type KeyModifiers } from "./designKeys.ts";
 import { DesignDrafts } from "./DesignDrafts.tsx";
 import { isFlexLike, layerName, mainAxis, parentAxis, type ElementLayout } from "./designLayout.ts";
 import { AltDistance, DesignHandles } from "./DesignHandles.tsx";
@@ -287,12 +287,17 @@ const DesignSession = ({ editor, project, entry }: { readonly editor: Editor; re
       if (typeof message.layouts === "object" && message.layouts !== null) setLayouts(message.layouts as Record<string, ElementLayout>);
       return;
     }
-    if (message.type === "unframed:edit:key") {
-      onKeyRef.current(String(message.key ?? ""), { shift: message.shift === true, meta: message.meta === true, ctrl: message.ctrl === true, alt: message.alt === true });
-      return;
-    }
-    if (message.type === "unframed:edit:keyup") {
-      if (message.key === "Alt") setAlt(false);
+    if (message.type === "unframed:edit:key" || message.type === "unframed:edit:keyup") {
+      const key = String(message.key ?? "");
+      const code = String(message.code ?? "");
+      const modifiers = { shift: message.shift === true, meta: message.meta === true, ctrl: message.ctrl === true, alt: message.alt === true };
+      const down = message.type === "unframed:edit:key";
+      if (!down && key === "Alt") setAlt(false);
+      if (down && onKeyRef.current(key, modifiers)) return;
+      if (!canvasKey(key, code, modifiers)) return;
+      editor.getContainer().dispatchEvent(
+        new KeyboardEvent(down ? "keydown" : "keyup", { key, code, repeat: message.repeat === true, shiftKey: modifiers.shift, metaKey: modifiers.meta, ctrlKey: modifiers.ctrl, altKey: modifiers.alt, bubbles: true, cancelable: true }),
+      );
       return;
     }
     if (message.type === "unframed:edit:context") {
