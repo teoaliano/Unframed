@@ -17,6 +17,7 @@ import { isFlexLike, layerName, mainAxis, parentAxis, type ElementLayout } from 
 import { AltDistance, DesignHandles } from "./DesignHandles.tsx";
 import { designDraftsOf, designHooksOf, designOf, leaveDesign, type DesignEntry } from "./designMode.ts";
 import { boxOf, DesignOverlay, selectionBox } from "./DesignOverlay.tsx";
+import { DesignMenu, type MenuAt } from "./DesignMenu.tsx";
 import { useScreenApply } from "./screenApply.ts";
 import type { ScreenEditHooks } from "./ScreenView.tsx";
 import { repositoryState } from "./store.ts";
@@ -98,6 +99,8 @@ const DesignSession = ({ editor, project, entry }: { readonly editor: Editor; re
   layoutsRef.current = layouts;
   const [alt, setAlt] = useState(false);
   const [resizing, setResizing] = useState<string | null>(null);
+  const [menu, setMenu] = useState<MenuAt | undefined>(undefined);
+  const hostRef = useRef<HTMLElement | null>(null);
   const [tokens, setTokens] = useState<TokenScale>(EMPTY_SCALE);
   const pointer = useMemo(() => atom<{ readonly x: number; readonly y: number } | null>("design pointer", null), []);
   const reorder = useRef<{ readonly id: string; readonly from: number; readonly axis: "row" | "column" } | null>(null);
@@ -221,6 +224,7 @@ const DesignSession = ({ editor, project, entry }: { readonly editor: Editor; re
   };
 
   const onKey = (key: string, modifiers: KeyModifiers): boolean => {
+    if (menu !== undefined) return false;
     if (key === "Alt") {
       setAlt(true);
       return false;
@@ -268,6 +272,16 @@ const DesignSession = ({ editor, project, entry }: { readonly editor: Editor; re
     }
     if (message.type === "unframed:edit:keyup") {
       if (message.key === "Alt") setAlt(false);
+      return;
+    }
+    if (message.type === "unframed:edit:context") {
+      const id = typeof message.id === "string" ? message.id : null;
+      const element = hostRef.current;
+      if (id === null || element === null || typeof message.x !== "number" || typeof message.y !== "number") return;
+      if (!current.selection.includes(id)) current.onFrameMessage({ type: "unframed:edit:pick", element: message.element, additive: false });
+      const rect = element.getBoundingClientRect();
+      const scale = element.offsetWidth === 0 ? 1 : rect.width / element.offsetWidth;
+      setMenu({ id, x: rect.left + message.x * scale, y: rect.top + message.y * scale });
       return;
     }
     if (message.type === "unframed:edit:pointer") {
@@ -331,6 +345,7 @@ const DesignSession = ({ editor, project, entry }: { readonly editor: Editor; re
   }, [draftKey]);
 
   const host = useHost(project, shapeId);
+  hostRef.current = host;
   const forAgent = (elements: ChipElement[]) => elements.map((element) => screenChip(element, session.reports[element.elementId ?? ""] ?? {}));
 
   if (props === undefined) return null;
@@ -361,6 +376,7 @@ const DesignSession = ({ editor, project, entry }: { readonly editor: Editor; re
           </div>,
           host,
         )}
+      <DesignMenu at={menu} session={session} onClose={() => setMenu(undefined)} onCommand={(command) => run(command)} />
       <ScreenDesignPanel editor={editor} session={session} project={project} instance={instance?.id} onTell={(elements) => tellAgent(client, shapeId, forAgent(elements))} />
     </>
   );

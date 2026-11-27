@@ -145,6 +145,8 @@ test("with repositories off, a Repository opens read-only on its Screens' last s
     const at = await centre(screen);
     await page.mouse.dblclick(at.x, at.y);
     await expect(page.getByTestId("artifact-editor")).toHaveCount(0);
+    await expect(page.getByTestId("design-overlay")).toHaveCount(0);
+    await expect(page.getByTestId("screen-design-panel")).toHaveCount(0);
     await expect(page.locator("[data-slot=top-bar] [role=tab][data-variant='secondary']")).toHaveCount(0);
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "All projects" }).click();
@@ -172,6 +174,22 @@ test("with element editing off, a React Screen's editor has no Edit mode, nothin
       await expect(page.locator('[data-edit-outline="selected"]')).toHaveCount(0);
       await expect(editor.getByTestId("screen-drafts")).toHaveCount(0);
       await expect(editor.getByTestId("screen-source")).toHaveCount(0);
+    },
+    prepareReactApp,
+  );
+});
+
+test("with element editing off, a double-click on a Screen opens its editor and never enters design mode", async ({ page }) => {
+  await withRepository(
+    page,
+    { UNFRAMED_FEATURES: "repositories" },
+    async (engine, project) => {
+      const [first] = await screenShapes(engine, project);
+      const at = await centre(page.locator(`[data-shape-id="${first.id}"] [data-testid=screen]`));
+      await page.mouse.dblclick(at.x, at.y);
+      await expect(page.getByTestId("artifact-editor")).toBeVisible();
+      await expect(page.getByTestId("design-overlay")).toHaveCount(0);
+      await expect(page.getByTestId("screen-design-panel")).toHaveCount(0);
     },
     prepareReactApp,
   );

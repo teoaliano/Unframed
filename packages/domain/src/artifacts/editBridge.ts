@@ -854,14 +854,22 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     const undo = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z";
     const transport = win.__timelines !== undefined && TRANSPORT_KEYS.includes(event.key);
     if (stamp || KEYS_FORWARDED.includes(event.key) || event.key === "Enter" || undo || transport) {
-      post({ type: "unframed:edit:key", key: event.key, shift: event.shiftKey === true, meta: event.metaKey === true, ctrl: event.ctrlKey === true, alt: event.altKey === true });
+      post({ type: "unframed:edit:key", key: event.key, shift: event.shiftKey === true, meta: event.metaKey === true, ctrl: event.ctrlKey === true, ...(stamp ? { alt: event.altKey === true } : {}) });
     }
   };
   const onKeyUp = (event: EditEvent) => {
     if (stamp && listening && editing === null && event.key === "Alt") post({ type: "unframed:edit:keyup", key: event.key });
   };
 
+  const onContext = (event: EditEvent) => {
+    if (!stamp || !listening || editing !== null) return;
+    event.preventDefault();
+    const el = hoverTarget(targetOf(event));
+    post({ type: "unframed:edit:context", x: event.clientX ?? 0, y: event.clientY ?? 0, id: el === null ? null : validId(el), element: el === null ? null : reportOf(el, true) });
+  };
+
   const LISTENERS: Array<[string, (event: EditEvent) => void]> = [
+    ["contextmenu", onContext],
     ["pointermove", onMove],
     ["pointermove", onDrag],
     ["pointermove", onPointer],
