@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 import { clickShape } from "./generation.ts";
@@ -174,6 +176,143 @@ test("edge and corner handles resize with a live badge, the radius circle near a
       await expect.poll(async () => (await app(page).locator("header").boundingBox())!.x > (await app(page).locator("ul").boundingBox())!.x).toBe(true);
       const rows = await openDrafts(page);
       await expect(rows.getByTestId("draft-line")).toContainText(["Moved after List"]);
+    },
+    prepareReactApp,
+  );
+});
+
+const title = (page: Page) => page.getByTestId("screen-design-title");
+
+test("keys reorder, duplicate, hide, wrap, delete, set opacity and bold, undo and redo each step, and Delete never deletes the Screen", async ({ page }) => {
+  await withRepository(
+    page,
+    {},
+    async (engine, project) => {
+      await openReact(page, engine, project);
+      await enterOn(page, "header h2");
+      await expect(title(page)).toHaveText("Header");
+
+      await page.keyboard.press("ArrowRight");
+      await expect.poll(async () => (await app(page).locator("header").boundingBox())!.x > (await app(page).locator("ul").boundingBox())!.x).toBe(true);
+      await page.keyboard.press("ControlOrMeta+z");
+      await expect.poll(async () => (await app(page).locator("header").boundingBox())!.x < (await app(page).locator("ul").boundingBox())!.x).toBe(true);
+      await page.keyboard.press("ControlOrMeta+Shift+z");
+      await expect.poll(async () => (await app(page).locator("header").boundingBox())!.x > (await app(page).locator("ul").boundingBox())!.x).toBe(true);
+
+      const second = await pointIn(page, "li:nth-child(2) p");
+      await page.mouse.click(second.x, second.y);
+      await expect(title(page)).toHaveText("Card");
+      await page.keyboard.press("5");
+      await expect.poll(() => computed(page, "li:nth-child(2)", "opacity")).toBe("0.5");
+      await page.keyboard.press("ControlOrMeta+d");
+      await expect(app(page).locator("li")).toHaveCount(4);
+      await page.keyboard.press("ControlOrMeta+Shift+h");
+      await page.keyboard.press("ControlOrMeta+g");
+      await page.keyboard.press("Delete");
+      await expect(title(page)).toHaveText("Design");
+      expect(await screenShapes(engine, project)).toHaveLength(1);
+
+      await page.keyboard.down("ControlOrMeta");
+      const body = await pointIn(page, "li:nth-child(1) p");
+      await page.mouse.click(body.x, body.y);
+      await page.keyboard.up("ControlOrMeta");
+      await expect(title(page)).toHaveText("Text");
+      await page.keyboard.press("ControlOrMeta+b");
+      await expect.poll(() => computed(page, "li:nth-child(1) p", "font-weight")).toBe("700");
+
+      await title(page).click();
+      await page.keyboard.press("Backspace");
+      await expect(title(page)).toHaveText("Design");
+      await page.keyboard.press("Delete");
+      expect(await screenShapes(engine, project)).toHaveLength(1);
+      await expect(overlay(page)).toBeAttached();
+
+      const rows = await openDrafts(page);
+      await expect(rows.getByTestId("draft-line")).toHaveText([
+        "Moved after List",
+        "Opacity 100% → 50% opacity-50",
+        "Duplicated (the copy right after it)",
+        "Hidden",
+        "Wrapped it in a new frame (flexbox, column)",
+        "Deleted",
+        "Weight Regular → Bold font-bold",
+        "Deleted",
+      ]);
+    },
+    prepareReactApp,
+  );
+});
+
+test("a double-click on a word of a selected text edits it in place and Escape commits it as a draft", async ({ page }) => {
+  await withRepository(
+    page,
+    {},
+    async (engine, project) => {
+      await openReact(page, engine, project);
+      await enterOn(page, "header h2");
+      await page.keyboard.down("ControlOrMeta");
+      const word = await pointIn(page, "li:nth-child(2) h3", { x: 0.2, y: 0.5 });
+      await page.mouse.click(word.x, word.y);
+      await page.keyboard.up("ControlOrMeta");
+      await expect(title(page)).toHaveText("Heading");
+      await page.mouse.dblclick(word.x, word.y);
+      await expect(app(page).locator("li:nth-child(2) h3")).toHaveAttribute("contenteditable", "plaintext-only");
+      await page.keyboard.type("Fourth");
+      await page.keyboard.press("Escape");
+      await expect(app(page).locator("li:nth-child(2) h3")).not.toHaveAttribute("contenteditable");
+      await expect(app(page).locator("li:nth-child(2) h3")).toHaveText("Fourth");
+      await expect(title(page)).toHaveText("Heading");
+      const rows = await openDrafts(page);
+      await expect(rows.getByTestId("draft-line")).toHaveText(["Text “Second” → “Fourth”"]);
+    },
+    prepareReactApp,
+  );
+});
+
+test("the drafts bar lists the changes, pins them with Show all, compares by swipe, discards all with undo, and Apply writes a padding drag", async ({ page }) => {
+  await withRepository(
+    page,
+    {},
+    async (engine, project) => {
+      await openReact(page, engine, project);
+      await enterOn(page, "header h2");
+      const scale = await frameScale(page);
+      await dragBy(page, await centreOf(page, '[data-design-padding="left"]'), { x: 6 * scale, y: 0 });
+      const second = await pointIn(page, "li:nth-child(2) p");
+      await page.mouse.click(second.x, second.y);
+      await page.keyboard.press("5");
+      await expect(page.getByTestId("design-drafts-count")).toHaveAccessibleName("2 changes");
+
+      const rows = await openDrafts(page);
+      await expect(rows.getByTestId("draft-layer")).toHaveText(["Header", "Card"]);
+      await page.getByRole("button", { name: "Show all" }).click();
+      await expect(page.locator("[data-design-pin]")).toHaveCount(2);
+      await rows.first().getByTestId("draft-layer").getByRole("button").click();
+      await expect(title(page)).toHaveText("Header");
+      await page.keyboard.press("Escape");
+
+      const compare = page.getByRole("button", { name: "Compare" });
+      if (await compare.isEnabled()) {
+        await compare.click();
+        await expect(page.getByTestId("design-swipe")).toBeVisible();
+        await compare.click();
+        await expect(page.getByTestId("design-swipe")).toHaveCount(0);
+      }
+
+      await page.getByRole("button", { name: "Discard all" }).click();
+      await expect(page.getByTestId("design-drafts")).toHaveCount(0);
+      await expect.poll(() => computed(page, "header", "padding-left")).toBe("14px");
+      await page.keyboard.press("ControlOrMeta+z");
+      await expect(page.getByTestId("design-drafts-count")).toHaveAccessibleName("2 changes");
+      await expect.poll(() => computed(page, "header", "padding-left")).toBe("20px");
+
+      const rpc = await engine.rpc();
+      const worktree = (await rpc.call("instances.list", { project })).instances[0]!.worktree;
+      await rpc.close();
+      await page.getByRole("button", { name: "Apply", exact: true }).click();
+      await page.getByTestId("design-drafts-count").click();
+      await expect(page.getByRole("list", { name: "Changes" }).locator("[data-draft-row]").first().getByTestId("draft-state")).toHaveText("Took", { timeout: 30_000 });
+      await expect.poll(() => readFile(join(worktree, "src", "App.jsx"), "utf8"), { timeout: 10_000 }).toContain("pl-5 pr-2");
     },
     prepareReactApp,
   );
