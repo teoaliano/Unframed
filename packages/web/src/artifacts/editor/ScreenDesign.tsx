@@ -1,7 +1,8 @@
 import type { SourceEdit } from "@unframed/contracts";
-import { classStep, DEFAULT_TYPE_SCALE, elementKind, fieldAria, pairShown, stepOfClass, styleValueRefusal, type ClassStep, type DraftChange, type NumberBounds } from "@unframed/domain";
+import type { TokenScale } from "@unframed/contracts";
+import { elementKind, EMPTY_SCALE, fieldAria, fieldToken, pairShown, styleValueRefusal, typeScaleOf, type DraftChange, type FieldToken, type NumberBounds, type TailwindToken } from "@unframed/domain";
 import { Eye, EyeOff, MoveHorizontal, MoveVertical, Scan, SunDim } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "~/components/ui/button";
 import { Toggle } from "~/components/ui/toggle";
 import { Tip } from "../../chrome/ui.tsx";
@@ -62,25 +63,39 @@ export interface Field {
   readonly mixed: boolean;
   readonly px: string;
   readonly raw: number | undefined;
-  readonly bound: ClassStep | undefined;
+  readonly bound: FieldToken | undefined;
   readonly shown: string;
 }
 
-export const useScreenFields = (session: EditSession, subjects: readonly ScreenSubject[], tokenNames: readonly string[]) => {
+export const useTokenScale = (context: ScreenDesignContext): TokenScale => {
+  const [found, setFound] = useState<{ readonly key: string; readonly scale: TokenScale } | undefined>(undefined);
+  const key = context.instance === undefined ? "" : `${context.project}|${context.instance}`;
+  useEffect(() => {
+    if (context.instance === undefined) return;
+    let live = true;
+    context.engine.call("screens.tokens", { project: context.project, instance: context.instance }).then(
+      (answer) => live && setFound({ key, scale: answer.scale }),
+      () => live && setFound({ key, scale: EMPTY_SCALE }),
+    );
+    return () => {
+      live = false;
+    };
+  }, [key]);
+  return found?.key === key ? found.scale : EMPTY_SCALE;
+};
+
+export const useScreenFields = (session: EditSession, subjects: readonly ScreenSubject[], scale: TokenScale, tokenNames: readonly string[]) => {
   const single = subjects.length === 1;
   const draftOf = (id: string, property: string): DraftChange | undefined => session.drafts.find((draft) => draft.element.stamp === id && draft.property === property);
-  const boundOf = (subject: ScreenSubject, reads: string, writes: string): ClassStep | undefined => {
-    const draft = draftOf(subject.id, writes) ?? (reads === writes ? undefined : draftOf(subject.id, reads));
-    if (draft !== undefined) return draft.kind === "class" && draft.after !== null ? stepOfClass(draft.after) : undefined;
-    return classStep(subject.report.className, reads);
-  };
+  const boundOf = (subject: ScreenSubject, reads: string, writes: string): FieldToken | undefined =>
+    fieldToken(scale, reads, subject.report.className, draftOf(subject.id, writes) ?? (reads === writes ? undefined : draftOf(subject.id, reads)));
   const field = (reads: string, writes: string = reads, pick: (subject: ScreenSubject) => string = (subject) => subject.report.computed[reads] ?? ""): Field => {
     const values = subjects.map(pick);
     const mixed = values.some((value) => value !== values[0]);
     const px = mixed ? "" : numberText(values[0]);
     const parsed = Number(px);
     const bound = single ? boundOf(subjects[0]!, reads, writes) : undefined;
-    return { reads, writes, values, mixed, px, raw: px === "" || !Number.isFinite(parsed) ? undefined : parsed, bound, shown: mixed ? "" : (bound?.step ?? px) };
+    return { reads, writes, values, mixed, px, raw: px === "" || !Number.isFinite(parsed) ? undefined : parsed, bound, shown: mixed ? "" : (bound?.label ?? px) };
   };
   const changeOf = (properties: readonly string[]): FieldChange | undefined => {
     const found = subjects.flatMap((subject) => properties.flatMap((property) => draftOf(subject.id, property) ?? []));
@@ -91,7 +106,7 @@ export const useScreenFields = (session: EditSession, subjects: readonly ScreenS
       discard: () => found.forEach((draft) => session.discardDraft(draft.id)),
     };
   };
-  const write = (property: string, valueOf: (subject: ScreenSubject) => string): boolean => {
+  const write = (property: string, valueOf: (subject: ScreenSubject) => string, token?: TailwindToken): boolean => {
     const writes = subjects.map((subject) => ({ subject, value: valueOf(subject) }));
     for (const { value } of writes) {
       const refusal = styleValueRefusal(property, value, tokenNames);
@@ -100,10 +115,10 @@ export const useScreenFields = (session: EditSession, subjects: readonly ScreenS
         return false;
       }
     }
-    for (const { subject, value } of writes) session.patch({ type: "style", elementId: subject.id, property, value } satisfies SourceEdit);
+    for (const { subject, value } of writes) session.patch({ type: "style", elementId: subject.id, property, value } satisfies SourceEdit, token);
     return true;
   };
-  return { field, changeOf, write, draftOf, single };
+  return { field, changeOf, write, draftOf, single, scale };
 };
 
 export type ScreenFields = ReturnType<typeof useScreenFields>;
@@ -260,7 +275,8 @@ export const ScreenDesign = ({
   readonly tokenNames?: readonly string[];
   readonly onTell: () => void;
 }) => {
-  const fields = useScreenFields(session, subjects, tokenNames);
+  const scale = useTokenScale(context);
+  const fields = useScreenFields(session, subjects, scale, tokenNames);
   const [first] = subjects;
   const text = subjects.every((subject) => subject.report.text !== null);
   return (
@@ -268,7 +284,7 @@ export const ScreenDesign = ({
       <ScreenHeader session={session} context={context} name={name} kind={fields.single ? elementKind(first!.report.tag) : `${subjects.length} elements`} onTell={onTell} />
       {text ? (
         <>
-          <TypographySection fields={fields} subjects={subjects} families={session.families} scale={DEFAULT_TYPE_SCALE} />
+          <TypographySection fields={fields} subjects={subjects} families={session.families} scale={typeScaleOf(scale)} />
           <PaddingSection fields={fields} />
           <SizeSection fields={fields} />
         </>

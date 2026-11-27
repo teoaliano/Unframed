@@ -1,4 +1,4 @@
-import { DEFAULT_LEADING, fieldAria, textStyleOf, trackingPercent, trackingValue, WEIGHT_STYLES, weightLabel, type ScalePreset, type TypeStep } from "@unframed/domain";
+import { DEFAULT_LEADING, fieldAria, snapToken, textStyleOf, trackingPercent, trackingValue, WEIGHT_STYLES, weightLabel, type ScalePreset, type TypeStep } from "@unframed/domain";
 import { AlignCenter, AlignLeft, AlignRight, ChevronDown, Settings2, Type } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Button } from "~/components/ui/button";
@@ -328,10 +328,10 @@ export const TypographySection = ({
   const weight = computed["font-weight"] ?? "400";
   const italic = computed["font-style"] === "italic";
   const align = computed["text-align"] === "start" ? "left" : computed["text-align"] === "end" ? "right" : (computed["text-align"] ?? "left");
-  const writeSize = (px: number) => fields.write("font-size", () => `${px}px`);
+  const writeSize = (px: number, picked = false) => fields.write("font-size", () => `${px}px`, picked ? snapToken(fields.scale, "font-size", px, 0) : undefined);
   return (
     <InspectorSection name="Typography">
-      {style !== undefined && <TextStyleChip style={style} scale={scale} onPick={(step) => writeSize(step.size)} onDetach={() => writeSize(style.size)} />}
+      {style !== undefined && <TextStyleChip style={style} scale={scale} onPick={(step) => writeSize(step.size, true)} onDetach={() => writeSize(style.size)} />}
       <div className="flex min-w-0 items-center gap-1">
         <ChangedDot change={fields.changeOf(["font-family"])} />
         <FontPicker value={computed["font-family"] ?? ""} project={families} onPick={(family) => fields.write("font-family", () => family)} />
@@ -354,14 +354,14 @@ export const TypographySection = ({
           field={size}
           icon={<Type aria-hidden className="size-3.5" />}
           bounds={{ min: 1 }}
-          suffix={<PresetMenu label="Font size presets" presets={[{ items: scale.map((step) => ({ name: step.name, px: step.size })) }]} onPick={(preset) => writeSize(preset.px)} />}
+          suffix={<PresetMenu label="Font size presets" presets={[{ items: scale.map((step) => ({ name: step.name, px: step.size })) }]} onPick={(preset) => writeSize(preset.px, true)} />}
         />
         <NumberRow
           fields={fields}
           label="Line height"
           field={line}
           icon={<span className="text-xs">↕</span>}
-          suffix={<PresetMenu label="Line height presets" presets={[{ items: leading }]} onPick={(preset) => fields.write("line-height", () => `${preset.px}px`)} />}
+          suffix={<PresetMenu label="Line height presets" presets={[{ items: leading }]} onPick={(preset) => fields.write("line-height", () => `${preset.px}px`, snapToken(fields.scale, "line-height", preset.px, 0))} />}
         />
         <ScrubField
           label="Letter spacing"

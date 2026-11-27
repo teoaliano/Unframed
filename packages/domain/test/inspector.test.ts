@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { classStep, DEFAULT_TYPE_SCALE, fieldAria, pairShown, scrubbed, stepOfClass, stepped, textStyleOf, trackingPercent, trackingValue, weightLabel } from "../src/inspector.ts";
+import { EMPTY_SCALE, tokenScaleOf } from "../src/design/tokens.ts";
+import { DEFAULT_TYPE_SCALE, fieldAria, fieldToken, pairShown, scrubbed, stepped, textStyleOf, trackingPercent, typeScaleOf, trackingValue, weightLabel } from "../src/inspector.ts";
 
 describe("scrubbing and stepping", () => {
   it("moves half a unit per pixel of pointer, rounded, and stays in bounds", () => {
@@ -19,28 +20,33 @@ describe("scrubbing and stepping", () => {
 
 describe("the token step a field shows", () => {
   it("shows the step of the class that sets the property", () => {
-    expect(classStep("flex h-12 items-center pl-3.5 pr-2", "padding-left")).toEqual({ name: "pl-3.5", step: "3.5" });
-    expect(classStep("px-2 py-1", "padding-top")).toEqual({ name: "py-1", step: "1" });
-    expect(classStep("text-sm font-medium", "font-size")).toEqual({ name: "text-sm", step: "sm" });
-    expect(classStep("size-7", "width")).toEqual({ name: "size-7", step: "size-7" });
-    expect(classStep("h-12", "height")).toEqual({ name: "h-12", step: "12" });
-    expect(classStep("rounded-2xl", "border-radius")).toEqual({ name: "rounded-2xl", step: "2xl" });
-    expect(classStep("rounded-full", "border-radius")).toEqual({ name: "rounded-full", step: "Full" });
-    expect(classStep("leading-6", "line-height")).toEqual({ name: "leading-6", step: "6" });
-    expect(classStep("flex gap-1", "row-gap")).toEqual({ name: "gap-1", step: "1" });
+    expect(fieldToken(EMPTY_SCALE, "padding-left", "flex h-12 items-center pl-3.5 pr-2")).toEqual({ name: "pl-3.5", label: "3.5" });
+    expect(fieldToken(EMPTY_SCALE, "padding-top", "px-2 py-1")).toEqual({ name: "py-1", label: "1" });
+    expect(fieldToken(EMPTY_SCALE, "font-size", "text-sm font-medium")).toEqual({ name: "text-sm", label: "sm" });
+    expect(fieldToken(EMPTY_SCALE, "width", "size-7")).toEqual({ name: "size-7", label: "size-7" });
+    expect(fieldToken(EMPTY_SCALE, "height", "h-12")).toEqual({ name: "h-12", label: "12" });
+    expect(fieldToken(EMPTY_SCALE, "border-radius", "rounded-2xl")).toEqual({ name: "rounded-2xl", label: "2xl" });
+    expect(fieldToken(EMPTY_SCALE, "border-radius", "rounded-full")).toEqual({ name: "rounded-full", label: "Full" });
+    expect(fieldToken(EMPTY_SCALE, "line-height", "leading-6")).toEqual({ name: "leading-6", label: "6" });
+    expect(fieldToken(EMPTY_SCALE, "row-gap", "flex gap-1")).toEqual({ name: "gap-1", label: "1" });
   });
 
   it("shows no step for an arbitrary value, a variant class or no class", () => {
-    expect(classStep("pr-[13px]", "padding-right")).toBeUndefined();
-    expect(classStep("md:pl-4", "padding-left")).toBeUndefined();
-    expect(classStep("flex", "padding-left")).toBeUndefined();
-    expect(classStep(null, "padding-left")).toBeUndefined();
-    expect(stepOfClass("hover:pl-4")).toBeUndefined();
+    expect(fieldToken(EMPTY_SCALE, "padding-right", "pr-[13px]")).toBeUndefined();
+    expect(fieldToken(EMPTY_SCALE, "padding-left", "md:pl-4")).toBeUndefined();
+    expect(fieldToken(EMPTY_SCALE, "padding-left", "flex")).toBeUndefined();
+    expect(fieldToken(EMPTY_SCALE, "padding-left", null)).toBeUndefined();
+  });
+
+  it("shows the class a draft asks for, or pixels when the draft is raw", () => {
+    expect(fieldToken(EMPTY_SCALE, "padding-left", "pl-3.5", { kind: "class", after: "pl-4" })).toEqual({ name: "pl-4", label: "4" });
+    expect(fieldToken(EMPTY_SCALE, "padding-left", "pl-3.5", { kind: "class", after: "pl-[15px]" })).toBeUndefined();
+    expect(fieldToken(EMPTY_SCALE, "padding-left", "pl-3.5", { kind: "style", after: "15px" })).toBeUndefined();
   });
 
   it("names the field with both the class and the pixels when a class sets it", () => {
-    expect(fieldAria("Gap between items", { name: "gap-1", step: "1" }, "4")).toBe("Gap between items: gap-1 (4)");
-    expect(fieldAria("Width", { name: "size-7", step: "size-7" }, "28")).toBe("Width: size-7 (28)");
+    expect(fieldAria("Gap between items", { name: "gap-1", label: "1" }, "4")).toBe("Gap between items: gap-1 (4)");
+    expect(fieldAria("Width", { name: "size-7", label: "size-7" }, "28")).toBe("Width: size-7 (28)");
     expect(fieldAria("Padding left", undefined, "13")).toBe("Padding left");
   });
 
@@ -67,5 +73,15 @@ describe("typography", () => {
     expect(trackingPercent("1.4px", "14px")).toBe(10);
     expect(trackingValue(10)).toBe("0.1em");
     expect(trackingValue(0)).toBe("0em");
+  });
+});
+
+describe("the type scale the presets offer", () => {
+  it("comes from the project's font sizes with their line heights, or Tailwind's defaults", () => {
+    expect(typeScaleOf(EMPTY_SCALE)).toBe(DEFAULT_TYPE_SCALE);
+    const scale = tokenScaleOf({ css: [{ file: "src/index.css", text: '@import "tailwindcss";\n@theme { --text-5xs: 0.4375rem; --text-5xs--line-height: 0.75rem; }' }] });
+    const steps = typeScaleOf(scale);
+    expect(steps[0]).toEqual({ name: "text-5xs", size: 7, leading: 12 });
+    expect(steps.find((step) => step.name === "text-sm")).toEqual({ name: "text-sm", size: 14, leading: 20 });
   });
 });

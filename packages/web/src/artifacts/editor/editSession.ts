@@ -30,6 +30,7 @@ import {
   type EditBox,
   type FieldOwner,
   type Kit,
+  type TailwindToken,
 } from "@unframed/domain";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CanvasDoc } from "../../canvas/doc.ts";
@@ -171,7 +172,7 @@ export interface EditSession {
   readonly discardDraft: (id: string) => void;
   readonly scopeDraft: (id: string, scope: DraftScope) => void;
   readonly showDrafts: (shown: boolean) => void;
-  readonly patch: (edit: SourceEdit) => void;
+  readonly patch: (edit: SourceEdit, token?: TailwindToken) => void;
   readonly patchTween: (edit: SourceEdit, frame: TweenPatch) => void;
   readonly previewTween: (frame: TweenPatch) => void;
   readonly previewEdits: (edits: readonly SourceEdit[] | null) => void;
@@ -499,7 +500,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
   );
 
   const collect = useCallback(
-    (edit: SourceEdit, showInFrame: boolean) => {
+    (edit: SourceEdit, showInFrame: boolean, token?: TailwindToken) => {
       if (screen) {
         const id = "elementId" in edit ? edit.elementId : undefined;
         const known = id === undefined ? undefined : reportsRef.current[id] ?? liveNodeOf(liveRef.current, id);
@@ -513,7 +514,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
           className: report?.className ?? null,
           computed: report?.computed ?? {},
           text: report?.text ?? null,
-        });
+        }, token);
         if (draft !== undefined) draftFor.current.set(edit, draft);
         setOverrides(addScreenOverride(overridesRef.current, override));
         const patches = framePatchesOf(edit, null);
@@ -555,7 +556,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
     [],
   );
 
-  const patch = useCallback((edit: SourceEdit) => collect(edit, true), [collect]);
+  const patch = useCallback((edit: SourceEdit, token?: TailwindToken) => collect(edit, true, token), [collect]);
 
   const patchTween = useCallback(
     (edit: SourceEdit, frame: TweenPatch) => {

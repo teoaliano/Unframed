@@ -1,4 +1,5 @@
-import { classSetting, readClass } from "./tailwind.ts";
+import type { TokenScale } from "@unframed/contracts";
+import { classForToken, EMPTY_SCALE, tokenLabel, tokenOf } from "./design/tokens.ts";
 
 export const SCRUB_RATE = 0.5;
 
@@ -13,33 +14,20 @@ export const scrubbed = (start: number, dx: number, bounds: NumberBounds = {}): 
 
 export const stepped = (value: number, up: boolean, shift: boolean, bounds: NumberBounds = {}): number => clamp(value + (up ? 1 : -1) * (shift ? 10 : 1), bounds);
 
-export interface ClassStep {
+export interface FieldToken {
   readonly name: string;
-  readonly step: string;
+  readonly label: string;
 }
 
-const WHOLE = new Set(["size"]);
+const named = (property: string, name: string): FieldToken | undefined => (name.includes("[") ? undefined : { name, label: tokenLabel(property, name) });
 
-export const stepOfClass = (name: string): ClassStep | undefined => {
-  const read = readClass(name);
-  if (read === undefined || read.variant !== "") return undefined;
-  const utility = read.utility.replace(/^-/, "");
-  if (/\[[^\]]*\]$/.test(utility)) return undefined;
-  const dash = utility.indexOf("-");
-  if (dash === -1) return { name, step: utility };
-  const prefix = utility.slice(0, dash);
-  const rest = utility.slice(dash + 1);
-  if (WHOLE.has(prefix)) return { name, step: utility };
-  if (rest === "full" && prefix === "rounded") return { name, step: "Full" };
-  return { name, step: rest };
+export const fieldToken = (scale: TokenScale, property: string, className: string | null | undefined, draft?: { readonly after: string | null; readonly kind: string }): FieldToken | undefined => {
+  if (draft !== undefined) return draft.kind === "class" && draft.after !== null ? named(property, draft.after) : undefined;
+  const bound = tokenOf(scale, property, { computed: "", className: className ?? null });
+  return bound === undefined ? undefined : named(property, bound.name);
 };
 
-export const classStep = (className: string | null | undefined, property: string): ClassStep | undefined => {
-  const found = classSetting(className, property);
-  return found === undefined ? undefined : stepOfClass(found.name);
-};
-
-export const fieldAria = (label: string, bound: ClassStep | undefined, raw: string): string => (bound === undefined ? label : `${label}: ${bound.name} (${raw})`);
+export const fieldAria = (label: string, bound: FieldToken | undefined, raw: string): string => (bound === undefined ? label : `${label}: ${bound.name} (${raw})`);
 
 export const pairShown = (a: string, b: string): string => (a === b ? a : `${a}, ${b}`);
 
@@ -76,7 +64,7 @@ export const DEFAULT_LEADING: readonly ScalePreset[] = [3, 4, 5, 6, 7, 8, 9, 10]
 export const DEFAULT_SPACING: readonly ScalePreset[] = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 20, 24, 28, 32, 36, 40, 44, 48].map((step) => ({ name: String(step), px: step * 4 }));
 
 export const textStyleOf = (scale: readonly TypeStep[], className: string | null | undefined): TypeStep | undefined => {
-  const step = classStep(className, "font-size");
+  const step = fieldToken(EMPTY_SCALE, "font-size", className);
   return step === undefined ? undefined : scale.find((each) => each.name === step.name);
 };
 
@@ -111,3 +99,13 @@ export const trackingPercent = (letterSpacing: string | undefined, fontSize: str
 };
 
 export const trackingValue = (percent: number): string => `${Math.round(percent * 10) / 1000}em`;
+
+export const typeScaleOf = (scale: TokenScale): readonly TypeStep[] => {
+  const steps = scale.fontSizes.flatMap((token): TypeStep[] => {
+    const name = classForToken("font-size", token);
+    if (name === undefined || token.px === null) return [];
+    const leading = Number.parseFloat(token.lineHeight ?? "");
+    return [{ name, size: token.px, leading: Number.isFinite(leading) ? (token.lineHeight?.endsWith("px") ? leading : Math.round(leading * token.px)) : token.px }];
+  });
+  return steps.length > 0 ? steps : DEFAULT_TYPE_SCALE;
+};
