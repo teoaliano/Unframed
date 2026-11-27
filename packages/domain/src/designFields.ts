@@ -1,7 +1,7 @@
 
-type DesignSection = "Text" | "Fill" | "Shape" | "Spacing" | "Layout" | "Visibility" | "Image";
+type DesignSection = "Text" | "Fill" | "Shape" | "Spacing" | "Layout" | "Visibility" | "Image" | "Size" | "Position" | "Effects";
 
-export type DesignValueKind = "length" | "number" | "opacity" | "weight" | "color" | "keyword" | "family" | "shadow";
+export type DesignValueKind = "length" | "number" | "opacity" | "weight" | "color" | "keyword" | "family" | "shadow" | "size" | "angle" | "filter";
 
 type DesignUnit = "px" | "unitless" | "percent" | "none";
 
@@ -45,6 +45,40 @@ export const DESIGN_FIELDS: readonly DesignField[] = [
   keyword("Layout", "Align items", "align-items", ["flex-start", "center", "flex-end", "stretch", "baseline"]),
   keyword("Layout", "Justify", "justify-content", ["flex-start", "center", "flex-end", "space-between", "space-around", "space-evenly"]),
   keyword("Layout", "Wrap", "flex-wrap", ["nowrap", "wrap"]),
+  keyword("Layout", "Display", "display", ["block", "flex", "inline-flex", "grid", "inline-grid", "inline", "inline-block", "none"]),
+  keyword("Layout", "Clip content", "overflow", ["visible", "hidden", "clip", "auto", "scroll"]),
+  { section: "Spacing", label: "Row gap", property: "row-gap", kind: "length", keywords: [], unit: "px" },
+  { section: "Spacing", label: "Column gap", property: "column-gap", kind: "length", keywords: [], unit: "px" },
+  keyword("Text", "Italic", "font-style", ["normal", "italic"]),
+  keyword("Text", "Decoration", "text-decoration-line", ["none", "underline", "line-through"]),
+  keyword("Text", "Case", "text-transform", ["none", "uppercase", "lowercase", "capitalize"]),
+  keyword("Text", "Wrap style", "text-wrap", ["wrap", "pretty", "balance", "nowrap"]),
+  keyword("Text", "Number spacing", "font-variant-numeric", ["normal", "tabular-nums", "proportional-nums"]),
+  keyword("Text", "Truncate text", "text-overflow", ["clip", "ellipsis"]),
+  keyword("Text", "White space", "white-space", ["normal", "nowrap", "pre", "pre-wrap", "pre-line"]),
+  { section: "Size", label: "Width", property: "width", kind: "size", keywords: [], unit: "px" },
+  { section: "Size", label: "Height", property: "height", kind: "size", keywords: [], unit: "px" },
+  { section: "Size", label: "Min width", property: "min-width", kind: "size", keywords: [], unit: "px" },
+  { section: "Size", label: "Max width", property: "max-width", kind: "size", keywords: [], unit: "px" },
+  { section: "Size", label: "Min height", property: "min-height", kind: "size", keywords: [], unit: "px" },
+  { section: "Size", label: "Max height", property: "max-height", kind: "size", keywords: [], unit: "px" },
+  keyword("Size", "Flex grow", "flex-grow", ["0", "1"]),
+  keyword("Size", "Align self", "align-self", ["auto", "flex-start", "center", "flex-end", "stretch"]),
+  keyword("Position", "Position", "position", ["static", "relative", "absolute", "fixed", "sticky"]),
+  { section: "Position", label: "X", property: "left", kind: "size", keywords: [], unit: "px" },
+  { section: "Position", label: "Y", property: "top", kind: "size", keywords: [], unit: "px" },
+  { section: "Position", label: "Rotation", property: "rotate", kind: "angle", keywords: [], unit: "none" },
+  { section: "Shape", label: "Border top width", property: "border-top-width", kind: "length", keywords: [], unit: "px" },
+  { section: "Shape", label: "Border right width", property: "border-right-width", kind: "length", keywords: [], unit: "px" },
+  { section: "Shape", label: "Border bottom width", property: "border-bottom-width", kind: "length", keywords: [], unit: "px" },
+  { section: "Shape", label: "Border left width", property: "border-left-width", kind: "length", keywords: [], unit: "px" },
+  { section: "Shape", label: "Top left radius", property: "border-top-left-radius", kind: "length", keywords: [], unit: "px" },
+  { section: "Shape", label: "Top right radius", property: "border-top-right-radius", kind: "length", keywords: [], unit: "px" },
+  { section: "Shape", label: "Bottom right radius", property: "border-bottom-right-radius", kind: "length", keywords: [], unit: "px" },
+  { section: "Shape", label: "Bottom left radius", property: "border-bottom-left-radius", kind: "length", keywords: [], unit: "px" },
+  keyword("Effects", "Blend mode", "mix-blend-mode", ["normal", "darken", "multiply", "plus-darker", "color-burn", "lighten", "screen", "plus-lighter", "color-dodge", "overlay", "soft-light", "hard-light", "difference", "exclusion", "hue", "saturation", "color", "luminosity"]),
+  { section: "Effects", label: "Layer blur", property: "filter", kind: "filter", keywords: [], unit: "none" },
+  { section: "Effects", label: "Background blur", property: "backdrop-filter", kind: "filter", keywords: [], unit: "none" },
 ];
 
 const FORBIDDEN: readonly RegExp[] = [/[;{}<>\\]/, /!\s*important/i, /url\(/i, /expression\(/i, /var\(/i];
@@ -58,14 +92,17 @@ const PATTERNS: Partial<Record<DesignValueKind, RegExp>> = {
   weight: /^[1-9]00$/,
   color: /^(?:#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})|[a-z]+\([^()]*\)|[a-z]+)$/i,
   family: /^[A-Za-z0-9 ,'"_.-]+$/,
+  size: new RegExp(`^(?:-?${NUMBER}(?:px|em|rem|%|vw|vh)|0|auto|fit-content|max-content|min-content|none)$`),
+  angle: new RegExp(`^(?:-?${NUMBER}deg|0|none)$`),
+  filter: new RegExp(`^(?:none|blur\\(${NUMBER}px\\))$`),
   shadow: /^(?:none|[-+.\dA-Za-z#%(),'"/\s]*\d[-+.\dA-Za-z#%(),'"/\s]*)$/,
 };
 
-const SIGNED_PROPERTIES: ReadonlySet<string> = new Set(["margin-top", "margin-right", "margin-bottom", "margin-left", "letter-spacing"]);
+const SIGNED_PROPERTIES: ReadonlySet<string> = new Set(["margin-top", "margin-right", "margin-bottom", "margin-left", "letter-spacing", "left", "top", "rotate"]);
 
 const valueFits = (field: DesignField, value: string): boolean => {
   if (value === "" || FORBIDDEN.some((re) => re.test(value))) return false;
-  if (value.startsWith("-") && !SIGNED_PROPERTIES.has(field.property) && (field.kind === "length" || field.kind === "number")) return false;
+  if (value.startsWith("-") && !SIGNED_PROPERTIES.has(field.property) && (field.kind === "length" || field.kind === "number" || field.kind === "size" || field.kind === "angle")) return false;
   if (field.kind === "keyword") return field.keywords.includes(value);
   if (field.kind === "weight") {
     const pattern = PATTERNS.weight;

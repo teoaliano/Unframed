@@ -72,6 +72,18 @@ describe("styleValueRefusal", () => {
     expect(styleValueRefusal("font-size", "12")).toBe('Font size cannot be "12".');
   });
 
+  it("takes sizes, angles, blurs and the inspector's keywords", () => {
+    expect(styleValueRefusal("width", "fit-content")).toBeNull();
+    expect(styleValueRefusal("width", "359px")).toBeNull();
+    expect(styleValueRefusal("width", "-4px")).toBe('Width cannot be "-4px".');
+    expect(styleValueRefusal("left", "-4px")).toBeNull();
+    expect(styleValueRefusal("rotate", "5deg")).toBeNull();
+    expect(styleValueRefusal("filter", "blur(4px)")).toBeNull();
+    expect(styleValueRefusal("filter", "url(#x)")).not.toBeNull();
+    expect(styleValueRefusal("mix-blend-mode", "multiply")).toBeNull();
+    expect(styleValueRefusal("text-decoration-line", "underline")).toBeNull();
+  });
+
   it("refuses a property that is not a design field", () => {
     expect(styleValueRefusal("cursor", "help")).toBe("cursor cannot be edited here.");
   });

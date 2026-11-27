@@ -1,7 +1,7 @@
 import { DESIGN_FIELDS } from "../designFields.ts";
 import { NON_ELEMENT_TAGS } from "../nonElementTags.ts";
 
-const BRIDGE_PROPERTIES = [...DESIGN_FIELDS.map((field) => field.property), "background-image", "display"];
+const BRIDGE_PROPERTIES = [...new Set([...DESIGN_FIELDS.map((field) => field.property), "background-image", "display"])];
 
 export type EditBox = { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
 

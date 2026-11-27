@@ -4,8 +4,6 @@ import {
   NO_BRIDGE,
   SCREEN_EDIT_NOTE,
   SCREEN_VIEWPORTS,
-  classSetting,
-  looksTailwind,
   screenChip,
   screenLabel,
   elementLabel,
@@ -80,7 +78,6 @@ import { installEditorDemand } from "../../repositories/demand.ts";
 import { OpenInBrowser } from "../../repositories/ScreenActions.tsx";
 import { ScreenPreview } from "../../repositories/ScreenPreview.tsx";
 import { ScreenDrafts } from "../../repositories/ScreenDrafts.tsx";
-import { ScreenSource } from "../../repositories/ScreenSource.tsx";
 import { useScreenApply } from "../../repositories/screenApply.ts";
 import { repositoryState } from "../../repositories/store.ts";
 import { MotionTimeline } from "../timeline/MotionTimeline.tsx";
@@ -226,12 +223,6 @@ export const ArtifactEditor = ({
   });
   const screenApplyRef = useRef(screenApply);
   screenApplyRef.current = screenApply;
-  const classOf = (id: string, property: string): string | undefined => {
-    const draft = session.drafts.find((change) => change.element.stamp === id && change.property === property && change.kind === "class");
-    if (draft !== undefined) return draft.after ?? undefined;
-    const className = session.reports[id]?.className;
-    return looksTailwind(className) ? classSetting(className, property)?.name : undefined;
-  };
   const closePanel = useRef<(() => boolean) | undefined>(undefined);
   const [transport] = useState(() => new MotionTransport());
   useEffect(() => () => transport.dispose(), [transport]);
@@ -640,14 +631,9 @@ export const ArtifactEditor = ({
           {SCREEN_EDIT_NOTE}
         </p>
       )}
-      {isScreen && shownPanel === "design" && session.selection.length === 1 && (
-        <div className="shrink-0 px-2.5 pt-2.5">
-          <ScreenSource session={session} engine={engine} project={project} instance={instance?.id} />
-        </div>
-      )}
       {shownPanel === "design" && (
         <DesignTab
-          classOf={isScreen ? classOf : undefined}
+          screen={isScreen ? { engine, project, instance: instance?.id } : undefined}
           session={session}
           kind={facts.kind}
           images={!isScreen}

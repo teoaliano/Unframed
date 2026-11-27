@@ -12,6 +12,7 @@ import { Tip } from "../../chrome/ui.tsx";
 import { showError } from "../../toasts.tsx";
 import { previewUrl } from "../../canvas/assetStore.ts";
 import { ComponentSection } from "./ComponentSection.tsx";
+import { ScreenDesign, type ScreenDesignContext } from "./ScreenDesign.tsx";
 import { InstanceSection, instanceFieldsOf } from "./InstanceSection.tsx";
 import { chainOf } from "./EditPanels.tsx";
 import { ImagePicker } from "./ImagePicker.tsx";
@@ -416,16 +417,8 @@ interface DesignTabProps {
   readonly onUpdateComponent?: ((tag: string) => void) | undefined;
   readonly onGoToMain?: ((shapeId: string) => void) | undefined;
   readonly onMake?: ((element: ChipElement) => void) | undefined;
-  readonly classOf?: ((id: string, property: string) => string | undefined) | undefined;
+  readonly screen?: ScreenDesignContext | undefined;
 }
-
-const ClassHint = ({ name, property }: { readonly name: string; readonly property: string }) => (
-  <Tip label={`Tailwind class ${name}`}>
-    <Badge variant="outline" size="sm" className="min-w-0 max-w-full" data-class-hint={property}>
-      <span className="block min-w-0 truncate">{name}</span>
-    </Badge>
-  </Tip>
-);
 
 const dialValueFor = (current: unknown, css: string): unknown => {
   if (typeof current !== "number") return css;
@@ -439,7 +432,7 @@ const normaliserFor = (property: string) => (value: string) => {
   return probe.style.getPropertyValue(property);
 };
 
-export const DesignTab = ({ session, kind, images = true, project, dials, locked, kit, mode, onOpenKit, onTell, onAsk, onShowOnTimeline, component, onAskComponent, componentTitle, componentOf, onGoToMain, onMake, onUpdateComponent, classOf }: DesignTabProps) => {
+export const DesignTab = ({ session, kind, images = true, project, dials, locked, kit, mode, onOpenKit, onTell, onAsk, onShowOnTimeline, component, onAskComponent, componentTitle, componentOf, onGoToMain, onMake, onUpdateComponent, screen }: DesignTabProps) => {
   const [openChip, setOpenChip] = useState<{ readonly field: string; readonly named: { readonly token: Token; readonly suffix?: string } } | null>(null);
   const { selection, reports, tree, preparing, prepareError, pending, families, overridden } = session;
   if (preparing) return <p className="m-0 p-2.5 text-sm text-(--artifact-editor-note)">{`Getting this ${kind} ready for editing…`}</p>;
@@ -458,6 +451,17 @@ export const DesignTab = ({ session, kind, images = true, project, dials, locked
   if (selection.some((id) => reports[id] === undefined)) return <p className="m-0 p-2.5 text-sm text-(--artifact-editor-note)">Reading the element…</p>;
 
   const elements = tree?.elements ?? [];
+  if (screen !== undefined) {
+    const picked = selection.map((id) => ({ id, report: reports[id]! }));
+    const [only] = picked;
+    const shownName = picked.length === 1 ? (elements.find((candidate) => candidate.id === only!.id)?.name ?? only!.report.name ?? only!.report.tag) : `${picked.length} elements`;
+    const chips = () =>
+      picked.map((subject) => {
+        const source = elements.find((candidate) => candidate.id === subject.id);
+        return chipDataFor(subject.id, source, subject.report, source !== undefined && elements.some((candidate) => candidate.parent === subject.id));
+      });
+    return <ScreenDesign session={session} subjects={picked} context={screen} name={shownName} onTell={() => onTell(chips())} />;
+  }
   const subjects: Subject[] = selection.map((id) => {
     const element = elements.find((candidate) => candidate.id === id);
     return {
@@ -600,15 +604,11 @@ export const DesignTab = ({ session, kind, images = true, project, dials, locked
     return view.sheet.rule === undefined ? (<>{chip}{slot}</>) : chip;
   };
 
-  const hintFor = (property: string): ReactNode => {
-    const name = single && classOf !== undefined ? classOf(first!.id, property) : undefined;
-    return name === undefined ? undefined : <ClassHint name={name} property={property} />;
-  };
   const numberField = (label: string, property: string, options: { readonly format?: (value: string) => string; readonly write?: (typed: number, subject: Subject) => string; readonly placeholder?: string } = {}) => {
     const view = viewOf(property);
     const chip = chipFor(property, view, [property], label);
     return (
-      <Row label={label} mark={dialPathOf(view)} token={chip === null ? (hintFor(property) ?? withSheet(view, tokenSlot(property, view.editable, [property], label)) ?? <span aria-hidden className="size-6 shrink-0" />) : undefined}>
+      <Row label={label} mark={dialPathOf(view)} token={chip === null ? (withSheet(view, tokenSlot(property, view.editable, [property], label)) ?? <span aria-hidden className="size-6 shrink-0" />) : undefined}>
         {chip ?? <NumberControl
           label={label}
           value={view.mixed ? "" : (options.format ?? numberOf)(view.value)}
@@ -633,7 +633,7 @@ export const DesignTab = ({ session, kind, images = true, project, dials, locked
     const view = colourView(property);
     const chip = chipFor(property, view, [property], label);
     return (
-      <Row label={label} mark={dialPathOf(view)} token={chip === null ? (hintFor(property) ?? withSheet(view, tokenSlot(property, view.editable, [property], label)) ?? <span aria-hidden className="size-6 shrink-0" />) : undefined}>
+      <Row label={label} mark={dialPathOf(view)} token={chip === null ? (withSheet(view, tokenSlot(property, view.editable, [property], label)) ?? <span aria-hidden className="size-6 shrink-0" />) : undefined}>
         {chip ?? <ColourControl label={label} hex={view.value} mixed={view.mixed} disabled={!view.editable} onCommit={(next) => write(property, () => next)} />}
       </Row>
     );

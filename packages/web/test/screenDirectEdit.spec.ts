@@ -52,12 +52,14 @@ test("a click takes the outermost component, a double-click goes deeper and Cmd-
       await pick(page, heading, { detail: 1 }, /^Header · in Header \d+×48$/);
       await expect(panels(page).getByTestId("screen-source-component")).toContainText("Header");
       await expect(panels(page).getByTestId("screen-source-component")).toContainText("1 instance");
-      await expect(panels(page).getByTestId("screen-source-file")).toHaveText("src/App.jsx:5–7");
-      await expect(panels(page).getByTestId("screen-source-span")).toContainText('<header className="flex h-12 items-center pl-3.5 pr-2">');
-      await expect(panels(page).getByRole("list", { name: "Classes" })).toContainText("pl-3.5");
+      await panels(page).getByRole("button", { name: "Code: App.jsx:5" }).click();
+      await expect(page.getByTestId("screen-source-file")).toHaveText("src/App.jsx:5–7");
+      await expect(page.getByTestId("screen-source-span")).toContainText('<header className="flex h-12 items-center pl-3.5 pr-2">');
+      await page.keyboard.press("Escape");
+      await expect(panels(page).getByRole("spinbutton", { name: "Horizontal padding: pl-3.5 (14) · pr-2 (8)" })).toBeVisible();
 
       await pick(page, heading, { detail: 2 }, /^Heading · in Header /);
-      await expect(panels(page).locator('[data-class-hint="font-size"]')).toHaveText("text-sm");
+      await expect(panels(page).getByRole("spinbutton", { name: "Font size: text-sm (14)" })).toHaveValue("sm");
 
       await pick(page, app(page).getByRole("heading", { name: "Second" }), { metaKey: true }, /^Heading · in Card /);
       await expect(panels(page).getByTestId("screen-source-component")).toContainText("3 instances");
@@ -77,7 +79,8 @@ test("a padding change reads as its class, joins the pending list, and Apply wri
     async (engine, project) => {
       await openReact(page, engine, project);
       await pick(page, app(page).getByRole("heading", { name: "Agent" }), { detail: 1 }, /^Header · in Header /);
-      const padding = panels(page).getByRole("spinbutton", { name: "Padding left", exact: true });
+      await panels(page).getByRole("button", { name: "Individual padding" }).click();
+      const padding = panels(page).getByRole("spinbutton", { name: /^Padding left/ });
       await expect(padding).toBeEnabled();
       await padding.fill("8");
       await padding.press("Enter");
@@ -109,7 +112,8 @@ test("a change kept to one instance goes to the Screen's agent with the file, th
     async (engine, project) => {
       await openReact(page, engine, project);
       await pick(page, app(page).getByRole("heading", { name: "Second" }), { detail: 1 }, /^List item · in Card /);
-      const padding = panels(page).getByRole("spinbutton", { name: "Padding left", exact: true });
+      await panels(page).getByRole("button", { name: "Individual padding" }).click();
+      const padding = panels(page).getByRole("spinbutton", { name: /^Padding left/ });
       await padding.fill("24");
       await padding.press("Enter");
       await drafts(page).click();
@@ -137,7 +141,8 @@ test("undo right after Apply puts back what Apply wrote while the agent still ha
     async (engine, project) => {
       await openReact(page, engine, project);
       await pick(page, app(page).getByRole("heading", { name: "Agent" }), { detail: 1 }, /^Header · in Header /);
-      const padding = panels(page).getByRole("spinbutton", { name: "Padding left", exact: true });
+      await panels(page).getByRole("button", { name: "Individual padding" }).click();
+      const padding = panels(page).getByRole("spinbutton", { name: /^Padding left/ });
       await padding.fill("8");
       await padding.press("Enter");
       await pick(page, app(page).getByRole("heading", { name: "Second" }), { detail: 1 }, /^List item · in Card /);
