@@ -54,6 +54,7 @@ interface EditEvent {
   readonly button?: number;
   readonly clientX?: number;
   readonly clientY?: number;
+  readonly isTrusted?: boolean;
   preventDefault(): void;
   stopImmediatePropagation?(): void;
 }
@@ -930,7 +931,7 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     "click", "auxclick", "dblclick", "contextmenu", "dragstart", "touchstart", "touchmove", "touchend", "touchcancel",
   ];
   const shield = (event: EditEvent) => {
-    if (!listening) return;
+    if (!listening || (event.isTrusted === false && SHIELDED.includes(event.type))) return;
     for (const [type, handler] of LISTENERS) if (type === event.type) handler(event);
     if (event.stopImmediatePropagation) event.stopImmediatePropagation();
   };

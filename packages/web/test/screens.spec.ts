@@ -1,6 +1,7 @@
 import { rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { git, makeRepo, repoEngineEnv } from "../../engine/test/gitRepos.ts";
+import { prepareReactApp } from "../../engine/test/reactFixture.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 import { openCanvas } from "./canvas.ts";
 import { firstScreenId, putShapes, saveSetup, screenShapes, withRepository } from "./screenHarness.ts";
@@ -334,5 +335,57 @@ test("a Screen with no run command yet shows Setup waiting for an answer, then t
       await expect(overlay.getByTestId("screen-overlay-detail")).toHaveText("Open the Setup chat to keep it going.");
     },
     noRunScript,
+  );
+});
+
+const STATEFUL_APP = `import { useState } from "react";
+
+export default function App() {
+  const [open, setOpen] = useState(false);
+  return (
+    <main>
+      <h1>Agent</h1>
+      <button onClick={() => setOpen(true)}>Open</button>
+      {open && <p id="opened">Opened</p>}
+    </main>
+  );
+}
+`;
+
+test("a Screen with a state, in design mode, replays its steps when its app reloads after its worktree changes on disk", async ({ page }) => {
+  await withRepository(
+    page,
+    {},
+    async (engine, project) => {
+      const [first] = await screenShapes(engine, project);
+      await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/react", w: 800, h: 500, state: "opened", steps: [{ action: "click", target: { role: "button", name: "Open" } }] } }]);
+      await clickShape(page, first.id);
+      const frame = page.frameLocator(`[data-screen-of="${first.id}"] iframe[data-screen-frame]`);
+      await expect(frame.getByText("Opened")).toBeVisible({ timeout: 30_000 });
+
+      const box = (await page.locator(`[data-screen-of="${first.id}"] iframe[data-screen-frame]`).boundingBox())!;
+      await expect(async () => {
+        await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+        await expect(page.getByTestId("design-overlay")).toBeAttached({ timeout: 2000 });
+      }).toPass({ timeout: 20_000 });
+      await expect(frame.getByText("Opened")).toBeVisible();
+
+      const rpc = await engine.rpc();
+      const worktree = (await rpc.call("instances.list", { project })).instances[0]!.worktree;
+      await rpc.close();
+      await frame.locator("body").evaluate((body) => {
+        body.dataset.beforeReload = "true";
+      });
+      await writeFile(join(worktree, "src", "App.jsx"), STATEFUL_APP.replace("<h1>Agent</h1>", "<h1>Agents</h1>"));
+      await expect(frame.getByRole("heading", { name: "Agents" })).toBeVisible({ timeout: 30_000 });
+      await expect(frame.locator("body[data-before-reload]")).toHaveCount(0);
+      await expect(frame.getByText("Opened")).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("design-overlay")).toBeAttached();
+    },
+    async (root) => {
+      await prepareReactApp(root);
+      await writeFile(join(root, "src", "App.jsx"), STATEFUL_APP);
+      git(root, "commit", "-qam", "stateful app");
+    },
   );
 });
