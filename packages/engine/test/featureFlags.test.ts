@@ -108,6 +108,7 @@ describe("UNFRAMED_FEATURES", () => {
     await expect(rpc.call("repositories.locate", { project: "app", path: engine.dataDir })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("repositories.setup", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("screens.stateToken", { project: "app", instance: instance.id, steps: [], mocks: [{ url: "/api" }] })).rejects.toMatchObject(REPOSITORIES_OFF);
+    await expect(rpc.call("screens.capture", { project: "app", shape: "shape:sc1", w: 1280, h: 800, html: "<p>copy</p>", parts: [] })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("repositories.confirmLogin", { project: "app" })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("repositories.setupVerdict", { project: "app", accepted: true })).rejects.toMatchObject(REPOSITORIES_OFF);
     const states = rpc.subscribe("instances.subscribe", { project: "app" });
@@ -116,7 +117,7 @@ describe("UNFRAMED_FEATURES", () => {
     expect((await rpc.call("projects.list")).projects).toEqual([]);
   });
 
-  it("with repositories off, opens an existing Repository on its Screens' last snapshots and starts no Instance or Setup", { timeout: 90_000 }, async () => {
+  it("with repositories off, opens an existing Repository on its Screens' pictures and starts no Instance or Setup", { timeout: 90_000 }, async () => {
     const root = await makeRepo("shop");
     const dataDir = await makeTempDir();
     const on = await startEngine({ dataDir, env: await repoEngineEnv({ UNFRAMED_TEST_CANVAS: "1", UNFRAMED_TEST_RENDERER: "ok" }) });
@@ -125,13 +126,17 @@ describe("UNFRAMED_FEATURES", () => {
     const placed = ((await onRpc.call("testCanvas.read", { project: "shop" })).records as any[]).find((record) => record.type === "screen");
     const held = { route: "/app", state: "the menu open", steps: [{ action: "click", target: { role: "button", name: "Menu" } }], mocks: [{ url: "/api/items", fail: true }] };
     await onRpc.call("testCanvas.apply", { project: "shop", change: { put: [{ ...placed, props: { ...placed.props, ...held } }], remove: [] }, origin: { kind: "server", id: "test" } });
-    const snapshots = onRpc.subscribe("screens.snapshots", { project: "shop" });
     for (let tries = 0; (await onRpc.call("instances.status", { project: "shop", id: added.instance.id })).state !== "stopped"; tries++) {
       if (tries > 200) throw new Error("the Instance never settled");
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     await onRpc.call("instances.demand", { project: "shop", client: "window-1", ids: [added.instance.id] });
-    const first = await snapshots.next();
+    let picture: string | undefined;
+    for (let tries = 0; picture === undefined; tries++) {
+      if (tries > 600) throw new Error("the Screen was never pictured");
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      picture = ((await onRpc.call("testCanvas.read", { project: "shop" })).records as any[]).find((record) => record.id === placed.id)?.props.picture;
+    }
     await on.stop("SIGTERM");
 
     const off = await startEngine({ dataDir, env: await repoEngineEnv({ UNFRAMED_FEATURES: undefined, UNFRAMED_TEST_CANVAS: "1", UNFRAMED_TEST_RENDERER: "ok" }) });
@@ -141,10 +146,9 @@ describe("UNFRAMED_FEATURES", () => {
     const screen = records.find((record) => record.type === "screen")!;
     expect(screen.props?.instance).toBe(added.instance.id);
     expect(screen.props).toMatchObject(held);
-    const stored = await rpc.subscribe("screens.snapshots", { project: "shop" }).next();
-    expect(stored).toEqual({ ...first, at: expect.any(Number) });
-    const served = await off.request(`/api/file/shop/${screen.id.replace(/^shape:/, "")}.png?screen=1`);
-    expect(served.status).toBe(200);
+    expect(screen.props).toMatchObject({ picture });
+    for (const name of [`${picture}.png`, `${picture}.w384.png`, `${picture}.w128.png`, `${picture}.html`]) expect((await off.request(`/api/pictures/shop/${name}`)).status).toBe(200);
+    await expect(rpc.call("screens.capture", { project: "shop", shape: screen.id, w: 1280, h: 800, html: "<p>copy</p>", parts: [] })).rejects.toMatchObject(REPOSITORIES_OFF);
     await expect(rpc.call("instances.demand", { project: "shop", client: "window-1", ids: [added.instance.id] })).rejects.toMatchObject(REPOSITORIES_OFF);
     await new Promise((resolve) => setTimeout(resolve, 1000));
     const pids = join(dataDir, "instance-pids");

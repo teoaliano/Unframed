@@ -177,6 +177,7 @@ export interface ScreenShapeProps {
   steps?: ScreenStep[];
   mocks?: ScreenMock[];
   state?: string;
+  picture?: string;
 }
 
 export const SCREEN_ROUTE_MAX = 2048;
@@ -198,6 +199,7 @@ const screenProps = {
   steps: T.arrayOf(T.jsonValue).optional() as T.Validatable<ScreenStep[] | undefined>,
   mocks: T.arrayOf(T.jsonValue).optional() as T.Validatable<ScreenMock[] | undefined>,
   state: T.string.optional(),
+  picture: T.string.optional(),
 };
 
 export interface AudioShapeProps {

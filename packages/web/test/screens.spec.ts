@@ -9,33 +9,31 @@ import { expect, startHostedEngine, test } from "./fixtures.ts";
 import { engineChat, engineChats, FIXTURES, openRail, scriptFolder, tabs } from "./agent.ts";
 import { applyScreenParametersInstruction, NO_BRIDGE, setupRejection } from "@unframed/domain";
 
-test("a new Repository's first Screen goes live through the proxy at /, keeps its snapshot until first paint, and keeps its frame, hidden, off screen", async ({ page }) => {
+test("a new Repository's first Screen gets its picture, goes live through the proxy at / when selected, keeps its picture until first paint, and parks when let go", async ({ page }) => {
   await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
     const screen = page.locator("[data-testid=screen]");
     await expect(screen).toHaveCount(1);
     await expect(screen).toHaveAttribute("data-route", "/");
+    await expect(screen).toHaveAttribute("data-picture", /^[a-f0-9]{40}$/, { timeout: 30_000 });
+    await expect(screen.locator("[data-testid=screen-snapshot]")).toHaveCount(1);
+    await expect(page.locator("[data-screen-of] iframe")).toHaveCount(0);
+
+    await clickShape(page, (await screenShapes(engine, project))[0].id);
     const frame = page.locator("[data-screen-of] iframe[data-screen-frame]");
     await expect(frame).toHaveAttribute("src", /^http:\/\/127\.0\.0\.1:\d+\/$/, { timeout: 30_000 });
     await expect(frame).toHaveAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-modals");
     await expect(frame).toHaveAttribute("allow", "");
     await expect(page.frameLocator("[data-screen-of] iframe[data-screen-frame]").getByRole("heading", { name: "Fake app" })).toBeVisible();
     await expect(screen).toHaveAttribute("data-painted", "true");
-    await expect(frame).toHaveCSS("pointer-events", "none");
-
-    await clickShape(page, (await screenShapes(engine, project))[0].id);
     await expect(frame).toHaveCSS("pointer-events", "auto");
     await expect(screen.locator("[data-testid=screen-snapshot]")).toHaveCount(0);
-    await page.keyboard.press("Escape");
 
-    const width = page.viewportSize()!.width;
-    await page.mouse.move(640, 360);
-    for (let step = 0; step < 80; step++) {
-      await page.mouse.wheel(width / 10, 0);
-      await page.waitForTimeout(16);
-    }
-    await expect(frame).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(screen).toHaveAttribute("data-tier", "parked");
+    await expect(frame).toHaveCSS("pointer-events", "none");
+    await expect(frame).toHaveCSS("visibility", "hidden");
     await expect(page.locator("[data-screen-of]")).toHaveCSS("visibility", "hidden");
-    await expect(screen).toHaveAttribute("data-painted", "true");
+    await expect(screen.locator("[data-testid=screen-snapshot]")).toHaveCount(1);
     expect((await screenShapes(engine, project))[0].props).toMatchObject({ route: "/", w: 1280, h: 800 });
   });
 });
@@ -48,7 +46,7 @@ test("the canvas waits behind one loading state while its Screens' dev servers s
   await withRepository(
     page,
     {},
-    async () => {
+    async (engine, project) => {
       const screen = page.locator("[data-testid=screen]");
       const cover = page.getByTestId("screens-starting");
       await expect(cover.getByRole("status")).toHaveText("Installing dependencies…");
@@ -58,6 +56,7 @@ test("the canvas waits behind one loading state while its Screens' dev servers s
       await expect(screen.locator("[data-testid=screen-overlay]")).toHaveText("Installing dependencies…");
       await expect(screen.locator("[data-testid=screen-overlay]")).toHaveCount(0, { timeout: 30_000 });
       await expect(cover).toHaveCount(0);
+      await clickShape(page, await firstScreenId(engine, project));
       await expect(screen).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
     },
     slowInstall,
@@ -96,7 +95,7 @@ test("a Screen tags mocks and lists warnings from Setup, and says when its Insta
     await rpc.call("instances.remove", { project, id: shape.props.instance, force: true });
     await rpc.close();
     await expect(screen.locator("[data-testid=screen-overlay]")).toHaveText("Worktree removed");
-    await expect(screen.locator("iframe")).toHaveCount(0);
+    await expect(page.locator("[data-screen-of] iframe")).toHaveCount(0);
 
     await rename(root, `${root}-moved`);
     await page.reload();
@@ -123,6 +122,7 @@ test("a Repository whose folder moved says so on its Screens, and Locate Reposit
     await page.getByRole("menuitem", { name: "Locate Repository…" }).click();
     await expect(page.getByText(`Found the Repository at ${moved}.`)).toBeVisible();
     await expect(screen.locator("[data-testid=screen-overlay]")).toHaveCount(0);
+    await clickShape(page, (await screenShapes(engine, "my-app"))[0].id);
     await expect(page.frameLocator("[data-screen-of] iframe[data-screen-frame]").getByRole("heading", { name: "Fake app" })).toBeVisible({ timeout: 30_000 });
     await page.getByRole("button", { name: "All projects" }).click();
     await expect(page.getByRole("menuitem", { name: "Locate Repository…" })).toHaveCount(0);
@@ -134,8 +134,8 @@ test("a Repository whose folder moved says so on its Screens, and Locate Reposit
 test("a selected Screen opens in the browser and changes viewport", async ({ page }) => {
   await withRepository(page, {}, async (engine, project) => {
     const screen = page.locator("[data-testid=screen]");
-    await expect(screen).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
     await clickShape(page, await firstScreenId(engine, project));
+    await expect(screen).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
 
     const popup = page.waitForEvent("popup");
     await page.getByRole("button", { name: "Open in browser" }).click();
@@ -151,9 +151,9 @@ test("New branch and worktree makes a named branch from the Screen's branch, wit
   await withRepository(page, {}, async (engine, project, root) => {
     git(root, "branch", "feature/login");
     const screens = page.locator("[data-testid=screen]");
-    await expect(screens.first()).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
     const [first] = await screenShapes(engine, project);
     await clickShape(page, first.id);
+    await expect(screens.first()).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
 
     await page.getByTestId("screen-branch").click();
     await page.getByRole("menuitem", { name: /New branch and worktree/ }).click();
@@ -211,8 +211,14 @@ test("Screens of one Instance keep their own Parameters through the bridge, and 
       { ...first, props: { ...first.props, route: "/dials", dials: { accent: "#00ff00" } } },
       { ...first, id: "shape:second", x: first.x, y: first.y + 900, props: { ...first.props, route: "/dials", dials: { accent: "#0000ff" } } },
     ]);
+    await expect(page.locator("[data-testid=screen]")).toHaveCount(2);
+    await page.keyboard.press("Shift+1");
+    await clickShape(page, first.id);
+    await expect(page.locator(`[data-shape-id="${first.id}"] [data-testid=screen]`)).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
+    await clickShape(page, "shape:second");
+    await expect(page.locator('[data-shape-id="shape:second"] [data-testid=screen]')).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
     const frames = page.locator("[data-screen-of] iframe[data-screen-frame]");
-    await expect(frames).toHaveCount(2, { timeout: 30_000 });
+    await expect(frames).toHaveCount(2);
     await expect(page.frameLocator(`[data-screen-of="${first.id}"] iframe[data-screen-frame]`).locator("#title")).toHaveAttribute("data-accent", "#00ff00");
     await expect(page.frameLocator('[data-screen-of="shape:second"] iframe[data-screen-frame]').locator("#title")).toHaveAttribute("data-accent", "#0000ff");
 
@@ -236,8 +242,8 @@ test("a Screen whose page did not load the bridge says in one line why it has no
     const [first] = await screenShapes(engine, project);
     await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/headless" } }]);
     const screen = page.locator("[data-testid=screen]");
-    await expect(screen).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
     await clickShape(page, first.id);
+    await expect(screen).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
     await page.getByTestId("selection-toolbar").getByRole("button", { name: "Parameters" }).click();
     await expect(page.getByTestId("artifact-parameters-panel").getByTestId("parameters-note")).toHaveText(NO_BRIDGE);
   });

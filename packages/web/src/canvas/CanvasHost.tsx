@@ -42,6 +42,9 @@ import { watchRunProgress } from "../generate/recipeRuns.ts";
 import { ComponentShapeUtil, MotionShapeUtil, PageShapeUtil } from "./shapes/artifact.tsx";
 import { AudioShapeUtil } from "./shapes/audio.tsx";
 import { keepScreensUpright, ScreenShapeUtil } from "./shapes/screen.tsx";
+import { installScreenDemand } from "../repositories/demand.ts";
+import { installScreenTiers } from "../repositories/tiers.ts";
+import { isDeviceClient } from "../deviceMode.ts";
 import { watchRepository, watchScreenSnapshots } from "../repositories/store.ts";
 import { NodeShapeUtil } from "../nodes/NodeShapeUtil.tsx";
 import { WireShapeUtil } from "../nodes/WireShapeUtil.tsx";
@@ -59,7 +62,7 @@ import { SyncSocket } from "./syncSocket.ts";
 import { CommentTool } from "../comments/CommentTool.ts";
 import { recalledCamera, rememberCamera } from "../project/tabMemory.ts";
 import { TLDRAW_ASSET_URLS, TLDRAW_CHROME, TLDRAW_OPTIONS } from "./tldrawChrome.tsx";
-import { useFeature } from "../features.ts";
+import { featureOn, useFeature } from "../features.ts";
 import { CanvasDoc, CanvasDocContext } from "./doc.ts";
 
 
@@ -185,6 +188,8 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
     const camera = recalledCamera(project);
     if (camera) editor.setCamera(camera, { animation: { duration: 0 } });
     else fitToShapes(editor);
+    const stopScreenTiers = installScreenTiers(editor, project, { live: featureOn("repositories") && !isDeviceClient() });
+    const stopScreenDemand = featureOn("repositories") ? installScreenDemand(editor, engine, project) : undefined;
     return () => {
       rememberCamera(project, editor.getCamera());
       stopTheme();
@@ -203,6 +208,8 @@ export const CanvasHost = ({ project, activation }: { readonly project: string; 
       stopUpright();
       stopCatalogues();
       stopLongPress();
+      stopScreenDemand?.();
+      stopScreenTiers();
       detach?.();
       if (artifactsOf(editor).canvas.get() === editor) artifactsOf(editor).canvas.set(undefined);
       content.current = undefined;

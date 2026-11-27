@@ -54,7 +54,7 @@ const start = () => {
     const counts = screenCounts();
     if (counts === undefined) return;
     screens.hidden = false;
-    screens.textContent = `screens: live ${counts.live} · loading ${counts.loading} · queued ${counts.queued} · replays ${counts.replays} · retries ${counts.retries} · failed ${counts.failed}`;
+    screens.textContent = `screens: live ${counts.live} · warming ${counts.warming} · parked ${counts.parked} · snapshot ${counts.snapshot} · picture ${counts.picture} · replays ${counts.replays} · retries ${counts.retries} · failed ${counts.failed}`;
   }, 500);
 
   const finish = () => {

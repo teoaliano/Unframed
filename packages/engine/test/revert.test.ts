@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { FIXTURES, scriptFolder, startAgentEngine } from "./agent.ts";
 import { motionShape, roomRecords, roomShape, seed, toolResults } from "./agentCanvas.ts";
-import { pageShape, promptShape, textOf } from "./canvasRecords.ts";
+import { pageShape, promptShape, screenShape, textOf } from "./canvasRecords.ts";
 import { connectTab } from "./syncClient.ts";
 
 const writes = (...batches: unknown[][]) => batches.map((ops) => ({ name: "canvas_write", input: { ops } }));
@@ -98,6 +98,42 @@ describe("reverting a turn", () => {
     await agent.send(chatId, "rework, said and done");
     const next = await agent.settled(chatId, 2);
     expect(next.session?.lastError ?? null).toBeNull();
+  });
+});
+
+describe("reverting a turn that changed a Screen", () => {
+  const before = "a".repeat(40);
+  const later = "b".repeat(40);
+  const routeScript = async () =>
+    scriptFolder({
+      permission: JSON.parse(await readFile(join(FIXTURES, "permission.json"), "utf8")),
+      route: { when: "^route", turns: [{ text: "Moved.", tools: writes([{ type: "update", id: "sc1", props: { route: "/settings" } }]) }] },
+    });
+
+  it("drops the old route's picture, so the Screen waits for a picture of its new route", async () => {
+    const agent = await startAgentEngine({ script: await routeScript() });
+    await seed(agent, [screenShape("sc1", { route: "/app", picture: before })]);
+    const chatId = await agent.createChat();
+    await agent.send(chatId, "route it to settings");
+    await agent.settled(chatId, 1);
+    const screen = await roomShape(agent, "sc1");
+    expect(screen.props.route).toBe("/settings");
+    expect(screen.props.picture).toBeUndefined();
+  });
+
+  it("restores a Screen whose only later change is the picture the engine set", async () => {
+    const agent = await startAgentEngine({ script: await routeScript() });
+    await seed(agent, [screenShape("sc1", { route: "/app", picture: before })]);
+    const chatId = await agent.createChat();
+    await agent.send(chatId, "route it to settings");
+    await agent.settled(chatId, 1);
+    const moved = await roomShape(agent, "sc1");
+    await agent.rpc.call("testCanvas.apply", { project: "board", change: { put: [{ ...moved, props: { ...moved.props, picture: later } }], remove: [] }, origin: { kind: "system", id: "screen-picture" } });
+
+    await agent.dispatch({ type: "thread.turn.revert", threadId: chatId, turnCount: 1 });
+    const chat = await (await agent.watch(chatId)).until((current) => current.turns[0]?.reverted !== undefined, "the revert");
+    expect(chat.turns[0]?.reverted).toMatchObject({ restored: ["shape:sc1"], skipped: [] });
+    expect((await roomShape(agent, "sc1")).props).toMatchObject({ route: "/app", picture: before });
   });
 });
 

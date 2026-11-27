@@ -1,12 +1,29 @@
 import { dialsBridgeSource } from "./artifacts/dials.ts";
 import { editBridgeSource } from "./artifacts/editBridge.ts";
 import { crossSiteCookie } from "./instanceProxy.ts";
+import { blankPixels, inlineViewportUnits, readCanvas, renameSelectors, rewriteCssUrls, snapshotPage, STAND_INS, type SnapshotHelpers } from "./pageSnapshot.ts";
 import { matchMock } from "./screenStates.ts";
 
 export const STATE_PARAM = "__unframed_state";
 export const STEP_TIMEOUT_MS = 5000;
 export const QUIET_IDLE_MS = 500;
 export const QUIET_CAP_MS = 15_000;
+
+export const SNAPSHOT_SETTLE_MS = 300;
+export const SNAPSHOT_GAP_MS = 800;
+export const SNAPSHOT_PART_MAX_BYTES = 8 * 1024 * 1024;
+export const SNAPSHOT_TOTAL_MAX_BYTES = 24 * 1024 * 1024;
+export const CANVAS_RETRY_MS = 1000;
+export const CANVAS_RETRY_FRAMES = 60;
+
+export interface SnapshotConfig {
+  readonly settle: number;
+  readonly gap: number;
+  readonly partMax: number;
+  readonly totalMax: number;
+  readonly canvasMs: number;
+  readonly canvasFrames: number;
+}
 
 export interface BridgeConfig {
   readonly param: string;
@@ -369,8 +386,13 @@ export function screenBridge(
     element.dispatchEvent(new win.KeyboardEvent("keyup", init));
     if (down && key === "Enter" && element.form && typeof element.form.requestSubmit === "function" && element.tagName === "INPUT") element.form.requestSubmit();
   };
+  let pressed: any;
+  const focusOn = (element: any) => {
+    pressed = element;
+    if (win.document.hasFocus() && typeof element.focus === "function") element.focus();
+  };
   const fill = (element: any, text: string) => {
-    if (typeof element.focus === "function") element.focus();
+    focusOn(element);
     if (element.isContentEditable) element.textContent = text;
     else {
       const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), "value")?.set;
@@ -382,7 +404,7 @@ export function screenBridge(
   };
   const perform = async (step: any) => {
     if (step.action === "press") {
-      const element = step.target ? await locate(step.target) : win.document.activeElement || win.document.body;
+      const element = step.target ? await locate(step.target) : (win.document.hasFocus() ? win.document.activeElement : pressed) || win.document.activeElement || win.document.body;
       keys(element, String(step.key));
       return;
     }
@@ -390,7 +412,7 @@ export function screenBridge(
     if (typeof element.scrollIntoView === "function") element.scrollIntoView({ block: "center", inline: "center" });
     if (step.action === "click") {
       mouse(element, ["pointerover", "pointerenter", "mouseover", "pointerdown", "mousedown"]);
-      if (typeof element.focus === "function") element.focus();
+      focusOn(element);
       mouse(element, ["pointerup", "mouseup"]);
       element.click();
     } else if (step.action === "hover") mouse(element, ["pointerover", "pointerenter", "mouseover", "mouseenter", "pointermove", "mousemove"]);
@@ -430,6 +452,198 @@ export function screenBridge(
   else painted();
 }
 
+export function snapshotBridge(win: any, config: SnapshotConfig, snapshot: typeof snapshotPage, helpers: SnapshotHelpers): void {
+  const LOOPBACK = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+  const load = typeof win.fetch === "function" ? win.fetch.bind(win) : undefined;
+  const fetched = new Map<string, Promise<{ type: string; data: string | null; size: number }>>();
+  const encode = (blob: any): Promise<string | null> =>
+    new Promise((resolve) => {
+      const reader = new win.FileReader();
+      reader.onload = () => {
+        const text = String(reader.result);
+        resolve(text.slice(text.indexOf(",") + 1));
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  const fetchPart = (url: string) => {
+    const known = fetched.get(url);
+    if (known !== undefined) return known;
+    const pending = (async () => {
+      try {
+        if (load === undefined) throw new Error("no fetch");
+        const response = await load(url, { credentials: "same-origin" });
+        if (!response.ok) throw new Error(String(response.status));
+        const blob = await response.blob();
+        const type = blob.type || response.headers.get("content-type") || "";
+        if (blob.size > config.partMax) return { type, data: null, size: blob.size };
+        const data = await encode(blob);
+        if (data === null) throw new Error("unreadable");
+        return { type, data, size: blob.size };
+      } catch {
+        fetched.delete(url);
+        return { type: "", data: null, size: 0 };
+      }
+    })();
+    fetched.set(url, pending);
+    return pending;
+  };
+  const settleCanvases = async (): Promise<Map<unknown, string | null>> => {
+    const reads = new Map<unknown, string | null>();
+    const waiting = new Set<any>();
+    const take = (canvas: any) => {
+      const read = helpers.canvas(win, canvas, helpers.blank);
+      if (read === null) return false;
+      if (read !== undefined) reads.set(canvas, read);
+      return true;
+    };
+    for (const canvas of Array.from(win.document.querySelectorAll("canvas") as ArrayLike<any>)) if (!take(canvas)) waiting.add(canvas);
+    if (waiting.size > 0 && win.document.visibilityState !== "hidden" && typeof win.requestAnimationFrame === "function") {
+      const until = Date.now() + config.canvasMs;
+      await new Promise<void>((resolve) => {
+        let frames = 0;
+        const timer = win.setTimeout(resolve, config.canvasMs + 100);
+        const tick = () => {
+          for (const canvas of Array.from(waiting)) if (take(canvas)) waiting.delete(canvas);
+          if (waiting.size === 0 || ++frames >= config.canvasFrames || Date.now() >= until) {
+            win.clearTimeout(timer);
+            resolve();
+            return;
+          }
+          win.requestAnimationFrame(tick);
+        };
+        win.requestAnimationFrame(tick);
+      });
+    }
+    for (const canvas of waiting) reads.set(canvas, null);
+    return reads;
+  };
+  win.__unframedSnapshot = async () => {
+    const page = snapshot(win, helpers, await settleCanvases());
+    const loaded = await Promise.all(page.parts.map(fetchPart));
+    let total = 0;
+    let over = false;
+    const parts = page.parts.map((url, index) => {
+      const found = loaded[index]!;
+      let data = found.data;
+      if (data !== null) {
+        if (over || total + found.size > config.totalMax) {
+          over = true;
+          data = null;
+        } else total += found.size;
+      }
+      return { url, type: found.type, data };
+    });
+    return { html: page.html, w: page.w, h: page.h, parts };
+  };
+
+  let peer: string | undefined;
+  let watching = false;
+  let observer: any;
+  let timer: any;
+  let changedAt = 0;
+  let capturedAt = -Infinity;
+  let busy = false;
+  let again = false;
+  let posted: string | undefined;
+  const post = (message: Record<string, unknown>) => {
+    if (peer === undefined) return;
+    try {
+      win.parent.postMessage({ type: "unframed:snapshot", href: win.location.href, ...message }, peer);
+    } catch {
+      return;
+    }
+  };
+  const capture = async (final: boolean) => {
+    busy = true;
+    capturedAt = Date.now();
+    try {
+      const taken = await win.__unframedSnapshot();
+      if (final || taken.html !== posted) {
+        posted = taken.html;
+        post({ final, snapshot: taken });
+      }
+    } catch (error) {
+      if (final) post({ final, snapshot: null, error: error instanceof Error ? error.message : String(error) });
+    } finally {
+      busy = false;
+      if (again && watching) {
+        again = false;
+        changed();
+      }
+    }
+  };
+  const fire = () => {
+    timer = undefined;
+    if (!watching) return;
+    const now = Date.now();
+    const wait = Math.max(changedAt + config.settle - now, capturedAt + config.gap - now);
+    if (wait > 0) {
+      timer = win.setTimeout(fire, wait);
+      return;
+    }
+    if (busy) {
+      again = true;
+      return;
+    }
+    void capture(false);
+  };
+  const changed = () => {
+    if (!watching) return;
+    changedAt = Date.now();
+    if (timer === undefined) timer = win.setTimeout(fire, config.settle);
+  };
+  const watch = (on: boolean) => {
+    if (on === watching) return;
+    watching = on;
+    if (on) {
+      if (typeof win.MutationObserver === "function") {
+        observer = new win.MutationObserver(changed);
+        observer.observe(win.document, { subtree: true, childList: true, attributes: true, characterData: true });
+      }
+      win.addEventListener("scroll", changed, true);
+      win.addEventListener("input", changed, true);
+      changed();
+      return;
+    }
+    observer?.disconnect();
+    observer = undefined;
+    win.removeEventListener("scroll", changed, true);
+    win.removeEventListener("input", changed, true);
+    if (timer !== undefined) win.clearTimeout(timer);
+    timer = undefined;
+    again = false;
+  };
+  win.addEventListener("message", (event: any) => {
+    if (win.parent === win || event.source !== win.parent) return;
+    if (typeof event.origin !== "string" || !LOOPBACK.test(event.origin)) return;
+    const data = event.data;
+    if (data === null || typeof data !== "object") return;
+    if (data.type === "unframed:snapshot:watch") {
+      peer = event.origin;
+      watch(data.on === true);
+    } else if (data.type === "unframed:snapshot:take") {
+      peer = event.origin;
+      void capture(true);
+    }
+  });
+}
+
+export function readableCanvases(win: any): void {
+  if (win.parent === win && win.navigator?.webdriver !== true) return;
+  const WEBGL = /^(webgl2?|experimental-webgl)$/;
+  for (const name of ["HTMLCanvasElement", "OffscreenCanvas"]) {
+    const proto = win[name]?.prototype;
+    const native = proto?.getContext;
+    if (typeof native !== "function") continue;
+    proto.getContext = function (this: unknown, type: unknown, options?: unknown) {
+      if (typeof type !== "string" || !WEBGL.test(type)) return native.apply(this, arguments as any);
+      const given = options !== null && typeof options === "object" ? options : {};
+      return native.call(this, type, { ...given, preserveDrawingBuffer: true });
+    };
+  }
+}
+
 const patchDocumentCookie = (win: any, rewrite: (cookie: string) => string): void => {
   const proto = win.Document?.prototype;
   const native = proto === undefined ? undefined : Object.getOwnPropertyDescriptor(proto, "cookie");
@@ -445,8 +659,10 @@ const patchDocumentCookie = (win: any, rewrite: (cookie: string) => string): voi
 
 export const screenBridgeSource = (): string =>
   [
+    `(${readableCanvases.toString()})(window);`,
     `(${patchDocumentCookie.toString()})(window, ${crossSiteCookie.toString()});`,
     ...dialsBridgeSource().split("\n").slice(1, -1),
+    `(${snapshotBridge.toString()})(window, ${JSON.stringify({ settle: SNAPSHOT_SETTLE_MS, gap: SNAPSHOT_GAP_MS, partMax: SNAPSHOT_PART_MAX_BYTES, totalMax: SNAPSHOT_TOTAL_MAX_BYTES, canvasMs: CANVAS_RETRY_MS, canvasFrames: CANVAS_RETRY_FRAMES } satisfies SnapshotConfig)}, ${snapshotPage.toString()}, { units: ${inlineViewportUnits.toString()}, urls: ${rewriteCssUrls.toString()}, selectors: ${renameSelectors.toString()}, standIns: ${JSON.stringify(STAND_INS)}, blank: ${blankPixels.toString()}, canvas: ${readCanvas.toString()} });`,
     `(${screenBridge.toString()})(window, ${JSON.stringify({ param: STATE_PARAM, stepTimeout: STEP_TIMEOUT_MS, quietIdle: QUIET_IDLE_MS, quietCap: QUIET_CAP_MS } satisfies BridgeConfig)}, ${matchMock.toString()}, ${cutParam.toString()}, ${quietWatch.toString()}, ${stepExpired.toString()});`,
     ...editBridgeSource({ stamp: true }).split("\n").slice(1, -1),
     "",

@@ -122,6 +122,57 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "text/html" });
     return res.end("<body>no head here</body>");
   }
+  if (url.pathname === "/page-text") {
+    let text = "";
+    try {
+      text = require("node:fs").readFileSync("page.txt", "utf8");
+    } catch {}
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end("<!doctype html><html><head><title>Page text</title></head><body><h1 id=\\"text\\">" + text.replace(/</g, "&lt;") + "</h1></body></html>");
+  }
+  if (url.pathname === "/webgl") {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end([
+      "<!doctype html><html><head><title>WebGL</title><style>body { margin: 0; background: rgb(255, 255, 255); } canvas.pill { display: block; width: 200px; height: 100px; border-radius: 50px; } canvas.idle { display: block; width: 100px; height: 50px; background: rgb(255, 0, 0); }</style></head>",
+      "<body><canvas class=\\"pill\\" id=\\"gl\\" width=\\"200\\" height=\\"100\\" role=\\"img\\" aria-label=\\"Glow\\" data-kind=\\"glow\\"></canvas><canvas class=\\"idle\\" id=\\"idle\\" width=\\"100\\" height=\\"50\\"></canvas><script>",
+      "document.getElementById('idle').getContext('webgl', { alpha: false });",
+      "var gl = document.getElementById('gl').getContext('webgl', { alpha: false });",
+      "var draw = function () { gl.clearColor(0, 0.5, 1, 1); gl.clear(gl.COLOR_BUFFER_BIT); requestAnimationFrame(draw); };",
+      "requestAnimationFrame(draw);",
+      "</script></body></html>",
+    ].join(""));
+  }
+  if (url.pathname === "/motion") {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end([
+      "<!doctype html><html><head><title>Motion</title><style>",
+      "@keyframes spin { to { transform: rotate(360deg); } } @keyframes fade { 0%, 100% { opacity: 0; } 50% { opacity: 1; } } @keyframes rise { from { opacity: 0; } to { opacity: 0.8; } }",
+      "div { width: 40px; height: 40px; background: rgb(0, 0, 255); }",
+      "#spinner { animation: spin 4s linear infinite; } #pulse { animation: fade 2s linear infinite; } #entrance { animation: rise 60s linear forwards; }",
+      "</style></head><body><div id=\\"spinner\\"></div><div id=\\"pulse\\"></div><div id=\\"entrance\\"></div><script>",
+      "document.getAnimations().forEach(function (animation) { if (animation.animationName === 'spin') { animation.pause(); animation.currentTime = 1000; } if (animation.animationName === 'fade') animation.currentTime = 0; });",
+      "</script></body></html>",
+    ].join(""));
+  }
+  if (url.pathname === "/logo.png") {
+    res.writeHead(200, { "content-type": "image/png" });
+    return res.end(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==", "base64"));
+  }
+  if (url.pathname === "/busy") {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end([
+      "<!doctype html><html><head><title>Busy</title><style>",
+      ":root { --accent: rgb(59, 130, 246); } html { font-family: sans-serif; } body { margin: 0; background: rgb(248, 250, 252); }",
+      ".bar { height: 10vh; background: var(--accent); color: white; display: flex; align-items: center; padding: 0 16px; }",
+      ".card { margin: 12px; padding: 12px; border-radius: 8px; background: white; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); }",
+      ".spin { width: 24px; height: 24px; border: 3px solid rgb(204, 204, 204); border-top-color: var(--accent); border-radius: 50%; }",
+      "@media (max-width: 500px) { .wide { display: none; } }",
+      "</style></head><body><div class=\\"bar\\" id=\\"bar\\">Busy app " + url.search + "</div><div class=\\"card wide\\" id=\\"wide\\">Wide only</div>",
+      "<div class=\\"card\\">Frame <span id=\\"tick\\">0</span></div><img id=\\"logo\\" src=\\"/logo.png\\" width=\\"32\\" height=\\"32\\" alt=\\"\\"><div class=\\"spin\\" id=\\"spin\\"></div>",
+      "<script>var n = 0; var f = function () { n++; document.getElementById('tick').textContent = n; document.getElementById('spin').style.transform = 'rotate(' + (n * 6) + 'deg)'; var x = 0; for (var i = 0; i < 20000; i++) x += Math.sqrt(i); requestAnimationFrame(f); }; requestAnimationFrame(f);</script>",
+      "</body></html>",
+    ].join(""));
+  }
   if (url.pathname === "/api/items") {
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify(["Apples", "Pears"]));
@@ -149,7 +200,7 @@ server.on("upgrade", (req, socket) => {
   socket.write(Buffer.concat([Buffer.from([0x81, payload.length]), payload]));
   socket.on("error", () => {});
 });
-server.listen(port, host, () => console.log("  ➜  Local:   http://localhost:" + port + "/"));
+setTimeout(() => server.listen(port, host, () => console.log("  ➜  Local:   http://localhost:" + port + "/")), Number(process.env.FAKE_DEV_LISTEN_DELAY_MS || 0));
 const linger = () => setTimeout(() => process.exit(0), Number(process.env.FAKE_DEV_LINGER_MS));
 process.on("SIGTERM", () => (process.env.FAKE_DEV_DETACHED ? linger() : process.exit(0)));
 if (process.env.FAKE_DEV_DETACHED) {

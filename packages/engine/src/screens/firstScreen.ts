@@ -26,7 +26,7 @@ export type ScreenShape = TLRecord & {
   x: number;
   y: number;
   parentId: string;
-  props: { w: number; h: number; instance: string; route: string; title?: string; dials?: Record<string, unknown>; steps?: unknown; mocks?: unknown; state?: string };
+  props: { w: number; h: number; instance: string; route: string; title?: string; dials?: Record<string, unknown>; steps?: unknown; mocks?: unknown; state?: string; picture?: string };
 };
 
 export const isScreenShape = (record: TLRecord | undefined): record is ScreenShape => record?.typeName === "shape" && (record as { type?: string }).type === "screen";

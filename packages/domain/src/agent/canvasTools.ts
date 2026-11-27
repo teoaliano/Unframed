@@ -868,6 +868,7 @@ const update = (batch: Batch, ctx: BatchContext, op: Record<string, unknown>): v
         delete props.steps;
         delete props.mocks;
         delete props.state;
+        delete props.picture;
       }
       return applyPatch(batch, shape, props, { ...patch, route });
     }

@@ -83,8 +83,8 @@ test("a live Screen follows the person's navigation inside it, back included, an
     const [first] = await screenShapes(engine, project);
     await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/app" } }]);
     const screen = page.locator("[data-testid=screen]");
-    await expect(screen).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
     await selectScreen(page, first.id);
+    await expect(screen).toHaveAttribute("data-painted", "true");
     await frameOf(page).getByRole("link", { name: "About" }).dispatchEvent("click");
     await expect(screen).toHaveAttribute("data-route", "/app/about");
     await expect(screen.locator("[data-shape-label] [data-label-text]")).toHaveText(`${first.props.title} · /app/about`);
@@ -112,13 +112,19 @@ test("a Screen holding a state replays its steps with its own mocks on every loa
       { ...first, props: { ...first.props, route: "/app", w: 640, h: 480, ...MENU_EMPTY } },
       { ...first, id: "shape:plain", y: first.y + 600, props: { ...first.props, route: "/app", w: 640, h: 480 } },
     ]);
+    await expect(page.locator("[data-testid=screen]")).toHaveCount(2);
+    await page.keyboard.press("Shift+1");
     const stateful = frameOf(page, first.id);
+    await selectScreen(page, first.id);
     await expect(stateful.getByRole("menuitem", { name: "Settings" })).toBeVisible({ timeout: 30_000 });
     await expect(stateful.locator("#list-state")).toHaveText("No items yet");
+    await selectScreen(page, "shape:plain");
     await expect(frameOf(page, "shape:plain").locator("#list-state")).toHaveText("2 items");
     await expect(frameOf(page, "shape:plain").getByRole("menuitem", { name: "Settings" })).toBeHidden();
 
     await page.reload();
+    await expect(page.locator(`[data-shape-id="${first.id}"] [data-testid=screen]`)).toBeVisible({ timeout: 30_000 });
+    await selectScreen(page, first.id);
     await expect(frameOf(page, first.id).getByRole("menuitem", { name: "Settings" })).toBeVisible({ timeout: 30_000 });
     await expect(frameOf(page, first.id).locator("#list-state")).toHaveText("No items yet");
 
@@ -143,9 +149,9 @@ test("a selected Screen whose steps moved it to another page replays its state w
     const elsewhere = { ...MENU_EMPTY, state: "the menu open on about", steps: [{ action: "click", target: { role: "link", name: "About" } }, ...MENU_EMPTY.steps] };
     await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/app", w: 640, h: 480, ...elsewhere } }]);
     const frame = frameOf(page, first.id);
+    await selectScreen(page, first.id);
     await expect(frame.getByRole("menuitem", { name: "Settings" })).toBeVisible({ timeout: 30_000 });
     await expect(frame.locator("#where")).toHaveText("/app/about");
-    await selectScreen(page, first.id);
 
     await frame.locator("body").evaluate((body) => {
       body.dataset.beforeReload = "true";
@@ -164,6 +170,7 @@ test("a Screen whose steps no longer work says Couldn't reach this state with th
     const [first] = await screenShapes(engine, project);
     const broken = { state: "the menu open", steps: [{ action: "click", target: { role: "button", name: "Menu" } }, { action: "click", target: { role: "button", name: "Missing" } }] };
     await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/app", ...broken } }]);
+    await clickShape(page, first.id);
     const failed = page.locator("[data-screen-of] [data-testid=screen-state-failed]");
     await expect(failed).toContainText("Couldn't reach this state", { timeout: 30_000 });
     await expect(failed.getByTestId("screen-state-failed-step")).toHaveText("Step 2, click button Missing, failed: nothing matched button Missing within 5 seconds of the page going quiet");
@@ -174,6 +181,25 @@ test("a Screen whose steps no longer work says Couldn't reach this state with th
     expect((await engineChat(engine, chats[0]!.id, project)).messages.find((message) => message.role === "user")?.text).toBe(
       fixStateInstruction({ shape: first.id.replace(/^shape:/, ""), branch: first.props.title, state: "the menu open", route: "/app", steps: broken.steps, mocks: undefined, number: 2, step: "click button Missing", reason: "nothing matched button Missing within 5 seconds of the page going quiet" }),
     );
+  });
+});
+
+test("a selected Screen replaying its steps takes no keyboard focus from the page around it; it takes input once its state is reached", async ({ page }) => {
+  await withRepository(page, {}, async (engine, project) => {
+    const [first] = await screenShapes(engine, project);
+    await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/boot?ms=1500", w: 640, h: 480, state: "the menu open", steps: [{ action: "click", target: { role: "button", name: "Open menu" } }] } }]);
+    await clickShape(page, first.id);
+    await page.evaluate(() => {
+      const input = document.createElement("input");
+      input.id = "host-input";
+      document.body.append(input);
+      input.focus();
+    });
+    const frame = page.frameLocator(`[data-screen-of="${first.id}"] iframe[data-screen-frame]`);
+    await expect(frame.getByRole("menuitem", { name: "Settings" })).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(`[data-screen-of="${first.id}"] iframe[data-screen-frame]`)).toHaveAttribute("data-interactive", "true", { timeout: 10_000 });
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("host-input");
   });
 });
 

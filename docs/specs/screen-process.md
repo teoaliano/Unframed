@@ -1,5 +1,7 @@
 # Screens in their own process
 
+The reach rules described here were replaced by `screen-tiers.md`: a Screen stays live while selected and stays parked after, wherever it is.
+
 ## Problem
 
 After Screens learned to load one at a time (`docs/specs/screen-load.md`), panning a ComfyUI board still lagged, and loaded Screens went back to their app's boot splash:
@@ -13,7 +15,7 @@ After Screens learned to load one at a time (`docs/specs/screen-load.md`), panni
 - **Cookies cross the site line.** In a cross-site frame Chromium drops `SameSite=Lax` and `Strict` cookies, so a login inside a Screen would not hold. The proxy rewrites every `Set-Cookie` it passes on: it removes `SameSite` and `Secure` and appends `SameSite=None; Secure`. The bridge script does the same to every cookie the page writes through `document.cookie`. Chromium accepts `Secure` cookies on `http://localhost` and `http://127.0.0.1`.
 - **Lax, kept by the proxy.** With every cookie `SameSite=None`, a page on any site could post to the dev app with its session, for example after "Open in browser". On an unsafe request (not GET, HEAD or OPTIONS) whose `Sec-Fetch-Site` is `cross-site` and whose Origin is not a loopback origin, the proxy drops every cookie except those the app last set as `SameSite=None` itself, which is what the app's own attributes would have done. A sign-in that posts back from its provider (`form_post`) keeps its state cookie. The proxy remembers those names while it runs; after a restart it drops them too until the app sets them again.
 - **Both loopback addresses.** The proxy listens on `::1` as well as `127.0.0.1`, at the same port, like the preview origin, so `localhost` reaches it whichever address the browser tries first.
-- **Loaded once.** Screens no longer unload when they go far off screen. See `docs/specs/screen-frames.md`.
+- **No reach.** Distance from the view no longer decides whether a Screen loads. `docs/specs/screen-tiers.md` says which Screens hold a frame, and `docs/specs/screen-frames.md` says where those frames live.
 - "Open in browser" uses the same host as the Screen.
 
 ## Costs

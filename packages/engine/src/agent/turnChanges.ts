@@ -30,6 +30,14 @@ export const isCommentId = (id: string): boolean => id.startsWith("comment:") ||
 
 const sameRecord = (a: TLRecord | null | undefined, b: TLRecord | null | undefined): boolean => stable(a ?? null) === stable(b ?? null);
 
+const withoutPicture = (record: TLRecord | null): TLRecord | null => {
+  if (record?.typeName !== "shape" || record.type !== "screen" || !("picture" in record.props)) return record;
+  const { picture: _picture, ...props } = record.props;
+  return { ...record, props } as unknown as TLRecord;
+};
+
+const unchangedSince = (now: TLRecord | null, after: TLRecord | null): boolean => sameRecord(now, after) || sameRecord(withoutPicture(now), withoutPicture(after));
+
 export class TurnChanges {
   private readonly db: DatabaseSync;
 
@@ -112,7 +120,7 @@ export const planRevert = (
   const skipped: Array<{ id: string; by: SkippedBy }> = [];
   for (const row of rows) {
     const now = current.get(row.shapeId) ?? null;
-    if (sameRecord(now, row.after)) {
+    if (unchangedSince(now, row.after)) {
       if (row.before === null) {
         if (now !== null) remove.push(row.shapeId);
       } else {

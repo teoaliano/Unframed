@@ -52,6 +52,7 @@ import {
   RepositoriesSetup,
   RepositoriesConfirmLogin,
   RepositoriesSetupVerdict,
+  ScreensCapture,
   ScreensSnapshots,
   ScreensStateToken,
 } from "./repositories.ts";
@@ -375,6 +376,7 @@ export const UnframedRpcs = RpcGroup.make(
   RepositoriesSetup,
   RepositoriesConfirmLogin,
   RepositoriesSetupVerdict,
+  ScreensCapture,
   ScreensSnapshots,
   ScreensStateToken,
   SettingsRemoveKey,

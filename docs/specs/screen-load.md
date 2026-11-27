@@ -1,5 +1,7 @@
 # Screen load
 
+The load queue described here was replaced by the tier scheduler in `screen-tiers.md`: only the selected Screen loads, and the meter counts tiers.
+
 ## Problem Statement
 
 Screens, the live frames of a Repository's dev app behind the `repositories` flag, run in the same renderer process and on the same main thread as the tldraw canvas. A trace of a ComfyUI board with about ten Screens showed the canvas thread 96 to 100 % busy for ten seconds, with freezes of 330 to 540 ms, each one a Screen booting ComfyUI. Four things make it worse than it needs to be:

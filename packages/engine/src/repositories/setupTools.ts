@@ -108,7 +108,7 @@ export class SetupTools {
     if (picture === undefined) throw new Refused(NO_CHROME_PREVIEW_MESSAGE);
     return {
       value: { shapeId: agentShapeId(screen.id), url, route: screen.props.route, w: Math.round(screen.props.w), h: Math.round(screen.props.h) },
-      images: [{ data: picture.toString("base64"), mimeType: "image/png" }],
+      images: [{ data: picture.png.toString("base64"), mimeType: "image/png" }],
     };
   }
 

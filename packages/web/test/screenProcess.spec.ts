@@ -16,6 +16,7 @@ test("a Screen loads from the other loopback host, so it runs outside the canvas
   await withRepository(page, {}, async (engine, project) => {
     const [first] = await screenShapes(engine, project);
     await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/whoami?login", w: 640, h: 480 } }]);
+    await clickShape(page, first.id);
     const frame = page.frameLocator(`[data-screen-of="${first.id}"] iframe[data-screen-frame]`);
     await expect(frame.locator("#who")).toHaveText("session=signed-in; theme=dark", { timeout: 30_000 });
     const src = await page.locator(`[data-screen-of="${first.id}"] iframe[data-screen-frame]`).getAttribute("src");
@@ -23,14 +24,20 @@ test("a Screen loads from the other loopback host, so it runs outside the canvas
   });
 });
 
-test("a Screen's page loads once: zoom, a far pan, its editor tab and back, and a project tab switch all keep the same page", async ({ page }) => {
+test("a live Screen's page loads once: a narrower canvas, zoom, a far pan, parking and selecting it again, its editor tab and back, and a project tab switch all keep the same page", async ({ page }) => {
   await withRepository(page, {}, async (engine, project) => {
     const [first] = await screenShapes(engine, project);
     const screen = page.locator(`[data-shape-id="${first.id}"] [data-testid=screen]`);
     const frame = page.frameLocator(`[data-screen-of="${first.id}"] iframe[data-screen-frame]`);
+    await clickShape(page, first.id);
     await expect(screen).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
     await frame.locator("body").evaluate(() => ((window as any).__kept = true));
     const kept = () => frame.locator("body").evaluate(() => (window as any).__kept === true);
+    const size = page.viewportSize()!;
+    await page.setViewportSize({ width: Math.round(size.width * 0.6), height: size.height });
+    await page.waitForTimeout(300);
+    await page.setViewportSize(size);
+    expect(await kept()).toBe(true);
     await page.mouse.move(640, 360);
     for (let step = 0; step < 15; step++) {
       await page.mouse.wheel(0, 120);
@@ -41,6 +48,13 @@ test("a Screen's page loads once: zoom, a far pan, its editor tab and back, and 
     await pan(page, 6);
     await pan(page, -6);
     expect(await kept()).toBe(true);
+    await page.keyboard.press("Escape");
+    await expect(screen).toHaveAttribute("data-tier", "parked");
+    await page.keyboard.press("Shift+1");
+    await expect(screen).toBeInViewport({ ratio: 1 });
+    await clickShape(page, first.id);
+    await expect(screen).toHaveAttribute("data-painted", "true");
+    expect(await kept()).toBe(true);
     await page.keyboard.press("ControlOrMeta+a");
     await page.keyboard.press("Shift+2");
     await page.getByTestId("selection-toolbar").getByRole("button", { name: "Editor" }).click();
@@ -48,11 +62,13 @@ test("a Screen's page loads once: zoom, a far pan, its editor tab and back, and 
     expect(await kept()).toBe(true);
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("artifact-editor")).toHaveCount(0);
+    await clickShape(page, first.id);
     await expect(screen).toHaveAttribute("data-painted", "true");
     expect(await kept()).toBe(true);
     await page.getByTestId("tab-strip").getByRole("tab", { name: "default", exact: true }).click();
     await expect(page.locator("[data-canvas-project='default']")).toBeVisible();
     await page.getByTestId("tab-strip").getByRole("tab", { name: "my-app", exact: true }).click();
+    await clickShape(page, first.id);
     await expect(screen).toHaveAttribute("data-painted", "true");
     expect(await kept()).toBe(true);
   });
@@ -62,6 +78,7 @@ test("a Screen's frame lies over its card on the canvas, and the selection toolb
   await withRepository(page, {}, async (engine, project) => {
     const [first] = await screenShapes(engine, project);
     const screen = page.locator(`[data-shape-id="${first.id}"] [data-testid=screen]`);
+    await clickShape(page, first.id);
     await expect(screen).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
     await pan(page, 0.3);
     const card = (await page.locator(`[data-shape-id="${first.id}"] [data-screen-slot]`).boundingBox())!;
@@ -83,8 +100,8 @@ test("a Screen's frame lies over its card on the canvas, and the selection toolb
 test("a Screen stays upright: the rotate shortcut leaves it at no rotation", async ({ page }) => {
   await withRepository(page, {}, async (engine, project) => {
     const [first] = await screenShapes(engine, project);
-    await expect(page.locator(`[data-shape-id="${first.id}"] [data-testid=screen]`)).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
     await clickShape(page, first.id);
+    await expect(page.locator(`[data-shape-id="${first.id}"] [data-testid=screen]`)).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
     await page.keyboard.press("Shift+.");
     await page.waitForTimeout(500);
     expect((await screenShapes(engine, project))[0].rotation).toBe(0);
