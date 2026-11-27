@@ -24,6 +24,22 @@ export interface DraftElement {
 
 export type DraftScope = "all" | "one";
 
+export type PropValue = string | number | boolean | null;
+
+export type SizeMode = "fixed" | "hug" | "fill";
+
+export interface DraftNeighbour {
+  readonly label: string;
+  readonly tag: string;
+  readonly source: DraftSource | null;
+}
+
+export interface DraftMove {
+  readonly from: number;
+  readonly to: number;
+  readonly siblings: ReadonlyArray<DraftNeighbour>;
+}
+
 export interface DraftChange {
   readonly id: string;
   readonly kind: ScreenWriteKind;
@@ -35,6 +51,12 @@ export interface DraftChange {
   readonly token?: TailwindToken;
   readonly element: DraftElement;
   readonly scope: DraftScope;
+  readonly move?: DraftMove;
+  readonly parent?: DraftNeighbour | null;
+  readonly props?: Readonly<Record<string, PropValue>>;
+  readonly propsBefore?: Readonly<Record<string, PropValue>>;
+  readonly mode?: SizeMode;
+  readonly together?: string;
 }
 
 export interface DraftContext {

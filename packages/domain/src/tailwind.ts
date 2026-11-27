@@ -1,9 +1,10 @@
-export type TokenKind = "spacing" | "size" | "font-size" | "font-weight" | "radius" | "opacity" | "color" | "line-height" | "tracking" | "align" | "display";
+export type TokenKind = "spacing" | "size" | "font-size" | "font-weight" | "font-family" | "radius" | "opacity" | "color" | "line-height" | "tracking" | "align" | "display" | "shadow";
 
 export interface TailwindToken {
   readonly name: string;
   readonly value: string;
   readonly kind: TokenKind;
+  readonly label?: string;
 }
 
 export interface TailwindClass {
