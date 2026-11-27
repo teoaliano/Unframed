@@ -38,10 +38,14 @@ describe("reduceTiers", () => {
     expect(state.active).toBe("s1");
   });
 
-  it("keeps one live Screen: activating another parks the live one with a capture wanted", () => {
-    const state = run([board(3), { type: "activate", id: "s0" }, { type: "ready", id: "s0" }, { type: "activate", id: "s1" }]);
-    expect(tiers(state)).toMatchObject({ s0: "parked", s1: "warming" });
+  it("keeps one live Screen: activating another demotes the live one with a capture wanted, and parks it once captured", () => {
+    let state = run([board(3), { type: "activate", id: "s0" }, { type: "ready", id: "s0" }, { type: "activate", id: "s1" }]);
+    expect(tiers(state)).toMatchObject({ s0: "demoting", s1: "warming" });
     expect(state.entries.get("s0")!.capture).toBe(true);
+    expect(state.active).toBe("s1");
+    expect(state.parked).toEqual(["s0"]);
+    state = reduceTiers(state, { type: "captured", id: "s0" });
+    expect(tiers(state)).toMatchObject({ s0: "parked", s1: "warming" });
     expect(state.parked).toEqual(["s0"]);
   });
 
@@ -52,15 +56,29 @@ describe("reduceTiers", () => {
   });
 
   it("brings a parked Screen back live at once", () => {
-    const state = run([board(3), { type: "activate", id: "s0" }, { type: "ready", id: "s0" }, { type: "activate", id: "s1" }, { type: "ready", id: "s1" }, { type: "activate", id: "s0" }]);
+    const state = run([
+      board(3),
+      { type: "activate", id: "s0" },
+      { type: "ready", id: "s0" },
+      { type: "activate", id: "s1" },
+      { type: "captured", id: "s0" },
+      { type: "ready", id: "s1" },
+      { type: "activate", id: "s0" },
+      { type: "captured", id: "s1" },
+    ]);
     expect(tiers(state)).toMatchObject({ s0: "live", s1: "parked" });
     expect(state.parked).toEqual(["s1"]);
   });
 
   it("parks at most three Screens and drops the least recently live", () => {
     const events: TierEvent[] = [board(6)];
-    for (const id of ["s0", "s1", "s2", "s3", "s4"]) events.push({ type: "activate", id }, { type: "ready", id });
-    events.push({ type: "deactivate" });
+    let previous: string | undefined;
+    for (const id of ["s0", "s1", "s2", "s3", "s4"]) {
+      events.push({ type: "activate", id }, { type: "ready", id });
+      if (previous !== undefined) events.push({ type: "captured", id: previous });
+      previous = id;
+    }
+    events.push({ type: "deactivate" }, { type: "captured", id: "s4" });
     const state = run(events);
     expect(state.parked).toEqual(["s4", "s3", "s2"]);
     expect(state.parked.length).toBe(TIER_BUDGETS.parked);
@@ -68,14 +86,42 @@ describe("reduceTiers", () => {
     expect(state.active).toBeUndefined();
   });
 
-  it("deactivating parks the live Screen with a capture, and a capture's end clears it", () => {
+  it("deactivating keeps the live Screen's frame shown while it captures, and parks it when the capture lands or fails", () => {
     let state = run([board(2), { type: "activate", id: "s0" }, { type: "ready", id: "s0" }, { type: "deactivate" }]);
-    expect(tiers(state).s0).toBe("parked");
+    expect(tiers(state).s0).toBe("demoting");
+    expect(state.entries.get("s0")!.frame).toBe("demoting");
     expect(state.entries.get("s0")!.capture).toBe(true);
+    expect(state.active).toBeUndefined();
+    expect(state.parked).toEqual(["s0"]);
     state = reduceTiers(state, { type: "captured", id: "s0" });
+    expect(tiers(state).s0).toBe("parked");
     expect(state.entries.get("s0")!.capture).toBe(false);
+    expect(state.parked).toEqual(["s0"]);
     state = run([{ type: "activate", id: "s1" }, { type: "ready", id: "s1" }, { type: "deactivate" }, { type: "captureFailed", id: "s1" }], state);
+    expect(tiers(state).s1).toBe("parked");
     expect(state.entries.get("s1")!.capture).toBe(false);
+    expect(state.parked).toEqual(["s1", "s0"]);
+  });
+
+  it("brings a demoting Screen back live at once when it is selected again", () => {
+    const state = run([board(2), { type: "activate", id: "s0" }, { type: "ready", id: "s0" }, { type: "deactivate" }, { type: "activate", id: "s0" }]);
+    expect(tiers(state).s0).toBe("live");
+    expect(state.entries.get("s0")!.capture).toBe(false);
+    expect(reduceTiers(state, { type: "captured", id: "s0" }).entries.get("s0")!.frame).toBe("live");
+  });
+
+  it("keeps a demoting Screen large on screen shown until the copy of its new picture is built", () => {
+    let state = run([view(screen("a", { width: 400 })), { type: "pageBuilt", id: "a" }, { type: "activate", id: "a" }, { type: "ready", id: "a" }, { type: "deactivate" }, { type: "picture", id: "a" }]);
+    expect(state.entries.get("a")!.page).toBe("loading");
+    state = reduceTiers(state, { type: "pageBuilt", id: "a" });
+    expect(tiers(state).a).toBe("demoting");
+    state = run([{ type: "picture", id: "a" }, { type: "captured", id: "a" }], state);
+    expect(tiers(state).a).toBe("demoting");
+    expect(state.entries.get("a")!.capture).toBe(false);
+    state = reduceTiers(state, { type: "pageBuilt", id: "a" });
+    expect(tiers(state).a).toBe("parked");
+    state = run([{ type: "activate", id: "a" }, { type: "deactivate" }, { type: "picture", id: "a" }, { type: "captured", id: "a" }, { type: "captureFailed", id: "a" }], state);
+    expect(tiers(state).a).toBe("parked");
   });
 
   it("ignores ready from a Screen that is not warming as the active one", () => {
@@ -96,8 +142,22 @@ describe("reduceTiers", () => {
     expect(state.active).toBeUndefined();
   });
 
+  it("counts a demoting Screen against the parked budget, so no more than three frames wait behind the live one", () => {
+    const events: TierEvent[] = [board(6)];
+    for (const id of ["s0", "s1", "s2", "s3", "s4"]) events.push({ type: "activate", id }, { type: "ready", id });
+    const state = run(events);
+    expect(state.parked).toEqual(["s3", "s2", "s1"]);
+    expect(tiers(state)).toMatchObject({ s0: "picture", s1: "demoting", s2: "demoting", s3: "demoting", s4: "live" });
+  });
+
+  it("lets a demoting Screen finish its capture when the tab is hidden", () => {
+    const state = run([board(2), { type: "activate", id: "s0" }, { type: "ready", id: "s0" }, { type: "deactivate" }, { type: "hidden", hidden: true }]);
+    expect(tiers(state).s0).toBe("demoting");
+    expect(tiers(reduceTiers(state, { type: "captured", id: "s0" })).s0).toBe("parked");
+  });
+
   it("drops every parked frame when the tab is hidden", () => {
-    const state = run([board(3), { type: "activate", id: "s0" }, { type: "ready", id: "s0" }, { type: "activate", id: "s1" }, { type: "ready", id: "s1" }, { type: "hidden", hidden: true }]);
+    const state = run([board(3), { type: "activate", id: "s0" }, { type: "ready", id: "s0" }, { type: "activate", id: "s1" }, { type: "captured", id: "s0" }, { type: "ready", id: "s1" }, { type: "hidden", hidden: true }]);
     expect(state.parked).toEqual([]);
     expect(tiers(state)).toMatchObject({ s0: "picture", s1: "live" });
   });
@@ -172,11 +232,11 @@ describe("reduceTiers", () => {
     expect(tiers(state).new).toBe("warming");
   });
   it("holds the editor tab's Screen live until the tab closes, whatever the selection does", () => {
-    let state = run([board(3), { type: "activate", id: "s0" }, { type: "ready", id: "s0" }, { type: "hold", id: "s1" }]);
+    let state = run([board(3), { type: "activate", id: "s0" }, { type: "ready", id: "s0" }, { type: "hold", id: "s1" }, { type: "captured", id: "s0" }]);
     expect(tiers(state)).toMatchObject({ s0: "parked", s1: "warming" });
     state = run([{ type: "ready", id: "s1" }, { type: "deactivate" }, { type: "activate", id: "s2" }], state);
     expect(tiers(state)).toMatchObject({ s1: "live", s2: "picture" });
-    state = run([{ type: "hold", id: undefined }, { type: "deactivate" }], state);
+    state = run([{ type: "hold", id: undefined }, { type: "deactivate" }, { type: "captured", id: "s1" }], state);
     expect(tiers(state)).toMatchObject({ s0: "parked", s1: "parked", s2: "picture" });
     expect(state.held).toBeUndefined();
   });

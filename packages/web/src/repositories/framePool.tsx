@@ -1,5 +1,5 @@
 import type { ScreenShapeProps } from "@unframed/contracts";
-import type { TierState } from "@unframed/domain";
+import { DEMOTE_WAIT_MS, pictureKeyOf, type TierState } from "@unframed/domain";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { atom, useValue, type Atom } from "tldraw";
 import type { StoreOwner } from "../canvas/doc.ts";
@@ -34,7 +34,6 @@ interface PoolEntry {
 }
 
 const NOT_LOADED: FrameStatus = { live: false, painted: false, settled: false };
-const CAPTURE_WAIT_MS = 8000;
 
 const pools = new Map<string, Atom<ReadonlyMap<string, PoolEntry>>>();
 
@@ -103,9 +102,12 @@ const PooledScreen = ({ project, shapeId, entry, host }: { readonly project: str
   const engine = useEngine();
   const tier = useValue("screen frame tier", () => tiersOf(project).get().entries.get(shapeId), [project, shapeId]);
   const parked = tier?.frame === "parked";
+  const demoting = tier?.frame === "demoting";
   const self = useRef<HTMLDivElement | null>(null);
   const post = useRef<FramePost | undefined>(undefined);
   const sent = useRef<string | undefined>(undefined);
+  const finals = useRef(0);
+  const [landed, setLanded] = useState<{ readonly key: string | null } | undefined>(undefined);
   const capture = (snapshot: PageSnapshotMessage | null, final: boolean) => {
     if (snapshot === null) {
       dispatchTier(project, { type: "captureFailed", id: shapeId });
@@ -118,11 +120,24 @@ const PooledScreen = ({ project, shapeId, entry, host }: { readonly project: str
       stored.catch(() => undefined);
       return;
     }
+    const seq = ++finals.current;
+    setLanded(undefined);
     stored.then(
-      () => dispatchTier(project, { type: "captured", id: shapeId }),
+      ({ key }) => {
+        if (seq === finals.current) setLanded({ key });
+      },
       () => dispatchTier(project, { type: "captureFailed", id: shapeId }),
     );
   };
+  const shownKey = pictureKeyOf(shown.props);
+  useEffect(() => {
+    if (landed === undefined || (landed.key !== null && landed.key !== shownKey)) return;
+    const frame = requestAnimationFrame(() => {
+      setLanded(undefined);
+      dispatchTier(project, { type: "captured", id: shapeId });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [landed, shownKey, project, shapeId]);
   const frame = useScreenFrame({
     owner: shown.owner,
     project,
@@ -181,9 +196,12 @@ const PooledScreen = ({ project, shapeId, entry, host }: { readonly project: str
       return;
     }
     post.current({ type: "unframed:snapshot:take" });
-    const timer = setTimeout(() => dispatchTier(project, { type: "captureFailed", id: shapeId }), CAPTURE_WAIT_MS);
-    return () => clearTimeout(timer);
   }, [wantsCapture, project, shapeId]);
+  useEffect(() => {
+    if (!demoting) return;
+    const timer = setTimeout(() => dispatchTier(project, { type: "captureFailed", id: shapeId }), DEMOTE_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [demoting, project, shapeId]);
   useLayoutEffect(() => {
     const current = entry.status.get();
     if (current.live !== frame.status.live || current.painted !== frame.status.painted || current.settled !== frame.status.settled) entry.status.set(frame.status);

@@ -4,7 +4,7 @@ import { AUDIO_SERVED_TYPES, PICTURE_POLICY, pictureContentType, pictureFileName
 import { PREVIEW_FOLDER, previewFileName } from "../media/mediaStore.ts";
 import { SNAPSHOT_FOLDER } from "../artifacts/snapshots.ts";
 import { SCREEN_SNAPSHOT_FOLDER } from "../screens/screenSnapshots.ts";
-import { PICTURE_FOLDER } from "../screens/pictureStore.ts";
+import { PICTURE_FOLDER, rastersDrawn } from "../screens/pictureStore.ts";
 import { fileNameOf } from "../paths.ts";
 import type { Route } from "./api.ts";
 import { sendError } from "./respond.ts";
@@ -120,6 +120,7 @@ export const pictureRoute =
       etag,
       "content-security-policy": PICTURE_POLICY,
     };
+    await rastersDrawn(join(folder, PICTURE_FOLDER), name);
     const path = join(folder, PICTURE_FOLDER, name);
     if (req.headers["if-none-match"]?.split(",").some((tag) => tag.trim() === etag) && (await stat(path).then((info) => info.isFile(), () => false))) {
       res.writeHead(304, { ...headers, "x-content-type-options": "nosniff" });

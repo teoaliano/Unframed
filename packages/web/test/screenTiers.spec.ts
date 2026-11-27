@@ -8,11 +8,11 @@ const MORE = [...IDS, "shape:tier-d", "shape:tier-e"];
 
 const screenOf = (page: Page, id: string) => page.locator(`[data-shape-id="${id}"] [data-testid=screen]`);
 
-const putBusyScreens = async (page: Page, engine: Parameters<Parameters<typeof withRepository>[2]>[0], project: string, ids: ReadonlyArray<string> = IDS) => {
+const putBusyScreens = async (page: Page, engine: Parameters<Parameters<typeof withRepository>[2]>[0], project: string, ids: ReadonlyArray<string> = IDS, route = (index: number) => `/busy?n=${index}`) => {
   const [first] = await screenShapes(engine, project);
   await putShapes(engine, project, [
     { ...first, x: -2000, y: -2000 },
-    ...ids.map((id, index) => ({ ...first, id, index: `a${index + 5}`, x: (index % 3) * 440, y: Math.floor(index / 3) * 340, props: { ...first.props, route: `/busy?n=${index}`, w: 390, h: 300 } })),
+    ...ids.map((id, index) => ({ ...first, id, index: `a${index + 5}`, x: (index % 3) * 440, y: Math.floor(index / 3) * 340, props: { ...first.props, route: route(index), w: 390, h: 300 } })),
   ]);
   await page.mouse.click(5, 300);
   await page.keyboard.press("Shift+1");
@@ -42,17 +42,17 @@ test("only the selected Screen runs live; the last ones stay parked, come back w
     await expect(screenOf(page, b)).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
     await expect(screenOf(page, a)).toHaveAttribute("data-tier", "parked");
     await expect(page.locator(`[data-screen-of="${a}"] iframe[data-screen-frame]`)).toHaveAttribute("data-parked", "true");
-    expect(await openFrames(page)).toBe(1);
+    await expect.poll(() => openFrames(page)).toBe(1);
 
     await clickShape(page, c);
     await expect(screenOf(page, c)).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
-    expect(await openFrames(page)).toBe(1);
+    await expect.poll(() => openFrames(page)).toBe(1);
     await expect(page.locator("iframe[data-screen-frame]")).toHaveCount(3);
 
     await clickShape(page, a);
     await expect(screenOf(page, a)).toHaveAttribute("data-painted", "true", { timeout: 2000 });
     expect(await page.frameLocator(`[data-screen-of="${a}"] iframe[data-screen-frame]`).locator("body").evaluate(() => (window as any).__kept === true)).toBe(true);
-    expect(await openFrames(page)).toBe(1);
+    await expect.poll(() => openFrames(page)).toBe(1);
 
     const before = await screenOf(page, a).getAttribute("data-picture");
     await page.frameLocator(`[data-screen-of="${a}"] iframe[data-screen-frame]`).locator("body").evaluate(() => {
@@ -62,7 +62,81 @@ test("only the selected Screen runs live; the last ones stay parked, come back w
     await expect(screenOf(page, a)).toHaveAttribute("data-tier", "parked");
     await expect(screenOf(page, a)).not.toHaveAttribute("data-painted", "true");
     await expect(screenOf(page, a)).not.toHaveAttribute("data-picture", before!, { timeout: 30_000 });
-    expect(await openFrames(page)).toBe(0);
+    await expect.poll(() => openFrames(page)).toBe(0);
+  });
+});
+
+const watchLeaving = (page: Page, id: string) =>
+  page.evaluate((id) => {
+    const seen: Array<{ frame: boolean; picture: string | null; tier: string | null }> = [];
+    (window as any).__leaving = seen;
+    const tick = () => {
+      const host = document.querySelector<HTMLElement>(`[data-screen-of="${id}"]`);
+      const card = document.querySelector(`[data-shape-id="${id}"] [data-testid=screen]`);
+      const frame = host !== null && getComputedStyle(host).visibility === "visible" && host.querySelector("iframe[data-screen-frame]:not([data-parked])") !== null;
+      seen.push({ frame, picture: card?.getAttribute("data-picture") ?? null, tier: card?.getAttribute("data-tier") ?? null });
+      if (card?.getAttribute("data-tier") !== "parked") requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }, id);
+
+const pageCopyText = (page: Page, project: string, key: string) => page.evaluate(({ project, key }) => fetch(`/api/pictures/${encodeURIComponent(project)}/${key}.html`).then((response) => response.text()), { project, key });
+
+test("leaving a live Screen keeps its frame in view until the picture of what it showed has landed", async ({ page }) => {
+  await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
+    const [a] = IDS as [string];
+    await putBusyScreens(page, engine, project, [a], () => "/app");
+    await clickShape(page, a);
+    await expect(screenOf(page, a)).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
+    await page.waitForTimeout(1500);
+    const before = await screenOf(page, a).getAttribute("data-picture");
+    await page.frameLocator(`[data-screen-of="${a}"] iframe[data-screen-frame]`).locator("body").evaluate(() => {
+      const box = document.getElementById("search-box") as HTMLInputElement;
+      box.value = "Typed before leaving";
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await watchLeaving(page, a);
+    await page.keyboard.press("Escape");
+    await expect(screenOf(page, a)).toHaveAttribute("data-tier", "parked", { timeout: 10_000 });
+    const seen = (await page.evaluate(() => (window as any).__leaving)) as Array<{ frame: boolean; picture: string | null; tier: string | null }>;
+    expect(seen.some((sample) => sample.tier === "demoting" && sample.frame)).toBe(true);
+    expect(seen.filter((sample) => !sample.frame && sample.picture === before)).toEqual([]);
+    const after = seen.at(-1)!.picture!;
+    expect(after).not.toBe(before);
+    expect(await pageCopyText(page, project, after)).toContain("Typed before leaving");
+  });
+});
+
+test("a live Screen that draws with WebGL keeps its drawing in the picture it leaves", async ({ page }) => {
+  await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
+    const [a] = IDS as [string];
+    await putBusyScreens(page, engine, project, [a], () => "/webgl");
+    await clickShape(page, a);
+    await expect(screenOf(page, a)).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
+    await page.keyboard.press("Escape");
+    await expect(screenOf(page, a)).toHaveAttribute("data-tier", "parked", { timeout: 10_000 });
+    const key = (await screenOf(page, a).getAttribute("data-picture"))!;
+    const html = await pageCopyText(page, project, key);
+    const part = /<img[^>]*src="parts\/([0-9a-f]{40}\.png)"/.exec(html)?.[1];
+    expect(part).toBeDefined();
+    const pixel = await page.evaluate(
+      async ({ project, part }) => {
+        const image = new Image();
+        image.src = `/api/pictures/${encodeURIComponent(project)}/parts/${part}`;
+        await image.decode();
+        const canvas = document.createElement("canvas");
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+        const context = canvas.getContext("2d")!;
+        context.drawImage(image, 0, 0);
+        return Array.from(context.getImageData(100, 50, 1, 1).data);
+      },
+      { project, part: part! },
+    );
+    expect(pixel[0]).toBe(0);
+    expect(Math.abs(pixel[1]! - 128)).toBeLessThanOrEqual(1);
+    expect(pixel[2]).toBe(255);
+    expect(pixel[3]).toBe(255);
   });
 });
 
@@ -271,14 +345,63 @@ test("a page copy keeps the custom properties its page registers, so transforms 
   });
 });
 
+test("a page copy registers no custom property in the canvas document, and its inheriting ones reach the whole copy", async ({ page }) => {
+  await page.addInitScript(() => {
+    const attach = Element.prototype.attachShadow;
+    Element.prototype.attachShadow = function (init) {
+      const root = attach.call(this, init);
+      (this as any).__copyRoot = root;
+      return root;
+    };
+  });
+  await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
+    const [a] = IDS as [string];
+    await putBusyScreens(page, engine, project, [a]);
+    const html = [
+      "<!doctype html><html><head><style>",
+      '@property --uf-test-gap { syntax: "<length>"; inherits: true; initial-value: 7px; }',
+      '@property --uf-test-ring { syntax: "<length>"; inherits: false; initial-value: 3px; }',
+      "#outer { --uf-test-ring: 9px; } #inner { margin-left: var(--uf-test-gap); padding-left: var(--uf-test-ring); }",
+      "</style></head><body><div id=\"outer\"><div id=\"inner\">Inner</div></div></body></html>",
+    ].join("");
+    const rpc = await engine.rpc();
+    let key: string | null;
+    try {
+      ({ key } = (await rpc.call("screens.capture", { project, shape: a, w: 390, h: 300, html, parts: [] })) as { key: string | null });
+    } finally {
+      await rpc.close();
+    }
+    await expect(screenOf(page, a)).toHaveAttribute("data-picture", key!);
+    await zoomOn(page, screenOf(page, a), /^page$/, -60);
+    const copy = screenOf(page, a).locator("[data-testid=screen-page-copy]");
+    await expect(copy).toHaveAttribute("data-built", "true", { timeout: 10_000 });
+    expect(
+      await copy.evaluate((element) => {
+        const inner = getComputedStyle((element as any).__copyRoot.getElementById("inner"));
+        return { margin: inner.marginLeft, padding: inner.paddingLeft };
+      }),
+    ).toEqual({ margin: "7px", padding: "3px" });
+    expect(
+      await page.evaluate(() => {
+        const probe = document.createElement("div");
+        probe.style.setProperty("--uf-test-ring", "calc(1px + 1px)");
+        document.body.append(probe);
+        const values = [getComputedStyle(document.body).getPropertyValue("--uf-test-gap"), getComputedStyle(document.body).getPropertyValue("--uf-test-ring"), getComputedStyle(probe).getPropertyValue("--uf-test-ring")];
+        probe.remove();
+        return values;
+      }),
+    ).toEqual(["", "", "calc(1px + 1px)"]);
+  });
+});
+
 test("one Screen is live and three stay parked at most: a fifth selection drops the oldest frame", async ({ page }) => {
   await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
     await putBusyScreens(page, engine, project, MORE);
     for (const id of MORE) {
       await clickShape(page, id);
       await expect(screenOf(page, id)).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
-      expect(await openFrames(page)).toBe(1);
       expect(await page.locator("iframe[data-screen-frame]").count()).toBeLessThanOrEqual(4);
+      await expect.poll(() => openFrames(page)).toBe(1);
     }
     await expect(page.locator("iframe[data-screen-frame]")).toHaveCount(4);
     await expect(frameOf(page, MORE[0]!)).toHaveCount(0);

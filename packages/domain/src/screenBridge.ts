@@ -1,7 +1,7 @@
 import { dialsBridgeSource } from "./artifacts/dials.ts";
 import { editBridgeSource } from "./artifacts/editBridge.ts";
 import { crossSiteCookie } from "./instanceProxy.ts";
-import { inlineViewportUnits, rewriteCssUrls, snapshotPage, type SnapshotHelpers } from "./pageSnapshot.ts";
+import { blankPixels, inlineViewportUnits, readCanvas, renameSelectors, rewriteCssUrls, snapshotPage, STAND_INS, type SnapshotHelpers } from "./pageSnapshot.ts";
 import { matchMock } from "./screenStates.ts";
 import { sourceModuleSource } from "./screenSource.ts";
 
@@ -14,12 +14,16 @@ export const SNAPSHOT_SETTLE_MS = 300;
 export const SNAPSHOT_GAP_MS = 800;
 export const SNAPSHOT_PART_MAX_BYTES = 8 * 1024 * 1024;
 export const SNAPSHOT_TOTAL_MAX_BYTES = 24 * 1024 * 1024;
+export const CANVAS_RETRY_MS = 1000;
+export const CANVAS_RETRY_FRAMES = 60;
 
 export interface SnapshotConfig {
   readonly settle: number;
   readonly gap: number;
   readonly partMax: number;
   readonly totalMax: number;
+  readonly canvasMs: number;
+  readonly canvasFrames: number;
 }
 
 export interface BridgeConfig {
@@ -487,8 +491,38 @@ export function snapshotBridge(win: any, config: SnapshotConfig, snapshot: typeo
     fetched.set(url, pending);
     return pending;
   };
+  const settleCanvases = async (): Promise<Map<unknown, string | null>> => {
+    const reads = new Map<unknown, string | null>();
+    const waiting = new Set<any>();
+    const take = (canvas: any) => {
+      const read = helpers.canvas(win, canvas, helpers.blank);
+      if (read === null) return false;
+      if (read !== undefined) reads.set(canvas, read);
+      return true;
+    };
+    for (const canvas of Array.from(win.document.querySelectorAll("canvas") as ArrayLike<any>)) if (!take(canvas)) waiting.add(canvas);
+    if (waiting.size > 0 && win.document.visibilityState !== "hidden" && typeof win.requestAnimationFrame === "function") {
+      const until = Date.now() + config.canvasMs;
+      await new Promise<void>((resolve) => {
+        let frames = 0;
+        const timer = win.setTimeout(resolve, config.canvasMs + 100);
+        const tick = () => {
+          for (const canvas of Array.from(waiting)) if (take(canvas)) waiting.delete(canvas);
+          if (waiting.size === 0 || ++frames >= config.canvasFrames || Date.now() >= until) {
+            win.clearTimeout(timer);
+            resolve();
+            return;
+          }
+          win.requestAnimationFrame(tick);
+        };
+        win.requestAnimationFrame(tick);
+      });
+    }
+    for (const canvas of waiting) reads.set(canvas, null);
+    return reads;
+  };
   win.__unframedSnapshot = async () => {
-    const page = snapshot(win, helpers);
+    const page = snapshot(win, helpers, await settleCanvases());
     const loaded = await Promise.all(page.parts.map(fetchPart));
     let total = 0;
     let over = false;
@@ -598,6 +632,21 @@ export function snapshotBridge(win: any, config: SnapshotConfig, snapshot: typeo
   });
 }
 
+export function readableCanvases(win: any): void {
+  if (win.parent === win && win.navigator?.webdriver !== true) return;
+  const WEBGL = /^(webgl2?|experimental-webgl)$/;
+  for (const name of ["HTMLCanvasElement", "OffscreenCanvas"]) {
+    const proto = win[name]?.prototype;
+    const native = proto?.getContext;
+    if (typeof native !== "function") continue;
+    proto.getContext = function (this: unknown, type: unknown, options?: unknown) {
+      if (typeof type !== "string" || !WEBGL.test(type)) return native.apply(this, arguments as any);
+      const given = options !== null && typeof options === "object" ? options : {};
+      return native.call(this, type, { ...given, preserveDrawingBuffer: true });
+    };
+  }
+}
+
 const patchDocumentCookie = (win: any, rewrite: (cookie: string) => string): void => {
   const proto = win.Document?.prototype;
   const native = proto === undefined ? undefined : Object.getOwnPropertyDescriptor(proto, "cookie");
@@ -614,9 +663,10 @@ const patchDocumentCookie = (win: any, rewrite: (cookie: string) => string): voi
 export const screenBridgeSource = (): string =>
   [
     sourceModuleSource(),
+    `(${readableCanvases.toString()})(window);`,
     `(${patchDocumentCookie.toString()})(window, ${crossSiteCookie.toString()});`,
     ...dialsBridgeSource().split("\n").slice(1, -1),
-    `(${snapshotBridge.toString()})(window, ${JSON.stringify({ settle: SNAPSHOT_SETTLE_MS, gap: SNAPSHOT_GAP_MS, partMax: SNAPSHOT_PART_MAX_BYTES, totalMax: SNAPSHOT_TOTAL_MAX_BYTES } satisfies SnapshotConfig)}, ${snapshotPage.toString()}, { units: ${inlineViewportUnits.toString()}, urls: ${rewriteCssUrls.toString()} });`,
+    `(${snapshotBridge.toString()})(window, ${JSON.stringify({ settle: SNAPSHOT_SETTLE_MS, gap: SNAPSHOT_GAP_MS, partMax: SNAPSHOT_PART_MAX_BYTES, totalMax: SNAPSHOT_TOTAL_MAX_BYTES, canvasMs: CANVAS_RETRY_MS, canvasFrames: CANVAS_RETRY_FRAMES } satisfies SnapshotConfig)}, ${snapshotPage.toString()}, { units: ${inlineViewportUnits.toString()}, urls: ${rewriteCssUrls.toString()}, selectors: ${renameSelectors.toString()}, standIns: ${JSON.stringify(STAND_INS)}, blank: ${blankPixels.toString()}, canvas: ${readCanvas.toString()} });`,
     `(${screenBridge.toString()})(window, ${JSON.stringify({ param: STATE_PARAM, stepTimeout: STEP_TIMEOUT_MS, quietIdle: QUIET_IDLE_MS, quietCap: QUIET_CAP_MS } satisfies BridgeConfig)}, ${matchMock.toString()}, ${cutParam.toString()}, ${quietWatch.toString()}, ${stepExpired.toString()});`,
     ...editBridgeSource({ stamp: true }).split("\n").slice(1, -1),
     "",

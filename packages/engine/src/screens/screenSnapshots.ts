@@ -63,7 +63,7 @@ const stubRasters = (text: Readonly<Record<string, unknown>>): PictureRasters =>
 });
 
 export const stubScreenRenderer: ScreenRenderer = async (job) => {
-  await sleep(150);
+  await sleep(Number(new URL(job.url).searchParams.get("render-ms")) || 150);
   return {
     ...stubRasters({ url: job.url, w: job.w, h: job.h, dials: job.dials ?? null }),
     snapshot: {
@@ -192,6 +192,8 @@ export class ScreenSnapshots {
   private readonly revisions = new Map<string, number>();
   private readonly firstRevision = Date.now();
   private readonly latestCaptures = new Map<string, number>();
+  private readonly liveTickets = new Map<string, number>();
+  private readonly livePictures = new Map<string, { readonly key: string; readonly signature: string }>();
   private captureCount = 0;
   private queue: Promise<unknown> = Promise.resolve();
 
@@ -251,19 +253,26 @@ export class ScreenSnapshots {
     const of = `${project}/${shapeId}`;
     const ticket = ++this.captureCount;
     this.latestCaptures.set(of, ticket);
+    this.liveTickets.set(of, ticket);
     try {
       const html = await this.storeCopy(project, copy);
       const key = pictureKey(html, copy.w, copy.h);
       if (!(await this.deps.pictures.has(project, key))) {
         const rasterizer = this.deps.rasterizer;
         if (rasterizer === undefined) return null;
-        const rasters = await rasterizer({ html, w: copy.w, h: copy.h, part: (name) => this.deps.pictures.read(project, `parts/${name}`) });
-        if (rasters === undefined) return null;
-        if ((await this.deps.pictures.putPicture(project, { html, w: copy.w, h: copy.h, ...rasters })) !== key) return null;
+        if ((await this.deps.pictures.putHtml(project, html, copy.w, copy.h)) !== key) return null;
+        await this.deps.pictures.draw(project, key, async () => {
+          const rasters = await rasterizer({ html, w: copy.w, h: copy.h, part: (name) => this.deps.pictures.read(project, `parts/${name}`) }).catch((error: unknown) => {
+            logError(`rasters of ${shapeId} in ${project}: ${errorText(error)}`);
+            return undefined;
+          });
+          if (rasters === undefined) logError(`${project}: could not draw the rasters of ${key}`);
+          return rasters;
+        });
       }
       if (this.latestCaptures.get(of) !== ticket) return key;
       const latest = (await this.deps.read(project)).find((record) => record.id === shapeId);
-      if (isScreenShape(latest)) await this.deps.pictures.remember(project, this.signatureOf(project, latest), key);
+      if (isScreenShape(latest)) this.livePictures.set(of, { key, signature: this.signatureOf(project, latest) });
       await this.deps.setPicture(project, shapeId, key);
       logInfo(`${project}: stored a live picture of ${shapeId}`);
       return key;
@@ -322,9 +331,13 @@ export class ScreenSnapshots {
 
   private async render(project: string, state: ProjectScreens, shapeId: string): Promise<void> {
     if (this.projects.get(project) !== state) return;
+    const of = `${project}/${shapeId}`;
+    const ticket = this.liveTickets.get(of);
     const shape = (await this.deps.read(project)).find((record) => record.id === shapeId);
-    if (!isScreenShape(shape)) return;
+    if (!isScreenShape(shape) || this.latestCaptures.has(of)) return;
     const signature = this.signatureOf(project, shape);
+    const live = this.livePictures.get(of);
+    if (live !== undefined && live.key === shape.props.picture && live.signature === signature) return;
     const known = await this.deps.pictures.keyFor(project, signature);
     if (known !== undefined && (await this.deps.pictures.has(project, known))) {
       if (shape.props.picture !== known) await this.deps.setPicture(project, shapeId, known);
@@ -349,7 +362,7 @@ export class ScreenSnapshots {
     const key = await this.deps.pictures.putPicture(project, { html, w: captured.snapshot?.w ?? shape.props.w, h: captured.snapshot?.h ?? shape.props.h, png: captured.png, w384: captured.w384, w128: captured.w128 });
     if (key === undefined) return;
     await this.deps.pictures.remember(project, signature, key);
-    await this.deps.setPicture(project, shapeId, key);
     logInfo(`${project}: captured a picture of ${shapeId}`);
+    if (this.liveTickets.get(of) === ticket) await this.deps.setPicture(project, shapeId, key);
   }
 }

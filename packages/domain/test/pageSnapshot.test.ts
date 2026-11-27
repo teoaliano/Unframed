@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fontFamilyKey, inlineViewportUnits, rewriteCssUrls, rootSelectors, scopeFontFamilies, screenBridgeSource } from "../src/index.ts";
+import { blankPixels, fontFamilyKey, inlineViewportUnits, readableCanvases, rewriteCssUrls, rootSelectors, scopeFontFamilies, screenBridgeSource, standInSelectors } from "../src/index.ts";
 
 describe("viewport units in a page copy", () => {
   it("writes every viewport unit as pixels of the page's own viewport", () => {
@@ -87,6 +87,30 @@ describe("root selectors in a page copy", () => {
   });
 });
 
+describe("canvas and video stand-ins in a page copy", () => {
+  const CANVAS = ':is(canvas, img:where([data-uf-stand-in="canvas"]))';
+  const VIDEO = ':is(video, img:where([data-uf-stand-in="video"]))';
+
+  it("lets the page's canvas and video type selectors match their stand-in pictures, with no change of specificity", () => {
+    expect(standInSelectors("canvas")).toBe(CANVAS);
+    expect(standInSelectors("canvas.pill, .stage > video")).toBe(`${CANVAS}.pill, .stage > ${VIDEO}`);
+    expect(standInSelectors("CANVAS:hover")).toBe(`${CANVAS}:hover`);
+    expect(standInSelectors("div:not(canvas) > canvas[data-x]")).toBe(`div:not(${CANVAS}) > ${CANVAS}[data-x]`);
+  });
+
+  it("leaves classes, ids, attributes and longer names alone", () => {
+    for (const selector of [".canvas", "#video", "[data-kind=canvas]", "canvas-wrap", "x-video", ".a\\:canvas", "html body", ":root"]) expect(standInSelectors(selector)).toBe(selector);
+  });
+
+  it("reads a canvas as blank when every pixel is black with one alpha", () => {
+    expect(blankPixels([0, 0, 0, 255, 0, 0, 0, 255])).toBe(true);
+    expect(blankPixels([0, 0, 0, 0, 0, 0, 0, 0])).toBe(true);
+    expect(blankPixels([0, 0, 0, 255, 0, 0, 0, 0])).toBe(false);
+    expect(blankPixels([0, 0, 0, 255, 0, 1, 0, 255])).toBe(false);
+    expect(blankPixels([12, 34, 56, 255])).toBe(false);
+  });
+});
+
 describe("the page copy in the Screen bridge", () => {
   const load = (origin: string) => {
     const listeners: Record<string, Array<(event: any) => void>> = {};
@@ -114,6 +138,50 @@ describe("the page copy in the Screen bridge", () => {
     expect(posted.filter((entry) => entry.message.type === "unframed:snapshot")).toEqual([
       { message: { type: "unframed:snapshot", href: "http://127.0.0.1:4101/", final: true, snapshot: { html: "<p>", w: 1, h: 2, parts: [] } }, to: "http://127.0.0.1:8787" },
     ]);
+  });
+});
+
+describe("WebGL canvases in a Screen", () => {
+  const canvasWindow = (framed: boolean, webdriver: boolean) => {
+    const asked: Array<{ type: string; options: unknown }> = [];
+    function Canvas() {}
+    Canvas.prototype.getContext = function (type: string, options?: unknown) {
+      asked.push({ type, options });
+      return { type };
+    };
+    const win: any = { navigator: { webdriver }, HTMLCanvasElement: Canvas };
+    win.parent = framed ? {} : win;
+    return { win, asked, canvas: new (Canvas as any)() };
+  };
+
+  it("keeps the drawing buffer of every WebGL context in a framed Screen, and leaves other contexts alone", () => {
+    const { win, asked, canvas } = canvasWindow(true, false);
+    readableCanvases(win);
+    canvas.getContext("webgl", { alpha: false });
+    canvas.getContext("webgl2");
+    canvas.getContext("experimental-webgl", { preserveDrawingBuffer: false, antialias: true });
+    canvas.getContext("2d", { alpha: false });
+    expect(asked).toEqual([
+      { type: "webgl", options: { alpha: false, preserveDrawingBuffer: true } },
+      { type: "webgl2", options: { preserveDrawingBuffer: true } },
+      { type: "experimental-webgl", options: { preserveDrawingBuffer: true, antialias: true } },
+      { type: "2d", options: { alpha: false } },
+    ]);
+  });
+
+  it("keeps it in a headless capture, and not in the person's own browser tab", () => {
+    const headless = canvasWindow(false, true);
+    readableCanvases(headless.win);
+    headless.canvas.getContext("webgl");
+    expect(headless.asked).toEqual([{ type: "webgl", options: { preserveDrawingBuffer: true } }]);
+    const tab = canvasWindow(false, false);
+    readableCanvases(tab.win);
+    tab.canvas.getContext("webgl");
+    expect(tab.asked).toEqual([{ type: "webgl", options: undefined }]);
+  });
+
+  it("runs first in the bridge, before the app can ask for a context", () => {
+    expect(screenBridgeSource().startsWith(`(${readableCanvases.toString()})(window);`)).toBe(true);
   });
 });
 

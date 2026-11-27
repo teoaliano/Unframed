@@ -8,6 +8,49 @@ export interface PageSnapshot {
 export interface SnapshotHelpers {
   readonly units: typeof inlineViewportUnits;
   readonly urls: typeof rewriteCssUrls;
+  readonly selectors: typeof renameSelectors;
+  readonly standIns: Readonly<Record<string, string>>;
+  readonly blank: typeof blankPixels;
+  readonly canvas: typeof readCanvas;
+}
+
+export type CanvasReads = ReadonlyMap<unknown, string | null>;
+
+export const STAND_INS: Readonly<Record<string, string>> = {
+  canvas: ':is(canvas, img:where([data-uf-stand-in="canvas"]))',
+  video: ':is(video, img:where([data-uf-stand-in="video"]))',
+};
+
+const ROOTS: Readonly<Record<string, string>> = { html: "[data-uf-html]", body: "[data-uf-body]", ":root": "[data-uf-html]" };
+
+export function blankPixels(data: ArrayLike<number>): boolean {
+  if (data.length < 4) return false;
+  const alpha = data[3];
+  for (let at = 0; at + 3 < data.length; at += 4) {
+    if (data[at] !== 0 || data[at + 1] !== 0 || data[at + 2] !== 0 || data[at + 3] !== alpha) return false;
+  }
+  return true;
+}
+
+export function readCanvas(win: any, canvas: any, blank: typeof blankPixels): string | null | undefined {
+  let data: string;
+  try {
+    data = canvas.toDataURL();
+  } catch {
+    return undefined;
+  }
+  if (typeof data !== "string" || !data.startsWith("data:image/")) return undefined;
+  try {
+    const probe = win.document.createElement("canvas");
+    probe.width = 32;
+    probe.height = 32;
+    const context = probe.getContext("2d");
+    context.imageSmoothingQuality = "high";
+    context.drawImage(canvas, 0, 0, 32, 32);
+    return blank(context.getImageData(0, 0, 32, 32).data) ? null : data;
+  } catch {
+    return data;
+  }
 }
 
 export function inlineViewportUnits(css: string, vw: number, vh: number, rem?: number): string {
@@ -191,7 +234,8 @@ export function rewriteCssUrls(css: string, map: (url: string) => string): strin
   return out;
 }
 
-export function rootSelectors(selectorText: string): string {
+export function renameSelectors(selectorText: string, names: Readonly<Record<string, string>>): string {
+  const named = (key: string): string | undefined => (Object.prototype.hasOwnProperty.call(names, key) ? names[key] : undefined);
   const identChar = /[A-Za-z0-9_\-\u0080-￿]/;
   const hex = /[0-9A-Fa-f]/;
   const selectorArguments = /^(is|where|not|has|matches|-webkit-any|-moz-any|host|host-context|nth-child|nth-last-child|current|past|future)$/i;
@@ -291,7 +335,7 @@ export function rootSelectors(selectorText: string): string {
         afterIdent = true;
         continue;
       }
-      out += !element && name.toLowerCase() === "root" ? "[data-uf-html]" : text.slice(at, stop);
+      out += (element ? undefined : named(`:${name.toLowerCase()}`)) ?? text.slice(at, stop);
       at = stop;
       afterIdent = true;
       continue;
@@ -299,8 +343,7 @@ export function rootSelectors(selectorText: string): string {
     if (char === "\\" || identChar.test(char)) {
       const stop = identEnd(at);
       const word = text.slice(at, stop);
-      const lower = word.toLowerCase();
-      out += !afterIdent && lower === "html" ? "[data-uf-html]" : !afterIdent && lower === "body" ? "[data-uf-body]" : word;
+      out += (afterIdent ? undefined : named(word.toLowerCase())) ?? word;
       at = stop;
       afterIdent = true;
       continue;
@@ -312,7 +355,11 @@ export function rootSelectors(selectorText: string): string {
   return out;
 }
 
-export function snapshotPage(win: any, helpers: SnapshotHelpers): PageSnapshot {
+export const rootSelectors = (selectorText: string): string => renameSelectors(selectorText, ROOTS);
+
+export const standInSelectors = (selectorText: string): string => renameSelectors(selectorText, STAND_INS);
+
+export function snapshotPage(win: any, helpers: SnapshotHelpers, reads?: CanvasReads): PageSnapshot {
   const doc = win.document;
   const HTML = "http://www.w3.org/1999/xhtml";
   const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
@@ -320,6 +367,8 @@ export function snapshotPage(win: any, helpers: SnapshotHelpers): PageSnapshot {
   const FRAMES = new Set(["iframe", "frame", "object", "embed"]);
   const NAME = /^[^\s"'>/=\u0000-\u001f]+$/;
   const DROPPED = /^(on.*|srcset|sizes|nonce|integrity|autofocus|loading)$/i;
+  const STAND_IN_KEPT = /^(id|class|style|width|height|role|title|slot|hidden|aria-.+|data-.+)$/i;
+  const STAND_IN_TYPES = /canvas|video/i;
   const vw = win.innerWidth;
   const vh = win.innerHeight;
   const rootStyle = win.getComputedStyle(doc.documentElement);
@@ -378,8 +427,9 @@ export function snapshotPage(win: any, helpers: SnapshotHelpers): PageSnapshot {
     if (is(rule, "CSSMediaRule")) return matches(rule.media.mediaText) ? rulesText(rule.cssRules, base) : "";
     if (is(rule, "CSSPageRule")) return "";
     if (is(rule, "CSSStyleRule")) {
-      if (rule.cssRules && rule.cssRules.length > 0) return `${rule.selectorText}{${css(rule.style.cssText, base)}${rulesText(rule.cssRules, base)}}`;
-      return css(rule.cssText, base);
+      const selector = STAND_IN_TYPES.test(rule.selectorText) ? helpers.selectors(rule.selectorText, helpers.standIns) : rule.selectorText;
+      if (rule.cssRules && rule.cssRules.length > 0) return `${selector}{${css(rule.style.cssText, base)}${rulesText(rule.cssRules, base)}}`;
+      return selector === rule.selectorText ? css(rule.cssText, base) : `${selector}{${css(rule.style.cssText, base)}}`;
     }
     if (is(rule, "CSSKeyframesRule") || is(rule, "CSSFontFaceRule") || !rule.cssRules) return css(rule.cssText, base);
     const whole = String(rule.cssText);
@@ -413,6 +463,67 @@ export function snapshotPage(win: any, helpers: SnapshotHelpers): PageSnapshot {
     for (const [name, value] of values) out += value === "" ? ` ${name}` : ` ${name}="${escapeAttribute(value)}"`;
     return out;
   };
+  const KEYFRAME_META = new Set(["offset", "computedOffset", "easing", "composite"]);
+  const cssName = (name: string): string => (name === "cssFloat" ? "float" : name.startsWith("--") ? name : name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`));
+  const pinned = new Map<any, string>();
+  const pinAnimations = (): void => {
+    let animations: any[] = [];
+    try {
+      animations = typeof doc.getAnimations === "function" ? Array.from(doc.getAnimations()) : [];
+    } catch {
+      return;
+    }
+    for (const animation of animations.slice(0, 500)) {
+      const effect = animation.effect;
+      const target = effect?.target;
+      if (!target || effect.pseudoElement || typeof effect.getKeyframes !== "function" || animation.currentTime === null) continue;
+      if (animation.playState !== "running" && animation.playState !== "paused") continue;
+      let frames: any[];
+      let timing: any;
+      try {
+        frames = effect.getKeyframes();
+        timing = effect.getComputedTiming();
+      } catch {
+        continue;
+      }
+      const names = new Set<string>();
+      for (const frame of frames) for (const name of Object.keys(frame)) if (!KEYFRAME_META.has(name)) names.add(cssName(name));
+      if (names.size === 0) continue;
+      let at: number | undefined;
+      if (animation.playState === "running") {
+        if (timing.iterations === Infinity) {
+          let offset = 0;
+          let most = -Infinity;
+          for (const frame of frames) {
+            const opacity = parseFloat(frame.opacity);
+            if (Number.isFinite(opacity) && opacity > most) {
+              most = opacity;
+              offset = frame.computedOffset ?? frame.offset ?? 0;
+            }
+          }
+          const progress = Math.min(Math.max(offset, 0), 0.9999);
+          const reversed = timing.direction === "reverse" || timing.direction === "alternate-reverse";
+          at = (Number(timing.delay) || 0) + (reversed ? 1 - progress : progress) * (Number(timing.duration) || 0);
+        } else if (Number.isFinite(timing.endTime)) at = timing.endTime;
+      }
+      const saved = animation.currentTime;
+      try {
+        if (at !== undefined) animation.currentTime = at;
+        const style = win.getComputedStyle(target);
+        let text = pinned.get(target) ?? "";
+        for (const name of names) {
+          const value = style.getPropertyValue(name);
+          if (value !== "") text += `;${name}:${value} !important`;
+        }
+        pinned.set(target, text);
+      } catch {
+        continue;
+      } finally {
+        if (at !== undefined) animation.currentTime = saved;
+      }
+    }
+  };
+  pinAnimations();
   const transparent = (style: any): boolean => (style.backgroundColor === "transparent" || style.backgroundColor === "rgba(0, 0, 0, 0)") && style.backgroundImage === "none";
   const baseOf = (): string => doc.baseURI;
   const own = (element: any): Map<string, string> => {
@@ -420,6 +531,11 @@ export function snapshotPage(win: any, helpers: SnapshotHelpers): PageSnapshot {
     for (const attribute of Array.from(element.attributes as ArrayLike<any>)) {
       if (!NAME.test(attribute.name) || DROPPED.test(attribute.name)) continue;
       values.set(attribute.name, attribute.name === "style" ? css(attribute.value, baseOf()) : attribute.value);
+    }
+    const pin = pinned.get(element);
+    if (pin !== undefined) {
+      const style = values.get("style");
+      values.set("style", `${style ?? ""}${css(pin, baseOf())}`.replace(/^;/, ""));
     }
     const top = element.scrollTop;
     const left = element.scrollLeft;
@@ -436,9 +552,12 @@ export function snapshotPage(win: any, helpers: SnapshotHelpers): PageSnapshot {
     for (const name of names) if (values.has(name)) kept.set(name, values.get(name)!);
     return kept;
   };
-  const picture = (data: string, element: any, values: Map<string, string>, out: string[]): void => {
-    const kept = keep(values, ["id", "class", "style", "width", "height", "data-uf-scroll"]);
-    kept.set("src", part(data));
+  const picture = (data: string | undefined, element: any, values: Map<string, string>, out: string[], kind: string): void => {
+    const kept = new Map<string, string>();
+    for (const [name, value] of values) if (STAND_IN_KEPT.test(name)) kept.set(name, value);
+    kept.set("data-uf-stand-in", kind);
+    if (data === undefined) kept.set("alt", "");
+    else kept.set("src", part(data));
     sized(kept, element);
     out.push(`<img${attributes(kept)}>`);
   };
@@ -471,14 +590,9 @@ export function snapshotPage(win: any, helpers: SnapshotHelpers): PageSnapshot {
       return;
     }
     if (html && local === "canvas") {
-      let data: string | undefined;
-      try {
-        data = node.toDataURL();
-      } catch {
-        data = undefined;
-      }
-      if (data !== undefined && data.startsWith("data:image/")) {
-        picture(data, node, values, out);
+      const read = reads !== undefined && reads.has(node) ? reads.get(node) : helpers.canvas(win, node, helpers.blank);
+      if (read !== undefined) {
+        picture(read ?? undefined, node, values, out, "canvas");
         return;
       }
     }
@@ -498,7 +612,7 @@ export function snapshotPage(win: any, helpers: SnapshotHelpers): PageSnapshot {
       if (data !== undefined && data.startsWith("data:image/")) {
         const fit = win.getComputedStyle(node).objectFit;
         values.set("style", `${values.get("style") ?? ""};object-fit:${fit === "fill" ? "contain" : fit}`);
-        picture(data, node, values, out);
+        picture(data, node, values, out, "video");
         return;
       }
       values.delete("src");

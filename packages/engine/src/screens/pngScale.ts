@@ -8,7 +8,7 @@ const ROWS_PER_TURN = 64;
 
 const turn = () => new Promise<void>((resolve) => setImmediate(resolve));
 
-interface Pixels {
+export interface Pixels {
   readonly width: number;
   readonly height: number;
   readonly channels: number;
@@ -25,7 +25,7 @@ const paeth = (a: number, b: number, c: number): number => {
   return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
 };
 
-const decode = async (png: Buffer): Promise<Pixels> => {
+export const decodePng = async (png: Buffer): Promise<Pixels> => {
   if (!png.subarray(0, 8).equals(SIGNATURE)) throw new Error("not a PNG");
   let width = 0;
   let height = 0;
@@ -114,7 +114,7 @@ const shrink = async (source: Pixels, width: number): Promise<Pixels> => {
 };
 
 export const scalePngs = async (png: Buffer, widths: ReadonlyArray<number>): Promise<Buffer[]> => {
-  const source = await decode(png);
+  const source = await decodePng(png);
   const scaled: Buffer[] = [];
   for (const width of widths) scaled.push(width >= source.width ? png : await encode(await shrink(source, width)));
   return scaled;

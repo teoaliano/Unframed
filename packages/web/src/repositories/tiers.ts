@@ -96,8 +96,11 @@ export const screenView = (editor: Editor): ViewScreen[] => {
 };
 
 const countTiers = (state: TierState) => {
-  const counts: Record<ScreenTier, number> = { live: 0, warming: 0, parked: 0, snapshot: 0, picture: 0 };
-  for (const entry of state.entries.values()) counts[tierOf(entry)]++;
+  const counts: Record<Exclude<ScreenTier, "demoting">, number> = { live: 0, warming: 0, parked: 0, snapshot: 0, picture: 0 };
+  for (const entry of state.entries.values()) {
+    const tier = tierOf(entry);
+    counts[tier === "demoting" ? "live" : tier]++;
+  }
   setTierCounts(counts);
 };
 
