@@ -1,4 +1,4 @@
-import type { ScaleToken } from "@unframed/contracts";
+import type { ScaleToken, TokenScale } from "@unframed/contracts";
 import { alphaPercent, colourWrite, currentColourToken, hexLabel, withAlpha } from "@unframed/domain";
 import { Grip, Minus, Plus } from "lucide-react";
 import { Button } from "~/components/ui/button";
@@ -20,6 +20,14 @@ export const coloursOnPage = (session: EditSession): string[] => [
   ),
 ];
 
+const inheritedColourToken = (scale: TokenScale, classes: readonly string[], value: string): ScaleToken | undefined => {
+  for (const className of classes) {
+    const token = currentColourToken(scale, "color", className, null);
+    if (token !== undefined) return token.hex === null || token.hex === hexLabel(value) ? token : undefined;
+  }
+  return undefined;
+};
+
 const transparent = (value: string | undefined): boolean => value === undefined || value === "" || value === "transparent" || alphaPercent(value) === 0;
 
 export const useColour = (fields: ScreenFields, subjects: readonly ScreenSubject[], property: string) => {
@@ -27,7 +35,8 @@ export const useColour = (fields: ScreenFields, subjects: readonly ScreenSubject
   const value = first!.report.computed[property] ?? "";
   const draft = fields.single ? fields.draftOf(first!.id, property) : undefined;
   const fromDraft = draft?.token?.label === undefined ? undefined : fields.scale.colors.find((token) => token.name === draft.token!.label);
-  const token = draft !== undefined ? fromDraft : fields.single ? currentColourToken(fields.scale, property, first!.report.className ?? null, first!.report.inline[property] ?? null) : undefined;
+  const own = draft !== undefined ? fromDraft : fields.single ? currentColourToken(fields.scale, property, first!.report.className ?? null, first!.report.inline[property] ?? null) : undefined;
+  const token = own ?? (draft === undefined && fields.single && property === "color" && !first!.report.inline[property] ? inheritedColourToken(fields.scale, first!.report.inheritedClasses ?? [], value) : undefined);
   const pickToken = (picked: ScaleToken) => {
     const write = colourWrite(property, picked);
     fields.write(property, () => write.value, write.className === undefined ? undefined : { name: write.className, value: picked.hex ?? picked.resolved, kind: "color", label: picked.name });

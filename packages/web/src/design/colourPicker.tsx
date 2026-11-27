@@ -310,7 +310,7 @@ export const ColourRow = ({
           trigger={
             <>
               <Swatch colour={value} />
-              <span className="min-w-0 truncate text-xs" title={name}>
+              <span className="min-w-0 truncate text-xs" title={token === undefined || hex === "" ? name : `${name} ${hex}`}>
                 {middle(name, 18)}
               </span>
             </>

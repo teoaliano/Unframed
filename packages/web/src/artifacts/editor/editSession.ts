@@ -71,6 +71,7 @@ export interface EditReport {
   readonly path?: string;
   readonly name?: string;
   readonly className?: string | null;
+  readonly inheritedClasses?: readonly string[];
   readonly owner?: string | null;
   readonly instance?: string | null;
   readonly slot?: string | null;

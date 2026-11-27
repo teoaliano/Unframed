@@ -22,7 +22,7 @@ function Header() {
 
 export default function App() {
   return (
-    <main className="flex min-h-screen gap-4 p-4">
+    <main className="flex min-h-screen gap-4 p-4 text-(--text-default)">
       <Header />
       <ul>
         <Card title="First" />

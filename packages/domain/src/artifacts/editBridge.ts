@@ -281,7 +281,15 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     return el.tagName.toLowerCase();
   };
   const sourceOf = (): SourceApi | undefined => (stamp ? win.__unframedSource : undefined);
-  const screenFields = (el: EditElement, deep = false): { path?: string; name?: string; className?: string | null; owner?: string | null; instance?: string | null; slot?: string | null; source?: unknown } => {
+  const inheritedClasses = (el: EditElement): string[] => {
+    const found: string[] = [];
+    for (let up = el.parentElement; up && up !== doc.body && found.length < 24; up = up.parentElement) {
+      const value = up.getAttribute("class");
+      if (value !== null && value.trim() !== "") found.push(value);
+    }
+    return found;
+  };
+  const screenFields = (el: EditElement, deep = false): { path?: string; name?: string; className?: string | null; inheritedClasses?: string[]; owner?: string | null; instance?: string | null; slot?: string | null; source?: unknown } => {
     if (!stamp) return {};
     const source = sourceOf();
     return {
@@ -291,6 +299,7 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
       owner: source?.owner(el) ?? null,
       instance: source?.instance?.(el) ?? null,
       slot: el.getAttribute("data-slot"),
+      ...(deep ? { inheritedClasses: inheritedClasses(el) } : {}),
       ...(deep && source !== undefined ? { source: source.describe(el) } : {}),
     };
   };

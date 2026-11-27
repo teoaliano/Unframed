@@ -49,6 +49,8 @@ const twRule = (name) => {
   if (text) return [1, "font-size: " + TW_TEXT[text[1]][0] + "; line-height: " + TW_TEXT[text[1]][1]];
   const colour = /^(text|bg)-\[(#[0-9a-fA-F]{3,8})\]$/.exec(name);
   if (colour) return [3, (colour[1] === "text" ? "color: " : "background-color: ") + colour[2]];
+  const variable = /^(text|bg)-\((--[\w-]+)\)$/.exec(name);
+  if (variable) return [3, (variable[1] === "text" ? "color: " : "background-color: ") + "var(" + variable[2] + ")"];
   const space = /^(p|px|py|pt|pr|pb|pl|m|mx|my|mt|mr|mb|ml|gap|h|w)-(?:(\d+(?:\.\d+)?)|\[(\d+(?:\.\d+)?px)\])$/.exec(name);
   if (space) {
     const value = space[3] ?? Number(space[2]) * 0.25 + "rem";
@@ -58,7 +60,7 @@ const twRule = (name) => {
 };
 const twCss = () => {
   const names = new Set();
-  for (const file of jsxFiles()) for (const token of reactFs.readFileSync(reactPath.join(reactSrc, file), "utf8").split(/[\s"'{}()<>=,;:]+/)) names.add(token);
+  for (const file of jsxFiles()) for (const token of reactFs.readFileSync(reactPath.join(reactSrc, file), "utf8").split(/[\s"'{}<>=,;:]+/)) names.add(token);
   const rules = [];
   for (const name of names) {
     const rule = twRule(name);

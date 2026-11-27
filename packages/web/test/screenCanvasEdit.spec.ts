@@ -656,3 +656,23 @@ test("elements are named as a person would: a component by its name, text by its
     prepareReactApp,
   );
 });
+
+test("a text colour that comes from a token, on the element or inherited from an ancestor's class, shows the token's name", async ({ page }) => {
+  await withRepository(
+    page,
+    {},
+    async (engine, project) => {
+      await openReact(page, engine, project);
+      await enterOn(page, "header h2");
+      await page.keyboard.down("ControlOrMeta");
+      const agent = await pointIn(page, "header h2");
+      await page.mouse.click(agent.x, agent.y);
+      await page.keyboard.up("ControlOrMeta");
+      await expect(title(page)).toHaveText("Agent · in Header");
+      const colour = panel(page).getByRole("region", { name: "Colour" }).getByRole("button", { name: "Text colour", exact: true });
+      await expect(colour).toContainText("text-default");
+      await expect(colour).not.toContainText("27272A");
+    },
+    prepareReactApp,
+  );
+});
