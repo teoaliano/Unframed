@@ -69,6 +69,23 @@ test("a double-click on a selected Screen enters design mode: hover shows a chip
       await expect(badge(page)).toHaveText(/^\d+(\.\d)? × \d+(\.\d)?$/);
       await expect(overlay(page).locator('[data-design-outline="parent"]')).toHaveCount(1);
 
+      await page.keyboard.down("Alt");
+      const header = await pointIn(page, "header h2");
+      await page.mouse.move(header.x, header.y);
+      await expect(page.getByTestId("design-distance-chip")).toHaveText(/^\d+(\.\d)?$/);
+      await page.keyboard.up("Alt");
+      await expect(page.getByTestId("design-distance-chip")).toHaveCount(0);
+
+      const first = await pointIn(page, "li:nth-child(1) h3");
+
+      await page.keyboard.down("Shift");
+      await page.mouse.click(first.x, first.y);
+      await page.keyboard.up("Shift");
+      await expect(overlay(page).locator('[data-design-outline="selected"]')).toHaveCount(2);
+      await expect(overlay(page).locator('[data-design-outline="union"]')).toHaveCount(1);
+      await expect(overlay(page).locator("[data-design-corner]")).toHaveCount(4);
+      await expect(page.getByTestId("screen-design-title")).toHaveText("2 selected");
+
       await page.keyboard.press("Escape");
       await expect(overlay(page).locator('[data-design-outline="selected"]')).toHaveCount(0);
       await expect(overlay(page)).toBeAttached();
@@ -313,6 +330,32 @@ test("the drafts bar lists the changes, pins them with Show all, compares by swi
       await page.getByTestId("design-drafts-count").click();
       await expect(page.getByRole("list", { name: "Changes" }).locator("[data-draft-row]").first().getByTestId("draft-state")).toHaveText("Took", { timeout: 30_000 });
       await expect.poll(() => readFile(join(worktree, "src", "App.jsx"), "utf8"), { timeout: 10_000 }).toContain("pl-5 pr-2");
+    },
+    prepareReactApp,
+  );
+});
+
+test("a right-click offers Select layer with the ancestor chain and each one's file and line, and the Design panel shows the selection's source", async ({ page }) => {
+  await withRepository(
+    page,
+    {},
+    async (engine, project) => {
+      await openReact(page, engine, project);
+      await enterOn(page, "header h2");
+      await expect(panel(page).getByTestId("screen-source-file")).toHaveText("src/App.jsx:5–7");
+
+      const heading = await pointIn(page, "li:nth-child(2) h3");
+      await page.mouse.click(heading.x, heading.y, { button: "right" });
+      const menu = page.getByRole("menu", { name: "Layer actions" });
+      await expect(menu).toBeVisible();
+      await menu.getByRole("menuitem", { name: "Select layer" }).hover();
+      const layers = page.getByRole("menu", { name: "Select layer" });
+      await expect(layers.getByRole("menuitem").first()).toContainText("Heading · in Card");
+      await expect(layers.getByRole("menuitem").first()).toContainText("Card.jsx:4");
+      await expect(layers.getByRole("menuitem").nth(1)).toContainText("Card.jsx:3");
+      await layers.getByRole("menuitem").nth(1).click();
+      await expect(title(page)).toHaveText("Card");
+      await expect(panel(page).getByTestId("screen-source-file")).toContainText("src/Card.jsx:3");
     },
     prepareReactApp,
   );

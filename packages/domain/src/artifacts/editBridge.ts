@@ -861,7 +861,15 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     if (stamp && listening && editing === null && event.key === "Alt") post({ type: "unframed:edit:keyup", key: event.key });
   };
 
+  const onContext = (event: EditEvent) => {
+    if (!stamp || !listening || editing !== null) return;
+    event.preventDefault();
+    const el = hoverTarget(targetOf(event));
+    post({ type: "unframed:edit:context", x: event.clientX ?? 0, y: event.clientY ?? 0, id: el === null ? null : validId(el), element: el === null ? null : reportOf(el, true) });
+  };
+
   const LISTENERS: Array<[string, (event: EditEvent) => void]> = [
+    ["contextmenu", onContext],
     ["pointermove", onMove],
     ["pointermove", onDrag],
     ["pointermove", onPointer],
