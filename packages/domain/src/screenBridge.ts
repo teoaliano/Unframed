@@ -662,8 +662,8 @@ const patchDocumentCookie = (win: any, rewrite: (cookie: string) => string): voi
 
 export const screenBridgeSource = (): string =>
   [
-    sourceModuleSource(),
     `(${readableCanvases.toString()})(window);`,
+    sourceModuleSource(),
     `(${patchDocumentCookie.toString()})(window, ${crossSiteCookie.toString()});`,
     ...dialsBridgeSource().split("\n").slice(1, -1),
     `(${snapshotBridge.toString()})(window, ${JSON.stringify({ settle: SNAPSHOT_SETTLE_MS, gap: SNAPSHOT_GAP_MS, partMax: SNAPSHOT_PART_MAX_BYTES, totalMax: SNAPSHOT_TOTAL_MAX_BYTES, canvasMs: CANVAS_RETRY_MS, canvasFrames: CANVAS_RETRY_FRAMES } satisfies SnapshotConfig)}, ${snapshotPage.toString()}, { units: ${inlineViewportUnits.toString()}, urls: ${rewriteCssUrls.toString()}, selectors: ${renameSelectors.toString()}, standIns: ${JSON.stringify(STAND_INS)}, blank: ${blankPixels.toString()}, canvas: ${readCanvas.toString()} });`,
