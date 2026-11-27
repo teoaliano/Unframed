@@ -121,13 +121,13 @@ Three tracks. Track A first defines its exported types and function signatures i
 4. [x] Writer: reorder, duplicate, delete, prop literal, hidden; engine Apply and revert for them.
 
 ### Track B: canvas surface (web, bridge)
-1. Design mode state, entry by double-click, exit rules, holding the Screen live; the toolbar Editor button for the tab.
-2. Bridge reports for geometry, hit, text lines and gestures; structural previews.
-3. Overlay: hover chip and outline, selection outline, corner handles, size badge, parent dashed outline, multi-selection union.
-4. Handles: edge and corner resize, padding bars, gap bars, radius circle, reorder, Alt distances, cursors, live chips with tokens.
-5. Keyboard map and Delete guard; inline text editing; context menu with Select layer.
-6. Drafts bar on the canvas: list, Show all pins, Compare swipe, Discard all with undo, Apply.
-7. The canvas Design panel hosting `DesignTab` for the session.
+1. [x] Design mode state, entry by double-click, exit rules, holding the Screen live; the toolbar Editor button for the tab.
+2. [x] Bridge reports for geometry, hit, text lines and gestures; structural previews.
+3. [x] Overlay: hover chip and outline, selection outline, corner handles, size badge, parent dashed outline, multi-selection union.
+4. [x] Handles: edge and corner resize, padding bars, gap bars, radius circle, reorder, Alt distances, cursors, live chips with tokens.
+5. [x] Keyboard map and Delete guard; inline text editing; context menu with Select layer.
+6. [x] Drafts bar on the canvas: list, Show all pins, Compare swipe, Discard all with undo, Apply.
+7. [x] The canvas Design panel hosting `DesignTab` for the session.
 
 ### Track C: inspector (web)
 1. Token-first field display, per-field discard dot, label scrubbing, arrow stepping.
