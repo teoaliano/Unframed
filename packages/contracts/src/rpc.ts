@@ -58,6 +58,7 @@ import {
   ScreensApply,
   ScreensInspect,
   ScreensRevert,
+  ScreensTokens,
   ScreensSnapshots,
   ScreensStateToken,
 } from "./repositories.ts";
@@ -389,6 +390,7 @@ export const UnframedRpcs = RpcGroup.make(
   ScreensInspect,
   ScreensApply,
   ScreensRevert,
+  ScreensTokens,
   SettingsRemoveKey,
   OAuthStart,
   OAuthPending,
