@@ -211,3 +211,88 @@ test("the colour picker lists the project's colour tokens by group, searches the
     prepareReactApp,
   );
 });
+
+const header = (page: Page) => app(page).locator("header");
+
+test("Size, Flexbox, Border and radius, Shadow, Appearance and Position each write their property", async ({ page }) => {
+  await withRepository(
+    page,
+    {},
+    async (engine, project) => {
+      await openReact(page, engine, project);
+      await pickHeader(page);
+      const section = (name: string) => panels(page).getByRole("region", { name });
+
+      await expect(field(page, "Height: h-12 (48)")).toHaveValue("12");
+      await section("Size").getByRole("button", { name: "Width sizing" }).click();
+      await page.getByRole("menuitem", { name: "Hug contents" }).click();
+      await expect(header(page)).toHaveCSS("width", /^(?!0px)\d+(\.\d+)?px$/);
+      await expect(section("Size").getByRole("button", { name: "Width sizing" })).toHaveText("Hug");
+      await section("Size").getByRole("button", { name: "Width sizing" }).click();
+      await page.getByRole("menuitem", { name: "Add min width…" }).click();
+      await field(page, "Min width").fill("100");
+      await field(page, "Min width").press("Enter");
+      await expect(header(page)).toHaveCSS("min-width", "100px");
+
+      const flexbox = section("Flexbox");
+      await flexbox.getByRole("button", { name: "Column · flex-direction: column" }).click();
+      await expect(header(page)).toHaveCSS("flex-direction", "column");
+      await flexbox.getByRole("radio", { name: "Align bottom right" }).click();
+      await expect(header(page)).toHaveCSS("justify-content", "flex-end");
+      await expect(header(page)).toHaveCSS("align-items", "flex-end");
+      await expect(flexbox.getByRole("radio", { name: "Align bottom right" })).toHaveAttribute("aria-checked", "true");
+      await flexbox.getByRole("button", { name: "Gap between items presets" }).click();
+      await page.getByRole("menuitem", { name: /^gap-2 8/ }).click();
+      await expect(header(page)).toHaveCSS("row-gap", "8px");
+      await expect(field(page, "Gap between items: gap-2 (8)")).toHaveValue("2");
+      await flexbox.getByRole("checkbox", { name: "Clip content" }).click();
+      await expect(header(page)).toHaveCSS("overflow", "hidden");
+
+      const border = section("Border & radius");
+      await border.getByRole("button", { name: "Add stroke" }).click();
+      await expect(header(page)).toHaveCSS("border-top-width", "1px");
+      await expect(header(page)).toHaveCSS("border-top-color", "rgb(228, 228, 231)");
+      await border.getByRole("button", { name: "Border sides" }).click();
+      await page.getByRole("menuitemradio", { name: "Bottom" }).click();
+      await expect(header(page)).toHaveCSS("border-top-width", "0px");
+      await expect(header(page)).toHaveCSS("border-bottom-width", "1px");
+      await expect(field(page, "Stroke weight")).toHaveValue("1 · bottom");
+      await border.getByRole("button", { name: "Corner radius" }).click();
+      await field(page, "Corner radius").fill("12");
+      await field(page, "Corner radius").press("Enter");
+      await expect(header(page)).toHaveCSS("border-top-left-radius", "12px");
+
+      const shadow = section("Shadow");
+      await shadow.getByRole("button", { name: "Add effect" }).click();
+      await page.getByRole("menuitem", { name: "Drop shadow" }).click();
+      await expect(header(page)).toHaveCSS("box-shadow", "rgba(0, 0, 0, 0.25) 0px 4px 4px 0px");
+      await field(page, "Shadow blur").fill("10");
+      await field(page, "Shadow blur").press("Enter");
+      await expect(header(page)).toHaveCSS("box-shadow", "rgba(0, 0, 0, 0.25) 0px 4px 10px 0px");
+      await shadow.getByRole("button", { name: "Add effect" }).click();
+      await page.getByRole("menuitem", { name: "Layer blur" }).click();
+      await expect(header(page)).toHaveCSS("filter", "blur(4px)");
+
+      await section("Appearance").getByRole("combobox", { name: "Blend mode" }).click();
+      await page.getByRole("option", { name: "Multiply" }).click();
+      await expect(header(page)).toHaveCSS("mix-blend-mode", "multiply");
+
+      await field(page, "Rotation").fill("5");
+      await field(page, "Rotation").press("Enter");
+      await expect(header(page)).toHaveCSS("rotate", "5deg");
+      await section("Position").getByRole("button", { name: "position: absolute · where it is" }).click();
+      await expect(header(page)).toHaveCSS("position", "absolute");
+
+      await pick(page, app(page).getByRole("heading", { name: "Second" }), { detail: 1 }, /^List item · in Card /);
+      await expect(field(page, "Corner radius: rounded-lg (8)")).toHaveValue("lg");
+      await expect(panels(page).getByRole("region", { name: "Layout" })).toContainText("display: list-item");
+      await panels(page).getByRole("region", { name: "Layout" }).getByRole("button", { name: "Use flexbox" }).click();
+      await expect(app(page).locator("li").nth(1)).toHaveCSS("display", "flex");
+
+      await pick(page, app(page).getByRole("heading", { name: "Agent" }), { metaKey: true }, /^Heading · in Header /);
+      await panels(page).getByRole("region", { name: "Size" }).getByRole("button", { name: "Auto width" }).click();
+      await expect(app(page).getByRole("heading", { name: "Agent" })).toHaveCSS("white-space", "nowrap");
+    },
+    prepareReactApp,
+  );
+});

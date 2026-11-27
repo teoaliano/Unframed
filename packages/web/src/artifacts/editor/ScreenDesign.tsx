@@ -4,6 +4,7 @@ import { elementKind, hexLabel, EMPTY_SCALE, fieldAria, fieldToken, pairShown, s
 import { Eye, EyeOff, MoveHorizontal, MoveVertical, Scan, SunDim } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "~/components/ui/button";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Toggle } from "~/components/ui/toggle";
 import { Tip } from "../../chrome/ui.tsx";
 import { showError } from "../../toasts.tsx";
@@ -14,6 +15,8 @@ import type { EditReport, EditSession } from "./editSession.ts";
 import { ScreenHeader, useInspected } from "./ScreenHeader.tsx";
 import { InstanceSection } from "./ScreenInstance.tsx";
 import { ColourSection, coloursOnPage, FillSection } from "./ScreenPaint.tsx";
+import { BorderSection, ShadowSection } from "./ScreenEffects.tsx";
+import { LayoutSection, PositionSection, SizeSection } from "./ScreenLayout.tsx";
 import { TypographySection } from "./ScreenTypography.tsx";
 
 export interface ScreenDesignContext {
@@ -169,6 +172,9 @@ export const NumberRow = ({
 
 const SideIcon = ({ side }: { readonly side: Side | "x" | "y" }) => <span className="w-3.5 text-center text-xs">{side === "x" ? "↔" : side === "y" ? "↕" : side.charAt(0).toUpperCase()}</span>;
 
+const BLENDS = ["normal", "darken", "multiply", "plus-darker", "color-burn", "lighten", "screen", "plus-lighter", "color-dodge", "overlay", "soft-light", "hard-light", "difference", "exclusion", "hue", "saturation", "color", "luminosity"];
+const BLEND_LABEL = (mode: string): string => mode.split("-").map((word, index) => (index === 0 ? word.charAt(0).toUpperCase() + word.slice(1) : word)).join(" ");
+
 let paddingIndividual = false;
 
 const PaddingSection = ({ fields }: { readonly fields: ScreenFields }) => {
@@ -230,6 +236,7 @@ const AppearanceSection = ({ fields, subjects, session }: { readonly fields: Scr
     return Number.isFinite(value) ? String(Math.round(value * 100)) : "";
   });
   const hidden = subjects.every((subject) => fields.draftOf(subject.id, "display")?.asked === "none");
+  const blend = subjects[0]!.report.computed["mix-blend-mode"] ?? "normal";
   const hideChange = fields.changeOf(["display"]);
   return (
     <InspectorSection
@@ -254,19 +261,25 @@ const AppearanceSection = ({ fields, subjects, session }: { readonly fields: Scr
           bounds={{ min: 0, max: 100 }}
           onCommit={(typed) => fields.write("opacity", () => String(Math.min(100, Math.max(0, typed)) / 100))}
         />
+        <div className="flex min-w-0 items-center gap-1">
+          <ChangedDot change={fields.changeOf(["mix-blend-mode"])} />
+          <Select value={blend} onValueChange={(next) => next !== null && fields.write("mix-blend-mode", () => String(next))}>
+            <SelectTrigger aria-label="Blend mode" size="sm">
+              <SelectValue>{BLEND_LABEL(blend)}</SelectValue>
+            </SelectTrigger>
+            <SelectPopup alignItemWithTrigger={false}>
+              {BLENDS.map((mode) => (
+                <SelectItem key={mode} value={mode}>
+                  {BLEND_LABEL(mode)}
+                </SelectItem>
+              ))}
+            </SelectPopup>
+          </Select>
+        </div>
       </div>
     </InspectorSection>
   );
 };
-
-const SizeSection = ({ fields }: { readonly fields: ScreenFields }) => (
-  <InspectorSection name="Size">
-    <div className="grid grid-cols-2 gap-1.5">
-      <NumberRow fields={fields} label="Width" field={fields.field("width")} icon={<MoveHorizontal aria-hidden className="size-3.5" />} />
-      <NumberRow fields={fields} label="Height" field={fields.field("height")} icon={<MoveVertical aria-hidden className="size-3.5" />} />
-    </div>
-  </InspectorSection>
-);
 
 export const ScreenDesign = ({
   session,
@@ -299,13 +312,21 @@ export const ScreenDesign = ({
           <ColourSection fields={fields} subjects={subjects} onPage={onPage} />
           <FillSection fields={fields} subjects={subjects} onPage={onPage} />
           <PaddingSection fields={fields} />
-          <SizeSection fields={fields} />
+          <BorderSection fields={fields} subjects={subjects} onPage={onPage} />
+          <ShadowSection fields={fields} subjects={subjects} onPage={onPage} />
+          <SizeSection fields={fields} subjects={subjects} text />
+          <PositionSection fields={fields} subjects={subjects} />
+          <LayoutSection fields={fields} subjects={subjects} />
         </>
       ) : (
         <>
-          <SizeSection fields={fields} />
+          <SizeSection fields={fields} subjects={subjects} text={false} />
+          <PositionSection fields={fields} subjects={subjects} />
+          <LayoutSection fields={fields} subjects={subjects} />
           <PaddingSection fields={fields} />
           <FillSection fields={fields} subjects={subjects} onPage={onPage} />
+          <BorderSection fields={fields} subjects={subjects} onPage={onPage} />
+          <ShadowSection fields={fields} subjects={subjects} onPage={onPage} />
         </>
       )}
       <AppearanceSection fields={fields} subjects={subjects} session={session} />

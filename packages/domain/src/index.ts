@@ -80,6 +80,7 @@ export * from "./jobLifecycle.ts";
 export * from "./designFields.ts";
 export * from "./inspector.ts";
 export * from "./colourPicker.ts";
+export * from "./inspectorLayout.ts";
 export * from "./shapeDesign.ts";
 export * from "./annotationStyle.ts";
 export * from "./elementChips.ts";
