@@ -227,10 +227,34 @@ export const draftLine = (change: DraftChange): string => {
 
 const sameTarget = (a: DraftChange, b: DraftChange): boolean => a.element.stamp === b.element.stamp && a.property === b.property;
 
+const mergedMove = (earlier: DraftChange, next: DraftChange): DraftChange | null => {
+  if (earlier.move === undefined || next.move === undefined) return next;
+  const moved = earlier.move.siblings[earlier.move.from];
+  const order = earlier.move.siblings.filter((_, index) => index !== earlier.move!.from);
+  order.splice(earlier.move.to, 0, moved!);
+  const after = next.move.siblings.length === order.length ? next.move.to : earlier.move.to;
+  if (after === earlier.move.from) return null;
+  return { ...next, move: { from: earlier.move.from, to: after, siblings: earlier.move.siblings } };
+};
+
+const mergedProps = (earlier: DraftChange, next: DraftChange): DraftChange | null => {
+  const before = { ...(next.propsBefore ?? {}), ...(earlier.propsBefore ?? {}) };
+  const props = Object.fromEntries(Object.entries({ ...(earlier.props ?? {}), ...(next.props ?? {}) }).filter(([name, value]) => before[name] !== value));
+  return Object.keys(props).length === 0 ? null : { ...next, props, propsBefore: before };
+};
+
 export const addDraft = (list: ReadonlyArray<DraftChange>, next: DraftChange): DraftChange[] => {
-  const earlier = list.find((each) => sameTarget(each, next));
-  if (earlier === undefined) return [...list, next];
-  const merged: DraftChange = { ...next, id: earlier.id, before: earlier.before, shownBefore: earlier.shownBefore, scope: earlier.scope };
+  const earlier = next.kind === "duplicate" ? undefined : list.find((each) => sameTarget(each, next));
+  if (earlier === undefined) {
+    if (next.kind === "props") {
+      const alone = mergedProps({ ...next, props: {} }, next);
+      return alone === null ? [...list] : [...list, alone];
+    }
+    return [...list, next];
+  }
+  const combined = next.kind === "reorder" ? mergedMove(earlier, next) : next.kind === "props" ? mergedProps(earlier, next) : next;
+  if (combined === null) return list.filter((each) => each !== earlier);
+  const merged: DraftChange = { ...combined, id: earlier.id, before: earlier.before, shownBefore: earlier.shownBefore, scope: earlier.scope };
   return list.map((each) => (each === earlier ? merged : each));
 };
 

@@ -6,6 +6,7 @@ export interface JsxChange {
   readonly property: string;
   readonly before: string | null;
   readonly after: string | null;
+  readonly move?: { readonly from: number; readonly to: number; readonly count: number } | undefined;
 }
 
 export interface JsxPlace {
@@ -228,10 +229,151 @@ const styleEdit = (source: string, element: Node, change: JsxChange): SpanEdit[]
   return [{ start: last.end, end: last.end, before: "", after: `, ${keyText}: ${JSON.stringify(change.after)}` }];
 };
 
+const NOT_A_CHILD = "The element is not one of a JSX element's children (it is returned, mapped or computed), so the change is left to the agent.";
+
+const childList = (found: Found): Node[] | string => {
+  const parent = found.parents.at(-1);
+  if (parent === undefined || (parent.type !== "JSXElement" && parent.type !== "JSXFragment")) return NOT_A_CHILD;
+  return parent.children as Node[];
+};
+
+const meaningful = (children: ReadonlyArray<Node>): Node[] => children.filter((child) => !(child.type === "JSXText" && child.value.trim() === "") && !(child.type === "JSXExpressionContainer" && child.expression.type === "JSXEmptyExpression"));
+
+const reorderEdit = (source: string, found: Found, change: JsxChange): SpanEdit[] | string => {
+  const move = change.move;
+  if (move === undefined) return "The move has no positions.";
+  const children = childList(found);
+  if (typeof children === "string") return children;
+  const items = meaningful(children);
+  if (items.some((child) => child.type !== "JSXElement")) return "The children include an expression or text, so their order on the page is not the order in the code; the move is left to the agent.";
+  if (items.length !== move.count) return `The page shows ${move.count} items here and the code writes ${items.length}; the move is left to the agent.`;
+  if (items.indexOf(found.element) !== move.from) return "The element's position on the page is not its position in the code; the move is left to the agent.";
+  if (move.to < 0 || move.to >= items.length) return "The move goes outside the list.";
+  if (move.to === move.from) return [];
+  const order = items.filter((_, index) => index !== move.from);
+  order.splice(move.to, 0, found.element);
+  const low = Math.min(move.from, move.to);
+  const high = Math.max(move.from, move.to);
+  let text = "";
+  for (let index = low; index <= high; index++) {
+    text += source.slice(order[index]!.start, order[index]!.end);
+    if (index < high) text += source.slice(items[index]!.end, items[index + 1]!.start);
+  }
+  const start = items[low]!.start;
+  const end = items[high]!.end;
+  return [{ start, end, before: source.slice(start, end), after: text }];
+};
+
+const ownLine = (source: string, at: number): { readonly lineStart: number; readonly indent: string } | undefined => {
+  const lineStart = source.lastIndexOf("\n", at - 1) + 1;
+  const indent = source.slice(lineStart, at);
+  return /^[ \t]*$/.test(indent) ? { lineStart, indent } : undefined;
+};
+
+const duplicateEdit = (source: string, found: Found): SpanEdit[] | string => {
+  const children = childList(found);
+  if (typeof children === "string") return children;
+  const element = found.element;
+  const span = source.slice(element.start, element.end);
+  const line = ownLine(source, element.start);
+  const after = line === undefined ? span : `\n${line.indent}${span}`;
+  return [{ start: element.end, end: element.end, before: "", after }];
+};
+
+const deleteEdit = (source: string, found: Found): SpanEdit[] | string => {
+  const children = childList(found);
+  if (typeof children === "string") return children;
+  const element = found.element;
+  const line = ownLine(source, element.start);
+  const start = line !== undefined && line.lineStart > 0 ? line.lineStart - 1 : element.start;
+  return [{ start, end: element.end, before: source.slice(start, element.end), after: "" }];
+};
+
+type Literal = string | number | boolean | null;
+
+const literalOf = (text: string | null): Literal | undefined => {
+  if (text === null) return undefined;
+  try {
+    const value: unknown = JSON.parse(text);
+    return value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const attrValueOf = (attr: Node): Literal | undefined | "expression" => {
+  if (attr.value === null || attr.value === undefined) return true;
+  const value = attr.value.type === "JSXExpressionContainer" ? attr.value.expression : attr.value;
+  if (value.type === "StringLiteral") return value.value;
+  if (value.type === "NumericLiteral") return value.value;
+  if (value.type === "BooleanLiteral") return value.value;
+  if (value.type === "NullLiteral") return null;
+  if (value.type === "TemplateLiteral" && value.expressions.length === 0) return value.quasis[0]?.value?.cooked ?? "";
+  return "expression";
+};
+
+const attrText = (name: string, value: Literal): string =>
+  typeof value === "string" ? (/["\n\\{}]/.test(value) ? `${name}={${JSON.stringify(value)}}` : `${name}="${value}"`) : `${name}={${JSON.stringify(value)}}`;
+
+const propEdit = (source: string, element: Node, change: JsxChange): SpanEdit[] | string => {
+  if (!/^[A-Za-z_$][\w$:-]*$/.test(change.property)) return "The prop name is not a plain name.";
+  const after = change.after === "null" ? null : literalOf(change.after);
+  if (after === undefined) return `The new value of ${change.property} is not a literal; it is left to the agent.`;
+  const before = change.before === null ? undefined : literalOf(change.before);
+  const attrs = element.openingElement.attributes as Node[];
+  const attr = attrs.find((each) => each.type === "JSXAttribute" && tagOf(each.name) === change.property);
+  if (attr === undefined) {
+    if (after === null) return [];
+    const at = attrs.at(-1)?.end ?? element.openingElement.name.end;
+    return [{ start: at, end: at, before: "", after: ` ${attrText(change.property, after)}` }];
+  }
+  const current = attrValueOf(attr);
+  if (current === "expression") return `The ${change.property} prop is an expression at the callsite, so it is left to the agent.`;
+  if (change.before !== null && before !== current) return `The code's ${change.property} is not the value the page reported; it may come from elsewhere.`;
+  if (after === null) {
+    let start = attr.start;
+    while (start > 0 && /[ \t]/.test(source.charAt(start - 1))) start--;
+    return [{ start, end: attr.end, before: source.slice(start, attr.end), after: "" }];
+  }
+  return [{ start: attr.start, end: attr.end, before: source.slice(attr.start, attr.end), after: attrText(change.property, after) }];
+};
+
+const hideEdit = (source: string, element: Node): SpanEdit[] | string => {
+  const tag = tagOf(element.openingElement.name);
+  if (classAttr(element) === undefined && !/^[a-z]/.test(tag)) return `<${tag}> has no className here and may not take one, so hiding it is left to the agent.`;
+  return classEdit(source, element, { kind: "class", property: "display", before: null, after: "hidden" });
+};
+
 export const applySpans = (source: string, edits: ReadonlyArray<SpanEdit>): string => {
   let text = source;
   for (const edit of [...edits].sort((a, b) => b.start - a.start)) text = text.slice(0, edit.start) + edit.after + text.slice(edit.end);
   return text;
+};
+
+const editsFor = (source: string, found: Found, change: JsxChange): SpanEdit[] | string => {
+  const element = found.element;
+  switch (change.kind) {
+    case "class":
+      return classEdit(source, element, change);
+    case "text":
+      return textEdit(source, element, change);
+    case "attr":
+      return attrEdit(source, element, change);
+    case "style":
+      return styleEdit(source, element, change);
+    case "reorder":
+      return reorderEdit(source, found, change);
+    case "duplicate":
+      return duplicateEdit(source, found);
+    case "delete":
+      return deleteEdit(source, found);
+    case "props":
+      return propEdit(source, element, change);
+    case "hide":
+      return hideEdit(source, element);
+    case "wrap":
+      return "Wrapping an element in a new one is left to the agent.";
+  }
 };
 
 export const writeJsx = (source: string, file: string, place: JsxPlace, change: JsxChange): JsxWrite => {
@@ -240,14 +382,7 @@ export const writeJsx = (source: string, file: string, place: JsxPlace, change: 
   const found = locate(ast, source, place, change);
   if (typeof found === "string") return fail(found);
   const element = found.element;
-  const edits =
-    change.kind === "class"
-      ? classEdit(source, element, change)
-      : change.kind === "text"
-        ? textEdit(source, element, change)
-        : change.kind === "attr"
-          ? attrEdit(source, element, change)
-          : styleEdit(source, element, change);
+  const edits = editsFor(source, found, change);
   if (typeof edits === "string") return fail(edits);
   const text = applySpans(source, edits);
   const first = edits.length === 0 ? element.start : Math.min(...edits.map((edit) => edit.start));
