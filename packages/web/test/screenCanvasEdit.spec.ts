@@ -391,3 +391,54 @@ test("a right-click offers Select layer with the ancestor chain and each one's f
     prepareReactApp,
   );
 });
+
+const selectedText = (page: Page) => app(page).locator("body").evaluate(() => getSelection()?.toString() ?? "");
+
+test("in design mode the page sees no pointer event and selects no text: presses, clicks, double-clicks and right-clicks stop at the bridge, while the wheel still reaches it", async ({ page }) => {
+  await withRepository(
+    page,
+    {},
+    async (engine, project) => {
+      await openReact(page, engine, project);
+      await enterOn(page, "header h2");
+      await expect(selectedText(page)).resolves.toBe("");
+      await app(page)
+        .locator("body")
+        .evaluate(() => {
+          const seen: string[] = [];
+          (window as unknown as { seen: string[] }).seen = seen;
+          for (const type of ["pointerdown", "pointerup", "pointermove", "mousedown", "mouseup", "click", "dblclick", "contextmenu", "wheel"]) {
+            window.addEventListener(type, () => seen.push(type), true);
+            document.getElementById("root")!.addEventListener(type, () => seen.push(type));
+          }
+        });
+      const body = await pointIn(page, "li:nth-child(2) p", { x: 0.3, y: 0.5 });
+      await page.mouse.dblclick(body.x, body.y);
+      await expect(title(page)).not.toHaveText("Design");
+      await expect(selectedText(page)).resolves.toBe("");
+      const other = await pointIn(page, "li:nth-child(3) h3", { x: 0.3, y: 0.5 });
+      await page.mouse.dblclick(other.x, other.y);
+      await expect(selectedText(page)).resolves.toBe("");
+      await page.mouse.click(other.x, other.y, { button: "right" });
+      await expect(page.getByRole("menu", { name: "Layer actions" })).toBeVisible();
+      await page.keyboard.press("Escape");
+      await page.mouse.move(body.x, body.y);
+      await page.mouse.wheel(0, 40);
+      await expect.poll(() => app(page).locator("body").evaluate(() => (window as unknown as { seen: string[] }).seen)).toContain("wheel");
+      expect((await app(page).locator("body").evaluate(() => (window as unknown as { seen: string[] }).seen)).filter((type) => type !== "wheel")).toEqual([]);
+
+      const startsSelecting = (selector: string) => app(page).locator(selector).first().evaluate((element) => element.dispatchEvent(new Event("selectstart", { bubbles: true, cancelable: true })));
+      await expect(startsSelecting("li:nth-child(2) p")).resolves.toBe(false);
+      await page.keyboard.down("ControlOrMeta");
+      const word = await pointIn(page, "li:nth-child(2) h3", { x: 0.2, y: 0.5 });
+      await page.mouse.click(word.x, word.y);
+      await page.keyboard.up("ControlOrMeta");
+      await expect(title(page)).toHaveText("Heading");
+      await page.mouse.dblclick(word.x, word.y);
+      await expect(app(page).locator("li:nth-child(2) h3")).toHaveAttribute("contenteditable", "plaintext-only");
+      await expect(selectedText(page)).resolves.toBe("Second");
+      await expect(startsSelecting("li:nth-child(2) h3")).resolves.toBe(true);
+    },
+    prepareReactApp,
+  );
+});

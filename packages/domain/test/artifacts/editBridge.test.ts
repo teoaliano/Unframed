@@ -144,8 +144,9 @@ const stubEditWindow = (options: { peer?: string; timelines?: unknown; loading?:
       win.scrollX = x;
       win.scrollY = y;
     },
-    addEventListener: (type: string, listener: Listener | (() => void)) => {
-      if (type === "message") listeners.push(listener as Listener);
+    addEventListener: (type: string, listener: Listener | (() => void), capture?: boolean) => {
+      if (capture === true) document.addEventListener(type, listener as Listener);
+      else if (type === "message") listeners.push(listener as Listener);
       else others.set(type, [...(others.get(type) ?? []), listener as () => void]);
     },
     getComputedStyle: (el: FakeElement) => ({

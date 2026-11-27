@@ -53,6 +53,7 @@ interface EditEvent {
   readonly clientX?: number;
   readonly clientY?: number;
   preventDefault(): void;
+  stopImmediatePropagation?(): void;
 }
 
 interface EditDocument {
@@ -82,6 +83,7 @@ interface EditWindow {
   readonly console: { error(...args: unknown[]): void };
   addEventListener(type: "message", listener: (event: { source: unknown; origin: string; data: unknown }) => void): void;
   addEventListener(type: "load" | "scroll", listener: () => void): void;
+  addEventListener(type: string, listener: (event: EditEvent) => void, capture: boolean): void;
   readonly scrollX: number;
   readonly scrollY: number;
   scrollTo(x: number, y: number): void;
@@ -868,6 +870,11 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     post({ type: "unframed:edit:context", x: event.clientX ?? 0, y: event.clientY ?? 0, id: el === null ? null : validId(el), element: el === null ? null : reportOf(el, true) });
   };
 
+  const noSelect = (event: EditEvent) => {
+    for (let node: EditElement | null = event.target; node; node = node.parentElement) if (editing !== null && node === editing.el) return;
+    event.preventDefault();
+  };
+
   const LISTENERS: Array<[string, (event: EditEvent) => void]> = [
     ["contextmenu", onContext],
     ["pointermove", onMove],
@@ -877,6 +884,7 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     ["mousedown", block],
     ["pointerdown", onPress],
     ["dragstart", block],
+    ["selectstart", noSelect],
     ["submit", block],
     ["click", onClick],
     ["dblclick", onDoubleClick],
@@ -890,15 +898,27 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
       pendingText = null;
     }
     if (!on) press = null;
-    for (const [type, handler] of LISTENERS) {
-      if (on) doc.addEventListener(type, handler, true);
-      else doc.removeEventListener(type, handler, true);
-    }
+    if (!stamp)
+      for (const [type, handler] of LISTENERS) {
+        if (on) doc.addEventListener(type, handler, true);
+        else doc.removeEventListener(type, handler, true);
+      }
     if (!on && hovered !== null) {
       hovered = null;
       post({ type: "unframed:edit:hover", element: null });
     }
   };
+
+  const SHIELDED = [
+    "pointerdown", "pointerup", "pointermove", "pointercancel", "pointerover", "pointerout", "mousedown", "mouseup", "mousemove", "mouseover", "mouseout",
+    "click", "auxclick", "dblclick", "contextmenu", "dragstart", "touchstart", "touchmove", "touchend", "touchcancel",
+  ];
+  const shield = (event: EditEvent) => {
+    if (!listening) return;
+    for (const [type, handler] of LISTENERS) if (type === event.type) handler(event);
+    if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+  };
+  if (stamp) for (const type of new Set([...SHIELDED, ...LISTENERS.map(([type]) => type)])) win.addEventListener(type, shield, true);
 
   let tweenFrame: unknown = null;
   const keyframePercents = (vars: Record<string, unknown>): number[] => {
