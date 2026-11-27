@@ -164,7 +164,7 @@ const useSetupChat = (project: string): SetupChatState | undefined => {
   return chat.status === "running" ? "running" : "idle";
 };
 
-export const ScreenOverlay = ({ project, instance }: { readonly project: string; readonly instance: string }) => {
+export const ScreenOverlay = ({ project, instance, pictured = false }: { readonly project: string; readonly instance: string; readonly pictured?: boolean }) => {
   const state = repositoryState(project);
   const setupChat = useSetupChat(project);
   const overlay = useValue(
@@ -173,6 +173,18 @@ export const ScreenOverlay = ({ project, instance }: { readonly project: string;
     [state, instance, setupChat],
   );
   if (overlay.kind === "none") return null;
+  if (pictured && overlay.kind === "progress")
+    return (
+      <div
+        className="pointer-events-none absolute top-2 right-2 flex items-center gap-2 rounded-md bg-(--artifact-card-surface) px-2 py-1 font-sans text-xs font-medium text-(--artifact-card-title) shadow-sm"
+        data-testid="screen-overlay"
+        data-overlay={overlay.kind}
+        data-compact="true"
+      >
+        <Spinner size="sm" tone="muted" />
+        <span>{overlay.label}</span>
+      </div>
+    );
   return (
     <div
       className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-(--artifact-card-surface) p-6 text-center font-sans text-sm text-(--artifact-card-foreground)"

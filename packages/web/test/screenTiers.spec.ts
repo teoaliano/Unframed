@@ -164,6 +164,31 @@ test("a board whose Screens in view all have pictures opens with no starting cov
   });
 });
 
+test("selecting a pictured Screen whose dev server is stopped keeps its picture in view and marks the start in a corner", async ({ page }) => {
+  await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok", FAKE_DEV_LISTEN_DELAY_MS: "3000" }, async (engine, project) => {
+    const [a] = IDS as [string];
+    await putBusyScreens(page, engine, project, [a]);
+    const [first] = await screenShapes(engine, project);
+    const rpc = await engine.rpc();
+    try {
+      await rpc.call("instances.stop", { project, id: first.props.instance });
+      await expect.poll(async () => (await rpc.call("instances.status", { project, id: first.props.instance })).state, { timeout: 30_000 }).toBe("stopped");
+    } finally {
+      await rpc.close();
+    }
+    await clickShape(page, a);
+    const overlay = screenOf(page, a).getByTestId("screen-overlay");
+    await expect(overlay).toHaveAttribute("data-overlay", "progress", { timeout: 10_000 });
+    await expect(overlay).toHaveAttribute("data-compact", "true");
+    await expect(overlay).toHaveText("Starting the dev server…");
+    await expect(screenOf(page, a).locator("img[data-testid=screen-snapshot]")).toBeVisible();
+    const box = (await screenOf(page, a).boundingBox())!;
+    const badge = (await overlay.boundingBox())!;
+    expect(badge.width * badge.height).toBeLessThan((box.width * box.height) / 10);
+    await expect(screenOf(page, a)).toHaveAttribute("data-painted", "true", { timeout: 30_000 });
+  });
+});
+
 test("a Screen large on screen shows a static copy of its page in a closed shadow root, and a small one an image", async ({ page }) => {
   await withRepository(page, { UNFRAMED_TEST_RENDERER: "ok" }, async (engine, project) => {
     await putBusyScreens(page, engine, project);

@@ -176,7 +176,7 @@ server.on("upgrade", (req, socket) => {
   socket.write(Buffer.concat([Buffer.from([0x81, payload.length]), payload]));
   socket.on("error", () => {});
 });
-server.listen(port, host, () => console.log("  ➜  Local:   http://localhost:" + port + "/"));
+setTimeout(() => server.listen(port, host, () => console.log("  ➜  Local:   http://localhost:" + port + "/")), Number(process.env.FAKE_DEV_LISTEN_DELAY_MS || 0));
 const linger = () => setTimeout(() => process.exit(0), Number(process.env.FAKE_DEV_LINGER_MS));
 process.on("SIGTERM", () => (process.env.FAKE_DEV_DETACHED ? linger() : process.exit(0)));
 if (process.env.FAKE_DEV_DETACHED) {
