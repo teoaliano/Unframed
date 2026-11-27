@@ -1,6 +1,7 @@
 import { changeLine, elementKind, pictureKeyOf, pictureUrl, type DraftChange } from "@unframed/domain";
 import { ChevronDown, Columns2, Eye, PencilLine, Trash2, X } from "lucide-react";
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { createPortal } from "react-dom";
 import { Button, InlineButton } from "~/components/ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { Tip } from "../chrome/ui.tsx";
@@ -90,7 +91,50 @@ const Swipe = ({ project, picture, size }: { readonly project: string; readonly 
   );
 };
 
-export const DesignDrafts = ({ session, run, project, picture, size, onApply, onDismiss, onDiscardAll }: {
+const EDGE = 8;
+
+interface BarPlace {
+  readonly left: number;
+  readonly top: number;
+}
+
+const placeBar = (host: HTMLElement, container: HTMLElement, bar: HTMLElement): BarPlace => {
+  const area = container.getBoundingClientRect();
+  const screen = host.getBoundingClientRect();
+  const panel = container.querySelector<HTMLElement>('[data-testid="screen-design-panel"]')?.getBoundingClientRect();
+  const toolbar = container.querySelector<HTMLElement>('[data-testid="bottom-toolbar"]')?.getBoundingClientRect();
+  const right = Math.min(screen.right, area.right, panel === undefined ? area.right : panel.left);
+  const left = Math.max(screen.left, area.left);
+  const centre = (left < right ? (left + right) / 2 : screen.left + screen.width / 2) - area.left;
+  const floor = (toolbar === undefined || toolbar.height === 0 ? area.bottom : toolbar.top) - area.top - EDGE - bar.offsetHeight;
+  const room = (panel === undefined ? area.width : panel.left - area.left) - EDGE - bar.offsetWidth;
+  return {
+    left: Math.max(EDGE, Math.min(room, centre - bar.offsetWidth / 2)),
+    top: Math.max(EDGE, Math.min(floor, screen.bottom - area.top + EDGE)),
+  };
+};
+
+const usePlace = (host: HTMLElement, container: HTMLElement, bar: { readonly current: HTMLElement | null }): BarPlace | undefined => {
+  const [place, setPlace] = useState<BarPlace | undefined>(undefined);
+  useEffect(() => {
+    let frame = 0;
+    const tick = () => {
+      const element = bar.current;
+      if (element !== null) {
+        const next = placeBar(host, container, element);
+        setPlace((previous) => (previous?.left === next.left && previous.top === next.top ? previous : next));
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    tick();
+    return () => cancelAnimationFrame(frame);
+  }, [host, container, bar]);
+  return place;
+};
+
+export const DesignDrafts = ({ host, container, session, run, project, picture, size, onApply, onDismiss, onDiscardAll }: {
+  readonly host: HTMLElement;
+  readonly container: HTMLElement;
   readonly session: EditSession;
   readonly run: ApplyRun | undefined;
   readonly project: string;
@@ -103,6 +147,8 @@ export const DesignDrafts = ({ session, run, project, picture, size, onApply, on
   const [open, setOpen] = useState(false);
   const [all, setAll] = useState(false);
   const [comparing, setComparing] = useState(false);
+  const barRef = useRef<HTMLDivElement>(null);
+  const place = usePlace(host, container, barRef);
   const drafts = session.drafts;
   const showRun = drafts.length === 0 && run !== undefined;
   const changes = showRun ? run.rows.map((row) => row.change) : drafts;
@@ -111,93 +157,99 @@ export const DesignDrafts = ({ session, run, project, picture, size, onApply, on
   const busy = run?.busy === true;
   return (
     <>
-      {all &&
-        !showRun &&
-        drafts.map((change, index) => {
-          const box = boxOf(session, change.element.stamp);
-          return box === undefined ? null : (
-            <Pinned key={change.id} x={box.x} y={box.y} origin="0 0" shift="translate(-50%, -50%)">
-              <span data-design-pin={index + 1} className="flex size-4 items-center justify-center rounded-full bg-(--edit-overlay-halo-outer) font-sans text-xs leading-4 text-(--edit-overlay-halo-inner)">
-                {index + 1}
-              </span>
-            </Pinned>
-          );
-        })}
-      {comparing && key !== undefined && !showRun && <Swipe project={project} picture={key} size={size} />}
-      <Pinned x={size.w / 2} y={size.h} origin="0 0" shift="translateX(-50%)">
-        <div className="pt-2">
-          <div
-            className="pointer-events-auto flex items-center gap-1 rounded-lg border border-(--artifact-editor-column-border) bg-(--artifact-editor-surface) p-1 font-sans text-(--artifact-editor-foreground) shadow-sm"
-            data-testid="design-drafts"
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            <Popover open={open} onOpenChange={setOpen}>
-              <Tip label="Changes in this Screen">
-                <PopoverTrigger render={<Button variant="ghost" size="sm" aria-label={showRun ? (busy ? "Applying" : "Applied") : counted(changes.length)} data-testid="design-drafts-count" />}>
-                  <PencilLine aria-hidden />
-                  {showRun ? (busy ? "Applying…" : "Applied") : changes.length}
-                  <ChevronDown aria-hidden />
-                </PopoverTrigger>
-              </Tip>
-              <PopoverPopup side="top" align="start" padding="compact" className="w-80" aria-label="Changes" initialFocus={false}>
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <p className="m-0 flex-1 text-sm font-semibold">{showRun ? "Applied changes" : "Changes in this Screen"}</p>
-                    {!showRun && (
-                      <Tip label="Show every change on the Screen">
-                        <Button variant={all ? "secondary" : "ghost"} size="xs" aria-pressed={all} onClick={() => setAll(!all)}>
-                          <Eye aria-hidden />
-                          Show all
-                        </Button>
-                      </Tip>
-                    )}
-                  </div>
-                  <ul className="m-0 flex list-none flex-col divide-y divide-(--artifact-editor-column-border) p-0" aria-label="Changes">
-                    {changes.map((change, index) => (
-                      <Row key={change.id} index={index} change={change} row={showRun ? run.rows.find((row) => row.change.id === change.id) : undefined} session={session} busy={busy} />
-                    ))}
-                  </ul>
-                  {showRun && (
-                    <div className="flex items-center justify-end gap-2">
-                      <span className="mr-auto text-xs text-(--artifact-editor-note)">{busy ? "" : "Undo puts back what Apply wrote."}</span>
-                      <Button variant="ghost" size="sm" disabled={busy} onClick={onDismiss}>
-                        Done
+      {createPortal(
+        <div className="pointer-events-none absolute inset-0" data-testid="design-drafts-layer">
+          {all &&
+            !showRun &&
+            drafts.map((change, index) => {
+              const box = boxOf(session, change.element.stamp);
+              return box === undefined ? null : (
+                <Pinned key={change.id} x={box.x} y={box.y} origin="0 0" shift="translate(-50%, -50%)">
+                  <span data-design-pin={index + 1} className="flex size-4 items-center justify-center rounded-full bg-(--edit-overlay-halo-outer) font-sans text-xs leading-4 text-(--edit-overlay-halo-inner)">
+                    {index + 1}
+                  </span>
+                </Pinned>
+              );
+            })}
+          {comparing && key !== undefined && !showRun && <Swipe project={project} picture={key} size={size} />}
+        </div>,
+        host,
+      )}
+      {createPortal(
+        <div
+          ref={barRef}
+          className="pointer-events-auto absolute z-[calc(var(--tl-layer-watermark)_-_1)] flex items-center gap-1 rounded-lg border border-(--artifact-editor-column-border) bg-(--artifact-editor-surface) p-1 font-sans text-(--artifact-editor-foreground) shadow-sm"
+          style={{ left: place?.left ?? 0, top: place?.top ?? 0, visibility: place === undefined ? "hidden" : "visible" }}
+          data-testid="design-drafts"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <Popover open={open} onOpenChange={setOpen}>
+            <Tip label="Changes in this Screen">
+              <PopoverTrigger render={<Button variant="ghost" size="sm" aria-label={showRun ? (busy ? "Applying" : "Applied") : counted(changes.length)} data-testid="design-drafts-count" />}>
+                <PencilLine aria-hidden />
+                {showRun ? (busy ? "Applying…" : "Applied") : changes.length}
+                <ChevronDown aria-hidden />
+              </PopoverTrigger>
+            </Tip>
+            <PopoverPopup side="top" align="start" padding="compact" className="w-80" aria-label="Changes" initialFocus={false}>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <p className="m-0 flex-1 text-sm font-semibold">{showRun ? "Applied changes" : "Changes in this Screen"}</p>
+                  {!showRun && (
+                    <Tip label="Show every change on the Screen">
+                      <Button variant={all ? "secondary" : "ghost"} size="xs" aria-pressed={all} onClick={() => setAll(!all)}>
+                        <Eye aria-hidden />
+                        Show all
                       </Button>
-                    </div>
+                    </Tip>
                   )}
                 </div>
-              </PopoverPopup>
-            </Popover>
-            {!showRun && (
-              <>
-                <Tip label={key === undefined ? "Compare needs a picture of this Screen" : "Swipe: the code on one side, your edits on the other"}>
-                  <Button variant={comparing ? "secondary" : "ghost"} size="icon-sm" aria-label="Compare" aria-pressed={comparing} disabled={key === undefined} onClick={() => setComparing(!comparing)}>
-                    <Columns2 aria-hidden />
-                  </Button>
-                </Tip>
-                <Tip label="Discard all changes (⌘Z brings them back)">
-                  <Button variant="ghost" size="icon-sm" aria-label="Discard all" disabled={busy} onClick={onDiscardAll}>
-                    <Trash2 aria-hidden />
-                  </Button>
-                </Tip>
-                <Tip label="Write these changes into the code">
-                  <Button
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => {
-                      setComparing(false);
-                      setAll(false);
-                      onApply();
-                    }}
-                  >
-                    Apply
-                  </Button>
-                </Tip>
-              </>
-            )}
-          </div>
-        </div>
-      </Pinned>
+                <ul className="m-0 flex list-none flex-col divide-y divide-(--artifact-editor-column-border) p-0" aria-label="Changes">
+                  {changes.map((change, index) => (
+                    <Row key={change.id} index={index} change={change} row={showRun ? run.rows.find((row) => row.change.id === change.id) : undefined} session={session} busy={busy} />
+                  ))}
+                </ul>
+                {showRun && (
+                  <div className="flex items-center justify-end gap-2">
+                    <span className="mr-auto text-xs text-(--artifact-editor-note)">{busy ? "" : "Undo puts back what Apply wrote."}</span>
+                    <Button variant="ghost" size="sm" disabled={busy} onClick={onDismiss}>
+                      Done
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </PopoverPopup>
+          </Popover>
+          {!showRun && (
+            <>
+              <Tip label={key === undefined ? "Compare needs a picture of this Screen" : "Swipe: the code on one side, your edits on the other"}>
+                <Button variant={comparing ? "secondary" : "ghost"} size="icon-sm" aria-label="Compare" aria-pressed={comparing} disabled={key === undefined} onClick={() => setComparing(!comparing)}>
+                  <Columns2 aria-hidden />
+                </Button>
+              </Tip>
+              <Tip label="Discard all changes (⌘Z brings them back)">
+                <Button variant="ghost" size="icon-sm" aria-label="Discard all" disabled={busy} onClick={onDiscardAll}>
+                  <Trash2 aria-hidden />
+                </Button>
+              </Tip>
+              <Tip label="Write these changes into the code">
+                <Button
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => {
+                    setComparing(false);
+                    setAll(false);
+                    onApply();
+                  }}
+                >
+                  Apply
+                </Button>
+              </Tip>
+            </>
+          )}
+        </div>,
+        container,
+      )}
     </>
   );
 };

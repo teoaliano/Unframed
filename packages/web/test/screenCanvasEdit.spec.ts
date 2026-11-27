@@ -499,3 +499,34 @@ test("canvas zoom and navigation keys work in design mode while the Screen has f
     prepareReactApp,
   );
 });
+
+test("the drafts bar stays in view: centred on the visible part of a Screen taller than the window, just above the canvas toolbar", async ({ page }) => {
+  await withRepository(
+    page,
+    {},
+    async (engine, project) => {
+      const [first] = await screenShapes(engine, project);
+      await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/react", w: 960, h: 1600 } }]);
+      await expect(page.locator(`[data-shape-id="${first.id}"] [data-testid=screen]`)).toHaveAttribute("data-route", "/react");
+      await clickShape(page, first.id);
+      await expect(app(page).getByRole("heading", { name: "Agent" })).toBeVisible({ timeout: 30_000 });
+      await enterOn(page, "header h2");
+      const scale = await frameScale(page);
+      await dragBy(page, await centreOf(page, '[data-design-padding="left"]'), { x: 6 * scale, y: 0 });
+      const bar = page.getByTestId("design-drafts");
+      await expect(bar).toBeVisible();
+
+      const toolbar = (await page.getByTestId("bottom-toolbar").boundingBox())!;
+      const viewport = page.viewportSize()!;
+      const box = (await bar.boundingBox())!;
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.y + box.height).toBeLessThanOrEqual(toolbar.y);
+      expect(box.y + box.height).toBeGreaterThan(toolbar.y - 40);
+      const screen = (await page.locator(SHOWN_FRAME).boundingBox())!;
+      const designPanel = (await panel(page).boundingBox())!;
+      const visible = { left: Math.max(0, screen.x), right: Math.min(viewport.width, screen.x + screen.width, designPanel.x) };
+      expect(Math.abs(box.x + box.width / 2 - (visible.left + visible.right) / 2)).toBeLessThan(4);
+    },
+    prepareReactApp,
+  );
+});

@@ -395,13 +395,9 @@ const DesignSession = ({ editor, project, entry }: { readonly editor: Editor; re
           </DesignOverlay>,
           host,
         )}
-      {host !== null &&
-        createPortal(
-          <div className="pointer-events-none absolute inset-0" data-testid="design-drafts-layer">
-            <DesignDrafts session={session} run={apply.run} project={project} picture={props.picture} size={{ w: props.w, h: props.h }} onApply={() => void apply.apply()} onDismiss={apply.clear} onDiscardAll={discardAll} />
-          </div>,
-          host,
-        )}
+      {host !== null && (
+        <DesignDrafts host={host} container={editor.getContainer()} session={session} run={apply.run} project={project} picture={props.picture} size={{ w: props.w, h: props.h }} onApply={() => void apply.apply()} onDismiss={apply.clear} onDiscardAll={discardAll} />
+      )}
       <DesignMenu at={menu} session={session} onClose={() => setMenu(undefined)} onCommand={(command) => run(command)} />
       <ScreenDesignPanel editor={editor} session={session} project={project} instance={instance?.id} onTell={(elements) => tellAgent(client, shapeId, forAgent(elements))} />
     </>
