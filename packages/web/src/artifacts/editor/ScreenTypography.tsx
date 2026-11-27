@@ -1,4 +1,5 @@
-import { DEFAULT_LEADING, fieldAria, snapToken, textStyleOf, trackingPercent, trackingValue, WEIGHT_STYLES, weightLabel, type ScalePreset, type TypeStep } from "@unframed/domain";
+import type { TokenScale } from "@unframed/contracts";
+import { classForToken, DEFAULT_LEADING, fieldAria, snapToken, textStyleOf, trackingPercent, trackingValue, WEIGHT_STYLES, weightLabel, type ScalePreset, type TypeStep } from "@unframed/domain";
 import { AlignCenter, AlignLeft, AlignRight, ChevronDown, Settings2, Type } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Button } from "~/components/ui/button";
@@ -53,7 +54,19 @@ export const PresetMenu = ({ label, presets, onPick, footer }: { readonly label:
   </Menu>
 );
 
-const FontPicker = ({ value, project, onPick }: { readonly value: string; readonly project: readonly string[]; readonly onPick: (family: string) => void }) => {
+export interface ProjectFont {
+  readonly label: string;
+  readonly family: string;
+  readonly name?: string | undefined;
+}
+
+export const projectFonts = (scale: TokenScale, families: readonly string[]): ProjectFont[] => {
+  const tokens = scale.families.map((token) => ({ label: firstFamily(token.resolved), family: token.variable === null ? token.resolved : `var(${token.variable})`, name: classForToken("font-family", token) }));
+  const named = new Set(tokens.map((font) => font.label));
+  return [...tokens, ...families.filter((family) => !named.has(family)).map((family) => ({ label: family, family: familyValue(family) }))];
+};
+
+const FontPicker = ({ value, project, onPick }: { readonly value: string; readonly project: readonly ProjectFont[]; readonly onPick: (family: string) => void }) => {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const search = query.trim().toLowerCase();
@@ -79,7 +92,7 @@ const FontPicker = ({ value, project, onPick }: { readonly value: string; readon
       {name !== undefined && <span className="shrink-0 font-mono text-xs text-(--artifact-editor-meta)">{name}</span>}
     </Button>
   );
-  const inProject = project.filter(matches);
+  const inProject = project.filter((font) => matches(font.label) || matches(font.name ?? ""));
   const system = SYSTEM_FONTS.filter((font) => matches(font.label) || matches(font.name ?? ""));
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -94,7 +107,7 @@ const FontPicker = ({ value, project, onPick }: { readonly value: string; readon
           {inProject.length > 0 && (
             <div role="group" aria-label="In this project" className="flex flex-col gap-0.5">
               <span className="px-2 py-1 text-xs text-(--artifact-editor-meta)">In this project</span>
-              {inProject.map((family) => row(family, familyValue(family), undefined))}
+              {inProject.map((font) => row(font.label, font.family, font.name))}
             </div>
           )}
           {system.length > 0 && (
@@ -334,7 +347,7 @@ export const TypographySection = ({
       {style !== undefined && <TextStyleChip style={style} scale={scale} onPick={(step) => writeSize(step.size, true)} onDetach={() => writeSize(style.size)} />}
       <div className="flex min-w-0 items-center gap-1">
         <ChangedDot change={fields.changeOf(["font-family"])} />
-        <FontPicker value={computed["font-family"] ?? ""} project={families} onPick={(family) => fields.write("font-family", () => family)} />
+        <FontPicker value={computed["font-family"] ?? ""} project={projectFonts(fields.scale, families)} onPick={(family) => fields.write("font-family", () => family)} />
       </div>
       <div className="grid grid-cols-2 gap-1.5">
         <div className="flex min-w-0 items-center gap-1">

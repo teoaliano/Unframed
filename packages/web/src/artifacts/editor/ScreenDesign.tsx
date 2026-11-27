@@ -297,7 +297,7 @@ export const ScreenDesign = ({
   readonly onTell: () => void;
 }) => {
   const scale = useTokenScale(context);
-  const fields = useScreenFields(session, subjects, scale, [...tokenNames, ...scale.colors.flatMap((token) => (token.variable === null ? [] : [token.variable]))]);
+  const fields = useScreenFields(session, subjects, scale, [...tokenNames, ...[...scale.colors, ...scale.families, ...scale.shadows].flatMap((token) => (token.variable === null ? [] : [token.variable]))]);
   const onPage = coloursOnPage(session);
   const [first] = subjects;
   const text = subjects.every((subject) => subject.report.text !== null);
