@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 import { clickShape } from "./generation.ts";
-import { prepareReactApp } from "../../engine/test/reactFixture.ts";
+import { REACT_APP, positionOf, prepareReactApp } from "../../engine/test/reactFixture.ts";
 import { putShapes, screenShapes, withRepository } from "./screenHarness.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
@@ -342,7 +342,10 @@ test("a right-click offers Select layer with the ancestor chain and each one's f
     async (engine, project) => {
       await openReact(page, engine, project);
       await enterOn(page, "header h2");
-      await expect(panel(page).getByTestId("screen-source-file")).toHaveText("src/App.jsx:5–7");
+      const at = positionOf(REACT_APP, "<header");
+      await panel(page).getByRole("button", { name: `Code: App.jsx:${at.line}` }).click();
+      await expect(page.getByTestId("screen-source-file")).toHaveText(`src/App.jsx:${at.line}–${at.line + 2}`);
+      await page.keyboard.press("Escape");
 
       const heading = await pointIn(page, "li:nth-child(2) h3");
       await page.mouse.click(heading.x, heading.y, { button: "right" });
@@ -355,7 +358,8 @@ test("a right-click offers Select layer with the ancestor chain and each one's f
       await expect(layers.getByRole("menuitem").nth(1)).toContainText("Card.jsx:3");
       await layers.getByRole("menuitem").nth(1).click();
       await expect(title(page)).toHaveText("Card");
-      await expect(panel(page).getByTestId("screen-source-file")).toContainText("src/Card.jsx:3");
+      await panel(page).getByRole("button", { name: "Code: Card.jsx:3" }).click();
+      await expect(page.getByTestId("screen-source-file")).toContainText("src/Card.jsx:3");
     },
     prepareReactApp,
   );
