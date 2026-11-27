@@ -142,6 +142,18 @@ const server = http.createServer((req, res) => {
       "</script></body></html>",
     ].join(""));
   }
+  if (url.pathname === "/motion") {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end([
+      "<!doctype html><html><head><title>Motion</title><style>",
+      "@keyframes spin { to { transform: rotate(360deg); } } @keyframes fade { 0%, 100% { opacity: 0; } 50% { opacity: 1; } } @keyframes rise { from { opacity: 0; } to { opacity: 0.8; } }",
+      "div { width: 40px; height: 40px; background: rgb(0, 0, 255); }",
+      "#spinner { animation: spin 4s linear infinite; } #pulse { animation: fade 2s linear infinite; } #entrance { animation: rise 60s linear forwards; }",
+      "</style></head><body><div id=\\"spinner\\"></div><div id=\\"pulse\\"></div><div id=\\"entrance\\"></div><script>",
+      "document.getAnimations().forEach(function (animation) { if (animation.animationName === 'spin') { animation.pause(); animation.currentTime = 1000; } if (animation.animationName === 'fade') animation.currentTime = 0; });",
+      "</script></body></html>",
+    ].join(""));
+  }
   if (url.pathname === "/logo.png") {
     res.writeHead(200, { "content-type": "image/png" });
     return res.end(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==", "base64"));

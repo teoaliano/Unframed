@@ -307,6 +307,19 @@ describe.skipIf(chrome === undefined)("Screen pictures in headless Chrome", () =
     expect((await pixelAt(png, 100, 250)).slice(0, 3)).toEqual([255, 0, 0]);
   });
 
+  it("pins each animation of the page in the copy: a paused one where it stands, a running loop at its most visible frame, an entrance at its end", { timeout: 120_000 }, async () => {
+    const { engine, rpc, project, instance, screen } = await addRepository();
+    await put(rpc, project, [{ ...screen, props: { ...screen.props, route: "/motion", w: 400, h: 300 } }]);
+    await goLive(rpc, project, instance);
+    const key = await pictureOf(rpc, project, screen.id);
+    const html = await readFile(join(store(engine, project), `${key}.html`), "utf8");
+    const styleOf = (id: string) => new RegExp(`<div id="${id}" style="([^"]*)"`).exec(html)?.[1] ?? "";
+    const matrix = /transform:\s*matrix\(([^)]*)\)\s*!important/.exec(styleOf("spinner"))?.[1]?.split(",").map(Number) ?? [];
+    expect(matrix.map((value) => Math.round(value * 1000) / 1000)).toEqual([0, 1, -1, 0, 0, 0]);
+    expect(styleOf("pulse")).toMatch(/opacity:\s*1\s*!important/);
+    expect(styleOf("entrance")).toMatch(/opacity:\s*0\.8\s*!important/);
+  });
+
   it("rasterises a live copy from screens.capture with its parts served from the store", { timeout: 120_000 }, async () => {
     const { engine, rpc, project, screen } = await addRepository();
     const html = '<!doctype html><html><head><style>body { margin: 0; background: rgb(0, 128, 0); }</style></head><body><img src="uf-part:0" width="64" height="64"></body></html>';

@@ -463,6 +463,67 @@ export function snapshotPage(win: any, helpers: SnapshotHelpers, reads?: CanvasR
     for (const [name, value] of values) out += value === "" ? ` ${name}` : ` ${name}="${escapeAttribute(value)}"`;
     return out;
   };
+  const KEYFRAME_META = new Set(["offset", "computedOffset", "easing", "composite"]);
+  const cssName = (name: string): string => (name === "cssFloat" ? "float" : name.startsWith("--") ? name : name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`));
+  const pinned = new Map<any, string>();
+  const pinAnimations = (): void => {
+    let animations: any[] = [];
+    try {
+      animations = typeof doc.getAnimations === "function" ? Array.from(doc.getAnimations()) : [];
+    } catch {
+      return;
+    }
+    for (const animation of animations.slice(0, 500)) {
+      const effect = animation.effect;
+      const target = effect?.target;
+      if (!target || effect.pseudoElement || typeof effect.getKeyframes !== "function" || animation.currentTime === null) continue;
+      if (animation.playState !== "running" && animation.playState !== "paused") continue;
+      let frames: any[];
+      let timing: any;
+      try {
+        frames = effect.getKeyframes();
+        timing = effect.getComputedTiming();
+      } catch {
+        continue;
+      }
+      const names = new Set<string>();
+      for (const frame of frames) for (const name of Object.keys(frame)) if (!KEYFRAME_META.has(name)) names.add(cssName(name));
+      if (names.size === 0) continue;
+      let at: number | undefined;
+      if (animation.playState === "running") {
+        if (timing.iterations === Infinity) {
+          let offset = 0;
+          let most = -Infinity;
+          for (const frame of frames) {
+            const opacity = parseFloat(frame.opacity);
+            if (Number.isFinite(opacity) && opacity > most) {
+              most = opacity;
+              offset = frame.computedOffset ?? frame.offset ?? 0;
+            }
+          }
+          const progress = Math.min(Math.max(offset, 0), 0.9999);
+          const reversed = timing.direction === "reverse" || timing.direction === "alternate-reverse";
+          at = (Number(timing.delay) || 0) + (reversed ? 1 - progress : progress) * (Number(timing.duration) || 0);
+        } else if (Number.isFinite(timing.endTime)) at = timing.endTime;
+      }
+      const saved = animation.currentTime;
+      try {
+        if (at !== undefined) animation.currentTime = at;
+        const style = win.getComputedStyle(target);
+        let text = pinned.get(target) ?? "";
+        for (const name of names) {
+          const value = style.getPropertyValue(name);
+          if (value !== "") text += `;${name}:${value} !important`;
+        }
+        pinned.set(target, text);
+      } catch {
+        continue;
+      } finally {
+        if (at !== undefined) animation.currentTime = saved;
+      }
+    }
+  };
+  pinAnimations();
   const transparent = (style: any): boolean => (style.backgroundColor === "transparent" || style.backgroundColor === "rgba(0, 0, 0, 0)") && style.backgroundImage === "none";
   const baseOf = (): string => doc.baseURI;
   const own = (element: any): Map<string, string> => {
@@ -470,6 +531,11 @@ export function snapshotPage(win: any, helpers: SnapshotHelpers, reads?: CanvasR
     for (const attribute of Array.from(element.attributes as ArrayLike<any>)) {
       if (!NAME.test(attribute.name) || DROPPED.test(attribute.name)) continue;
       values.set(attribute.name, attribute.name === "style" ? css(attribute.value, baseOf()) : attribute.value);
+    }
+    const pin = pinned.get(element);
+    if (pin !== undefined) {
+      const style = values.get("style");
+      values.set("style", `${style ?? ""}${css(pin, baseOf())}`.replace(/^;/, ""));
     }
     const top = element.scrollTop;
     const left = element.scrollLeft;
