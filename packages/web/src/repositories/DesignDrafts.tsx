@@ -132,8 +132,10 @@ const usePlace = (host: HTMLElement, container: HTMLElement, bar: { readonly cur
   return place;
 };
 
-export const DesignDrafts = ({ host, container, session, run, project, picture, size, onApply, onDismiss, onDiscardAll }: {
+export const DesignDrafts = ({ host, container, open, onOpen, session, run, project, picture, size, onApply, onDismiss, onDiscardAll }: {
   readonly host: HTMLElement;
+  readonly open: boolean;
+  readonly onOpen: (open: boolean) => void;
   readonly container: HTMLElement;
   readonly session: EditSession;
   readonly run: ApplyRun | undefined;
@@ -144,7 +146,6 @@ export const DesignDrafts = ({ host, container, session, run, project, picture, 
   readonly onDismiss: () => void;
   readonly onDiscardAll: () => void;
 }) => {
-  const [open, setOpen] = useState(false);
   const [all, setAll] = useState(false);
   const [comparing, setComparing] = useState(false);
   const barRef = useRef<HTMLDivElement>(null);
@@ -183,7 +184,7 @@ export const DesignDrafts = ({ host, container, session, run, project, picture, 
           data-testid="design-drafts"
           onPointerDown={(event) => event.stopPropagation()}
         >
-          <Popover open={open} onOpenChange={setOpen}>
+          <Popover open={open} onOpenChange={onOpen}>
             <Tip label="Changes in this Screen">
               <PopoverTrigger render={<Button variant="ghost" size="sm" aria-label={showRun ? (busy ? "Applying" : "Applied") : counted(changes.length)} data-testid="design-drafts-count" />}>
                 <PencilLine aria-hidden />

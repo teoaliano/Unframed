@@ -586,3 +586,41 @@ test("the live chip of a padding drag goes away when the drag ends, and the valu
     prepareReactApp,
   );
 });
+
+test("Undo right after Apply on the canvas puts back what Apply wrote", async ({ page }) => {
+  await withRepository(
+    page,
+    {},
+    async (engine, project) => {
+      await openReact(page, engine, project);
+      await enterOn(page, "header h2");
+      const scale = await frameScale(page);
+      const second = await pointIn(page, "li:nth-child(2) p");
+      await page.mouse.click(second.x, second.y);
+      await page.keyboard.press("5");
+      await page.getByRole("button", { name: "Discard all" }).click();
+      await expect(page.getByTestId("design-drafts")).toHaveCount(0);
+      const header = await pointIn(page, "header h2");
+      await page.mouse.click(header.x, header.y);
+      await expect(title(page)).toHaveText("Header");
+      await dragBy(page, await centreOf(page, '[data-design-padding="left"]'), { x: 6 * scale, y: 0 });
+      await expect(page.getByTestId("design-drafts-count")).toHaveAccessibleName("1 change");
+      const rpc = await engine.rpc();
+      const worktree = (await rpc.call("instances.list", { project })).instances[0]!.worktree;
+      await rpc.close();
+      const file = join(worktree, "src", "App.jsx");
+      await page.getByRole("button", { name: "Apply", exact: true }).click();
+      await page.getByTestId("design-drafts-count").click();
+      await expect(page.getByRole("list", { name: "Changes" }).locator("[data-draft-row]").first().getByTestId("draft-state")).toHaveText("Took", { timeout: 30_000 });
+      await expect(page.getByText("Undo puts back what Apply wrote.")).toBeVisible();
+      await expect.poll(() => readFile(file, "utf8"), { timeout: 10_000 }).toContain("pl-5 pr-2");
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("list", { name: "Changes" })).toHaveCount(0);
+      await expect(overlay(page)).toBeAttached();
+      await page.keyboard.press("ControlOrMeta+z");
+      await expect.poll(() => readFile(file, "utf8"), { timeout: 10_000 }).toContain("pl-3.5 pr-2");
+      await expect.poll(() => computed(page, "li:nth-child(2)", "opacity")).toBe("1");
+    },
+    prepareReactApp,
+  );
+});

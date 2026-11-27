@@ -100,6 +100,7 @@ const DesignSession = ({ editor, project, entry }: { readonly editor: Editor; re
   const [alt, setAlt] = useState(false);
   const [resizing, setResizing] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuAt | undefined>(undefined);
+  const [listOpen, setListOpen] = useState(false);
   const hostRef = useRef<HTMLElement | null>(null);
   const [tokens, setTokens] = useState<TokenScale>(EMPTY_SCALE);
   const pointer = useMemo(() => atom<{ readonly x: number; readonly y: number } | null>("design pointer", null), []);
@@ -174,6 +175,12 @@ const DesignSession = ({ editor, project, entry }: { readonly editor: Editor; re
     sessionRef.current.restoreOverrides([...sessionRef.current.overrides, next]);
   };
 
+  const applyDrafts = () => {
+    discarded.current = undefined;
+    redoable.current = [];
+    void apply.apply();
+  };
+
   const discardAll = () => {
     const current = sessionRef.current;
     if (current.overrides.length === 0) return;
@@ -246,6 +253,10 @@ const DesignSession = ({ editor, project, entry }: { readonly editor: Editor; re
 
   const onKey = (key: string, modifiers: KeyModifiers): boolean => {
     if (menu !== undefined) return false;
+    if (key === "Escape" && listOpen) {
+      setListOpen(false);
+      return true;
+    }
     if (key === "Alt") {
       setAlt(true);
       return false;
@@ -396,7 +407,7 @@ const DesignSession = ({ editor, project, entry }: { readonly editor: Editor; re
           host,
         )}
       {host !== null && (
-        <DesignDrafts host={host} container={editor.getContainer()} session={session} run={apply.run} project={project} picture={props.picture} size={{ w: props.w, h: props.h }} onApply={() => void apply.apply()} onDismiss={apply.clear} onDiscardAll={discardAll} />
+        <DesignDrafts host={host} container={editor.getContainer()} open={listOpen} onOpen={setListOpen} session={session} run={apply.run} project={project} picture={props.picture} size={{ w: props.w, h: props.h }} onApply={applyDrafts} onDismiss={apply.clear} onDiscardAll={discardAll} />
       )}
       <DesignMenu at={menu} session={session} onClose={() => setMenu(undefined)} onCommand={(command) => run(command)} />
       <ScreenDesignPanel editor={editor} session={session} project={project} instance={instance?.id} onTell={(elements) => tellAgent(client, shapeId, forAgent(elements))} />
