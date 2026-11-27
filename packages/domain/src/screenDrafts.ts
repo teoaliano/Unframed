@@ -17,6 +17,7 @@ export interface DraftElement {
   readonly key: string | null;
   readonly source: DraftSource | null;
   readonly component: string | null;
+  readonly instance?: string | null;
   readonly instanceIndex: number;
   readonly instanceCount: number;
   readonly selfMapped: boolean;
@@ -184,8 +185,21 @@ export const oneLine = (text: string, most: number): string => text.replace(new 
 
 export const quoted = (text: string, most = 300): string => JSON.stringify(oneLine(text, most));
 
-export const elementLabel = (input: { readonly tag: string; readonly owner: string | null; readonly w: number; readonly h: number }): string =>
-  `${elementKind(input.tag)}${input.owner === null ? "" : ` · in ${input.owner}`} ${Math.round(input.w)}×${Math.round(input.h)}`;
+export interface NamedElement {
+  readonly tag: string;
+  readonly name?: string | null | undefined;
+  readonly instance?: string | null | undefined;
+  readonly owner?: string | null | undefined;
+}
+
+export const elementName = (input: NamedElement): string => {
+  if (input.instance) return input.instance;
+  const name = input.name?.trim() ?? "";
+  const base = name === "" || name.toLowerCase() === input.tag.toLowerCase() ? elementKind(input.tag) : name;
+  return input.owner && input.owner !== base ? `${base} · in ${input.owner}` : base;
+};
+
+export const elementLabel = (input: NamedElement & { readonly w: number; readonly h: number }): string => `${elementName(input)} ${Math.round(input.w)}×${Math.round(input.h)}`;
 
 export const propertyLabel = (property: string): string => {
   if (property === "#text") return "Text";

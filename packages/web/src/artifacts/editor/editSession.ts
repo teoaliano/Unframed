@@ -364,7 +364,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
     for (const wake of [...updateWaiters.current]) wake();
   };
   const draftKeyOf = (edit: SourceEdit): string => (edit.type === "style" ? edit.property : edit.type === "text" ? "#text" : "display");
-  const draftElementOf = (stamp: string, known: { readonly name?: string; readonly tag: string; readonly path?: string; readonly selector: string }): DraftElement => {
+  const draftElementOf = (stamp: string, known: { readonly name?: string; readonly instance?: string | null; readonly tag: string; readonly path?: string; readonly selector: string }): DraftElement => {
     const source = checkResolved(reportsRef.current[stamp]?.source);
     return withSource({
       stamp,
@@ -374,6 +374,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
       key: source?.key ?? null,
       source: null,
       component: source?.owner ?? null,
+      instance: source?.instanceOf ?? known.instance ?? null,
       instanceIndex: source?.instanceIndex ?? 0,
       instanceCount: source?.instanceCount ?? 1,
       selfMapped: source?.selfMapped ?? false,

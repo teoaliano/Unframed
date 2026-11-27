@@ -1,4 +1,4 @@
-import { changeLine, elementKind, pictureKeyOf, pictureUrl, type DraftChange } from "@unframed/domain";
+import { changeLine, elementName, pictureKeyOf, pictureUrl, type DraftChange } from "@unframed/domain";
 import { ChevronDown, Columns2, Eye, PencilLine, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
@@ -13,7 +13,7 @@ const counted = (count: number) => (count === 1 ? "1 change" : `${count} changes
 
 const layerOf = (change: DraftChange): string => {
   const element = change.element;
-  const named = element.component ?? elementKind(element.tag);
+  const named = elementName({ tag: element.tag, name: element.name, instance: element.instance, owner: element.component });
   const text = change.kind === "text" ? (change.before ?? "") : "";
   return text === "" ? named : `${named} · “${text}”`;
 };

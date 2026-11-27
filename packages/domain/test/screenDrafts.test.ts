@@ -11,6 +11,7 @@ import {
   readClass,
   scopeDraft,
   elementLabel,
+  elementName,
   screenDraftInstruction,
   SCREEN_DRAFTS_TEMPLATE,
   checkResolved,
@@ -121,6 +122,15 @@ describe("the selection label", () => {
   it("names the element by its kind and the component whose JSX holds it, with its size", () => {
     expect(elementLabel({ tag: "header", owner: "AgentRail", w: 359.4, h: 48 })).toBe("Header · in AgentRail 359×48");
     expect(elementLabel({ tag: "custom-el", owner: null, w: 10, h: 10 })).toBe("custom-el 10×10");
+  });
+
+  it("names an element as a person would: a component by its name, else the page's own name for it, never a class", () => {
+    expect(elementName({ tag: "aside", name: "aside", instance: "AgentRail", owner: "AgentRail" })).toBe("AgentRail");
+    expect(elementName({ tag: "h2", name: "Agent", instance: null, owner: "AgentRail" })).toBe("Agent · in AgentRail");
+    expect(elementName({ tag: "header", name: "header", instance: null, owner: "AgentRail" })).toBe("Header · in AgentRail");
+    expect(elementName({ tag: "div", name: "composer", owner: null })).toBe("composer");
+    expect(elementName({ tag: "div" })).toBe("Frame");
+    expect(elementLabel({ tag: "h2", name: "Agent", owner: "AgentRail", w: 40, h: 20 })).toBe("Agent · in AgentRail 40×20");
   });
 });
 

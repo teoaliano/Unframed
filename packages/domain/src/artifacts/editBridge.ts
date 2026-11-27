@@ -273,7 +273,12 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     const label = (el.getAttribute("aria-label") ?? "").trim();
     if (label !== "") return label.slice(0, 60);
     const text = textOnly(el) ? (el.textContent ?? "").replace(/\s+/g, " ").trim() : "";
-    return el.getAttribute("id") ?? classesOf(el)[0] ?? (text === "" ? el.tagName.toLowerCase() : text.slice(0, 40));
+    if (text !== "") return text.length > 40 ? text.slice(0, 39) + "…" : text;
+    for (const attribute of ["data-slot", "data-testid", "id"]) {
+      const value = (el.getAttribute(attribute) ?? "").trim();
+      if (value !== "") return value.slice(0, 60);
+    }
+    return el.tagName.toLowerCase();
   };
   const sourceOf = (): SourceApi | undefined => (stamp ? win.__unframedSource : undefined);
   const screenFields = (el: EditElement, deep = false): { path?: string; name?: string; className?: string | null; owner?: string | null; instance?: string | null; slot?: string | null; source?: unknown } => {

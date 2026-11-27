@@ -233,7 +233,7 @@ test("keys reorder, duplicate, hide, wrap, delete, set opacity and bold, undo an
       const body = await pointIn(page, "li:nth-child(1) p");
       await page.mouse.click(body.x, body.y);
       await page.keyboard.up("ControlOrMeta");
-      await expect(title(page)).toHaveText("Text");
+      await expect(title(page)).toHaveText("Static body · in Card");
       await page.keyboard.press("ControlOrMeta+b");
       await expect.poll(() => computed(page, "li:nth-child(1) p", "font-weight")).toBe("700");
 
@@ -271,14 +271,14 @@ test("a double-click on a word of a selected text edits it in place and Escape c
       const word = await pointIn(page, "li:nth-child(2) h3", { x: 0.2, y: 0.5 });
       await page.mouse.click(word.x, word.y);
       await page.keyboard.up("ControlOrMeta");
-      await expect(title(page)).toHaveText("Heading");
+      await expect(title(page)).toHaveText("Second · in Card");
       await page.mouse.dblclick(word.x, word.y);
       await expect(app(page).locator("li:nth-child(2) h3")).toHaveAttribute("contenteditable", "plaintext-only");
       await page.keyboard.type("Fourth");
       await page.keyboard.press("Escape");
       await expect(app(page).locator("li:nth-child(2) h3")).not.toHaveAttribute("contenteditable");
       await expect(app(page).locator("li:nth-child(2) h3")).toHaveText("Fourth");
-      await expect(title(page)).toHaveText("Heading");
+      await expect(title(page)).toHaveText(/^(Second|Fourth) · in Card$/);
       const rows = await openDrafts(page);
       await expect(rows.getByTestId("draft-line")).toHaveText(["Text “Second” → “Fourth”"]);
     },
@@ -380,7 +380,7 @@ test("a right-click offers Select layer with the ancestor chain and each one's f
       await expect(menu).toBeVisible();
       await menu.getByRole("menuitem", { name: "Select layer" }).hover();
       const layers = page.getByRole("menu", { name: "Select layer" });
-      await expect(layers.getByRole("menuitem").first()).toContainText("Heading · in Card");
+      await expect(layers.getByRole("menuitem").first()).toContainText("Second · in Card");
       await expect(layers.getByRole("menuitem").first()).toContainText("Card.jsx:4");
       await expect(layers.getByRole("menuitem").nth(1)).toContainText("Card.jsx:3");
       await layers.getByRole("menuitem").nth(1).click();
@@ -433,7 +433,7 @@ test("in design mode the page sees no pointer event and selects no text: presses
       const word = await pointIn(page, "li:nth-child(2) h3", { x: 0.2, y: 0.5 });
       await page.mouse.click(word.x, word.y);
       await page.keyboard.up("ControlOrMeta");
-      await expect(title(page)).toHaveText("Heading");
+      await expect(title(page)).toHaveText("Second · in Card");
       await page.mouse.dblclick(word.x, word.y);
       await expect(app(page).locator("li:nth-child(2) h3")).toHaveAttribute("contenteditable", "plaintext-only");
       await expect(selectedText(page)).resolves.toBe("Second");
@@ -620,6 +620,38 @@ test("Undo right after Apply on the canvas puts back what Apply wrote", async ({
       await page.keyboard.press("ControlOrMeta+z");
       await expect.poll(() => readFile(file, "utf8"), { timeout: 10_000 }).toContain("pl-3.5 pr-2");
       await expect.poll(() => computed(page, "li:nth-child(2)", "opacity")).toBe("1");
+    },
+    prepareReactApp,
+  );
+});
+
+test("elements are named as a person would: a component by its name, text by its words, and what sits inside a component says which one", async ({ page }) => {
+  await withRepository(
+    page,
+    {},
+    async (engine, project) => {
+      await openReact(page, engine, project);
+      await enterOn(page, "header h2");
+      await expect(title(page)).toHaveText("Header");
+      await expect(panel(page).getByTestId("screen-source-name")).toHaveText("Header");
+
+      await page.keyboard.down("ControlOrMeta");
+      const agent = await pointIn(page, "header h2");
+      await page.mouse.click(agent.x, agent.y);
+      await page.keyboard.up("ControlOrMeta");
+      await expect(title(page)).toHaveText("Agent · in Header");
+      await expect(panel(page).getByTestId("screen-source-name")).toHaveText("Agent · in Header");
+
+      const list = await pointIn(page, "ul", { x: 0.5, y: 0.98 });
+      await page.mouse.click(list.x, list.y);
+      await page.keyboard.press("Escape");
+      const third = await pointIn(page, "li:nth-child(3) p");
+      await page.mouse.move(third.x, third.y);
+      await expect(hoverChip(page)).toHaveText(/^Card \d+×\d+$/);
+      await page.keyboard.down("ControlOrMeta");
+      await page.mouse.move(third.x + 1, third.y);
+      await expect(hoverChip(page)).toHaveText(/^Static body · in Card \d+×\d+$/);
+      await page.keyboard.up("ControlOrMeta");
     },
     prepareReactApp,
   );

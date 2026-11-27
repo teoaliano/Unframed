@@ -507,20 +507,20 @@ describe("the edit bridge in a Screen, which stamps the app's elements on demand
     expect(posted).toEqual([{ message: { type: "unframed:edit:ready" }, targetOrigin: "http://127.0.0.1:5001" }]);
   });
 
-  it("stamps an element the first time it is picked, and reports a path and a name that do not use the stamp", () => {
+  it("stamps an element the first time it is picked, and reports a path and a name that use neither the stamp nor a class", () => {
     const { document, first, second, titled, mode, messages } = app();
     mode("edit");
     document.fire("click", first);
     const picked = messages("unframed:edit:pick")[0].element;
     expect(picked.id).toMatch(/^uf\d+$/);
     expect(first.getAttribute("data-hf-id")).toBe(picked.id);
-    expect(picked).toMatchObject({ path: "body > main.page.wide > button.btn.primary:nth-of-type(1)", name: "btn" });
+    expect(picked).toMatchObject({ path: "body > main.page.wide > button.btn.primary:nth-of-type(1)", name: "Save" });
     document.fire("click", first);
     expect(messages("unframed:edit:pick")[1].element.id).toBe(picked.id);
     document.fire("click", second);
     expect(messages("unframed:edit:pick")[2].element).toMatchObject({ path: "body > main.page.wide > button:nth-of-type(2)", name: "Cancel changes" });
     document.fire("click", titled);
-    expect(messages("unframed:edit:pick")[3].element).toMatchObject({ path: "#title", name: "title" });
+    expect(messages("unframed:edit:pick")[3].element).toMatchObject({ path: "#title", name: "Shop" });
   });
 
   it("answers the tree with every element stamped, named and pathed", () => {
@@ -528,11 +528,11 @@ describe("the edit bridge in a Screen, which stamps the app's elements on demand
     send({ type: "unframed:edit:tree" });
     const [main, title, note] = messages("unframed:edit:tree")[0].nodes;
     expect(note).toMatchObject({ tag: "p", name: "Free delivery", path: "body > p" });
-    expect(main).toMatchObject({ tag: "main", name: "page", path: "body > main.page.wide" });
+    expect(main).toMatchObject({ tag: "main", name: "main", path: "body > main.page.wide" });
     expect(main.id).toMatch(/^uf\d+$/);
-    expect(main.children.map((node: { name: string }) => node.name)).toEqual(["btn", "Cancel changes"]);
+    expect(main.children.map((node: { name: string }) => node.name)).toEqual(["Save", "Cancel changes"]);
     expect(main.children.every((node: { id: string | null }) => typeof node.id === "string")).toBe(true);
-    expect(title).toMatchObject({ tag: "h1", name: "title", path: "#title" });
+    expect(title).toMatchObject({ tag: "h1", name: "Shop", path: "#title" });
   });
 });
 

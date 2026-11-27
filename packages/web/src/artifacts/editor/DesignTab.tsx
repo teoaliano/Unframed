@@ -1,5 +1,5 @@
 import type { OffTokenFound, SourceEdit } from "@unframed/contracts";
-import { cssName, dialAt, DESIGN_FIELDS, fieldOwner, kitCssNames, resolve, styleValueRefusal, TEXT_STYLE_SUFFIX, tokensForField, type EditorKind, type ChipElement, type ComponentDeclaration, type FieldOwner, type Kit, type TextStyleField, type Token } from "@unframed/domain";
+import { cssName, dialAt, DESIGN_FIELDS, elementName, fieldOwner, kitCssNames, resolve, styleValueRefusal, TEXT_STYLE_SUFFIX, tokensForField, type EditorKind, type ChipElement, type ComponentDeclaration, type FieldOwner, type Kit, type TextStyleField, type Token } from "@unframed/domain";
 import { Component, Diamond, Link, MessageSquarePlus, Unlink } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Badge } from "~/components/ui/badge";
@@ -454,7 +454,10 @@ export const DesignTab = ({ session, kind, images = true, project, dials, locked
   if (screen !== undefined) {
     const picked = selection.map((id) => ({ id, report: reports[id]! }));
     const [only] = picked;
-    const shownName = picked.length === 1 ? (elements.find((candidate) => candidate.id === only!.id)?.name ?? only!.report.name ?? only!.report.tag) : `${picked.length} elements`;
+    const shownName =
+      picked.length === 1
+        ? elementName({ tag: only!.report.tag, name: elements.find((candidate) => candidate.id === only!.id)?.name ?? only!.report.name, instance: only!.report.instance, owner: session.resolved[only!.id]?.owner ?? only!.report.owner })
+        : `${picked.length} elements`;
     const chips = () =>
       picked.map((subject) => {
         const source = elements.find((candidate) => candidate.id === subject.id);

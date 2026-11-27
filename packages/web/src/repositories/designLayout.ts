@@ -1,4 +1,4 @@
-import { elementKind, type EditBox } from "@unframed/domain";
+import { elementName, type EditBox } from "@unframed/domain";
 import type { EditReport } from "../artifacts/editor/editSession.ts";
 
 export interface LaidChild {
@@ -25,14 +25,16 @@ export interface ElementLayout {
   readonly lines: readonly EditBox[];
 }
 
-export const layerName = (report: Pick<EditReport, "tag" | "instance" | "slot">): string => report.instance ?? report.slot ?? elementKind(report.tag);
+type Named = Pick<EditReport, "tag" | "name" | "instance" | "owner">;
+
+export const layerName = (report: Named): string => elementName(report);
 
 const decimal = (value: number): string => {
   const rounded = Math.round(value * 10) / 10;
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 };
 
-export const chipText = (report: Pick<EditReport, "tag" | "instance" | "slot">, box: EditBox): string => `${layerName(report)} ${Math.round(box.w)}×${Math.round(box.h)}`;
+export const chipText = (report: Named, box: EditBox): string => `${layerName(report)} ${Math.round(box.w)}×${Math.round(box.h)}`;
 
 export const badgeText = (box: EditBox): string => `${decimal(box.w)} × ${decimal(box.h)}`;
 

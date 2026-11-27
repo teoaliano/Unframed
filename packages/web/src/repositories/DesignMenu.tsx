@@ -1,4 +1,4 @@
-import { ancestorsOf, elementKind, type LayerTree } from "@unframed/domain";
+import { ancestorsOf, elementName, type LayerTree } from "@unframed/domain";
 import { useEffect, useState } from "react";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuShortcut, MenuSub, MenuSubPopup, MenuSubTrigger, MenuTrigger } from "~/components/ui/menu";
 import type { EditSession, ResolvedSource } from "../artifacts/editor/editSession.ts";
@@ -20,10 +20,10 @@ const treeOf = (session: EditSession): LayerTree => {
   };
 };
 
-const nameOf = (session: EditSession, id: string): string => {
+const nameOf = (session: EditSession, id: string, owner: string | null): string => {
   const report = session.reports[id];
   const node = session.tree?.elements.find((element) => element.id === id);
-  return report?.instance ?? report?.slot ?? elementKind(report?.tag ?? node?.tag ?? "element");
+  return elementName({ tag: report?.tag ?? node?.tag ?? "element", name: node?.name ?? report?.name, instance: report?.instance, owner: owner ?? report?.owner });
 };
 
 const whereOf = (found: ResolvedSource | null | undefined): string => {
@@ -60,11 +60,10 @@ export const DesignMenu = ({ at, session, onClose, onCommand }: { readonly at: M
             <MenuSubPopup aria-label="Select layer">
               {chain.map((id) => {
                 const resolved = found[id];
-                const owner = resolved?.owner ?? null;
-                const name = nameOf(session, id);
+                const name = nameOf(session, id, resolved?.owner ?? null);
                 return (
                   <MenuItem key={id} data-layer={id} onClick={() => session.setSelection([id])}>
-                    <span className="min-w-0 truncate">{owner === null || owner === name ? name : `${name} · in ${owner}`}</span>
+                    <span className="min-w-0 truncate">{name}</span>
                     <MenuShortcut>{whereOf(resolved)}</MenuShortcut>
                   </MenuItem>
                 );

@@ -72,7 +72,7 @@ export const ScreenHeader = ({ inspect, name, kind, onTell }: { readonly inspect
   return (
     <header className="flex min-w-0 flex-col gap-1.5 border-b border-(--design-panel-border) px-2.5 py-3" data-testid="screen-source">
       <div className="flex min-w-0 items-center gap-1.5">
-        <span className="min-w-0 truncate text-sm font-semibold">{name}</span>
+        <span className="min-w-0 truncate text-sm font-semibold" data-testid="screen-source-name">{name}</span>
         <span className="shrink-0 text-xs text-(--artifact-editor-meta)">{kind}</span>
         <span className="ml-auto flex shrink-0 items-center gap-0.5">
           {file !== undefined && <CodePeek file={file} lines={lines} span={inspected?.span} first={line} />}
