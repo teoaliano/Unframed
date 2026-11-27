@@ -37,6 +37,15 @@ export const findInWorktree = async (worktree: string, reported: string): Promis
   return matches.length === 1 ? matches[0] : undefined;
 };
 
+const STRUCTURAL: ReadonlySet<ScreenWrite["kind"]> = new Set(["reorder", "duplicate", "delete", "wrap"]);
+
+export const SHIFTED = "Another change in the same list was written first and moved this element, so this one is left to the agent.";
+
+const inApplyOrder = (changes: ReadonlyArray<ScreenWrite>): ScreenWrite[] => [
+  ...changes.filter((change) => !STRUCTURAL.has(change.kind)),
+  ...changes.filter((change) => STRUCTURAL.has(change.kind)).sort((a, b) => b.line - a.line || b.col - a.col),
+];
+
 export const makeDirectEdits = (worktreeOf: (project: string, instance: string) => Effect.Effect<string, UnframedError>) => {
   const applied = new Map<string, Applied>();
 
@@ -54,20 +63,31 @@ export const makeDirectEdits = (worktreeOf: (project: string, instance: string) 
   const apply = (input: { project: string; instance: string; changes: ReadonlyArray<ScreenWrite> }): Effect.Effect<{ apply: string; results: ScreenWriteResult[] }, UnframedError> =>
     Effect.gen(function* () {
       const worktree = yield* worktreeOf(input.project, input.instance);
-      const results: ScreenWriteResult[] = [];
+      const results = new Map<string, ScreenWriteResult>();
       const texts = new Map<string, string>();
       const written: Written[] = [];
-      for (const change of input.changes) {
+      const moved = new Map<string, Array<{ from: number; to: number }>>();
+      for (const change of inApplyOrder(input.changes)) {
         const file = yield* Effect.promise(() => findInWorktree(worktree, change.file));
         if (file === undefined) {
-          results.push({ id: change.id, written: false, reason: NOT_IN_WORKTREE(change.file), file: null, line: null });
+          results.set(change.id, { id: change.id, written: false, reason: NOT_IN_WORKTREE(change.file), file: null, line: null });
           continue;
         }
         const source = texts.get(file) ?? (yield* Effect.promise(() => readFile(join(worktree, file), "utf8")));
+        if (STRUCTURAL.has(change.kind) && (moved.get(file) ?? []).some((range) => change.line >= range.from && change.line <= range.to)) {
+          results.set(change.id, { id: change.id, written: false, reason: SHIFTED, file, line: change.line });
+          continue;
+        }
         const result = writeJsx(source, file, { line: change.line, col: change.col, tag: change.tag }, change);
         if (!result.ok) {
-          results.push({ id: change.id, written: false, reason: result.reason, file, line: change.line });
+          results.set(change.id, { id: change.id, written: false, reason: result.reason, file, line: change.line });
           continue;
+        }
+        if (STRUCTURAL.has(change.kind)) {
+          const lineOf = (offset: number) => source.slice(0, offset).split("\n").length;
+          const from = Math.min(...result.edits.map((edit) => lineOf(edit.start)));
+          const to = Math.max(...result.edits.map((edit) => lineOf(edit.end)), change.line);
+          moved.set(file, [...(moved.get(file) ?? []), { from: Math.min(from, change.line), to }]);
         }
         texts.set(file, result.text);
         let shift = 0;
@@ -76,7 +96,7 @@ export const makeDirectEdits = (worktreeOf: (project: string, instance: string) 
           written.push({ file, edit: { ...edit, start, end: start + edit.after.length }, context: result.text.slice(Math.max(0, start - 40), start) });
           shift += edit.after.length - (edit.end - edit.start);
         }
-        results.push({ id: change.id, written: true, reason: null, file, line: result.line });
+        results.set(change.id, { id: change.id, written: true, reason: null, file, line: result.line });
       }
       yield* Effect.tryPromise({
         try: async () => {
@@ -86,7 +106,7 @@ export const makeDirectEdits = (worktreeOf: (project: string, instance: string) 
       });
       const id = randomUUID();
       if (written.length > 0) applied.set(id, { project: input.project, worktree, edits: written });
-      return { apply: id, results };
+      return { apply: id, results: input.changes.map((change) => results.get(change.id)!) };
     });
 
   const revert = (input: { project: string; apply: string }): Effect.Effect<{ reverted: number; kept: string[] }, UnframedError> =>
