@@ -243,7 +243,7 @@ export const ScreensInspect = Rpc.make("screens.inspect", {
   error: UnframedError,
 });
 
-export const ScreenWriteKind = Schema.Literals(["class", "text", "attr", "style"]);
+export const ScreenWriteKind = Schema.Literals(["class", "text", "attr", "style", "reorder", "duplicate", "delete", "wrap", "hide", "props"]);
 export type ScreenWriteKind = typeof ScreenWriteKind.Type;
 
 export const ScreenWrite = Schema.Struct({
@@ -256,6 +256,7 @@ export const ScreenWrite = Schema.Struct({
   line: Schema.Number,
   col: Schema.Number,
   tag: Schema.optionalKey(Schema.String),
+  move: Schema.optionalKey(Schema.Struct({ from: Schema.Number, to: Schema.Number, count: Schema.Number })),
 });
 export type ScreenWrite = typeof ScreenWrite.Type;
 
@@ -277,5 +278,57 @@ export const ScreensApply = Rpc.make("screens.apply", {
 export const ScreensRevert = Rpc.make("screens.revert", {
   payload: Schema.Struct({ project: Schema.String, apply: Schema.String }),
   success: Schema.Struct({ reverted: Schema.Number, kept: Schema.Array(Schema.String) }),
+  error: UnframedError,
+});
+
+export const DESIGN_TOKEN_CATEGORIES = ["color", "spacing", "size", "radius", "font-size", "line-height", "tracking", "font-family", "font-weight", "shadow", "opacity", "other"] as const;
+export const DesignTokenCategory = Schema.Literals(DESIGN_TOKEN_CATEGORIES);
+export type DesignTokenCategory = typeof DesignTokenCategory.Type;
+
+export const DesignTokenOrigin = Schema.Literals(["framework", "theme", "custom"]);
+export type DesignTokenOrigin = typeof DesignTokenOrigin.Type;
+
+export const ScaleToken = Schema.Struct({
+  name: Schema.String,
+  variable: Schema.NullOr(Schema.String),
+  category: DesignTokenCategory,
+  origin: DesignTokenOrigin,
+  value: Schema.String,
+  resolved: Schema.String,
+  px: Schema.NullOr(Schema.Number),
+  step: Schema.NullOr(Schema.String),
+  chain: Schema.Array(Schema.String),
+  group: Schema.String,
+  file: Schema.NullOr(Schema.String),
+  line: Schema.NullOr(Schema.Number),
+  hex: Schema.NullOr(Schema.String),
+  lineHeight: Schema.NullOr(Schema.String),
+  layers: Schema.NullOr(Schema.Number),
+  blur: Schema.NullOr(Schema.Number),
+});
+export type ScaleToken = typeof ScaleToken.Type;
+
+export const TokenGroup = Schema.Struct({ name: Schema.String, count: Schema.Number, tokens: Schema.Array(Schema.String) });
+export type TokenGroup = typeof TokenGroup.Type;
+
+export const TokenScale = Schema.Struct({
+  colors: Schema.Array(ScaleToken),
+  colorGroups: Schema.Array(TokenGroup),
+  spacing: Schema.Array(ScaleToken),
+  sizes: Schema.Array(ScaleToken),
+  radii: Schema.Array(ScaleToken),
+  fontSizes: Schema.Array(ScaleToken),
+  lineHeights: Schema.Array(ScaleToken),
+  tracking: Schema.Array(ScaleToken),
+  families: Schema.Array(ScaleToken),
+  weights: Schema.Array(ScaleToken),
+  shadows: Schema.Array(ScaleToken),
+  other: Schema.Array(ScaleToken),
+});
+export type TokenScale = typeof TokenScale.Type;
+
+export const ScreensTokens = Rpc.make("screens.tokens", {
+  payload: Schema.Struct({ project: Schema.String, instance: Schema.String }),
+  success: Schema.Struct({ revision: Schema.String, scale: TokenScale }),
   error: UnframedError,
 });

@@ -39,6 +39,14 @@ _Avoid_: Fixture, stub
 A group of Screens from the same Instance, laid out in order and joined by arrows labelled with the action that leads from one Screen to the next, and labelled with the Instance's branch.
 _Avoid_: Journey, sequence
 
+**Design mode**:
+Editing one Screen's elements on the canvas itself: the person selects elements in the running page and changes them with handles, keys and the Design panel. Each change is a draft until Apply.
+_Avoid_: Edit mode (the Screen editor tab's own mode), inspect mode
+
+**Draft**:
+One change a person made by hand to a Screen's element (a style, its text, its order, a copy, a deletion, a wrapper, hiding it, a prop) that previews on the live page and is not yet in the code. Apply writes the drafts it can and hands the rest to the Screen's agent.
+_Avoid_: Override, pending change
+
 ## Analysis
 
 **Code map**:
@@ -48,6 +56,10 @@ _Avoid_: Sitemap, manifest
 **Design-system index**:
 The app's own components (file, props, variants, how often they are used) and design tokens, so the agent reuses them.
 _Avoid_: Component library, registry
+
+**Token scale**:
+A Repository's design tokens as the canvas uses them, read from its CSS and Design-system index: colours grouped by meaning and component, spacing (the Scale and the project's own Semantic values), sizes, radii, type, weights and shadows, with each alias chain. Drags snap to it and the Design panel names its steps.
+_Avoid_: Theme, palette, token list
 
 **States index**:
 For each route, the visible cases its import closure contains (empty, error, loading, a role, a dialog), plus the prepared states the agent has proven for it.

@@ -71,4 +71,76 @@ describe("direct edits of a Screen's source", () => {
     expect(await rpc.call("screens.revert", { project, apply: answer.apply })).toEqual({ reverted: 0, kept: ['src/AgentRail.tsx: "pl-2"'] });
     expect(await readFile(file, "utf8")).toContain("pl-6");
   });
+
+  it("writes a move, a variant change, a duplicate and a delete in one Apply, leaves a mapped list to the agent, and undoes them all", { timeout: 60_000 }, async () => {
+    const { rpc, project, instance } = await withRail();
+    const file = join(instance.worktree, "src", "Toolbar.tsx");
+    const TOOLBAR = `export function Toolbar({ items }) {
+  return (
+    <div>
+      <header className="flex gap-1">
+        <Icon />
+        <Button variant="ghost" aria-label="Search">
+          <Search />
+        </Button>
+        <Button variant="ghost" aria-label="New">
+          <Plus />
+        </Button>
+      </header>
+      <ul>
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+      <span>Note</span>
+    </div>
+  );
+}
+`;
+    await writeFile(file, TOOLBAR);
+    const at = (id: string, kind: "reorder" | "props" | "duplicate" | "delete", line: number, col: number, extra: object = {}) => ({ id, kind, property: "#", before: null, after: null, file: "src/Toolbar.tsx", line, col, ...extra });
+    const answer = await rpc.call("screens.apply", {
+      project,
+      instance: instance.id,
+      changes: [
+        at("move", "reorder", 6, 9, { tag: "button", move: { from: 1, to: 2, count: 3 } }),
+        at("variant", "props", 6, 9, { property: "variant", before: '"ghost"', after: '"outline"' }),
+        at("copy", "duplicate", 5, 9),
+        at("gone", "delete", 18, 7),
+        at("mapped", "reorder", 15, 11, { move: { from: 0, to: 1, count: 3 } }),
+      ],
+    });
+    expect(answer.results.map((result) => [result.id, result.written])).toEqual([
+      ["move", true],
+      ["variant", true],
+      ["copy", true],
+      ["gone", true],
+      ["mapped", false],
+    ]);
+    expect(answer.results[4]!.reason).toMatch(/agent/);
+    expect(await readFile(file, "utf8")).toBe(`export function Toolbar({ items }) {
+  return (
+    <div>
+      <header className="flex gap-1">
+        <Icon />
+        <Icon />
+        <Button variant="ghost" aria-label="New">
+          <Plus />
+        </Button>
+        <Button variant="outline" aria-label="Search">
+          <Search />
+        </Button>
+      </header>
+      <ul>
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+`);
+    expect(await rpc.call("screens.revert", { project, apply: answer.apply })).toEqual({ reverted: 4, kept: [] });
+    expect(await readFile(file, "utf8")).toBe(TOOLBAR);
+  });
 });

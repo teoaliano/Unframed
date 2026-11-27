@@ -1,9 +1,10 @@
-export type TokenKind = "spacing" | "size" | "font-size" | "font-weight" | "radius" | "opacity" | "color" | "line-height" | "tracking" | "align" | "display";
+export type TokenKind = "spacing" | "size" | "font-size" | "font-weight" | "font-family" | "radius" | "opacity" | "color" | "line-height" | "tracking" | "align" | "display" | "shadow";
 
 export interface TailwindToken {
   readonly name: string;
   readonly value: string;
   readonly kind: TokenKind;
+  readonly label?: string;
 }
 
 export interface TailwindClass {
@@ -265,6 +266,8 @@ export const classFor = (property: string, value: string): TailwindToken | undef
   return undefined;
 };
 
+const alphaOf = (raw: string | undefined): number => (raw === undefined ? 1 : raw.endsWith("%") ? Number(raw.slice(0, -1)) / 100 : Number(raw));
+
 export function parseColour(value: string): [number, number, number, number] | undefined {
   const text = value.trim().toLowerCase();
   const hex = /^#([0-9a-f]{3,8})$/.exec(text);
@@ -279,6 +282,35 @@ export function parseColour(value: string): [number, number, number, number] | u
   if (rgb !== null) {
     const alpha = rgb[4] === undefined ? 1 : rgb[4].endsWith("%") ? Number(rgb[4].slice(0, -1)) / 100 : Number(rgb[4]);
     return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3]), alpha];
+  }
+  const hsl = /^hsla?\(\s*(-?[\d.]+)(?:deg)?[\s,]+([\d.]+)%[\s,]+([\d.]+)%(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/.exec(text);
+  if (hsl !== null) {
+    const hue = (((Number(hsl[1]) % 360) + 360) % 360) / 60;
+    const saturation = Number(hsl[2]) / 100;
+    const light = Number(hsl[3]) / 100;
+    const chroma = (1 - Math.abs(2 * light - 1)) * saturation;
+    const second = chroma * (1 - Math.abs((hue % 2) - 1));
+    const [r, g, b] = hue < 1 ? [chroma, second, 0] : hue < 2 ? [second, chroma, 0] : hue < 3 ? [0, chroma, second] : hue < 4 ? [0, second, chroma] : hue < 5 ? [second, 0, chroma] : [chroma, 0, second];
+    const base = light - chroma / 2;
+    return [Math.round((r + base) * 255), Math.round((g + base) * 255), Math.round((b + base) * 255), alphaOf(hsl[4])];
+  }
+  const oklch = /^oklch\(\s*([\d.]+)(%?)\s+([\d.]+)\s+(-?[\d.]+)(?:deg)?(?:\s*\/\s*([\d.]+%?))?\s*\)$/.exec(text);
+  if (oklch !== null) {
+    const lightness = oklch[2] === "%" ? Number(oklch[1]) / 100 : Number(oklch[1]);
+    const chroma = Number(oklch[3]);
+    const hue = (Number(oklch[4]) * Math.PI) / 180;
+    const a = chroma * Math.cos(hue);
+    const bAxis = chroma * Math.sin(hue);
+    const l = (lightness + 0.3963377774 * a + 0.2158037573 * bAxis) ** 3;
+    const m = (lightness - 0.1055613458 * a - 0.0638541728 * bAxis) ** 3;
+    const s = (lightness - 0.0894841775 * a - 1.291485548 * bAxis) ** 3;
+    const linear = [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s, -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s];
+    const channel = (value: number) => {
+      const clamped = Math.min(1, Math.max(0, value));
+      const gamma = clamped <= 0.0031308 ? 12.92 * clamped : 1.055 * clamped ** (1 / 2.4) - 0.055;
+      return Math.round(gamma * 255 * 1000) / 1000;
+    };
+    return [channel(linear[0]!), channel(linear[1]!), channel(linear[2]!), alphaOf(oklch[5])];
   }
   if (text === "white") return [255, 255, 255, 1];
   if (text === "black") return [0, 0, 0, 1];
