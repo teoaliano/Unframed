@@ -257,9 +257,15 @@ export class ScreenSnapshots {
       if (!(await this.deps.pictures.has(project, key))) {
         const rasterizer = this.deps.rasterizer;
         if (rasterizer === undefined) return null;
-        const rasters = await rasterizer({ html, w: copy.w, h: copy.h, part: (name) => this.deps.pictures.read(project, `parts/${name}`) });
-        if (rasters === undefined) return null;
-        if ((await this.deps.pictures.putPicture(project, { html, w: copy.w, h: copy.h, ...rasters })) !== key) return null;
+        if ((await this.deps.pictures.putHtml(project, html, copy.w, copy.h)) !== key) return null;
+        await this.deps.pictures.draw(project, key, async () => {
+          const rasters = await rasterizer({ html, w: copy.w, h: copy.h, part: (name) => this.deps.pictures.read(project, `parts/${name}`) }).catch((error: unknown) => {
+            logError(`rasters of ${shapeId} in ${project}: ${errorText(error)}`);
+            return undefined;
+          });
+          if (rasters === undefined) logError(`${project}: could not draw the rasters of ${key}`);
+          return rasters;
+        });
       }
       if (this.latestCaptures.get(of) !== ticket) return key;
       const latest = (await this.deps.read(project)).find((record) => record.id === shapeId);

@@ -22,6 +22,14 @@ const exists = (path: string) =>
 
 let written = 0;
 
+const drawing = new Map<string, Promise<void>>();
+const RASTER = /^([0-9a-f]{40})\.(?:w384\.|w128\.)?png$/;
+
+export const rastersDrawn = async (dir: string, name: string): Promise<void> => {
+  const key = RASTER.exec(name)?.[1];
+  if (key !== undefined) await drawing.get(join(dir, key));
+};
+
 const writeAtomic = async (path: string, content: Buffer | string): Promise<void> => {
   await mkdir(dirname(path), { recursive: true });
   const temp = `${path}.${process.pid}.${++written}.tmp`;
@@ -64,6 +72,31 @@ export class PictureStore {
     await writeOnce(join(dir, pictureFile(key, "w384")), picture.w384);
     await writeOnce(join(dir, pictureFile(key, "full")), picture.png);
     return key;
+  }
+
+  async putHtml(project: string, html: string, w: number, h: number): Promise<string | undefined> {
+    const dir = await this.dir(project);
+    if (dir === undefined) return undefined;
+    const key = pictureKey(html, w, h);
+    await writeOnce(join(dir, pictureFile(key, "html")), html);
+    return key;
+  }
+
+  async draw(project: string, key: string, rasters: () => Promise<PictureRasters | undefined>): Promise<void> {
+    const dir = await this.dir(project);
+    if (dir === undefined || !PICTURE_KEY.test(key)) return;
+    const at = join(dir, key);
+    if (drawing.has(at)) return;
+    const pending = (async () => {
+      const drawn = await rasters().catch(() => undefined);
+      if (drawn === undefined) return;
+      await writeOnce(join(dir, pictureFile(key, "w128")), drawn.w128);
+      await writeOnce(join(dir, pictureFile(key, "w384")), drawn.w384);
+      await writeOnce(join(dir, pictureFile(key, "full")), drawn.png);
+    })()
+      .catch(() => undefined)
+      .finally(() => drawing.delete(at));
+    drawing.set(at, pending);
   }
 
   async has(project: string, key: string): Promise<boolean> {

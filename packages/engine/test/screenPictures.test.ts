@@ -66,6 +66,9 @@ const captures = (engine: TestEngine) => engine.stdout().split("\n").filter((lin
 
 const pngSize = (png: Buffer) => ({ width: png.readUInt32BE(16), height: png.readUInt32BE(20) });
 
+const drawn = (engine: TestEngine, project: string, key: string) =>
+  Promise.all([`${key}.png`, `${key}.w384.png`, `${key}.w128.png`].map(async (name) => (await engine.request(`/api/pictures/${encodeURIComponent(project)}/${name}`)).status));
+
 const pixelAt = async (png: Buffer, x: number, y: number) => {
   const { width, channels, data } = await decodePng(png);
   return Array.from(data.subarray((y * width + x) * channels, (y * width + x) * channels + channels));
@@ -89,6 +92,7 @@ describe("Screen pictures", () => {
     expect((await screenOf(rpc, project, screen.id)).props.picture).toBe(key);
     expect((await readdir(join(store(engine, project), "parts"))).filter((name) => !name.endsWith(".tmp"))).toEqual([part]);
     expect(await readFile(join(store(engine, project), `${key}.html`), "utf8")).toBe(resolved);
+    expect(await drawn(engine, project, key)).toEqual([200, 200, 200]);
     for (const name of [`${key}.png`, `${key}.w384.png`, `${key}.w128.png`]) expect(existsSync(join(store(engine, project), name))).toBe(true);
 
     const again = await rpc.call("screens.capture", { project, shape: screen.id, w: 1280, h: 800, html, parts });
@@ -162,6 +166,8 @@ describe("Screen pictures", () => {
     expect(tall.key).toMatch(KEY);
     expect(tall.key).not.toBe(short.key);
     expect((await screenOf(rpc, project, screen.id)).props.picture).toBe(tall.key);
+    await drawn(engine, project, short.key!);
+    await drawn(engine, project, tall.key!);
     const dir = store(engine, project);
     expect((await readFile(join(dir, `${tall.key}.png`))).equals(await readFile(join(dir, `${short.key}.png`)))).toBe(false);
   });
@@ -175,6 +181,19 @@ describe("Screen pictures", () => {
     const fast = await rpc.call("screens.capture", { project, shape: screen.id, w: 1280, h: 800, html: later, parts: [] });
     expect((await slow).key).toMatch(KEY);
     expect((await screenOf(rpc, project, screen.id)).props.picture).toBe(fast.key);
+  });
+
+  it("sets a live copy's key as soon as its page is stored, and holds a request for its rasters until they are drawn", async () => {
+    const { engine, rpc, project, screen } = await addRepository({ UNFRAMED_TEST_RENDERER: "ok" });
+    const html = `<!doctype html><html><head></head><body><p>${"Slow to draw ".repeat(5000)}</p></body></html>`;
+    const { key } = await rpc.call("screens.capture", { project, shape: screen.id, w: 1280, h: 800, html, parts: [] });
+    const dir = store(engine, project);
+    expect((await screenOf(rpc, project, screen.id)).props.picture).toBe(key);
+    expect(existsSync(join(dir, `${key}.html`))).toBe(true);
+    expect(existsSync(join(dir, `${key}.w384.png`))).toBe(false);
+    expect((await engine.request(`/api/pictures/${encodeURIComponent(project)}/${key}.html`)).status).toBe(200);
+    expect(await drawn(engine, project, key!)).toEqual([200, 200, 200]);
+    for (const name of [`${key}.png`, `${key}.w384.png`, `${key}.w128.png`]) expect(existsSync(join(dir, name))).toBe(true);
   });
 
   it("does not capture a Screen whose Instance never runs", async () => {
@@ -243,6 +262,7 @@ describe.skipIf(chrome === undefined)("Screen pictures in headless Chrome", () =
     const { key } = await rpc.call("screens.capture", { project, shape: screen.id, w: 390, h: 844, html, parts: [{ url: "http://x/logo.png", type: "image/png", data: LOGO.toString("base64") }] });
     expect(key).toMatch(KEY);
     expect((await screenOf(rpc, project, screen.id)).props.picture).toBe(key);
+    expect(await drawn(engine, project, key!)).toEqual([200, 200, 200]);
     const dir = store(engine, project);
     expect(pngSize(await readFile(join(dir, `${key}.png`)))).toEqual({ width: 780, height: 1688 });
     expect(pngSize(await readFile(join(dir, `${key}.w384.png`))).width).toBe(384);
