@@ -133,8 +133,9 @@ const server = http.createServer((req, res) => {
   if (url.pathname === "/webgl") {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     return res.end([
-      "<!doctype html><html><head><title>WebGL</title><style>body { margin: 0; background: rgb(255, 255, 255); } canvas.pill { display: block; width: 200px; height: 100px; border-radius: 50px; }</style></head>",
-      "<body><canvas class=\\"pill\\" id=\\"gl\\" width=\\"200\\" height=\\"100\\"></canvas><script>",
+      "<!doctype html><html><head><title>WebGL</title><style>body { margin: 0; background: rgb(255, 255, 255); } canvas.pill { display: block; width: 200px; height: 100px; border-radius: 50px; } canvas.idle { display: block; width: 100px; height: 50px; background: rgb(255, 0, 0); }</style></head>",
+      "<body><canvas class=\\"pill\\" id=\\"gl\\" width=\\"200\\" height=\\"100\\" role=\\"img\\" aria-label=\\"Glow\\" data-kind=\\"glow\\"></canvas><canvas class=\\"idle\\" id=\\"idle\\" width=\\"100\\" height=\\"50\\"></canvas><script>",
+      "document.getElementById('idle').getContext('webgl', { alpha: false });",
       "var gl = document.getElementById('gl').getContext('webgl', { alpha: false });",
       "var draw = function () { gl.clearColor(0, 0.5, 1, 1); gl.clear(gl.COLOR_BUFFER_BIT); requestAnimationFrame(draw); };",
       "requestAnimationFrame(draw);",

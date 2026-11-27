@@ -285,6 +285,28 @@ describe.skipIf(chrome === undefined)("Screen pictures in headless Chrome", () =
     expect(Math.abs(g! - 128)).toBeLessThanOrEqual(1);
   });
 
+  it("places a canvas's picture where the page's canvas rules put and round it, and shows a never-drawn canvas's own background instead of black", { timeout: 120_000 }, async () => {
+    const { engine, rpc, project, instance, screen } = await addRepository();
+    await put(rpc, project, [{ ...screen, props: { ...screen.props, route: "/webgl", w: 400, h: 300 } }]);
+    await goLive(rpc, project, instance);
+    const key = await pictureOf(rpc, project, screen.id);
+    const html = await readFile(join(store(engine, project), `${key}.html`), "utf8");
+    const pill = /<img[^>]*class="pill"[^>]*>/.exec(html)?.[0] ?? "";
+    for (const attribute of ['data-uf-stand-in="canvas"', 'role="img"', 'aria-label="Glow"', 'data-kind="glow"', 'id="gl"']) expect(pill).toContain(attribute);
+    const idle = /<img[^>]*class="idle"[^>]*>/.exec(html)?.[0] ?? "";
+    expect(idle).toContain('data-uf-stand-in="canvas"');
+    expect(idle).not.toContain("src=");
+    expect(html).toContain(':is(canvas, img:where([data-uf-stand-in="canvas"])).pill');
+    const { key: copy } = await rpc.call("screens.capture", { project, shape: screen.id, w: 400, h: 300, html: `${html}<!-- copy -->`, parts: [] });
+    expect(await drawn(engine, project, copy!)).toEqual([200, 200, 200]);
+    const png = await readFile(join(store(engine, project), `${copy}.png`));
+    expect((await pixelAt(png, 4, 4)).slice(0, 3)).toEqual([255, 255, 255]);
+    const [r, g, b] = await pixelAt(png, 200, 100);
+    expect([r, b]).toEqual([0, 255]);
+    expect(Math.abs(g! - 128)).toBeLessThanOrEqual(1);
+    expect((await pixelAt(png, 100, 250)).slice(0, 3)).toEqual([255, 0, 0]);
+  });
+
   it("rasterises a live copy from screens.capture with its parts served from the store", { timeout: 120_000 }, async () => {
     const { engine, rpc, project, screen } = await addRepository();
     const html = '<!doctype html><html><head><style>body { margin: 0; background: rgb(0, 128, 0); }</style></head><body><img src="uf-part:0" width="64" height="64"></body></html>';

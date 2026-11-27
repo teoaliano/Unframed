@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fontFamilyKey, inlineViewportUnits, readableCanvases, rewriteCssUrls, rootSelectors, scopeFontFamilies, screenBridgeSource } from "../src/index.ts";
+import { blankPixels, fontFamilyKey, inlineViewportUnits, readableCanvases, rewriteCssUrls, rootSelectors, scopeFontFamilies, screenBridgeSource, standInSelectors } from "../src/index.ts";
 
 describe("viewport units in a page copy", () => {
   it("writes every viewport unit as pixels of the page's own viewport", () => {
@@ -84,6 +84,30 @@ describe("root selectors in a page copy", () => {
     expect(rootSelectors("x-y::part(body)")).toBe("x-y::part(body)");
     expect(rootSelectors(":lang(html) p")).toBe(":lang(html) p");
     expect(rootSelectors("html::before")).toBe("[data-uf-html]::before");
+  });
+});
+
+describe("canvas and video stand-ins in a page copy", () => {
+  const CANVAS = ':is(canvas, img:where([data-uf-stand-in="canvas"]))';
+  const VIDEO = ':is(video, img:where([data-uf-stand-in="video"]))';
+
+  it("lets the page's canvas and video type selectors match their stand-in pictures, with no change of specificity", () => {
+    expect(standInSelectors("canvas")).toBe(CANVAS);
+    expect(standInSelectors("canvas.pill, .stage > video")).toBe(`${CANVAS}.pill, .stage > ${VIDEO}`);
+    expect(standInSelectors("CANVAS:hover")).toBe(`${CANVAS}:hover`);
+    expect(standInSelectors("div:not(canvas) > canvas[data-x]")).toBe(`div:not(${CANVAS}) > ${CANVAS}[data-x]`);
+  });
+
+  it("leaves classes, ids, attributes and longer names alone", () => {
+    for (const selector of [".canvas", "#video", "[data-kind=canvas]", "canvas-wrap", "x-video", ".a\\:canvas", "html body", ":root"]) expect(standInSelectors(selector)).toBe(selector);
+  });
+
+  it("reads a canvas as blank when every pixel is black with one alpha", () => {
+    expect(blankPixels([0, 0, 0, 255, 0, 0, 0, 255])).toBe(true);
+    expect(blankPixels([0, 0, 0, 0, 0, 0, 0, 0])).toBe(true);
+    expect(blankPixels([0, 0, 0, 255, 0, 0, 0, 0])).toBe(false);
+    expect(blankPixels([0, 0, 0, 255, 0, 1, 0, 255])).toBe(false);
+    expect(blankPixels([12, 34, 56, 255])).toBe(false);
   });
 });
 
