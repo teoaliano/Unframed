@@ -23,6 +23,8 @@ interface ScreenSlot {
   readonly write: (next: ScreenShapeProps) => boolean;
   readonly edit?: ScreenEditHooks | undefined;
   readonly overlay?: ReactNode;
+  readonly design?: boolean;
+  readonly onDoubleClick?: ((at: { readonly x: number; readonly y: number }) => void) | undefined;
 }
 
 interface PoolEntry {
@@ -135,6 +137,7 @@ const PooledScreen = ({ project, shapeId, entry, host }: { readonly project: str
     onPost: (next) => {
       post.current = next;
     },
+    onDoubleClick: (at) => slot?.onDoubleClick?.(at),
   });
   const interactive = wanted && frame.status.settled;
   useEffect(() => {
@@ -165,7 +168,7 @@ const PooledScreen = ({ project, shapeId, entry, host }: { readonly project: str
       document.removeEventListener("focusout", onFocusOut, true);
     };
   }, [interactive]);
-  const watching = tier?.frame === "live" && frame.status.painted;
+  const watching = tier?.frame === "live" && frame.status.painted && slot?.design !== true;
   useEffect(() => {
     if (frame.status.painted) post.current?.({ type: "unframed:snapshot:watch", on: watching });
   }, [watching, frame.status.painted]);
@@ -197,8 +200,9 @@ const PooledScreen = ({ project, shapeId, entry, host }: { readonly project: str
         self.current = element;
         host(shapeId, element);
       }}
-      className="absolute top-0 left-0 overflow-hidden"
+      className={`absolute top-0 left-0 ${slot?.design === true ? "overflow-visible" : "overflow-hidden"}`}
       data-screen-of={shapeId}
+      data-design={slot?.design === true ? "true" : undefined}
       data-parked={parked ? "true" : undefined}
       data-painted={frame.status.painted ? "true" : undefined}
       style={{ visibility: "hidden", transformOrigin: "0 0", pointerEvents: wanted ? "auto" : "none" }}
@@ -233,11 +237,12 @@ const place = (layer: HTMLElement, hosts: ReadonlyMap<string, HTMLDivElement>, e
     const w = element.offsetWidth;
     const h = element.offsetHeight;
     const scale = rect.width / w;
+    const floor = host.dataset.design === "true" ? Number.NEGATIVE_INFINITY : 0;
     const inset = {
-      top: Math.max(0, clip.top - rect.top) / scale,
-      left: Math.max(0, clip.left - rect.left) / scale,
-      bottom: Math.max(0, rect.bottom - clip.bottom) / scale,
-      right: Math.max(0, rect.right - clip.right) / scale,
+      top: Math.max(floor, clip.top - rect.top) / scale,
+      left: Math.max(floor, clip.left - rect.left) / scale,
+      bottom: Math.max(floor, rect.bottom - clip.bottom) / scale,
+      right: Math.max(floor, rect.right - clip.right) / scale,
     };
     const visible = inset.top + inset.bottom < h && inset.left + inset.right < w;
     const at = { x: rect.left - origin.left, y: rect.top - origin.top };
@@ -247,6 +252,7 @@ const place = (layer: HTMLElement, hosts: ReadonlyMap<string, HTMLDivElement>, e
       host.style.transform = `translate(${at.x}px, ${at.y}px) scale(${scale})`;
       host.style.clipPath = `inset(${inset.top}px ${inset.right}px ${inset.bottom}px ${inset.left}px)`;
       host.style.setProperty("--screen-ring", `${1 / scale}px`);
+      host.style.setProperty("--screen-unscale", `${1 / scale}`);
       host.style.visibility = visible ? "visible" : "hidden";
     });
   }

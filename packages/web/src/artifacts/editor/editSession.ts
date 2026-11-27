@@ -68,6 +68,8 @@ export interface EditReport {
   readonly name?: string;
   readonly className?: string | null;
   readonly owner?: string | null;
+  readonly instance?: string | null;
+  readonly slot?: string | null;
   readonly source?: ElementSource | null;
 }
 
@@ -152,7 +154,10 @@ export interface EditSession {
   readonly hoverLayer: (id: string | null) => void;
   readonly layerHover: string | null;
   readonly startText: (id: string) => void;
+  readonly pickAt: (at: { readonly x: number; readonly y: number }, gesture?: { readonly clicks?: number; readonly deepest?: boolean; readonly additive?: boolean }) => void;
   readonly requestLive: () => void;
+  readonly watch: (ids: readonly string[]) => void;
+  readonly restoreOverrides: (list: readonly ScreenOverride[]) => void;
   readonly setLocked: (locked: readonly string[]) => void;
   readonly preparing: boolean;
   readonly prepareError: string | undefined;
@@ -840,7 +845,8 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
       }
       case "unframed:edit:textStart": {
         const id = typeof message.id === "string" ? message.id : null;
-        if (id !== null) startText(id);
+        if (id !== null && screen && message.inline === true) textPending.current = id;
+        else if (id !== null) startText(id);
         return;
       }
       case "unframed:edit:text": {
@@ -953,6 +959,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
     tween,
     setTween,
     startText,
+    pickAt: (at, gesture = {}) => post({ type: "unframed:edit:pickAt", x: at.x, y: at.y, clicks: gesture.clicks ?? 1, deepest: gesture.deepest === true, additive: gesture.additive === true }),
     selectMatching,
     hovered,
     reports,
@@ -966,6 +973,11 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
     hoverLayer,
     layerHover,
     requestLive,
+    watch: (ids) => post({ type: "unframed:edit:watch", ids }),
+    restoreOverrides: (list) => {
+      setOverrides(list);
+      repaint(list);
+    },
     setLocked,
     preparing,
     prepareError,

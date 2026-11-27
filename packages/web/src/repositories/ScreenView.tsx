@@ -34,6 +34,7 @@ interface FrameEvents {
   readonly onRoute: (route: string, replaying: boolean) => void;
   readonly onSteps: (result: StepsResult) => void;
   readonly onSnapshot: (snapshot: PageSnapshotMessage | null, final: boolean) => void;
+  readonly onDoubleClick: (at: { readonly x: number; readonly y: number }) => void;
 }
 
 export interface PageSnapshotMessage {
@@ -98,6 +99,10 @@ const LiveScreen = ({ owner, shapeId, url, dials, interactive, parked, events, e
         post({ type: "unframed:dials:hello" });
       } else if (data.type === "unframed:screen:paint") handlers.current.onPainted();
       else if (data.type === "unframed:screen:route" && typeof data.route === "string") handlers.current.onRoute(data.route, data.replaying === true);
+      else if (data.type === "unframed:screen:dblclick") {
+        const at = data as { x?: unknown; y?: unknown };
+        if (typeof at.x === "number" && typeof at.y === "number" && Number.isFinite(at.x) && Number.isFinite(at.y)) handlers.current.onDoubleClick({ x: at.x, y: at.y });
+      }
       else if (data.type === "unframed:screen:steps")
         handlers.current.onSteps({ ok: data.ok === true, ...(typeof data.step === "number" ? { step: data.step } : {}), ...(typeof data.reason === "string" ? { reason: data.reason } : {}) });
       else if (data.type === "unframed:snapshot") {
@@ -221,6 +226,7 @@ interface ScreenFrameInput {
   readonly onReady: () => void;
   readonly onSnapshot: (snapshot: PageSnapshotMessage | null, final: boolean) => void;
   readonly onPost: (post: FramePost | undefined) => void;
+  readonly onDoubleClick?: (at: { readonly x: number; readonly y: number }) => void;
 }
 
 export const useScreenBranch = (project: string, props: ScreenShapeProps): string => {
@@ -250,7 +256,7 @@ const FixButton = ({ shapeId, instruction }: { readonly shapeId: string; readonl
   );
 };
 
-export const useScreenFrame = ({ owner, project, shapeId, props, interactive, write, edit, parked, onReady, onSnapshot, onPost }: ScreenFrameInput): { readonly content: ReactNode; readonly failure: ReactNode; readonly status: FrameStatus } => {
+export const useScreenFrame = ({ owner, project, shapeId, props, interactive, write, edit, parked, onReady, onSnapshot, onPost, onDoubleClick }: ScreenFrameInput): { readonly content: ReactNode; readonly failure: ReactNode; readonly status: FrameStatus } => {
   const engine = useEngine();
   const state = repositoryState(project);
   const proxyPort = useValue(
@@ -321,6 +327,7 @@ export const useScreenFrame = ({ owner, project, shapeId, props, interactive, wr
       onReady();
     },
     onSnapshot,
+    onDoubleClick: (at) => onDoubleClick?.(at),
     onBridge: (bridged) => {
       noteBridge(project, shapeId, bridged);
     },

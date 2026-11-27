@@ -260,6 +260,8 @@ export function screenBridge(
     }
   };
 
+  win.addEventListener("dblclick", (event: any) => tell("unframed:screen:dblclick", { x: event.clientX, y: event.clientY }), true);
+
   let replaying = false;
   let reported = routeOf();
   const report = () => {

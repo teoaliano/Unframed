@@ -14,6 +14,7 @@ import { CommentsHost } from "../comments/CommentsHost.tsx";
 import { useFeature } from "../features.ts";
 import { OnboardingProbe } from "../onboarding/OnboardingProbe.tsx";
 import { ScreensStarting } from "../repositories/ScreensStarting.tsx";
+import { CanvasDesign } from "../repositories/CanvasDesign.tsx";
 
 export const InFront = () => {
   useEffect(() => registerSlot("toolbarEnd", ToolbarEnd), []);
@@ -33,6 +34,7 @@ export const InFront = () => {
     <ArtifactsHost />
     <OnboardingProbe />
     {repositories && <ScreensStarting />}
+    {repositories && <CanvasDesign />}
   </>
   );
 };
