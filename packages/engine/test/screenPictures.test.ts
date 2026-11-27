@@ -125,7 +125,8 @@ describe("Screen pictures", () => {
     expect(cached.status).toBe(304);
     expect(cached.body.length).toBe(0);
 
-    const signature = (await readdir(join(store(engine, project), "signatures")))[0]!;
+    expect(existsSync(join(store(engine, project), "signatures"))).toBe(false);
+    const signature = hash("a signature");
     for (const name of [`${"0".repeat(40)}.png`, `${key}.js`, `${key}.w256.png`, `signatures/${signature}`, `parts/${hash(LOGO)}.html`, `..%2F..%2Fcanvas.db`, `parts%2F..%2F${key}.png`, key]) {
       expect((await engine.request(`/api/pictures/${encodeURIComponent(project)}/${name}`)).status).toBe(404);
     }
@@ -194,6 +195,34 @@ describe("Screen pictures", () => {
     expect((await engine.request(`/api/pictures/${encodeURIComponent(project)}/${key}.html`)).status).toBe(200);
     expect(await drawn(engine, project, key!)).toEqual([200, 200, 200]);
     for (const name of [`${key}.png`, `${key}.w384.png`, `${key}.w128.png`]) expect(existsSync(join(dir, name))).toBe(true);
+  });
+
+  it("keeps a live capture that lands while a headless render of the Screen's default state is still running", { timeout: 120_000 }, async () => {
+    const { engine, rpc, project, instance, screen } = await addRepository({ UNFRAMED_TEST_RENDERER: "ok" });
+    await goLive(rpc, project, instance);
+    const first = await pictureOf(rpc, project, screen.id);
+    const counted = captures(engine);
+    await put(rpc, project, [{ ...(await screenOf(rpc, project, screen.id)), props: { ...screen.props, picture: first, route: "/slow-render?render-ms=3000" } }]);
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const { key } = await rpc.call("screens.capture", { project, shape: screen.id, w: 1280, h: 800, html: "<!doctype html><html><head></head><body><p>Left by the person</p></body></html>", parts: [] });
+    await eventually(async () => captures(engine), (count) => count > counted, 10_000);
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    expect((await screenOf(rpc, project, screen.id)).props.picture).toBe(key);
+    expect(captures(engine)).toBe(counted + 1);
+  });
+
+  it("keeps a Screen's live picture as its own: no later render replaces it, and a copy of the Screen does not inherit it as its state's picture", { timeout: 120_000 }, async () => {
+    const { engine, rpc, project, instance, screen } = await addRepository({ UNFRAMED_TEST_RENDERER: "ok" });
+    await goLive(rpc, project, instance);
+    const headless = await pictureOf(rpc, project, screen.id);
+    const { key } = await rpc.call("screens.capture", { project, shape: screen.id, w: 1280, h: 800, html: "<!doctype html><html><head></head><body><p>Typed into</p></body></html>", parts: [] });
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    expect((await screenOf(rpc, project, screen.id)).props.picture).toBe(key);
+    const counted = captures(engine);
+    const { picture: _, ...props } = (await screenOf(rpc, project, screen.id)).props;
+    await put(rpc, project, [{ ...screen, id: "shape:copy", x: 2000, props }]);
+    expect(await pictureOf(rpc, project, "shape:copy")).toBe(headless);
+    expect(captures(engine)).toBe(counted);
   });
 
   it("does not capture a Screen whose Instance never runs", async () => {
