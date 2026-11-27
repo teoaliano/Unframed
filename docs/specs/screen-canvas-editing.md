@@ -130,8 +130,8 @@ Three tracks. Track A first defines its exported types and function signatures i
 7. The canvas Design panel hosting `DesignTab` for the session.
 
 ### Track C: inspector (web)
-1. Token-first field display, per-field discard dot, label scrubbing, arrow stepping.
-2. Typography with presets, font and weight pickers, Type settings popover.
-3. Colour token picker (Tokens, Custom) for text, fill, stroke.
-4. Padding linked and individual, Border and radius, Shadow and effects, Size menu, Position, Flexbox with 3×3 grid and gap presets, Appearance.
+1. [x] Token-first field display, per-field discard dot, label scrubbing, arrow stepping.
+2. [x] Typography with presets, font and weight pickers, Type settings popover.
+3. [x] Colour token picker (Tokens, Custom) for text, fill, stroke.
+4. [x] Padding linked and individual, Border and radius, Shadow and effects, Size menu, Position, Flexbox with 3×3 grid and gap presets, Appearance.
 5. Header with component, instances, Go to main component and code peek; instance props with `cva` options.
