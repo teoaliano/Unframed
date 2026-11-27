@@ -530,3 +530,35 @@ test("the drafts bar stays in view: centred on the visible part of a Screen tall
     prepareReactApp,
   );
 });
+
+const overlaps = (a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
+test("the canvas Design panel sits below the top bar and the Screen's toolbar never covers it, even when the Screen fills the window", async ({ page }) => {
+  await withRepository(
+    page,
+    {},
+    async (engine, project) => {
+      const [first] = await screenShapes(engine, project);
+      await putShapes(engine, project, [{ ...first, props: { ...first.props, route: "/react", w: 1600, h: 1600 } }]);
+      await expect(page.locator(`[data-shape-id="${first.id}"] [data-testid=screen]`)).toHaveAttribute("data-route", "/react");
+      await clickShape(page, first.id);
+      await expect(app(page).getByRole("heading", { name: "Agent" })).toBeVisible({ timeout: 30_000 });
+      await enterOn(page, "header h2");
+      await expect(title(page)).toHaveText("Header");
+      const toolbar = page.getByTestId("selection-toolbar");
+      await expect(toolbar).toBeVisible();
+      const strip = (await page.getByTestId("tab-strip").boundingBox())!;
+      const box = (await panel(page).boundingBox())!;
+      expect(box.y).toBeGreaterThanOrEqual(strip.y + strip.height - 1);
+      await expect.poll(async () => overlaps((await toolbar.boundingBox())!, (await panel(page).boundingBox())!)).toBe(false);
+      const covered = await title(page).evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        const top = document.elementFromPoint(rect.left + 4, rect.top + rect.height / 2);
+        return top === null || !element.contains(top);
+      });
+      expect(covered).toBe(false);
+    },
+    prepareReactApp,
+  );
+});

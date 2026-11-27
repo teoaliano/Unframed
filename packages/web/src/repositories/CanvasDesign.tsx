@@ -446,6 +446,7 @@ const ScreenDesignPanel = ({ editor, session, project, instance, onTell }: {
   return createPortal(
     <div
       ref={ref}
+      data-unframed-design-panel=""
       data-testid="screen-design-panel"
       aria-label="Design"
       role="region"
