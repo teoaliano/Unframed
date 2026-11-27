@@ -115,10 +115,10 @@ The behaviour below was recorded control by control in a reference tool and is t
 Three tracks. Track A first defines its exported types and function signatures in one commit so B and C can build against them.
 
 ### Track A: core (domain, engine, writer)
-1. Token scale types and `screens.tokens` contract; domain parse of `@theme` and custom properties with aliases and groups; engine reads the worktree and caches it.
-2. `snapToken`, `tokenOf`, `tokenLabel`, `changeLine`; gesture math; selection rules.
-3. New draft kinds and their lines and agent instructions.
-4. Writer: reorder, duplicate, delete, prop literal, hidden; engine Apply and revert for them.
+1. [x] Token scale types and `screens.tokens` contract; domain parse of `@theme` and custom properties with aliases and groups; engine reads the worktree and caches it.
+2. [x] `snapToken`, `tokenOf`, `tokenLabel`, `changeLine`; gesture math; selection rules.
+3. [x] New draft kinds and their lines and agent instructions.
+4. [x] Writer: reorder, duplicate, delete, prop literal, hidden; engine Apply and revert for them.
 
 ### Track B: canvas surface (web, bridge)
 1. Design mode state, entry by double-click, exit rules, holding the Screen live; the toolbar Editor button for the tab.

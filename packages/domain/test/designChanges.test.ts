@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { changeLine, draftInstructionLine, draftOf, groupLine, paddingLine, screenWritesOf, snapToken, structuralDraftOf, tokenScaleOf, type DraftChange, type DraftElement, type DraftNeighbour } from "../src/index.ts";
+import { addDraft, changeLine, draftInstructionLine, draftOf, groupLine, paddingLine, screenWritesOf, snapToken, structuralDraftOf, tokenScaleOf, type DraftChange, type DraftElement, type DraftNeighbour } from "../src/index.ts";
 
 const element: DraftElement = {
   stamp: "uf9",
@@ -123,5 +123,29 @@ describe("agent instructions for structural changes", () => {
     expect(line(structuralDraftOf({ type: "props", props: { variant: "outline" }, before: { variant: "ghost" } }, { id: "p", element }))).toBe(
       '- On this <button> in "AgentRail" at its call site, "src/AgentRail.tsx":219:9–221:18: variant="ghost" → variant="outline". The children are a mapped list.',
     );
+  });
+});
+
+describe("repeated structural edits", () => {
+  it("merges two moves of one element into one from the first position, and drops a move back home", () => {
+    const first = structuralDraftOf({ type: "reorder", from: 2, to: 3, siblings, parent }, { id: "r1", element });
+    const order = [siblings[0]!, siblings[1]!, siblings[3]!, siblings[2]!, siblings[4]!];
+    const second = structuralDraftOf({ type: "reorder", from: 3, to: 4, siblings: order, parent }, { id: "r2", element });
+    const merged = addDraft([first], second);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ id: "r1", move: { from: 2, to: 4, siblings } });
+    expect(changeLine(merged[0]!)).toBe("Moved after Button");
+    const home = structuralDraftOf({ type: "reorder", from: 3, to: 2, siblings: order, parent }, { id: "r3", element });
+    expect(addDraft([first], home)).toEqual([]);
+  });
+
+  it("merges props, keeping what they were first, and keeps every duplicate", () => {
+    const one = structuralDraftOf({ type: "props", props: { variant: "outline" }, before: { variant: "ghost", size: "sm" } }, { id: "p1", element });
+    const two = structuralDraftOf({ type: "props", props: { size: "lg" }, before: { variant: "outline", size: "sm" } }, { id: "p2", element });
+    expect(addDraft([one], two)[0]).toMatchObject({ id: "p1", props: { variant: "outline", size: "lg" }, propsBefore: { variant: "ghost", size: "sm" } });
+    const back = structuralDraftOf({ type: "props", props: { variant: "ghost" }, before: { variant: "outline" } }, { id: "p3", element });
+    expect(addDraft([one], back)).toEqual([]);
+    const copy = structuralDraftOf({ type: "duplicate", parent }, { id: "c1", element });
+    expect(addDraft([copy], { ...copy, id: "c2" })).toHaveLength(2);
   });
 });
