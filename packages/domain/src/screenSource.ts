@@ -413,7 +413,11 @@ export function installSourceModule(win: any, tools: SourceTools): void {
     return { found: true, computed, text: el.textContent, attributes };
   };
 
-  win.__unframedSource = { levels, describe, resolve, owner: ownerOf, find };
+  const instance = (el: any): string | null => {
+    const rooted = rootedHere(el);
+    return rooted === null ? null : nameOfType(rooted.type);
+  };
+  win.__unframedSource = { levels, describe, resolve, owner: ownerOf, find, instance };
 
   win.addEventListener("message", (event: any) => {
     if (event.source !== win.parent || !LOOPBACK.test(event.origin)) return;

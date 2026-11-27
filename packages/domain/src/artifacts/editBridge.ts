@@ -1,7 +1,7 @@
 import { DESIGN_FIELDS } from "../designFields.ts";
 import { NON_ELEMENT_TAGS } from "../nonElementTags.ts";
 
-const BRIDGE_PROPERTIES = [...new Set([...DESIGN_FIELDS.map((field) => field.property), "background-image", "display"])];
+const BRIDGE_PROPERTIES = [...new Set([...DESIGN_FIELDS.map((field) => field.property), "background-image", "display", "width", "height", "font-style", "text-decoration-line", "text-align", "flex-direction"])];
 
 export type EditBox = { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
 
@@ -32,6 +32,11 @@ interface EditElement {
   getRootNode?(): unknown;
   matches?(selector: string): boolean;
   readonly id?: string;
+  readonly nextSibling?: unknown;
+  insertBefore?(node: unknown, reference: unknown): unknown;
+  remove?(): void;
+  cloneNode?(deep: boolean): EditElement;
+  querySelectorAll?(selector: string): ArrayLike<EditElement>;
 }
 
 interface EditEvent {
@@ -43,6 +48,10 @@ interface EditEvent {
   readonly metaKey: boolean;
   readonly ctrlKey: boolean;
   readonly detail?: number;
+  readonly altKey?: boolean;
+  readonly button?: number;
+  readonly clientX?: number;
+  readonly clientY?: number;
   preventDefault(): void;
 }
 
@@ -63,6 +72,7 @@ interface SourceApi {
   describe(el: EditElement): unknown;
   levels(el: EditElement): Array<{ el: EditElement; component: string | null }>;
   owner(el: EditElement): string | null;
+  instance?(el: EditElement): string | null;
 }
 
 interface EditWindow {
@@ -138,9 +148,11 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
   let hovered: EditElement | null = null;
   let external: EditElement | null = null;
   let selection: string[] = [];
+  let watched: string[] = [];
   let frame: unknown = null;
   let last: Record<string, EditBox> = {};
   let lastCopies = "";
+  let lastLayouts = "";
   let editing: { el: EditElement; id: string; original: string | null } | null = null;
   type HeldKey = { key: string; shiftKey: boolean; metaKey: boolean; ctrlKey: boolean };
   let pendingText: { id: string; keys: HeldKey[]; timer: unknown } | null = null;
@@ -190,8 +202,12 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     return false;
   };
 
+  const inClone = (el: EditElement): boolean => {
+    for (let e: EditElement | null = el; e; e = e.parentElement) if (e.getAttribute("data-uf-clone") !== null) return true;
+    return false;
+  };
   const pickable = (el: EditElement | null): boolean =>
-    el !== null && el.nodeType === 1 && (isCopy(el) || (el !== doc.body && isInBody(el) && !EXCLUDED.includes(el.tagName.toLowerCase())));
+    el !== null && el.nodeType === 1 && (isCopy(el) || (el !== doc.body && isInBody(el) && !EXCLUDED.includes(el.tagName.toLowerCase()) && !(stamp && inClone(el))));
 
   const isLocked = (el: EditElement): boolean => {
     for (let e: EditElement | null = el; e; e = e.parentElement) {
@@ -256,10 +272,18 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     return el.getAttribute("id") ?? classesOf(el)[0] ?? (text === "" ? el.tagName.toLowerCase() : text.slice(0, 40));
   };
   const sourceOf = (): SourceApi | undefined => (stamp ? win.__unframedSource : undefined);
-  const screenFields = (el: EditElement, deep = false): { path?: string; name?: string; className?: string | null; owner?: string | null; source?: unknown } => {
+  const screenFields = (el: EditElement, deep = false): { path?: string; name?: string; className?: string | null; owner?: string | null; instance?: string | null; slot?: string | null; source?: unknown } => {
     if (!stamp) return {};
     const source = sourceOf();
-    return { path: pathOf(el), name: nameOf(el), className: el.getAttribute("class"), owner: source?.owner(el) ?? null, ...(deep && source !== undefined ? { source: source.describe(el) } : {}) };
+    return {
+      path: pathOf(el),
+      name: nameOf(el),
+      className: el.getAttribute("class"),
+      owner: source?.owner(el) ?? null,
+      instance: source?.instance?.(el) ?? null,
+      slot: el.getAttribute("data-slot"),
+      ...(deep && source !== undefined ? { source: source.describe(el) } : {}),
+    };
   };
   const levelsOf = (el: EditElement): Array<{ id: string | null; component: string | null }> | undefined => {
     const source = sourceOf();
@@ -423,6 +447,55 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     return el;
   };
 
+  const shownBox = (el: EditElement): boolean => {
+    const box = boxOf(el);
+    return box.w > 0 || box.h > 0;
+  };
+  const px = (value: string): number => {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  const linesOf = (el: EditElement): EditBox[] => {
+    if (!textOnly(el) || !doc.createRange) return [];
+    const range = doc.createRange() as unknown as { selectNodeContents(node: EditElement): void; getClientRects?(): ArrayLike<{ left: number; top: number; width: number; height: number }> };
+    range.selectNodeContents(el);
+    if (typeof range.getClientRects !== "function") return [];
+    return Array.from(range.getClientRects())
+      .filter((rect) => rect.width > 0 && rect.height > 0)
+      .map((rect) => ({ x: rect.left, y: rect.top, w: rect.width, h: rect.height }));
+  };
+  const layoutOf = (el: EditElement) => {
+    const style = win.getComputedStyle(el);
+    const read = (name: string) => style.getPropertyValue(name);
+    const parent = el.parentElement;
+    const parentStyle = parent === null || parent === doc.body ? null : win.getComputedStyle(parent);
+    return {
+      display: read("display"),
+      direction: read("flex-direction"),
+      wrap: read("flex-wrap"),
+      position: read("position"),
+      gap: { row: px(read("row-gap")), column: px(read("column-gap")) },
+      padding: [px(read("padding-top")), px(read("padding-right")), px(read("padding-bottom")), px(read("padding-left"))],
+      radius: [px(read("border-top-left-radius")), px(read("border-top-right-radius")), px(read("border-bottom-right-radius")), px(read("border-bottom-left-radius"))],
+      children: Array.from(el.children)
+        .filter((child) => pickable(child) && shownBox(child))
+        .map((child) => ({ id: validId(child), box: boxOf(child) })),
+      parent:
+        parent === null || parent === doc.body || !pickable(parent)
+          ? null
+          : {
+              id: validId(parent),
+              box: boxOf(parent),
+              display: parentStyle?.getPropertyValue("display") ?? "",
+              direction: parentStyle?.getPropertyValue("flex-direction") ?? "",
+              siblings: Array.from(parent.children)
+                .filter((child) => pickable(child) && shownBox(child))
+                .map((child) => ({ id: validId(child), box: boxOf(child) })),
+            },
+      lines: linesOf(el),
+    };
+  };
+
   const schedule = () => {
     if (frame !== null || current().length === 0) return;
     frame = win.requestAnimationFrame(tick);
@@ -436,6 +509,7 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     add(hovered);
     add(external);
     for (const key of selection) add(resolveKey(key));
+    for (const key of watched) add(resolveKey(key));
     return found;
   };
 
@@ -456,6 +530,15 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
       }
       if (moved) post({ type: "unframed:edit:boxes", boxes });
       last = boxes;
+      if (stamp) {
+        const layouts: Record<string, unknown> = {};
+        for (const [key, el] of targets) layouts[key] = layoutOf(el);
+        const shown = JSON.stringify(layouts);
+        if (shown !== lastLayouts) {
+          lastLayouts = shown;
+          post({ type: "unframed:edit:layouts", layouts });
+        }
+      }
       const serialised = JSON.stringify(copies);
       if (serialised !== lastCopies) {
         lastCopies = serialised;
@@ -499,9 +582,23 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     schedule();
   };
 
+  const levelTarget = (el: EditElement, deepest: boolean): EditElement => {
+    const source = sourceOf();
+    if (source === undefined || isCopy(el)) return el;
+    const levels = source.levels(el).map((level) => level.el);
+    if (deepest) return levels[levels.length - 1] ?? el;
+    let at = -1;
+    levels.forEach((level, index) => {
+      const id = level.getAttribute("data-hf-id");
+      if (id !== null && selection.includes(id)) at = index;
+    });
+    return levels[at >= 0 ? at : 0] ?? el;
+  };
+
   const onMove = (event: EditEvent) => {
     if (!listening || editing !== null) return;
-    const el = hoverTarget(targetOf(event));
+    const found = hoverTarget(targetOf(event));
+    const el = found === null ? null : levelTarget(found, event.metaKey === true || event.ctrlKey === true);
     if (el === hovered) return;
     hovered = el;
     post({ type: "unframed:edit:hover", element: el === null ? null : reportOf(el) });
@@ -513,24 +610,131 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     event.preventDefault();
   };
 
-  const onClick = (event: EditEvent) => {
-    if (!listening) return;
-    if (editing !== null && event.target === editing.el) return;
-    event.preventDefault();
-    const el = hoverTarget(targetOf(event));
+  const pickElement = (el: EditElement | null, gesture: { additive: boolean; deepest: boolean; clicks: number }) => {
     if (el !== null && isCopy(el)) picked.set(validId(el)!, el);
-    if (win.focus) win.focus();
     const levels = el === null || isCopy(el) ? undefined : levelsOf(el);
     post({
       type: "unframed:edit:pick",
       element: el === null ? null : reportOf(el, true),
-      additive: event.shiftKey === true,
-      ...(levels === undefined ? {} : { levels, deepest: event.metaKey === true || event.ctrlKey === true, clicks: event.detail ?? 1 }),
+      additive: gesture.additive,
+      ...(levels === undefined ? {} : { levels, deepest: gesture.deepest, clicks: gesture.clicks }),
     });
   };
 
+  let press: { x: number; y: number; key: string; started: boolean } | null = null;
+  let swallowClick = false;
+  const selectedAround = (el: EditElement | null): EditElement | null => {
+    for (let e: EditElement | null = el; e && e !== doc.body; e = e.parentElement) {
+      const id = e.getAttribute("data-hf-id");
+      if (id !== null && selection.includes(id)) return e;
+    }
+    return null;
+  };
+  const onPress = (event: EditEvent) => {
+    block(event);
+    if (!stamp || !listening || editing !== null || (event.button ?? 0) !== 0 || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return;
+    const el = selectedAround(targetOf(event));
+    press = el === null ? null : { x: event.clientX ?? 0, y: event.clientY ?? 0, key: keyOf(el), started: false };
+  };
+  let pointerAt: { x: number; y: number } | null = null;
+  let pointerFrame: unknown = null;
+  const onPointer = (event: EditEvent) => {
+    if (!stamp || !listening) return;
+    pointerAt = { x: event.clientX ?? 0, y: event.clientY ?? 0 };
+    if (pointerFrame !== null) return;
+    pointerFrame = win.requestAnimationFrame(() => {
+      pointerFrame = null;
+      if (pointerAt !== null) post({ type: "unframed:edit:pointer", x: pointerAt.x, y: pointerAt.y });
+    });
+  };
+  const onDrag = (event: EditEvent) => {
+    if (press === null) return;
+    const x = event.clientX ?? 0;
+    const y = event.clientY ?? 0;
+    if (!press.started) {
+      if (Math.abs(x - press.x) + Math.abs(y - press.y) < 4) return;
+      press.started = true;
+      post({ type: "unframed:edit:drag", phase: "start", key: press.key, x: press.x, y: press.y });
+    }
+    post({ type: "unframed:edit:drag", phase: "move", key: press.key, x, y });
+  };
+  const onRelease = (event: EditEvent) => {
+    const held = press;
+    press = null;
+    if (held === null || !held.started) return;
+    swallowClick = true;
+    win.setTimeout(() => {
+      swallowClick = false;
+    }, 0);
+    post({ type: "unframed:edit:drag", phase: "end", key: held.key, x: event.clientX ?? held.x, y: event.clientY ?? held.y });
+  };
+
+  const onClick = (event: EditEvent) => {
+    if (!listening) return;
+    if (editing !== null && event.target === editing.el) return;
+    event.preventDefault();
+    if (swallowClick) {
+      swallowClick = false;
+      return;
+    }
+    const el = hoverTarget(targetOf(event));
+    if (win.focus) win.focus();
+    pickElement(el, { additive: event.shiftKey === true, deepest: event.metaKey === true || event.ctrlKey === true, clicks: event.detail ?? 1 });
+  };
+
+  const WORD = /[\p{L}\p{N}_'’-]/u;
+  const selectWordAt = (el: EditElement, x: number, y: number) => {
+    const caretAt = (doc as unknown as { caretRangeFromPoint?: (x: number, y: number) => { startContainer: { nodeType: number; nodeValue: string | null }; startOffset: number } | null }).caretRangeFromPoint;
+    const caret = typeof caretAt === "function" ? caretAt.call(doc, x, y) : null;
+    const node = caret?.startContainer;
+    const selected = win.getSelection?.();
+    if (caret === null || caret === undefined || node === undefined || node.nodeType !== 3 || !doc.createRange || !selected || !Array.from(el.childNodes).includes(node as never)) {
+      selectText(el, false);
+      return;
+    }
+    const text = node.nodeValue ?? "";
+    let start = caret.startOffset;
+    let end = start;
+    while (start > 0 && WORD.test(text.charAt(start - 1))) start--;
+    while (end < text.length && WORD.test(text.charAt(end))) end++;
+    const range = doc.createRange() as unknown as { setStart(node: unknown, offset: number): void; setEnd(node: unknown, offset: number): void };
+    range.setStart(node, start);
+    range.setEnd(node, end);
+    selected.removeAllRanges();
+    selected.addRange(range);
+  };
+  const beginInline = (el: EditElement, x: number, y: number) => {
+    const id = validId(el);
+    if (id === null) return;
+    const nodes = Array.from(el.childNodes) as unknown as Array<{ nodeType: number; nodeValue: string | null }>;
+    const only = nodes.length === 1 && nodes[0]!.nodeType === 3 ? nodes[0]! : null;
+    touch(el, "text", () => {
+      const value = only === null ? el.textContent : only.nodeValue;
+      return () => {
+        if (only === null) el.textContent = value;
+        else only.nodeValue = value;
+      };
+    });
+    editing = { el, id, original: el.textContent };
+    el.setAttribute("contenteditable", "plaintext-only");
+    if (el.addEventListener) el.addEventListener("blur", onBlur);
+    if (el.focus) el.focus();
+    selectWordAt(el, x, y);
+    post({ type: "unframed:edit:textStart", id, inline: true });
+  };
+
   const onDoubleClick = (event: EditEvent) => {
-    if (!listening || editing !== null || sourceOf() !== undefined) return;
+    if (!listening || editing !== null) return;
+    if (stamp) {
+      const el = hoverTarget(event.target);
+      const id = el === null ? null : el.getAttribute("data-hf-id");
+      if (el === null || id === null || !selection.includes(id) || !textOnly(el)) return;
+      event.preventDefault();
+      if (win.focus) win.focus();
+      beginInline(el, event.clientX ?? 0, event.clientY ?? 0);
+      return;
+    }
+    if (sourceOf() !== undefined) return;
     const el = hoverTarget(event.target);
     const id = el === null ? null : validId(el);
     if (el === null || id === null || !textOnly(el)) return;
@@ -628,7 +832,12 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
       return;
     }
     if (editing !== null) {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && stamp) {
+        event.preventDefault();
+        const el = editing.el;
+        endEdit(true);
+        if (el.blur) el.blur();
+      } else if (event.key === "Escape") {
         event.preventDefault();
         editing.el.textContent = editing.original;
         endEdit(false);
@@ -644,15 +853,21 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     event.preventDefault();
     const undo = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z";
     const transport = win.__timelines !== undefined && TRANSPORT_KEYS.includes(event.key);
-    if (KEYS_FORWARDED.includes(event.key) || event.key === "Enter" || undo || transport) {
-      post({ type: "unframed:edit:key", key: event.key, shift: event.shiftKey === true, meta: event.metaKey === true, ctrl: event.ctrlKey === true });
+    if (stamp || KEYS_FORWARDED.includes(event.key) || event.key === "Enter" || undo || transport) {
+      post({ type: "unframed:edit:key", key: event.key, shift: event.shiftKey === true, meta: event.metaKey === true, ctrl: event.ctrlKey === true, alt: event.altKey === true });
     }
+  };
+  const onKeyUp = (event: EditEvent) => {
+    if (stamp && listening && editing === null && event.key === "Alt") post({ type: "unframed:edit:keyup", key: event.key });
   };
 
   const LISTENERS: Array<[string, (event: EditEvent) => void]> = [
     ["pointermove", onMove],
+    ["pointermove", onDrag],
+    ["pointermove", onPointer],
+    ["pointerup", onRelease],
     ["mousedown", block],
-    ["pointerdown", block],
+    ["pointerdown", onPress],
     ["dragstart", block],
     ["submit", block],
     ["click", onClick],
@@ -666,6 +881,7 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
       win.clearTimeout(pendingText.timer);
       pendingText = null;
     }
+    if (!on) press = null;
     for (const [type, handler] of LISTENERS) {
       if (on) doc.addEventListener(type, handler, true);
       else doc.removeEventListener(type, handler, true);
@@ -1000,6 +1216,45 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
     return after === before && after !== probe.style.getPropertyValue(property);
   };
 
+  const clones = new Map<string, EditElement>();
+  const dropClone = (key: string) => {
+    clones.get(key)?.remove?.();
+    clones.delete(key);
+  };
+  const cloneOf = (el: EditElement): EditElement => {
+    const copy = el.cloneNode?.(true) ?? doc.createElement(el.tagName.toLowerCase());
+    copy.removeAttribute("data-hf-id");
+    for (const inner of Array.from(copy.querySelectorAll?.("[data-hf-id]") ?? [])) inner.removeAttribute("data-hf-id");
+    copy.setAttribute("data-uf-clone", "");
+    return copy;
+  };
+  const siblingsOf = (el: EditElement): EditElement[] =>
+    el.parentElement === null ? [] : Array.from(el.parentElement.children).filter((child) => pickable(child) && child.getAttribute("data-uf-clone") === null);
+  const moveTo = (el: EditElement, to: number) => {
+    const parent = el.parentElement;
+    const list = siblingsOf(el);
+    if (parent === null || !list.includes(el)) return;
+    const order = list.filter((child) => child !== el);
+    order.splice(Math.max(0, Math.min(order.length, Math.round(to))), 0, el);
+    if (/flex|grid/.test(win.getComputedStyle(parent).getPropertyValue("display"))) {
+      order.forEach((child, index) => {
+        touchStyle(child, "order");
+        child.style.setProperty("order", String(index));
+      });
+      return;
+    }
+    const key = validId(el) + ":move";
+    dropClone(key);
+    touchStyle(el, "display");
+    el.style.setProperty("display", "none", "important");
+    const copy = cloneOf(el);
+    const next = order[order.indexOf(el) + 1];
+    const after = list[list.length - 1]!;
+    parent.insertBefore?.(copy, next ?? after.nextSibling ?? null);
+    clones.set(key, copy);
+    touch(el, "clone:move", () => () => dropClone(key));
+  };
+
   const applyPatch = (patch: Record<string, unknown>, flags: Map<EditElement, boolean>) => {
     const el = typeof patch.elementId === "string" ? byId(patch.elementId) : null;
     if (el === null) return;
@@ -1038,6 +1293,35 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
           el.style.removeProperty("display");
         }
       }
+      flags.set(el, flags.get(el) === true);
+    } else if (stamp && patch.type === "move" && typeof patch.to === "number") {
+      moveTo(el, patch.to);
+      flags.set(el, flags.get(el) === true);
+    } else if (stamp && patch.type === "duplicate") {
+      const key = validId(el) + ":duplicate";
+      dropClone(key);
+      const copy = cloneOf(el);
+      el.parentElement?.insertBefore?.(copy, el.nextSibling ?? null);
+      clones.set(key, copy);
+      touch(el, "clone:duplicate", () => () => dropClone(key));
+      flags.set(el, flags.get(el) === true);
+    } else if (stamp && patch.type === "remove") {
+      touchStyle(el, "display");
+      el.style.setProperty("display", "none", "important");
+      flags.set(el, flags.get(el) === true);
+    } else if (stamp && patch.type === "wrap") {
+      const key = validId(el) + ":wrap";
+      dropClone(key);
+      const wrapper = doc.createElement("div");
+      wrapper.setAttribute("data-uf-clone", "");
+      wrapper.style.setProperty("display", "flex");
+      wrapper.style.setProperty("flex-direction", "column");
+      wrapper.insertBefore?.(cloneOf(el), null);
+      el.parentElement?.insertBefore?.(wrapper, el);
+      clones.set(key, wrapper);
+      touchStyle(el, "display");
+      el.style.setProperty("display", "none", "important");
+      touch(el, "clone:wrap", () => () => dropClone(key));
       flags.set(el, flags.get(el) === true);
     } else if (patch.type === "attribute" && typeof patch.name === "string") {
       touchAttribute(el, patch.name);
@@ -1160,12 +1444,20 @@ export function installEditBridge(win: EditWindow, properties: readonly string[]
       if (held !== null) replay(held.keys);
     } else if (type === "unframed:edit:tree") {
       post({ type: "unframed:edit:tree", nodes: Array.from(doc.body.children).filter(pickable).map(treeOf), declaration: declarationOf() });
+    } else if (type === "unframed:edit:watch") {
+      watched = Array.isArray(data.ids) ? data.ids.filter((id): id is string => typeof id === "string") : [];
+      last = {};
+      schedule();
+    } else if (type === "unframed:edit:pickAt" && typeof data.x === "number" && typeof data.y === "number") {
+      if (!listening) return;
+      pickElement(hoverTarget(doc.elementFromPoint(data.x, data.y)), { additive: data.additive === true, deepest: data.deepest === true, clicks: typeof data.clicks === "number" ? data.clicks : 1 });
     } else if (type === "unframed:edit:hitTest" && typeof data.x === "number" && typeof data.y === "number") {
       post({ type: "unframed:edit:hit", ...hitAt(data.x, data.y) });
     }
   });
 
   doc.addEventListener("keydown", onKey, true);
+  doc.addEventListener("keyup", onKeyUp, true);
   if (!stamp || typeof win.unframedEditPeer === "string") post({ type: "unframed:edit:ready" });
 }
 

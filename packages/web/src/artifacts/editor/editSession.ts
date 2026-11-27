@@ -11,15 +11,16 @@ import {
   addDraft,
   checkResolved,
   withResolved,
-  addScreenOverride,
   draftOf,
   pickTarget,
   screenOverrideOf,
   screenSourceTree,
-  undoScreenOverride,
+  elementKind,
+  structuralDraftOf,
+  type DraftNeighbour,
+  type StructuralEdit,
   withoutEdit,
   STRUCTURAL_PROPERTY,
-  structuralDraftOf,
   type EditorKind,
   type ScreenOverride,
   type DraftChange,
@@ -27,13 +28,12 @@ import {
   type DraftScope,
   type ResolvedElement,
   type Burst,
+  type TailwindToken,
   type ComponentDeclaration,
   type Measured,
   type EditBox,
   type FieldOwner,
   type Kit,
-  type TailwindToken,
-  type StructuralEdit,
 } from "@unframed/domain";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CanvasDoc } from "../../canvas/doc.ts";
@@ -72,10 +72,25 @@ export interface EditReport {
   readonly name?: string;
   readonly className?: string | null;
   readonly owner?: string | null;
+  readonly instance?: string | null;
+  readonly slot?: string | null;
   readonly source?: ElementSource | null;
 }
 
 export type ResolvedSource = ResolvedElement;
+
+export interface StructuralOverride {
+  readonly structural: { readonly elementId: string; readonly change: DraftChange; readonly patch: Readonly<Record<string, unknown>> };
+}
+
+export type SessionStep = ScreenOverride | StructuralOverride;
+
+export type StructureCommand = { readonly kind: "duplicate" | "delete" | "wrap" } | { readonly kind: "move"; readonly by: 1 | -1 } | { readonly kind: "moveTo"; readonly to: number };
+
+const isOverride = (step: SessionStep): step is ScreenOverride => "edit" in step;
+
+const sameEdit = (a: ScreenOverride["edit"], b: ScreenOverride["edit"]): boolean =>
+  a.elementId === b.elementId && a.type === b.type && (a.type !== "style" || (b.type === "style" && a.property === b.property));
 export type ElementSource = Omit<ResolvedElement, "source">;
 
 export interface MeasureTarget {
@@ -110,6 +125,8 @@ export interface LiveNode {
   readonly selector: string;
   readonly tag: string;
   readonly name?: string;
+  readonly instance?: string | null;
+  readonly slot?: string | null;
   readonly path?: string;
   readonly children: readonly LiveNode[];
 }
@@ -156,7 +173,11 @@ export interface EditSession {
   readonly hoverLayer: (id: string | null) => void;
   readonly layerHover: string | null;
   readonly startText: (id: string) => void;
+  readonly pickAt: (at: { readonly x: number; readonly y: number }, gesture?: { readonly clicks?: number; readonly deepest?: boolean; readonly additive?: boolean }) => void;
   readonly requestLive: () => void;
+  readonly watch: (ids: readonly string[]) => void;
+  readonly restoreOverrides: (list: readonly SessionStep[]) => void;
+  readonly structure: (command: StructureCommand, ids: readonly string[]) => Promise<void>;
   readonly setLocked: (locked: readonly string[]) => void;
   readonly preparing: boolean;
   readonly prepareError: string | undefined;
@@ -166,7 +187,7 @@ export interface EditSession {
   readonly patchDial: (path: string, value: unknown) => void;
   readonly releaseDials: (values: Readonly<Record<string, unknown>>) => void;
   readonly overridden: Readonly<Record<string, boolean>>;
-  readonly overrides: readonly ScreenOverride[];
+  readonly overrides: readonly SessionStep[];
   readonly drafts: readonly DraftChange[];
   readonly resolved: Readonly<Record<string, ResolvedSource | null>>;
   readonly resolve: (stamp: string, fresh?: boolean) => Promise<ResolvedSource | null>;
@@ -176,7 +197,7 @@ export interface EditSession {
   readonly patchStructure: (elementId: string, edit: StructuralEdit) => void;
   readonly scopeDraft: (id: string, scope: DraftScope) => void;
   readonly showDrafts: (shown: boolean) => void;
-  readonly patch: (edit: SourceEdit, token?: TailwindToken) => void;
+  readonly patch: (edit: SourceEdit, snapped?: TailwindToken) => void;
   readonly patchTween: (edit: SourceEdit, frame: TweenPatch) => void;
   readonly previewTween: (frame: TweenPatch) => void;
   readonly previewEdits: (edits: readonly SourceEdit[] | null) => void;
@@ -225,13 +246,13 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
   const [settled, setSettled] = useState<{ base: string; result?: string; edits: readonly SourceEdit[] } | undefined>(undefined);
   const [held, setHeld] = useState<Readonly<Record<string, unknown>>>({});
   const [overridden, setOverridden] = useState<Readonly<Record<string, boolean>>>({});
-  const [overrides, setOverridesState] = useState<readonly ScreenOverride[]>([]);
-  const overridesRef = useRef<readonly ScreenOverride[]>([]);
+  const [overrides, setOverridesState] = useState<readonly SessionStep[]>([]);
+  const overridesRef = useRef<readonly SessionStep[]>([]);
+  const duplicates = useRef(0);
   const undoEmptyTo = useRef(onUndoEmpty);
   undoEmptyTo.current = onUndoEmpty;
   const [drafts, setDraftsState] = useState<readonly DraftChange[]>([]);
   const draftFor = useRef(new Map<SourceEdit, DraftChange>());
-  const structural = useRef<readonly DraftChange[]>([]);
   const scopes = useRef(new Map<string, DraftScope>());
   const [resolved, setResolved] = useState<Readonly<Record<string, ResolvedSource | null>>>({});
   const resolvedRef = useRef<Readonly<Record<string, ResolvedSource | null>>>({});
@@ -274,18 +295,19 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
   const withSource = (element: DraftElement): DraftElement => (element.source !== null ? element : withResolved(element, resolvedRef.current[element.stamp]));
   const deriveDrafts = () => {
     let list: DraftChange[] = [];
-    for (const override of overridesRef.current) {
-      const draft = draftFor.current.get(override.edit);
+    for (const step of overridesRef.current) {
+      const draft = draftOfStep(step);
       if (draft !== undefined) list = addDraft(list, draft);
     }
-    list = [...list, ...structural.current];
     setDraftsState(list.map((draft) => ({ ...draft, scope: scopes.current.get(draft.id) ?? draft.scope, element: withSource(draft.element) })));
   };
-  const setOverrides = (next: readonly ScreenOverride[]) => {
+  const draftOfStep = (step: SessionStep): DraftChange | undefined => (isOverride(step) ? draftFor.current.get(step.edit) : step.structural.change);
+  const editsOf = (list: readonly SessionStep[]) => list.flatMap((step) => (isOverride(step) ? [step.edit] : []));
+  const setOverrides = (next: readonly SessionStep[]) => {
     if (next === overridesRef.current || (next.length === 0 && overridesRef.current.length === 0)) return;
     overridesRef.current = next;
     setOverridesState(next);
-    setPending(next.map((override) => override.edit));
+    setPending(editsOf(next));
     deriveDrafts();
   };
   const ask = <T,>(message: Record<string, unknown>, timeout: number, fallback: T): Promise<T> =>
@@ -356,9 +378,9 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
       selfMapped: source?.selfMapped ?? false,
     });
   };
-  const repaint = (list: readonly ScreenOverride[]) => {
+  const repaint = (list: readonly SessionStep[]) => {
     post({ type: "unframed:edit:reset" });
-    const patches = list.flatMap((override) => framePatchesOf(override.edit, null));
+    const patches = list.flatMap((step) => (isOverride(step) ? framePatchesOf(step.edit, null) : [step.structural.patch]));
     if (patches.length > 0) post({ type: "unframed:edit:patch", patches });
   };
 
@@ -489,10 +511,6 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
     (quiet = false) => {
       window.clearTimeout(timerRef.current);
       timerRef.current = undefined;
-      if (screen && structural.current.length > 0) {
-        structural.current = [];
-        deriveDrafts();
-      }
       if (screen && overridesRef.current.length > 0) {
         setOverrides([]);
         if (!quiet) post({ type: "unframed:edit:reset" });
@@ -510,7 +528,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
   );
 
   const collect = useCallback(
-    (edit: SourceEdit, showInFrame: boolean, token?: TailwindToken) => {
+    (edit: SourceEdit, showInFrame: boolean, snapped?: TailwindToken) => {
       if (screen) {
         const id = "elementId" in edit ? edit.elementId : undefined;
         const known = id === undefined ? undefined : reportsRef.current[id] ?? liveNodeOf(liveRef.current, id);
@@ -524,10 +542,11 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
           className: report?.className ?? null,
           computed: report?.computed ?? {},
           text: report?.text ?? null,
-        }, token);
-        const earlier = draft === undefined ? undefined : overridesRef.current.map((each) => draftFor.current.get(each.edit)).find((each) => each?.id === draft.id);
-        if (draft !== undefined) draftFor.current.set(edit, earlier === undefined ? draft : { ...draft, before: earlier.before, shownBefore: earlier.shownBefore });
-        setOverrides(addScreenOverride(overridesRef.current, override));
+        }, snapped);
+        const replaced = overridesRef.current.find((step): step is ScreenOverride => isOverride(step) && sameEdit(step.edit, override.edit));
+        const earlier = replaced === undefined ? undefined : draftFor.current.get(replaced.edit);
+        if (draft !== undefined) draftFor.current.set(edit, earlier === undefined ? draft : { ...draft, before: draft.kind === earlier.kind ? earlier.before : draft.before, shownBefore: earlier.shownBefore });
+        setOverrides([...overridesRef.current.filter((step) => !isOverride(step) || !sameEdit(step.edit, override.edit)), override]);
         const patches = framePatchesOf(edit, null);
         if (showInFrame && patches.length > 0) post({ type: "unframed:edit:patch", patches });
         return;
@@ -567,7 +586,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
     [],
   );
 
-  const patch = useCallback((edit: SourceEdit, token?: TailwindToken) => collect(edit, true, token), [collect]);
+  const patch = useCallback((edit: SourceEdit, snapped?: TailwindToken) => collect(edit, true, snapped), [collect]);
 
   const patchTween = useCallback(
     (edit: SourceEdit, frame: TweenPatch) => {
@@ -587,6 +606,60 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
     },
     [post],
   );
+
+  const neighbourOf = async (id: string): Promise<DraftNeighbour> => {
+    const node = liveNodeOf(liveRef.current, id);
+    const element = treeRef.current?.elements.find((candidate) => candidate.id === id);
+    const tag = node?.tag ?? element?.tag ?? "element";
+    const found = await resolve(id);
+    const label = node?.instance ?? node?.slot ?? elementKind(tag);
+    return { label, tag: found?.tag ?? tag, source: found?.source ?? null };
+  };
+
+  const structure = async (command: StructureCommand, ids: readonly string[]): Promise<void> => {
+    if (!screen) return;
+    for (const id of ids) {
+      const elements = treeRef.current?.elements ?? [];
+      const self = elements.find((element) => element.id === id);
+      const known = reportsRef.current[id] ?? liveNodeOf(liveRef.current, id);
+      if (self === undefined || known === undefined) continue;
+      const siblings = elements.filter((element) => element.parent === self.parent).sort((a, b) => a.index - b.index);
+      const from = siblings.findIndex((element) => element.id === id);
+      const parentId = self.parent;
+      const parent = parentId === null ? null : await neighbourOf(parentId);
+      await resolve(id);
+      const element = draftElementOf(id, known);
+      let edit: StructuralEdit;
+      let patch: Record<string, unknown>;
+      let key: string;
+      if (command.kind === "move" || command.kind === "moveTo") {
+        const earlier = [...overridesRef.current].reverse().find((step): step is StructuralOverride => !isOverride(step) && step.structural.elementId === id && step.structural.change.kind === "reorder");
+        const current = earlier?.structural.change.move?.to ?? from;
+        const to = Math.max(0, Math.min(siblings.length - 1, command.kind === "move" ? current + command.by : command.to));
+        if (to === current || siblings.length < 2) continue;
+        edit = { type: "reorder", from, to, siblings: await Promise.all(siblings.map((sibling) => neighbourOf(sibling.id))), parent };
+        patch = { type: "move", elementId: id, to };
+        key = "#order";
+      } else if (command.kind === "duplicate") {
+        duplicates.current += 1;
+        edit = { type: "duplicate", parent };
+        patch = { type: "duplicate", elementId: id };
+        key = `#duplicate:${duplicates.current}`;
+      } else if (command.kind === "delete") {
+        edit = { type: "delete", parent };
+        patch = { type: "remove", elementId: id };
+        key = "#delete";
+      } else {
+        edit = { type: "wrap" };
+        patch = { type: "wrap", elementId: id };
+        key = "#wrap";
+      }
+      const change = structuralDraftOf(edit, { id: `${id}:${key}`, element });
+      const step: StructuralOverride = { structural: { elementId: id, change, patch } };
+      setOverrides([...overridesRef.current.filter((each) => isOverride(each) || command.kind === "duplicate" || each.structural.elementId !== id || each.structural.change.kind !== change.kind), step]);
+      post({ type: "unframed:edit:patch", patches: [patch] });
+    }
+  };
 
   const lockedInside = (id: string): boolean => {
     for (let current: string | null = id; current !== null; ) {
@@ -679,7 +752,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
         undoEmptyTo.current?.();
         return;
       }
-      const next = undoScreenOverride(overridesRef.current);
+      const next = overridesRef.current.slice(0, -1);
       setOverrides(next);
       repaint(next);
       return;
@@ -797,10 +870,10 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
         for (const element of judged) {
           const edit = element.overridden === true ? lastEdit.current[element.id!] : undefined;
           if (edit !== undefined) burstRef.current = withoutEdit(burstRef.current, edit);
-          if (edit !== undefined && screen) setOverrides(overridesRef.current.filter((override) => override.edit !== edit));
+          if (edit !== undefined && screen) setOverrides(overridesRef.current.filter((step) => !isOverride(step) || step.edit !== edit));
         }
         settle();
-        setPending(screen ? overridesRef.current.map((override) => override.edit) : burstEdits(burstRef.current));
+        setPending(screen ? editsOf(overridesRef.current) : burstEdits(burstRef.current));
         setHeld(heldNow());
         return;
       }
@@ -852,7 +925,8 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
       }
       case "unframed:edit:textStart": {
         const id = typeof message.id === "string" ? message.id : null;
-        if (id !== null) startText(id);
+        if (id !== null && screen && message.inline === true) textPending.current = id;
+        else if (id !== null) startText(id);
         return;
       }
       case "unframed:edit:text": {
@@ -965,6 +1039,7 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
     tween,
     setTween,
     startText,
+    pickAt: (at, gesture = {}) => post({ type: "unframed:edit:pickAt", x: at.x, y: at.y, clicks: gesture.clicks ?? 1, deepest: gesture.deepest === true, additive: gesture.additive === true }),
     selectMatching,
     hovered,
     reports,
@@ -978,6 +1053,12 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
     hoverLayer,
     layerHover,
     requestLive,
+    watch: (ids) => post({ type: "unframed:edit:watch", ids }),
+    structure,
+    restoreOverrides: (list) => {
+      setOverrides(list);
+      repaint(list);
+    },
     setLocked,
     preparing,
     prepareError,
@@ -997,20 +1078,15 @@ export const useEditSession = ({ doc, engine, project, shapeId, kind, file, lock
       const known = reportsRef.current[elementId] ?? liveNodeOf(liveRef.current, elementId);
       if (!screen || known === undefined) return;
       const id = `${elementId}:${STRUCTURAL_PROPERTY[edit.type]}`;
-      const earlier = structural.current.find((draft) => draft.id === id);
+      const earlier = overridesRef.current.find((step): step is StructuralOverride => !isOverride(step) && step.structural.change.id === id)?.structural.change;
       const merged: StructuralEdit =
         edit.type === "props" && earlier?.kind === "props" ? { type: "props", props: { ...earlier.props, ...edit.props }, before: { ...edit.before, ...earlier.propsBefore } } : edit;
-      const draft = structuralDraftOf(merged, { id, element: draftElementOf(elementId, known) });
-      structural.current = [...structural.current.filter((each) => each.id !== id), draft];
-      deriveDrafts();
+      const change = structuralDraftOf(merged, { id, element: draftElementOf(elementId, known) });
+      const step: StructuralOverride = { structural: { elementId, change, patch: { type: edit.type, elementId } } };
+      setOverrides([...overridesRef.current.filter((each) => isOverride(each) || each.structural.change.id !== id), step]);
     },
     discardDraft: (id: string) => {
-      if (structural.current.some((draft) => draft.id === id)) {
-        structural.current = structural.current.filter((draft) => draft.id !== id);
-        deriveDrafts();
-        return;
-      }
-      const next = overridesRef.current.filter((override) => draftFor.current.get(override.edit)?.id !== id);
+      const next = overridesRef.current.filter((step) => draftOfStep(step)?.id !== id);
       if (next.length === overridesRef.current.length) return;
       setOverrides(next);
       repaint(next);

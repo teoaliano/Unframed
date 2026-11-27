@@ -2,9 +2,10 @@ import type { ScreenMock, ScreenShapeProps, ScreenStep } from "@unframed/contrac
 import { pictureKeyOf, picturePartsUrl, pictureUrl, screenLabel, tierOf } from "@unframed/domain";
 import { useEffect, useRef, useState } from "react";
 import { BaseBoxShapeUtil, HTMLContainer, resizeBox, T, useEditor, useValue, type Editor, type RecordProps, type TLResizeInfo, type TLShape, type TLShapeId } from "tldraw";
-import { isInteractive } from "../../artifacts/state.ts";
+import { artifactsOf, isInteractive } from "../../artifacts/state.ts";
+import { designHooksOf, designOf, enterDesign } from "../../repositories/designMode.ts";
 import { useCanvasProject } from "../../context.ts";
-import { useFeature } from "../../features.ts";
+import { featureOn, useFeature } from "../../features.ts";
 import { noteRender } from "../../fps/renders.ts";
 import { mountPageCopy, preparePageCopy } from "../../repositories/pageCopy.ts";
 import { schedulePageBuild } from "../../repositories/pageBuilds.ts";
@@ -100,6 +101,11 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
     editor.store.put([{ ...current, props: next } as TLShape]);
     return true;
   };
+  const designing = useValue("screen design mode", () => designOf(project).get()?.screen === shape.id, [project, shape.id]);
+  const design = useValue("screen design hooks", () => {
+    const hooks = designHooksOf(project).get();
+    return hooks?.screen === shape.id ? hooks : undefined;
+  }, [project, shape.id]);
   const status = useScreenSlot(project, shape.id, {
     element,
     clip: () => (canvas.current ??= editor.getContainer().querySelector(".tl-canvas")),
@@ -110,6 +116,11 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
     selected,
     editor: false,
     write,
+    edit: design?.edit,
+    design: designing,
+    onDoubleClick: (at) => {
+      if (designable() && editor.getSelectedShapeIds().length === 1 && editor.getSelectedShapeIds()[0] === shape.id) enterDesign(project, shape.id, at);
+    },
   });
   useEffect(
     () => () => {
@@ -153,6 +164,8 @@ const ScreenCard = ({ shape }: { readonly shape: ScreenShape }) => {
   );
 };
 
+const designable = (): boolean => featureOn("repositories") && featureOn("element-editing");
+
 export const keepScreensUpright = (editor: Editor): (() => void) =>
   editor.sideEffects.registerBeforeChangeHandler("shape", (_, next) => (next.type === "screen" && next.rotation !== 0 ? { ...next, rotation: 0 } : next));
 
@@ -187,6 +200,13 @@ export class ScreenShapeUtil extends BaseBoxShapeUtil<ScreenShape> {
   }
 
   override onDoubleClick(shape: ScreenShape) {
+    if (designable()) {
+      const project = artifactsOf(this.editor).project.get();
+      const point = this.editor.inputs.getCurrentPagePoint();
+      const local = this.editor.getPointInShapeSpace(shape.id, point);
+      enterDesign(project, shape.id, { x: local.x, y: local.y });
+      return { id: shape.id, type: shape.type };
+    }
     currentSlots().openArtifact?.(this.editor, shape.id);
     return { id: shape.id, type: shape.type };
   }

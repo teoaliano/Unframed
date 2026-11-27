@@ -27,6 +27,7 @@ import { NodeRunButtons, selectionNodeCount } from "../nodes/NodeChrome.tsx";
 import { selectionTarget, useDesignTarget } from "../canvas/designTarget.ts";
 import { StyleRow } from "../canvas/StyleRow.tsx";
 import { ScreenActions } from "../repositories/ScreenActions.tsx";
+import { designDraftsOf } from "../repositories/designMode.ts";
 
 const messageOf = (error: unknown) => (error instanceof UnframedError || error instanceof Error ? error.message : String(error));
 
@@ -390,7 +391,7 @@ export const SelectionToolbar = () => {
   const project = useCanvasProject();
   const { agentTray } = useSlots();
   const composer = useValue("composer", () => composerState(editor).get(), [editor]);
-  const hidden = useValue("toolbar hidden", () => hiddenByGesture(editor) || renamingShape(editor).get() !== undefined, [editor]);
+  const hidden = useValue("toolbar hidden", () => hiddenByGesture(editor) || renamingShape(editor).get() !== undefined || designDraftsOf(project).get() > 0, [editor, project]);
   const selectionKey = useValue("selection", () => editor.getSelectedShapeIds().join(" "), [editor]);
   const expanded = composer.mode !== "bar";
 

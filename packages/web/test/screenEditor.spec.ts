@@ -35,7 +35,7 @@ const openFromToolbar = async (page: Page, screen: { readonly id: string; readon
   await expect(editor(page)).toBeVisible();
 };
 
-test("a Screen opens in the editor from its toolbar and by double-click, live through the proxy, and its tab comes back after a reload", async ({ page }) => {
+test("a Screen opens in the editor from its toolbar, live through the proxy, and its tab comes back after a reload; a double-click enters design mode instead", async ({ page }) => {
   await withRepository(page, {}, async (engine, project) => {
     const first = await onRoute(page, engine, project, "/app");
     const title = `${first.props.title} · /app`;
@@ -59,17 +59,11 @@ test("a Screen opens in the editor from its toolbar and by double-click, live th
     await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).not.toBe("IFRAME");
     await page.keyboard.press("Escape");
     const at = await centre(shapeOnScreen(page, first.id));
-    const probe = () =>
-      page.evaluate(({ x, y, id }) => {
-        const hit = document.elementFromPoint(x, y);
-        const card = document.querySelector(`[data-shape-id="${id}"] [data-testid=screen]`);
-        const host = document.querySelector(`[data-screen-of="${id}"]`) as HTMLElement | null;
-        return JSON.stringify({ hit: hit?.tagName, hitScreenOf: hit?.closest("[data-screen-of]")?.getAttribute("data-screen-of") ?? null, hitClass: (hit as HTMLElement | null)?.className?.toString().slice(0, 80), active: document.activeElement?.tagName, interactive: host?.querySelector("iframe")?.getAttribute("data-interactive") ?? null, hostPointer: host?.style.pointerEvents, layerZ: host?.parentElement?.className, painted: card?.getAttribute("data-painted"), selected: (window as any).__selected ?? null });
-      }, { x: at.x, y: at.y, id: first.id });
-    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
-    const before = await probe();
     await page.mouse.dblclick(at.x, at.y);
-    await expect(editor(page), `before the double-click: ${before}; after: ${await probe()}`).toBeVisible();
+    await expect(page.getByTestId("design-overlay")).toBeAttached({ timeout: 20_000 });
+    await expect(editor(page)).toHaveCount(0);
+    await page.getByRole("button", { name: "Editor", exact: true }).click();
+    await expect(editor(page)).toBeVisible();
     await expect(centreColumn(page).getByTestId("artifact-editor-title")).toHaveText(title);
   });
 });
