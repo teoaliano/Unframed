@@ -4,6 +4,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Instance } from "@unframed/contracts";
 import { describe, expect, it } from "vitest";
+import { decodePng } from "../src/screens/pngScale.ts";
 import { chromeOnMachine as chrome } from "./chrome.ts";
 import { makeRepo, repoEngineEnv } from "./gitRepos.ts";
 import { startEngine, type TestEngine } from "./harness.ts";
@@ -64,6 +65,11 @@ const store = (engine: TestEngine, project: string) => join(engine.dataDir, "out
 const captures = (engine: TestEngine) => engine.stdout().split("\n").filter((line) => line.includes(": captured a picture of ")).length;
 
 const pngSize = (png: Buffer) => ({ width: png.readUInt32BE(16), height: png.readUInt32BE(20) });
+
+const pixelAt = async (png: Buffer, x: number, y: number) => {
+  const { width, channels, data } = await decodePng(png);
+  return Array.from(data.subarray((y * width + x) * channels, (y * width + x) * channels + channels));
+};
 
 describe("Screen pictures", () => {
   it("stores a live copy from screens.capture under the hash of its content, with its parts, and sets the Screen's picture", async () => {
@@ -215,6 +221,20 @@ describe.skipIf(chrome === undefined)("Screen pictures in headless Chrome", () =
     const second = await pictureOf(rpc, project, screen.id, first);
     expect(second).toMatch(KEY);
     expect(second).not.toBe(first);
+  });
+
+  it("keeps what a WebGL canvas drew in the copy, not a black or empty buffer", { timeout: 120_000 }, async () => {
+    const { engine, rpc, project, instance, screen } = await addRepository();
+    await put(rpc, project, [{ ...screen, props: { ...screen.props, route: "/webgl", w: 400, h: 300 } }]);
+    await goLive(rpc, project, instance);
+    const key = await pictureOf(rpc, project, screen.id);
+    const dir = store(engine, project);
+    const html = await readFile(join(dir, `${key}.html`), "utf8");
+    const part = /<img[^>]*src="parts\/([0-9a-f]{40}\.png)"/.exec(html)?.[1];
+    expect(part).toBeDefined();
+    const [r, g, b, a] = await pixelAt(await readFile(join(dir, "parts", part!)), 100, 50);
+    expect({ r, b, a: a ?? 255 }).toEqual({ r: 0, b: 255, a: 255 });
+    expect(Math.abs(g! - 128)).toBeLessThanOrEqual(1);
   });
 
   it("rasterises a live copy from screens.capture with its parts served from the store", { timeout: 120_000 }, async () => {

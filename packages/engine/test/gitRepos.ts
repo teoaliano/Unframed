@@ -130,6 +130,17 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     return res.end("<!doctype html><html><head><title>Page text</title></head><body><h1 id=\\"text\\">" + text.replace(/</g, "&lt;") + "</h1></body></html>");
   }
+  if (url.pathname === "/webgl") {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    return res.end([
+      "<!doctype html><html><head><title>WebGL</title><style>body { margin: 0; background: rgb(255, 255, 255); } canvas.pill { display: block; width: 200px; height: 100px; border-radius: 50px; }</style></head>",
+      "<body><canvas class=\\"pill\\" id=\\"gl\\" width=\\"200\\" height=\\"100\\"></canvas><script>",
+      "var gl = document.getElementById('gl').getContext('webgl', { alpha: false });",
+      "var draw = function () { gl.clearColor(0, 0.5, 1, 1); gl.clear(gl.COLOR_BUFFER_BIT); requestAnimationFrame(draw); };",
+      "requestAnimationFrame(draw);",
+      "</script></body></html>",
+    ].join(""));
+  }
   if (url.pathname === "/logo.png") {
     res.writeHead(200, { "content-type": "image/png" });
     return res.end(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==", "base64"));

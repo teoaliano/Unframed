@@ -595,6 +595,21 @@ export function snapshotBridge(win: any, config: SnapshotConfig, snapshot: typeo
   });
 }
 
+export function readableCanvases(win: any): void {
+  if (win.parent === win && win.navigator?.webdriver !== true) return;
+  const WEBGL = /^(webgl2?|experimental-webgl)$/;
+  for (const name of ["HTMLCanvasElement", "OffscreenCanvas"]) {
+    const proto = win[name]?.prototype;
+    const native = proto?.getContext;
+    if (typeof native !== "function") continue;
+    proto.getContext = function (this: unknown, type: unknown, options?: unknown) {
+      if (typeof type !== "string" || !WEBGL.test(type)) return native.apply(this, arguments as any);
+      const given = options !== null && typeof options === "object" ? options : {};
+      return native.call(this, type, { ...given, preserveDrawingBuffer: true });
+    };
+  }
+}
+
 const patchDocumentCookie = (win: any, rewrite: (cookie: string) => string): void => {
   const proto = win.Document?.prototype;
   const native = proto === undefined ? undefined : Object.getOwnPropertyDescriptor(proto, "cookie");
@@ -610,6 +625,7 @@ const patchDocumentCookie = (win: any, rewrite: (cookie: string) => string): voi
 
 export const screenBridgeSource = (): string =>
   [
+    `(${readableCanvases.toString()})(window);`,
     `(${patchDocumentCookie.toString()})(window, ${crossSiteCookie.toString()});`,
     ...dialsBridgeSource().split("\n").slice(1, -1),
     `(${snapshotBridge.toString()})(window, ${JSON.stringify({ settle: SNAPSHOT_SETTLE_MS, gap: SNAPSHOT_GAP_MS, partMax: SNAPSHOT_PART_MAX_BYTES, totalMax: SNAPSHOT_TOTAL_MAX_BYTES } satisfies SnapshotConfig)}, ${snapshotPage.toString()}, { units: ${inlineViewportUnits.toString()}, urls: ${rewriteCssUrls.toString()} });`,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fontFamilyKey, inlineViewportUnits, rewriteCssUrls, rootSelectors, scopeFontFamilies, screenBridgeSource } from "../src/index.ts";
+import { fontFamilyKey, inlineViewportUnits, readableCanvases, rewriteCssUrls, rootSelectors, scopeFontFamilies, screenBridgeSource } from "../src/index.ts";
 
 describe("viewport units in a page copy", () => {
   it("writes every viewport unit as pixels of the page's own viewport", () => {
@@ -114,6 +114,50 @@ describe("the page copy in the Screen bridge", () => {
     expect(posted.filter((entry) => entry.message.type === "unframed:snapshot")).toEqual([
       { message: { type: "unframed:snapshot", href: "http://127.0.0.1:4101/", final: true, snapshot: { html: "<p>", w: 1, h: 2, parts: [] } }, to: "http://127.0.0.1:8787" },
     ]);
+  });
+});
+
+describe("WebGL canvases in a Screen", () => {
+  const canvasWindow = (framed: boolean, webdriver: boolean) => {
+    const asked: Array<{ type: string; options: unknown }> = [];
+    function Canvas() {}
+    Canvas.prototype.getContext = function (type: string, options?: unknown) {
+      asked.push({ type, options });
+      return { type };
+    };
+    const win: any = { navigator: { webdriver }, HTMLCanvasElement: Canvas };
+    win.parent = framed ? {} : win;
+    return { win, asked, canvas: new (Canvas as any)() };
+  };
+
+  it("keeps the drawing buffer of every WebGL context in a framed Screen, and leaves other contexts alone", () => {
+    const { win, asked, canvas } = canvasWindow(true, false);
+    readableCanvases(win);
+    canvas.getContext("webgl", { alpha: false });
+    canvas.getContext("webgl2");
+    canvas.getContext("experimental-webgl", { preserveDrawingBuffer: false, antialias: true });
+    canvas.getContext("2d", { alpha: false });
+    expect(asked).toEqual([
+      { type: "webgl", options: { alpha: false, preserveDrawingBuffer: true } },
+      { type: "webgl2", options: { preserveDrawingBuffer: true } },
+      { type: "experimental-webgl", options: { preserveDrawingBuffer: true, antialias: true } },
+      { type: "2d", options: { alpha: false } },
+    ]);
+  });
+
+  it("keeps it in a headless capture, and not in the person's own browser tab", () => {
+    const headless = canvasWindow(false, true);
+    readableCanvases(headless.win);
+    headless.canvas.getContext("webgl");
+    expect(headless.asked).toEqual([{ type: "webgl", options: { preserveDrawingBuffer: true } }]);
+    const tab = canvasWindow(false, false);
+    readableCanvases(tab.win);
+    tab.canvas.getContext("webgl");
+    expect(tab.asked).toEqual([{ type: "webgl", options: undefined }]);
+  });
+
+  it("runs first in the bridge, before the app can ask for a context", () => {
+    expect(screenBridgeSource().startsWith(`(${readableCanvases.toString()})(window);`)).toBe(true);
   });
 });
 
