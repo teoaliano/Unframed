@@ -135,3 +135,32 @@ test("Typography shows the text style, picks a size preset, a weight, a font, sc
     prepareReactApp,
   );
 });
+
+test("a component instance shows its props: a dropdown per cva variant with every option, a switch for a boolean, and read-only text, and a pick joins the drafts", async ({ page }) => {
+  await withRepository(
+    page,
+    {},
+    async (engine, project) => {
+      await openReact(page, engine, project);
+      await pick(page, app(page).getByRole("button", { name: "Save" }), { detail: 1 }, /^Button · in Button /);
+      await expect(panels(page).getByTestId("screen-source-component")).toContainText("Button");
+      const props = panels(page).getByRole("region", { name: "Instance" });
+      const variant = props.getByRole("combobox", { name: "variant" });
+      await expect(variant).toHaveText(/ghost/);
+      await variant.click();
+      await expect(page.getByRole("option")).toHaveText(["ghost", "outline", "destructive"]);
+      await page.getByRole("option", { name: "outline" }).click();
+      await expect(variant).toHaveText(/outline/);
+      await expect(props.getByRole("combobox", { name: "size" })).toHaveText(/sm/);
+      await expect(props.getByRole("switch", { name: "pressed" })).not.toBeChecked();
+      await expect(drafts(page)).toHaveText("1 change");
+      await panels(page).getByRole("button", { name: "Changed from ghost · click the dot to discard" }).click();
+      await expect(variant).toHaveText(/ghost/);
+      await expect(drafts(page)).toHaveCount(0);
+
+      await pick(page, app(page).getByRole("heading", { name: "Third" }), { detail: 1 }, /^List item · in Card /);
+      await expect(panels(page).getByRole("region", { name: "Instance" }).locator('[data-prop="title"]')).toContainText('"Third"');
+    },
+    prepareReactApp,
+  );
+});

@@ -11,7 +11,8 @@ import { numberOf as numberText } from "../../design/controls.tsx";
 import { ChangedDot, ScrubField, type FieldChange } from "../../design/fields.tsx";
 import type { EngineConnection } from "../../rpc/engine.ts";
 import type { EditReport, EditSession } from "./editSession.ts";
-import { ScreenHeader } from "./ScreenHeader.tsx";
+import { ScreenHeader, useInspected } from "./ScreenHeader.tsx";
+import { InstanceSection } from "./ScreenInstance.tsx";
 import { TypographySection } from "./ScreenTypography.tsx";
 
 export interface ScreenDesignContext {
@@ -279,9 +280,11 @@ export const ScreenDesign = ({
   const fields = useScreenFields(session, subjects, scale, tokenNames);
   const [first] = subjects;
   const text = subjects.every((subject) => subject.report.text !== null);
+  const inspect = useInspected(session, context);
   return (
     <div className="flex min-h-0 flex-col overflow-auto" data-testid="design-tab" data-screen-design="">
-      <ScreenHeader session={session} context={context} name={name} kind={fields.single ? elementKind(first!.report.tag) : `${subjects.length} elements`} onTell={onTell} />
+      <ScreenHeader inspect={inspect} name={name} kind={fields.single ? elementKind(first!.report.tag) : `${subjects.length} elements`} onTell={onTell} />
+      {inspect.single && <InstanceSection session={session} fields={fields} inspect={inspect} id={first!.id} />}
       {text ? (
         <>
           <TypographySection fields={fields} subjects={subjects} families={session.families} scale={typeScaleOf(scale)} />

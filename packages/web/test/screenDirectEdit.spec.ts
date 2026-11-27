@@ -4,7 +4,7 @@ import type { Page } from "@playwright/test";
 import { ONLY_THIS_ONE } from "@unframed/domain";
 import { expect, test } from "./fixtures.ts";
 import { clickShape } from "./generation.ts";
-import { REACT_APP, prepareReactApp } from "../../engine/test/reactFixture.ts";
+import { REACT_APP, positionOf, prepareReactApp } from "../../engine/test/reactFixture.ts";
 import { putShapes, screenShapes, withRepository } from "./screenHarness.ts";
 import type { TestEngine } from "../../engine/test/engineProcess.ts";
 
@@ -52,8 +52,9 @@ test("a click takes the outermost component, a double-click goes deeper and Cmd-
       await pick(page, heading, { detail: 1 }, /^Header · in Header \d+×48$/);
       await expect(panels(page).getByTestId("screen-source-component")).toContainText("Header");
       await expect(panels(page).getByTestId("screen-source-component")).toContainText("1 instance");
-      await panels(page).getByRole("button", { name: "Code: App.jsx:5" }).click();
-      await expect(page.getByTestId("screen-source-file")).toHaveText("src/App.jsx:5–7");
+      const at = positionOf(REACT_APP, "<header");
+      await panels(page).getByRole("button", { name: `Code: App.jsx:${at.line}` }).click();
+      await expect(page.getByTestId("screen-source-file")).toHaveText(`src/App.jsx:${at.line}–${at.line + 2}`);
       await expect(page.getByTestId("screen-source-span")).toContainText('<header className="flex h-12 items-center pl-3.5 pr-2">');
       await page.keyboard.press("Escape");
       await expect(panels(page).getByRole("spinbutton", { name: "Horizontal padding: pl-3.5 (14) · pr-2 (8)" })).toBeVisible();
@@ -66,7 +67,7 @@ test("a click takes the outermost component, a double-click goes deeper and Cmd-
       await expect(panels(page).getByTestId("screen-source-component")).toContainText("this is 2");
 
       await pick(page, app(page).getByRole("heading", { name: "Third" }), { detail: 1 }, /^List item · in Card /);
-      await expect(panels(page).locator('[data-prop="title"]')).toContainText('"Third"');
+      await expect(panels(page).getByRole("region", { name: "Instance" }).locator('[data-prop="title"]')).toContainText('"Third"');
     },
     prepareReactApp,
   );

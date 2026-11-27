@@ -9,7 +9,8 @@ import App from "./App.jsx";
 createRoot(document.getElementById("root")).render(<App />);
 `;
 
-export const REACT_APP = `import Card from "./Card.jsx";
+export const REACT_APP = `import Button from "./Button.jsx";
+import Card from "./Card.jsx";
 
 function Header() {
   return (
@@ -28,6 +29,7 @@ export default function App() {
         <Card title="Second" />
         <Card title="Third" />
       </ul>
+      <Button variant="ghost" size="sm" pressed={false}>Save</Button>
     </main>
   );
 }
@@ -39,6 +41,25 @@ export const REACT_CARD = `export default function Card({ title }) {
       <h3 className="text-base">{title}</h3>
       <p className="text-sm">Static body</p>
     </li>
+  );
+}
+`;
+
+export const REACT_BUTTON = `const cva = (base, config) => (props) => [base, ...Object.keys(config.variants).map((axis) => config.variants[axis][props[axis] ?? config.defaultVariants[axis]])].join(" ");
+
+const buttonVariants = cva("rounded px-2", {
+  variants: {
+    variant: { ghost: "bg-[#ffffff]", outline: "bg-[#eeeeee]", destructive: "bg-[#ff0000]" },
+    size: { sm: "h-7", lg: "h-9" },
+  },
+  defaultVariants: { variant: "ghost", size: "sm" },
+});
+
+export default function Button({ variant, size, pressed, children }) {
+  return (
+    <button className={buttonVariants({ variant, size })} aria-pressed={pressed}>
+      {children}
+    </button>
   );
 }
 `;
@@ -59,6 +80,7 @@ export const prepareReactApp = async (root: string) => {
   await writeFile(join(root, "src", "main.jsx"), REACT_MAIN);
   await writeFile(join(root, "src", "App.jsx"), REACT_APP);
   await writeFile(join(root, "src", "Card.jsx"), REACT_CARD);
+  await writeFile(join(root, "src", "Button.jsx"), REACT_BUTTON);
   git(root, "add", ".");
   git(root, "commit", "-q", "-m", "react app");
 };

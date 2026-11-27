@@ -61,8 +61,10 @@ const CodePeek = ({ file, lines, span, first }: { readonly file: string; readonl
   );
 };
 
-export const ScreenHeader = ({ session, context, name, kind, onTell }: { readonly session: EditSession; readonly context: ScreenDesignContext; readonly name: string; readonly kind: string; readonly onTell: () => void }) => {
-  const { single, found, source, inspected } = useInspected(session, context);
+export type Inspected = ReturnType<typeof useInspected>;
+
+export const ScreenHeader = ({ inspect, name, kind, onTell }: { readonly inspect: Inspected; readonly name: string; readonly kind: string; readonly onTell: () => void }) => {
+  const { single, found, source, inspected } = inspect;
   const component = found?.instanceOf ?? found?.owner ?? null;
   const file = inspected?.file ?? source?.file;
   const line = inspected?.line ?? source?.line ?? 0;
